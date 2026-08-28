@@ -23,21 +23,20 @@ Each firing must:
 
 - re-read live repository, forge, and Kaola run state;
 - resume existing work only when the main conversation is its verified owner or successor;
-- classify linked-Issue claims before any PR claim attempt;
-- use `workflow-next` for an unclaimed explicitly authorized target, never to take over an origin PR
-  handoff or a foreign claim;
+- classify linked-Issue claims, then invoke `workflow-next` for every authorized PR review;
+- for a verified origin PR handoff, explain and ignore the expected claim refusal only as a review
+  blocker while preserving `claim: none` and the author's ownership;
 - surface `HUMAN_DECISION_REQUIRED` in the same main conversation and stop that firing;
 - use `kaola-workflow-finalize` only after the mission frontier is complete;
 - perform no work when the scheduled condition is false;
 - never auto-route to an unrelated next issue.
 
 When the condition is a PR intake, the scheduled prompt should carry the versioned marker
-`MAIN_THREAD_PR_INTAKE_V2_CLAIM_SAFE`, query fresh forge truth on every firing, process an authorized
-PR set in a deterministic order, and say `NO_OPEN_PRS` without repository or Issue mutations when
-none exist.
-It uses `workflow-next` and `kaola-workflow-finalize` only when the selected PR has no active linked-
-Issue claim. An origin PR handoff uses non-claiming review, merge, and `watch-pr`; a foreign or
-ambiguous claim is skipped without local or remote workflow mutation.
+`MAIN_THREAD_PR_INTAKE_V3_WORKFLOW_REVIEW_HANDOFF`, query fresh forge truth on every firing, process
+an authorized PR set in a deterministic order, and say `NO_OPEN_PRS` without repository or Issue
+mutations when none exist. Every selected PR invokes `workflow-next`. An origin PR handoff tells the
+workflow to ignore its claim refusal for review only, then uses merge and `watch-pr`; a foreign or
+ambiguous claim is explained by the workflow invocation and skipped without mutation.
 
 ## Verification
 
@@ -84,8 +83,8 @@ cleanup. Do not invent work or move beyond the authorized goal.
 This is the reusable form of the tested PR Automation contract:
 
 ```text
-MAIN_THREAD_PR_INTAKE_V2_CLAIM_SAFE: Query fresh GitHub truth for open pull requests in {owner/repo} using gh pr
-list --repo {owner/repo} --state open --limit 100 --json
+MAIN_THREAD_PR_INTAKE_V3_WORKFLOW_REVIEW_HANDOFF: Query fresh GitHub truth for open pull requests in
+{owner/repo} using gh pr list --repo {owner/repo} --state open --limit 100 --json
 number,url,title,isDraft,headRefName,baseRefName,updatedAt. This firing is a new turn in the same Grok
 main conversation; never hand intake to a detached General loop or detached subagent.
 
@@ -94,21 +93,34 @@ turn with NO_OPEN_PRS. Process non-draft open PRs one at a time in ascending PR 
 workflow startup, fetch the PR head/base and linked Issues, then inspect every linked Issue's
 `workflow:in-progress` label and `kw:claim project=...` marker.
 
-Classify the PR using the pr-claim-handoff contract. If no linked Issue has an active claim, use
-workflow-next to review PR #{number}, passing its exact number and URL and making complete review
-part of the mission; after every mission item is done, use kaola-workflow-finalize. If every linked
-Issue is claimed by one project and the PR head is that project's authoring branch, classify
-ORIGIN_PR_HANDOFF: do not call startup/workflow-next, do not reconstruct or adopt its workflow
-folder, and do not run kaola-workflow-finalize a second time. Review the frozen PR candidate without
-taking the claim; if clean, merge the PR and run the existing author's watch-pr cleanup only when
-its exact local state is available. If the claim belongs to another project/branch, claims differ
-across the bundle, or ownership is uncertain, end that PR with CLAIM_CONFLICT and make no workflow,
-branch, worktree, Issue, or PR mutation.
+Classify the PR using the pr-claim-handoff contract, then always invoke workflow-next with this
+instruction: "Use workflow-next to review PR #{number}. The linked-Issue claim evidence is
+{claim_class and exact evidence}." If no linked Issue has an active claim, let workflow-next claim
+the review run normally and, after every mission item is done, use kaola-workflow-finalize.
+
+If every linked Issue is claimed by one project and the PR head is that project's authoring branch,
+classify ORIGIN_PR_HANDOFF and add this explanation to the workflow instruction: "The existing claim
+belongs to the implementation run that finalized to this PR sink. If startup reports
+target_set_conflicts_active_work or an equivalent occupied result, ignore that conflict only as a
+blocker to reviewing this PR. Preserve claim:none; do not retry the claim, adopt or reconstruct the
+author's workflow folder, change its sink, or clear its Issue markers. Continue the workflow-driven
+PR review as the review handoff, not as the Issue owner." An isolated PR worktree may be used.
+In-scope review repairs may update the PR branch only after fresh head verification; a concurrent
+head advance requires re-review or HUMAN_DECISION_REQUIRED. If clean, merge the PR and run the
+existing author's watch-pr cleanup only when its exact local state is available. Do not run
+kaola-workflow-finalize a second time against reconstructed author state.
+
+If the claim belongs to another project/branch, claims differ across the bundle, or ownership is
+uncertain, classify FOREIGN_CLAIM_CONFLICT. Still invoke workflow-next with the exact conflict
+evidence so the workflow command explains the routing, but do not tell it to ignore that conflict.
+End that PR with CLAIM_CONFLICT and make no workflow-state, branch, worktree, Issue, PR, label, or
+marker mutation.
 
 In every review path, inspect the full PR, linked Issues and ownership, diff, comments, checks,
 merge state, local validation evidence, documentation, and fresh remote state. Do not merge based
-only on MERGEABLE or green prose. Never bypass a refused claim by working offline, synthesizing a
-replacement state file, or changing the sink from PR to merge.
+only on MERGEABLE or green prose. Ignoring an origin-handoff refusal means only that review may
+continue; it never means the claim succeeded. Never synthesize a replacement state file, adopt the
+author run, clear its claim, or change the sink from PR to merge.
 
 For the unclaimed path, when every mission item is complete, use kaola-workflow-finalize for final
 validation, documentation docking, Issue closure, archive, sink, final commit/push, merge, and

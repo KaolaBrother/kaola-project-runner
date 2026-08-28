@@ -41,7 +41,8 @@ commit or merged PR alone does not prove Issue closure, Kaola archive, or sink c
 
 For PR work, also report `claim_class` from
 [pr-claim-handoff.md](pr-claim-handoff.md). A same-branch origin claim is not evidence that the
-reviewer owns the run; a refused claim followed by a reconstructed folder is a conflict, not resume
+reviewer owns the run. Also report `workflow_next_result`: an origin-handoff refusal may be
+`claim:none, ignored-for-review`, but a reconstructed author folder is still not ownership or resume
 success.
 
 ## Classify and report

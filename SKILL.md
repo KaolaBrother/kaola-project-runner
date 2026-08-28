@@ -45,8 +45,9 @@ scope throughout the run:
   `scripts/grok-tmux.sh`; do not reconstruct its ownership checks ad hoc.
 - **Finalize or close a run:** read [references/closing.md](references/closing.md).
 - **Review any PR:** first read
-  [references/pr-claim-handoff.md](references/pr-claim-handoff.md) before invoking
-  `workflow-next`, creating workflow state, or checking out a writable PR branch.
+  [references/pr-claim-handoff.md](references/pr-claim-handoff.md), then invoke `workflow-next`
+  with the measured claim context and its narrow ignore rule before creating workflow state or
+  checking out a writable PR branch.
 - **A user decision may be needed:** read
   [references/human-decisions.md](references/human-decisions.md) before prompting Grok.
 - **The user explicitly requested periodic work:** additionally read
@@ -64,7 +65,9 @@ scope throughout the run:
    owns the target, resume its `workflow-state.md` and `mission-list.md` only when this conversation
    is the verified owner or successor. Never adopt another session's folder or duplicate its claim.
    For PR work, classify linked-Issue claims with
-   [references/pr-claim-handoff.md](references/pr-claim-handoff.md) before any claim attempt.
+   [references/pr-claim-handoff.md](references/pr-claim-handoff.md), then still invoke
+   `workflow-next`. An originating PR claim may be ignored as a blocker to review, never as an
+   ownership protection.
 4. Give the goal to the Grok **main conversation**. Require it to use `workflow-next`, keep the
    mission list recoverable, and return value-laden or irreversible decisions to that same main
    conversation. A detached subagent may own a bounded mission item, never the project intake.
@@ -75,9 +78,11 @@ scope throughout the run:
    state to distinguish in-progress, waiting-human, ready-to-finalize, finalized, and uncertain.
    Send new input only when the helper reports an
    owned session, the exact repository, a detected Grok TUI, and `activity: idle`.
-7. When every mission is done, instruct the main conversation to use `kaola-workflow-finalize`.
-   Confirm validation, sink, remote state, issue closure or agreed keep-open state, archive, and
-   cleanup from evidence rather than success prose.
+7. When every mission in a run this conversation owns is done, instruct the main conversation to
+   use `kaola-workflow-finalize`. An origin PR handoff already finalized to a PR sink: finish its
+   workflow-driven review with merge and the originating run's `watch-pr`, not a second finalize
+   against reconstructed state. Confirm validation, sink, remote state, issue closure or agreed
+   keep-open state, archive, and cleanup from evidence rather than success prose.
 8. Close the selected mode with [references/closing.md](references/closing.md). Stop after this
    explicitly selected run. Delete the exact Codex supervision heartbeat when the terminal state
    has been verified. Do not auto-claim the next issue. Leave an active session running unless the

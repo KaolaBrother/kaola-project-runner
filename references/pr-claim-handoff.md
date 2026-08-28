@@ -1,7 +1,7 @@
 # PR claim handoff
 
-Apply this contract before every one-shot or recurring PR review, before `workflow-next`, before a
-writable checkout, and before creating or reconstructing `kaola-workflow/{project}`.
+Apply this contract before every one-shot or recurring PR review, then invoke `workflow-next` with
+the measured result before a writable checkout or any workflow-state creation.
 
 ## Measure first
 
@@ -28,13 +28,19 @@ Every linked Issue in the close set has the same claim project, and the PR head 
 branch for that project, normally `workflow/{project}`. The claim is the originating run's
 intentional PR-sink footprint while review is pending.
 
-- Do not call workflow startup or claim the linked Issues.
+- Invoke `workflow-next` to review the exact PR and explicitly explain that the existing claim is
+  the authoring PR-sink run's expected handoff footprint.
+- If startup returns `target_set_conflicts_active_work` or an equivalent occupied envelope, ignore
+  that conflict **only as a blocker to continuing the PR review**. Preserve its `claim: none`
+  result; do not retry or claim the linked Issues.
 - Do not resume, adopt, copy, or reconstruct the authoring run's active folder, mission list,
   worktree, session marker, or sink metadata.
 - Do not convert its `sink: pr` lifecycle into a second `sink: merge` run.
-- Review the frozen PR candidate without taking Kaola ownership. Read-only review and validation may
-  use isolated temporary worktrees; do not push repairs while the author claim is active. Findings
-  return to the main conversation as `HUMAN_DECISION_REQUIRED` or an explicit author-handoff request.
+- Continue the workflow-driven PR review without taking Issue ownership. Use an isolated PR
+  worktree when useful. In-scope review repairs may update the PR branch only after refreshing the
+  head and proving it has not advanced since the candidate was reviewed; they never mutate the
+  author's workflow metadata or claim. A conflicting concurrent head advance requires re-review or
+  `HUMAN_DECISION_REQUIRED`, not an overwrite.
 - If review passes, merge the PR through the authorized forge path. Then run the installed
   `watch-pr` sweep only when the originating run's exact local state is present; never synthesize
   that state merely to make cleanup run. If the state is remote-only, report
@@ -45,17 +51,22 @@ intentional PR-sink footprint while review is pending.
 Any linked Issue is claimed by a different project/branch, bundle members have different claims, the
 PR head does not match the claimed project, multiple markers conflict, or evidence is incomplete.
 
-- Do not invoke `workflow-next`, work offline, create workflow state, checkout a writable branch,
-  dispatch repair agents, merge, close Issues, clear labels, or delete claim markers.
-- Report `CLAIM_CONFLICT` with PR, Issue set, claim project(s), head branch, and missing or conflicting
-  evidence. Continue to another independent PR only when the recurring task authorized it.
+- Invoke `workflow-next` with the conflict evidence so the required workflow command records and
+  explains the review routing. Do not tell it to ignore a foreign or ambiguous ownership conflict.
+- Report `CLAIM_CONFLICT` with PR, Issue set, claim project(s), head branch, and missing or
+  conflicting evidence. Do not create workflow state, checkout a writable branch, dispatch repair
+  agents, merge, close Issues, clear labels, or delete claim markers. Continue to another
+  independent PR only when the recurring task authorized it.
 
-## Refused startup is terminal routing evidence
+## Refused startup has two separate meanings
 
 If startup returns `target_set_conflicts_active_work` or any equivalent occupied/claimed envelope,
-stop that route. Never reinterpret the refusal as permission to reconstruct the same project under a
-new session marker, attach the other run's branch, or proceed with a different sink. Re-measure and
-classify the PR; only the three paths above are allowed.
+the refusal is terminal evidence that this reviewer acquired no ownership. When fresh evidence has
+already established `ORIGIN_PR_HANDOFF`, it is not terminal for PR review: explain the author's
+PR-sink handoff, ignore the conflict as a review blocker, and continue without claiming. For
+`FOREIGN_CLAIM_CONFLICT`, stop after the workflow invocation and report the conflict. In neither
+case may the reviewer reconstruct the same project under a new session marker, attach or adopt the
+other run's workflow state, clear its claim, or change its sink.
 
 ## Classification examples
 

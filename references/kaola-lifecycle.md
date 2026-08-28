@@ -21,8 +21,10 @@ Mission items are outcome-sized. A detached worker can own one bounded item, but
 conversation keeps run synthesis and user decisions.
 
 For PR review, an active claim can be the authoring run's intentional PR-sink footprint. Apply
-[pr-claim-handoff.md](pr-claim-handoff.md) before `workflow-next`. A refused startup envelope is a
-routing fact, never permission to reconstruct the other run or bypass the claim offline.
+[pr-claim-handoff.md](pr-claim-handoff.md), then invoke `workflow-next` with that explanation. For a
+verified authoring PR handoff, a refused claim is ignored only as a blocker to continuing the PR
+review; it remains authoritative proof that the reviewer did not acquire the Issues or author run.
+Never reconstruct or adopt the other run to manufacture ownership.
 
 ## Finalize only after the mission frontier is complete
 

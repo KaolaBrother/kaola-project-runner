@@ -34,25 +34,27 @@ Read [scheduling.md](scheduling.md) for creation, migration, and verification de
 ## 3. Complete one PR review and finalization
 
 Use when the user names one PR or asks for one bounded PR review/merge run. First apply
-[pr-claim-handoff.md](pr-claim-handoff.md); do not invoke `workflow-next` until the claim class is
-known.
+[pr-claim-handoff.md](pr-claim-handoff.md), then invoke `workflow-next` with the claim class and its
+review-only ignore boundary.
 
 Send this core instruction in the Grok main conversation, expanded with the exact repo, number, URL,
 and completion boundary:
 
 ```text
-If and only if no active linked-Issue claim exists, use workflow-next to review PR #{number}.
-Inspect fresh PR and linked Issue truth, the complete diff, comments, checks, merge state, local
-validation, documentation, and Kaola ownership. Repair only in-scope defects and do not merge based
-only on MERGEABLE or green prose. This main conversation owns intake and user decisions. When every
-mission item is complete, use kaola-workflow-finalize for final validation, documentation docking,
-Issue closure, archive, sink, final push/merge, and fetched-live verification. Stop after this PR's
-run.
+Use workflow-next to review PR #{number}. Explain the measured linked-Issue claim before startup.
+If this is an ORIGIN_PR_HANDOFF and workflow-next reports target_set_conflicts_active_work or an
+equivalent claim refusal, ignore that conflict only as a blocker to the PR review: claim:none stays
+authoritative, do not claim again, and do not adopt or reconstruct the author's run. Inspect fresh
+PR and linked Issue truth, the complete diff, comments, checks, merge state, local validation,
+documentation, and Kaola ownership. Repair only in-scope PR defects within the authorized review
+handoff and do not merge based only on MERGEABLE or green prose. This main conversation owns review
+intake and user decisions, not the originating Issue claim. Stop after this PR's review handoff.
 ```
 
-For an origin PR handoff, review without claiming, reconstructing, or finalizing the authoring run;
-merge only after the review passes, then use the existing run's `watch-pr` cleanup when locally
-available. Do not create a Grok scheduler for this mode.
+For an unclaimed PR, use `kaola-workflow-finalize` normally when every mission is complete. For an
+origin PR handoff, merge only after the workflow-driven review passes, then use the existing run's
+`watch-pr` cleanup when locally available; do not run a second finalization against reconstructed
+author state. Do not create a Grok scheduler for this mode.
 
 ## 4. Recurring PR review and finalization
 
@@ -61,12 +63,12 @@ Use when the user asks for the tested open-PR intake behavior.
 - Inspect `/tasks`, migrate only an inactive old detached loop, and ensure exactly one scheduler.
 - Create it through an ordinary main-conversation request with the requested interval and
   `foreground: true`; never use `/loop`.
-- Use the `MAIN_THREAD_PR_INTAKE_V2_CLAIM_SAFE` contract in
+- Use the `MAIN_THREAD_PR_INTAKE_V3_WORKFLOW_REVIEW_HANDOFF` contract in
   [scheduling.md](scheduling.md): query open PRs fresh,
   return `NO_OPEN_PRS` without mutation when empty, process non-draft PRs deterministically, and
-  classify claims before selecting the review path. Use `workflow-next` plus
-  `kaola-workflow-finalize` only for an unclaimed PR; use non-claiming review plus merge and
-  `watch-pr` for an origin PR handoff; skip a foreign or ambiguous claim.
+  classify claims before invoking `workflow-next` for every PR. For an origin PR handoff, tell
+  `workflow-next` to ignore the expected claim refusal for review only while preserving
+  `claim:none`; use merge plus `watch-pr` rather than a second author-run finalization.
 - A firing that requires the user prints `HUMAN_DECISION_REQUIRED` in the main orchestrator and
   prevents later firings from duplicating that blocked run.
 - Verify a real firing appears as a new turn in the same Grok conversation, with zero detached
