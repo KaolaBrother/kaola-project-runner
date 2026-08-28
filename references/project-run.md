@@ -3,6 +3,25 @@
 Use this reference to create, start, or resume a project run. Scheduling is a separate, optional
 mode.
 
+## Bare Skill invocation
+
+When the user supplies only `$grok-kaola-project-runner`, proceed without a clarification round:
+
+- resolve `repo` as the canonical Git top-level containing the current working directory;
+- select the one-shot Workflow project mode;
+- derive `session` as `grok-kaola-<repo-basename>` with unsafe tmux-name characters replaced by
+  `-`;
+- set `goal` to `advance the workflow-selected project to its verified terminal state`;
+- set `targets` to `select under workflow-next`;
+- use current repository validation, documentation, forge, and Kaola lifecycle requirements as the
+  definition of done and authority boundary;
+- preflight, start or reuse the exact owned Grok main conversation, and send the start prompt as
+  soon as the main conversation is ready for input.
+
+These defaults do not authorize leaving the current repository, starting recurring execution, or
+answering an irreversible or value-laden decision for the user. Extra prompt text refines the
+defaults but is not required to start.
+
 ## Establish the run
 
 Resolve these fields from the user's request and live repository evidence:

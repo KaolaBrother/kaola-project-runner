@@ -1,13 +1,36 @@
 ---
 name: grok-kaola-project-runner
-description: Use when Codex should create, start, resume, supervise, finalize, or safely stop project work owned by a Grok CLI main conversation in an exact tmux session, with Kaola Workflow handling the project lifecycle. Codex supervises active runs with a 15-minute thread heartbeat; recurring Grok execution remains optional and main-conversation-only.
+description: Use when Codex should run Kaola Workflow through a Grok CLI main conversation in an exact tmux session. A bare invocation uses the current Git repository and starts workflow-next immediately; extra prompt text can refine the goal, target, or mode, while recurring Grok execution remains explicit.
 ---
 
 # Grok Kaola Project Runner
 
-This is a Codex-only skill. Run one project through one explicitly named tmux session and one Grok
-main conversation. Grok owns the project run; Kaola Workflow owns its durable lifecycle. A loop is
-never the default.
+This is a Codex-only skill. Run one project through one exact tmux session and one Grok main
+conversation. Grok owns the project run; Kaola Workflow owns its durable lifecycle. A loop is never
+the default.
+
+## Bare invocation starts immediately
+
+`$grok-kaola-project-runner` by itself is a complete request. Do not ask the user to add parameters,
+choose a mode, or restate a goal.
+
+1. Resolve the canonical Git top-level containing the current working directory and use it as the
+   workspace repository. Do not search siblings or use a remembered repository.
+2. Select **Complete one Workflow project**.
+3. Derive the exact tmux session as `grok-kaola-<repo-basename>`, replacing characters outside
+   letters, digits, dot, underscore, and hyphen with `-`.
+4. Run preflight, start or reuse the exact owned Grok main conversation, and send the one-shot
+   prompt from [references/project-run.md](references/project-run.md) as soon as that main
+   conversation is ready for input.
+5. Tell Grok to invoke `workflow-next` immediately with the target `select under workflow-next`.
+   Let the current `workflow-next` contract choose the project when the user named none.
+6. Create the 15-minute Codex supervision heartbeat after the run starts. Do not create a Grok
+   scheduler unless recurring work was explicitly requested.
+
+Extra prompt text is optional and only refines these defaults. An explicit repository, mode,
+session, goal, Issue, PR, or interval overrides the corresponding default. Stop for input only when
+the current directory is not inside a Git repository, preflight cannot establish safe ownership, or
+a material user decision is genuinely required.
 
 ## Full lifecycle
 
@@ -20,8 +43,8 @@ the Grok prompts described here; `scripts/grok-tmux.sh` is only a safe low-level
 
 ## Four exposed capabilities
 
-Read [references/task-modes.md](references/task-modes.md), select exactly one mode, and preserve its
-scope throughout the run:
+Read [references/task-modes.md](references/task-modes.md), select the explicit mode or mode 1 by
+default, and preserve its scope throughout the run:
 
 1. **Complete one Workflow project** — start or resume one bounded project with `workflow-next`,
    carry it through validation and `kaola-workflow-finalize`, then stop.
@@ -55,9 +78,9 @@ scope throughout the run:
 
 ## Essential contract
 
-1. Resolve an absolute repository root, a deliberate exact tmux session name, and a concrete goal.
-   Do not infer authorization for a different repository, issue set, deployment, or destructive
-   operation.
+1. Resolve the repository, exact tmux session, and goal from explicit user input or the bare
+   invocation defaults above. Do not infer authorization for a different repository, issue set,
+   deployment, or destructive operation.
 2. Run `scripts/grok-tmux.sh preflight --repo <root> --session <name>`. Treat current `grok inspect
    --json` output as authority for discovered project instructions and Kaola commands; never apply a
    remembered `CLAUDE.md`, `AGENTS.md`, redirect, plugin layout, or Grok version as current fact.

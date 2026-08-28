@@ -4,6 +4,10 @@ These are Skill-level capabilities exposed to Codex. They are not shell subcomma
 one mode, uses the low-level tmux helper where useful, and operates the Grok CLI main conversation
 as the current task requires.
 
+A bare `$grok-kaola-project-runner` invocation selects mode 1 immediately, uses the current Git
+repository and derived session from [project-run.md](project-run.md), and starts `workflow-next`.
+Do not present these modes as a blocking choice unless the user asked to compare them.
+
 ## 1. Complete one Workflow project
 
 Use when the user asks Grok to establish, resume, or finish one bounded project goal.

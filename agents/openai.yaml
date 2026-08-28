@@ -1,6 +1,6 @@
 interface:
   display_name: "Grok Kaola Project Runner"
   short_description: "Run projects through Grok CLI and Kaola Workflow"
-  default_prompt: "Use $grok-kaola-project-runner to start or resume this project in a controlled Grok tmux session."
+  default_prompt: "Use $grok-kaola-project-runner to start workflow-next immediately in the current Git repository."
 policy:
   allow_implicit_invocation: true
