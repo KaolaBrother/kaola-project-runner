@@ -33,21 +33,26 @@ Read [scheduling.md](scheduling.md) for creation, migration, and verification de
 
 ## 3. Complete one PR review and finalization
 
-Use when the user names one PR or asks for one bounded PR review/merge run.
+Use when the user names one PR or asks for one bounded PR review/merge run. First apply
+[pr-claim-handoff.md](pr-claim-handoff.md); do not invoke `workflow-next` until the claim class is
+known.
 
 Send this core instruction in the Grok main conversation, expanded with the exact repo, number, URL,
 and completion boundary:
 
 ```text
-Use workflow-next to review PR #{number}. Inspect fresh PR and linked Issue truth, the complete diff,
-comments, checks, merge state, local validation, documentation, and Kaola ownership. Repair only
-in-scope defects and do not merge based only on MERGEABLE or green prose. This main conversation
-owns intake and user decisions. When every mission item is complete, use
-kaola-workflow-finalize for final validation, documentation docking, Issue closure, archive, sink,
-final push/merge, and fetched-live verification. Stop after this PR's run.
+If and only if no active linked-Issue claim exists, use workflow-next to review PR #{number}.
+Inspect fresh PR and linked Issue truth, the complete diff, comments, checks, merge state, local
+validation, documentation, and Kaola ownership. Repair only in-scope defects and do not merge based
+only on MERGEABLE or green prose. This main conversation owns intake and user decisions. When every
+mission item is complete, use kaola-workflow-finalize for final validation, documentation docking,
+Issue closure, archive, sink, final push/merge, and fetched-live verification. Stop after this PR's
+run.
 ```
 
-Do not create a Grok scheduler for this mode.
+For an origin PR handoff, review without claiming, reconstructing, or finalizing the authoring run;
+merge only after the review passes, then use the existing run's `watch-pr` cleanup when locally
+available. Do not create a Grok scheduler for this mode.
 
 ## 4. Recurring PR review and finalization
 
@@ -56,10 +61,12 @@ Use when the user asks for the tested open-PR intake behavior.
 - Inspect `/tasks`, migrate only an inactive old detached loop, and ensure exactly one scheduler.
 - Create it through an ordinary main-conversation request with the requested interval and
   `foreground: true`; never use `/loop`.
-- Use the `MAIN_THREAD_PR_INTAKE` contract in [scheduling.md](scheduling.md): query open PRs fresh,
-  return `NO_OPEN_PRS` without mutation when empty, process non-draft PRs deterministically, say
-  `Use workflow-next to review PR #{number}`, and call `kaola-workflow-finalize` only after missions
-  complete.
+- Use the `MAIN_THREAD_PR_INTAKE_V2_CLAIM_SAFE` contract in
+  [scheduling.md](scheduling.md): query open PRs fresh,
+  return `NO_OPEN_PRS` without mutation when empty, process non-draft PRs deterministically, and
+  classify claims before selecting the review path. Use `workflow-next` plus
+  `kaola-workflow-finalize` only for an unclaimed PR; use non-claiming review plus merge and
+  `watch-pr` for an origin PR handoff; skip a foreign or ambiguous claim.
 - A firing that requires the user prints `HUMAN_DECISION_REQUIRED` in the main orchestrator and
   prevents later firings from duplicating that blocked run.
 - Verify a real firing appears as a new turn in the same Grok conversation, with zero detached

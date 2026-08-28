@@ -39,6 +39,11 @@ When GitHub is in scope and `gh` is authenticated, refresh only the exact Issue 
 run. Inspect its current state, checks, merge status, comments, and remote branch/main truth. A local
 commit or merged PR alone does not prove Issue closure, Kaola archive, or sink completion.
 
+For PR work, also report `claim_class` from
+[pr-claim-handoff.md](pr-claim-handoff.md). A same-branch origin claim is not evidence that the
+reviewer owns the run; a refused claim followed by a reconstructed folder is a conflict, not resume
+success.
+
 ## Classify and report
 
 Use one of these concise states:

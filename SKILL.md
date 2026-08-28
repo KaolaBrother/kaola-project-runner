@@ -44,6 +44,9 @@ scope throughout the run:
 - **Send to or stop Grok:** read [references/grok-tui.md](references/grok-tui.md) and use
   `scripts/grok-tmux.sh`; do not reconstruct its ownership checks ad hoc.
 - **Finalize or close a run:** read [references/closing.md](references/closing.md).
+- **Review any PR:** first read
+  [references/pr-claim-handoff.md](references/pr-claim-handoff.md) before invoking
+  `workflow-next`, creating workflow state, or checking out a writable PR branch.
 - **A user decision may be needed:** read
   [references/human-decisions.md](references/human-decisions.md) before prompting Grok.
 - **The user explicitly requested periodic work:** additionally read
@@ -58,7 +61,10 @@ scope throughout the run:
    --json` output as authority for discovered project instructions and Kaola commands; never apply a
    remembered `CLAUDE.md`, `AGENTS.md`, redirect, plugin layout, or Grok version as current fact.
 3. Start a new Grok conversation or resume the intended one. If an active Kaola project already
-   owns the target, resume its `workflow-state.md` and `mission-list.md`; never duplicate its claim.
+   owns the target, resume its `workflow-state.md` and `mission-list.md` only when this conversation
+   is the verified owner or successor. Never adopt another session's folder or duplicate its claim.
+   For PR work, classify linked-Issue claims with
+   [references/pr-claim-handoff.md](references/pr-claim-handoff.md) before any claim attempt.
 4. Give the goal to the Grok **main conversation**. Require it to use `workflow-next`, keep the
    mission list recoverable, and return value-laden or irreversible decisions to that same main
    conversation. A detached subagent may own a bounded mission item, never the project intake.

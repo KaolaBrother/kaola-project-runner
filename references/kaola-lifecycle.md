@@ -10,7 +10,8 @@ The main conversation must:
 
 1. honor a user-named issue or PR;
 2. refresh local and remote truth before claiming;
-3. resume an existing active folder for the target instead of claiming twice;
+3. resume an existing active folder only when this conversation is its verified owner or successor;
+   another session's folder, branch, worktree, and Issues remain untouched;
 4. create or maintain `kaola-workflow/{project}/workflow-state.md`;
 5. write `kaola-workflow/{project}/mission-list.md` immediately after a new claim;
 6. treat the mission list as the single recovery index and preserve completed item results;
@@ -18,6 +19,10 @@ The main conversation must:
 
 Mission items are outcome-sized. A detached worker can own one bounded item, but the Grok main
 conversation keeps run synthesis and user decisions.
+
+For PR review, an active claim can be the authoring run's intentional PR-sink footprint. Apply
+[pr-claim-handoff.md](pr-claim-handoff.md) before `workflow-next`. A refused startup envelope is a
+routing fact, never permission to reconstruct the other run or bypass the claim offline.
 
 ## Finalize only after the mission frontier is complete
 

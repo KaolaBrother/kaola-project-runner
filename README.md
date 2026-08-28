@@ -51,6 +51,10 @@ Automation 一样自行检查状态、操作 tmux/Grok CLI、发送提示词并�
 Grok 使用同一个 Main orchestrator 中的 `foreground: true` scheduler，绝不使用 detached
 `/loop` General subagent。
 
+PR 模式会在任何 `workflow-next` 启动前检查 linked Issue 的远端 claim：没有 claim 才建立新的
+review run；PR head 与同一 claim project 匹配时按作者的 PR-sink handoff 进行无 claim 审核；
+其他或不确定的 claim 直接报告冲突，不重建、不接管，也不绕过拒绝。
+
 底层控制 helper 示例：
 
 ```bash
