@@ -1,0 +1,85 @@
+---
+name: grok-kaola-project-runner
+description: Use when Codex should create, start, resume, supervise, finalize, or safely stop project work owned by a Grok CLI main conversation in an exact tmux session, with Kaola Workflow handling the project lifecycle. Codex supervises active runs with a 15-minute thread heartbeat; recurring Grok execution remains optional and main-conversation-only.
+---
+
+# Grok Kaola Project Runner
+
+This is a Codex-only skill. Run one project through one explicitly named tmux session and one Grok
+main conversation. Grok owns the project run; Kaola Workflow owns its durable lifecycle. A loop is
+never the default.
+
+## Full lifecycle
+
+`create/start → Codex 15m supervision → resume → observe/report → optional Grok recurring work → decision → finalize/close → stop`
+
+Codex performs all control through CLI evidence: inspect Git and Kaola state in the repository,
+operate the Grok TUI through tmux, and verify forge state with the available CLI. No desktop UI is
+required. The skill exposes task modes to Codex, not business subcommands. Codex decides and sends
+the Grok prompts described here; `scripts/grok-tmux.sh` is only a safe low-level control helper.
+
+## Four exposed capabilities
+
+Read [references/task-modes.md](references/task-modes.md), select exactly one mode, and preserve its
+scope throughout the run:
+
+1. **Complete one Workflow project** — start or resume one bounded project with `workflow-next`,
+   carry it through validation and `kaola-workflow-finalize`, then stop.
+2. **Recurring Workflow projects** — create or reuse one `foreground: true` scheduler in the same
+   Grok main orchestrator; every firing resumes or completes work inside the authorized project goal.
+3. **Complete one PR review and finalization** — use `workflow-next` to review the exact PR, repair
+   in-scope defects, then merge and finalize through Kaola Workflow.
+4. **Recurring PR review and finalization** — reproduce the tested Automation shape: fresh open-PR
+   query, main-orchestrator foreground scheduler, full review, merge, and finalization.
+
+## Select the mode
+
+- **Create, start, or resume project work:** read
+  [references/task-modes.md](references/task-modes.md),
+  [references/project-run.md](references/project-run.md), and
+  [references/kaola-lifecycle.md](references/kaola-lifecycle.md).
+- **Inspect progress or report status:** additionally read
+  [references/status-monitoring.md](references/status-monitoring.md) and
+  [references/codex-supervision.md](references/codex-supervision.md).
+- **Send to or stop Grok:** read [references/grok-tui.md](references/grok-tui.md) and use
+  `scripts/grok-tmux.sh`; do not reconstruct its ownership checks ad hoc.
+- **Finalize or close a run:** read [references/closing.md](references/closing.md).
+- **A user decision may be needed:** read
+  [references/human-decisions.md](references/human-decisions.md) before prompting Grok.
+- **The user explicitly requested periodic work:** additionally read
+  [references/scheduling.md](references/scheduling.md). Do not load or apply it otherwise.
+
+## Essential contract
+
+1. Resolve an absolute repository root, a deliberate exact tmux session name, and a concrete goal.
+   Do not infer authorization for a different repository, issue set, deployment, or destructive
+   operation.
+2. Run `scripts/grok-tmux.sh preflight --repo <root> --session <name>`. Treat current `grok inspect
+   --json` output as authority for discovered project instructions and Kaola commands; never apply a
+   remembered `CLAUDE.md`, `AGENTS.md`, redirect, plugin layout, or Grok version as current fact.
+3. Start a new Grok conversation or resume the intended one. If an active Kaola project already
+   owns the target, resume its `workflow-state.md` and `mission-list.md`; never duplicate its claim.
+4. Give the goal to the Grok **main conversation**. Require it to use `workflow-next`, keep the
+   mission list recoverable, and return value-laden or irreversible decisions to that same main
+   conversation. A detached subagent may own a bounded mission item, never the project intake.
+5. Immediately after a run starts or resumes, create or update one 15-minute Codex thread heartbeat
+   for this exact run using [references/codex-supervision.md](references/codex-supervision.md). It
+   observes and reports to the user; it is not a Grok execution loop.
+6. Observe without injecting while Grok is busy. Use Git, the Kaola state files, and fresh forge
+   state to distinguish in-progress, waiting-human, ready-to-finalize, finalized, and uncertain.
+   Send new input only when the helper reports an
+   owned session, the exact repository, a detected Grok TUI, and `activity: idle`.
+7. When every mission is done, instruct the main conversation to use `kaola-workflow-finalize`.
+   Confirm validation, sink, remote state, issue closure or agreed keep-open state, archive, and
+   cleanup from evidence rather than success prose.
+8. Close the selected mode with [references/closing.md](references/closing.md). Stop after this
+   explicitly selected run. Delete the exact Codex supervision heartbeat when the terminal state
+   has been verified. Do not auto-claim the next issue. Leave an active session running unless the
+   user asked to stop it or the owned session is idle and the applicable operating agreement says
+   to stop it.
+
+## Required handoff
+
+Report the exact repository, tmux session, Grok session identity when visible, Codex heartbeat ID,
+Git branch/HEAD and cleanliness, Kaola project and issue set, mission counts, forge state, current
+activity, completion classification, next action, and any user decision still required.
