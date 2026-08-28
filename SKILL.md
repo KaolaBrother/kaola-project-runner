@@ -1,6 +1,6 @@
 ---
 name: grok-kaola-project-runner
-description: Use when Codex should run Kaola Workflow through a Grok CLI main conversation in an exact tmux session. A bare invocation uses the current Git repository and starts workflow-next immediately; extra prompt text can refine the goal, target, or mode, while recurring Grok execution remains explicit.
+description: Use when Codex should run Kaola Workflow through a Grok CLI main conversation in an exact tmux session. A bare invocation uses the current Git repository and starts workflow-next so it can select the most appropriate Issue batch; extra prompt text can refine the goal or mode, while recurring Grok execution remains explicit.
 ---
 
 # Grok Kaola Project Runner
@@ -22,15 +22,19 @@ choose a mode, or restate a goal.
 4. Run preflight, start or reuse the exact owned Grok main conversation, and send the one-shot
    prompt from [references/project-run.md](references/project-run.md) as soon as that main
    conversation is ready for input.
-5. Tell Grok to invoke `workflow-next` immediately with the target `select under workflow-next`.
-   Let the current `workflow-next` contract choose the project when the user named none.
+5. Tell Grok to invoke `workflow-next` immediately without an individual Issue target. Let the
+   current `workflow-next` contract inspect repository and forge state, then select the most
+   appropriate coherent Issue batch for efficient execution. Do not preselect one Issue, set a
+   single-Issue target, or turn the current directory into an Issue hint.
 6. Create the 15-minute Codex supervision heartbeat after the run starts. Do not create a Grok
    scheduler unless recurring work was explicitly requested.
 
 Extra prompt text is optional and only refines these defaults. An explicit repository, mode,
-session, goal, Issue, PR, or interval overrides the corresponding default. Stop for input only when
-the current directory is not inside a Git repository, preflight cannot establish safe ownership, or
-a material user decision is genuinely required.
+session, goal, PR, or interval overrides the corresponding default. In project mode, a mentioned
+Issue supplies goal context; it does not narrow `workflow-next` to a one-Issue run or prevent it
+from selecting the related batch. Stop for input only when the current directory is not inside a
+Git repository, preflight cannot establish safe ownership, or a material user decision is
+genuinely required.
 
 ## Full lifecycle
 
@@ -46,8 +50,8 @@ the Grok prompts described here; `scripts/grok-tmux.sh` is only a safe low-level
 Read [references/task-modes.md](references/task-modes.md), select the explicit mode or mode 1 by
 default, and preserve its scope throughout the run:
 
-1. **Complete one Workflow project** — start or resume one bounded project with `workflow-next`,
-   carry it through validation and `kaola-workflow-finalize`, then stop.
+1. **Complete one Workflow project** — let `workflow-next` select or resume one coherent Issue
+   batch, carry that batch through validation and `kaola-workflow-finalize`, then stop.
 2. **Recurring Workflow projects** — create or reuse one `foreground: true` scheduler in the same
    Grok main orchestrator; every firing resumes or completes work inside the authorized project goal.
 3. **Complete one PR review and finalization** — use `workflow-next` to review the exact PR, repair
@@ -107,10 +111,10 @@ default, and preserve its scope throughout the run:
    against reconstructed state. Confirm validation, sink, remote state, issue closure or agreed
    keep-open state, archive, and cleanup from evidence rather than success prose.
 8. Close the selected mode with [references/closing.md](references/closing.md). Stop after this
-   explicitly selected run. Delete the exact Codex supervision heartbeat when the terminal state
-   has been verified. Do not auto-claim the next issue. Leave an active session running unless the
-   user asked to stop it or the owned session is idle and the applicable operating agreement says
-   to stop it.
+   explicitly selected batch run. Delete the exact Codex supervision heartbeat when the terminal
+   state has been verified. In one-shot mode, do not start a second unrelated batch. Leave an
+   active session running unless the user asked to stop it or the owned session is idle and the
+   applicable operating agreement says to stop it.
 
 ## Required handoff
 

@@ -10,14 +10,17 @@ Do not present these modes as a blocking choice unless the user asked to compare
 
 ## 1. Complete one Workflow project
 
-Use when the user asks Grok to establish, resume, or finish one bounded project goal.
+Use when the user asks Grok to establish, resume, or finish one bounded project goal. The run unit
+is the coherent Issue batch selected by `workflow-next`, not one Issue selected by Codex or Grok.
 
 - Start or reuse the exact owned tmux/Grok main conversation.
 - Send the one-shot project prompt from [project-run.md](project-run.md).
-- Require `workflow-next` to establish or resume the Issue-scoped run and mission list.
+- Require `workflow-next` to select the most appropriate coherent Issue batch, or resume the active
+  batch this conversation owns, and establish its run and mission list. Pass no individual Issue
+  target.
 - Let the main conversation progress the mission frontier and surface user decisions.
 - When every mission is done, require `kaola-workflow-finalize` and verify the terminal state.
-- Do not create a Grok scheduler and do not auto-claim another project.
+- Do not create a Grok scheduler and do not start a second unrelated batch.
 
 ## 2. Recurring Workflow projects
 
@@ -27,9 +30,10 @@ Use only when the user asks Grok to advance project work repeatedly.
 - Inspect `/tasks` in the idle main conversation before changing scheduler state.
 - Ask with ordinary natural language for exactly one scheduler at the requested interval with
   `foreground: true`; never send `/loop`.
-- Every firing must be a new turn in the same main orchestrator, resume active Kaola work first,
-  remain inside the authorized project goal, use `workflow-next`, and use
-  `kaola-workflow-finalize` when the current run is complete.
+- Every firing must be a new turn in the same main orchestrator, resume an active Kaola batch first,
+  remain inside the authorized project goal, invoke `workflow-next` without an individual Issue
+  target, and use `kaola-workflow-finalize` when the current batch is complete. A later firing may
+  let `workflow-next` select the next efficient batch inside the recurring goal.
 - Require authoritative scheduler ID/count/interval/foreground evidence and zero detached intake
   loops or agents.
 

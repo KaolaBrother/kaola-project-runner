@@ -11,8 +11,9 @@ When the user supplies only `$grok-kaola-project-runner`, proceed without a clar
 - select the one-shot Workflow project mode;
 - derive `session` as `grok-kaola-<repo-basename>` with unsafe tmux-name characters replaced by
   `-`;
-- set `goal` to `advance the workflow-selected project to its verified terminal state`;
-- set `targets` to `select under workflow-next`;
+- set `goal` to `advance the Workflow-selected Issue batch to its verified terminal state`;
+- give `workflow-next` no individual Issue target and let it select the most appropriate coherent
+  batch from current repository and forge state;
 - use current repository validation, documentation, forge, and Kaola lifecycle requirements as the
   definition of done and authority boundary;
 - preflight, start or reuse the exact owned Grok main conversation, and send the start prompt as
@@ -29,16 +30,20 @@ Resolve these fields from the user's request and live repository evidence:
 - `repo`: absolute Git repository root.
 - `session`: exact tmux session name chosen for this project run.
 - `goal`: concrete outcome, not a recurring schedule.
-- `targets`: user-named issues or PRs; otherwise let `workflow-next` select under its own contract.
+- `selection_context`: user goal and constraints, without an individual Issue target; let
+  `workflow-next` select the most appropriate coherent Issue batch under its own contract. An
+  exact PR remains the review object in PR mode, not a request to claim one linked Issue.
 - `definition_of_done`: validation, review, documentation, remote, and lifecycle evidence expected.
 - `authority_boundary`: mutations authorized by the user and decisions that must come back.
 
-Do not silently broaden a review request into unrelated implementation or let an active directory's
-issue replace a user-named target.
+Do not silently broaden a review request into unrelated implementation. Do not derive a target
+Issue from the active directory, branch, roadmap cursor, or a single Issue mentioned as context.
 
-If the user described new work but named no Issue, tell Grok to let `workflow-next` resolve it to an
-existing Issue or establish the task under its current contract before claiming. The controlling
-Agent does not invent parallel bookkeeping outside Kaola Workflow.
+Tell Grok to let `workflow-next` choose the most appropriate batch from live repository and forge
+state. Do not direct it to select or claim one individual Issue. If the user mentions an Issue in
+project mode, pass it as goal context while preserving Workflow Next's authority to include the
+coherent related batch. The controlling Agent does not invent parallel bookkeeping outside Kaola
+Workflow.
 
 ## Start prompt
 
@@ -49,14 +54,16 @@ Work in this Grok main conversation as the owner of the project run.
 
 Repository: {repo}
 Goal: {goal}
-Target issues or PRs: {targets or "select under workflow-next"}
+Selection context: {goal and user constraints; no individual Issue target}
 Definition of done: {definition_of_done}
 Authority boundary: {authority_boundary}
 
 Use workflow-next to start or resume this work. First inspect current repository instructions and
-current Kaola Workflow state. Reuse an existing active run for these targets rather than creating a
-duplicate claim. Maintain mission-list.md as the recovery record. Perform the required work,
-review, validation, documentation, and evidence collection.
+current Kaola Workflow state. Do not direct workflow-next to one individual Issue. Let it select
+the most appropriate coherent Issue batch for efficient execution, or resume the active batch this
+conversation owns. Do not split that selected batch into separate claims. Maintain mission-list.md
+as the recovery record. Perform the required work, review, validation, documentation, and evidence
+collection.
 
 This main conversation owns project intake and synthesis. You may use bounded subagents for
 individual mission items when appropriate, but do not hand the project to a detached General loop
@@ -65,9 +72,9 @@ or detached subagent.
 When an irreversible or value-laden decision requires the user, return HUMAN_DECISION_REQUIRED in
 this main conversation with the evidence, recommendation, and safe options, then wait.
 
-After every mission is complete, use kaola-workflow-finalize. Verify the actual sink, remote state,
-issue state, archive, and cleanup before reporting completion. Stop after this selected run; do not
-claim another issue automatically.
+After every mission for the selected batch is complete, use kaola-workflow-finalize. Verify the
+actual sink, remote state, Issue state, archive, and cleanup before reporting completion. Stop
+after this selected batch run; do not start a second unrelated batch in one-shot mode.
 ```
 
 For PR review, make the goal explicit:
@@ -83,10 +90,10 @@ the owned run; do not equate mergeable status or green prose with completed revi
 Before sending, observe the session and inspect the promised output locators. Then use:
 
 ```text
-Resume the existing Kaola Workflow run for {targets}. Read workflow-state.md and mission-list.md
-top to bottom. Reconcile in-flight items from their output locators, continue the actual frontier,
-and preserve completed mission results. Keep project ownership and any user decision in this main
-conversation.
+Resume the existing Kaola Workflow run for its selected Issue batch. Read workflow-state.md and
+mission-list.md top to bottom. Reconcile in-flight items from their output locators, continue the
+actual frontier, and preserve completed mission results. Keep batch ownership and any user decision
+in this main conversation.
 ```
 
 Do not create a second run merely because the original worker or terminal is no longer visible.

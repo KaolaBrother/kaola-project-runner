@@ -8,7 +8,9 @@ contracts. Grok must read the currently discovered `workflow-next` and
 
 The main conversation must:
 
-1. honor a user-named issue or PR;
+1. for project work, pass goal context without narrowing selection to one Issue and let
+   `workflow-next` select the most appropriate coherent batch; for PR mode, honor the exact PR as
+   the review object without instructing it to claim one linked Issue;
 2. refresh local and remote truth before claiming;
 3. resume an existing active folder only when this conversation is its verified owner or successor;
    another session's folder, branch, worktree, and Issues remain untouched;
@@ -41,5 +43,6 @@ then owns:
 Do not treat a green CI badge, a mergeable flag, a PR merge, or a success message as the whole
 completion contract. Read the emitted evidence and verify fetched-live state.
 
-After the selected issue set is closed and archived, or the agreed keep-open terminal state is
-recorded and sunk, stop. A completion never authorizes automatically selecting the next issue.
+After the selected batch is closed and archived, or the agreed keep-open terminal state is recorded
+and sunk, stop. One-shot completion does not authorize starting a second unrelated batch; recurring
+project mode may let `workflow-next` select the next batch on a later authorized firing.

@@ -29,7 +29,7 @@ Each firing must:
 - surface `HUMAN_DECISION_REQUIRED` in the same main conversation and stop that firing;
 - use `kaola-workflow-finalize` only after the mission frontier is complete;
 - perform no work when the scheduled condition is false;
-- never auto-route to an unrelated next issue.
+- never inject an individual Issue target or override Workflow Next's coherent batch selection.
 
 When the condition is a PR intake, the scheduled prompt should carry the versioned marker
 `MAIN_THREAD_PR_INTAKE_V3_WORKFLOW_REVIEW_HANDOFF`, query fresh forge truth on every firing, process
@@ -65,17 +65,19 @@ project intake to a detached General loop or detached subagent.
 
 Repository: {absolute repo root}
 Goal: {authorized recurring project goal}
-Targets: {explicit issue set or workflow-next selection boundary}
+Selection boundary: {authorized project goal; no individual Issue target}
 Definition of done: {validation and lifecycle evidence}
 Authority boundary: {authorized mutations and user decisions}
 
-Read fresh repository, forge, and Kaola Workflow state. Resume an active workflow before taking
-anything new. Use workflow-next only inside this goal and scope. Keep mission-list.md as the
-recovery record and this main conversation as the owner. If a material user decision is required,
-print HUMAN_DECISION_REQUIRED with the exact decision, evidence, recommendation, and options here,
-pause the affected run, and prevent later firings from duplicating it. When every mission is done,
-use kaola-workflow-finalize and verify validation, sink, remote state, Issue state, archive, and
-cleanup. Do not invent work or move beyond the authorized goal.
+Read fresh repository, forge, and Kaola Workflow state. Resume an active batch before taking
+anything new. Invoke workflow-next without an individual Issue target and let it select the most
+appropriate coherent batch inside this goal. Keep mission-list.md as the recovery record and this
+main conversation as the owner. If a material user decision is required, print
+HUMAN_DECISION_REQUIRED with the exact decision, evidence, recommendation, and options here, pause
+the affected run, and prevent later firings from duplicating it. When every mission in the batch is
+done, use kaola-workflow-finalize and verify validation, sink, remote state, Issue state, archive,
+and cleanup. A later authorized firing may let workflow-next select the next efficient batch. Do
+not invent work or move beyond the authorized goal.
 ```
 
 ## PR review loop template

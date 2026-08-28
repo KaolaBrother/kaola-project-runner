@@ -8,8 +8,9 @@ Kaola Workflow 启动、恢复、推进和收口具体项目。
 它与可选的 Grok 执行 scheduler 是两套不同机制。
 
 裸调用不需要任何参数或补充提示词：Codex 会把当前工作目录所在的 Git repo 作为 workspace，
-选择一次性 Workflow 项目模式，并立即在 Grok 主会话调用 `workflow-next`。额外提示词只用于更
-准确地说明目标、Issue、PR 或模式，不是启动前提。
+选择一次性 Workflow 项目模式，并立即在 Grok 主会话调用 `workflow-next`，由 Workflow Next
+根据仓库和远端现状自行选择最高效的关联 Issue batch。Skill 不会把它限制为单个 Issue。额外
+提示词只用于更准确地说明目标、PR 或模式，不是启动前提。
 
 ## 能力边界
 
@@ -44,7 +45,8 @@ $grok-kaola-project-runner
 ```
 
 默认含义是：在当前 Git repo 中，使用 `grok-kaola-<repo-name>` tmux session，立即启动或恢复
-一个由 `workflow-next` 选择的项目。只有明确要求循环时才创建 Grok scheduler。
+一个由 `workflow-next` 自行选择的最合适 Issue batch。Codex 和 Grok 都不会预先指定单个
+Issue；只有明确要求循环时才创建 Grok scheduler。
 
 Skill 向 Codex 暴露四种任务能力：
 
