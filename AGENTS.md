@@ -82,6 +82,13 @@ Everything between these markers is owned by `workflow-init`; owner content outs
 - `CHANGELOG.md` — user-visible changes when present.
 - `docs/` — architecture, APIs, conventions, and decisions when present.
 
+## Documentation Update Checklist
+
+- Update `README.md` when installation, setup, or usage changes.
+- Update `docs/architecture.md` or `docs/api.md` when runtime boundaries or interfaces change.
+- Update `CHANGELOG.md` for user-visible behavior changes.
+- Record an explicit no-impact reason when none of those documents needs a change.
+
 ## Maintenance
 
 - Keep this universal contract concise; move long procedures and runtime-only detail elsewhere.
