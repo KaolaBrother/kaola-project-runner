@@ -50,10 +50,11 @@ binary at argv[0] or interpreter argv[1], except Kimi's exact `kimi-code` plus `
 The Grok compatibility wrapper preserves `grok_version` and `project_root` in preflight.
 
 Claude Code activity classification treats a visible Workflow decision as a compound state rather
-than trusting a prompt glyph alone. A pending decision signature together with the current editor or
-draft reports `waiting-human`, so `send` fails with `not-idle`. The state clears only when later
-runtime output is followed by a fresh empty prompt; an old `HUMAN_DECISION_REQUIRED` line outside
-the current activity tail does not permanently latch the session.
+than trusting a prompt glyph alone. A pending decision signature together with the current editor,
+whether empty or populated, reports `waiting-human`, so `send` fails with `not-idle`. The state
+clears only after later runtime output replaces pending evidence in the current activity tail and a
+fresh empty prompt appears; old `HUMAN_DECISION_REQUIRED` scrollback outside that tail does not
+permanently latch the session.
 
 Preflight reports runtime binary/version, Workflow capability discovery, recurring capability,
 project materialization state, and an adapter-specific evidence summary.

@@ -64,6 +64,17 @@ case '$mode' in
       'Draft response: option 1, rename both' \\
       '❯ option 1, rename both'
     ;;
+  decision-empty)
+    printf '%s\\n' 'HUMAN_DECISION_REQUIRED'
+    for ((i = 1; i <= 24; i++)); do printf 'history line %02d\\n' "\$i"; done
+    printf '%s\\n' \\
+      'Workflow decision state: PENDING' \\
+      'Waiting on your #842 call.' \\
+      'Decision options: 1. rename both  2. leave unchanged' \\
+      'Claude Code' \\
+      'Opus 5 | high effort' \\
+      '❯'
+    ;;
   idle)
     printf '%s\\n' 'Completed work: issue #900 is finished.' 'Final response recorded.' '❯'
     ;;
@@ -85,8 +96,9 @@ while IFS= read -r line; do
     exit 0
   fi
   if [[ '$mode' == decision && "\$line" == 'option 1, rename both' ]]; then
+    printf '%s\\n' 'Decision answer received: option 1, rename both'
+    for ((i = 1; i <= 16; i++)); do printf 'Resumed work output %02d\\n' "\$i"; done
     printf '%s\\n' \\
-      'Decision answer received: option 1, rename both' \\
       'Claude resumed visibly after the explicit answer.' \\
       'Completed decision-gated work.' \\
       '❯'
@@ -97,6 +109,15 @@ while IFS= read -r line; do
       'Waiting on your #842 call.' \\
       'Draft response: option 1, rename both' \\
       '❯ option 1, rename both'
+  elif [[ '$mode' == decision-empty ]]; then
+    # The empty editor is still unresolved; do not manufacture a resume marker.
+    printf '%s\\n' \\
+      'Workflow decision state: PENDING' \\
+      'Waiting on your #842 call.' \\
+      'Decision options: 1. rename both  2. leave unchanged' \\
+      'Claude Code' \\
+      'Opus 5 | high effort' \\
+      '❯'
   else
     printf 'Echoed completed prompt: %s\\n' "\$line"
     printf '%s\\n' 'Completed work remains resumable.' '❯'
@@ -126,6 +147,7 @@ keeper="claude-human-decision-keeper-$$"
 "$issue_tmux_bin" set-window-option -g pane-base-index 1
 
 decision_fake="$(make_claude_fixture decision)"
+empty_decision_fake="$(make_claude_fixture decision-empty)"
 idle_fake="$(make_claude_fixture idle)"
 approval_fake="$(make_claude_fixture approval)"
 trust_fake="$(make_claude_fixture trust)"
@@ -169,8 +191,8 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
   expect_send_refusal test_claude_decision_refuses_send "$repo" "$decision_session"
 
   # Simulate the human explicitly answering the exact owned pane. The fake
-  # runtime then emits a visible resume/completion frame; old marker history
-  # intentionally remains in the 120-line capture.
+  # runtime emits enough visible progress to replace pending evidence in the
+  # short activity tail, while old marker history remains in the 120-line capture.
   decision_answer='option 1, rename both'
   "$issue_tmux_bin" send-keys -t "$decision_pane_id" -l "$decision_answer"
   "$issue_tmux_bin" send-keys -t "$decision_pane_id" C-m
@@ -197,6 +219,48 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
   json_assert test_claude_decision_clear_allows_follow_up \
     "d['result'] == 'sent'" "$follow_up"
   run_runner stop --repo "$repo" --session "$decision_session" --force >/dev/null 2>&1 || true
+fi
+
+# Recreate the same unresolved boundary with an empty editor. Decision and
+# footer lines intervene before the final bare prompt, so a prompt glyph is
+# not evidence that the conversation is idle. This fixture remains unresolved
+# throughout and intentionally has no resume/completion marker.
+export CLAUDE_BIN="$empty_decision_fake"
+empty_decision_session="claude-human-decision-empty-$$"
+empty_decision_start="$(run_runner start --repo "$repo" --session "$empty_decision_session" 2>&1)" || \
+  fail test_claude_empty_decision_start "start failed: $empty_decision_start"
+
+if "$issue_tmux_bin" has-session -t "=$empty_decision_session" >/dev/null 2>&1; then
+  empty_decision_status="$(run_runner status --repo "$repo" --session "$empty_decision_session")"
+  json_assert test_claude_empty_editor_conflict_state \
+    "d['activity'] in ('waiting-human', 'unknown') and d['activity'] != 'idle' and d['tui_detected'] and d['pane_count'] == 1" \
+    "$empty_decision_status"
+
+  empty_decision_capture="$(run_runner capture --repo "$repo" --session "$empty_decision_session" --lines 120)"
+  empty_decision_tail="$(printf '%s\n' "$empty_decision_capture" | tail -n 18)"
+  if grep -Fq 'HUMAN_DECISION_REQUIRED' <<<"$empty_decision_tail"; then
+    fail test_claude_empty_marker_is_outside_captured_tail "marker unexpectedly remained in tail: $empty_decision_tail"
+  fi
+  grep -Fq 'Waiting on your #842 call.' <<<"$empty_decision_tail" || \
+    fail test_claude_empty_visible_waiting_evidence "waiting language missing from tail: $empty_decision_tail"
+  grep -Fq 'Decision options: 1. rename both  2. leave unchanged' <<<"$empty_decision_tail" || \
+    fail test_claude_empty_visible_decision_options "decision options missing from tail: $empty_decision_tail"
+  grep -Fq 'Opus 5 | high effort' <<<"$empty_decision_tail" || \
+    fail test_claude_empty_visible_claude_footer "Claude footer missing from tail: $empty_decision_tail"
+  grep -Eq '^[[:space:]]*❯[[:space:]]*$' <<<"$empty_decision_tail" || \
+    fail test_claude_empty_editor_prompt "empty editor prompt missing from tail: $empty_decision_tail"
+  if grep -Fq 'Claude resumed visibly after the explicit answer.' <<<"$empty_decision_capture" || \
+     grep -Fq 'Completed decision-gated work.' <<<"$empty_decision_capture"; then
+    fail test_claude_empty_remains_unresolved "fixture emitted a resume/completion marker"
+  fi
+
+  expect_send_refusal test_claude_empty_decision_refuses_send "$repo" "$empty_decision_session"
+  empty_after_send="$(run_runner capture --repo "$repo" --session "$empty_decision_session" --lines 120)"
+  if grep -Fq 'Claude resumed visibly after the explicit answer.' <<<"$empty_after_send" || \
+     grep -Fq 'Completed decision-gated work.' <<<"$empty_after_send"; then
+    fail test_claude_empty_stays_unresolved_after_refused_send "refused send changed unresolved fixture"
+  fi
+  run_runner stop --repo "$repo" --session "$empty_decision_session" --force >/dev/null 2>&1 || true
 fi
 
 # Preserve an ordinary completed-work prompt as idle.

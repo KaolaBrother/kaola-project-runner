@@ -66,9 +66,9 @@ claude_has_unresolved_decision_conflict() {
   # contains a Workflow decision that is still pending. Keep this deliberately
   # compound: no free-form waiting sentence can gate input by itself.
   #
-  # A later runtime output followed by a fresh empty prompt proves that the
-  # captured pending frame is stale. This gives manually answered conversations
-  # a deterministic clear path without letting old scrollback latch the session.
+  # The gate clears only after later runtime output has replaced the pending
+  # evidence in this short current-frame tail. Older scrollback is deliberately
+  # outside this classifier, so answered conversations cannot latch forever.
   awk '
     function is_prompt(line) {
       return line ~ /^[[:space:]]*(❯|›|>)/
@@ -84,20 +84,14 @@ claude_has_unresolved_decision_conflict() {
       line = $0
       if (is_pending(line)) {
         pending = NR
-        output_after_pending = 0
-      } else if (pending && line !~ /^[[:space:]]*$/ && !is_prompt(line)) {
-        output_after_pending = NR
       }
 
       if (is_prompt(line)) {
         prompt = NR
-        prompt_text = line
-        sub(/^[[:space:]]*(❯|›|>)[[:space:]]*/, "", prompt_text)
-        prompt_has_text = prompt_text ~ /[^[:space:]]/
       }
     }
     END {
-      if (pending && prompt && (prompt_has_text || output_after_pending <= pending)) exit 0
+      if (pending && prompt) exit 0
       exit 1
     }
   '
