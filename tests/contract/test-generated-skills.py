@@ -249,6 +249,26 @@ GROK_COMPATIBILITY_MARKERS = {
     ),
 }
 
+# Reviewed immutable bytes for the frozen Grok prompt/protocol.  The root
+# legacy carrier is intentionally absent in the Issue #1 distribution, so a
+# root-vs-golden diff cannot detect an arbitrary future edit.  Updating one of
+# these values is an explicit review event for the corresponding golden file;
+# generated Grok files must continue to match the reviewed bytes below.
+GROK_GOLDEN_REVIEWED_SHA256 = {
+    "SKILL.md": "6589f47f7b34c3d697176b2d0abbc05dafd3676348f4b0479a0b925b5d188630",
+    "agents/openai.yaml": "66699c5188eb10c53ab166572d530bbe77132c64d5b666c7258f68188bc64ddd",
+    "references/closing.md": "ae6c47a21e851f745ea743928b7b20fdc1b08c23929466f05ee9c63c21a07601",
+    "references/codex-supervision.md": "44c427a1503ef98fb345825962129c51058bd671d2cc806b047a968ea3baeabb",
+    "references/grok-tui.md": "818f9c7496d7d9a132112ceeb4d29c03d10d0c7a7765945026353d8e4033a6f8",
+    "references/human-decisions.md": "f7abfdda3d3590fcefd10316cf3bc51a6ffcf79834ae7b23cf7c25f1ba621a2c",
+    "references/kaola-lifecycle.md": "2c545d92737fee3bf3b3f1d147ac1e425999f698d0aa3e69a4afe210106dd9ea",
+    "references/pr-claim-handoff.md": "d7b452943c5775aa2fc79db402ded3aab9a0cc332230b59f910ce334415c2377",
+    "references/project-run.md": "742ec446152abd484fb4c7368da27183878d0f2075c63cec10a1327a8923187f",
+    "references/scheduling.md": "da7272156c5f0cca5f1ec223c9464caa338475493a37b296e1eba6fd5daa6867",
+    "references/status-monitoring.md": "cd69e7de643f61c3455cfb7ce0b68dbd6131ef2952f3f74a498263815559fc05",
+    "references/task-modes.md": "531dd0e0150f8abc05131addb53db92ea1d47c8dfab8084eec61fe81c2b191e1",
+}
+
 
 def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
     package = root / "skills" / "grok-kaola-project-runner"
@@ -267,14 +287,29 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
         expected_files = [
             Path("SKILL.md"),
             Path("agents/openai.yaml"),
-            *sorted(Path("references").glob("*.md")),
+            *sorted(path.relative_to(golden) for path in (golden / "references").glob("*.md")),
         ]
+        expected_relatives = {relative.as_posix() for relative in expected_files}
+        reviewed_relatives = set(GROK_GOLDEN_REVIEWED_SHA256)
+        assertions.check(
+            "test_grok_golden_reviewed_inventory_is_exact",
+            expected_relatives == reviewed_relatives,
+            f"reviewed SHA-256 inventory paths are {sorted(reviewed_relatives)!r}, expected {sorted(expected_relatives)!r}",
+        )
         for relative in expected_files:
             expected = golden / relative
             actual = package / relative
+            reviewed_hash = GROK_GOLDEN_REVIEWED_SHA256.get(relative.as_posix())
+            golden_hash = hashlib.sha256(expected.read_bytes()).hexdigest() if expected.is_file() else ""
+            assertions.check(
+                f"test_grok_golden_reviewed_sha256_{relative.as_posix()}",
+                expected.is_file() and reviewed_hash == golden_hash,
+                f"golden bytes for {relative} no longer match the reviewed SHA-256 inventory",
+            )
             assertions.check(
                 f"test_grok_compatibility_exact_{relative.as_posix()}",
-                actual.is_file() and expected.is_file() and actual.read_bytes() == expected.read_bytes(),
+                actual.is_file() and expected.is_file() and actual.read_bytes() == expected.read_bytes()
+                and hashlib.sha256(actual.read_bytes()).hexdigest() == reviewed_hash,
                 f"generated Grok file is not byte-identical to {expected}",
             )
 
