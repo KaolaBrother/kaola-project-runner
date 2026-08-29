@@ -25,6 +25,7 @@ run_case "$project_root/tests/contract/test-lifecycle-contract.py"
 run_case "$project_root/tests/contract/test-installer-migration.sh"
 run_case "$project_root/tests/contract/test-kaola-tmux.sh"
 run_case "$project_root/tests/contract/test-adapters.sh"
+run_case "$project_root/tests/contract/test-live-smoke-adapters.sh"
 run_case "$project_root/tests/contract/test-grok-compat.sh"
 
 if [[ "$failures" -gt 0 ]]; then

@@ -84,10 +84,50 @@ for relative in ("commands/workflow-next.md", "commands/kaola-workflow-finalize.
         "mode": stat.S_IMODE(path.stat().st_mode),
     }
 (root / "kaola-workflow/cursor-authority.json").write_text(
-    json.dumps({"schema_version": 1, "kind": "cursor_global_authority", "files": files}) + "\n",
+    json.dumps({"schema_version": 1, "kind": "cursor_global_authority", "forge": "github", "files": files}) + "\n",
     encoding="utf-8",
 )
 PY
+      # Start now performs point-of-use materialization through the installed
+      # global authority helper.  Keep this fixture fully isolated and
+      # idempotent so continue/resume launch checks do not touch ~/.cursor.
+      mkdir -p "$CURSOR_HOME/kaola-workflow/scripts"
+      cat >"$CURSOR_HOME/kaola-workflow/scripts/kaola-workflow-cursor-surface.js" <<'CURSOR_SURFACE'
+#!/usr/bin/env node
+const fs = require("fs");
+const path = require("path");
+const args = process.argv.slice(2);
+
+if (args.includes("--doctor")) {
+  process.stdout.write(JSON.stringify({authority: {receipt_status: "valid", freshness: "current"}}) + "\n");
+  process.exit(0);
+}
+const index = args.indexOf("--ensure-target");
+if (index === -1 || !args[index + 1] || !path.isAbsolute(args[index + 1])) process.exit(2);
+const target = args[index + 1];
+const names = ["workflow-next.md", "kaola-workflow-finalize.md"];
+const commandDir = path.join(target, ".cursor", "commands");
+const sourceRoot = process.env.CURSOR_HOME;
+const collisions = [];
+for (const name of names) {
+  const destination = path.join(commandDir, name);
+  if (fs.existsSync(destination)) {
+    const source = path.join(sourceRoot, "commands", name);
+    if (!fs.readFileSync(destination).equals(fs.readFileSync(source))) collisions.push(destination);
+  }
+}
+if (collisions.length) {
+  process.stderr.write(JSON.stringify({status: "foreign-collision", scope: "project", target, files: collisions}) + "\n");
+  process.exit(23);
+}
+fs.mkdirSync(commandDir, {recursive: true});
+for (const name of names) {
+  const destination = path.join(commandDir, name);
+  if (!fs.existsSync(destination)) fs.copyFileSync(path.join(sourceRoot, "commands", name), destination);
+}
+process.stdout.write(JSON.stringify({status: "current", scope: "project", target, files: names.length}) + "\n");
+CURSOR_SURFACE
+      chmod +x "$CURSOR_HOME/kaola-workflow/scripts/kaola-workflow-cursor-surface.js"
       ;;
   esac
 }
