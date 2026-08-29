@@ -1,0 +1,27 @@
+# {{RUNTIME_NAME}} adapter
+
+- Platform ID: `{{ID}}`
+- Default binary: `{{BINARY_NAME}}`
+- Binary override: `{{BINARY_ENV}}`
+- Default tmux session prefix: `{{SESSION_PREFIX}}`
+- Continue: `{{CONTINUE_SYNTAX}}`
+- Exact resume: `{{RESUME_SYNTAX}}`
+- Recurring execution: `{{RECURRING_EXECUTION}}`
+
+## Preflight
+
+{{PREFLIGHT_SUMMARY}}
+
+Preflight is read-only. Missing or untrusted Kaola runtime surfaces produce a typed refusal and a
+repair hint; the Runner never installs, upgrades, adopts, or rewrites runtime configuration.
+
+## Launch
+
+{{LAUNCH_SUMMARY}}
+
+Use `scripts/runtime-tmux.sh` for every preflight, start, status, capture, send, and stop operation.
+Do not reconstruct ownership checks from process names or fuzzy tmux matches.
+
+## Recurring boundary
+
+{{RECURRING_SUMMARY}}

@@ -1,87 +1,102 @@
-# Grok Kaola Project Runner
+# Kaola Project Runner
 
-一个仅面向 Codex 的 Skill：让 Codex 在精确的 tmux session 中操作 Grok CLI 主会话，并使用
-Kaola Workflow 启动、恢复、推进和收口具体项目。
+Kaola Project Runner 是一组面向 Codex 的外层调度 Skill。每个 Skill 在一个所有权可验证的
+tmux 主会话中启动指定 CLI，再让该 CLI 使用已经安装的 Kaola Workflow 完成 Issue 选择、
+claim、mission list、执行和最终收口。
 
-默认模式是一次性、可恢复的项目运行。loop 或 scheduler 只有在用户明确要求周期执行时才启用。
-每个活动项目都会由 Codex 在当前线程建立一个 15 分钟 heartbeat，用来检查状态并向用户汇报；
-它与可选的 Grok 执行 scheduler 是两套不同机制。
+现有 Grok Skill 是已经实跑验证的 golden contract：四种任务模式、项目与 PR 提示词、claim
+handoff、15 分钟 heartbeat、foreground scheduler 和关闭协议保持原文、原语义。其他平台从这份
+完整契约机械对齐，只把 executable、启动/恢复、preflight、TUI/activity 和尚未实证的 recurring
+能力放进 adapter。本仓库不安装或改写 Kaola Workflow，也不修改目标 CLI 的用户配置。
 
-裸调用不需要任何参数或补充提示词：Codex 会把当前工作目录所在的 Git repo 作为 workspace，
-选择一次性 Workflow 项目模式，并立即在 Grok 主会话调用 `workflow-next`，由 Workflow Next
-根据仓库和远端现状自行选择最高效的关联 Issue batch。Skill 不会把它限制为单个 Issue。额外
-提示词只用于更准确地说明目标、PR 或模式，不是启动前提。
+## 支持的平台
 
-## 能力边界
+| Platform | Codex Skill | CLI | Recurring |
+|---|---|---|---|
+| Grok CLI | `$grok-kaola-project-runner` | `grok` | supported，需显式请求 |
+| Claude Code | `$claude-code-kaola-project-runner` | `claude` | unsupported |
+| OpenCode | `$opencode-kaola-project-runner` | `opencode` | unsupported |
+| Kimi CLI | `$kimi-cli-kaola-project-runner` | `kimi` | unsupported |
+| Cursor CLI | `$cursor-cli-kaola-project-runner` | `cursor-agent` | unsupported |
 
-- Grok 主会话负责接单和保留需要用户决定的问题。
-- `workflow-next` 负责 claim、mission list 和项目推进。
-- `kaola-workflow-finalize` 负责最终验证、文档、Issue、归档与 sink。
-- `scripts/grok-tmux.sh` 只操作带有本项目所有权标记的精确 tmux session。
-- Codex 线程 heartbeat 每 15 分钟检查 Grok、Git、Kaola 和远端状态，终态后删除。
-- Grok 循环执行必须在同一个 main orchestrator 中使用 `foreground: true` scheduler。
-- 不根据历史记忆假定仓库指令、Grok 版本或 Kaola Workflow 安装位置。
+裸调用统一表示：使用当前目录所在的 canonical Git repository，启动或恢复该平台的精确
+tmux session，让当前可见的 `workflow-next` 自行选择最合适的 coherent Issue batch，完成后
+finalize 并停止。不会预先限制为单个 Issue，也不会隐式启动循环。
 
 ## 本地安装
 
 ```bash
+./scripts/render-skills.py --write
+./scripts/render-skills.py --check
 ./scripts/install-local.sh
 ```
 
-安装器会创建：
+默认安装全部五个平台，也可以选择一个或多个：
 
-```text
-~/.codex/skills/grok-kaola-project-runner -> 当前项目目录
+```bash
+./scripts/install-local.sh --platform grok,opencode
+./scripts/install-local.sh --platform claude-code
+./scripts/install-local.sh --uninstall
 ```
 
-如果目标已被其他文件或目录占用，安装器会停止，不会覆盖。
+安装目标是 `${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>`。旧的
+`grok-kaola-project-runner -> <repository-root>` 只有在 canonical target 精确等于当前仓库根
+时才会迁移。其他 symlink、普通文件、目录和 dangling link 均拒绝覆盖；卸载也只移除精确指向
+本仓库生成目录的 owned symlink。
 
 ## 快速使用
 
-在 Codex 中：
-
 ```text
 $grok-kaola-project-runner
+$claude-code-kaola-project-runner
+$opencode-kaola-project-runner
+$kimi-cli-kaola-project-runner
+$cursor-cli-kaola-project-runner
 ```
 
-默认含义是：在当前 Git repo 中，使用 `grok-kaola-<repo-name>` tmux session，立即启动或恢复
-一个由 `workflow-next` 自行选择的最合适 Issue batch。Codex 和 Grok 都不会预先指定单个
-Issue；只有明确要求循环时才创建 Grok scheduler。
+每个运行保留三层边界：Codex 外层负责精确会话控制和监督；目标 CLI 主会话负责项目接单和
+执行；Kaola Workflow 负责 claim、mission list、finalize、Issue/PR、archive 和 sink。
+Codex heartbeat 只监督，不是执行循环。`HUMAN_DECISION_REQUIRED` 必须回到用户，并且只有在
+精确 runtime session 已证明 idle 后才能把答案送回。
 
-Skill 向 Codex 暴露四种任务能力：
-
-1. 完整做一次 Workflow 项目。
-2. 循环做 Workflow 项目。
-3. 完整做一次 PR 审核、合并与 finalize。
-4. 循环做 PR 审核、合并与 finalize。
-
-这是 Skill 路由，不是四个业务 CLI 子命令。Codex 根据 Skill 选择模式，再像现有
-Automation 一样自行检查状态、操作 tmux/Grok CLI、发送提示词并监管结果。两个循环模式都要求
-Grok 使用同一个 Main orchestrator 中的 `foreground: true` scheduler，绝不使用 detached
-`/loop` General subagent。
-
-PR 模式始终调用 `workflow-next`。调用前先检查 linked Issue 的远端 claim；当 PR head 与同一
-claim project 匹配时，把冲突解释为作者 PR-sink run 的正常 review handoff，并明确要求
-`workflow-next` 忽略该冲突对 PR 审核的阻断。忽略的只是“不能审核”这一结论，不是 Issue 或
-作者 run 的 ownership：审阅者不得重复 claim、接管或重建作者的 workflow 状态。
-
-底层控制 helper 示例：
+## 控制接口
 
 ```bash
-scripts/grok-tmux.sh preflight \
-  --repo /absolute/path/to/repo \
-  --session my-project-grok
+scripts/kaola-tmux.sh grok preflight \
+  --repo /absolute/path/to/repo --session grok-kaola-example
 
-scripts/grok-tmux.sh start \
-  --repo /absolute/path/to/repo \
-  --session my-project-grok
+scripts/kaola-tmux.sh opencode start \
+  --repo /absolute/path/to/repo --session opencode-kaola-example
 
-scripts/grok-tmux.sh status \
-  --repo /absolute/path/to/repo \
-  --session my-project-grok
+scripts/kaola-tmux.sh cursor-cli status \
+  --repo /absolute/path/to/repo --session cursor-cli-kaola-example
 ```
 
-通常应由 Agent 根据 Skill 契约操作这些命令，而不是让用户手工驱动整个流程。
+命令为 `preflight`、`start`、`status`、`capture`、`send`、`stop`。复用、捕获、发送和停止前
+都必须证明 exact session、单 pane、Runner owner、platform、canonical repo、pane cwd 和
+runtime TUI；TUI 身份同时要求当前 pane process 在 argv[0] 或解释器 argv[1] 绑定 exact resolved
+runtime binary，不能只信任 scrollback 或后续参数文本。发送和普通停止还要求 activity 为 idle，
+待人工决定会话会被保留。prompt 使用 tmux buffer 传输，不经过 shell 求值。
+
+`scripts/grok-tmux.sh` 是 frozen Grok surface 的兼容包装器，等价于
+`scripts/kaola-tmux.sh grok ...`，并保留旧 marker 与 `grok_tui` 状态字段。
+
+Cursor CLI 的 `preflight` 保持只读；首次 `start` 会在创建 tmux 前调用当前 Kaola Cursor
+authority 的正式 `--ensure-target <repo>`，验证 receipt 后物化项目级 commands。任何 unmanaged
+collision 都会在 session 创建前失败关闭。本仓库不复制或自行改写这些 Workflow commands。
+
+## 仓库结构
+
+- `templates/grok-golden/`：已实跑验证、字节冻结的 Grok 协议和提示词；
+- `platforms/*.yaml`：五个平台的固定事实与能力声明；
+- `templates/agents/`、`templates/references/platform.md.tmpl`：UI 与 adapter facts 模板；
+- `scripts/adapters/`：binary、preflight、启动、TUI/activity 和退出差异；
+- `scripts/kaola-tmux.sh`：平台中立、安全默认关闭的会话核心；
+- `skills/`：确定性生成并提交的五个自包含 Skill；
+- `tests/contract/`：golden compatibility、renderer、安装迁移和控制面验收。
+
+修改 golden contract 需要真实 Grok 再验证和明确授权；通常的新平台工作只能改 manifest、adapter
+和机械 renderer。修改后运行 `--write` 并提交生成产物，`--check` 会拒绝任何 drift。
 
 ## 验证
 
@@ -89,4 +104,11 @@ scripts/grok-tmux.sh status \
 ./scripts/validate.sh
 ```
 
-测试使用隔离临时 Git 仓库、假的 Grok TUI 和独立 tmux session；不会接触已有 session。
+离线测试使用临时 Git repository、fake CLI、隔离 Codex home 和独立 tmux session。真实验收按
+五个平台分别启动 exact tmux 主会话并交付完整 Grok-aligned `workflow-next` 提示词。Claude Code
+当前无账号时，只把 TUI/命令接收作为通过证据，认证后的执行阻断会单独记录，不声称 Workflow
+成功运行。
+
+详细边界见 [架构](docs/architecture.md)、[命令契约](docs/api.md) 和
+[开发约定](docs/conventions.md)。五个平台的真实 tmux 验收、Claude 认证边界和零会话残留见
+[2026-08-29 live smoke](docs/live-smoke-2026-08-29.md)。
