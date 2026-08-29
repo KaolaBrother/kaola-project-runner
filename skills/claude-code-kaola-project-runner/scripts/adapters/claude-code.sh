@@ -61,6 +61,48 @@ adapter_detect_tui() {
     printf '%s\n' "$capture" | grep -Eqi 'Claude Code|Opus [0-9]|auto mode on|bypass permissions on'
 }
 
+claude_has_unresolved_decision_conflict() {
+  # A prompt glyph is not sufficient idle evidence when the visible frame also
+  # contains a Workflow decision that is still pending. Keep this deliberately
+  # compound: no free-form waiting sentence can gate input by itself.
+  #
+  # A later runtime output followed by a fresh empty prompt proves that the
+  # captured pending frame is stale. This gives manually answered conversations
+  # a deterministic clear path without letting old scrollback latch the session.
+  awk '
+    function is_prompt(line) {
+      return line ~ /^[[:space:]]*(❯|›|>)/
+    }
+    function is_pending(line) {
+      return line ~ /^HUMAN_DECISION_REQUIRED[[:space:]]*$/ ||
+             line ~ /Workflow decision state:[[:space:]]*PENDING/ ||
+             line ~ /Waiting on your #[0-9]+ call[.]?/ ||
+             line ~ /Decision remains unresolved[.]?/ ||
+             line ~ /Draft response:/
+    }
+    {
+      line = $0
+      if (is_pending(line)) {
+        pending = NR
+        output_after_pending = 0
+      } else if (pending && line !~ /^[[:space:]]*$/ && !is_prompt(line)) {
+        output_after_pending = NR
+      }
+
+      if (is_prompt(line)) {
+        prompt = NR
+        prompt_text = line
+        sub(/^[[:space:]]*(❯|›|>)[[:space:]]*/, "", prompt_text)
+        prompt_has_text = prompt_text ~ /[^[:space:]]/
+      }
+    }
+    END {
+      if (pending && prompt && (prompt_has_text || output_after_pending <= pending)) exit 0
+      exit 1
+    }
+  '
+}
+
 adapter_detect_activity() {
   local capture="$1" tail_sample
   tail_sample="$(printf '%s\n' "$capture" | tail -n 18)"
@@ -69,6 +111,7 @@ adapter_detect_activity() {
   elif printf '%s\n' "$tail_sample" | grep -Eqi 'esc to interrupt|working|thinking|running tool|responding|press esc'; then printf '%s\n' busy
   elif printf '%s\n' "$tail_sample" | grep -Eqi 'Quick safety check|trust this folder|Enter to confirm'; then printf '%s\n' waiting-human
   elif printf '%s\n' "$tail_sample" | grep -Eq '^HUMAN_DECISION_REQUIRED[[:space:]]*$'; then printf '%s\n' waiting-human
+  elif printf '%s\n' "$tail_sample" | claude_has_unresolved_decision_conflict; then printf '%s\n' waiting-human
   elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|>)'; then printf '%s\n' idle
   else printf '%s\n' unknown
   fi

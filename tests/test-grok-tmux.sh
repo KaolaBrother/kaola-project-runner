@@ -3,14 +3,28 @@ set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 helper="$project_root/scripts/grok-tmux.sh"
-tmux_bin="${TMUX_BIN:-$(command -v tmux)}"
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/grok-kaola-runner-test.XXXXXX")"
+tmux_base_bin="$(command -v tmux)"
+tmux_socket="gkpr-test-$$-${RANDOM}"
+tmux_bin="$tmp_root/tmux"
 session="gkpr-test-$$"
 unrelated="gkpr-unrelated-$$"
+keeper="gkpr-keeper-$$"
+
+cat >"$tmux_bin" <<'TMUX_SHIM'
+#!/usr/bin/env bash
+set -euo pipefail
+exec "$GROK_TEST_TMUX_BIN" -L "$GROK_TEST_TMUX_SOCKET" "$@"
+TMUX_SHIM
+chmod +x "$tmux_bin"
+export GROK_TEST_TMUX_BIN="$tmux_base_bin"
+export GROK_TEST_TMUX_SOCKET="$tmux_socket"
 
 cleanup() {
   "$tmux_bin" kill-session -t "$session" 2>/dev/null || true
   "$tmux_bin" kill-session -t "$unrelated" 2>/dev/null || true
+  "$tmux_bin" kill-session -t "$keeper" 2>/dev/null || true
+  "$tmux_bin" kill-server 2>/dev/null || true
   rm -rf "$tmp_root"
 }
 trap cleanup EXIT
@@ -21,6 +35,12 @@ fake_grok="$tmp_root/grok"
 mkdir -p "$repo" "$other_repo"
 git -C "$repo" init -q -b main
 git -C "$other_repo" init -q -b main
+
+# Keep the legacy validation hermetic. Its own server uses explicit ordinary
+# numbering so a user's/default server configuration cannot affect the test.
+"$tmux_bin" new-session -d -s "$keeper" -c "$tmp_root"
+"$tmux_bin" set-option -g base-index 0
+"$tmux_bin" set-window-option -g pane-base-index 0
 
 cat >"$fake_grok" <<'FAKE'
 #!/usr/bin/env bash
