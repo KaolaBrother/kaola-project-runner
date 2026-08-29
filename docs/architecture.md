@@ -54,7 +54,9 @@ markers and later argv text are never identity proof. Kimi's fixed `kimi-code` p
 is accepted only together with tmux's live `node` foreground command.
 `send` additionally requires idle activity. Ordinary `stop` also requires idle and preserves an
 unresolved `HUMAN_DECISION_REQUIRED`; `stop --force` bypasses graceful exit only and never bypasses
-ownership checks. Grok also receives the legacy markers and legacy JSON aliases.
+ownership checks. Claude decision classification combines pending-decision and editor evidence so a
+prompt cannot override an unresolved decision; later runtime output followed by a fresh empty prompt
+clears stale history. Grok also receives the legacy markers and legacy JSON aliases.
 
 ## Failure model
 

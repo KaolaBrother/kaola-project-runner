@@ -73,6 +73,13 @@ If status is `waiting-human`, do not send. Native Claude trust or tool-approval 
 `--permission-mode auto` session should not stop on routine tool approvals; if it does, preserve the
 session and report the discrepancy rather than selecting an approval option automatically.
 
+The decision gate is based on compound current-frame evidence, not on a prompt glyph or an arbitrary
+waiting sentence alone. When a pending Workflow decision remains visible together with an editor or
+draft, status stays `waiting-human` and `send` fails closed even if the original structured marker has
+left the short activity tail. After the human answer reaches the exact owned pane, require later
+runtime output and a fresh empty prompt before treating the conversation as idle. Old marker history
+outside the current activity tail does not permanently latch a resumed conversation.
+
 ## 4. Send one intake prompt and supervise
 
 Send the one-shot prompt from [project-run.md](project-run.md) only after the verified idle state:
