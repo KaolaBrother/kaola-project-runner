@@ -6,7 +6,6 @@
 - Default tmux session prefix: `kimi-cli-kaola`
 - Continue: `--continue`
 - Exact resume: `--session <session-id>`
-- Recurring execution: `unsupported`
 
 ## Preflight
 
@@ -22,9 +21,12 @@ Launch kimi from the canonical repository root.
 Use `scripts/runtime-tmux.sh` for every preflight, start, status, capture, send, and stop operation.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
-## Recurring boundary
+## Scheduling carriers
 
-Do not map goal mode or background agents to recurring execution until the same-main-conversation lifecycle is live-proven.
+Use the caller-selected one-shot, Codex heartbeat, or live-verified runtime-native carrier described in [scheduling.md](scheduling.md).
+
+This adapter capability does not gate external Codex scheduling. The human or invoking agent chooses
+the execution carrier and follows [scheduling.md](scheduling.md) for each firing.
 
 ---
 

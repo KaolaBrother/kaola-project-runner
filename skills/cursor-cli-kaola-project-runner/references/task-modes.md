@@ -1,7 +1,5 @@
 # Four Codex task modes
 
-> Adapter capability gate: recurring execution is currently `unsupported` for Cursor CLI. Modes 2 and 4 below preserve the Grok golden-contract parity target but are unavailable; do not emulate them with a heartbeat, background agent, goal, loop, task, or detached conversation.
-
 These are Skill-level capabilities exposed to Codex. They are not shell subcommands. Codex selects
 one mode, uses the low-level tmux helper where useful, and operates the Cursor CLI main conversation
 as the current task requires.
@@ -22,22 +20,24 @@ is the coherent Issue batch selected by `workflow-next`, not one Issue selected 
   target.
 - Let the main conversation progress the mission frontier and surface user decisions.
 - When every mission is done, require `kaola-workflow-finalize` and verify the terminal state.
-- Do not create a Cursor CLI scheduler and do not start a second unrelated batch.
+- Finish after this batch when the caller selected one-shot execution.
 
 ## 2. Recurring Workflow projects
 
-Use only when the user asks Cursor CLI to advance project work repeatedly.
+Use when the human or invoking agent selects repeated project work. The caller selects the execution
+carrier; runtime-native recurring support does not gate a Codex thread heartbeat or another
+authorized outer carrier.
 
 - Start or reuse the exact owned Cursor CLI main conversation.
-- Inspect `/tasks` in the idle main conversation before changing scheduler state.
-- Ask with ordinary natural language for exactly one scheduler at the requested interval with
-  `foreground: true`; never send `/loop`.
-- Every firing must be a new turn in the same main orchestrator, resume an active Kaola batch first,
-  remain inside the authorized project goal, invoke `workflow-next` without an individual Issue
-  target, and use `kaola-workflow-finalize` when the current batch is complete. A later firing may
-  let `workflow-next` select the next efficient batch inside the recurring goal.
-- Require authoritative scheduler ID/count/interval/foreground evidence and zero detached intake
-  loops or agents.
+- Select one carrier described in [scheduling.md](scheduling.md). A Codex thread heartbeat can own
+  external cadence; a runtime-native same-main-orchestrator scheduler can own it when that carrier
+  is selected and its live interface has been verified.
+- Every firing resumes an active Kaola batch first, remains inside the authorized project goal,
+  invokes `workflow-next` without an individual Issue target, and uses
+  `kaola-workflow-finalize` when the current batch is complete. A later firing may let
+  `workflow-next` select the next efficient batch inside the recurring goal.
+- Record authoritative carrier identity, interval, active window, and stopping condition, and never
+  overlap two firings for the same run.
 
 Read [scheduling.md](scheduling.md) for creation, migration, and verification details.
 
@@ -68,17 +68,18 @@ origin PR handoff, merge only after the workflow-driven review passes, then use 
 `watch-pr` cleanup when locally available; do not run a second finalization against reconstructed
 author state. When origin state is absent or watch-pr cannot clean, prove merge and linked-Issue
 completion, then remove only matching residue; never touch foreign or unfinished claims, and stop
-for `HUMAN_DECISION_REQUIRED` on ambiguity. Do not create a Cursor CLI scheduler for this mode. Terminal
+for `HUMAN_DECISION_REQUIRED` on ambiguity. Terminal
 evidence includes merged PR, terminal linked Issues, zero matching claims/labels, zero Runner
 schedulers/detached intake, clean aligned repo, and agreed tmux shutdown.
 
 ## 4. Recurring PR review and finalization
 
-Use when the user asks for the tested open-PR intake behavior.
+Use when the human or invoking agent selects repeated open-PR intake. The caller selects the
+execution carrier.
 
-- Inspect `/tasks`, migrate only an inactive old detached loop, and ensure exactly one scheduler.
-- Create it through an ordinary main-conversation request with the requested interval and
-  `foreground: true`; never use `/loop`.
+- Configure one carrier from [scheduling.md](scheduling.md) with the caller's interval, active
+  window, and stopping condition. A Codex thread heartbeat can own external cadence; a runtime-
+  native same-main-conversation scheduler can own it after live interface verification.
 - Use the `MAIN_THREAD_PR_INTAKE_V3_WORKFLOW_REVIEW_HANDOFF` contract in
   [scheduling.md](scheduling.md): query open PRs fresh,
   return `NO_OPEN_PRS` without mutation when empty, process non-draft PRs deterministically, and
@@ -90,14 +91,14 @@ Use when the user asks for the tested open-PR intake behavior.
   the next firing or mutate foreign, mismatched, unfinished, or ambiguous ownership.
 - A firing that requires the user prints `HUMAN_DECISION_REQUIRED` in the main orchestrator and
   prevents later firings from duplicating that blocked run.
-- Verify a real firing appears as a new turn in the same Cursor CLI conversation, with zero detached
-  General-loop scheduler and zero detached intake subagent.
+- Verify a real firing enters the intended Cursor CLI main conversation, with zero overlapping intake
+  firing and zero detached intake subagent.
 - At terminal shutdown verify merged PR state, terminal linked Issues, zero matching claim markers
   and in-progress labels, zero Runner schedulers/detached intake, clean aligned repo, and the agreed
   exact tmux/session disposition.
 
 ## Supervision shared by all four
 
-After any mode starts or resumes, Codex establishes one 15-minute current-thread heartbeat from
-[codex-supervision.md](codex-supervision.md). The heartbeat checks Cursor CLI, Git, Kaola, and forge state
-and reports to the user until the terminal state is verified, then deletes itself.
+The human or invoking agent chooses whether to create supervision and its cadence. Follow
+[codex-supervision.md](codex-supervision.md) when the selected carrier is a Codex thread heartbeat.
+It may provide observation only or trigger the next safe firing; record which role it owns.

@@ -17,16 +17,26 @@ claude_surface() {
 }
 
 adapter_preflight() {
-  local user_root="${CLAUDE_CONFIG_DIR:-$HOME/.claude}" carrier
+  local user_root="${CLAUDE_CONFIG_DIR:-$HOME/.claude}" carrier help_text
   if claude_surface "$repo/.claude"; then carrier="$repo/.claude"
   elif claude_surface "$user_root"; then carrier="$user_root"
   else die "missing complete Claude Kaola commands/Skills, agents, or support scripts"
+  fi
+  if [[ "${KAOLA_CLAUDE_PROFILE_REQUIRED:-false}" == true ]]; then
+    help_text="$("$RUNTIME_BIN" --help 2>&1)"
+    for option in --model --effort --permission-mode; do
+      grep -Fq -- "$option" <<<"$help_text" || \
+        die "Claude Code does not expose required launch option: $option"
+    done
   fi
   PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1)"
   PREFLIGHT_WORKFLOW_NEXT=true
   PREFLIGHT_FINALIZE=true
   PREFLIGHT_PROJECT_MATERIALIZATION=not-required
   PREFLIGHT_DETAIL="complete Claude Kaola carrier at $carrier"
+  if [[ "${KAOLA_CLAUDE_PROFILE_REQUIRED:-false}" == true ]]; then
+    PREFLIGHT_DETAIL+="; model, effort, and permission-mode launch options verified"
+  fi
 }
 
 adapter_build_launch() {
@@ -35,17 +45,28 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--resume "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
+  if [[ -n "${model:-}" ]]; then ADAPTER_LAUNCH_ARGS+=(--model "$model"); fi
+  if [[ -n "${effort:-}" ]]; then ADAPTER_LAUNCH_ARGS+=(--effort "$effort"); fi
+  if [[ -n "${permission_mode:-}" ]]; then
+    ADAPTER_LAUNCH_ARGS+=(--permission-mode "$permission_mode")
+  fi
 }
 
 adapter_detect_tui() {
   local title="$1" command="$2" capture="$3"
-  [[ "$title" =~ [Cc]laude ]]
+  # Claude replaces the terminal title with the active task after intake. Core
+  # has already proved the exact launcher process, ownership, and repository;
+  # keep the second predicate on stable live CLI surfaces rather than title alone.
+  [[ "$title" =~ [Cc]laude || "$command" == claude* ]] || \
+    printf '%s\n' "$capture" | grep -Eqi 'Claude Code|Opus [0-9]|auto mode on|bypass permissions on'
 }
 
 adapter_detect_activity() {
   local capture="$1" tail_sample
   tail_sample="$(printf '%s\n' "$capture" | tail -n 18)"
-  if printf '%s\n' "$tail_sample" | grep -Eqi 'esc to interrupt|working|thinking|running tool|responding|press esc'; then printf '%s\n' busy
+  if printf '%s\n' "$tail_sample" | grep -Eqi \
+      'This command requires approval|Do you want to proceed\?|switch to auto mode|Esc to cancel.*Tab to amend'; then printf '%s\n' waiting-human
+  elif printf '%s\n' "$tail_sample" | grep -Eqi 'esc to interrupt|working|thinking|running tool|responding|press esc'; then printf '%s\n' busy
   elif printf '%s\n' "$tail_sample" | grep -Eqi 'Quick safety check|trust this folder|Enter to confirm'; then printf '%s\n' waiting-human
   elif printf '%s\n' "$tail_sample" | grep -Eq '^HUMAN_DECISION_REQUIRED[[:space:]]*$'; then printf '%s\n' waiting-human
   elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|>)'; then printf '%s\n' idle

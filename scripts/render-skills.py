@@ -123,24 +123,13 @@ def align_grok_contract(text: str, manifest: dict[str, str]) -> str:
     return text
 
 
-def capability_gate(manifest: dict[str, str]) -> str:
-    if manifest["recurring_execution"] == "supported":
-        return ""
-    return (
-        "\n> Adapter capability gate: recurring execution is currently `unsupported` for "
-        f"{manifest['runtime_name']}. Modes 2 and 4 below preserve the Grok golden-contract "
-        "parity target but are unavailable; do not emulate them with a heartbeat, background "
-        "agent, goal, loop, task, or detached conversation.\n"
-    )
-
-
 def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     result[MARKER] = (manifest["skill_name"] + "\n").encode()
     if manifest["id"] == "grok":
-        # Grok is the live-proven golden contract. Its prose and prompt bytes are frozen; the
-        # multi-runtime renderer may extend the executable carrier but must never simplify or
-        # reinterpret this protocol while aligning newer runtimes to it.
+        # Grok is the live-proven golden contract. Its runtime-native procedures remain the
+        # reference implementation; cross-platform orchestration changes must update these
+        # reviewed bytes explicitly rather than being injected only into generated variants.
         contract = TEMPLATES / "grok-golden"
         result["SKILL.md"] = (contract / "SKILL.md").read_bytes()
         result["agents/openai.yaml"] = (contract / "agents" / "openai.yaml").read_bytes()
@@ -149,8 +138,24 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     else:
         contract = TEMPLATES / "grok-golden"
         skill = align_grok_contract((contract / "SKILL.md").read_text(encoding="utf-8"), manifest)
-        gate = capability_gate(manifest)
-        skill = skill.replace("\n## Four exposed capabilities\n", f"{gate}\n## Four exposed capabilities\n")
+        if manifest["id"] == "claude-code":
+            skill = skill.replace(
+                "  [references/task-modes.md](references/task-modes.md),\n"
+                "  [references/project-run.md](references/project-run.md), and\n"
+                "  [references/kaola-lifecycle.md](references/kaola-lifecycle.md).\n",
+                "  [references/task-modes.md](references/task-modes.md),\n"
+                "  [references/project-run.md](references/project-run.md),\n"
+                "  [references/kaola-lifecycle.md](references/kaola-lifecycle.md), and\n"
+                "  [references/launch.md](references/launch.md).\n",
+                1,
+            )
+            skill = skill.replace(
+                "3. Start a new Claude Code conversation or resume the intended one.",
+                "3. Start a new Claude Code conversation or resume the intended one through the "
+                "measured configuration and verification sequence in "
+                "[references/launch.md](references/launch.md).",
+                1,
+            )
         result["SKILL.md"] = skill.encode()
 
         metadata = TEMPLATES / "agents" / "openai.yaml.tmpl"
@@ -160,16 +165,43 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
 
         for source in sorted((contract / "references").glob("*.md")):
             target_name = "platform.md" if source.name == "grok-tui.md" else source.name
-            aligned = align_grok_contract(source.read_text(encoding="utf-8"), manifest)
-            if source.name in {"task-modes.md", "scheduling.md"}:
-                first_break = aligned.find("\n")
-                aligned = aligned[:first_break + 1] + capability_gate(manifest) + aligned[first_break + 1:]
+            if manifest["id"] == "claude-code" and source.name == "scheduling.md":
+                claude_schedule = TEMPLATES / "claude-code" / "references" / "scheduling.md"
+                aligned = claude_schedule.read_text(encoding="utf-8")
+            elif source.name == "scheduling.md":
+                schedule = TEMPLATES / "references" / "scheduling.md.tmpl"
+                aligned = render(schedule.read_text(encoding="utf-8"), manifest, schedule)
+            else:
+                aligned = align_grok_contract(source.read_text(encoding="utf-8"), manifest)
             if source.name == "grok-tui.md":
                 facts = TEMPLATES / "references" / "platform.md.tmpl"
                 aligned = render(facts.read_text(encoding="utf-8"), manifest, facts) + "\n---\n\n" + aligned
+                if manifest["id"] == "claude-code":
+                    aligned = aligned.replace(
+                        "- `idle`: input may be sent if every ownership and identity field is also true.\n",
+                        "- `idle`: input may be sent if every ownership and identity field is also true.\n"
+                        "- `waiting-human`: a trust, native approval, or Workflow human-decision "
+                        "surface is visible; do not inject.\n",
+                        1,
+                    )
+                    aligned = aligned.replace(
+                        "The helper uses the exact cwd, its tmux\n"
+                        "ownership marker, and the pane title together instead of assuming the executable name is `claude`.\n",
+                        "The helper uses exact cwd, tmux ownership, resolved process identity, and stable "
+                        "Claude CLI surfaces. Claude may replace the pane title with its active task; that "
+                        "does not invalidate an otherwise exact TUI.\n",
+                        1,
+                    )
             result[f"references/{target_name}"] = aligned.encode()
 
-    core = ROOT / "scripts" / "kaola-tmux.sh"
+        if manifest["id"] == "claude-code":
+            launch = TEMPLATES / "claude-code" / "references" / "launch.md"
+            result["references/launch.md"] = launch.read_bytes()
+
+    if manifest["id"] == "claude-code":
+        core = ROOT / "scripts" / "claude-code-tmux.sh"
+    else:
+        core = ROOT / "scripts" / "kaola-tmux.sh"
     adapter = ROOT / "scripts" / "adapters" / f"{manifest['id']}.sh"
     for source, target in ((core, "scripts/kaola-tmux.sh"), (adapter, f"scripts/adapters/{adapter.name}")):
         if not source.is_file():

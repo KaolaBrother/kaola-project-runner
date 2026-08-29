@@ -6,7 +6,6 @@
 - Default tmux session prefix: `cursor-cli-kaola`
 - Continue: `--continue`
 - Exact resume: `--resume <chat-id>`
-- Recurring execution: `unsupported`
 
 ## Preflight
 
@@ -22,9 +21,12 @@ For a new exact session, run the installed Kaola Cursor authority's fail-closed 
 Use `scripts/runtime-tmux.sh` for every preflight, start, status, capture, send, and stop operation.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
-## Recurring boundary
+## Scheduling carriers
 
-Do not extrapolate Cursor App, Cloud, goal, loop, or background behavior to standalone CLI recurring execution without a dedicated live proof.
+Use the caller-selected one-shot, Codex heartbeat, or live-verified runtime-native carrier described in [scheduling.md](scheduling.md).
+
+This adapter capability does not gate external Codex scheduling. The human or invoking agent chooses
+the execution carrier and follows [scheduling.md](scheduling.md) for each firing.
 
 ---
 

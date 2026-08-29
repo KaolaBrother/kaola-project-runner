@@ -188,9 +188,9 @@ GROK_COMPATIBILITY_MARKERS = {
         "Recurring Workflow projects",
         "Complete one PR review and finalization",
         "Recurring PR review and finalization",
-        "foreground: true",
+        "caller-selected scheduling",
         "HUMAN_DECISION_REQUIRED",
-        "15-minute",
+        "human or invoking agent",
         "workflow-next",
         "kaola-workflow-finalize",
         "## Required handoff",
@@ -209,7 +209,7 @@ GROK_COMPATIBILITY_MARKERS = {
         "## 2. Recurring Workflow projects",
         "## 3. Complete one PR review and finalization",
         "## 4. Recurring PR review and finalization",
-        "15-minute current-thread heartbeat",
+        "caller selects the execution carrier",
     ),
     "references/pr-claim-handoff.md": (
         "UNCLAIMED_PR",
@@ -222,8 +222,9 @@ GROK_COMPATIBILITY_MARKERS = {
         "Never remove a foreign/mismatched claim",
     ),
     "references/codex-supervision.md": (
-        "lightweight 15-minute",
-        "supervise and report, not to become a second project owner",
+        "chooses whether to create a Codex thread heartbeat",
+        "observation only",
+        "execution carrier",
         "HUMAN_DECISION_REQUIRED",
         "Do not inject",
     ),
@@ -245,28 +246,28 @@ GROK_COMPATIBILITY_MARKERS = {
         "zero matching claim residue",
         "Never clean foreign, mismatched, open unfinished, or ambiguous residue",
         "exact owned Grok session is idle",
-        "delete the exact Codex supervision heartbeat",
+        "caller-selected terminal disposition",
     ),
 }
 
-# Reviewed immutable bytes for the frozen Grok prompt/protocol.  The root
+# Reviewed immutable bytes for the current Grok prompt/protocol.  The root
 # legacy carrier is intentionally absent in the Issue #1 distribution, so a
 # root-vs-golden diff cannot detect an arbitrary future edit.  Updating one of
 # these values is an explicit review event for the corresponding golden file;
 # generated Grok files must continue to match the reviewed bytes below.
 GROK_GOLDEN_REVIEWED_SHA256 = {
-    "SKILL.md": "6589f47f7b34c3d697176b2d0abbc05dafd3676348f4b0479a0b925b5d188630",
+    "SKILL.md": "ae74d354ef1059a60edbde8cb4a99dad09d2d25cc47e0fc637e2c9164cc70dbe",
     "agents/openai.yaml": "66699c5188eb10c53ab166572d530bbe77132c64d5b666c7258f68188bc64ddd",
-    "references/closing.md": "ae6c47a21e851f745ea743928b7b20fdc1b08c23929466f05ee9c63c21a07601",
-    "references/codex-supervision.md": "44c427a1503ef98fb345825962129c51058bd671d2cc806b047a968ea3baeabb",
+    "references/closing.md": "2fda2a5726fa39abbbeb87ce7e80815e2d2870f001d7198e949e26f46a2b60c1",
+    "references/codex-supervision.md": "b9c3ec5d4aa7081faccf7773d84b08b10bad828cc8e15f4221de9435be7cb2d4",
     "references/grok-tui.md": "818f9c7496d7d9a132112ceeb4d29c03d10d0c7a7765945026353d8e4033a6f8",
     "references/human-decisions.md": "f7abfdda3d3590fcefd10316cf3bc51a6ffcf79834ae7b23cf7c25f1ba621a2c",
     "references/kaola-lifecycle.md": "2c545d92737fee3bf3b3f1d147ac1e425999f698d0aa3e69a4afe210106dd9ea",
     "references/pr-claim-handoff.md": "d7b452943c5775aa2fc79db402ded3aab9a0cc332230b59f910ce334415c2377",
     "references/project-run.md": "742ec446152abd484fb4c7368da27183878d0f2075c63cec10a1327a8923187f",
-    "references/scheduling.md": "da7272156c5f0cca5f1ec223c9464caa338475493a37b296e1eba6fd5daa6867",
-    "references/status-monitoring.md": "cd69e7de643f61c3455cfb7ce0b68dbd6131ef2952f3f74a498263815559fc05",
-    "references/task-modes.md": "531dd0e0150f8abc05131addb53db92ea1d47c8dfab8084eec61fe81c2b191e1",
+    "references/scheduling.md": "6ea889913d7e8109767b61695b9d0030e393941861023a2a9955f093e2558e9e",
+    "references/status-monitoring.md": "a113eee36c698c8c85d7e2e9a303837a8cc8dfd9c27a6e7e944789758776db20",
+    "references/task-modes.md": "c9e8333d82a44edbdf8eb1d2bbb2f3f4f317b9ed34a02aea69fa2240aff3ca23",
 }
 
 
@@ -313,11 +314,10 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
                 f"generated Grok file is not byte-identical to {expected}",
             )
 
-        # The frozen contract may add only the expressly authorized merged-PR
-        # residue cleanup to the current root legacy Skill.  A deletion or
-        # replacement would be semantic compression; additions are the sole
-        # permitted delta, and the exact golden-byte check above constrains
-        # those additions to the reviewed template.
+        # The reviewed contract may carry the expressly authorized merged-PR
+        # residue cleanup and caller-controlled scheduling changes relative to
+        # a root legacy Skill. The exact golden-byte check above constrains
+        # those changes to the reviewed template.
         legacy_files = [Path("SKILL.md"), *sorted(Path("references").glob("*.md"))]
         inserted_text: list[str] = []
         legacy_changed = False
@@ -353,6 +353,10 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
                             "matching claim",
                             "residue",
                             "human_decision_required",
+                            "caller",
+                            "execution carrier",
+                            "heartbeat",
+                            "scheduling",
                         )
                     )
                     assertions.check(
@@ -369,11 +373,15 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
             "workflow:in-progress",
             "matching claim",
             "HUMAN_DECISION_REQUIRED",
+            "caller",
+            "execution carrier",
+            "heartbeat",
+            "scheduling",
         )
         assertions.check(
             "test_grok_compatibility_legacy_delta_is_authorized_residue_cleanup",
             not legacy_changed or any(any(marker in line for marker in residue_markers) for line in inserted_text),
-            "frozen contract delta has no authorized merged-PR residue-cleanup marker",
+            "reviewed contract delta has no authorized residue-cleanup or scheduling marker",
         )
     for relative, markers in GROK_COMPATIBILITY_MARKERS.items():
         path = package / relative

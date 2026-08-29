@@ -3,8 +3,9 @@
 Use CLI evidence to supervise progress without taking ownership away from OpenCode. Monitoring is
 read-only except for an explicitly requested remote refresh.
 
-Codex performs this check from the current thread heartbeat every 15 minutes while the run is
-active. See [codex-supervision.md](codex-supervision.md).
+When the caller selected a Codex thread heartbeat for observation, it performs this check at the
+caller-selected cadence. The same checks may also be run directly. See
+[codex-supervision.md](codex-supervision.md).
 
 ## Observe the three state surfaces
 

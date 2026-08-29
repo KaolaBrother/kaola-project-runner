@@ -1,12 +1,24 @@
-# Optional scheduling
+# Execution cadence and scheduling
 
-Read this reference only when the user explicitly requests periodic, recurring, or delayed work.
-Scheduling changes when work runs; it does not replace the project-run contract.
+The human or invoking agent chooses the execution carrier and its cadence. Available choices include
+one-shot execution, a Codex thread heartbeat, and Grok's live-verified foreground scheduler. Runtime-
+native recurring support never gates whether an authorized outer Codex carrier may trigger work.
 
-This file describes recurring execution inside Grok. It is separate from the mandatory 15-minute
-Codex supervision heartbeat in [codex-supervision.md](codex-supervision.md).
+Scheduling changes when work runs; it does not replace the project-run contract. Every firing reads
+fresh truth, resumes owned active work before selecting new work, invokes `workflow-next` inside the
+authorized boundary, and reaches a terminal or waiting-human classification before the next firing.
+Use one carrier identity for the selected scope and never overlap two firings for the same run.
 
-## Main-conversation requirement
+## Carrier selection
+
+- **One-shot:** run one bounded batch and finish after terminal evidence.
+- **Codex thread heartbeat:** use [codex-supervision.md](codex-supervision.md) either for observation
+  only or as the execution carrier. Record which role it owns, its ID, interval, active window, and
+  stopping condition.
+- **Grok foreground scheduler:** use the live-verified same-main-conversation flow below when the
+  caller selects it. Record its scheduler ID, interval, active window, and stopping condition.
+
+## Grok foreground scheduler flow
 
 In an idle owned main conversation, inspect `/tasks` first. Ask Grok with one ordinary natural-
 language request to use its currently available scheduler creation capability with
@@ -51,8 +63,6 @@ After creation, verify from live evidence:
 - zero detached General-loop schedulers and zero detached project-intake subagents;
 - a real firing appears as a new turn of the same Grok session;
 - disabling or stopping it affects no other scheduler or tmux session.
-
-If periodic work was not requested, create no scheduler at all.
 
 If the first firing begins immediately, leave it running and report `created-active`. If a previous
 detached loop is currently firing, do not kill it or create a duplicate; report the migration as

@@ -23,6 +23,7 @@ run_case() {
 run_case "$project_root/tests/contract/test-generated-skills.py"
 run_case "$project_root/tests/contract/test-lifecycle-contract.py"
 run_case "$project_root/tests/contract/test-installer-migration.sh"
+run_case "$project_root/tests/contract/test-claude-code-runtime.sh"
 run_case "$project_root/tests/contract/test-kaola-tmux.sh"
 run_case "$project_root/tests/contract/test-adapters.sh"
 run_case "$project_root/tests/contract/test-live-smoke-adapters.sh"

@@ -6,7 +6,6 @@
 - Default tmux session prefix: `{{SESSION_PREFIX}}`
 - Continue: `{{CONTINUE_SYNTAX}}`
 - Exact resume: `{{RESUME_SYNTAX}}`
-- Recurring execution: `{{RECURRING_EXECUTION}}`
 
 ## Preflight
 
@@ -22,6 +21,9 @@ repair hint; the Runner never installs, upgrades, adopts, or rewrites runtime co
 Use `scripts/runtime-tmux.sh` for every preflight, start, status, capture, send, and stop operation.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
-## Recurring boundary
+## Scheduling carriers
 
 {{RECURRING_SUMMARY}}
+
+This adapter capability does not gate external Codex scheduling. The human or invoking agent chooses
+the execution carrier and follows [scheduling.md](scheduling.md) for each firing.

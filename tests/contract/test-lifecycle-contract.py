@@ -48,12 +48,12 @@ REQUIRED_MARKERS = {
         "Prefer the originating run's `watch-pr`",
         "when its state is absent or cleanup fails",
         "same {runtime} main conversation",
-        "scheduler ID is absent",
-        "matching scheduler count is zero",
-        "no detached firing remains",
+        "selected execution carrier",
+        "exact identity and intended terminal disposition",
+        "no firing remains active",
         "exact owned idle",
         "session shutdown",
-        "delete the exact Codex supervision heartbeat",
+        "caller-selected terminal disposition",
         "incomplete state",
         "interrupted",
         "uncertain",
@@ -87,6 +87,48 @@ REQUIRED_MARKERS = {
     ),
 }
 
+CALLER_CONTROLLED_SCHEDULING_MARKERS = (
+    "human or invoking agent",
+    "chooses the execution carrier",
+    "one-shot",
+    "Codex thread heartbeat",
+    "Every firing",
+    "workflow-next",
+    "HUMAN_DECISION_REQUIRED",
+    "never overlap",
+)
+
+CALLER_CONTROLLED_TASK_MODE_MARKERS = (
+    "caller selects the execution carrier",
+    "Recurring Workflow projects",
+    "Recurring PR review and finalization",
+    "Codex thread heartbeat",
+    "HUMAN_DECISION_REQUIRED",
+)
+
+CALLER_CONTROLLED_SKILL_MARKERS = (
+    "human or invoking agent",
+    "selects whether the run is one-shot, supervised, or scheduled",
+    "caller-selected scheduling",
+)
+
+CALLER_CONTROLLED_SUPERVISION_MARKERS = (
+    "human or invoking agent",
+    "chooses whether to create",
+    "observation only",
+    "execution carrier",
+)
+
+PROHIBITED_SCHEDULING_GATES = (
+    "recurring execution is currently `unsupported`",
+    "native recurring execution is `unsupported`",
+    "do not create a Claude scheduler or loop",
+    "Do not create a Grok scheduler unless",
+    "Every started or resumed project run gets one",
+    "Immediately after a run starts or resumes, create or update one 15-minute",
+    "heartbeat is supervision only",
+)
+
 
 def main() -> int:
     failures: list[str] = []
@@ -99,7 +141,50 @@ def main() -> int:
     }
     for skill_id in SKILL_IDS:
         package = PROJECT / "skills" / skill_id
+        skill_text = " ".join((package / "SKILL.md").read_text(encoding="utf-8").split())
+        for marker in CALLER_CONTROLLED_SKILL_MARKERS:
+            if marker not in skill_text:
+                failures.append(
+                    f"test_{skill_id}_SKILL_{marker[:30]} — missing caller-controlled marker {marker!r}"
+                )
+        for marker in PROHIBITED_SCHEDULING_GATES:
+            if " ".join(marker.split()) in skill_text:
+                failures.append(
+                    f"test_{skill_id}_SKILL_{marker[:30]} — retained scheduling capability gate {marker!r}"
+                )
+
+        for markdown in package.rglob("*.md"):
+            markdown_text = " ".join(markdown.read_text(encoding="utf-8").split())
+            for marker in PROHIBITED_SCHEDULING_GATES:
+                if " ".join(marker.split()) in markdown_text:
+                    relative = markdown.relative_to(package)
+                    failures.append(
+                        f"test_{skill_id}_{relative}_{marker[:30]} — retained scheduling capability gate {marker!r}"
+                    )
+
+        supervision = package / "references" / "codex-supervision.md"
+        supervision_text = " ".join(supervision.read_text(encoding="utf-8").split())
+        for marker in CALLER_CONTROLLED_SUPERVISION_MARKERS:
+            if marker not in supervision_text:
+                failures.append(
+                    f"test_{skill_id}_supervision_{marker[:30]} — missing caller-controlled marker {marker!r}"
+                )
+        for marker in PROHIBITED_SCHEDULING_GATES:
+            if " ".join(marker.split()) in supervision_text:
+                failures.append(
+                    f"test_{skill_id}_supervision_{marker[:30]} — retained scheduling capability gate {marker!r}"
+                )
+
         for relative, markers in REQUIRED_MARKERS.items():
+            if relative == "references/scheduling.md":
+                markers = CALLER_CONTROLLED_SCHEDULING_MARKERS
+                if skill_id == "claude-code-kaola-project-runner":
+                    markers += (
+                        "--model opus --effort high --permission-mode auto",
+                        "bypassPermissions",
+                    )
+            elif relative == "references/task-modes.md":
+                markers = CALLER_CONTROLLED_TASK_MODE_MARKERS
             path = package / relative
             if not path.is_file():
                 failures.append(f"test_{skill_id}_{relative} — missing generated lifecycle reference")

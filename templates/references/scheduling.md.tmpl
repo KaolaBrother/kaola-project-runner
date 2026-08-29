@@ -14,14 +14,14 @@ identity for the selected scope and never overlap two firings for the same run.
 - **Codex thread heartbeat:** use [codex-supervision.md](codex-supervision.md) either for observation
   only or as the execution carrier. Record which role it owns, its ID, interval, active window, and
   stopping condition.
-- **Runtime-native scheduler:** when selected, inspect the current Cursor CLI interface in the
+- **Runtime-native scheduler:** when selected, inspect the current {{RUNTIME_NAME}} interface in the
   owned idle main conversation, create the scheduler using its authoritative live schema, and verify
   its identity, cadence, main-conversation routing, and stopping behavior from runtime evidence.
 
 ## Every firing
 
 1. Re-read the exact repository, Git, forge, Kaola run, and selected-carrier state.
-2. Resume an active batch only when the Cursor CLI main conversation is its verified owner or
+2. Resume an active batch only when the {{RUNTIME_NAME}} main conversation is its verified owner or
    successor. Never overlap it with a new batch.
 3. For project intake, invoke `workflow-next` without an individual Issue target and remain within
    the authorized recurring goal.
@@ -43,7 +43,7 @@ re-review or `HUMAN_DECISION_REQUIRED`. Empty intake performs no repository or I
 
 Record the selected carrier type and exact identity, interval, active window, stopping condition,
 repository, tmux session, and authority boundary. A real firing must enter the intended
-Cursor CLI main conversation. Verify that stopping, pausing, or updating this carrier affects
+{{RUNTIME_NAME}} main conversation. Verify that stopping, pausing, or updating this carrier affects
 no unrelated carrier or tmux session.
 
 At the selected terminal condition, finish or classify the active firing, reconcile finalization,

@@ -1,55 +1,56 @@
 # Codex supervision heartbeat
 
-This skill targets Codex only. Every started or resumed project run gets one lightweight 15-minute
-Codex heartbeat attached to the current thread. Its job is to supervise and report, not to become a
-second project owner.
+The human or invoking agent chooses whether to create a Codex thread heartbeat, its cadence, and
+its role. Runtime-native recurring support does not control that choice.
 
-This heartbeat is different from the optional Grok scheduler:
+A heartbeat can serve either role:
 
-- **Codex heartbeat:** always created for an active run; observes status and reports to the user.
-- **Grok foreground scheduler:** created only when the user explicitly requests recurring project
-  execution; each firing runs in the same Grok main orchestrator.
+- **observation only:** inspect the active run and report without triggering new work;
+- **execution carrier:** run the next authorized firing using
+  [scheduling.md](scheduling.md), after proving that no prior firing overlaps it.
 
-## Create or update
+Record the selected role, exact heartbeat ID, repository, tmux session, interval, active window,
+stopping condition, and authority boundary. Update an existing heartbeat for that exact scope when
+appropriate instead of creating a duplicate.
 
-Use Codex's current thread heartbeat/automation mechanism, not a shell `sleep`, background process,
-standalone cron project, or detached agent. Prefer updating the heartbeat already associated with
-this exact repository, tmux session, and Kaola run over creating a duplicate.
-
-Schedule it every 15 minutes. Its prompt must include stable exact identifiers and this contract:
+## Observation-only prompt contract
 
 ```text
-Supervise the active Grok Kaola project run.
+Supervise the active Grok Kaola project run by observation only.
 
 Repository: {absolute repo root}
 Tmux session: {exact session}
 Kaola project or targets: {project and issue/PR set when known}
+Stopping condition: {caller-selected terminal condition}
 
 Use the grok-kaola-project-runner status contract. Inspect only the exact owned tmux session and
 repository. Read Grok activity, Git branch/HEAD/cleanliness/ahead-behind, the relevant
 workflow-state.md and mission-list.md, and fresh exact Issue/PR state when available. Do not inject
-while Grok is busy and do not create another Grok scheduler or project claim.
+while Grok is busy and do not take project ownership away from the main conversation.
 
 Report a concise status to the user: Grok state, Git state, mission counts, forge state,
-classification, next safe action, and any HUMAN_DECISION_REQUIRED. If the run is still active,
-leave this heartbeat active for the next 15-minute check. If complete, verify finalization, sink,
-remote state, archive, and cleanup, then delete this exact heartbeat after reporting the final
-result. If uncertain, preserve the run and report the missing evidence.
+classification, next safe action, and any HUMAN_DECISION_REQUIRED. If terminal state is verified,
+report finalization, sink, remote state, archive, and cleanup. If uncertain, preserve the run and
+report the missing evidence.
 ```
 
-Record the returned heartbeat ID in the Codex thread and include it in status reports.
+## Execution-carrier prompt contract
 
-## On each firing
+Use the common firing contract in [scheduling.md](scheduling.md). The heartbeat prompt also records
+the exact authorized goal, cadence, active window, and stopping condition. Each firing performs a
+read-only overlap check first, resumes owned active work before selecting anything new, and ends at
+a terminal, waiting-human, or honestly uncertain boundary before another firing can begin.
+
+## Every heartbeat firing
 
 1. Perform read-only observation first.
-2. Report even when the state is unchanged, but keep it concise.
+2. Report unchanged state honestly and keep the report concise.
 3. Never interrupt active Grok work merely to obtain a response.
-4. If `HUMAN_DECISION_REQUIRED` is pending, surface that exact decision from the main conversation;
-   do not answer it or duplicate it in a child.
-5. If a terminal state is genuinely verified, report it and delete this exact heartbeat.
+4. Surface an unresolved `HUMAN_DECISION_REQUIRED`; do not answer it or start duplicate work.
+5. Apply the caller-selected stopping condition. Update, pause, or delete this exact heartbeat only
+   when its selected role and lifecycle require it.
 6. If the exact tmux session is absent before completion evidence exists, classify `uncertain` or
-   `interrupted`; do not silently declare success or create a replacement without reconciling Git
-   and Kaola state.
+   `interrupted` and reconcile Git, Kaola, and forge state before any replacement run.
 
-Do not use a recurring heartbeat to broaden the user's original authority. It supervises only the
-run that caused it to be created.
+A heartbeat carries only the authority recorded for its selected run; it does not broaden the
+repository, Issue/PR set, mutations, or value decisions.

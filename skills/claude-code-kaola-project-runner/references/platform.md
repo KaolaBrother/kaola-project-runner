@@ -6,7 +6,6 @@
 - Default tmux session prefix: `claude-code-kaola`
 - Continue: `--continue`
 - Exact resume: `--resume <session-id>`
-- Recurring execution: `unsupported`
 
 ## Preflight
 
@@ -17,14 +16,17 @@ repair hint; the Runner never installs, upgrades, adopts, or rewrites runtime co
 
 ## Launch
 
-Launch claude from the canonical repository root.
+Launch Claude from the canonical repository root through the measured fresh-session flow in [launch.md](launch.md); do not repair sessions with raw tmux commands or UI key cycling.
 
 Use `scripts/runtime-tmux.sh` for every preflight, start, status, capture, send, and stop operation.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
-## Recurring boundary
+## Scheduling carriers
 
-Do not map goals, background agents, or other Claude features to recurring execution until a same-main-conversation lifecycle is live-proven.
+Use the caller-selected one-shot, Codex heartbeat, or live-verified Claude-native carrier described in [scheduling.md](scheduling.md).
+
+This adapter capability does not gate external Codex scheduling. The human or invoking agent chooses
+the execution carrier and follows [scheduling.md](scheduling.md) for each firing.
 
 ---
 
@@ -68,7 +70,7 @@ Resume an exact Claude Code conversation:
 scripts/runtime-tmux.sh start --repo "$REPO" --session "$SESSION" --resume "$RUNTIME_SESSION_ID"
 ```
 
-Launch claude from the canonical repository root. Preserve terminal evidence so it remains capturable. If the exact session
+Launch Claude from the canonical repository root through the measured fresh-session flow in [launch.md](launch.md); do not repair sessions with raw tmux commands or UI key cycling. Preserve terminal evidence so it remains capturable. If the exact session
 already exists, start succeeds only when it is already owned by this runner and bound to the same
 repository; otherwise it fails closed.
 
@@ -83,10 +85,10 @@ Interpret `activity` conservatively:
 
 - `busy`: wait and observe later; do not inject.
 - `idle`: input may be sent if every ownership and identity field is also true.
+- `waiting-human`: a trust, native approval, or Workflow human-decision surface is visible; do not inject.
 - `unknown`: inspect the capture and do not inject until the uncertainty is resolved.
 
-`pane_current_command` may name a launcher or runtime process. The helper uses the exact cwd, its tmux
-ownership marker, and the pane title together instead of assuming the executable name is `claude`.
+`pane_current_command` may name a launcher or runtime process. The helper uses exact cwd, tmux ownership, resolved process identity, and stable Claude CLI surfaces. Claude may replace the pane title with its active task; that does not invalidate an otherwise exact TUI.
 Status also reports local Git branch, HEAD, cleanliness, upstream, and locally known ahead/behind
 counts. Read [status-monitoring.md](status-monitoring.md) before deciding the project is complete.
 

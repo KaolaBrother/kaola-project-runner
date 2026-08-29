@@ -6,7 +6,6 @@
 - Default tmux session prefix: `opencode-kaola`
 - Continue: `--continue`
 - Exact resume: `--session <session-id>`
-- Recurring execution: `unsupported`
 
 ## Preflight
 
@@ -22,9 +21,12 @@ Launch opencode <repo> --mini.
 Use `scripts/runtime-tmux.sh` for every preflight, start, status, capture, send, and stop operation.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
-## Recurring boundary
+## Scheduling carriers
 
-Do not infer recurring execution from OpenCode session, server, or task features without a live-proven same-main-conversation loop.
+Use the caller-selected one-shot, Codex heartbeat, or live-verified runtime-native carrier described in [scheduling.md](scheduling.md).
+
+This adapter capability does not gate external Codex scheduling. The human or invoking agent chooses
+the execution carrier and follows [scheduling.md](scheduling.md) for each firing.
 
 ---
 

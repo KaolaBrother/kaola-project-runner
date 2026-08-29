@@ -1,13 +1,14 @@
 ---
 name: claude-code-kaola-project-runner
-description: Use when Codex should run Kaola Workflow through a Claude Code main conversation in an exact tmux session. A bare invocation uses the current Git repository and starts workflow-next so it can select the most appropriate Issue batch; extra prompt text can refine the goal or mode, while recurring Claude Code execution remains explicit.
+description: Use when Codex should run Kaola Workflow through a Claude Code main conversation in an exact tmux session. A bare invocation uses the current Git repository and starts workflow-next so it can select the most appropriate Issue batch; extra prompt text can refine the goal, mode, supervision, or execution cadence.
 ---
 
 # Claude Code Kaola Project Runner
 
 This is a Codex-only skill. Run one project through one exact tmux session and one Claude Code main
-conversation. Claude Code owns the project run; Kaola Workflow owns its durable lifecycle. A loop is never
-the default.
+conversation. Claude Code owns the project run; Kaola Workflow owns its durable lifecycle. The human or
+invoking agent selects whether the run is one-shot, supervised, or scheduled and chooses the
+execution carrier.
 
 ## Bare invocation starts immediately
 
@@ -26,8 +27,8 @@ choose a mode, or restate a goal.
    current `workflow-next` contract inspect repository and forge state, then select the most
    appropriate coherent Issue batch for efficient execution. Do not preselect one Issue, set a
    single-Issue target, or turn the current directory into an Issue hint.
-6. Create the 15-minute Codex supervision heartbeat after the run starts. Do not create a Claude Code
-   scheduler unless recurring work was explicitly requested.
+6. After the run starts, follow the caller's selected cadence. The caller may leave it one-shot,
+   add observation-only supervision, or use caller-selected scheduling to trigger later firings.
 
 Extra prompt text is optional and only refines these defaults. An explicit repository, mode,
 session, goal, PR, or interval overrides the corresponding default. In project mode, a mentioned
@@ -38,14 +39,12 @@ genuinely required.
 
 ## Full lifecycle
 
-`create/start → Codex 15m supervision → resume → observe/report → optional Claude Code recurring work → decision → finalize/close → stop`
+`create/start → optional supervision or caller-selected scheduling → resume → observe/report → decision → finalize/close → stop`
 
 Codex performs all control through CLI evidence: inspect Git and Kaola state in the repository,
 operate the Claude Code TUI through tmux, and verify forge state with the available CLI. No desktop UI is
 required. The skill exposes task modes to Codex, not business subcommands. Codex decides and sends
 the Claude Code prompts described here; `scripts/runtime-tmux.sh` is only a safe low-level control helper.
-
-> Adapter capability gate: recurring execution is currently `unsupported` for Claude Code. Modes 2 and 4 below preserve the Grok golden-contract parity target but are unavailable; do not emulate them with a heartbeat, background agent, goal, loop, task, or detached conversation.
 
 ## Four exposed capabilities
 
@@ -54,19 +53,20 @@ default, and preserve its scope throughout the run:
 
 1. **Complete one Workflow project** — let `workflow-next` select or resume one coherent Issue
    batch, carry that batch through validation and `kaola-workflow-finalize`, then stop.
-2. **Recurring Workflow projects** — create or reuse one `foreground: true` scheduler in the same
-   Claude Code main orchestrator; every firing resumes or completes work inside the authorized project goal.
+2. **Recurring Workflow projects** — use the caller-selected execution carrier; every firing
+   resumes or completes work inside the authorized project goal.
 3. **Complete one PR review and finalization** — use `workflow-next` to review the exact PR, repair
    in-scope defects, then merge and finalize through Kaola Workflow.
-4. **Recurring PR review and finalization** — reproduce the tested Automation shape: fresh open-PR
-   query, main-orchestrator foreground scheduler, full review, merge, and finalization.
+4. **Recurring PR review and finalization** — use the caller-selected execution carrier for fresh
+   open-PR query, full review, merge, and finalization.
 
 ## Select the mode
 
 - **Create, start, or resume project work:** read
   [references/task-modes.md](references/task-modes.md),
-  [references/project-run.md](references/project-run.md), and
-  [references/kaola-lifecycle.md](references/kaola-lifecycle.md).
+  [references/project-run.md](references/project-run.md),
+  [references/kaola-lifecycle.md](references/kaola-lifecycle.md), and
+  [references/launch.md](references/launch.md).
 - **Inspect progress or report status:** additionally read
   [references/status-monitoring.md](references/status-monitoring.md) and
   [references/codex-supervision.md](references/codex-supervision.md).
@@ -79,8 +79,8 @@ default, and preserve its scope throughout the run:
   checking out a writable PR branch.
 - **A user decision may be needed:** read
   [references/human-decisions.md](references/human-decisions.md) before prompting Claude Code.
-- **The user explicitly requested periodic work:** additionally read
-  [references/scheduling.md](references/scheduling.md). Do not load or apply it otherwise.
+- **The human or invoking agent selected delayed or repeated work:** additionally read
+  [references/scheduling.md](references/scheduling.md) and follow the selected carrier.
 
 ## Essential contract
 
@@ -89,7 +89,7 @@ default, and preserve its scope throughout the run:
    deployment, or destructive operation.
 2. Run `scripts/runtime-tmux.sh preflight --repo <root> --session <name>`. Treat the live adapter preflight result as authority for discovered project instructions and Kaola commands; never apply a
    remembered `CLAUDE.md`, `AGENTS.md`, redirect, plugin layout, or Claude Code version as current fact.
-3. Start a new Claude Code conversation or resume the intended one. If an active Kaola project already
+3. Start a new Claude Code conversation or resume the intended one through the measured configuration and verification sequence in [references/launch.md](references/launch.md). If an active Kaola project already
    owns the target, resume its `workflow-state.md` and `mission-list.md` only when this conversation
    is the verified owner or successor. Never adopt another session's folder or duplicate its claim.
    For PR work, classify linked-Issue claims with
@@ -99,9 +99,10 @@ default, and preserve its scope throughout the run:
 4. Give the goal to the Claude Code **main conversation**. Require it to use `workflow-next`, keep the
    mission list recoverable, and return value-laden or irreversible decisions to that same main
    conversation. A detached subagent may own a bounded mission item, never the project intake.
-5. Immediately after a run starts or resumes, create or update one 15-minute Codex thread heartbeat
-   for this exact run using [references/codex-supervision.md](references/codex-supervision.md). It
-   observes and reports to the user; it is not a Claude Code execution loop.
+5. Apply the caller's supervision choice using
+   [references/codex-supervision.md](references/codex-supervision.md). A heartbeat may provide
+   observation only or act as an execution carrier; neither role is mandatory or inferred from a
+   runtime-native recurring capability flag.
 6. Observe without injecting while Claude Code is busy. Use Git, the Kaola state files, and fresh forge
    state to distinguish in-progress, waiting-human, ready-to-finalize, finalized, and uncertain.
    Send new input only when the helper reports an
@@ -116,13 +117,15 @@ default, and preserve its scope throughout the run:
    keep-open state, zero matching claim residue, archive, and cleanup from evidence rather than
    success prose.
 8. Close the selected mode with [references/closing.md](references/closing.md). Stop after this
-   explicitly selected batch run. Delete the exact Codex supervision heartbeat when the terminal
-   state has been verified. In one-shot mode, do not start a second unrelated batch. Leave an
+   explicitly selected batch run. If a heartbeat exists, update or delete it according to the
+   caller's selected cadence after terminal state has been verified. In one-shot mode, do not start
+   a second unrelated batch. Leave an
    active session running unless the user asked to stop it or the owned session is idle and the
    applicable operating agreement says to stop it.
 
 ## Required handoff
 
-Report the exact repository, tmux session, Claude Code session identity when visible, Codex heartbeat ID,
-Git branch/HEAD and cleanliness, Kaola project and issue set, mission counts, forge state, current
-activity, completion classification, next action, and any user decision still required.
+Report the exact repository, tmux session, Claude Code session identity when visible, selected execution
+carrier and its identity when present, Git branch/HEAD and cleanliness, Kaola project and issue set,
+mission counts, forge state, current activity, completion classification, next action, and any user
+decision still required.
