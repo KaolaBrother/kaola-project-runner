@@ -42,6 +42,7 @@ IFS=$'\t' read -r fake_claude _ < <(issue_make_fake_runtime claude-code)
 session="grok-contract-$$"
 unrelated="unrelated-contract-$$"
 unowned="unowned-contract-$$"
+waiting_human="waiting-human-contract-$$"
 
 export FAKE_RUNTIME_NAME=grok
 export FAKE_RUNTIME_LOG="$fake_log"
@@ -114,6 +115,31 @@ else
   expect_fail "test_unowned_session_cannot_stop" run_runner grok stop --repo "$repo" --session "$unowned"
   "$issue_tmux_bin" has-session -t "=$unowned" || fail "test_unowned_session_is_preserved" "unowned session disappeared"
   "$issue_tmux_bin" kill-session -t "=$unowned"
+
+  # A human-decision gate is not an ordinary graceful-stop boundary.  The
+  # session and its scrollback must remain available until an explicit force
+  # stop, rather than silently answering the runtime's quit prompt.
+  export FAKE_RUNTIME_STATE=decision
+  # tmux servers snapshot their environment when first created (the earlier
+  # unrelated session made that happen before this export), so set the fixture
+  # state on the private server explicitly for the new pane.
+  "$issue_tmux_bin" set-environment -g FAKE_RUNTIME_STATE decision
+  run_runner grok start --repo "$repo" --session "$waiting_human" >/dev/null || \
+    fail "test_waiting_human_stop_refuses" "waiting-human start failed"
+  waiting_status="$(run_runner grok status --repo "$repo" --session "$waiting_human")"
+  json_assert "test_waiting_human_stop_refuses" "d['activity'] == 'waiting-human' and d['tui_detected']" "$waiting_status"
+  waiting_before="$(run_runner grok capture --repo "$repo" --session "$waiting_human" --lines 30)"
+  waiting_stop="$(expect_fail "test_waiting_human_stop_refuses" run_runner grok stop --repo "$repo" --session "$waiting_human")"
+  if "$issue_tmux_bin" has-session -t "=$waiting_human" >/dev/null 2>&1; then
+    waiting_after="$(run_runner grok capture --repo "$repo" --session "$waiting_human" --lines 30)"
+    [[ "$waiting_before" == "$waiting_after" ]] || \
+      fail "test_waiting_human_stop_refuses" "ordinary stop changed waiting-human scrollback"
+  else
+    fail "test_waiting_human_stop_refuses" "ordinary stop removed waiting-human session: $waiting_stop"
+  fi
+  run_runner grok stop --repo "$repo" --session "$waiting_human" --force >/dev/null 2>&1 || true
+  export FAKE_RUNTIME_STATE=ready
+  "$issue_tmux_bin" set-environment -g FAKE_RUNTIME_STATE ready
 
   run_runner grok start --repo "$repo" --session "$session" >/dev/null
   run_runner grok send --repo "$repo" --session "$session" --text BUSY >/dev/null

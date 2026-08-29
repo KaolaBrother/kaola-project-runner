@@ -51,6 +51,7 @@ if [[ ! -f "$wrapper" ]]; then
 else
   preflight="$(run_wrapper preflight --repo "$repo" --session "$session")" || fail "test_grok_wrapper_preflight" "preflight failed: $preflight"
   json_assert "test_grok_wrapper_preserves_legacy_preflight_fields" "d['result'] == 'ready' and d['workflow_next'] and d['kaola_workflow_finalize']" "$preflight"
+  json_assert "test_grok_wrapper_preserves_legacy_version_and_project_root" "d['grok_version'] == 'fixture' and d['project_root'] == 'fixture'" "$preflight"
   json_assert "test_grok_wrapper_exposes_neutral_preflight_identity" "d['platform'] == 'grok' and 'recurring_execution' in d" "$preflight"
 
   "$issue_tmux_bin" new-session -d -s "$unrelated" -c "$repo"

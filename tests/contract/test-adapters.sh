@@ -128,6 +128,24 @@ for (const name of names) {
 process.stdout.write(JSON.stringify({status: "current", scope: "project", target, files: names.length}) + "\n");
 CURSOR_SURFACE
       chmod +x "$CURSOR_HOME/kaola-workflow/scripts/kaola-workflow-cursor-surface.js"
+      CURSOR_ROOT="$CURSOR_HOME" CURSOR_HELPER="$CURSOR_HOME/kaola-workflow/scripts/kaola-workflow-cursor-surface.js" python3 - <<'PY'
+import hashlib
+import json
+import os
+import pathlib
+import stat
+
+root = pathlib.Path(os.environ["CURSOR_ROOT"])
+helper = pathlib.Path(os.environ["CURSOR_HELPER"])
+receipt_path = root / "kaola-workflow/cursor-authority.json"
+receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+relative = helper.relative_to(root).as_posix()
+receipt.setdefault("files", {})[relative] = {
+    "sha256": hashlib.sha256(helper.read_bytes()).hexdigest(),
+    "mode": stat.S_IMODE(helper.stat().st_mode),
+}
+receipt_path.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+PY
       ;;
   esac
 }
