@@ -131,14 +131,14 @@ fake_snapshot="kpr-snapshot-v2:$(printf '%064d' 0)"
 if capture_command claude-code observe --repo "$legacy_repo" --session "$legacy_session"; then
   legacy_observe="$COMMAND_OUTPUT"
   json_assert test_issue6_legacy_observe_schema \
-    "d['result'] == 'observed' and d['snapshot_id'] is None and d['relay']['managed'] is False and d['relay']['child_pid'] is None and 'relay-required' in d['guard_failures']" \
+    "d['result'] == 'observed' and d['snapshot_id'] is None and d['relay']['managed'] is False and d['relay']['child_pid'] is None and 'relay-required' in d['evidence_flags']" \
     "$legacy_observe"
 else
   fail test_issue6_legacy_observe_schema "legacy observe failed: $COMMAND_OUTPUT"
 fi
 
 capture_command claude-code send --repo "$legacy_repo" --session "$legacy_session" \
-  --if-snapshot "$fake_snapshot" --require-empty-editor --text must-not-send || true
+  --if-snapshot "$fake_snapshot" --text must-not-send || true
 expect_refusal test_issue6_legacy_send_refuses 'relay-required'
 
 capture_command claude-code stop --repo "$legacy_repo" --session "$legacy_session" \

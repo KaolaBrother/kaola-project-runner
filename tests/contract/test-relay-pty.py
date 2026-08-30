@@ -165,9 +165,8 @@ class RelayPtyTests(unittest.TestCase):
                 self.assertGreater(third["relay"]["child_input_offset"], second["relay"]["child_input_offset"])
                 self.assertEqual(third["raw_current_frame"], second["raw_current_frame"])
 
-                # Public stale refusal must not prepare/send any payload and
-                # must acknowledge restoration before returning.
-                stale = self._run(
+                # A changed visual snapshot is audit evidence, not a refusal.
+                correlated = self._run(
                     env,
                     "claude-code",
                     "send",
@@ -177,13 +176,16 @@ class RelayPtyTests(unittest.TestCase):
                     session,
                     "--if-snapshot",
                     first["snapshot_id"],
-                    "--require-empty-editor",
                     "--text",
                     "must-not-send",
                 )
-                self.assertNotEqual(stale.returncode, 0)
-                self.assertIn("stale-snapshot", stale.stdout + stale.stderr)
-                self.assertNotIn("must-not-send", input_log.read_text(encoding="utf-8") if input_log.exists() else "")
+                self.assertEqual(correlated.returncode, 0, correlated.stdout + correlated.stderr)
+                receipt = json.loads(correlated.stdout)
+                self.assertEqual(receipt["result"], "sent", receipt)
+                self.assertEqual(receipt["based_on_snapshot"], first["snapshot_id"], receipt)
+                self.assertEqual(receipt["action_time_snapshot"], third["snapshot_id"], receipt)
+                self.assertIs(receipt["observation_changed"], True, receipt)
+                self.assertRegex(receipt["prepared_payload_fingerprint"], r"^sha256:[0-9a-f]{64}$")
                 restored = self._observe(env, repo, session)
                 self.assertFalse(restored["hard_evidence"]["pane_input_off"])
                 self.assertNotEqual(self._ps_row(relay["child_pid"])["state"][0], "T")

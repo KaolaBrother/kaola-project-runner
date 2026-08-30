@@ -83,159 +83,21 @@ def render(template: str, manifest: dict[str, str], source: Path) -> str:
     return output
 
 
-def align_grok_contract(text: str, manifest: dict[str, str]) -> str:
-    """Mechanically align a newer runtime to the frozen, live-proven Grok contract."""
-    replacements = (
-        (
-            "Treat current `grok inspect\n   --json` output",
-            "Treat the live adapter preflight result",
-        ),
-        (
-            "The helper starts Grok with `--minimal` so terminal evidence remains capturable.",
-            f"{manifest['launch_summary']} Preserve terminal evidence so it remains capturable.",
-        ),
-        (
-            "`pane_current_command` may be `node` for the Grok launcher.",
-            "`pane_current_command` may name a launcher or runtime process.",
-        ),
-        (
-            "This only sends `/quit` to an owned idle Grok session.",
-            f"This only sends `{manifest['quit_text']}` to an owned idle {manifest['runtime_name']} session.",
-        ),
-        ("$grok-kaola-project-runner", f"${manifest['skill_name']}"),
-        ("grok-kaola-project-runner", manifest["skill_name"]),
-        ("Grok Kaola Project Runner", manifest["display_name"]),
-        ("scripts/grok-tmux.sh", "scripts/runtime-tmux.sh"),
-        ("references/grok-tui.md", "references/platform.md"),
-        ("grok-kaola-", f"{manifest['session_prefix']}-"),
-        ("$GROK_SESSION_ID", "$RUNTIME_SESSION_ID"),
-        ("GROK_START_TIMEOUT", "KAOLA_START_TIMEOUT"),
-        ("GROK_BIN", manifest["binary_env"]),
-        ("`grok inspect --json`", "the live adapter preflight result"),
-        ("grok inspect --json", "the live adapter preflight result"),
-        ("`grok plugin list`", "a runtime-native catalog listing"),
-        ("`grok`", f"`{manifest['binary_name']}`"),
-        ("Grok CLI", manifest["runtime_name"]),
-        ("Grok", manifest["runtime_name"]),
-    )
-    for old, new in replacements:
-        text = text.replace(old, new)
-    return text
-
-
-def apply_guarded_transport_overlay(text: str, script: str) -> str:
-    """Update only generated mutation examples; keep frozen Grok source bytes intact."""
-    route = (
-        "Mutation commands use the schema-v2 snapshot and editor guards in "
-        "[transport.md](transport.md).\n\n"
-    )
-    observe_heading = "## Observe\n\n"
-    if route not in text:
-        if text.count(observe_heading) != 1:
-            raise ValueError("platform guidance lost the unique Observe heading")
-        text = text.replace(observe_heading, route + observe_heading, 1)
-    replacements = (
-        (
-            f'{script} send --repo "$REPO" --session "$SESSION" --text "$PROMPT"',
-            f'{script} send --repo "$REPO" --session "$SESSION" \\\n  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor --text "$PROMPT"',
-        ),
-        (
-            f'{script} send --repo "$REPO" --session "$SESSION" < prompt.txt',
-            f'{script} send --repo "$REPO" --session "$SESSION" \\\n  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor < prompt.txt',
-        ),
-        (
-            f'{script} stop --repo "$REPO" --session "$SESSION"',
-            f'{script} stop --repo "$REPO" --session "$SESSION" \\\n  --if-snapshot "$SNAPSHOT_ID"',
-        ),
-    )
-    for old, new in replacements:
-        if text.count(old) != 1:
-            raise ValueError(f"platform guidance lost guarded overlay anchor: {old}")
-        text = text.replace(old, new, 1)
-    return text
-
-
 def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     result[MARKER] = (manifest["skill_name"] + "\n").encode()
-    if manifest["id"] == "grok":
-        # Grok is the live-proven golden contract. Its runtime-native procedures remain the
-        # reference implementation; cross-platform orchestration changes must update these
-        # reviewed bytes explicitly rather than being injected only into generated variants.
-        contract = TEMPLATES / "grok-golden"
-        result["SKILL.md"] = (contract / "SKILL.md").read_bytes()
-        result["agents/openai.yaml"] = (contract / "agents" / "openai.yaml").read_bytes()
-        for source in sorted((contract / "references").glob("*.md")):
-            if source.name == "grok-tui.md":
-                overlaid = apply_guarded_transport_overlay(
-                    source.read_text(encoding="utf-8"), "scripts/grok-tmux.sh"
-                )
-                result[f"references/{source.name}"] = overlaid.encode()
-            else:
-                result[f"references/{source.name}"] = source.read_bytes()
-    else:
-        contract = TEMPLATES / "grok-golden"
-        skill = align_grok_contract((contract / "SKILL.md").read_text(encoding="utf-8"), manifest)
-        if manifest["id"] == "claude-code":
-            skill = skill.replace(
-                "  [references/task-modes.md](references/task-modes.md),\n"
-                "  [references/project-run.md](references/project-run.md), and\n"
-                "  [references/kaola-lifecycle.md](references/kaola-lifecycle.md).\n",
-                "  [references/task-modes.md](references/task-modes.md),\n"
-                "  [references/project-run.md](references/project-run.md),\n"
-                "  [references/kaola-lifecycle.md](references/kaola-lifecycle.md), and\n"
-                "  [references/launch.md](references/launch.md).\n",
-                1,
-            )
-            skill = skill.replace(
-                "3. Start a new Claude Code conversation or resume the intended one.",
-                "3. Start a new Claude Code conversation or resume the intended one through the "
-                "measured configuration and verification sequence in "
-                "[references/launch.md](references/launch.md).",
-                1,
-            )
-        result["SKILL.md"] = skill.encode()
-
-        metadata = TEMPLATES / "agents" / "openai.yaml.tmpl"
-        result["agents/openai.yaml"] = render(
-            metadata.read_text(encoding="utf-8"), manifest, metadata
-        ).encode()
-
-        for source in sorted((contract / "references").glob("*.md")):
-            target_name = "platform.md" if source.name == "grok-tui.md" else source.name
-            if manifest["id"] == "claude-code" and source.name == "scheduling.md":
-                claude_schedule = TEMPLATES / "claude-code" / "references" / "scheduling.md"
-                aligned = claude_schedule.read_text(encoding="utf-8")
-            elif source.name == "scheduling.md":
-                schedule = TEMPLATES / "references" / "scheduling.md.tmpl"
-                aligned = render(schedule.read_text(encoding="utf-8"), manifest, schedule)
-            else:
-                aligned = align_grok_contract(source.read_text(encoding="utf-8"), manifest)
-            if source.name == "grok-tui.md":
-                facts = TEMPLATES / "references" / "platform.md.tmpl"
-                aligned = render(facts.read_text(encoding="utf-8"), manifest, facts) + "\n---\n\n" + aligned
-                if manifest["id"] == "claude-code":
-                    aligned = aligned.replace(
-                        "- `idle`: input may be sent if every ownership and identity field is also true.\n",
-                        "- `idle`: input may be sent if every ownership and identity field is also true.\n"
-                        "- `waiting-human`: a trust, native approval, or Workflow human-decision "
-                        "surface is visible; do not inject.\n",
-                        1,
-                    )
-                    aligned = aligned.replace(
-                        "The helper uses the exact cwd, its tmux\n"
-                        "ownership marker, and the pane title together instead of assuming the executable name is `claude`.\n",
-                        "The helper uses exact cwd, tmux ownership, resolved process identity, and stable "
-                        "Claude CLI surfaces. Claude may replace the pane title with its active task; that "
-                        "does not invalidate an otherwise exact TUI.\n",
-                        1,
-                    )
-                aligned = apply_guarded_transport_overlay(aligned, "scripts/runtime-tmux.sh")
-            result[f"references/{target_name}"] = aligned.encode()
-
-        if manifest["id"] == "claude-code":
-            launch = TEMPLATES / "claude-code" / "references" / "launch.md"
-            result["references/launch.md"] = launch.read_bytes()
+    skill_template = TEMPLATES / "SKILL.md.tmpl"
+    result["SKILL.md"] = render(
+        skill_template.read_text(encoding="utf-8"), manifest, skill_template
+    ).encode()
+    metadata = TEMPLATES / "agents" / "openai.yaml.tmpl"
+    result["agents/openai.yaml"] = render(
+        metadata.read_text(encoding="utf-8"), manifest, metadata
+    ).encode()
+    platform_facts = TEMPLATES / "references" / "platform.md.tmpl"
+    result["references/platform.md"] = render(
+        platform_facts.read_text(encoding="utf-8"), manifest, platform_facts
+    ).encode()
 
     transport = TEMPLATES / "references" / "transport.md.tmpl"
     result["references/transport.md"] = render(
@@ -244,10 +106,11 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
 
     core = ROOT / "scripts" / "kaola-tmux.sh"
     adapter = ROOT / "scripts" / "adapters" / f"{manifest['id']}.sh"
+    shared_root = ROOT / "scripts"
     shared_sources = (
-        (core, "scripts/kaola-tmux.sh"),
-        (ROOT / "scripts" / "kaola-observation.py", "scripts/kaola-observation.py"),
-        (ROOT / "scripts" / "kaola-pane-relay.py", "scripts/kaola-pane-relay.py"),
+        (shared_root / "kaola-tmux.sh", "scripts/kaola-tmux.sh"),
+        (shared_root / "kaola-observation.py", "scripts/kaola-observation.py"),
+        (shared_root / "kaola-pane-relay.py", "scripts/kaola-pane-relay.py"),
         (ROOT / "scripts" / "kaola-relay-client.py", "scripts/kaola-relay-client.py"),
         (ROOT / "scripts" / "kaola-relay-protocol.py", "scripts/kaola-relay-protocol.py"),
         (adapter, f"scripts/adapters/{adapter.name}"),

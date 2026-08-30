@@ -11,71 +11,20 @@ ADAPTER_QUIT_TEXT="/exit"
 ADAPTER_ANSWER_MODE="unsupported"
 
 adapter_preflight() {
-  local cursor_root="${CURSOR_HOME:-$HOME/.cursor}" authority doctor doctor_json doctor_state
+  local cursor_root="${CURSOR_HOME:-$HOME/.cursor}" authority workflow_state=false finalize_state=false authority_state=missing
   authority="$cursor_root/kaola-workflow/cursor-authority.json"
-  [[ -f "$authority" ]] || die "missing Kaola Cursor authority receipt: $authority"
-  [[ -f "$cursor_root/commands/workflow-next.md" && -f "$cursor_root/commands/kaola-workflow-finalize.md" ]] || \
-    die "missing global Kaola Cursor commands"
-  doctor="$cursor_root/kaola-workflow/scripts/kaola-workflow-cursor-surface.js"
-  [[ -f "$doctor" ]] || die "missing Kaola Cursor project materializer: $doctor"
-  CURSOR_SURFACE_HELPER="$doctor"
-  CURSOR_FORGE="$(AUTHORITY="$authority" CURSOR_ROOT="$cursor_root" "$PYTHON_BIN" <<'PY'
-import hashlib, json, os, pathlib, stat
-root = pathlib.Path(os.environ["CURSOR_ROOT"]).resolve()
-receipt_path = pathlib.Path(os.environ["AUTHORITY"])
-receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-if receipt.get("schema_version") != 1 or receipt.get("kind") != "cursor_global_authority":
-    raise SystemExit(1)
-forge = receipt.get("forge", "github")
-if forge not in {"github", "gitlab", "gitea"}:
-    raise SystemExit(1)
-files = receipt.get("files")
-if not isinstance(files, dict) or not files:
-    raise SystemExit(1)
-required = {
-    "commands/workflow-next.md",
-    "commands/kaola-workflow-finalize.md",
-    "kaola-workflow/scripts/kaola-workflow-cursor-surface.js",
-}
-if not required.issubset(files):
-    raise SystemExit(1)
-for relative, record in files.items():
-    pure = pathlib.PurePosixPath(relative)
-    if pure.is_absolute() or ".." in pure.parts or not relative:
-        raise SystemExit(1)
-    path = root.joinpath(*pure.parts)
-    info = path.lstat()
-    if not stat.S_ISREG(info.st_mode) or path.is_symlink():
-        raise SystemExit(1)
-    if hashlib.sha256(path.read_bytes()).hexdigest() != record.get("sha256"):
-        raise SystemExit(1)
-    if stat.S_IMODE(info.st_mode) != record.get("mode"):
-        raise SystemExit(1)
-print(forge)
-PY
-)" || \
-    die "Kaola Cursor authority receipt or managed files are invalid"
-  CURSOR_NODE_BIN="$(resolve_tool node)" || die "node executable not found for Cursor authority"
-  doctor_state=unavailable
-  if doctor_json="$("$CURSOR_NODE_BIN" "$CURSOR_SURFACE_HELPER" --doctor --product cli --host local --json 2>/dev/null)"; then
-      DOCTOR_JSON="$doctor_json" "$PYTHON_BIN" <<'PY' >/dev/null || die "Kaola Cursor authority is not current"
-import json, os
-p = json.loads(os.environ["DOCTOR_JSON"])
-a = p.get("authority") or {}
-if a.get("receipt_status") != "valid" or a.get("freshness") != "current":
-    raise SystemExit(1)
-PY
-      doctor_state=current
-  fi
-  PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1)"
-  PREFLIGHT_WORKFLOW_NEXT=true
-  PREFLIGHT_FINALIZE=true
+  [[ -f "$authority" ]] && authority_state=present
+  [[ -f "$cursor_root/commands/workflow-next.md" ]] && workflow_state=true
+  [[ -f "$cursor_root/commands/kaola-workflow-finalize.md" ]] && finalize_state=true
+  PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1 || true)"; [[ -n "$PREFLIGHT_VERSION" ]] || PREFLIGHT_VERSION=unknown
+  PREFLIGHT_WORKFLOW_NEXT="$workflow_state"
+  PREFLIGHT_FINALIZE="$finalize_state"
   if [[ -f "$repo/.cursor/commands/workflow-next.md" && -f "$repo/.cursor/commands/kaola-workflow-finalize.md" ]]; then
     PREFLIGHT_PROJECT_MATERIALIZATION=current
   else
-    PREFLIGHT_PROJECT_MATERIALIZATION=required-at-point-of-use
+    PREFLIGHT_PROJECT_MATERIALIZATION=not-present
   fi
-  PREFLIGHT_DETAIL="valid exact-hash global Cursor authority (doctor=$doctor_state); project materialization remains an explicit Kaola transaction"
+  PREFLIGHT_DETAIL="Cursor CLI communication is available; global Workflow commands are advisory (workflow_next=$workflow_state finalize=$finalize_state authority=$authority_state); Runner start does not materialize project files"
 }
 
 adapter_prepare_launch() {

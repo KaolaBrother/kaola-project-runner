@@ -1,15 +1,15 @@
-# {{RUNTIME_NAME}} adapter
+# Grok CLI adapter
 
-- Platform ID: `{{ID}}`
-- Default binary: `{{BINARY_NAME}}`
-- Binary override: `{{BINARY_ENV}}`
-- Default tmux session prefix: `{{SESSION_PREFIX}}`
-- Continue: `{{CONTINUE_SYNTAX}}`
-- Exact resume: `{{RESUME_SYNTAX}}`
+- Platform ID: `grok`
+- Default binary: `grok`
+- Binary override: `GROK_BIN`
+- Default tmux session prefix: `grok-kaola`
+- Continue: `--continue`
+- Exact resume: `--resume <session-id-or-title>`
 
 ## Preflight
 
-{{PREFLIGHT_SUMMARY}}
+Verify the Grok executable and report grok inspect catalog evidence without making Workflow availability a communication gate.
 
 Preflight is read-only. Optional Kaola/Workflow surfaces and runtime health are reported as evidence;
 their absence does not block starting the CLI. The Runner never installs, upgrades, adopts, or
@@ -17,7 +17,7 @@ rewrites runtime configuration.
 
 ## Launch
 
-{{LAUNCH_SUMMARY}}
+Launch grok --cwd <repo> --minimal.
 
 Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
 and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.

@@ -1,11 +1,11 @@
 ---
-name: cursor-cli-kaola-project-runner
-description: Use when Codex should communicate with a Cursor Agent CLI main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.
+name: {{SKILL_NAME}}
+description: {{DESCRIPTION}}
 ---
 
-# Cursor CLI Kaola Project Runner
+# {{DISPLAY_NAME}}
 
-This Skill is a communication driver for Cursor CLI. It gives the controlling Agent a
+This Skill is a communication driver for {{RUNTIME_NAME}}. It gives the controlling Agent a
 measured tmux channel; it does not choose commands, Workflow modes, cadence, state, approvals,
 retries, or completion policy.
 
@@ -15,7 +15,7 @@ Use the canonical Git root and one exact session name throughout:
 
 ```bash
 REPO="$(git rev-parse --show-toplevel)"
-SESSION="cursor-cli-kaola-<purpose>"
+SESSION="{{SESSION_PREFIX}}-<purpose>"
 scripts/runtime-tmux.sh preflight --repo "$REPO" --session "$SESSION"
 scripts/runtime-tmux.sh start --repo "$REPO" --session "$SESSION"
 scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
@@ -68,5 +68,5 @@ session. Never use raw `tmux send-keys` or broad session/process cleanup.
   creates a heartbeat, or selects recurring behavior. The Agent may send any of those commands when
   it decides they serve the user's task.
 
-See [references/platform.md](references/platform.md) for Cursor CLI launch/observation facts and
+See [references/platform.md](references/platform.md) for {{RUNTIME_NAME}} launch/observation facts and
 [references/transport.md](references/transport.md) for receipt and recovery details.

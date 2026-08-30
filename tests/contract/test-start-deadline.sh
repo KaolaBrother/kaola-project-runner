@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# A start timeout is a wall-clock deadline. A slow complete observation must
-# not be multiplied by a fixed number of polling iterations.
+# Start reports readiness once the exact managed relay is mechanically
+# available. It must not wait for a TUI/status classifier.
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 runner="$project_root/scripts/kaola-tmux.sh"
@@ -40,12 +40,16 @@ set -e
 finished_ms="$(python3 -c 'import time; print(time.time_ns() // 1000000)')"
 elapsed_ms=$(( finished_ms - started_ms ))
 
-[[ "$rc" -eq 2 ]] || {
-  printf 'RED: expected start-pending exit 2, got %s: %s\n' "$rc" "$output" >&2
+[[ "$rc" -eq 0 ]] || {
+  printf 'RED: expected mechanically ready start exit 0, got %s: %s\n' "$rc" "$output" >&2
   exit 1
 }
-grep -Fq '"result": "start-pending"' <<<"$output" || {
-  printf 'RED: missing start-pending receipt: %s\n' "$output" >&2
+grep -Fq '"result": "started"' <<<"$output" || {
+  printf 'RED: missing started receipt: %s\n' "$output" >&2
+  exit 1
+}
+grep -Fq '"tui_detected": false' <<<"$output" || {
+  printf 'RED: fixture unexpectedly depended on TUI classification: %s\n' "$output" >&2
   exit 1
 }
 (( elapsed_ms < 8000 )) || {

@@ -20,17 +20,16 @@ kimi_surface() {
 }
 
 adapter_preflight() {
-  local user_root="${KIMI_CODE_HOME:-$HOME/.kimi-code}" carrier
+  local user_root="${KIMI_CODE_HOME:-$HOME/.kimi-code}" carrier="" doctor_state=failed
   if kimi_surface "$repo/.kimi-code"; then carrier="$repo/.kimi-code"
   elif kimi_surface "$user_root"; then carrier="$user_root"
-  else die "missing complete Kimi Kaola Skills, agents, or support scripts"
   fi
-  "$RUNTIME_BIN" doctor >/dev/null 2>&1 || die "kimi doctor rejected current configuration"
-  PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1)"
-  PREFLIGHT_WORKFLOW_NEXT=true
-  PREFLIGHT_FINALIZE=true
+  "$RUNTIME_BIN" doctor >/dev/null 2>&1 && doctor_state=passed
+  PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1 || true)"; [[ -n "$PREFLIGHT_VERSION" ]] || PREFLIGHT_VERSION=unknown
+  PREFLIGHT_WORKFLOW_NEXT=false; PREFLIGHT_FINALIZE=false
+  [[ -n "$carrier" ]] && PREFLIGHT_WORKFLOW_NEXT=true PREFLIGHT_FINALIZE=true
   PREFLIGHT_PROJECT_MATERIALIZATION=not-required
-  PREFLIGHT_DETAIL="complete Kimi Kaola carrier at $carrier and kimi doctor passed"
+  PREFLIGHT_DETAIL="Kimi CLI communication is available; Kaola carrier=${carrier:-not-discovered}; doctor=$doctor_state"
 }
 
 adapter_build_launch() {

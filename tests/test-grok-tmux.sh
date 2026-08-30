@@ -116,23 +116,19 @@ run_helper status --repo "$repo" --session "$session" | \
   json_assert "d['result'] == 'present' and d['activity'] == 'idle' and d['pane_count'] == 1"
 
 literal='literal ; $(touch SHOULD_NOT_EXIST) `touch ALSO_NOT`'
-missing_send="$(expect_refusal '"result": "snapshot-required"' run_helper send --repo "$repo" --session "$session" --require-empty-editor --text "$literal")"
 observe_before_send="$(run_helper observe --repo "$repo" --session "$session")"
 snapshot_before_send="$(json_value "$observe_before_send" "d['snapshot_id']")"
-sent_output="$(run_helper send --repo "$repo" --session "$session" --if-snapshot "$snapshot_before_send" --require-empty-editor --text "$literal")" || {
+sent_output="$(run_helper send --repo "$repo" --session "$session" --text "$literal")" || {
   printf 'RED: test_grok_send_accepts_idle_literal — tokenized send failed: %s\n' "$sent_output" >&2
   exit 1
 }
-printf '%s\n' "$sent_output" | json_assert "d['result'] == 'sent' and d['action'] == 'send' and d['based_on_snapshot'] == '$snapshot_before_send'"
+printf '%s\n' "$sent_output" | json_assert "d['result'] == 'sent' and d['action'] == 'send' and d['based_on_snapshot'] == '' and d['action_time_snapshot'].startswith('kpr-snapshot-v2:') and d['observation_changed'] is False"
 sleep 1
 capture="$(run_helper capture --repo "$repo" --session "$session" --lines 40)"
 printf '%s\n' "$capture" | grep -Fq 'ECHO:literal ; $(touch SHOULD_NOT_EXIST) `touch ALSO_NOT`'
 [[ ! -e "$repo/SHOULD_NOT_EXIST" && ! -e "$repo/ALSO_NOT" ]]
 
-wrong_repo_missing="$(expect_refusal '"result": "snapshot-required"' run_helper send --repo "$other_repo" --session "$session" --require-empty-editor --text wrong-repo)"
-observe_after_send="$(run_helper observe --repo "$repo" --session "$session")"
-snapshot_after_send="$(json_value "$observe_after_send" "d['snapshot_id']")"
-wrong_repo_output="$(run_helper send --repo "$other_repo" --session "$session" --if-snapshot "$snapshot_after_send" --require-empty-editor --text wrong-repo 2>&1)" || true
+wrong_repo_output="$(run_helper send --repo "$other_repo" --session "$session" --text wrong-repo 2>&1)" || true
 if [[ "$wrong_repo_output" != *'repo-mismatch'* ]]; then
   printf 'expected repo mismatch to fail\n' >&2
   exit 1
@@ -140,21 +136,18 @@ fi
 
 busy_start_observe="$(run_helper observe --repo "$repo" --session "$session")"
 busy_start_snapshot="$(json_value "$busy_start_observe" "d['snapshot_id']")"
-run_helper send --repo "$repo" --session "$session" --if-snapshot "$busy_start_snapshot" --require-empty-editor --text BUSY >/dev/null
+run_helper send --repo "$repo" --session "$session" --if-snapshot "$busy_start_snapshot" --text BUSY >/dev/null
 sleep 1
 busy_observe="$(run_helper observe --repo "$repo" --session "$session")"
 busy_snapshot="$(json_value "$busy_observe" "d['snapshot_id']")"
-busy_output="$(run_helper send --repo "$repo" --session "$session" --if-snapshot "$busy_snapshot" --require-empty-editor --text must-wait 2>&1)" || true
-if [[ "$busy_output" == *'"result": "sent"'* ]]; then
-  printf 'expected busy session injection to fail\n' >&2
+busy_output="$(run_helper send --repo "$repo" --session "$session" --if-snapshot "$busy_snapshot" --text must-wait 2>&1)" || true
+if [[ "$busy_output" != *'"result": "sent"'* ]]; then
+  printf 'RED: test_busy_activity_is_advisory — busy advisory blocked caller-selected send: %s\n' "$busy_output" >&2
   exit 1
 fi
 sleep 2
 
-stop_missing="$(expect_refusal '"result": "snapshot-required"' run_helper stop --repo "$repo" --session "$session")"
-stop_observe="$(run_helper observe --repo "$repo" --session "$session")"
-stop_snapshot="$(json_value "$stop_observe" "d['snapshot_id']")"
-stopped_output="$(run_helper stop --repo "$repo" --session "$session" --if-snapshot "$stop_snapshot")" || {
+stopped_output="$(run_helper stop --repo "$repo" --session "$session")" || {
   printf 'RED: test_grok_stop_exact_owned_session — tokenized stop failed: %s\n' "$stopped_output" >&2
   exit 1
 }

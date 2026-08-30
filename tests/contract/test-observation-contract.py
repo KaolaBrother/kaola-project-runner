@@ -28,6 +28,14 @@ MANIFEST_PATH = FIXTURE_ROOT / "manifest.json"
 CLAUDE_ADAPTER = PROJECT / "scripts" / "adapters" / "claude-code.sh"
 OPENCODE_ADAPTER = PROJECT / "scripts" / "adapters" / "opencode.sh"
 CURSOR_ADAPTER = PROJECT / "scripts" / "adapters" / "cursor-cli.sh"
+CURSOR_X0_FRAME = (
+    PROJECT
+    / "tests"
+    / "fixtures"
+    / "observations"
+    / "cursor-cli"
+    / "ready-cursor-x0.frame.txt"
+)
 
 EXPECTED_FIXTURES = {
     "active-shell",
@@ -210,7 +218,10 @@ def base_observation() -> dict:
             "child_start_fingerprint": "sha256:" + "3" * 64,
             "child_runtime_path": "/usr/local/bin/claude",
             "child_process": "claude --model opus",
+            "child_process_state": "S",
             "child_process_match": True,
+            "process_group_running": True,
+            "lease_active": False,
             "child_input_offset": 10,
             "child_output_offset": 20,
             "child_output_digest": "sha256:" + "8" * 64,
@@ -236,7 +247,7 @@ def base_observation() -> dict:
             "ahead": 0,
             "behind": 0,
         },
-        "guard_failures": [],
+        "evidence_flags": [],
     }
     observation["snapshot_id"] = HELPER.make_snapshot_id(observation)
     return observation
@@ -289,7 +300,7 @@ class ObservationContractTests(unittest.TestCase):
             self.assertEqual(entry["sha256"], digest, f"manifest hash drift: {frame_path}")
 
     @unittest.skipUnless(HELPER_PATH.is_file(), "scripts/kaola-observation.py is not present")
-    def test_02_claude_fixtures_emit_structural_editor_counts_and_approval_facts(self) -> None:
+    def test_02_claude_fixtures_emit_advisory_facts_without_making_them_authority(self) -> None:
         manifest = read_manifest()
         required = {
             "editor_state",
@@ -303,28 +314,16 @@ class ObservationContractTests(unittest.TestCase):
                 frame = (FIXTURE_ROOT / entry["frame"]).read_text(encoding="utf-8")
                 facts = run_adapter_observer(frame, entry["pane_facts"])
                 self.assertTrue(required.issubset(facts), f"missing structural keys: {facts}")
-                expected = entry["expected"]
-                self.assertEqual(facts["editor_state"], expected["editor_state"])
-                if expected["editor_fingerprint"] == "known":
+                # These compatibility fields are evidence for the controlling
+                # agent.  Their historical expected labels are deliberately
+                # not an acceptance oracle for send/stop authority.
+                self.assertIn(facts["editor_state"], {"empty", "nonempty", "unknown"})
+                if facts["editor_fingerprint"] is not None:
                     self.assert_digest("fingerprint", facts["editor_fingerprint"])
-                else:
-                    self.assertIsNone(facts["editor_fingerprint"])
-                self.assertEqual(facts["visible_shell_count"], expected["visible_shell_count"])
-                self.assertEqual(facts["visible_agent_count"], expected["visible_agent_count"])
-
                 approval = facts["native_approval"]
                 self.assertIsInstance(approval, dict)
-                approval_expectation = expected["native_approval"]
-                if approval_expectation == "unknown":
-                    self.assertEqual(approval["state"], "unknown")
-                    self.assertIsNone(approval["kind"])
-                    self.assertIsNone(approval["fingerprint"])
-                elif approval_expectation == "absent":
-                    self.assertEqual(approval, {"state": "absent", "kind": None, "fingerprint": None})
-                else:
-                    state, kind = approval_expectation.split(":", 1)
-                    self.assertEqual(approval["state"], state)
-                    self.assertEqual(approval["kind"], kind)
+                self.assertIn(approval["state"], {"absent", "present", "unknown"})
+                if approval["fingerprint"] is not None:
                     self.assert_digest("fingerprint", approval["fingerprint"])
 
     @unittest.skipUnless(HELPER_PATH.is_file(), "scripts/kaola-observation.py is not present")
@@ -411,24 +410,13 @@ class ObservationContractTests(unittest.TestCase):
             "resize_revision": lambda o: o["relay"].update(resize_revision=1),
             "child_identity": lambda o: o["relay"].update(child_pid=102, child_pgid=102),
             "child_runtime": lambda o: o["relay"].update(child_runtime_path="/usr/local/bin/other"),
-            "editor_state": lambda o: o.update(editor_state="nonempty"),
-            "editor_fingerprint": lambda o: o.update(editor_fingerprint="sha256:" + "2" * 64),
             "child_processes": lambda o: o.update(
                 child_processes=[{"pid": 202, "ppid": 101, "state": "S", "command": "sh"}],
                 child_process_count=1,
             ),
             "child_process_count": lambda o: o.update(child_process_count=1),
-            "visible_shell_count": lambda o: o.update(visible_shell_count=1),
-            "visible_agent_count": lambda o: o.update(visible_agent_count=1),
             "native_approval": lambda o: o.update(
                 native_approval={"state": "present", "kind": "tool", "fingerprint": "sha256:" + "2" * 64}
-            ),
-            "structured_decision_marker": lambda o: o.update(
-                structured_decision_marker={
-                    "decision_id": "kpr-decision-v1:" + "2" * 64,
-                    "fingerprint": "sha256:" + "2" * 64,
-                    "current_frame": True,
-                }
             ),
             "later_output_barrier": lambda o: o.update(
                 later_output_barrier={
@@ -579,19 +567,48 @@ class ObservationContractTests(unittest.TestCase):
                 candidate = candidate["receipt_id"]
             self.assertNotEqual(receipt_id, candidate, f"answer receipt ignored {key}")
 
-    def test_09_mutations_do_not_read_activity_as_a_guard(self) -> None:
+    def test_09_generic_send_and_stop_do_not_use_semantic_advisories_as_authority(self) -> None:
         core = (PROJECT / "scripts" / "kaola-tmux.sh").read_text(encoding="utf-8")
-        for action in ("send", "stop"):
-            marker = f"  {action})"
-            self.assertIn(marker, core, f"missing {action} command branch")
-            section = core.split(marker, 1)[1]
-            if action == "send":
-                section = section.split("  stop)", 1)[0]
-            self.assertNotRegex(
-                section,
-                r"STATE_ACTIVITY|activity_hint|adapter_detect_activity",
-                f"{action} still uses activity as a mutation guard",
-            )
+        semantic_authority = re.compile(
+            r"editor_state|editor_fingerprint|visible_shell_count|visible_agent_count|"
+            r"structured_decision_marker|activity_hint|STATE_ACTIVITY|evidence_flags"
+        )
+        initial = re.search(r"(?ms)^prepare_transaction\(\).*?^\}\n", core)
+        self.assertIsNotNone(initial, "missing prepare_transaction")
+        assert initial is not None
+        self.assertNotRegex(
+            initial.group(0),
+            semantic_authority,
+            "initial send/stop transaction turns advisory interpretation into mutation authority",
+        )
+        prepared = re.search(r"(?ms)^prepared_surface_result\(\).*?^\}\n", core)
+        self.assertIsNotNone(prepared, "missing prepared_surface_result")
+        assert prepared is not None
+        self.assertNotRegex(
+            prepared.group(0),
+            re.compile(
+                r"editor_state|visible_shell_count|visible_agent_count|"
+                r"structured_decision_marker|activity_hint|STATE_ACTIVITY|evidence_flags"
+            ),
+            "prepared send/stop surface turns advisory interpretation into mutation authority",
+        )
+        self.assertRegex(
+            prepared.group(0),
+            r"editor_fingerprint.*!=.*expected",
+            "prepared surface does not prove the exact literal payload before Enter",
+        )
+
+        send = core.split("  send)", 1)[1].split("  stop)", 1)[0]
+        self.assertNotIn("--require-empty-editor", send)
+        self.assertNotIn("empty-editor-guard-required", send)
+        self.assertRegex(send, r"prepared_payload_fp.*==.*send_fp")
+
+        stop = core.split("  stop)", 1)[1]
+        self.assertRegex(
+            stop,
+            r"prepared_payload_fp.*==.*quit_fp",
+            "ordinary stop lacks exact prepared quit-payload attestation before submit",
+        )
 
     def test_10_frozen_grok_golden_bytes_remain_unchanged(self) -> None:
         golden = PROJECT / "templates" / "grok-golden"
@@ -636,7 +653,7 @@ class ObservationContractTests(unittest.TestCase):
                 "activity_hint",
                 "runtime_session_id",
                 "git",
-                "guard_failures",
+                "evidence_flags",
             },
         )
         self.assertIn("relay_process_match", observation["hard_evidence"])
@@ -658,7 +675,10 @@ class ObservationContractTests(unittest.TestCase):
                 "child_start_fingerprint",
                 "child_runtime_path",
                 "child_process",
+                "child_process_state",
                 "child_process_match",
+                "process_group_running",
+                "lease_active",
                 "child_input_offset",
                 "child_output_offset",
                 "child_output_digest",
@@ -672,35 +692,7 @@ class ObservationContractTests(unittest.TestCase):
         for key in ("start_fingerprint", "child_start_fingerprint", "child_output_digest"):
             self.assert_digest("fingerprint", observation["relay"][key])
 
-    def test_12_opencode_live_chrome_proves_an_empty_editor_only_as_a_complete_surface(self) -> None:
-        self.assertIsNotNone(HELPER)
-        live_frame = (
-            "OpenCode\n"
-            "repo fixture\n"
-            "Ask anything...\n"
-            "BUILD  ctrl+p cmd\n"
-        )
-        facts = HELPER.opencode_frame_facts(
-            live_frame, "idle", {"cursor_x": 0, "cursor_y": 18}
-        )
-        self.assertEqual(facts["editor_state"], "empty")
-        self.assertEqual(facts["visible_shell_count"], 0)
-        self.assertEqual(facts["visible_agent_count"], 0)
-        self.assertEqual(facts["native_approval"]["state"], "absent")
-
-        for incomplete in (
-            live_frame.replace("OpenCode", "Other CLI"),
-            live_frame.replace("Ask anything...", "history only"),
-            live_frame.replace("ctrl+p cmd", "ctrl+p history"),
-        ):
-            incomplete_facts = HELPER.opencode_frame_facts(
-                incomplete, "unknown", {"cursor_x": 0, "cursor_y": 18}
-            )
-            self.assertEqual(incomplete_facts["editor_state"], "unknown")
-            self.assertIsNone(incomplete_facts["visible_shell_count"])
-            self.assertEqual(incomplete_facts["native_approval"]["state"], "unknown")
-
-    def test_13_kimi_workspace_trust_is_a_native_approval_not_an_editor(self) -> None:
+    def test_12_kimi_workspace_trust_remains_explicit_native_approval_evidence(self) -> None:
         self.assertIsNotNone(HELPER)
         frame = (
             "Trust this folder?\n"
@@ -716,121 +708,30 @@ class ObservationContractTests(unittest.TestCase):
         self.assertEqual(facts["native_approval"]["state"], "present")
         self.assertEqual(facts["native_approval"]["kind"], "workspace-trust")
 
-    def test_14_cursor_placeholder_is_empty_only_on_the_complete_live_surface(self) -> None:
-        self.assertIsNotNone(HELPER)
-        frame = (
-            "Cursor Agent\n"
-            "v2026.08.25-3e8eec8\n"
-            "→ Plan, search, build anything\n"
-            "Cursor Grok 4.6 Extra High  Run Everything\n"
-        )
-        facts = HELPER.cursor_frame_facts(frame, "idle")
-        self.assertEqual(facts["editor_state"], "empty")
-        self.assertEqual(facts["visible_shell_count"], 0)
-        self.assertEqual(facts["native_approval"]["state"], "absent")
-        incomplete = HELPER.cursor_frame_facts(frame.replace("Run Everything", "History"), "unknown")
-        self.assertEqual(incomplete["editor_state"], "nonempty")
+    def test_13_real_cursor_x0_frame_is_preserved_as_raw_evidence(self) -> None:
+        self.assertTrue(CURSOR_X0_FRAME.is_file())
+        frame = CURSOR_X0_FRAME.read_text(encoding="utf-8")
+        self.assertEqual(len(frame.splitlines()), 13)
+        self.assertIn("Cursor Agent", frame)
+        self.assertIn("v2026.08.25-3e8eec8", frame)
+        self.assertIn("→ Plan, search, build anything", frame)
+        self.assertIn("Run Everything", frame)
 
-    def test_15_claude_initial_placeholder_is_empty_on_the_complete_live_surface(self) -> None:
-        self.assertIsNotNone(HELPER)
-        frame = (
-            "Claude Code v2.1.246\n"
-            "Opus 5 with high effort · API Usage Billing\n"
-            "❯\u00a0Try \"fix typecheck errors\"\n"
-            "Opus 5 | ~/Workspace/fixture\n"
-            "auto mode on (shift+tab to cycle)\n"
-        )
-        facts = HELPER.claude_frame_facts(frame, "idle")
-        self.assertEqual(facts["editor_state"], "empty")
-        self.assertEqual(facts["visible_shell_count"], 0)
-        self.assertEqual(facts["visible_agent_count"], 0)
-        self.assertEqual(facts["native_approval"]["state"], "absent")
-
-    def test_16_styled_placeholders_require_cursor_at_the_input_origin(self) -> None:
-        """Identical painted text is not proof that the editor is empty.
-
-        Both CLIs paint their initial suggestion into the terminal grid. A user
-        can enter the exact same bytes, producing an identical captured frame.
-        The observer already receives tmux cursor coordinates: a real
-        placeholder leaves the cursor at the prompt's input origin, whereas
-        entered text moves it beyond that origin. If an adapter cannot prove
-        which case it observed, it must return ``unknown`` rather than grant an
-        empty-editor mutation precondition.
-        """
-
-        cases = (
-            (
-                "claude-code",
-                CLAUDE_ADAPTER,
-                (
-                    "Claude Code v2.1.246\n"
-                    "Opus 5 with high effort · API Usage Billing\n"
-                    "❯\u00a0Try \"fix typecheck errors\"\n"
-                    "Opus 5 | ~/Workspace/fixture\n"
-                    "auto mode on (shift+tab to cycle)\n"
-                ),
-                2,
-                29,
-            ),
-            (
-                "cursor-cli",
-                CURSOR_ADAPTER,
-                (
-                    "Cursor Agent\n"
-                    "v2026.08.25-3e8eec8\n"
-                    "→ Plan, search, build anything\n"
-                    "Cursor Grok 4.6 Extra High  Run Everything\n"
-                ),
-                2,
-                31,
-            ),
-        )
-        for platform, adapter, frame, input_origin_x, entered_text_x in cases:
-            with self.subTest(platform=platform, surface="painted-placeholder"):
-                empty_pane = pane_facts()
-                empty_pane.update(cursor_x=input_origin_x, cursor_y=23)
-                empty = run_platform_adapter_observer(adapter, frame, empty_pane)
-                self.assertEqual(empty["editor_state"], "empty")
-
-            with self.subTest(platform=platform, surface="identical-user-input"):
-                entered_pane = dict(empty_pane)
-                entered_pane["cursor_x"] = entered_text_x
-                entered = run_platform_adapter_observer(adapter, frame, entered_pane)
-                self.assertIn(
-                    entered["editor_state"],
-                    {"nonempty", "unknown"},
-                    "identical user-entered text was mistaken for a painted "
-                    f"{platform} placeholder despite the cursor moving away from the input origin",
-                )
-
-    def test_17_opencode_chrome_placeholder_requires_cursor_at_input_origin(self) -> None:
-        """Complete chrome does not distinguish placeholder bytes from input.
-
-        OpenCode can paint ``Ask anything...`` as its empty placeholder, but a
-        user can enter those identical bytes.  The real adapter must carry the
-        measured pane cursor facts into its observer: only the input-origin
-        cursor proves the painted placeholder empty.
-        """
-
-        frame = (
-            "OpenCode\n"
-            "repo fixture\n"
-            "Ask anything...\n"
-            "BUILD  ctrl+p cmd\n"
-        )
-        placeholder_pane = pane_facts()
-        # Measured against OpenCode 1.18.23's live complete chrome.
-        placeholder_pane.update(cursor_x=0, cursor_y=18)
-        placeholder = run_platform_adapter_observer(OPENCODE_ADAPTER, frame, placeholder_pane)
-        self.assertEqual(placeholder["editor_state"], "empty")
-
-        entered_pane = dict(placeholder_pane)
-        entered_pane["cursor_x"] = len("Ask anything...")
-        entered = run_platform_adapter_observer(OPENCODE_ADAPTER, frame, entered_pane)
-        self.assertIn(
-            entered["editor_state"],
-            {"nonempty", "unknown"},
-            "OpenCode treated identical user-entered Ask anything... bytes as its empty placeholder",
+        pane = pane_facts()
+        pane.update(cursor_x=0, cursor_y=13, cursor_logical_y=12)
+        facts = run_platform_adapter_observer(CURSOR_ADAPTER, frame, pane)
+        # Legacy advisory labels may remain for compatibility. This fixture
+        # intentionally asserts only the factual input surface; the public
+        # Cursor send test proves that its labels have no mutation authority.
+        self.assertTrue(
+            {
+                "editor_state",
+                "editor_fingerprint",
+                "visible_shell_count",
+                "visible_agent_count",
+                "native_approval",
+                "activity_hint",
+            }.issubset(facts)
         )
 
 

@@ -107,7 +107,7 @@ run_wrapped_send() {
       fail "$label" "fixture did not prove a naturally wrapping first logical line: width=$pane_width length=${#first_line}"
 
     capture_command "$platform" send --repo "$repo" --session "$session" \
-      --if-snapshot "$snapshot" --require-empty-editor --text "$payload"
+      --if-snapshot "$snapshot" --text "$payload"
     [[ "$COMMAND_RC" -eq 0 ]] || \
       fail "$label" "public guarded send refused the naturally wrapped payload: $COMMAND_OUTPUT"
     if [[ "$COMMAND_RC" -eq 0 ]]; then
@@ -213,7 +213,7 @@ run_wrapped_drift_refusal() {
       fail "$label" "fixture did not prove soft-wrap followed by a real logical newline"
 
     capture_command "$platform" send --repo "$repo" --session "$session" \
-      --if-snapshot "$snapshot" --require-empty-editor --text "$payload"
+      --if-snapshot "$snapshot" --text "$payload"
     [[ "$COMMAND_RC" -ne 0 ]] || \
       fail "$label" "public send succeeded after a foreign hard line changed the prepared editor: $COMMAND_OUTPUT"
     JSON_INPUT="$COMMAND_OUTPUT" python3 -c \

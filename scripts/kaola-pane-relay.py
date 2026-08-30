@@ -77,6 +77,8 @@ class RelayState:
 
     def facts(self) -> dict[str, Any]:
         child_process = process_command(self.child_pid)
+        rows = _process_rows()
+        child_state = rows.get(self.child_pid, (0, ""))[1]
         return {
             "managed": True,
             "protocol_version": PROTOCOL.PROTOCOL_VERSION,
@@ -93,8 +95,11 @@ class RelayState:
             "child_start_fingerprint": self.child_fingerprint,
             "child_runtime_path": os.path.realpath(self.args.runtime_path),
             "child_process": child_process,
+            "child_process_state": child_state,
             "child_process_match": runtime_command_matches(child_process, self.args.runtime_path)
             or bool(self.args.exact_process_title and child_process == self.args.exact_process_title),
+            "process_group_running": child_tree_running(self),
+            "lease_active": self.lease_owner is not None,
             "child_input_offset": self.input_offset,
             "child_output_offset": self.output_offset,
             "child_output_digest": "sha256:" + self.output_hash.hexdigest(),
@@ -366,6 +371,20 @@ def _group_states(pgid: int) -> list[str]:
     return states
 
 
+def child_tree_running(state: RelayState) -> bool:
+    group_states = [value for value in _group_states(state.child_pgid) if not value.startswith("Z")]
+    if not group_states or any(value.startswith("T") for value in group_states):
+        return False
+    rows = _process_rows()
+    for pid, fingerprint in list(state.tracked_descendants.items()):
+        if process_fingerprint(pid) != fingerprint:
+            continue
+        process_state = rows.get(pid, (0, ""))[1]
+        if not process_state or process_state.startswith("T"):
+            return False
+    return True
+
+
 def verify_group_stopped(state: RelayState) -> bool:
     for _ in range(20):
         states = [value for value in _group_states(state.child_pgid) if not value.startswith("Z")]
@@ -499,15 +518,37 @@ def submit_input(state: RelayState) -> None:
     state.lease_owner = None
 
 
+def send_control_input(state: RelayState, payload: bytes) -> None:
+    """Send one controller-selected native key sequence without adding Enter."""
+    if not payload:
+        raise RuntimeError("control input must not be empty")
+    reject_queued_outer_input(state)
+    _write_child(state, payload)
+    resume_child_tree(state)
+    # Keep pane input fenced until bytes that raced the controller transaction
+    # have been discarded. The relay assigns no meaning to the selected key.
+    discard_outer_input(state)
+    set_pane_input(state, True)
+    state.prepared = False
+    state.mode = "running"
+    state.lease_id = None
+    state.lease_owner = None
+    state.lease_deadline = 0.0
+    state.transaction_deadline = 0.0
+
+
 def restore_running(state: RelayState) -> None:
     # All bytes queued while pane input was disabled are outside the caller's
     # snapshot. A refusal/timeout must not replay them after restoration.
     discard_outer_input(state)
     resume_child_tree(state)
-    try:
-        set_pane_input(state, True)
-    except RuntimeError:
-        pass
+    set_pane_input(state, True)
+    for _ in range(50):
+        if child_tree_running(state):
+            break
+        time.sleep(0.01)
+    else:
+        raise RuntimeError("child-tree-resume-unproved")
     state.prepared = False
     state.mode = "running"
     state.lease_id = None
@@ -698,10 +739,35 @@ def _handle(state: RelayState, connection: socket.socket, request: dict[str, Any
         submitted_offset = state.output_offset
         submit_input(state)
         return _reply(state, request, "submitted", submitted_output_offset=submitted_offset, relay=state.facts())
+    if operation == "send-control":
+        _require_lease(state, connection, request)
+        submitted_offset = state.output_offset
+        payload_fingerprint = "sha256:" + hashlib.sha256(payload).hexdigest()
+        send_control_input(state, payload)
+        return _reply(
+            state,
+            request,
+            "control-sent",
+            submitted_output_offset=submitted_offset,
+            payload_fingerprint=payload_fingerprint,
+            relay=state.facts(),
+        )
     if operation in {"abort", "resume"}:
         _require_lease(state, connection, request)
         restore_running(state)
-        return _reply(state, request, "resumed")
+        return _reply(
+            state,
+            request,
+            "resumed",
+            relay=state.facts(),
+            restoration_evidence={
+                "child_resumed": True,
+                "pane_input_restored": True,
+                "relay_responsive": True,
+                "process_group_running": True,
+                "lease_released": True,
+            },
+        )
     if operation == "terminate":
         _require_lease(state, connection, request)
         set_pane_input(state, True)

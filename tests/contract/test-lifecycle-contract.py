@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Acceptance checks for the shared PR-handoff and terminal lifecycle contract.
+"""Acceptance checks for the communication-only generated Skill contract.
 
-The runner delegates Issue/PR mutation to Kaola-Workflow.  Consequently the
-observable offline contract is the generated Skill guidance: every platform
-must carry the same safety decisions, including the origin-watch-pr fallback
-and the no-cleanup boundary for foreign or ambiguous claims.
+Project Runner exposes an exact tmux transport to a controlling Agent. It does
+not own Workflow commands, scheduling, task modes, lifecycle state, or semantic
+classification. Generated packages must keep that boundary identical across
+all supported CLIs.
 """
 
 from __future__ import annotations
@@ -22,188 +22,143 @@ SKILL_IDS = (
     "cursor-cli-kaola-project-runner",
 )
 
-
-REQUIRED_MARKERS = {
-    "references/pr-claim-handoff.md": (
-        "workflow:in-progress",
-        "kw:claim project=",
-        "UNCLAIMED_PR",
-        "ORIGIN_PR_HANDOFF",
-        "FOREIGN_CLAIM_CONFLICT",
-        "watch-pr",
-        "origin folder/state is absent",
-        "`watch-pr` cannot perform cleanup",
-        "originating run's exact local state is present",
-        "never synthesize that state merely to make cleanup run",
-        "MERGED_AWAITING_ORIGIN_WATCH_PR",
-        "Do not create workflow state",
-        "close Issues, clear labels",
-        "repository is clean and aligned",
-        "runner scheduler and detached intake counts are zero",
-        "tmux/session shutdown follows the operating agreement",
-        "HUMAN_DECISION_REQUIRED",
-    ),
-    "references/closing.md": (
-        "Verify validation, sink, remote main/PR/Issue state",
-        "Prefer the originating run's `watch-pr`",
-        "when its state is absent or cleanup fails",
-        "same {runtime} main conversation",
-        "selected execution carrier",
-        "exact identity and intended terminal disposition",
-        "no firing remains active",
-        "exact owned idle",
-        "session shutdown",
-        "caller-selected terminal disposition",
-        "incomplete state",
-        "interrupted",
-        "uncertain",
-    ),
-    "references/scheduling.md": (
-        "foreground: true",
-        "same main conversation",
-        "zero detached General-loop schedulers",
-        "zero detached project-intake subagents",
-        "workflow:in-progress",
-        "kw:claim project=",
-        "HUMAN_DECISION_REQUIRED",
-        "watch-pr",
-        "clean review",
-        "head advance requires re-review",
-    ),
-    "references/project-run.md": (
-        "clean",
-        "detached General loop",
-        "detached subagent",
-        "HUMAN_DECISION_REQUIRED",
-        "actual sink, remote state, Issue state, archive, and cleanup",
-    ),
-    "references/task-modes.md": (
-        "`watch-pr` cleanup when locally available",
-        "claim:none",
-        "origin state is absent or watch-pr cannot clean",
-        "zero detached",
-        "HUMAN_DECISION_REQUIRED",
-        "same main orchestrator",
-    ),
+EXPECTED_MARKDOWN = {
+    "SKILL.md",
+    "references/platform.md",
+    "references/transport.md",
 }
 
-CALLER_CONTROLLED_SCHEDULING_MARKERS = (
-    "human or invoking agent",
-    "chooses the execution carrier",
-    "one-shot",
-    "Codex thread heartbeat",
-    "Every firing",
-    "workflow-next",
-    "HUMAN_DECISION_REQUIRED",
-    "never overlap",
+EXPECTED_ACTIVE_TEMPLATES = {
+    "SKILL.md.tmpl",
+    "agents/openai.yaml.tmpl",
+    "references/platform.md.tmpl",
+    "references/transport.md.tmpl",
+}
+
+SKILL_MARKERS = (
+    "communication driver",
+    "does not choose commands, Workflow modes, cadence, state, approvals, retries, or completion policy",
+    "No invocation implicitly starts `workflow-next`",
+    "creates a heartbeat",
+    "runtime-tmux.sh start",
+    "runtime-tmux.sh observe",
+    "runtime-tmux.sh capture",
+    "runtime-tmux.sh send",
+    "runtime-tmux.sh key",
+    "runtime-tmux.sh stop",
 )
 
-CALLER_CONTROLLED_TASK_MODE_MARKERS = (
-    "caller selects the execution carrier",
+PLATFORM_MARKERS = (
+    "The Agent decides",
+    "does not block starting the CLI",
+    "reported as evidence",
+)
+
+TRANSPORT_MARKERS = (
+    "managed nested-PTY relay",
+    "Transfer the agent's prompt",
+    "Transfer an Agent-selected native key",
+    "Read the response",
+    "Stop and capability-specific actions",
+)
+
+PROHIBITED_POLICY = (
+    "starts workflow-next immediately",
+    "Complete one Workflow project",
     "Recurring Workflow projects",
     "Recurring PR review and finalization",
-    "Codex thread heartbeat",
+    "Every started or resumed project run gets one",
+    "15-minute heartbeat",
+    "MERGED_AWAITING_ORIGIN_WATCH_PR",
+    "UNCLAIMED_PR",
+    "FOREIGN_CLAIM_CONFLICT",
     "HUMAN_DECISION_REQUIRED",
 )
 
-CALLER_CONTROLLED_SKILL_MARKERS = (
-    "human or invoking agent",
-    "selects whether the run is one-shot, supervised, or scheduled",
-    "caller-selected scheduling",
-)
 
-CALLER_CONTROLLED_SUPERVISION_MARKERS = (
-    "human or invoking agent",
-    "chooses whether to create",
-    "observation only",
-    "execution carrier",
-)
-
-PROHIBITED_SCHEDULING_GATES = (
-    "recurring execution is currently `unsupported`",
-    "native recurring execution is `unsupported`",
-    "do not create a Claude scheduler or loop",
-    "Do not create a Grok scheduler unless",
-    "Every started or resumed project run gets one",
-    "Immediately after a run starts or resumes, create or update one 15-minute",
-    "heartbeat is supervision only",
-)
+def normalized(path: Path) -> str:
+    return " ".join(path.read_text(encoding="utf-8").split())
 
 
 def main() -> int:
     failures: list[str] = []
-    runtime_names = {
-        "grok-kaola-project-runner": "Grok",
-        "claude-code-kaola-project-runner": "Claude Code",
-        "opencode-kaola-project-runner": "OpenCode",
-        "kimi-cli-kaola-project-runner": "Kimi CLI",
-        "cursor-cli-kaola-project-runner": "Cursor CLI",
+    agents_text = normalized(PROJECT / "AGENTS.md")
+    cursor_evidence = normalized(
+        PROJECT / "docs" / "live-smoke-evidence-first-2026-08-30.md"
+    )
+    if not all(
+        marker in agents_text
+        for marker in (
+            "Cursor CLI live experiments must explicitly open the native `/model` selector",
+            "non-FAST Cursor Grok 4.6",
+            "not a Runner gate",
+        )
+    ):
+        failures.append(
+            "test_cursor_live_experiment_policy — missing Agent-owned non-FAST Grok 4.6 protocol"
+        )
+    if not all(
+        marker in cursor_evidence
+        for marker in (
+            "Cursor Grok 4.6 Extra High, FAST off",
+            "KPR_CURSOR_GROK46_NO_FAST_OK",
+            "status returned `absent`",
+        )
+    ):
+        failures.append(
+            "test_cursor_live_experiment_evidence — missing model, reply, or exact-session shutdown proof"
+        )
+    templates = PROJECT / "templates"
+    active_templates = {
+        path.relative_to(templates).as_posix()
+        for path in templates.rglob("*")
+        if path.is_file() and "grok-golden" not in path.relative_to(templates).parts
     }
+    if active_templates != EXPECTED_ACTIVE_TEMPLATES:
+        failures.append(
+            "test_active_template_inventory — expected "
+            f"{sorted(EXPECTED_ACTIVE_TEMPLATES)}, got {sorted(active_templates)}"
+        )
     for skill_id in SKILL_IDS:
         package = PROJECT / "skills" / skill_id
-        skill_text = " ".join((package / "SKILL.md").read_text(encoding="utf-8").split())
-        for marker in CALLER_CONTROLLED_SKILL_MARKERS:
-            if marker not in skill_text:
-                failures.append(
-                    f"test_{skill_id}_SKILL_{marker[:30]} — missing caller-controlled marker {marker!r}"
-                )
-        for marker in PROHIBITED_SCHEDULING_GATES:
-            if " ".join(marker.split()) in skill_text:
-                failures.append(
-                    f"test_{skill_id}_SKILL_{marker[:30]} — retained scheduling capability gate {marker!r}"
-                )
+        markdown = {
+            path.relative_to(package).as_posix() for path in package.rglob("*.md")
+        }
+        if markdown != EXPECTED_MARKDOWN:
+            failures.append(
+                f"test_{skill_id}_markdown_inventory — expected {sorted(EXPECTED_MARKDOWN)}, got {sorted(markdown)}"
+            )
 
-        for markdown in package.rglob("*.md"):
-            markdown_text = " ".join(markdown.read_text(encoding="utf-8").split())
-            for marker in PROHIBITED_SCHEDULING_GATES:
-                if " ".join(marker.split()) in markdown_text:
-                    relative = markdown.relative_to(package)
-                    failures.append(
-                        f"test_{skill_id}_{relative}_{marker[:30]} — retained scheduling capability gate {marker!r}"
-                    )
-
-        supervision = package / "references" / "codex-supervision.md"
-        supervision_text = " ".join(supervision.read_text(encoding="utf-8").split())
-        for marker in CALLER_CONTROLLED_SUPERVISION_MARKERS:
-            if marker not in supervision_text:
-                failures.append(
-                    f"test_{skill_id}_supervision_{marker[:30]} — missing caller-controlled marker {marker!r}"
-                )
-        for marker in PROHIBITED_SCHEDULING_GATES:
-            if " ".join(marker.split()) in supervision_text:
-                failures.append(
-                    f"test_{skill_id}_supervision_{marker[:30]} — retained scheduling capability gate {marker!r}"
-                )
-
-        for relative, markers in REQUIRED_MARKERS.items():
-            if relative == "references/scheduling.md":
-                markers = CALLER_CONTROLLED_SCHEDULING_MARKERS
-                if skill_id == "claude-code-kaola-project-runner":
-                    markers += (
-                        "--model opus --effort high --permission-mode auto",
-                        "bypassPermissions",
-                    )
-            elif relative == "references/task-modes.md":
-                markers = CALLER_CONTROLLED_TASK_MODE_MARKERS
-            path = package / relative
+        checks = (
+            (package / "SKILL.md", SKILL_MARKERS),
+            (package / "references/platform.md", PLATFORM_MARKERS),
+            (package / "references/transport.md", TRANSPORT_MARKERS),
+        )
+        for path, markers in checks:
             if not path.is_file():
-                failures.append(f"test_{skill_id}_{relative} — missing generated lifecycle reference")
+                failures.append(f"test_{skill_id}_{path.name} — missing generated reference")
                 continue
-            text = path.read_text(encoding="utf-8")
-            searchable = " ".join(text.split())
+            text = normalized(path)
             for marker in markers:
-                marker = marker.replace("{runtime}", runtime_names[skill_id])
-                if " ".join(marker.split()) not in searchable:
+                if " ".join(marker.split()) not in text:
                     failures.append(
-                        f"test_{skill_id}_{relative}_{marker[:30]} — missing lifecycle marker {marker!r}"
+                        f"test_{skill_id}_{path.name}_{marker[:32]} — missing communication marker {marker!r}"
+                    )
+
+        for path in package.rglob("*.md"):
+            text = normalized(path)
+            for marker in PROHIBITED_POLICY:
+                if " ".join(marker.split()) in text:
+                    failures.append(
+                        f"test_{skill_id}_{path.relative_to(package)}_{marker[:32]} — active package retained orchestration policy {marker!r}"
                     )
 
     if failures:
         for failure in failures:
             print(f"RED: {failure}", file=sys.stderr)
-        print(f"lifecycle contract acceptance: {len(failures)} failure(s)", file=sys.stderr)
+        print(f"communication lifecycle acceptance: {len(failures)} failure(s)", file=sys.stderr)
         return 1
-    print("lifecycle contract acceptance: PASS")
+    print("communication lifecycle acceptance: PASS")
     return 0
 
 

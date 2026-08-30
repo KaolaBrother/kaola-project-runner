@@ -1,0 +1,13 @@
+Cursor Agent
+v2026.08.25-3e8eec8
+
+Kaola Workflow fixture repository
+
+No command is running
+
+No approval surface is visible
+
+The main conversation is open
+
+Cursor Grok 4.6 Extra High  Run Everything
+→ Plan, search, build anything

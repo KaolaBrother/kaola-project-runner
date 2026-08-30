@@ -286,9 +286,8 @@ else
   IFS=$'\t' read -r kimi_fake kimi_log < <(make_kimi_fake)
   export KIMI_BIN="$kimi_fake" FAKE_RUNTIME_LOG="$kimi_log"
 
-  # Kimi's trust screen is a human gate, not an idle prompt.  Its real prompt
-  # frame, busy indicator, and both session-id formats are checked separately
-  # so a broad "has a Kimi TUI" result cannot hide an adapter regression.
+  # Kimi's trust screen is evidence for the controlling Agent. The Runner must
+  # still transfer an Agent-selected native key without deciding its meaning.
   kimi_repo="$(issue_new_repo kimi-trust-repo)"
   prepare_kimi_surface "$kimi_repo"
   export FAKE_RUNTIME_STATE=trust
@@ -296,12 +295,9 @@ else
   trust_start="$(run_runner kimi-cli start --repo "$kimi_repo" --session "$kimi_trust_session" 2>&1)" || \
     fail test_kimi_trust_prompt_start "start failed: $trust_start"
   expect_status test_kimi_trust_prompt_waiting_human kimi-cli "$kimi_repo" "$kimi_trust_session" waiting-human
-  trust_send=""
-  set +e
-  trust_send="$(run_runner kimi-cli send --repo "$kimi_repo" --session "$kimi_trust_session" --text 'must wait' 2>&1)"
-  trust_send_rc=$?
-  set -e
-  [[ "$trust_send_rc" -ne 0 ]] || fail test_kimi_trust_prompt_waiting_human "send succeeded through trust gate: $trust_send"
+  trust_key="$(run_runner kimi-cli key --repo "$kimi_repo" --session "$kimi_trust_session" --key down 2>&1)" || \
+    fail test_kimi_trust_prompt_key_transport "key transport failed: $trust_key"
+  json_assert test_kimi_trust_prompt_key_transport "d['result'] == 'key-sent' and d['key'] == 'down' and d['mutation_performed'] is True and d['payload_fingerprint'].startswith('sha256:')" "$trust_key"
   stop_force kimi-cli "$kimi_repo" "$kimi_trust_session"
 
   kimi_repo="$(issue_new_repo kimi-idle-repo)"
@@ -357,18 +353,17 @@ else
   [[ ! -e "$cursor_repo/.cursor" ]] || fail test_cursor_preflight_read_only "preflight materialized .cursor"
   grep -q -- '--ensure-target' "$CURSOR_HELPER_LOG" && \
     fail test_cursor_preflight_read_only "preflight invoked point-of-use materialization"
-  json_assert test_cursor_preflight_read_only "d['project_materialization'] == 'required-at-point-of-use'" "$preflight"
+  json_assert test_cursor_preflight_read_only "d['project_materialization'] == 'not-present'" "$preflight"
 
   export FAKE_RUNTIME_STATE=idle
   cursor_materialize_repo="$(issue_new_repo cursor-materialize-repo)"
   cursor_materialize_session="cursor-materialize-$$"
   run_runner cursor-cli start --repo "$cursor_materialize_repo" --session "$cursor_materialize_session" >/dev/null 2>&1 || \
-    fail test_cursor_start_materializes_via_global_authority "start failed"
-  assert_helper_call test_cursor_start_materializes_via_global_authority "$CURSOR_HELPER_LOG" "$(cd "$cursor_materialize_repo" && pwd -P)"
-  cmp -s "$CURSOR_HOME/commands/workflow-next.md" "$cursor_materialize_repo/.cursor/commands/workflow-next.md" || \
-    fail test_cursor_start_materializes_via_global_authority "workflow-next was not materialized from global authority"
-  cmp -s "$CURSOR_HOME/commands/kaola-workflow-finalize.md" "$cursor_materialize_repo/.cursor/commands/kaola-workflow-finalize.md" || \
-    fail test_cursor_start_materializes_via_global_authority "finalize was not materialized from global authority"
+    fail test_cursor_start_does_not_materialize_workflow "start failed"
+  [[ ! -e "$cursor_materialize_repo/.cursor" ]] || \
+    fail test_cursor_start_does_not_materialize_workflow "Runner start modified the repository"
+  grep -q -- '--ensure-target' "$CURSOR_HELPER_LOG" && \
+    fail test_cursor_start_does_not_materialize_workflow "Runner start invoked Workflow materialization"
   stop_force cursor-cli "$cursor_materialize_repo" "$cursor_materialize_session"
 
   cursor_collision_repo="$(issue_new_repo cursor-collision-repo)"
@@ -378,20 +373,13 @@ else
   foreign_before="$(cat "$cursor_collision_repo/.cursor/commands/workflow-next.md")"
   foreign_finalize_before="$(cat "$cursor_collision_repo/.cursor/commands/kaola-workflow-finalize.md")"
   cursor_collision_session="cursor-collision-$$"
-  set +e
-  collision_output="$(run_runner cursor-cli start --repo "$cursor_collision_repo" --session "$cursor_collision_session" 2>&1)"
-  collision_rc=$?
-  set -e
-  [[ "$collision_rc" -ne 0 ]] || fail test_cursor_foreign_collision_refuses "start succeeded over foreign command: $collision_output"
+  collision_output="$(run_runner cursor-cli start --repo "$cursor_collision_repo" --session "$cursor_collision_session" 2>&1)" || \
+    fail test_cursor_foreign_collision_is_advisory "start failed because of unrelated Workflow files: $collision_output"
   foreign_after="$(cat "$cursor_collision_repo/.cursor/commands/workflow-next.md")"
   foreign_finalize_after="$(cat "$cursor_collision_repo/.cursor/commands/kaola-workflow-finalize.md")"
   [[ "$foreign_after" == "$foreign_before" ]] || fail test_cursor_foreign_collision_refuses "foreign command was overwritten"
   [[ "$foreign_finalize_after" == "$foreign_finalize_before" ]] || fail test_cursor_foreign_collision_refuses "foreign finalize command was overwritten"
-  assert_helper_call test_cursor_foreign_collision_refuses "$CURSOR_HELPER_LOG" "$(cd "$cursor_collision_repo" && pwd -P)"
-  if "$issue_tmux_bin" has-session -t "=$cursor_collision_session" >/dev/null 2>&1; then
-    fail test_cursor_foreign_collision_refuses "failed materialization left a live tmux session"
-    "$issue_tmux_bin" kill-session -t "=$cursor_collision_session" >/dev/null 2>&1 || true
-  fi
+  stop_force cursor-cli "$cursor_collision_repo" "$cursor_collision_session"
 fi
 
 if [[ "$failures" -gt 0 ]]; then

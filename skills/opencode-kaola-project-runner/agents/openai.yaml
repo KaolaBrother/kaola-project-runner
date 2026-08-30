@@ -1,6 +1,6 @@
 interface:
   display_name: "OpenCode Kaola Project Runner"
-  short_description: "Run Kaola Workflow projects through OpenCode"
-  default_prompt: "Use $opencode-kaola-project-runner to start workflow-next immediately in the current Git repository."
+  short_description: "Communicate with OpenCode through exact tmux"
+  default_prompt: "Use $opencode-kaola-project-runner to start an exact OpenCode tmux session, read its output, and send only the input I choose."
 policy:
   allow_implicit_invocation: true

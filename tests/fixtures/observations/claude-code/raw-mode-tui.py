@@ -62,6 +62,24 @@ def completed_frame(editor: str = "") -> list[str]:
     ]
 
 
+def cursor_ready_frame() -> list[str]:
+    return [
+        "Cursor Agent",
+        "v2026.08.25-3e8eec8",
+        "",
+        "Kaola Workflow fixture repository",
+        "",
+        "No command is running",
+        "",
+        "No approval surface is visible",
+        "",
+        "The main conversation is open",
+        "",
+        "Cursor Grok 4.6 Extra High  Run Everything",
+        "→ Plan, search, build anything",
+    ]
+
+
 def native_approval_frame() -> list[str]:
     return [
         "Claude Code",
@@ -133,7 +151,13 @@ def main() -> int:
     bracketed_paste_enabled = os.environ.get("FAKE_CLAUDE_BRACKETED_PASTE", "1") != "0"
     if bracketed_paste_enabled:
         os.write(sys.stdout.fileno(), b"\x1b[?2004h")
-    if initial_mode == "unknown":
+    if initial_mode == "cursor-ready":
+        write_frame(cursor_ready_frame())
+        # The reported Issue #7 reproducer had cursor_x=0 even though the
+        # placeholder remained painted in the grid.
+        sys.stdout.write("\r")
+        sys.stdout.flush()
+    elif initial_mode == "unknown":
         write_frame(["Claude Code", "Kaola Workflow", "Thinking...", "⠋"])
     elif initial_mode == "empty":
         write_frame(completed_frame())
@@ -246,6 +270,8 @@ def main() -> int:
                 elif byte in (0x0A, 0x0D):
                     submitted = editor.decode("utf-8", errors="replace")
                     write_log(f"submitted={submitted}")
+                    if submitted in {"/exit", "/quit"}:
+                        return 0
                     if exit_on_submit:
                         return 0
                     if submitted == "chosen-answer" and not answered:

@@ -21,18 +21,16 @@ opencode_surface() {
 }
 
 adapter_preflight() {
-  local config_root="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}" carrier
+  local config_root="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}" carrier="" config_state=missing
   if opencode_surface "$repo/.opencode"; then carrier="$repo/.opencode"
   elif opencode_surface "$config_root"; then carrier="$config_root"
-  else die "missing complete OpenCode Kaola commands, agents, plugin, or support scripts"
   fi
-  [[ -f "$repo/opencode.json" || -f "$config_root/opencode.json" ]] || \
-    die "missing project or user OpenCode configuration"
-  PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1)"
-  PREFLIGHT_WORKFLOW_NEXT=true
-  PREFLIGHT_FINALIZE=true
+  [[ -f "$repo/opencode.json" || -f "$config_root/opencode.json" ]] && config_state=present
+  PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1 || true)"; [[ -n "$PREFLIGHT_VERSION" ]] || PREFLIGHT_VERSION=unknown
+  PREFLIGHT_WORKFLOW_NEXT=false; PREFLIGHT_FINALIZE=false
+  [[ -n "$carrier" ]] && PREFLIGHT_WORKFLOW_NEXT=true PREFLIGHT_FINALIZE=true
   PREFLIGHT_PROJECT_MATERIALIZATION=not-required
-  PREFLIGHT_DETAIL="complete OpenCode Kaola carrier at $carrier; user opencode.json preserved"
+  PREFLIGHT_DETAIL="OpenCode communication is available; Kaola carrier=${carrier:-not-discovered}; configuration=$config_state"
 }
 
 adapter_build_launch() {

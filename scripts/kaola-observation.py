@@ -120,14 +120,9 @@ def make_snapshot_id(observation: dict[str, Any]) -> str:
         "raw_current_frame": observation.get("raw_current_frame"),
         "hard_evidence": hard,
         "relay": relay,
-        "editor_state": observation.get("editor_state"),
-        "editor_fingerprint": observation.get("editor_fingerprint"),
         "child_processes": observation.get("child_processes"),
         "child_process_count": observation.get("child_process_count"),
-        "visible_shell_count": observation.get("visible_shell_count"),
-        "visible_agent_count": observation.get("visible_agent_count"),
         "native_approval": observation.get("native_approval"),
-        "structured_decision_marker": observation.get("structured_decision_marker"),
         "later_output_barrier": observation.get("later_output_barrier"),
         "git": observation.get("git"),
     }
@@ -282,7 +277,6 @@ def claude_frame_facts(
         and re.search(r'^\s*❯\s*Try "[^"]+"\s*$', joined, re.MULTILINE)
         and "auto mode on" in joined
         and re.search(r"^\s*Opus \d+ \| ", joined, re.MULTILINE)
-        and (pane_facts is None or pane_facts.get("cursor_x") == 2)
     ):
         editor_state = "empty"
         editor_fingerprint = _fingerprint("")
@@ -366,7 +360,6 @@ def opencode_frame_facts(
         and "OpenCode" in frame
         and "Ask anything..." in frame
         and "ctrl+p cmd" in frame
-        and (pane_facts is None or pane_facts.get("cursor_x") == 0)
     ):
         facts.update(
             editor_state="empty",
@@ -412,7 +405,6 @@ def cursor_frame_facts(
         and re.search(r"^\s*v\d{4}\.\d{2}\.\d{2}-[0-9a-f]+\s*$", frame, re.MULTILINE)
         and re.search(r"^\s*→ Plan, search, build anything\s*$", frame, re.MULTILINE)
         and "Run Everything" in frame
-        and (pane_facts is None or pane_facts.get("cursor_x") == 2)
     ):
         facts.update(
             editor_state="empty",
@@ -499,7 +491,9 @@ def build_from_environment() -> dict[str, Any]:
             "peer_pid_verified": False, "state": "legacy-direct",
             "child_pid": None, "child_pgid": None,
             "child_start_fingerprint": None, "child_runtime_path": None,
-            "child_process": None, "child_process_match": False,
+            "child_process": None, "child_process_state": None,
+            "child_process_match": False, "process_group_running": False,
+            "lease_active": False,
             "child_input_offset": None, "child_output_offset": None,
             "child_output_digest": None, "resize_revision": None,
             "bracketed_paste": None, "terminal_fence": None,
@@ -558,7 +552,7 @@ def build_from_environment() -> dict[str, Any]:
         "activity_hint": adapter.get("activity_hint", "unknown"),
         "runtime_session_id": os.environ.get("KPR_RUNTIME_SESSION_ID", ""),
         "git": _git_facts(os.environ["KPR_REPO"]),
-        "guard_failures": [],
+        "evidence_flags": [],
     }
     failures: list[str] = []
     checks = (
@@ -588,7 +582,7 @@ def build_from_environment() -> dict[str, Any]:
         (barrier is not None and barrier.get("state") in {"pending", "output-seen"}, "awaiting-later-output"),
     )
     failures.extend(name for condition, name in checks if condition)
-    observation["guard_failures"] = sorted(set(failures))
+    observation["evidence_flags"] = sorted(set(failures))
     observation["snapshot_id"] = make_snapshot_id(observation) if present and relay.get("managed") else None
     return observation
 

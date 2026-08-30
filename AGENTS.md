@@ -32,11 +32,35 @@
 4. Machines decide facts; humans decide values.
 5. Own local completion evidence instead of outsourcing the verdict.
 
+## Runner Authority Boundary
+
+- Project Runner Skills are CLI communication drivers: start the exact tmux session, read/capture
+  output, transfer Agent-selected prompts or native keys, read the reply, and stop only that session.
+- They discover and transfer; they do not decide, orchestrate, or block. A bare invocation has no
+  default Workflow command, task mode, heartbeat, cadence, lifecycle, or completion policy.
+- Collect the complete runtime frame and deterministic terminal, process, relay, repository, Workflow,
+  and forge facts, then give that evidence to the controlling agent.
+- Transfer the prompt or command chosen by the controlling agent and read the actual response back.
+- Native selection keys are also Agent-owned input. The Runner may transfer an explicitly named key
+  and attest its bytes, but must not infer what a visible option means or choose it automatically.
+- Do not turn activity, editor, approval, decision, worker-count, coordinate, prose, Git, Workflow, or
+  snapshot-change observations into authorization gates for agent-directed actions.
+- A snapshot or revision may correlate an action with earlier evidence, but ordinary live change must be
+  reported rather than refused as stale.
+- The controlling agent owns all semantic judgment and recovery choices. The Skill reports objective
+  transport impossibility or failure exactly; it does not disguise it as a runtime-status verdict.
+- Treat a previously working real automation that becomes blocked by a new classifier, snapshot rule,
+  label interpretation, or inferred state as regression evidence. Measure actual input, output, and
+  durable effects; do not add another hard gate in response.
+
 ## Validation Policy
 
 - Treat background hooks as advisory and avoid repeating validation they already completed.
 - Record the exact commands and outcomes that establish completion.
 - Run the smallest focused proof first, then the project-required integration surface.
+- Cursor CLI live experiments must explicitly open the native `/model` selector, select a non-FAST
+  Cursor Grok 4.6 variant, capture the selected model without a `Fast` suffix, and only then send the
+  verification prompt. This is an experiment requirement owned by the validating Agent, not a Runner gate.
 
 ## Kaola-Workflow
 

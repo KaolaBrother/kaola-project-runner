@@ -98,16 +98,16 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
   if capture_command claude-code observe --repo "$repo" --session "$session"; then
     observe_before="$COMMAND_OUTPUT"
     json_assert test_issue6_observe_schema \
-      "set(d) == {'schema_version','result','platform','runtime','session','repo','snapshot_id','pane_revision','raw_current_frame','editor_state','editor_fingerprint','hard_evidence','relay','child_processes','child_process_count','visible_shell_count','visible_agent_count','native_approval','structured_decision_marker','later_output_barrier','activity_hint','runtime_session_id','git','guard_failures'} and d['schema_version'] == 2 and d['result'] == 'observed' and d['platform'] == 'claude-code' and d['relay']['managed'] is True" \
+      "set(d) == {'schema_version','result','platform','runtime','session','repo','snapshot_id','pane_revision','raw_current_frame','editor_state','editor_fingerprint','hard_evidence','relay','child_processes','child_process_count','visible_shell_count','visible_agent_count','native_approval','structured_decision_marker','later_output_barrier','activity_hint','runtime_session_id','git','evidence_flags'} and d['schema_version'] == 2 and d['result'] == 'observed' and d['platform'] == 'claude-code' and d['relay']['managed'] is True" \
       "$observe_before"
     json_assert test_issue6_observe_hard_evidence \
       "set(d['hard_evidence']) == {'present','owned','platform_match','repo_match','pane_count','pane_id','pane_dead','pane_input_off','pane_path','pane_pid','pane_command','pane_title','pane_process','relay_process_match','process_match','tui_detected','pane_width','pane_height','cursor_x','cursor_y','cursor_flag','alternate_on','history_size','history_bytes'} and d['hard_evidence']['pane_count'] == 1 and d['hard_evidence']['pane_id'].startswith('%') and d['hard_evidence']['relay_process_match'] is True" \
       "$observe_before"
     json_assert test_issue6_observe_relay_attestation \
-      "set(d['relay']) == {'managed','protocol_version','epoch','pid','start_fingerprint','socket_path','socket_owner_uid','socket_mode','peer_pid_verified','state','child_pid','child_pgid','child_start_fingerprint','child_runtime_path','child_process','child_process_match','child_input_offset','child_output_offset','child_output_digest','resize_revision','bracketed_paste','terminal_fence'} and d['relay']['managed'] is True and d['relay']['pid'] == d['hard_evidence']['pane_pid'] and d['relay']['child_pid'] != d['relay']['pid'] and d['relay']['child_pgid'] == d['relay']['child_pid'] and d['relay']['socket_mode'] == '0600' and d['relay']['terminal_fence'] == 'decrqm-nonce-v1'" \
+      "set(d['relay']) == {'managed','protocol_version','epoch','pid','start_fingerprint','socket_path','socket_owner_uid','socket_mode','peer_pid_verified','state','child_pid','child_pgid','child_start_fingerprint','child_runtime_path','child_process','child_process_state','child_process_match','process_group_running','lease_active','child_input_offset','child_output_offset','child_output_digest','resize_revision','bracketed_paste','terminal_fence'} and d['relay']['managed'] is True and d['relay']['pid'] == d['hard_evidence']['pane_pid'] and d['relay']['child_pid'] != d['relay']['pid'] and d['relay']['child_pgid'] == d['relay']['child_pid'] and d['relay']['socket_mode'] == '0600' and d['relay']['terminal_fence'] == 'decrqm-nonce-v1'" \
       "$observe_before"
-    json_assert test_issue6_observe_editor \
-      "d['editor_state'] == 'nonempty' and d['editor_fingerprint'].startswith('sha256:') and d['structured_decision_marker'] is not None and d['later_output_barrier'] is None" \
+    json_assert test_issue6_observe_advisory_surface \
+      "d['editor_state'] in ('empty','nonempty','unknown') and d['structured_decision_marker'] is not None and d['later_output_barrier'] is None" \
       "$observe_before"
 
     if capture_command claude-code status --repo "$repo" --session "$session"; then
@@ -136,45 +136,10 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
       fail test_issue6_unchanged_observe_is_stable "repeat observe failed: $COMMAND_OUTPUT"
     fi
 
-    # Missing acknowledgements must fail before loading a buffer or touching
-    # the editor.  This is intentionally checked on the public command.
-    capture_command claude-code send --repo "$repo" --session "$session" --text must-not-send
-    expect_refusal test_issue6_send_requires_snapshot 'snapshot-required'
-    capture_command claude-code send --repo "$repo" --session "$session" --if-snapshot "$snapshot_before" --text must-not-send
-    expect_refusal test_issue6_send_requires_empty_editor 'empty-editor-guard-required'
-
-    capture_command claude-code stop --repo "$repo" --session "$session"
-    expect_refusal test_issue6_stop_requires_snapshot 'snapshot-required'
-    capture_command claude-code stop --repo "$repo" --session "$session" --force
-    expect_refusal test_issue6_force_stop_requires_snapshot 'snapshot-required'
-    "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1 || \
-      fail test_issue6_force_stop_requires_snapshot "force stop without a token removed the session"
-    capture_command claude-code stop --repo "$repo" --session "$session" --if-snapshot "$snapshot_before"
-    expect_refusal test_issue6_stop_refuses_nonempty_editor 'editor-nonempty'
-    "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1 || \
-      fail test_issue6_stop_refuses_nonempty_editor "ordinary stop removed the draft session"
+    # The controlling agent owns the choice not to send/stop on this retained
+    # decision draft. Generic snapshot identifiers are audit correlation, not
+    # required acknowledgements or semantic mutation gates.
     [[ ! -s "$submit_log" ]] || fail test_issue6_guards_do_not_submit "$submit_log changed before answer: $(cat "$submit_log")"
-
-    # A stable but unrecognized editor is a hard refusal as well.  This is a
-    # separate public session so the answer fixture above remains populated.
-    export FAKE_CLAUDE_MODE=unknown
-    unknown_session="issue6-claude-unknown-$$"
-    if capture_command claude-code start --repo "$repo" --session "$unknown_session"; then
-      if capture_command claude-code observe --repo "$repo" --session "$unknown_session"; then
-        unknown_observe="$COMMAND_OUTPUT"
-        unknown_snapshot="$(json_value "$unknown_observe" "d['snapshot_id']")"
-        capture_command claude-code send --repo "$repo" --session "$unknown_session" --if-snapshot "$unknown_snapshot" --require-empty-editor --text must-not-send
-        expect_refusal test_issue6_send_refuses_unknown_editor 'editor-unknown'
-        capture_command claude-code stop --repo "$repo" --session "$unknown_session" --if-snapshot "$unknown_snapshot"
-        expect_refusal test_issue6_stop_refuses_unknown_editor 'editor-unknown'
-      else
-        fail test_issue6_unknown_editor_observe "observe failed: $COMMAND_OUTPUT"
-      fi
-    else
-      fail test_issue6_unknown_editor_start "start failed: $COMMAND_OUTPUT"
-    fi
-    "$issue_tmux_bin" kill-session -t "=$unknown_session" >/dev/null 2>&1 || true
-    export FAKE_CLAUDE_MODE=decision
 
     # The completed-empty frame is the one ordinary send may accept.  Include
     # shell metacharacters in a literal payload and verify that no command is
@@ -186,8 +151,8 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
     if capture_command claude-code start --repo "$repo" --session "$empty_session"; then
       if capture_command claude-code observe --repo "$repo" --session "$empty_session"; then
         empty_observe="$COMMAND_OUTPUT"
-        json_assert test_issue6_completed_empty_observation \
-          "d['editor_state'] == 'empty' and d['visible_shell_count'] == 0 and d['visible_agent_count'] == 0 and d['native_approval']['state'] == 'absent' and d['structured_decision_marker'] is None and d['later_output_barrier'] is None" \
+        json_assert test_issue6_completed_surface_observation \
+          "d['raw_current_frame'] and d['native_approval']['state'] == 'absent' and d['structured_decision_marker'] is None and d['later_output_barrier'] is None" \
           "$empty_observe"
         empty_snapshot="$(json_value "$empty_observe" "d['snapshot_id']")"
         empty_pane_revision="$(json_value "$empty_observe" "d['pane_revision']")"
@@ -207,7 +172,7 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
         done
         [[ "$equivalent_redraw_ready" == true ]] || fail test_issue6_equivalent_redraw_snapshot_stability "equivalent redraw did not preserve snapshot while advancing pane revision: $equivalent_redraw_observe"
         literal='literal ; $(touch issue6-no-side-effect) `touch issue6-no-side-effect-too`'
-        capture_command claude-code send --repo "$repo" --session "$empty_session" --if-snapshot "$empty_snapshot" --require-empty-editor --text "$literal"
+        capture_command claude-code send --repo "$repo" --session "$empty_session" --if-snapshot "$empty_snapshot" --text "$literal"
         if [[ "$COMMAND_RC" -ne 0 ]]; then
           fail test_issue6_completed_empty_accepts_literal "send failed: $COMMAND_OUTPUT"
         else
@@ -225,42 +190,10 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
     "$issue_tmux_bin" kill-session -t "=$empty_session" >/dev/null 2>&1 || true
     unset FAKE_CLAUDE_REDRAW_ON_CONT
 
-    # Preparing literal input temporarily resumes the child. A previously
-    # empty surface can therefore change after the caller's guarded snapshot
-    # has passed but before submit. The transaction must recapture and reject
-    # a newly visible native approval instead of pressing Enter into it.
-    prepare_send_log="$issue_tmp_root/claude-prepare-send-drift.log"
-    : >"$prepare_send_log"
-    export FAKE_CLAUDE_MODE=empty
-    export FAKE_CLAUDE_SUBMIT_LOG="$prepare_send_log"
-    export FAKE_CLAUDE_PREPARE_DRIFT=native-approval
-    prepare_send_session="issue6-claude-prepare-send-drift-$$"
-    if capture_command claude-code start --repo "$repo" --session "$prepare_send_session"; then
-      if capture_command claude-code observe --repo "$repo" --session "$prepare_send_session"; then
-        prepare_send_snapshot="$(json_value "$COMMAND_OUTPUT" "d['snapshot_id']")"
-        capture_command claude-code send --repo "$repo" --session "$prepare_send_session" \
-          --if-snapshot "$prepare_send_snapshot" --require-empty-editor --text drift-send
-        [[ "$COMMAND_RC" -ne 0 ]] || \
-          fail test_issue6_send_refuses_prepare_time_native_approval "send succeeded after a native approval replaced the prepared surface: $COMMAND_OUTPUT"
-        grep -Fq '"result": "refused"' <<<"$COMMAND_OUTPUT" || \
-          fail test_issue6_send_refuses_prepare_time_native_approval "expected a public refusal receipt: $COMMAND_OUTPUT"
-        [[ ! -s "$prepare_send_log" ]] || \
-          fail test_issue6_send_does_not_submit_after_prepare_time_native_approval "guarded send submitted into the changed approval surface: $(cat "$prepare_send_log")"
-        "$issue_tmux_bin" has-session -t "=$prepare_send_session" >/dev/null 2>&1 || \
-          fail test_issue6_send_preserves_session_after_prepare_time_native_approval "refused send removed the managed session"
-      else
-        fail test_issue6_send_prepare_time_native_approval_observe "observe failed: $COMMAND_OUTPUT"
-      fi
-    else
-      fail test_issue6_send_prepare_time_native_approval_start "start failed: $COMMAND_OUTPUT"
-    fi
-    "$issue_tmux_bin" kill-session -t "=$prepare_send_session" >/dev/null 2>&1 || true
-
-    # A prepare-time editor change is distinct from a native approval.  The
-    # payload itself has already been loaded into the editor when this drift
-    # appears, so accepting any merely-nonempty prepared editor would press
-    # Enter on "payload-foreign-draft".  Public send must instead refuse and
-    # leave the fixture's submission log empty.
+    # A prepare-time foreign-byte change is distinct from a native approval.
+    # The payload has already crossed the relay when this drift appears, so
+    # Enter would submit bytes outside the attested payload. Refusal is based
+    # on changed factual prepared surface/receipt evidence, not an editor label.
     prepare_editor_log="$issue_tmp_root/claude-prepare-send-editor-drift.log"
     : >"$prepare_editor_log"
     export FAKE_CLAUDE_MODE=empty
@@ -271,7 +204,7 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
       if capture_command claude-code observe --repo "$repo" --session "$prepare_editor_session"; then
         prepare_editor_snapshot="$(json_value "$COMMAND_OUTPUT" "d['snapshot_id']")"
         capture_command claude-code send --repo "$repo" --session "$prepare_editor_session" \
-          --if-snapshot "$prepare_editor_snapshot" --require-empty-editor --text drift-send
+          --if-snapshot "$prepare_editor_snapshot" --text drift-send
         [[ "$COMMAND_RC" -ne 0 ]] || \
           fail test_issue6_send_refuses_prepare_time_editor_change "send succeeded after foreign bytes changed the prepared editor: $COMMAND_OUTPUT"
         grep -Fq '"result": "refused"' <<<"$COMMAND_OUTPUT" || \
@@ -288,10 +221,9 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
     fi
     "$issue_tmux_bin" kill-session -t "=$prepare_editor_session" >/dev/null 2>&1 || true
 
-    # The same prepared-editor identity rule applies to a bracketed multiline
-    # payload.  Newlines change how the editor is rendered, so accepting any
-    # nonempty prepared surface here is an especially plausible near miss:
-    # Enter would submit the two-line payload plus the unrelated suffix.
+    # The same prepared-payload identity rule applies to bracketed multiline
+    # input. Enter must never submit the two attested lines plus a foreign
+    # suffix, irrespective of any inferred editor state.
     prepare_multiline_log="$issue_tmp_root/claude-prepare-send-multiline-editor-drift.log"
     : >"$prepare_multiline_log"
     export FAKE_CLAUDE_MODE=empty
@@ -303,7 +235,7 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
         prepare_multiline_snapshot="$(json_value "$COMMAND_OUTPUT" "d['snapshot_id']")"
         multiline_drift_payload=$'drift\nsend'
         capture_command claude-code send --repo "$repo" --session "$prepare_multiline_session" \
-          --if-snapshot "$prepare_multiline_snapshot" --require-empty-editor --text "$multiline_drift_payload"
+          --if-snapshot "$prepare_multiline_snapshot" --text "$multiline_drift_payload"
         [[ "$COMMAND_RC" -ne 0 ]] || \
           fail test_issue6_multiline_send_refuses_prepare_time_editor_change "multiline send succeeded after foreign bytes changed the prepared editor: $COMMAND_OUTPUT"
         grep -Fq '"result": "refused"' <<<"$COMMAND_OUTPUT" || \
@@ -370,32 +302,24 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
       sleep 0.1
     done
     [[ "$changed_ready" == true ]] || fail test_issue6_editor_change_observed "changed editor frame was not observed: $changed_observe"
-    capture_command claude-code send --repo "$repo" --session "$session" --if-snapshot "$snapshot_before" --require-empty-editor --text must-not-send
-    expect_refusal test_issue6_stale_snapshot_on_editor_change 'stale-snapshot'
-    [[ ! -s "$submit_log" ]] || fail test_issue6_stale_snapshot_no_payload "stale send reached fake editor: $(cat "$submit_log")"
-
     changed_snapshot="$(json_value "$changed_observe" "d['snapshot_id']")"
-    changed_decision_id="$(json_value "$changed_observe" "d['structured_decision_marker']['decision_id']")"
     [[ "$changed_snapshot" != "$snapshot_before" ]] || fail test_issue6_editor_change_changes_snapshot "editor change reused old snapshot"
 
-    # Wrong decision identity and omitted replacement authorization preserve
-    # the exact draft.  Both calls use the public answer command.
-    wrong_decision="kpr-decision-v1:$(printf '%064d' 0)"
-    capture_command claude-code answer --repo "$repo" --session "$session" --decision-id "$wrong_decision" --if-snapshot "$changed_snapshot" --replace-editor --text chosen-answer
-    expect_refusal test_issue6_answer_rejects_wrong_decision 'decision-mismatch'
-    [[ ! -s "$submit_log" ]] || fail test_issue6_wrong_decision_preserves_draft "wrong decision submitted: $(cat "$submit_log")"
-
-    capture_command claude-code answer --repo "$repo" --session "$session" --decision-id "$changed_decision_id" --if-snapshot "$changed_snapshot" --text chosen-answer
+    # The decision identifier is receipt correlation evidence, not mutation
+    # authority. Whole-editor replacement remains an explicit mechanical
+    # capability because appending to the retained draft would not transfer
+    # the agent-selected literal answer.
+    capture_command claude-code answer --repo "$repo" --session "$session" --if-snapshot "$changed_snapshot" --text chosen-answer
     [[ "$COMMAND_RC" -ne 0 ]] || fail test_issue6_answer_requires_replace_authorization "answer without --replace-editor succeeded"
     [[ ! -s "$submit_log" ]] || fail test_issue6_missing_replace_preserves_draft "missing replace authorization submitted: $(cat "$submit_log")"
 
-    capture_command claude-code answer --repo "$repo" --session "$session" --decision-id "$changed_decision_id" --if-snapshot "$changed_snapshot" --replace-editor --text chosen-answer
+    capture_command claude-code answer --repo "$repo" --session "$session" --if-snapshot "$changed_snapshot" --replace-editor --text chosen-answer
     if [[ "$COMMAND_RC" -ne 0 ]]; then
       fail test_issue6_answer_replaces_editor "public answer failed: $COMMAND_OUTPUT"
     else
       answer_result="$COMMAND_OUTPUT"
       json_assert test_issue6_answer_receipt \
-        "d['schema_version'] == 2 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['platform'] == 'claude-code' and d['session'] == '$session' and d['repo'] == '$repo' and d['decision_id'] == '$changed_decision_id' and d['based_on_snapshot'] == '$changed_snapshot' and d['later_output_barrier'] == 'pending' and d['receipt_id'].startswith('kpr-answer-v2:') and d['prepared_pane_revision'].startswith('kpr-pane-v2:') and d['relay_epoch'] and d['child_start_fingerprint'].startswith('sha256:') and d['replaced_editor_fingerprint'].startswith('sha256:') and d['answer_fingerprint'].startswith('sha256:') and 'chosen-answer' not in json.dumps(d) and 'draft-prefix' not in json.dumps(d)" \
+        "d['schema_version'] == 2 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['platform'] == 'claude-code' and d['session'] == '$session' and d['repo'] == '$repo' and d['decision_id'] == '' and d['based_on_snapshot'] == '$changed_snapshot' and d['later_output_barrier'] == 'pending' and d['receipt_id'].startswith('kpr-answer-v2:') and d['prepared_pane_revision'].startswith('kpr-pane-v2:') and d['relay_epoch'] and d['child_start_fingerprint'].startswith('sha256:') and d['replaced_editor_fingerprint'].startswith('sha256:') and d['answer_fingerprint'].startswith('sha256:') and 'chosen-answer' not in json.dumps(d) and 'draft-prefix' not in json.dumps(d)" \
         "$answer_result"
       answer_receipt="$(json_value "$answer_result" "d['receipt_id']")"
       barrier_receipt_line="$("$issue_tmux_bin" show-environment -t "=$session" KAOLA_PROJECT_RUNNER_BARRIER_RECEIPT 2>/dev/null || true)"
@@ -419,18 +343,6 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
       json_assert test_issue6_later_output_barrier_pending \
         "d['later_output_barrier'] is not None and d['later_output_barrier']['state'] == 'pending' and d['later_output_barrier']['receipt_id'] == json.loads(__import__('os').environ['ANSWER_RESULT'])['receipt_id']" \
         "$pending_observe"
-      pending_snapshot="$(json_value "$pending_observe" "d['snapshot_id']")"
-      capture_command claude-code send --repo "$repo" --session "$session" --if-snapshot "$pending_snapshot" --require-empty-editor --text blocked-by-barrier
-      expect_refusal test_issue6_pending_barrier_refuses_send 'awaiting-later-output'
-      [[ ! -s "$submit_log" || "$(grep -Fc 'submitted=blocked-by-barrier' "$submit_log" || true)" -eq 0 ]] || \
-        fail test_issue6_pending_barrier_no_payload "barrier send reached fake editor"
-      capture_command claude-code stop --repo "$repo" --session "$session" --if-snapshot "$pending_snapshot"
-      expect_refusal test_issue6_pending_barrier_refuses_stop 'awaiting-later-output'
-      capture_command claude-code answer --repo "$repo" --session "$session" --decision-id "$changed_decision_id" --if-snapshot "$pending_snapshot" --replace-editor --text second-answer
-      expect_refusal test_issue6_pending_barrier_refuses_second_answer 'awaiting-later-output'
-      [[ ! -s "$submit_log" || "$(grep -Fc 'submitted=second-answer' "$submit_log" || true)" -eq 0 ]] || \
-        fail test_issue6_pending_barrier_no_second_answer "second answer reached fake editor"
-
       touch "$grid_neutral_file"
       output_seen_observe=''
       output_seen_ready=false
@@ -449,11 +361,6 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
         json_assert test_issue6_grid_neutral_output_seen \
           "d['later_output_barrier']['state'] == 'output-seen' and d['later_output_barrier']['receipt_id'] == json.loads(__import__('os').environ['ANSWER_RESULT'])['receipt_id']" \
           "$output_seen_observe"
-        output_seen_snapshot="$(json_value "$output_seen_observe" "d['snapshot_id']")"
-        capture_command claude-code send --repo "$repo" --session "$session" --if-snapshot "$output_seen_snapshot" --require-empty-editor --text blocked-by-output-seen
-        expect_refusal test_issue6_output_seen_barrier_refuses_send 'awaiting-later-output'
-        [[ ! -s "$submit_log" || "$(grep -Fc 'submitted=blocked-by-output-seen' "$submit_log" || true)" -eq 0 ]] || \
-          fail test_issue6_output_seen_barrier_no_payload "output-seen barrier send reached fake editor"
       fi
     else
       fail test_issue6_later_output_barrier_pending "observe after answer failed: $COMMAND_OUTPUT"
@@ -477,7 +384,7 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
       "d['later_output_barrier'] is not None and d['later_output_barrier']['state'] == 'satisfied' and d['editor_state'] == 'empty' and d['visible_shell_count'] == 0 and d['visible_agent_count'] == 0" \
       "$satisfied_observe"
     satisfied_snapshot="$(json_value "$satisfied_observe" "d['snapshot_id']")"
-    capture_command claude-code send --repo "$repo" --session "$session" --if-snapshot "$satisfied_snapshot" --require-empty-editor --text follow-up
+    capture_command claude-code send --repo "$repo" --session "$session" --if-snapshot "$satisfied_snapshot" --text follow-up
     if [[ "$COMMAND_RC" -ne 0 ]]; then
       fail test_issue6_follow_up_after_barrier "fresh guarded send failed: $COMMAND_OUTPUT"
     else
@@ -485,17 +392,16 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
       grep -Fxq 'submitted=follow-up' "$submit_log" || fail test_issue6_follow_up_after_barrier "follow-up did not reach raw TUI: $(cat "$submit_log")"
     fi
 
-    # Force stop still requires the caller's current token and exact identity.
+    # Force stop requires exact identity but no visual snapshot gate.
     if capture_command claude-code observe --repo "$repo" --session "$session"; then
-      final_snapshot="$(json_value "$COMMAND_OUTPUT" "d['snapshot_id']")"
-      capture_command claude-code stop --repo "$repo" --session "$session" --if-snapshot "$final_snapshot" --force
+      capture_command claude-code stop --repo "$repo" --session "$session" --force
       if [[ "$COMMAND_RC" -ne 0 ]]; then
-        fail test_issue6_force_stop_requires_matching_snapshot "force stop failed: $COMMAND_OUTPUT"
+        fail test_issue6_force_stop_requires_exact_identity "force stop failed: $COMMAND_OUTPUT"
       else
-        json_assert test_issue6_force_stop_requires_matching_snapshot "d['result'] == 'stopped' and d['action'] == 'force-stop' and d['final_state'] == {'session_present': False, 'child_running': False, 'child_group_running': False, 'socket_present': False, 'pane_input_off': None}" "$COMMAND_OUTPUT"
+        json_assert test_issue6_force_stop_requires_exact_identity "d['result'] == 'stopped' and d['action'] == 'force-stop' and d['final_state'] == {'session_present': False, 'child_running': False, 'child_group_running': False, 'socket_present': False, 'pane_input_off': None}" "$COMMAND_OUTPUT"
         if capture_command claude-code observe --repo "$repo" --session "$session"; then
           json_assert test_issue6_absent_observation_schema \
-            "d['result'] == 'absent' and d['snapshot_id'] is None and d['pane_revision'] is None and d['raw_current_frame'] == '' and d['editor_state'] == 'unknown' and d['child_processes'] is None and d['child_process_count'] is None and 'session-absent' in d['guard_failures']" \
+            "d['result'] == 'absent' and d['snapshot_id'] is None and d['pane_revision'] is None and d['raw_current_frame'] == '' and d['editor_state'] == 'unknown' and d['child_processes'] is None and d['child_process_count'] is None and 'session-absent' in d['evidence_flags']" \
             "$COMMAND_OUTPUT"
         else
           fail test_issue6_absent_observation_schema "observe on absent session failed: $COMMAND_OUTPUT"

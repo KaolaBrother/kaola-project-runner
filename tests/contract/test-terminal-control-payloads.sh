@@ -108,7 +108,7 @@ run_send_vector() {
   offset_before="$(json_value "$observe" 'd["relay"]["child_input_offset"]')"
 
   capture_command claude-code send --repo "$repo" --session "$session" \
-    --if-snapshot "$snapshot" --require-empty-editor --text "$payload"
+    --if-snapshot "$snapshot" --text "$payload"
   assert_public_refusal "$label"
   assert_no_child_input "$label" "$repo" "$session" "$offset_before" "$submit_log"
   "$issue_tmux_bin" kill-session -t "=$session" >/dev/null 2>&1 || true
@@ -174,7 +174,7 @@ run_bracketed_text_vector() {
 
   if [[ "$action" == send ]]; then
     capture_command claude-code send --repo "$repo" --session "$session" \
-      --if-snapshot "$snapshot" --require-empty-editor --text "$payload"
+      --if-snapshot "$snapshot" --text "$payload"
   else
     decision_id="$(json_value "$observe" 'd["structured_decision_marker"]["decision_id"]')"
     capture_command claude-code answer --repo "$repo" --session "$session" \

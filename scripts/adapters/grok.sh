@@ -11,32 +11,37 @@ ADAPTER_QUIT_TEXT="/quit"
 ADAPTER_ANSWER_MODE="unsupported"
 
 adapter_preflight() {
-  local inspect_json parsed
-  inspect_json="$(cd "$repo" && "$RUNTIME_BIN" inspect --json)" || die "grok inspect --json failed"
-  parsed="$(INSPECT_JSON="$inspect_json" "$PYTHON_BIN" <<'PY'
+  local inspect_json parsed inspect_rc=0
+  PREFLIGHT_VERSION="$($RUNTIME_BIN --version 2>&1 | head -1 || true)"
+  [[ -n "$PREFLIGHT_VERSION" ]] || PREFLIGHT_VERSION=unknown
+  PREFLIGHT_PROJECT_ROOT_JSON=null
+  PREFLIGHT_WORKFLOW_NEXT=false
+  PREFLIGHT_FINALIZE=false
+  PREFLIGHT_PROJECT_MATERIALIZATION=not-required
+  inspect_json="$(cd "$repo" && "$RUNTIME_BIN" inspect --json 2>/dev/null)" || inspect_rc=$?
+  if [[ "$inspect_rc" -eq 0 && -n "$inspect_json" ]]; then
+    parsed="$(INSPECT_JSON="$inspect_json" "$PYTHON_BIN" <<'PY'
 import json, os, sys
 try:
     payload = json.loads(os.environ["INSPECT_JSON"])
-except Exception as exc:
-    print(f"invalid grok inspect JSON: {exc}", file=sys.stderr)
+except Exception:
     raise SystemExit(2)
 skills = {item.get("name") for item in payload.get("skills", [])}
-missing = sorted({"workflow-next", "kaola-workflow-finalize"} - skills)
-if missing:
-    print("missing Grok skills: " + ", ".join(missing), file=sys.stderr)
-    raise SystemExit(3)
 print(str(payload.get("grokVersion", "unknown")).replace("\n", " "))
 print(json.dumps(payload.get("projectRoot"), ensure_ascii=False))
-print("grok inspect discovered required Kaola Skills")
+print("true" if "workflow-next" in skills else "false")
+print("true" if "kaola-workflow-finalize" in skills else "false")
 PY
-)" || die "Grok Kaola preflight failed"
-  PREFLIGHT_VERSION="${parsed%%$'\n'*}"
-  parsed="${parsed#*$'\n'}"
-  PREFLIGHT_PROJECT_ROOT_JSON="${parsed%%$'\n'*}"
-  PREFLIGHT_DETAIL="${parsed#*$'\n'}"
-  PREFLIGHT_WORKFLOW_NEXT=true
-  PREFLIGHT_FINALIZE=true
-  PREFLIGHT_PROJECT_MATERIALIZATION=not-required
+)" || parsed=""
+  fi
+  if [[ -n "$parsed" ]]; then
+    PREFLIGHT_VERSION="${parsed%%$'\n'*}"; parsed="${parsed#*$'\n'}"
+    PREFLIGHT_PROJECT_ROOT_JSON="${parsed%%$'\n'*}"; parsed="${parsed#*$'\n'}"
+    PREFLIGHT_WORKFLOW_NEXT="${parsed%%$'\n'*}"; PREFLIGHT_FINALIZE="${parsed##*$'\n'}"
+    PREFLIGHT_DETAIL="Grok CLI communication is available; inspect catalog reported workflow_next=$PREFLIGHT_WORKFLOW_NEXT finalize=$PREFLIGHT_FINALIZE"
+  else
+    PREFLIGHT_DETAIL="Grok CLI communication is available; inspect catalog was unavailable or unreadable"
+  fi
 }
 
 adapter_build_launch() {

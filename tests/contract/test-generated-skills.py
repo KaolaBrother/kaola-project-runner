@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import hashlib
-import difflib
 import os
 import re
 import shutil
@@ -20,32 +19,32 @@ RENDERER = PROJECT / "scripts" / "render-skills.py"
 PLATFORMS = {
     "grok-kaola-project-runner": {
         "display": "Grok Kaola Project Runner",
-        "short": "Run projects through Grok CLI and Kaola Workflow",
-        "prompt": "Use $grok-kaola-project-runner to start workflow-next immediately in the current Git repository.",
+        "short": "Communicate with Grok CLI through exact tmux",
+        "prompt": "Use $grok-kaola-project-runner to start an exact Grok CLI tmux session, read its output, and send only the input I choose.",
         "tokens": ("grok", "grok-kaola-project-runner"),
     },
     "claude-code-kaola-project-runner": {
         "display": "Claude Code Kaola Project Runner",
-        "short": "Run Kaola Workflow projects through Claude Code",
-        "prompt": "Use $claude-code-kaola-project-runner to start workflow-next immediately in the current Git repository.",
+        "short": "Communicate with Claude Code through exact tmux",
+        "prompt": "Use $claude-code-kaola-project-runner to start an exact Claude Code tmux session, read its output, and send only the input I choose.",
         "tokens": ("claude", "claude-code", "claude-code-kaola-project-runner"),
     },
     "opencode-kaola-project-runner": {
         "display": "OpenCode Kaola Project Runner",
-        "short": "Run Kaola Workflow projects through OpenCode",
-        "prompt": "Use $opencode-kaola-project-runner to start workflow-next immediately in the current Git repository.",
+        "short": "Communicate with OpenCode through exact tmux",
+        "prompt": "Use $opencode-kaola-project-runner to start an exact OpenCode tmux session, read its output, and send only the input I choose.",
         "tokens": ("opencode", "opencode-kaola-project-runner"),
     },
     "kimi-cli-kaola-project-runner": {
         "display": "Kimi CLI Kaola Project Runner",
-        "short": "Run Kaola Workflow projects through Kimi CLI",
-        "prompt": "Use $kimi-cli-kaola-project-runner to start workflow-next immediately in the current Git repository.",
+        "short": "Communicate with Kimi CLI through exact tmux",
+        "prompt": "Use $kimi-cli-kaola-project-runner to start an exact Kimi CLI tmux session, read its output, and send only the input I choose.",
         "tokens": ("kimi", "kimi-cli", "kimi-cli-kaola-project-runner"),
     },
     "cursor-cli-kaola-project-runner": {
         "display": "Cursor CLI Kaola Project Runner",
-        "short": "Run Kaola Workflow projects through Cursor CLI",
-        "prompt": "Use $cursor-cli-kaola-project-runner to start workflow-next immediately in the current Git repository.",
+        "short": "Communicate with Cursor CLI through exact tmux",
+        "prompt": "Use $cursor-cli-kaola-project-runner to start an exact Cursor CLI tmux session, read its output, and send only the input I choose.",
         "tokens": ("cursor", "cursor-agent", "cursor-cli", "cursor-cli-kaola-project-runner"),
     },
 }
@@ -105,34 +104,6 @@ def shell_examples(markdown: str) -> list[str]:
         command = re.sub(r"\\\n\s*", " ", match.group(1))
         examples.extend(line.strip() for line in command.splitlines() if line.strip())
     return examples
-
-
-def grok_nontransport_contract(markdown: str) -> str:
-    """Remove only Issue #6's reviewed transport/API overlay surface."""
-    without_mutation_examples = re.sub(
-        r"```(?:bash|sh)\n(?:(?!```).)*?\b(?:send|stop)\b(?:(?!```).)*?\n```\n?",
-        "",
-        markdown,
-        flags=re.DOTALL,
-    )
-    transport_terms = (
-        "transport.md",
-        "schema-v2",
-        "snapshot_id",
-        "--if-snapshot",
-        "--require-empty-editor",
-        "empty editor",
-        "snapshot guard",
-    )
-    filtered = "\n".join(
-        line
-        for line in without_mutation_examples.splitlines()
-        if not any(term in line for term in transport_terms)
-    )
-    # Removing one overlay-only prose line can leave one extra empty line at
-    # the insertion boundary. Blank-line multiplicity carries no contract
-    # meaning; normalize it without ignoring any nonblank golden prose.
-    return re.sub(r"\n{3,}", "\n\n", filtered).strip()
 
 
 def is_shell_command_example(command: str) -> bool:
@@ -222,76 +193,6 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
             )
 
 
-GROK_COMPATIBILITY_MARKERS = {
-    "SKILL.md": (
-        "## Full lifecycle",
-        "## Four exposed capabilities",
-        "Complete one Workflow project",
-        "Recurring Workflow projects",
-        "Complete one PR review and finalization",
-        "Recurring PR review and finalization",
-        "caller-selected scheduling",
-        "HUMAN_DECISION_REQUIRED",
-        "human or invoking agent",
-        "workflow-next",
-        "kaola-workflow-finalize",
-        "## Required handoff",
-    ),
-    "references/project-run.md": (
-        "Work in this Grok main conversation as the owner of the project run.",
-        "Repository: {repo}",
-        "Selection context:",
-        "Definition of done:",
-        "Authority boundary:",
-        "When an irreversible or value-laden decision requires the user, return HUMAN_DECISION_REQUIRED in",
-        "Stop after this selected batch run; do not start a second unrelated batch in one-shot mode.",
-    ),
-    "references/task-modes.md": (
-        "## 1. Complete one Workflow project",
-        "## 2. Recurring Workflow projects",
-        "## 3. Complete one PR review and finalization",
-        "## 4. Recurring PR review and finalization",
-        "caller selects the execution carrier",
-    ),
-    "references/pr-claim-handoff.md": (
-        "UNCLAIMED_PR",
-        "ORIGIN_PR_HANDOFF",
-        "FOREIGN_CLAIM_CONFLICT",
-        "claim: none",
-        "never synthesize that state merely to make cleanup run",
-        "watch-pr",
-        "zero matching `kw:claim` markers",
-        "Never remove a foreign/mismatched claim",
-    ),
-    "references/codex-supervision.md": (
-        "chooses whether to create a Codex thread heartbeat",
-        "observation only",
-        "execution carrier",
-        "HUMAN_DECISION_REQUIRED",
-        "Do not inject",
-    ),
-    "references/scheduling.md": (
-        "foreground: true",
-        "same main conversation",
-        "zero detached General-loop schedulers",
-        "MAIN_THREAD_PR_INTAKE_V3_WORKFLOW_REVIEW_HANDOFF",
-    ),
-    "references/grok-tui.md": (
-        "tmux environment metadata",
-        "grok inspect --json",
-        "The helper starts Grok with `--minimal`",
-        "literal bytes",
-        "idle",
-    ),
-    "references/closing.md": (
-        "originating run's `watch-pr`",
-        "zero matching claim residue",
-        "Never clean foreign, mismatched, open unfinished, or ambiguous residue",
-        "exact owned Grok session is idle",
-        "caller-selected terminal disposition",
-    ),
-}
-
 # Reviewed immutable bytes for the current Grok prompt/protocol.  The root
 # legacy carrier is intentionally absent in the Issue #1 distribution, so a
 # root-vs-golden diff cannot detect an arbitrary future edit.  Updating one of
@@ -315,152 +216,58 @@ GROK_GOLDEN_REVIEWED_SHA256 = {
 
 def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
     package = root / "skills" / "grok-kaola-project-runner"
-    if not package.is_dir():
-        return
     golden = root / "templates" / "grok-golden"
+    reviewed_relatives = set(GROK_GOLDEN_REVIEWED_SHA256)
+    actual_golden = {
+        path.relative_to(golden).as_posix()
+        for path in golden.rglob("*")
+        if path.is_file()
+    } if golden.is_dir() else set()
     assertions.check(
-        "test_grok_compatibility_golden_contract_exists",
-        golden.is_dir(),
-        f"missing frozen Grok contract: {golden}",
+        "test_grok_golden_reviewed_inventory_is_exact",
+        actual_golden == reviewed_relatives,
+        f"golden inventory drifted: actual={sorted(actual_golden)!r}",
     )
-    if golden.is_dir():
-        # The Grok package is not a paraphrase or a reduced adapter variant:
-        # its canonical prose and prompt blocks must be byte-for-byte the
-        # frozen golden contract.  Executable files are checked separately.
-        expected_files = [
-            Path("SKILL.md"),
-            Path("agents/openai.yaml"),
-            *sorted(path.relative_to(golden) for path in (golden / "references").glob("*.md")),
-        ]
-        expected_relatives = {relative.as_posix() for relative in expected_files}
-        reviewed_relatives = set(GROK_GOLDEN_REVIEWED_SHA256)
+    for relative, reviewed_hash in GROK_GOLDEN_REVIEWED_SHA256.items():
+        path = golden / relative
+        current_hash = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
         assertions.check(
-            "test_grok_golden_reviewed_inventory_is_exact",
-            expected_relatives == reviewed_relatives,
-            f"reviewed SHA-256 inventory paths are {sorted(reviewed_relatives)!r}, expected {sorted(expected_relatives)!r}",
+            f"test_grok_golden_reviewed_sha256_{relative}",
+            current_hash == reviewed_hash,
+            f"frozen historical Grok bytes changed at {relative}",
         )
-        for relative in expected_files:
-            expected = golden / relative
-            actual = package / relative
-            reviewed_hash = GROK_GOLDEN_REVIEWED_SHA256.get(relative.as_posix())
-            golden_hash = hashlib.sha256(expected.read_bytes()).hexdigest() if expected.is_file() else ""
-            assertions.check(
-                f"test_grok_golden_reviewed_sha256_{relative.as_posix()}",
-                expected.is_file() and reviewed_hash == golden_hash,
-                f"golden bytes for {relative} no longer match the reviewed SHA-256 inventory",
+    active = package / "SKILL.md"
+    active_text = active.read_text(encoding="utf-8") if active.is_file() else ""
+    active_normalized = re.sub(r"\s+", " ", active_text)
+    assertions.check(
+        "test_grok_active_skill_is_transport_only",
+        all(
+            marker in active_normalized
+            for marker in (
+                "communication driver",
+                "does not choose commands",
+                "scripts/runtime-tmux.sh send",
+                "scripts/runtime-tmux.sh key",
+                "scripts/runtime-tmux.sh capture",
+                "No invocation implicitly starts `workflow-next`",
             )
-            if relative.as_posix() == "references/grok-tui.md":
-                actual_text = actual.read_text(encoding="utf-8") if actual.is_file() else ""
-                expected_text = expected.read_text(encoding="utf-8") if expected.is_file() else ""
-                assertions.check(
-                    "test_grok_generated_tui_delta_is_transport_only",
-                    bool(actual_text)
-                    and grok_nontransport_contract(actual_text)
-                    == grok_nontransport_contract(expected_text),
-                    "generated Grok TUI differs from frozen golden prose outside the reviewed transport/API overlay",
-                )
-            else:
-                assertions.check(
-                    f"test_grok_compatibility_exact_{relative.as_posix()}",
-                    actual.is_file() and expected.is_file() and actual.read_bytes() == expected.read_bytes()
-                    and hashlib.sha256(actual.read_bytes()).hexdigest() == reviewed_hash,
-                    f"generated Grok file is not byte-identical to {expected}",
-                )
-
-        # The reviewed contract may carry the expressly authorized merged-PR
-        # residue cleanup and caller-controlled scheduling changes relative to
-        # a root legacy Skill. The exact golden-byte check above constrains
-        # those changes to the reviewed template.
-        legacy_files = [Path("SKILL.md"), *sorted(Path("references").glob("*.md"))]
-        inserted_text: list[str] = []
-        legacy_changed = False
-        for relative in legacy_files:
-            legacy = root / relative
-            frozen = golden / relative
-            if not legacy.is_file() or not frozen.is_file():
-                continue
-            legacy_lines = legacy.read_text(encoding="utf-8").splitlines()
-            frozen_lines = frozen.read_text(encoding="utf-8").splitlines()
-            opcodes = difflib.SequenceMatcher(a=legacy_lines, b=frozen_lines).get_opcodes()
-            for tag, _a1, _a2, b1, b2 in opcodes:
-                if tag != "equal":
-                    legacy_changed = True
-                if tag == "delete":
-                    assertions.check(
-                        f"test_grok_compatibility_preserves_legacy_{relative.as_posix()}",
-                        False,
-                        f"frozen contract deletes or rewrites root legacy lines ({tag})",
-                    )
-                elif tag == "replace":
-                    old_lines = legacy_lines[_a1:_a2]
-                    new_lines = frozen_lines[b1:b2]
-                    old_without_numbers = [re.sub(r"^\s*[0-9]+\.\s*", "", line) for line in old_lines]
-                    new_without_numbers = [re.sub(r"^\s*[0-9]+\.\s*", "", line) for line in new_lines]
-                    changed_for_residue = "\n".join(new_lines).lower()
-                    renumber_only = old_without_numbers == new_without_numbers
-                    authorized_delta = any(
-                        marker in changed_for_residue
-                        for marker in (
-                            "watch-pr",
-                            "workflow:in-progress",
-                            "matching claim",
-                            "residue",
-                            "human_decision_required",
-                            "caller",
-                            "execution carrier",
-                            "heartbeat",
-                            "scheduling",
-                        )
-                    )
-                    assertions.check(
-                        f"test_grok_compatibility_preserves_legacy_{relative.as_posix()}",
-                        renumber_only or authorized_delta,
-                        "frozen contract rewrites root legacy lines outside the authorized residue delta",
-                    )
-                elif tag == "insert":
-                    inserted_text.extend(
-                        frozen_lines[b1:b2]
-                    )
-        residue_markers = (
-            "watch-pr",
-            "workflow:in-progress",
-            "matching claim",
-            "HUMAN_DECISION_REQUIRED",
-            "caller",
-            "execution carrier",
-            "heartbeat",
-            "scheduling",
-        )
-        assertions.check(
-            "test_grok_compatibility_legacy_delta_is_authorized_residue_cleanup",
-            not legacy_changed or any(any(marker in line for marker in residue_markers) for line in inserted_text),
-            "reviewed contract delta has no authorized residue-cleanup or scheduling marker",
-        )
-    for relative, markers in GROK_COMPATIBILITY_MARKERS.items():
-        path = package / relative
-        if not path.is_file():
-            assertions.check(
-                f"test_grok_compatibility_has_{relative}",
-                False,
-                f"missing canonical compatibility file {relative}",
-            )
-            continue
-        text = path.read_text(encoding="utf-8")
-        # Markdown prose wraps many of the canonical prompt lines.  Match the
-        # semantic line while preserving the exact-byte comparison above.
-        searchable = re.sub(r"\s+", " ", text)
-        for marker in markers:
-            assertions.check(
-                f"test_grok_compatibility_{relative}_{marker[:32]}",
-                re.sub(r"\s+", " ", marker) in searchable,
-                f"generated Grok Skill lost canonical marker {marker!r}",
-            )
+        ),
+        "active Grok Skill must expose communication tools without Workflow orchestration authority",
+    )
+    generated_references = {
+        path.name for path in (package / "references").glob("*.md")
+    }
+    assertions.check(
+        "test_grok_active_package_has_only_communication_references",
+        generated_references == {"platform.md", "transport.md"},
+        f"active package carries orchestration references: {sorted(generated_references)!r}",
+    )
 
 
-def check_guarded_transport_guidance(
+def check_evidence_first_transport_guidance(
     assertions: Assertions, package: Path, package_id: str
 ) -> None:
-    """Pin the generated, caller-visible route to schema-v2 guarded actions."""
+    """Pin the five generated Skills to the agent-owned interaction loop."""
     transport = package / "references" / "transport.md"
     assertions.check(
         f"test_{package_id}_schema_v2_transport_overlay_exists",
@@ -475,28 +282,64 @@ def check_guarded_transport_guidance(
     observe_examples = [command for command in examples if " observe " in f" {command} "]
     send_examples = [command for command in examples if " send " in f" {command} "]
     stop_examples = [command for command in examples if " stop " in f" {command} "]
+    lowered = transport_text.lower()
+    normalized = re.sub(r"\s+", " ", lowered)
     assertions.check(
-        f"test_{package_id}_transport_uses_schema_v2_observe",
-        "schema-v2" in transport_text
-        and any("scripts/runtime-tmux.sh observe" in command for command in observe_examples),
-        "transport overlay must obtain a schema-v2 observation before mutation",
+        f"test_{package_id}_transport_exposes_raw_evidence_before_agent_decision",
+        "raw_current_frame" in transport_text
+        and "terminal" in lowered
+        and "process/relay" in normalized
+        and any("scripts/runtime-tmux.sh observe" in command for command in observe_examples)
+        and ("agent decides" in normalized or "controlling agent decides" in normalized),
+        "transport must expose raw frame/tmux/process/relay evidence and say that the controlling agent decides",
     )
     assertions.check(
-        f"test_{package_id}_transport_send_is_snapshot_and_editor_guarded",
+        f"test_{package_id}_transport_send_has_no_snapshot_or_semantic_hard_gate",
         bool(send_examples)
         and all(
             is_shell_command_example(command)
-            and "--if-snapshot" in command
-            and "--require-empty-editor" in command
+            and "--if-snapshot" not in command
+            and "--require-empty-editor" not in command
             for command in send_examples
         ),
-        f"unguarded or invalid transport send example(s): {send_examples!r}",
+        f"send examples must not present snapshot/editor/status correlation as authority: {send_examples!r}",
     )
     assertions.check(
-        f"test_{package_id}_transport_stop_is_snapshot_guarded",
+        f"test_{package_id}_transport_stop_has_no_snapshot_hard_gate",
         bool(stop_examples)
-        and all(is_shell_command_example(command) and "--if-snapshot" in command for command in stop_examples),
-        f"unguarded or invalid transport stop example(s): {stop_examples!r}",
+        and all(is_shell_command_example(command) and "--if-snapshot" not in command for command in stop_examples),
+        f"stop examples present an evidence identifier as authority: {stop_examples!r}",
+    )
+    assertions.check(
+        f"test_{package_id}_snapshot_is_optional_audit_correlation",
+        "optional" in lowered
+        and "evidence identifiers, not freshness gates" in lowered
+        and "action-time identifier" in lowered
+        and "observation_changed:true" in lowered,
+        "snapshot guidance must describe optional audit correlation and changed action-time evidence",
+    )
+    assertions.check(
+        f"test_{package_id}_transport_teaches_observe_decide_send_read_durable_evidence",
+        all(
+            marker in normalized
+            for marker in (
+                "observe",
+                "agent decides",
+                "send",
+                "reads the real response",
+                "if the agent chose workflow work",
+            )
+        ),
+        "missing observe -> agent decides -> send -> observe/read -> durable Workflow evidence loop",
+    )
+    assertions.check(
+        f"test_{package_id}_retained_text_is_agent_policy_not_runner_classification",
+        "retained text" in normalized
+        and "agent may still choose" in normalized
+        and "whole-editor replacement" in normalized
+        and "clean conversation" in normalized
+        and "does not turn any of those observations into a policy gate" in normalized,
+        "retained-text guidance must expose evidence and leave the route to the controlling agent",
     )
 
     if package_id == "grok-kaola-project-runner":
@@ -509,9 +352,7 @@ def check_guarded_transport_guidance(
             not golden_transport.exists(),
             f"transport overlay was added to frozen Grok golden bytes: {golden_transport}",
         )
-        platform = package / "references" / "grok-tui.md"
-    else:
-        platform = package / "references" / "platform.md"
+    platform = package / "references" / "platform.md"
     assertions.check(
         f"test_{package_id}_platform_routes_mutations_through_transport",
         platform.is_file() and "[transport.md](transport.md)" in platform.read_text(encoding="utf-8"),
@@ -520,25 +361,31 @@ def check_guarded_transport_guidance(
     if not platform.is_file():
         return
 
-    platform_examples = shell_examples(platform.read_text(encoding="utf-8"))
-    routed_sends = [command for command in platform_examples if " send " in f" {command} "]
-    routed_stops = [command for command in platform_examples if " stop " in f" {command} "]
+    skill_examples = shell_examples((package / "SKILL.md").read_text(encoding="utf-8"))
+    routed_sends = [command for command in skill_examples if " send " in f" {command} "]
+    routed_stops = [command for command in skill_examples if " stop " in f" {command} "]
+    routed_keys = [command for command in skill_examples if " key " in f" {command} "]
     assertions.check(
-        f"test_{package_id}_routed_send_examples_are_guarded",
+        f"test_{package_id}_routed_send_examples_are_evidence_first",
         bool(routed_sends)
         and all(
             is_shell_command_example(command)
-            and "--if-snapshot" in command
-            and "--require-empty-editor" in command
+            and "--if-snapshot" not in command
+            and "--require-empty-editor" not in command
             for command in routed_sends
         ),
-        f"routed send example(s) are invalid or bypass schema-v2 snapshot/editor guards: {routed_sends!r}",
+        f"routed send example(s) bypass fresh evidence or retain semantic editor authority: {routed_sends!r}",
     )
     assertions.check(
-        f"test_{package_id}_routed_stop_examples_are_guarded",
+        f"test_{package_id}_routed_stop_examples_are_agent_directed",
         bool(routed_stops)
-        and all(is_shell_command_example(command) and "--if-snapshot" in command for command in routed_stops),
-        f"routed stop example(s) are invalid or bypass the schema-v2 snapshot guard: {routed_stops!r}",
+        and all(is_shell_command_example(command) and "--if-snapshot" not in command for command in routed_stops),
+        f"routed stop example(s) still present snapshot correlation as authority: {routed_stops!r}",
+    )
+    assertions.check(
+        f"test_{package_id}_routed_key_examples_are_agent_selected",
+        bool(routed_keys) and all("--key" in command for command in routed_keys),
+        f"active Skill does not expose explicit Agent-selected key transport: {routed_keys!r}",
     )
 
 
@@ -600,7 +447,7 @@ def check_generated_tree(assertions: Assertions, root: Path, require_check: bool
             f"default_prompt is {default_prompt!r}, expected {details['prompt']!r}",
         )
         check_no_cross_platform_leakage(assertions, package, package_id)
-        check_guarded_transport_guidance(assertions, package, package_id)
+        check_evidence_first_transport_guidance(assertions, package, package_id)
 
     check_grok_compatibility(assertions, root)
 

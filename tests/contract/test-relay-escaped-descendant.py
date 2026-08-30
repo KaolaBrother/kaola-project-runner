@@ -131,7 +131,6 @@ class EscapedDescendantTests(unittest.TestCase):
             self.session,
             "--if-snapshot",
             observed["snapshot_id"],
-            "--require-empty-editor",
             "--text",
             "containment-must-block",
         )
@@ -153,7 +152,19 @@ class EscapedDescendantTests(unittest.TestCase):
             )
         else:
             self.assertFalse(receipt.get("mutation_performed", False), receipt)
-            self.assertTrue(receipt.get("restored", False), receipt)
+            if receipt.get("restored") is True:
+                proof = receipt.get("restoration_evidence") or {}
+                required = (
+                    "child_resumed",
+                    "pane_input_restored",
+                    "relay_responsive",
+                    "process_group_running",
+                    "lease_released",
+                    "mutation_lock_released",
+                )
+                self.assertTrue(all(proof.get(key) is True for key in required), receipt)
+            else:
+                self.assertIs(receipt.get("restored"), False, receipt)
             self.assertEqual(payload_events, [], logged)
         self.assertTrue(self._process_exists(self.escaped_pid))
 

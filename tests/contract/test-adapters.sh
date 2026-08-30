@@ -64,10 +64,9 @@ prepare_surface() {
       mkdir -p "$CURSOR_HOME/commands" "$CURSOR_HOME/kaola-workflow"
       printf '%s\n' workflow-next >"$CURSOR_HOME/commands/workflow-next.md"
       printf '%s\n' finalize >"$CURSOR_HOME/commands/kaola-workflow-finalize.md"
-      # Cursor preflight validates a versioned authority receipt against every
-      # managed file's exact bytes and mode.  Build that receipt from the
-      # fixture itself instead of weakening the acceptance surface with a
-      # hand-written placeholder.
+      # Workflow files and the authority receipt are optional evidence. Keep a
+      # complete fixture so preflight can report their presence without making
+      # them a CLI-communication prerequisite.
       CURSOR_ROOT="$CURSOR_HOME" python3 - <<'PY'
 import hashlib
 import json
@@ -88,9 +87,7 @@ for relative in ("commands/workflow-next.md", "commands/kaola-workflow-finalize.
     encoding="utf-8",
 )
 PY
-      # Start now performs point-of-use materialization through the installed
-      # global authority helper.  Keep this fixture fully isolated and
-      # idempotent so continue/resume launch checks do not touch ~/.cursor.
+      # The helper is deliberately present but start must not call it.
       mkdir -p "$CURSOR_HOME/kaola-workflow/scripts"
       cat >"$CURSOR_HOME/kaola-workflow/scripts/kaola-workflow-cursor-surface.js" <<'CURSOR_SURFACE'
 #!/usr/bin/env node
@@ -212,7 +209,7 @@ else
       expected_materialization=not-required
     elif [[ "$platform" == cursor-cli ]]; then
       expected_recurring=unsupported
-      expected_materialization=required-at-point-of-use
+      expected_materialization=not-present
     else
       expected_recurring=unsupported
       expected_materialization=not-required
@@ -268,7 +265,7 @@ else
       grok|claude-code|cursor-cli) grep -Fq -- '--resume' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume option absent: $log_text" ;;
     esac
 
-    # Surface absence is a typed preflight refusal, not an implicit installation.
+    # Surface absence is advisory evidence and never refuses CLI communication.
     case "$platform" in
       claude-code)
         rm "$repo/.claude/commands/workflow-next.md"
@@ -288,11 +285,22 @@ else
         ;;
     esac
     if [[ "$platform" != grok ]]; then
-      expect_fail "test_${platform}_missing_kaola_surface" run_runner "$platform" preflight --repo "$repo" --session "${platform}-missing-surface-$$" >/dev/null
+      missing_surface="$(run_runner "$platform" preflight --repo "$repo" --session "${platform}-missing-surface-$$")" || \
+        fail "test_${platform}_missing_kaola_surface_advisory" "preflight blocked CLI communication: $missing_surface"
+      json_assert "test_${platform}_missing_kaola_surface_advisory" "d['result'] == 'ready' and d['platform'] == '$platform'" "$missing_surface"
+      case "$platform" in
+        claude-code|opencode|kimi-cli)
+          json_assert "test_${platform}_missing_kaola_surface_evidence" "not d['workflow_next'] and not d['kaola_workflow_finalize']" "$missing_surface"
+          ;;
+        cursor-cli)
+          json_assert "test_${platform}_missing_authority_evidence" "d['workflow_next'] and d['kaola_workflow_finalize'] and 'authority=missing' in d['detail']" "$missing_surface"
+          ;;
+      esac
     fi
   done
 
-  # Grok must refuse an inspect result that omits either required capability.
+  # Grok inspect is evidence only; a missing optional Workflow capability must
+  # not block the already verified CLI transport.
   grok_fake="${fake_paths[0]}"
   grok_missing="$issue_tmp_root/grok-missing"
   cat >"$grok_missing" <<'FAKE_GROK_MISSING'
@@ -307,7 +315,9 @@ FAKE_GROK_MISSING
   chmod +x "$grok_missing"
   export REAL_GROK_FIXTURE="$grok_fake"
   runtime_env grok "$grok_missing"
-  expect_fail "test_grok_missing_finalize_surface" run_runner grok preflight --repo "$repo" --session grok-missing-finalize-$$ >/dev/null
+  grok_missing_preflight="$(run_runner grok preflight --repo "$repo" --session grok-missing-finalize-$$)" || \
+    fail test_grok_missing_finalize_surface_advisory "preflight blocked CLI communication: $grok_missing_preflight"
+  json_assert test_grok_missing_finalize_surface_advisory "d['result'] == 'ready' and d['workflow_next'] and not d['kaola_workflow_finalize']" "$grok_missing_preflight"
 fi
 
 if [[ "$failures" -gt 0 ]]; then

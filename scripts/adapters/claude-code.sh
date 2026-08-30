@@ -20,26 +20,22 @@ claude_surface() {
 }
 
 adapter_preflight() {
-  local user_root="${CLAUDE_CONFIG_DIR:-$HOME/.claude}" carrier help_text
+  local user_root="${CLAUDE_CONFIG_DIR:-$HOME/.claude}" carrier="" help_text option_summary="not-checked"
   if claude_surface "$repo/.claude"; then carrier="$repo/.claude"
   elif claude_surface "$user_root"; then carrier="$user_root"
-  else die "missing complete Claude Kaola commands/Skills, agents, or support scripts"
   fi
+  PREFLIGHT_WORKFLOW_NEXT=false; PREFLIGHT_FINALIZE=false
+  [[ -n "$carrier" ]] && PREFLIGHT_WORKFLOW_NEXT=true PREFLIGHT_FINALIZE=true
   if [[ "${KAOLA_CLAUDE_PROFILE_REQUIRED:-false}" == true ]]; then
-    help_text="$("$RUNTIME_BIN" --help 2>&1)"
+    help_text="$("$RUNTIME_BIN" --help 2>&1 || true)"
+    option_summary=available
     for option in --model --effort --permission-mode; do
-      grep -Fq -- "$option" <<<"$help_text" || \
-        die "Claude Code does not expose required launch option: $option"
+      grep -Fq -- "$option" <<<"$help_text" || option_summary=incomplete
     done
   fi
-  PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1)"
-  PREFLIGHT_WORKFLOW_NEXT=true
-  PREFLIGHT_FINALIZE=true
+  PREFLIGHT_VERSION="$("$RUNTIME_BIN" --version 2>&1 | head -1 || true)"; [[ -n "$PREFLIGHT_VERSION" ]] || PREFLIGHT_VERSION=unknown
   PREFLIGHT_PROJECT_MATERIALIZATION=not-required
-  PREFLIGHT_DETAIL="complete Claude Kaola carrier at $carrier"
-  if [[ "${KAOLA_CLAUDE_PROFILE_REQUIRED:-false}" == true ]]; then
-    PREFLIGHT_DETAIL+="; model, effort, and permission-mode launch options verified"
-  fi
+  PREFLIGHT_DETAIL="Claude Code communication is available; Kaola carrier=${carrier:-not-discovered}; launch-option evidence=$option_summary"
 }
 
 adapter_build_launch() {

@@ -24,20 +24,6 @@ run_runner() {
   TMUX_BIN="$issue_tmux_bin" bash "$runner" claude-code "$@"
 }
 
-expect_send_refusal() {
-  local label="$1" repo="$2" session="$3" snapshot="$4" expected="$5" output rc missing
-  missing="$(run_runner send --repo "$repo" --session "$session" --require-empty-editor --text 'must-not-inject' 2>&1)" || true
-  [[ "$missing" == *'"result": "snapshot-required"'* ]] || \
-    fail "${label}_requires_snapshot" "missing snapshot refusal: $missing"
-  set +e
-  output="$(run_runner send --repo "$repo" --session "$session" --if-snapshot "$snapshot" --require-empty-editor --text 'must-not-inject' 2>&1)"
-  rc=$?
-  set -e
-  [[ "$rc" -ne 0 ]] || fail "$label" "send succeeded through a human gate: $output"
-  [[ "$output" =~ $expected ]] || \
-    fail "$label" "missing expected guard ($expected): $output"
-}
-
 make_claude_fixture() {
   local mode="$1" path="$issue_tmp_root/claude-$1"
   cat >"$path" <<EOF
@@ -192,20 +178,12 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
   grep -Fq '❯ option 1, rename both' <<<"$decision_tail" || \
     fail test_claude_visible_editor_prompt "editor prompt missing from tail: $decision_tail"
 
-  decision_observe="$(run_runner observe --repo "$repo" --session "$decision_session")"
-  decision_snapshot="$(JSON_INPUT="$decision_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-  expect_send_refusal test_claude_decision_refuses_send "$repo" "$decision_session" "$decision_snapshot" '"result": "editor-nonempty"'
-
-  # The free-form decision marker above is reporting-only. Stop it with a
+  # The free-form decision evidence above is reporting-only; the controlling
+  # agent owns the decision not to append to its retained draft. Stop it with a
   # fresh token, then exercise the answer operation against the structured
   # current-frame marker in the raw-mode fixture. This keeps the old visible
   # decision evidence while ensuring no answer path uses direct tmux input.
-  decision_force_missing="$(run_runner stop --repo "$repo" --session "$decision_session" --force 2>&1)" || true
-  [[ "$decision_force_missing" == *'"result": "snapshot-required"'* ]] || \
-    fail test_claude_decision_force_stop_requires_snapshot "missing snapshot refusal: $decision_force_missing"
-  decision_force_observe="$(run_runner observe --repo "$repo" --session "$decision_session")"
-  decision_force_snapshot="$(JSON_INPUT="$decision_force_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-  decision_force_stop="$(run_runner stop --repo "$repo" --session "$decision_session" --if-snapshot "$decision_force_snapshot" --force)" || \
+  decision_force_stop="$(run_runner stop --repo "$repo" --session "$decision_session" --force)" || \
     fail test_claude_decision_force_stop "force stop failed: $decision_force_stop"
   [[ -z "${decision_force_stop:-}" ]] || json_assert test_claude_decision_force_stop \
     "d['result'] == 'stopped' and d['action'] == 'force-stop' and d['final_state']['session_present'] is False" \
@@ -227,14 +205,11 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
       "d['editor_state'] == 'nonempty' and d['visible_shell_count'] == 0 and d['visible_agent_count'] == 0 and d['structured_decision_marker']['decision_id'] == '$answer_decision_id'" \
       "$answer_observe"
 
-    answer_missing="$(run_runner answer --repo "$repo" --session "$answer_session" --decision-id "$answer_decision_id" --replace-editor --text chosen-answer 2>&1)" || true
-    [[ "$answer_missing" == *'"result": "snapshot-required"'* ]] || \
-      fail test_claude_public_answer_requires_snapshot "missing snapshot refusal: $answer_missing"
-    answer_result="$(run_runner answer --repo "$repo" --session "$answer_session" --decision-id "$answer_decision_id" --if-snapshot "$answer_snapshot" --replace-editor --text chosen-answer)" || \
+    answer_result="$(run_runner answer --repo "$repo" --session "$answer_session" --decision-id "$answer_decision_id" --replace-editor --text chosen-answer)" || \
       fail test_claude_public_answer "public answer failed: $answer_result"
     if [[ -n "${answer_result:-}" ]]; then
       json_assert test_claude_public_answer \
-        "d['schema_version'] == 2 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['decision_id'] == '$answer_decision_id' and d['based_on_snapshot'] == '$answer_snapshot' and d['receipt_id'].startswith('kpr-answer-v2:') and d['prepared_pane_revision'].startswith('kpr-pane-v2:') and 'chosen-answer' not in json.dumps(d) and 'draft-prefix' not in json.dumps(d)" \
+        "d['schema_version'] == 2 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['decision_id'] == '$answer_decision_id' and d['based_on_snapshot'] == '' and d['action_time_snapshot'].startswith('kpr-snapshot-v2:') and d['observation_changed'] is False and d['receipt_id'].startswith('kpr-answer-v2:') and d['prepared_pane_revision'].startswith('kpr-pane-v2:') and 'chosen-answer' not in json.dumps(d) and 'draft-prefix' not in json.dumps(d)" \
         "$answer_result"
       grep -Fxq 'submitted=chosen-answer' "$answer_log" || \
         fail test_claude_public_answer "replacement receipt missing or appended draft: $(cat "$answer_log")"
@@ -269,7 +244,7 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
         json_assert test_claude_public_answer_barrier \
           "d['later_output_barrier']['state'] == 'satisfied'" "$answer_after"
         answer_after_snapshot="$(JSON_INPUT="$answer_after" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-        follow_up="$(run_runner send --repo "$repo" --session "$answer_session" --if-snapshot "$answer_after_snapshot" --require-empty-editor --text follow-up-after-resume)" || \
+        follow_up="$(run_runner send --repo "$repo" --session "$answer_session" --if-snapshot "$answer_after_snapshot" --text follow-up-after-resume)" || \
           fail test_claude_public_answer_follow_up "fresh guarded send failed: $follow_up"
         [[ -z "${follow_up:-}" ]] || json_assert test_claude_public_answer_follow_up \
           "d['result'] == 'sent' and d['action'] == 'send'" "$follow_up"
@@ -277,10 +252,7 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
     fi
     answer_final_observe="$(run_runner observe --repo "$repo" --session "$answer_session")"
     answer_final_snapshot="$(JSON_INPUT="$answer_final_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-    answer_force_missing="$(run_runner stop --repo "$repo" --session "$answer_session" --force 2>&1)" || true
-    [[ "$answer_force_missing" == *'"result": "snapshot-required"'* ]] || \
-      fail test_claude_public_answer_force_stop_requires_snapshot "missing snapshot refusal: $answer_force_missing"
-    run_runner stop --repo "$repo" --session "$answer_session" --if-snapshot "$answer_final_snapshot" --force >/dev/null 2>&1 || \
+    run_runner stop --repo "$repo" --session "$answer_session" --force >/dev/null 2>&1 || \
       fail test_claude_public_answer_force_stop "force stop failed"
   fi
 fi
@@ -318,20 +290,9 @@ if "$issue_tmux_bin" has-session -t "=$empty_decision_session" >/dev/null 2>&1; 
     fail test_claude_empty_remains_unresolved "fixture emitted a resume/completion marker"
   fi
 
-  empty_decision_observe="$(run_runner observe --repo "$repo" --session "$empty_decision_session")"
-  empty_decision_snapshot="$(JSON_INPUT="$empty_decision_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-  expect_send_refusal test_claude_empty_decision_refuses_send "$repo" "$empty_decision_session" "$empty_decision_snapshot" '"result": "(visible|editor|structured|native)-'
-  empty_after_send="$(run_runner capture --repo "$repo" --session "$empty_decision_session" --lines 120)"
-  if grep -Fq 'Claude resumed visibly after the explicit answer.' <<<"$empty_after_send" || \
-     grep -Fq 'Completed decision-gated work.' <<<"$empty_after_send"; then
-    fail test_claude_empty_stays_unresolved_after_refused_send "refused send changed unresolved fixture"
-  fi
-  empty_force_missing="$(run_runner stop --repo "$repo" --session "$empty_decision_session" --force 2>&1)" || true
-  [[ "$empty_force_missing" == *'"result": "snapshot-required"'* ]] || \
-    fail test_claude_empty_decision_force_stop_requires_snapshot "missing snapshot refusal: $empty_force_missing"
-  empty_force_observe="$(run_runner observe --repo "$repo" --session "$empty_decision_session")"
-  empty_force_snapshot="$(JSON_INPUT="$empty_force_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-  run_runner stop --repo "$repo" --session "$empty_decision_session" --if-snapshot "$empty_force_snapshot" --force >/dev/null 2>&1 || \
+  # No generic send is attempted: retained-draft/unresolved handling belongs
+  # to the controlling agent and Skill policy, not a runner-owned state gate.
+  run_runner stop --repo "$repo" --session "$empty_decision_session" --force >/dev/null 2>&1 || \
     fail test_claude_empty_decision_force_stop "force stop failed"
 fi
 
@@ -344,12 +305,7 @@ if "$issue_tmux_bin" has-session -t "=$idle_session" >/dev/null 2>&1; then
   idle_status="$(run_runner status --repo "$repo" --session "$idle_session")"
   json_assert test_claude_completed_work_is_idle \
     "d['activity'] == 'idle' and d['tui_detected'] and d['pane_count'] == 1" "$idle_status"
-  idle_force_missing="$(run_runner stop --repo "$repo" --session "$idle_session" --force 2>&1)" || true
-  [[ "$idle_force_missing" == *'"result": "snapshot-required"'* ]] || \
-    fail test_claude_idle_force_stop_requires_snapshot "missing snapshot refusal: $idle_force_missing"
-  idle_observe="$(run_runner observe --repo "$repo" --session "$idle_session")"
-  idle_snapshot="$(JSON_INPUT="$idle_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-  run_runner stop --repo "$repo" --session "$idle_session" --if-snapshot "$idle_snapshot" --force >/dev/null 2>&1 || \
+  run_runner stop --repo "$repo" --session "$idle_session" --force >/dev/null 2>&1 || \
     fail test_claude_idle_force_stop "force stop failed"
 fi
 
@@ -366,13 +322,9 @@ gate_case() {
       fail "${label}_surface" "expected gate evidence missing"
     gate_observe="$(run_runner observe --repo "$repo" --session "$session")"
     gate_snapshot="$(JSON_INPUT="$gate_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-    expect_send_refusal "$label" "$repo" "$session" "$gate_snapshot" '"result": "editor-unknown"'
-    gate_force_missing="$(run_runner stop --repo "$repo" --session "$session" --force 2>&1)" || true
-    [[ "$gate_force_missing" == *'"result": "snapshot-required"'* ]] || \
-      fail "${label}_force_stop_requires_snapshot" "missing snapshot refusal: $gate_force_missing"
-    gate_force_observe="$(run_runner observe --repo "$repo" --session "$session")"
-    gate_force_snapshot="$(JSON_INPUT="$gate_force_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-    run_runner stop --repo "$repo" --session "$session" --if-snapshot "$gate_force_snapshot" --force >/dev/null 2>&1 || \
+    # Approval/trust is evidence for the controlling agent; no generic send is
+    # attempted and force-stop uses exact identity without a snapshot gate.
+    run_runner stop --repo "$repo" --session "$session" --force >/dev/null 2>&1 || \
       fail "${label}_force_stop" "force stop failed"
   fi
 }

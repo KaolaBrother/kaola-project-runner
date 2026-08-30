@@ -2,25 +2,42 @@
 
 ## Unreleased
 
-- Replaced authoritative idle-gated mutation with schema-v2 evidence snapshots and a managed
-  nested-PTY relay. Every send, ordinary/force stop, and supported decision answer now rechecks an
-  exact fresh snapshot after child-process quiescence and a tokenized tmux parser fence.
-- Added independent editor/approval/visible-work facts, relay byte/input/output/resize revisions,
-  stale-snapshot refusals, legacy-direct reporting-only migration, and a Claude-only public answer
-  operation with replacement receipts plus pending/output-seen/satisfied later-output barriers.
-- Added prepared-surface revalidation, exact outer-PTY fence refusal without replay, cursor-bound
-  Claude/Cursor/OpenCode placeholder recognition, escaped-descendant containment, and pre-write terminal
-  control rejection with bracketed-paste-only LF/TAB handling. Prepared send/answer editors now bind
-  the exact payload across real newlines, TABs, and terminal soft wraps before Enter.
+- Reframed all five active Project Runner Skills as communication-only drivers. Bare invocation no
+  longer implies `workflow-next`, task-mode selection, a 15-minute heartbeat, lifecycle classification,
+  Cursor command materialization, or any other orchestration policy.
+- Added Agent-selected native key transport (`up/down/left/right/enter/escape/tab/backtab/space`) with
+  exact byte fingerprints. Kimi 0.39.1 was revalidated end-to-end through Runner-only
+  trust-selection, prompt delivery, reply readback, and exact-session shutdown.
+- Made optional Kaola carriers, runtime health, and Cursor authority/materialization preflight facts
+  advisory so missing Workflow setup cannot block starting a usable CLI communication channel.
+
+- Made interaction evidence-first across Grok, Claude Code, OpenCode, Kimi CLI, and Cursor CLI:
+  raw frames and exact tmux/process/relay facts go to the controlling agent, while coordinates,
+  fixed placeholders, editor/activity/approval labels, and worker counts no longer authorize or
+  block generic send/stop. Skills now teach observe, agent decision, prompt transfer, response
+  reading, retained-draft recovery, and durable Workflow verification.
+- Removed evidence-derived hard gates from agent-directed transport. `send` and `stop` no longer
+  require a snapshot; a caller-supplied old observation is reported through `action_time_snapshot`
+  and `observation_changed:true` instead of `stale-snapshot` refusal. Later-output barriers, draft,
+  approval, activity, process counts, Git, and Workflow interpretations remain evidence only.
+- Removed the Cursor `cursor_x=2` input-origin blocker and the equivalent coordinate authority from
+  shared placeholder interpretation. Added the real Cursor v2026.08.25 x=0 frame as evidence.
+- Made mutation-refusal recovery receipts truthful: `restored:true` now requires proof of resumed
+  child/process group, restored pane input, a responsive relay, and released lease/mutation lock;
+  otherwise the receipt reports `restored:false` with explicit evidence.
+- Added schema-v2 observations and a managed nested-PTY relay that record independent
+  editor/approval/visible-work facts, byte/input/output/resize revisions, recovery evidence, and
+  Claude whole-editor replacement receipts without turning those facts into runtime state authority.
+- Added exact outer-PTY fence outcomes without replay, escaped-descendant containment, and pre-write
+  terminal-control reporting with bracketed-paste-only LF/TAB handling. Prepared send/answer payloads
+  retain byte-level fingerprint receipts across real newlines, TABs, and terminal soft wraps.
 - Consolidated all five generated Skills on the shared relay control plane while keeping Grok's
   live-proven prompts, task modes, scheduling, claim handoff, lifecycle, and golden source bytes
   unchanged; generated transport wording is applied through an exact reversible overlay.
 - Made the legacy Grok validation use its own explicitly numbered tmux server, so a user's
   `base-index` and `pane-base-index` cannot change the verdict.
-- Made Claude Code decision conflicts fail closed: a visible pending Workflow decision plus an
-  editor, whether empty or populated, can no longer be reported as idle or accept `send`; later
-  runtime output must replace pending evidence in the current activity tail before a fresh empty
-  prompt clears stale decision history.
+- Made Claude Code decisions, approval surfaces, retained editors, and later-output barriers visible
+  to the controlling agent without blocking that agent's chosen follow-up transport.
 - Made execution cadence caller-controlled across every runner Skill; runtime-native recurring
   support no longer gates an outer Codex heartbeat or scheduler.
 - Added the live-proven Claude Code launch profile, stable tmux pane targeting, dynamic-title TUI
