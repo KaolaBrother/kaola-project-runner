@@ -15,3 +15,6 @@ launch_summary: "Launch Claude from the canonical repository root; use only the 
 recurring_execution: "unsupported"
 recurring_summary: "Use the caller-selected one-shot, Codex heartbeat, or live-verified Claude-native carrier described in [scheduling.md](scheduling.md)."
 quit_text: "/exit"
+default_model_name: "Opus 5 High"
+default_model_id: "opus"
+default_model_parameters: "effort=high"

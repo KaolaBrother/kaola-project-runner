@@ -6,6 +6,8 @@
 - Default tmux session prefix: `opencode-kaola`
 - Continue: `--continue`
 - Exact resume: `--session <session-id>`
+- Runner default main model: **GLM 5.3 Max**
+- Current resolved launch identity: `zhipuai-coding-plan/glm-5.3` with `effort=max`
 
 ## Preflight
 
@@ -14,6 +16,12 @@ Verify the OpenCode executable and report optional Kaola carrier/configuration e
 Preflight is read-only. Optional Kaola/Workflow surfaces and runtime health are reported as evidence;
 their absence does not block starting the CLI. The Runner never installs, upgrades, adopts, or
 rewrites runtime configuration.
+
+Model catalogs are probed read-only. A user-provided per-run `--model`/`--effort` overrides the
+Runner default; saved picker/config values never become the Runner default. If the requested model
+cannot be resolved from a readable catalog, no model-unspecified session is created. Once a selected
+session exists, actual-model mismatch or unreadable evidence is reported without blocking ordinary
+observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 

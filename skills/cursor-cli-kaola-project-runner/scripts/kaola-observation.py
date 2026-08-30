@@ -125,6 +125,7 @@ def make_snapshot_id(observation: dict[str, Any]) -> str:
         "native_approval": observation.get("native_approval"),
         "later_output_barrier": observation.get("later_output_barrier"),
         "git": observation.get("git"),
+        "model": observation.get("model"),
     }
     return _digest("kpr-snapshot-v2:", value)
 
@@ -551,6 +552,7 @@ def build_from_environment() -> dict[str, Any]:
         "later_output_barrier": barrier,
         "activity_hint": adapter.get("activity_hint", "unknown"),
         "runtime_session_id": os.environ.get("KPR_RUNTIME_SESSION_ID", ""),
+        "model": json.loads(os.environ.get("KPR_MODEL_JSON", "{}")),
         "git": _git_facts(os.environ["KPR_REPO"]),
         "evidence_flags": [],
     }

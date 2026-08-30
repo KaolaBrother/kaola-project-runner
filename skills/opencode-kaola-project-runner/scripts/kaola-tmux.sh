@@ -13,13 +13,15 @@ LEGACY_REPO_KEY=GROK_KAOLA_REPO
 OBSERVATION_HELPER="$script_dir/kaola-observation.py"
 RELAY="$script_dir/kaola-pane-relay.py"
 RELAY_CLIENT="$script_dir/kaola-relay-client.py"
+MODEL_POLICY_HELPER="$script_dir/kaola-model-policy.py"
+MODEL_POLICY_KEY=KAOLA_PROJECT_RUNNER_MODEL_POLICY
 export OBSERVATION_HELPER
 
 usage() {
   cat <<'EOF'
 Usage:
   kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
-  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID]
+  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--model ID --effort LEVEL]
   kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N]
@@ -48,7 +50,7 @@ PY
 platform="${1:-}"; [[ -n "$platform" ]] || { usage; exit 2; }; shift
 case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli) ;; *) die "unknown platform: $platform" ;; esac
 adapter_file="$script_dir/adapters/$platform.sh"; [[ -f "$adapter_file" ]] || die "adapter not installed"
-[[ -f "$OBSERVATION_HELPER" && -f "$RELAY" && -f "$RELAY_CLIENT" ]] || die "relay control plane is incomplete"
+[[ -f "$OBSERVATION_HELPER" && -f "$RELAY" && -f "$RELAY_CLIENT" && -f "$MODEL_POLICY_HELPER" ]] || die "relay control plane is incomplete"
 # shellcheck source=/dev/null
 source "$adapter_file"
 [[ "${ADAPTER_ID:-}" == "$platform" ]] || die "adapter identity mismatch"
@@ -57,7 +59,7 @@ source "$adapter_file"
 command_name="${1:-}"; [[ -n "$command_name" ]] || { usage; exit 2; }; shift
 case "$command_name" in preflight|start|observe|status|capture|send|key|answer|stop) ;; *) die "unknown command: $command_name" ;; esac
 repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_value="" text_given=false
-if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model=opus effort=high permission_mode=auto
+if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
 model_given=false effort_given=false permission_mode_given=false key_name=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -84,10 +86,14 @@ repo="$(canonical_dir "$repo")"; git_root="$(git -C "$repo" rev-parse --show-top
 git_root="$(canonical_dir "$git_root")"; [[ "$git_root" == "$repo" ]] || die "--repo must name the Git root: $git_root"
 [[ "$session" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$ ]] || die "invalid session name"
 TMUX_SESSION_TARGET="=$session"
-if [[ "$platform" != claude-code && ( "$model_given" == true || "$effort_given" == true || "$permission_mode_given" == true ) ]]; then die "model, effort, and permission mode are Claude-only"; fi
+if [[ "$platform" != claude-code && "$permission_mode_given" == true ]]; then die "permission mode is Claude-only"; fi
 if [[ "$command_name" != start && ( "$model_given" == true || "$effort_given" == true || "$permission_mode_given" == true ) ]]; then die "model, effort, and permission mode are start-only"; fi
-[[ "$model" =~ ^[A-Za-z0-9._:-]+$ ]] || die "model contains unsupported characters"
-case "$effort" in low|medium|high|xhigh|max) ;; *) die "unsupported Claude effort" ;; esac
+MODEL_VALUE="$model" "$PYTHON_BIN" - <<'PY' || die "model contains unsupported terminal controls"
+import os
+value = os.environ.get("MODEL_VALUE", "")
+raise SystemExit(1 if any(ord(ch) < 32 or ord(ch) == 127 for ch in value) else 0)
+PY
+if [[ -n "$effort" ]]; then case "$effort" in low|medium|high|xhigh|max) ;; *) die "unsupported effort" ;; esac; fi
 case "$permission_mode" in acceptEdits|auto|bypassPermissions|manual|dontAsk|plan) ;; *) die "unsupported Claude permission mode" ;; esac
 if [[ -n "$key_name" && "$command_name" != key ]]; then die "--key is only valid with key"; fi
 if [[ "$command_name" == key ]]; then
@@ -107,13 +113,33 @@ path_leads_command() {
 }
 runtime_process_matches() { path_leads_command "$1" "$RUNTIME_BIN" && return 0; [[ "$RUNTIME_BIN_REAL" != "$RUNTIME_BIN" ]] && path_leads_command "$1" "$RUNTIME_BIN_REAL" && return 0; type adapter_process_matches >/dev/null 2>&1 && adapter_process_matches "$1" "$2"; }
 
+MODEL_POLICY_JSON="" RESOLVED_MODEL_ID="" RESOLVED_MODEL_EFFORT="" MODEL_HAS_EFFORT=false MODEL_HAS_VARIANT=false
+resolve_model_policy() {
+  local source requested candidate chosen_effort
+  if [[ "$model_given" == true ]]; then source=user requested="$model" candidate="$model"; else source=runner-default requested="$ADAPTER_DEFAULT_MODEL_NAME" candidate="$ADAPTER_DEFAULT_MODEL_ID"; fi
+  if [[ "$effort_given" == true ]]; then chosen_effort="$effort"; else chosen_effort="$ADAPTER_DEFAULT_MODEL_EFFORT"; fi
+  MODEL_POLICY_JSON="$("$PYTHON_BIN" "$MODEL_POLICY_HELPER" resolve --platform "$platform" --runtime-bin "$RUNTIME_BIN" --repo "$repo" --source "$source" --requested-name "$requested" --candidate-id "$candidate" --effort "$chosen_effort" --fast "$ADAPTER_DEFAULT_MODEL_FAST")"
+  RESOLVED_MODEL_ID="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_runtime_model_id")')"
+  RESOLVED_MODEL_EFFORT="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_parameters",{}).get("effort")')"
+  [[ "$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("model_evidence_provenance",{}).get("resolution",{}).get("supported_options",[])')" == *'--effort'* ]] && MODEL_HAS_EFFORT=true
+  [[ "$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("model_evidence_provenance",{}).get("resolution",{}).get("supported_options",[])')" == *'--variant'* ]] && MODEL_HAS_VARIANT=true
+  [[ -n "$RESOLVED_MODEL_ID" ]]
+}
+
+emit_model_unavailable() {
+  POLICY_JSON="$MODEL_POLICY_JSON" RESULT=model-unavailable PLATFORM="$platform" SESSION="$session" REPO="$repo" "$PYTHON_BIN" - <<'PY'
+import json, os
+d=json.loads(os.environ["POLICY_JSON"]); d.update(schema_version=2,result=os.environ["RESULT"],platform=os.environ["PLATFORM"],session=os.environ["SESSION"],repo=os.environ["REPO"],mutation_performed=False); print(json.dumps(d,ensure_ascii=False,sort_keys=True))
+PY
+}
+
 load_session_identity() {
   STATE_PRESENT=false STATE_OWNED=false STATE_PLATFORM_MATCH=false STATE_REPO_MATCH=false STATE_TUI=false
   STATE_LEGACY_OWNERSHIP=false
   STATE_PANE_COUNT=0 STATE_PANE_ID="" STATE_PANE_PATH="" STATE_PANE_COMMAND="" STATE_PANE_TITLE="" STATE_PANE_DEAD="" STATE_PANE_PID="" STATE_PANE_PROCESS=""
   STATE_RELAY_PROCESS_MATCH=false STATE_PROCESS_MATCH=false STATE_PANE_INPUT_OFF=false STATE_PANE_WIDTH="" STATE_PANE_HEIGHT="" STATE_CURSOR_X="" STATE_CURSOR_Y=""
   STATE_CURSOR_FLAG=false STATE_ALTERNATE_ON=false STATE_HISTORY_SIZE="" STATE_HISTORY_BYTES="" STATE_CAPTURE_HISTORY="" STATE_ACTIVITY=unknown STATE_RUNTIME_SESSION_ID=""
-  STATE_RELAY_SOCKET="" STATE_RELAY_EPOCH=""; session_exists || return 0; STATE_PRESENT=true
+  STATE_RELAY_SOCKET="" STATE_RELAY_EPOCH="" STATE_MODEL_POLICY_JSON=""; session_exists || return 0; STATE_PRESENT=true
   local panes owner platform_marker repo_marker value pane_real legacy_owner legacy_repo
   panes="$("$TMUX_BIN" list-panes -t "$TMUX_SESSION_TARGET" -F '#{pane_id}')"; STATE_PANE_COUNT="$(printf '%s\n' "$panes" | awk 'NF{n++}END{print n+0}')"
   if [[ "$STATE_PANE_COUNT" -eq 1 ]]; then
@@ -130,6 +156,7 @@ EOF
   elif [[ "$platform" == grok ]]; then legacy_owner="$(tmux_env_value "$LEGACY_OWNER_KEY" || true)"; legacy_repo="$(tmux_env_value "$LEGACY_REPO_KEY" || true)"; [[ "$legacy_owner" == 1 && "$legacy_repo" == "$repo" ]] && STATE_OWNED=true STATE_PLATFORM_MATCH=true STATE_LEGACY_OWNERSHIP=true repo_marker="$legacy_repo"; fi
   if [[ -d "$STATE_PANE_PATH" ]]; then pane_real="$(canonical_dir "$STATE_PANE_PATH" || true)"; [[ "$pane_real" == "$repo" && "$repo_marker" == "$repo" ]] && STATE_REPO_MATCH=true; fi
   STATE_RELAY_SOCKET="$(tmux_env_value "$RELAY_SOCKET_KEY" || true)"; STATE_RELAY_EPOCH="$(tmux_env_value "$RELAY_EPOCH_KEY" || true)"
+  STATE_MODEL_POLICY_JSON="$(tmux_env_value "$MODEL_POLICY_KEY" || true)"
   if [[ -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]]; then path_leads_command "$STATE_PANE_PROCESS" "$RELAY" && STATE_RELAY_PROCESS_MATCH=true; if [[ -n "${CURRENT_RELAY_JSON:-}" ]]; then STATE_PROCESS_MATCH="$(printf '%s' "$CURRENT_RELAY_JSON" | json_value 'd.get("child_process_match",False)')"; fi
   else runtime_process_matches "$STATE_PANE_PROCESS" "$STATE_PANE_COMMAND" && STATE_PROCESS_MATCH=true; fi
   if [[ "$STATE_PROCESS_MATCH" == true ]] && adapter_detect_tui "$STATE_PANE_TITLE" "$STATE_PANE_COMMAND" "$STATE_CAPTURE_HISTORY"; then STATE_TUI=true; STATE_ACTIVITY="$(adapter_activity_hint "$STATE_CAPTURE_HISTORY")"; STATE_RUNTIME_SESSION_ID="$(adapter_extract_session_id "$STATE_CAPTURE_HISTORY" || true)"; fi
@@ -156,7 +183,7 @@ PY
 }
 
 build_sample() {
-  local relay_json="$1" barrier_json="$2" result="${3:-observed}" frame cursor_frame cursor_logical_y process_json adapter_json child_pid ps_text temporary pane_facts_json
+  local relay_json="$1" barrier_json="$2" result="${3:-observed}" frame cursor_frame cursor_logical_y process_json adapter_json child_pid ps_text temporary pane_facts_json model_json
   if [[ -n "$relay_json" && "$relay_json" != null ]]; then
     CURRENT_RELAY_JSON="$relay_json"
   else
@@ -177,7 +204,13 @@ build_sample() {
   [[ "$child_pid" =~ ^[0-9]+$ ]] || child_pid="$STATE_PANE_PID"
   if [[ -n "$child_pid" ]]; then ps_text="$("$PS_BIN" -axo pid=,ppid=,state=,comm=,command= 2>/dev/null || true)"; process_json="$(printf '%s\n' "$ps_text" | "$PYTHON_BIN" "$OBSERVATION_HELPER" process-tree "$child_pid" 2>/dev/null || printf null)"; fi
   temporary="$(mktemp "${TMPDIR:-/tmp}/kpr-frame.XXXXXX")"; printf '%s' "$frame" >"$temporary"
-  KPR_FRAME_FILE="$temporary" KPR_PRESENT="$STATE_PRESENT" KPR_OWNED="$STATE_OWNED" KPR_PLATFORM_MATCH="$STATE_PLATFORM_MATCH" KPR_REPO_MATCH="$STATE_REPO_MATCH" KPR_PANE_COUNT="$STATE_PANE_COUNT" KPR_PANE_ID="$STATE_PANE_ID" KPR_PANE_DEAD="${STATE_PANE_DEAD:-0}" KPR_PANE_INPUT_OFF=false KPR_PANE_PATH="$STATE_PANE_PATH" KPR_PANE_PID="$STATE_PANE_PID" KPR_PANE_COMMAND="$STATE_PANE_COMMAND" KPR_PANE_TITLE="$STATE_PANE_TITLE" KPR_PANE_PROCESS="$STATE_PANE_PROCESS" KPR_RELAY_PROCESS_MATCH="$STATE_RELAY_PROCESS_MATCH" KPR_PROCESS_MATCH="$STATE_PROCESS_MATCH" KPR_TUI="$STATE_TUI" KPR_PANE_WIDTH="$STATE_PANE_WIDTH" KPR_PANE_HEIGHT="$STATE_PANE_HEIGHT" KPR_CURSOR_X="$STATE_CURSOR_X" KPR_CURSOR_Y="$STATE_CURSOR_Y" KPR_CURSOR_FLAG="$STATE_CURSOR_FLAG" KPR_ALTERNATE_ON="$STATE_ALTERNATE_ON" KPR_HISTORY_SIZE="$STATE_HISTORY_SIZE" KPR_HISTORY_BYTES="$STATE_HISTORY_BYTES" KPR_ADAPTER_JSON="$adapter_json" KPR_PROCESS_JSON="$process_json" KPR_RELAY_JSON="$relay_json" KPR_BARRIER_JSON="$barrier_json" KPR_RESULT="$result" KPR_PLATFORM="$platform" KPR_RUNTIME="$ADAPTER_DISPLAY_NAME" KPR_SESSION="$session" KPR_REPO="$repo" KPR_RUNTIME_SESSION_ID="$STATE_RUNTIME_SESSION_ID" "$PYTHON_BIN" "$OBSERVATION_HELPER" build
+  if [[ -n "$STATE_MODEL_POLICY_JSON" ]]; then
+    model_json="$("$PYTHON_BIN" "$MODEL_POLICY_HELPER" verify --platform "$platform" --policy-json "$STATE_MODEL_POLICY_JSON" --frame-file "$temporary")"
+    [[ "$STATE_PRESENT" == true ]] && "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$MODEL_POLICY_KEY" "$model_json"
+  else
+    model_json='{}'
+  fi
+  KPR_FRAME_FILE="$temporary" KPR_PRESENT="$STATE_PRESENT" KPR_OWNED="$STATE_OWNED" KPR_PLATFORM_MATCH="$STATE_PLATFORM_MATCH" KPR_REPO_MATCH="$STATE_REPO_MATCH" KPR_PANE_COUNT="$STATE_PANE_COUNT" KPR_PANE_ID="$STATE_PANE_ID" KPR_PANE_DEAD="${STATE_PANE_DEAD:-0}" KPR_PANE_INPUT_OFF=false KPR_PANE_PATH="$STATE_PANE_PATH" KPR_PANE_PID="$STATE_PANE_PID" KPR_PANE_COMMAND="$STATE_PANE_COMMAND" KPR_PANE_TITLE="$STATE_PANE_TITLE" KPR_PANE_PROCESS="$STATE_PANE_PROCESS" KPR_RELAY_PROCESS_MATCH="$STATE_RELAY_PROCESS_MATCH" KPR_PROCESS_MATCH="$STATE_PROCESS_MATCH" KPR_TUI="$STATE_TUI" KPR_PANE_WIDTH="$STATE_PANE_WIDTH" KPR_PANE_HEIGHT="$STATE_PANE_HEIGHT" KPR_CURSOR_X="$STATE_CURSOR_X" KPR_CURSOR_Y="$STATE_CURSOR_Y" KPR_CURSOR_FLAG="$STATE_CURSOR_FLAG" KPR_ALTERNATE_ON="$STATE_ALTERNATE_ON" KPR_HISTORY_SIZE="$STATE_HISTORY_SIZE" KPR_HISTORY_BYTES="$STATE_HISTORY_BYTES" KPR_ADAPTER_JSON="$adapter_json" KPR_PROCESS_JSON="$process_json" KPR_RELAY_JSON="$relay_json" KPR_BARRIER_JSON="$barrier_json" KPR_RESULT="$result" KPR_PLATFORM="$platform" KPR_RUNTIME="$ADAPTER_DISPLAY_NAME" KPR_SESSION="$session" KPR_REPO="$repo" KPR_RUNTIME_SESSION_ID="$STATE_RUNTIME_SESSION_ID" KPR_MODEL_JSON="$model_json" "$PYTHON_BIN" "$OBSERVATION_HELPER" build
   rm -f "$temporary"
 }
 
@@ -363,20 +396,33 @@ PY
 }
 
 case "$command_name" in
-  preflight) adapter_preflight; args=("s:result:ready" "s:platform:$platform" "s:runtime:$ADAPTER_DISPLAY_NAME" "s:runtime_version:$PREFLIGHT_VERSION" "s:runtime_binary:$RUNTIME_BIN" "s:repo:$repo" "s:session:$session" "b:workflow_next:$PREFLIGHT_WORKFLOW_NEXT" "b:kaola_workflow_finalize:$PREFLIGHT_FINALIZE" "s:recurring_execution:$ADAPTER_RECURRING_EXECUTION" "s:project_materialization:$PREFLIGHT_PROJECT_MATERIALIZATION" "s:detail:$PREFLIGHT_DETAIL"); if [[ "$platform" == grok ]]; then args+=("s:grok_version:$PREFLIGHT_VERSION" "j:project_root:$PREFLIGHT_PROJECT_ROOT_JSON"); fi; emit_json "${args[@]}" ;;
+  preflight)
+    adapter_preflight; resolve_model_policy || true
+    base_json="$(emit_json "s:result:ready" "s:platform:$platform" "s:runtime:$ADAPTER_DISPLAY_NAME" "s:runtime_version:$PREFLIGHT_VERSION" "s:runtime_binary:$RUNTIME_BIN" "s:repo:$repo" "s:session:$session" "b:workflow_next:$PREFLIGHT_WORKFLOW_NEXT" "b:kaola_workflow_finalize:$PREFLIGHT_FINALIZE" "s:recurring_execution:$ADAPTER_RECURRING_EXECUTION" "s:project_materialization:$PREFLIGHT_PROJECT_MATERIALIZATION" "s:detail:$PREFLIGHT_DETAIL")"
+    BASE_JSON="$base_json" POLICY_JSON="$MODEL_POLICY_JSON" GROK_VERSION="$PREFLIGHT_VERSION" GROK_ROOT="${PREFLIGHT_PROJECT_ROOT_JSON:-null}" "$PYTHON_BIN" - "$platform" <<'PY'
+import json,os,sys
+d=json.loads(os.environ["BASE_JSON"]); d.update(json.loads(os.environ["POLICY_JSON"]))
+if sys.argv[1] == "grok": d.update(grok_version=os.environ["GROK_VERSION"], project_root=json.loads(os.environ["GROK_ROOT"]))
+print(json.dumps(d,ensure_ascii=False,sort_keys=True))
+PY
+    ;;
   observe) observe_managed ;;
   status) load_session_identity; if [[ "$STATE_PRESENT" == true ]]; then emit_status present; else emit_status absent; fi ;;
   capture) [[ "$lines" =~ ^[1-9][0-9]*$ && "$lines" -le 5000 ]] || die "--lines must be 1..5000"; load_session_identity; [[ "$STATE_PRESENT" == true && "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && "$STATE_PANE_COUNT" -eq 1 && -n "$STATE_PANE_ID" ]] || { emit_refusal identity-mismatch capture; exit 1; }; "$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S "-$lines" ;;
   start)
-    [[ -z "$resume_id" || "$continue_mode" == false ]] || die "--resume and --continue are mutually exclusive"; adapter_preflight; load_session_identity
+    [[ -z "$resume_id" || "$continue_mode" == false ]] || die "--resume and --continue are mutually exclusive"; adapter_preflight; resolve_model_policy || { emit_model_unavailable; exit 1; }; load_session_identity
     if [[ "$STATE_PRESENT" == true ]]; then if [[ "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && -n "$STATE_RELAY_SOCKET" ]]; then emit_status already-running; exit 0; fi; emit_status existing-session-not-reusable; exit 1; fi
+    adapter_prepare_model_environment
     session_env_args=(); while IFS='=' read -r name value; do case "$name" in CLAUDE_*|GROK_*|OPENCODE_*|KIMI_*|CURSOR_*|FAKE_*) session_env_args+=(-e "$name=$value") ;; esac; done < <(env)
+    set +u
+    for value in "${ADAPTER_MODEL_ENV[@]}"; do session_env_args+=(-e "$value"); done
+    set -u
     if (( ${#session_env_args[@]} > 0 )); then
       "$TMUX_BIN" new-session -d -s "$session" -c "$repo" "${session_env_args[@]}" || { emit_status existing-session-not-reusable; exit 1; }
     else
       "$TMUX_BIN" new-session -d -s "$session" -c "$repo" || { emit_status existing-session-not-reusable; exit 1; }
     fi
-    "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$OWNER_KEY" 1; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$PLATFORM_KEY" "$platform"; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$REPO_KEY" "$repo"; if [[ "$platform" == grok ]]; then "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$LEGACY_OWNER_KEY" 1; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$LEGACY_REPO_KEY" "$repo"; fi
+    "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$OWNER_KEY" 1; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$PLATFORM_KEY" "$platform"; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$REPO_KEY" "$repo"; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$MODEL_POLICY_KEY" "$MODEL_POLICY_JSON"; if [[ "$platform" == grok ]]; then "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$LEGACY_OWNER_KEY" 1; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$LEGACY_REPO_KEY" "$repo"; fi
     load_session_identity; adapter_build_launch "$repo" "$resume_id" "$continue_mode"; launch=exec; for argument in "$PYTHON_BIN" "$RELAY" --tmux-bin "$TMUX_BIN" --session "$session" --pane-id "$STATE_PANE_ID" --repo "$repo" --runtime-path "$RUNTIME_BIN" --exact-process-title "${ADAPTER_CHILD_PROCESS_TITLE_EXACT:-}" -- ${ADAPTER_LAUNCH_ARGS[@]+"${ADAPTER_LAUNCH_ARGS[@]}"}; do printf -v quoted '%q' "$argument"; launch+=" $quoted"; done; "$TMUX_BIN" send-keys -t "$STATE_PANE_ID" -l "$launch"; "$TMUX_BIN" send-keys -t "$STATE_PANE_ID" C-m
     start_timeout="${KAOLA_START_TIMEOUT:-${GROK_START_TIMEOUT:-20}}"; [[ "$start_timeout" =~ ^[0-9]+$ ]] || die "KAOLA_START_TIMEOUT must be integer"; start_deadline=$((SECONDS + start_timeout)); while (( SECONDS < start_deadline )); do sleep 0.1; load_session_identity; [[ "$STATE_PRESENT" == true ]] || { emit_status start-exited; exit 1; }; if [[ -n "$STATE_RELAY_SOCKET" ]]; then observation="$(observe_managed)"; if [[ "$(printf '%s' "$observation" | json_value 'd.get("relay",{}).get("managed",False)')" == true ]]; then STATUS_JSON="$(printf '%s' "$observation" | "$PYTHON_BIN" "$OBSERVATION_HELPER" status-view)" "$PYTHON_BIN" -c 'import json,os; d=json.loads(os.environ["STATUS_JSON"]); d["result"]="started"; print(json.dumps(d,ensure_ascii=False,sort_keys=True))'; exit 0; fi; fi; done; emit_status start-pending; exit 2
     ;;

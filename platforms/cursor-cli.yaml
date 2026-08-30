@@ -15,3 +15,6 @@ launch_summary: "Launch cursor-agent --workspace <repo> without materializing or
 recurring_execution: "unsupported"
 recurring_summary: "Use the caller-selected one-shot, Codex heartbeat, or live-verified runtime-native carrier described in [scheduling.md](scheduling.md)."
 quit_text: "/exit"
+default_model_name: "Grok 4.6 Extra High"
+default_model_id: "cursor-grok-4.6-xhigh"
+default_model_parameters: "effort=xhigh, fast=false"

@@ -89,13 +89,13 @@ def main() -> int:
     if not all(
         marker in agents_text
         for marker in (
-            "Cursor CLI live experiments must explicitly open the native `/model` selector",
-            "non-FAST Cursor Grok 4.6",
-            "not a Runner gate",
+            "Cursor CLI live experiments must pass `cursor-grok-4.6-xhigh`",
+            "without a `Fast` suffix",
+            "Do not use native `/model` as a read-only probe",
         )
     ):
         failures.append(
-            "test_cursor_live_experiment_policy — missing Agent-owned non-FAST Grok 4.6 protocol"
+            "test_cursor_live_experiment_policy — missing argv-selected non-FAST Cursor model protocol"
         )
     if not all(
         marker in cursor_evidence

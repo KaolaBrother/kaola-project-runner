@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added verified per-run main-model selection for all five runtimes: explicit user override first,
+  otherwise a declared Runner default, with catalog resolution, literal launch parameters,
+  actual-model evidence, resume re-verification, and no global-config mutation or communication gate.
+
 - Reframed all five active Project Runner Skills as communication-only drivers. Bare invocation no
   longer implies `workflow-next`, task-mode selection, a 15-minute heartbeat, lifecycle classification,
   Cursor command materialization, or any other orchestration policy.

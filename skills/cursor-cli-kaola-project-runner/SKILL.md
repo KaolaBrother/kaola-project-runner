@@ -22,6 +22,13 @@ scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
 scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
+The controlling Agent first checks whether the current user request explicitly selects the main
+model. Pass that choice with `--model ID --effort LEVEL`; otherwise `start` resolves this Skill's
+Runner default: **Grok 4.6 Extra High** (`cursor-grok-4.6-xhigh`, effort=xhigh, fast=false).
+This is per-run input and never rewrites global CLI configuration. `preflight`, `start`, `observe`,
+and `status` report requested, resolved, and actual model evidence. A mismatch or unreadable actual
+model remains evidence for the Agent and does not disable the communication channel.
+
 `preflight` reports runtime and optional Kaola carrier evidence. Missing Workflow commands,
 configuration health, account state, trust state, editor state, activity hints, or a changed
 snapshot do not authorize or block starting the CLI communication channel.

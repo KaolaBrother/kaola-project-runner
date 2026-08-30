@@ -9,6 +9,10 @@ ADAPTER_BIN_ENV="OPENCODE_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
 ADAPTER_ANSWER_MODE="unsupported"
+ADAPTER_DEFAULT_MODEL_NAME="GLM 5.3 Max"
+ADAPTER_DEFAULT_MODEL_ID="zhipuai-coding-plan/glm-5.3"
+ADAPTER_DEFAULT_MODEL_EFFORT="max"
+ADAPTER_DEFAULT_MODEL_FAST="unknown"
 
 opencode_surface() {
   local root="$1"
@@ -39,6 +43,28 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--session "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
+  ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
+  if [[ -n "$RESOLVED_MODEL_EFFORT" && "$MODEL_HAS_VARIANT" == true ]]; then
+    ADAPTER_LAUNCH_ARGS+=(--variant "$RESOLVED_MODEL_EFFORT")
+  fi
+}
+
+adapter_prepare_model_environment() {
+  local existing="${OPENCODE_CONFIG_CONTENT:-}" merged
+  merged="$(EXISTING_OPENCODE_CONFIG="$existing" MODEL_ID="$RESOLVED_MODEL_ID" MODEL_EFFORT="$RESOLVED_MODEL_EFFORT" "$PYTHON_BIN" - <<'PY'
+import json, os
+try:
+    value = json.loads(os.environ.get("EXISTING_OPENCODE_CONFIG") or "{}")
+except json.JSONDecodeError:
+    value = {}
+agent = value.setdefault("agent", {}).setdefault("build", {})
+agent["model"] = os.environ["MODEL_ID"]
+if os.environ.get("MODEL_EFFORT"):
+    agent["variant"] = os.environ["MODEL_EFFORT"]
+print(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+PY
+)"
+  ADAPTER_MODEL_ENV=("OPENCODE_CONFIG_CONTENT=$merged")
 }
 
 adapter_detect_tui() {

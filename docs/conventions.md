@@ -41,6 +41,11 @@ transfer the chosen prompt or key, observe/capture the response, and stop the ex
 Agent chooses. Workflow/Git/forge verification occurs only when the Agent chose a Workflow task.
 Snapshot changes and retained drafts are evidence, never Skill-owned policy gates.
 
+Model mismatch, unreadable actual-model evidence, login failures, and resume behavior are likewise
+facts for the controlling Agent. Never turn them into a blanket send/observe/stop gate. The one
+pre-session exception is mechanical: when a readable catalog proves the requested model absent,
+do not create a model-unspecified child that would inherit ambient client state.
+
 Do not reintroduce direct `SIGSTOP` of the pane leader: tmux resumes it. Do not replace the tokenized
 DECRQM parser fence with a sleep, double capture, plain DSR, control-mode pause, or tmux command-list
 claim. Legacy-direct sessions are reporting-only until the user explicitly authorizes migration.
@@ -56,6 +61,7 @@ truthful restoration, and zero residual sockets/processes.
 Real runtime tests record version, relay/child/pane identity, snapshot, prompt
 delivery, Workflow start evidence, stop result, and zero unintended residual sessions.
 Authentication-blocked command receipt is not reported as successful Workflow execution.
-For Cursor CLI, the validating Agent must explicitly select a non-FAST Cursor Grok 4.6 model through
-the native `/model` UI, capture the selected row and post-selection footer without `Fast`, then run
-the prompt/reply proof. This is a strict live-experiment protocol, not active Skill runtime policy.
+For Cursor CLI, live experiments must pass the exact non-FAST slug `cursor-grok-4.6-xhigh`, capture
+the resulting `Cursor Grok 4.6 Extra High` footer without `Fast`, then run the prompt/reply proof.
+Do not use native `/model` as a read-only probe: Cursor 2026.08.25 rewrites global picker config even
+when the visible selection is unchanged.

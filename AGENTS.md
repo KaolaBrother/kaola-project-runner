@@ -58,9 +58,12 @@
 - Treat background hooks as advisory and avoid repeating validation they already completed.
 - Record the exact commands and outcomes that establish completion.
 - Run the smallest focused proof first, then the project-required integration surface.
-- Cursor CLI live experiments must explicitly open the native `/model` selector, select a non-FAST
-  Cursor Grok 4.6 variant, capture the selected model without a `Fast` suffix, and only then send the
-  verification prompt. This is an experiment requirement owned by the validating Agent, not a Runner gate.
+- Cursor CLI live experiments must pass `cursor-grok-4.6-xhigh`, capture the resulting model without
+  a `Fast` suffix, and only then send the verification prompt. Do not use native `/model` as a
+  read-only probe; the current CLI rewrites global picker config even for an unchanged selection.
+- Per-run model resolution and actual-model comparison are machine facts, not permission gates. A
+  mismatch or unreadable value remains visible to the Agent without disabling an existing session's
+  ordinary communication transport.
 
 ## Kaola-Workflow
 

@@ -6,6 +6,8 @@
 - Default tmux session prefix: `cursor-cli-kaola`
 - Continue: `--continue`
 - Exact resume: `--resume <chat-id>`
+- Runner default main model: **Grok 4.6 Extra High**
+- Current resolved launch identity: `cursor-grok-4.6-xhigh` with `effort=xhigh, fast=false`
 
 ## Preflight
 
@@ -14,6 +16,12 @@ Verify the Cursor executable and report optional global/project Workflow command
 Preflight is read-only. Optional Kaola/Workflow surfaces and runtime health are reported as evidence;
 their absence does not block starting the CLI. The Runner never installs, upgrades, adopts, or
 rewrites runtime configuration.
+
+Model catalogs are probed read-only. A user-provided per-run `--model`/`--effort` overrides the
+Runner default; saved picker/config values never become the Runner default. If the requested model
+cannot be resolved from a readable catalog, no model-unspecified session is created. Once a selected
+session exists, actual-model mismatch or unreadable evidence is reported without blocking ordinary
+observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 

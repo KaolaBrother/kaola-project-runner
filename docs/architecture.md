@@ -19,6 +19,12 @@ choice. The Runner owns exact-session control, evidence collection, prompt/key t
 readback, and truthful mechanical receipts. Kaola Workflow owns lifecycle state only when the Agent
 chooses to invoke it.
 
+Main-model choice is a per-run transport fact. A current-request user override wins; otherwise the
+adapter's declared Runner default is resolved from the current catalog. The selection enters the
+child as literal argv plus narrowly scoped invocation parameters, never by rewriting global CLI
+configuration. Runtime-owned post-launch evidence is returned to the Agent and does not become
+permission to use the communication channel.
+
 ## Grok golden contract
 
 `templates/grok-golden/` is an immutable historical copy of the live-proven Grok Skill, metadata, lifecycle,
@@ -50,6 +56,7 @@ receive:
 KAOLA_PROJECT_RUNNER=1
 KAOLA_PROJECT_RUNNER_PLATFORM=<platform>
 KAOLA_PROJECT_RUNNER_REPO=<canonical Git root>
+KAOLA_PROJECT_RUNNER_MODEL_POLICY=<canonical JSON selection/provenance>
 ```
 
 Observation reports exact session, owner, platform, repo, pane, cwd, relay, runtime child, and TUI

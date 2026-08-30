@@ -25,7 +25,8 @@ migrated, or removed.
 
 ```text
 scripts/kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
-scripts/kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID]
+scripts/kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] \
+  [--model ID --effort low|medium|high|xhigh|max]
 scripts/kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N]
@@ -79,6 +80,16 @@ Preflight reports runtime binary/version, optional Workflow capability discovery
 project materialization evidence, and an adapter-specific summary. Missing Workflow carriers,
 configuration health, or materialization does not block the CLI communication channel.
 
+Preflight also resolves the declared Runner default without starting a session. `start` gives an
+explicit user model/effort precedence; otherwise it uses that Runner default. A readable catalog
+that proves the requested model absent returns typed `model-unavailable` evidence before tmux is
+created, rather than launching with ambient client state. After creation, actual mismatch or
+unreadable evidence never disables generic communication.
+
+Model evidence under `model` includes `requested_model_source`, `requested_model_name`,
+`resolved_runtime_model_id`, `resolved_parameters`, `actual_runtime_model_id`,
+`actual_parameters`, tri-state `model_verified`, `model_mismatch_reason`, and structured provenance.
+
 ## Agent-directed transport results
 
 Every transport action acquires the relay's mechanical write transaction, captures action-time
@@ -114,7 +125,8 @@ child/group and every exact fingerprint-tracked escaped descendant are absent.
 ## Adapter interface
 
 Each adapter declares identity, display name, executable, environment override, recurring support,
-quit text, and answer capability. It implements `adapter_preflight`, `adapter_build_launch`,
+quit text, answer capability, and declared default-model facts. It implements `adapter_preflight`,
+`adapter_build_launch`, `adapter_prepare_model_environment`,
 `adapter_detect_tui`, `adapter_activity_hint`, `adapter_observe_frame`, and
 `adapter_extract_session_id`. Adapters contain platform facts only and must not evaluate runtime- or
 user-produced shell text. Starting a CLI does not invoke a Workflow materializer.

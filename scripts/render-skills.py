@@ -24,7 +24,8 @@ REQUIRED = {
     "id", "runtime_name", "skill_name", "display_name", "short_description",
     "default_prompt", "description", "session_prefix", "binary_name", "binary_env",
     "continue_syntax", "resume_syntax", "preflight_summary", "launch_summary",
-    "recurring_execution", "recurring_summary", "quit_text",
+    "recurring_execution", "recurring_summary", "quit_text", "default_model_name",
+    "default_model_id", "default_model_parameters",
 }
 
 
@@ -109,6 +110,7 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     shared_root = ROOT / "scripts"
     shared_sources = (
         (shared_root / "kaola-tmux.sh", "scripts/kaola-tmux.sh"),
+        (shared_root / "kaola-model-policy.py", "scripts/kaola-model-policy.py"),
         (shared_root / "kaola-observation.py", "scripts/kaola-observation.py"),
         (shared_root / "kaola-pane-relay.py", "scripts/kaola-pane-relay.py"),
         (ROOT / "scripts" / "kaola-relay-client.py", "scripts/kaola-relay-client.py"),

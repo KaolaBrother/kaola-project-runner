@@ -17,13 +17,13 @@ tmux 主会话中启动指定 CLI、读取输出、传递控制 Agent 选择的�
 
 ## 支持的平台
 
-| Platform | Codex Skill | CLI | 已实证的 runtime-native recurring |
-|---|---|---|---|
-| Grok CLI | `$grok-kaola-project-runner` | `grok` | supported，需显式请求 |
-| Claude Code | `$claude-code-kaola-project-runner` | `claude` | unsupported |
-| OpenCode | `$opencode-kaola-project-runner` | `opencode` | unsupported |
-| Kimi CLI | `$kimi-cli-kaola-project-runner` | `kimi` | unsupported |
-| Cursor CLI | `$cursor-cli-kaola-project-runner` | `cursor-agent` | unsupported |
+| Platform | Codex Skill | CLI | Runner 默认主模型 | runtime-native recurring |
+|---|---|---|---|---|
+| Grok CLI | `$grok-kaola-project-runner` | `grok` | Grok 4.6, xhigh, non-FAST | supported，需显式请求 |
+| Claude Code | `$claude-code-kaola-project-runner` | `claude` | Opus 5, high | unsupported |
+| OpenCode | `$opencode-kaola-project-runner` | `opencode` | GLM 5.3, max | unsupported |
+| Kimi CLI | `$kimi-cli-kaola-project-runner` | `kimi` | K3, max | unsupported |
+| Cursor CLI | `$cursor-cli-kaola-project-runner` | `cursor-agent` | Cursor Grok 4.6, xhigh, non-FAST | unsupported |
 
 裸调用统一表示：使用当前目录所在的 canonical Git repository，启动或恢复该平台的精确
 tmux session 并返回可读证据。它不会隐式发送 `workflow-next`、materialize 项目文件、创建
@@ -73,6 +73,10 @@ scripts/kaola-tmux.sh grok preflight \
 scripts/kaola-tmux.sh opencode start \
   --repo /absolute/path/to/repo --session opencode-kaola-example
 
+scripts/kaola-tmux.sh opencode start \
+  --repo /absolute/path/to/repo --session opencode-user-model \
+  --model zhipuai-coding-plan/glm-5.3 --effort max
+
 scripts/kaola-tmux.sh cursor-cli status \
   --repo /absolute/path/to/repo --session cursor-cli-kaola-example
 
@@ -91,6 +95,9 @@ scripts/kaola-tmux.sh kimi-cli key \
 snapshot 是可选的证据关联：若传入旧 snapshot，回执报告 action-time snapshot 与
 `observation_changed:true`，仍继续执行 agent 选择的传输。prompt 通过 relay
 literal/bracketed-paste transport 传输，不经过 shell 求值。
+每次 `start` 都先解析主模型：当前请求显式传入的 `--model/--effort` 优先，否则使用上表的
+Runner default；不会把 CLI 保存的 picker/config 冒充默认值。模型不可读或不匹配只作为 Agent
+的事实输入，不会封锁已有会话的普通通信；Runner 也从不自动发送 `workflow-next`。
 CR、ESC、DEL 与其他终端 C0/C1 控制字会在任何子 PTY 写入前被拒绝；LF/TAB 只有在 CLI 已明确
 启用 bracketed paste 时才允许。跨出原 child PGID 的后代也会按启动指纹纳入 quiesce 与
 force-stop 终态证明。send 回执记录实际传输的 payload fingerprint；语义是否合适、如何处理
@@ -129,6 +136,7 @@ authority receipt 和项目级 commands 只作为证据报告；需要 materiali
 - `scripts/kaola-tmux.sh`：平台中立、安全默认关闭的会话与 guarded-action 核心；
 - `scripts/kaola-pane-relay.py`、`kaola-relay-client.py`：nested PTY、fence、lease 和原子输入 transport；
 - `scripts/kaola-observation.py`：schema-v2 canonical facts、revision、snapshot 与 receipt；
+- `scripts/kaola-model-policy.py`：只读 catalog 解析、per-run 主模型选择与实际模型证据比较；
 - `skills/`：确定性生成并提交的五个自包含 Skill；
 - `tests/contract/`：golden compatibility、renderer、安装迁移和控制面验收。
 
@@ -150,3 +158,5 @@ golden bytes 保持冻结；active Skill、manifest、adapter 或 renderer 修�
 [2026-08-29 live smoke](docs/live-smoke-2026-08-29.md)。
 Issue #7 的无 hardgate 交互验收和五平台权限边界见
 [2026-08-30 evidence-first live smoke](docs/live-smoke-evidence-first-2026-08-30.md)。
+Issue #8 的逐 runtime 模型选择、`workflow-next` 通信和精确会话关闭证据见
+[2026-08-30 model-policy live smoke](docs/live-smoke-model-policy-2026-08-30.md)。

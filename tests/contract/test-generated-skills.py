@@ -180,6 +180,12 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
     text = re.sub(r"\bclaude\.md\b", "", text)
     text = text.replace("roadmap cursor", "roadmap")
     text = text.replace("grok golden-contract parity target", "")
+    if package_id == "cursor-cli-kaola-project-runner":
+        # Cursor's user-selected Runner default is intentionally a Cursor Grok
+        # model. Remove only those exact declared model facts before checking
+        # for accidental Grok adapter/protocol leakage.
+        text = text.replace("grok 4.6 extra high", "cursor-default-model")
+        text = text.replace("cursor-grok-4.6-xhigh", "cursor-default-model-id")
     for other_id, tokens in forbidden.items():
         for token in tokens:
             # A common word such as "cursor" is intentionally not exempted: a

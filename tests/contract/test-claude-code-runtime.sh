@@ -120,7 +120,7 @@ fi
 
 invalid_effort="$(expect_fail test_claude_invalid_effort \
   run_runner start --repo "$repo" --session "claude-invalid-effort-$$" --effort extreme)"
-grep -Fq 'unsupported Claude effort' <<<"$invalid_effort" || \
+grep -Fq 'unsupported effort' <<<"$invalid_effort" || \
   fail test_claude_invalid_effort "missing typed refusal: $invalid_effort"
 
 if [[ "$failures" -gt 0 ]]; then

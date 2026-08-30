@@ -9,6 +9,10 @@ ADAPTER_BIN_ENV="GROK_BIN"
 ADAPTER_RECURRING_EXECUTION="supported"
 ADAPTER_QUIT_TEXT="/quit"
 ADAPTER_ANSWER_MODE="unsupported"
+ADAPTER_DEFAULT_MODEL_NAME="Grok 4.6 Extra High"
+ADAPTER_DEFAULT_MODEL_ID="grok-4.6"
+ADAPTER_DEFAULT_MODEL_EFFORT="xhigh"
+ADAPTER_DEFAULT_MODEL_FAST="false"
 
 adapter_preflight() {
   local inspect_json parsed inspect_rc=0
@@ -50,7 +54,11 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--resume "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
+  ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
+  [[ -z "$RESOLVED_MODEL_EFFORT" ]] || ADAPTER_LAUNCH_ARGS+=(--reasoning-effort "$RESOLVED_MODEL_EFFORT")
 }
+
+adapter_prepare_model_environment() { ADAPTER_MODEL_ENV=(); }
 
 adapter_detect_tui() {
   local title="$1" command="$2" capture="$3"

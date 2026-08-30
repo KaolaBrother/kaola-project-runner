@@ -41,6 +41,7 @@ run_case "$project_root/tests/contract/test-process-identity.sh"
 run_case "$project_root/tests/contract/test-grok-compat.sh"
 run_case "$project_root/tests/contract/test-grok-validation-isolation.sh"
 run_case "$project_root/tests/contract/test-claude-human-decision.sh"
+run_case "$project_root/tests/contract/test-model-policy.sh"
 
 if [[ "$failures" -gt 0 ]]; then
   printf '\nIssue #1 acceptance: %d case(s) failed\n' "$failures" >&2
