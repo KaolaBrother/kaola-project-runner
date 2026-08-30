@@ -1,0 +1,6 @@
+Claude Code
+Kaola Workflow
+Shell activity in progress
+shells: 1
+agents: 0
+❯

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
+ADAPTER_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 ADAPTER_ID="cursor-cli"
 ADAPTER_DISPLAY_NAME="Cursor CLI"
 ADAPTER_DEFAULT_BIN="cursor-agent"
 ADAPTER_BIN_ENV="CURSOR_AGENT_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
+ADAPTER_ANSWER_MODE="unsupported"
 
 adapter_preflight() {
   local cursor_root="${CURSOR_HOME:-$HOME/.cursor}" authority doctor doctor_json doctor_state
@@ -111,7 +114,7 @@ adapter_detect_tui() {
   [[ "$title" =~ [Cc]ursor ]]
 }
 
-adapter_detect_activity() {
+adapter_activity_hint() {
   local capture="$1" tail_sample
   tail_sample="$(printf '%s\n' "$capture" | tail -n 18)"
   if printf '%s\n' "$tail_sample" | grep -Eqi 'ctrl\+c to stop|esc to cancel|Press Esc to interrupt|Waiting for response|^[[:space:]]*[^[:alnum:][:space:]]+.*(Working|Thinking|Reading|Globbing|Grepping|Searching|Running|Responding).*tokens'; then printf '%s\n' busy
@@ -119,6 +122,15 @@ adapter_detect_activity() {
   elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|→|>)|Plan, search, build anything'; then printf '%s\n' idle
   else printf '%s\n' unknown
   fi
+}
+
+adapter_observe_frame() {
+  local frame="$1" pane_facts="${2:-}" hint helper python_bin
+  [[ -n "$pane_facts" ]] || pane_facts='{}'
+  hint="$(adapter_activity_hint "$frame")"
+  helper="${OBSERVATION_HELPER:-$(dirname "$ADAPTER_SOURCE_DIR")/kaola-observation.py}"
+  python_bin="${PYTHON_BIN:-python3}"
+  printf '%s' "$frame" | KPR_ADAPTER_PANE_FACTS="$pane_facts" "$python_bin" "$helper" cursor-frame "$hint"
 }
 
 adapter_extract_session_id() { printf '%s\n' "$1" | sed -nE 's/.*(chat[_ -]?id|session[_ -]?id)[:= ]+([A-Za-z0-9_-]+).*/\2/ip' | tail -1; }

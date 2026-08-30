@@ -42,6 +42,8 @@ The helper starts Grok with `--minimal` so terminal evidence remains capturable.
 already exists, start succeeds only when it is already owned by this runner and bound to the same
 repository; otherwise it fails closed.
 
+Mutation commands use the schema-v2 snapshot and editor guards in [transport.md](transport.md).
+
 ## Observe
 
 ```bash
@@ -63,13 +65,15 @@ counts. Read [status-monitoring.md](status-monitoring.md) before deciding the pr
 ## Send literal input
 
 ```bash
-scripts/grok-tmux.sh send --repo "$REPO" --session "$SESSION" --text "$PROMPT"
+scripts/grok-tmux.sh send --repo "$REPO" --session "$SESSION" \
+  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor --text "$PROMPT"
 ```
 
 For a multiline or large prompt, use stdin:
 
 ```bash
-scripts/grok-tmux.sh send --repo "$REPO" --session "$SESSION" < prompt.txt
+scripts/grok-tmux.sh send --repo "$REPO" --session "$SESSION" \
+  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor < prompt.txt
 ```
 
 The helper pastes literal bytes and sends Enter separately. Shell metacharacters in the prompt are
@@ -78,7 +82,8 @@ not executed by the tmux pane's shell.
 ## Stop
 
 ```bash
-scripts/grok-tmux.sh stop --repo "$REPO" --session "$SESSION"
+scripts/grok-tmux.sh stop --repo "$REPO" --session "$SESSION" \
+  --if-snapshot "$SNAPSHOT_ID"
 ```
 
 This only sends `/quit` to an owned idle Grok session. If it does not exit promptly, report

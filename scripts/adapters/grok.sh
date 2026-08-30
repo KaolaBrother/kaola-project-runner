@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
+ADAPTER_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 ADAPTER_ID="grok"
 ADAPTER_DISPLAY_NAME="Grok CLI"
 ADAPTER_DEFAULT_BIN="grok"
 ADAPTER_BIN_ENV="GROK_BIN"
 ADAPTER_RECURRING_EXECUTION="supported"
 ADAPTER_QUIT_TEXT="/quit"
+ADAPTER_ANSWER_MODE="unsupported"
 
 adapter_preflight() {
   local inspect_json parsed
@@ -49,7 +52,7 @@ adapter_detect_tui() {
   [[ "$title" == grok ]]
 }
 
-adapter_detect_activity() {
+adapter_activity_hint() {
   local capture="$1" tail_sample
   tail_sample="$(printf '%s\n' "$capture" | tail -n 16)"
   if printf '%s\n' "$tail_sample" | grep -Eq 'Waiting for response|Press Esc to interrupt|Running tool|Working…|Thinking…|Responding…|esc to cancel'; then printf '%s\n' busy
@@ -57,6 +60,15 @@ adapter_detect_activity() {
   elif printf '%s\n' "$tail_sample" | grep -q '^❯'; then printf '%s\n' idle
   else printf '%s\n' unknown
   fi
+}
+
+adapter_observe_frame() {
+  local frame="$1" pane_facts="${2:-}" hint helper python_bin
+  [[ -n "$pane_facts" ]] || pane_facts='{}'
+  hint="$(adapter_activity_hint "$frame")"
+  helper="${OBSERVATION_HELPER:-$(dirname "$ADAPTER_SOURCE_DIR")/kaola-observation.py}"
+  python_bin="${PYTHON_BIN:-python3}"
+  printf '%s' "$frame" | KPR_ADAPTER_PANE_FACTS="$pane_facts" "$python_bin" "$helper" generic-frame "$hint"
 }
 
 adapter_extract_session_id() {

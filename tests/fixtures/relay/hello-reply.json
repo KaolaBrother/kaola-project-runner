@@ -1,0 +1,9 @@
+{
+  "protocol_version": 1,
+  "request_id": "11111111111111111111111111111111",
+  "relay_epoch": "22222222222222222222222222222222",
+  "operation": "hello",
+  "expected_child_fingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "result": "ok",
+  "payload_hex": ""
+}

@@ -1,0 +1,6 @@
+Claude Code
+Kaola Workflow
+Subagent activity in progress
+shells: 0
+agents: 1
+❯

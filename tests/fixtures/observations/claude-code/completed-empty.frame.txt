@@ -1,0 +1,6 @@
+Claude Code
+Kaola Workflow
+Completed work is ready to continue.
+shells: 0
+agents: 0
+❯

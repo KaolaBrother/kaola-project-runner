@@ -11,9 +11,11 @@ issue_tmp_root=""
 issue_tmux_socket=""
 issue_tmux_bin=""
 issue_fake_bin_dir=""
+issue_socket_tmp_root=""
 
 issue_setup() {
   issue_tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/kaola-project-runner-issue-1.XXXXXX")"
+  issue_socket_tmp_root="$(mktemp -d /tmp/kpr-issue-test.XXXXXX)"
   issue_tmux_socket="kaola-issue-1-$$-${RANDOM}"
   issue_fake_bin_dir="$issue_tmp_root/bin"
   mkdir -p "$issue_fake_bin_dir"
@@ -29,6 +31,7 @@ TMUX_SHIM
   export TMUX_BIN="$issue_tmux_bin"
   export PATH="$issue_fake_bin_dir:$PATH"
   export HOME="$issue_tmp_root/home"
+  export TMPDIR="$issue_socket_tmp_root"
   mkdir -p "$HOME"
 }
 
@@ -38,6 +41,9 @@ issue_cleanup() {
   fi
   if [[ -n "$issue_tmp_root" ]]; then
     rm -rf "$issue_tmp_root"
+  fi
+  if [[ -n "$issue_socket_tmp_root" ]]; then
+    rm -rf "$issue_socket_tmp_root"
   fi
 }
 
@@ -97,7 +103,7 @@ case "${FAKE_RUNTIME_STATE:-ready}" in
       printf 'session id: %s\n' "$FAKE_RUNTIME_SESSION_ID"
       printf 'Session ID: %s\n' "$FAKE_RUNTIME_SESSION_ID"
     fi
-    printf '%s\n' '❯' '›'
+    printf '❯ '
     ;;
   busy)
     printf '\033]0;%s\007' "$runtime"
@@ -106,7 +112,15 @@ case "${FAKE_RUNTIME_STATE:-ready}" in
     ;;
   decision)
     printf '\033]0;%s\007' "$runtime"
-    printf '%s\n' "${runtime} Kaola TUI" 'HUMAN_DECISION_REQUIRED' 'Decision: choose fixture' '❯'
+    printf '%s\n' \
+      "${runtime} Kaola TUI" \
+      'HUMAN_DECISION_REQUIRED' \
+      'Decision: choose fixture' \
+      'Evidence: sanitized fixture evidence' \
+      'Recommendation: choose fixture' \
+      'Safe options: choose fixture or decline' \
+      'Paused state: waiting for explicit answer' \
+      '❯'
     ;;
 esac
 
@@ -117,10 +131,10 @@ while IFS= read -r line; do
   if [[ "$line" == 'BUSY' ]]; then
     printf 'Waiting for response…'
     sleep "${FAKE_BUSY_SECONDS:-3}"
-    printf '\r\033[2KDONE\nminimal · /help\n❯\n'
+    printf '\r\033[2KDONE\nminimal · /help\n❯ '
   else
     printf 'ECHO:%s\n' "$line"
-    printf '%s\n' 'minimal · /help' '❯'
+    printf 'minimal · /help\n❯ '
   fi
 done
 FAKE_RUNTIME

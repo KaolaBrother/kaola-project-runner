@@ -1,0 +1,7 @@
+Claude Code
+Kaola Workflow
+This command requires approval
+Tool approval
+Do you want to proceed?
+❯ 1. Allow
+  2. Deny

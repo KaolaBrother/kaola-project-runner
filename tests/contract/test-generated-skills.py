@@ -98,6 +98,48 @@ def all_files(root: Path) -> list[Path]:
     return sorted(path for path in root.rglob("*") if path.is_file())
 
 
+def shell_examples(markdown: str) -> list[str]:
+    """Return normalized commands from bash/sh fenced examples."""
+    examples: list[str] = []
+    for match in re.finditer(r"```(?:bash|sh)\n(.*?)\n```", markdown, flags=re.DOTALL):
+        command = re.sub(r"\\\n\s*", " ", match.group(1))
+        examples.extend(line.strip() for line in command.splitlines() if line.strip())
+    return examples
+
+
+def grok_nontransport_contract(markdown: str) -> str:
+    """Remove only Issue #6's reviewed transport/API overlay surface."""
+    without_mutation_examples = re.sub(
+        r"```(?:bash|sh)\n(?:(?!```).)*?\b(?:send|stop)\b(?:(?!```).)*?\n```\n?",
+        "",
+        markdown,
+        flags=re.DOTALL,
+    )
+    transport_terms = (
+        "transport.md",
+        "schema-v2",
+        "snapshot_id",
+        "--if-snapshot",
+        "--require-empty-editor",
+        "empty editor",
+        "snapshot guard",
+    )
+    filtered = "\n".join(
+        line
+        for line in without_mutation_examples.splitlines()
+        if not any(term in line for term in transport_terms)
+    )
+    # Removing one overlay-only prose line can leave one extra empty line at
+    # the insertion boundary. Blank-line multiplicity carries no contract
+    # meaning; normalize it without ignoring any nonblank golden prose.
+    return re.sub(r"\n{3,}", "\n\n", filtered).strip()
+
+
+def is_shell_command_example(command: str) -> bool:
+    """Reject diff artifacts and other standalone tokens in routed examples."""
+    return re.search(r"(?:^|\s)\+(?:\s|$)", command) is None
+
+
 def file_hashes(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for path in all_files(root):
@@ -307,12 +349,23 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
                 expected.is_file() and reviewed_hash == golden_hash,
                 f"golden bytes for {relative} no longer match the reviewed SHA-256 inventory",
             )
-            assertions.check(
-                f"test_grok_compatibility_exact_{relative.as_posix()}",
-                actual.is_file() and expected.is_file() and actual.read_bytes() == expected.read_bytes()
-                and hashlib.sha256(actual.read_bytes()).hexdigest() == reviewed_hash,
-                f"generated Grok file is not byte-identical to {expected}",
-            )
+            if relative.as_posix() == "references/grok-tui.md":
+                actual_text = actual.read_text(encoding="utf-8") if actual.is_file() else ""
+                expected_text = expected.read_text(encoding="utf-8") if expected.is_file() else ""
+                assertions.check(
+                    "test_grok_generated_tui_delta_is_transport_only",
+                    bool(actual_text)
+                    and grok_nontransport_contract(actual_text)
+                    == grok_nontransport_contract(expected_text),
+                    "generated Grok TUI differs from frozen golden prose outside the reviewed transport/API overlay",
+                )
+            else:
+                assertions.check(
+                    f"test_grok_compatibility_exact_{relative.as_posix()}",
+                    actual.is_file() and expected.is_file() and actual.read_bytes() == expected.read_bytes()
+                    and hashlib.sha256(actual.read_bytes()).hexdigest() == reviewed_hash,
+                    f"generated Grok file is not byte-identical to {expected}",
+                )
 
         # The reviewed contract may carry the expressly authorized merged-PR
         # residue cleanup and caller-controlled scheduling changes relative to
@@ -404,6 +457,91 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
             )
 
 
+def check_guarded_transport_guidance(
+    assertions: Assertions, package: Path, package_id: str
+) -> None:
+    """Pin the generated, caller-visible route to schema-v2 guarded actions."""
+    transport = package / "references" / "transport.md"
+    assertions.check(
+        f"test_{package_id}_schema_v2_transport_overlay_exists",
+        transport.is_file(),
+        f"missing generated transport overlay: {transport}",
+    )
+    if not transport.is_file():
+        return
+
+    transport_text = transport.read_text(encoding="utf-8")
+    examples = shell_examples(transport_text)
+    observe_examples = [command for command in examples if " observe " in f" {command} "]
+    send_examples = [command for command in examples if " send " in f" {command} "]
+    stop_examples = [command for command in examples if " stop " in f" {command} "]
+    assertions.check(
+        f"test_{package_id}_transport_uses_schema_v2_observe",
+        "schema-v2" in transport_text
+        and any("scripts/runtime-tmux.sh observe" in command for command in observe_examples),
+        "transport overlay must obtain a schema-v2 observation before mutation",
+    )
+    assertions.check(
+        f"test_{package_id}_transport_send_is_snapshot_and_editor_guarded",
+        bool(send_examples)
+        and all(
+            is_shell_command_example(command)
+            and "--if-snapshot" in command
+            and "--require-empty-editor" in command
+            for command in send_examples
+        ),
+        f"unguarded or invalid transport send example(s): {send_examples!r}",
+    )
+    assertions.check(
+        f"test_{package_id}_transport_stop_is_snapshot_guarded",
+        bool(stop_examples)
+        and all(is_shell_command_example(command) and "--if-snapshot" in command for command in stop_examples),
+        f"unguarded or invalid transport stop example(s): {stop_examples!r}",
+    )
+
+    if package_id == "grok-kaola-project-runner":
+        # Grok's reviewed prompt/protocol files remain byte-frozen.  Issue #6
+        # may add a transport overlay, but must not silently fold it into the
+        # golden tree and re-baseline the live-proven Grok contract.
+        golden_transport = package.parents[1] / "templates" / "grok-golden" / "references" / "transport.md"
+        assertions.check(
+            "test_grok_transport_overlay_stays_outside_frozen_golden_contract",
+            not golden_transport.exists(),
+            f"transport overlay was added to frozen Grok golden bytes: {golden_transport}",
+        )
+        platform = package / "references" / "grok-tui.md"
+    else:
+        platform = package / "references" / "platform.md"
+    assertions.check(
+        f"test_{package_id}_platform_routes_mutations_through_transport",
+        platform.is_file() and "[transport.md](transport.md)" in platform.read_text(encoding="utf-8"),
+        f"generated platform guidance does not route mutations through {transport.name}",
+    )
+    if not platform.is_file():
+        return
+
+    platform_examples = shell_examples(platform.read_text(encoding="utf-8"))
+    routed_sends = [command for command in platform_examples if " send " in f" {command} "]
+    routed_stops = [command for command in platform_examples if " stop " in f" {command} "]
+    assertions.check(
+        f"test_{package_id}_routed_send_examples_are_guarded",
+        bool(routed_sends)
+        and all(
+            is_shell_command_example(command)
+            and "--if-snapshot" in command
+            and "--require-empty-editor" in command
+            for command in routed_sends
+        ),
+        f"routed send example(s) are invalid or bypass schema-v2 snapshot/editor guards: {routed_sends!r}",
+    )
+    assertions.check(
+        f"test_{package_id}_routed_stop_examples_are_guarded",
+        bool(routed_stops)
+        and all(is_shell_command_example(command) and "--if-snapshot" in command for command in routed_stops),
+        f"routed stop example(s) are invalid or bypass the schema-v2 snapshot guard: {routed_stops!r}",
+    )
+
+
 def check_generated_tree(assertions: Assertions, root: Path, require_check: bool = True) -> None:
     generated = root / "skills"
     actual_ids = {
@@ -462,6 +600,7 @@ def check_generated_tree(assertions: Assertions, root: Path, require_check: bool
             f"default_prompt is {default_prompt!r}, expected {details['prompt']!r}",
         )
         check_no_cross_platform_leakage(assertions, package, package_id)
+        check_guarded_transport_guidance(assertions, package, package_id)
 
     check_grok_compatibility(assertions, root)
 

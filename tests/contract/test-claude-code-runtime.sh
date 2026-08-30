@@ -19,6 +19,10 @@ json_assert() {
     fail "$label" "JSON assertion failed: $input"
 }
 
+snapshot_id() {
+  JSON_INPUT="$1" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])"
+}
+
 expect_fail() {
   local label="$1"
   shift
@@ -100,11 +104,27 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
   grep -Fq -- '--model opus --effort high --permission-mode auto' "$claude_log" || \
     fail test_claude_default_launch_configuration "missing launch args: $(cat "$claude_log")"
 
+  send_missing="$(expect_fail test_claude_send_requires_snapshot \
+    run_runner send --repo "$repo" --session "$session" --require-empty-editor --text must-not-inject)"
+  grep -Fq '"result": "snapshot-required"' <<<"$send_missing" || \
+    fail test_claude_send_requires_snapshot "missing snapshot refusal: $send_missing"
+  approval_observe="$(run_runner observe --repo "$repo" --session "$session")"
+  approval_snapshot="$(snapshot_id "$approval_observe")"
   send_output="$(expect_fail test_claude_approval_rejects_input \
-    run_runner send --repo "$repo" --session "$session" --text must-not-inject)"
-  grep -Fq '"result": "not-idle"' <<<"$send_output" || \
-    fail test_claude_approval_rejects_input "missing not-idle refusal: $send_output"
-  run_runner stop --repo "$repo" --session "$session" --force >/dev/null 2>&1 || true
+    run_runner send --repo "$repo" --session "$session" --if-snapshot "$approval_snapshot" --require-empty-editor --text must-not-inject)"
+  grep -Fq '"result": "editor-unknown"' <<<"$send_output" || \
+    fail test_claude_approval_rejects_input "missing editor-unknown refusal: $send_output"
+  force_missing="$(expect_fail test_claude_force_stop_requires_snapshot \
+    run_runner stop --repo "$repo" --session "$session" --force)"
+  grep -Fq '"result": "snapshot-required"' <<<"$force_missing" || \
+    fail test_claude_force_stop_requires_snapshot "missing snapshot refusal: $force_missing"
+  force_stopped="$(run_runner stop --repo "$repo" --session "$session" --if-snapshot "$approval_snapshot" --force)" || \
+    fail test_claude_force_stop "force stop failed: $force_stopped"
+  if [[ -n "${force_stopped:-}" ]]; then
+    json_assert test_claude_force_stop \
+      "d['result'] == 'stopped' and d['action'] == 'force-stop' and d['final_state']['session_present'] is False" \
+      "$force_stopped"
+  fi
 fi
 
 invalid_effort="$(expect_fail test_claude_invalid_effort \

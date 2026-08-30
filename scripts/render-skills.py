@@ -123,6 +123,38 @@ def align_grok_contract(text: str, manifest: dict[str, str]) -> str:
     return text
 
 
+def apply_guarded_transport_overlay(text: str, script: str) -> str:
+    """Update only generated mutation examples; keep frozen Grok source bytes intact."""
+    route = (
+        "Mutation commands use the schema-v2 snapshot and editor guards in "
+        "[transport.md](transport.md).\n\n"
+    )
+    observe_heading = "## Observe\n\n"
+    if route not in text:
+        if text.count(observe_heading) != 1:
+            raise ValueError("platform guidance lost the unique Observe heading")
+        text = text.replace(observe_heading, route + observe_heading, 1)
+    replacements = (
+        (
+            f'{script} send --repo "$REPO" --session "$SESSION" --text "$PROMPT"',
+            f'{script} send --repo "$REPO" --session "$SESSION" \\\n  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor --text "$PROMPT"',
+        ),
+        (
+            f'{script} send --repo "$REPO" --session "$SESSION" < prompt.txt',
+            f'{script} send --repo "$REPO" --session "$SESSION" \\\n  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor < prompt.txt',
+        ),
+        (
+            f'{script} stop --repo "$REPO" --session "$SESSION"',
+            f'{script} stop --repo "$REPO" --session "$SESSION" \\\n  --if-snapshot "$SNAPSHOT_ID"',
+        ),
+    )
+    for old, new in replacements:
+        if text.count(old) != 1:
+            raise ValueError(f"platform guidance lost guarded overlay anchor: {old}")
+        text = text.replace(old, new, 1)
+    return text
+
+
 def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     result[MARKER] = (manifest["skill_name"] + "\n").encode()
@@ -134,7 +166,13 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
         result["SKILL.md"] = (contract / "SKILL.md").read_bytes()
         result["agents/openai.yaml"] = (contract / "agents" / "openai.yaml").read_bytes()
         for source in sorted((contract / "references").glob("*.md")):
-            result[f"references/{source.name}"] = source.read_bytes()
+            if source.name == "grok-tui.md":
+                overlaid = apply_guarded_transport_overlay(
+                    source.read_text(encoding="utf-8"), "scripts/grok-tmux.sh"
+                )
+                result[f"references/{source.name}"] = overlaid.encode()
+            else:
+                result[f"references/{source.name}"] = source.read_bytes()
     else:
         contract = TEMPLATES / "grok-golden"
         skill = align_grok_contract((contract / "SKILL.md").read_text(encoding="utf-8"), manifest)
@@ -192,18 +230,29 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
                         "does not invalidate an otherwise exact TUI.\n",
                         1,
                     )
+                aligned = apply_guarded_transport_overlay(aligned, "scripts/runtime-tmux.sh")
             result[f"references/{target_name}"] = aligned.encode()
 
         if manifest["id"] == "claude-code":
             launch = TEMPLATES / "claude-code" / "references" / "launch.md"
             result["references/launch.md"] = launch.read_bytes()
 
-    if manifest["id"] == "claude-code":
-        core = ROOT / "scripts" / "claude-code-tmux.sh"
-    else:
-        core = ROOT / "scripts" / "kaola-tmux.sh"
+    transport = TEMPLATES / "references" / "transport.md.tmpl"
+    result["references/transport.md"] = render(
+        transport.read_text(encoding="utf-8"), manifest, transport
+    ).encode()
+
+    core = ROOT / "scripts" / "kaola-tmux.sh"
     adapter = ROOT / "scripts" / "adapters" / f"{manifest['id']}.sh"
-    for source, target in ((core, "scripts/kaola-tmux.sh"), (adapter, f"scripts/adapters/{adapter.name}")):
+    shared_sources = (
+        (core, "scripts/kaola-tmux.sh"),
+        (ROOT / "scripts" / "kaola-observation.py", "scripts/kaola-observation.py"),
+        (ROOT / "scripts" / "kaola-pane-relay.py", "scripts/kaola-pane-relay.py"),
+        (ROOT / "scripts" / "kaola-relay-client.py", "scripts/kaola-relay-client.py"),
+        (ROOT / "scripts" / "kaola-relay-protocol.py", "scripts/kaola-relay-protocol.py"),
+        (adapter, f"scripts/adapters/{adapter.name}"),
+    )
+    for source, target in shared_sources:
         if not source.is_file():
             raise ValueError(f"required runtime source missing: {source}")
         result[target] = source.read_bytes()
@@ -211,7 +260,8 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         "script_dir=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd -P)\"\n"
-        f"exec \"$script_dir/kaola-tmux.sh\" {manifest['id']} \"$@\"\n"
+        + ("export KAOLA_CLAUDE_PROFILE_REQUIRED=true\n" if manifest["id"] == "claude-code" else "")
+        + f"exec \"$script_dir/kaola-tmux.sh\" {manifest['id']} \"$@\"\n"
     )
     result["scripts/runtime-tmux.sh"] = wrapper.encode()
     if manifest["id"] == "grok":

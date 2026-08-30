@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
+ADAPTER_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 ADAPTER_ID="opencode"
 ADAPTER_DISPLAY_NAME="OpenCode"
 ADAPTER_DEFAULT_BIN="opencode"
 ADAPTER_BIN_ENV="OPENCODE_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
+ADAPTER_ANSWER_MODE="unsupported"
 
 opencode_surface() {
   local root="$1"
@@ -42,12 +45,14 @@ adapter_build_launch() {
 
 adapter_detect_tui() {
   local title="$1" command="$2" capture="$3"
-  # OpenCode 1.18.x keeps the terminal title at the host name while tmux reports the foreground
-  # command as opencode.exe. The core has already bound that process to the exact runtime argv path.
-  [[ "$title" =~ [Oo]pen[Cc]ode || "$command" == opencode* ]]
+  # OpenCode 1.18.x keeps the terminal title at the host name. Under the managed relay tmux's
+  # foreground command is the attested Python relay, so use the live stable TUI chrome only after
+  # the core has bound the exact child runtime path.
+  [[ "$title" =~ [Oo]pen[Cc]ode || "$command" == opencode* ]] && return 0
+  [[ "$capture" == *OpenCode* && "$capture" == *'Ask anything'* && "$capture" == *'ctrl+p cmd'* ]]
 }
 
-adapter_detect_activity() {
+adapter_activity_hint() {
   local capture="$1" tail_sample
   tail_sample="$(printf '%s\n' "$capture" | tail -n 18)"
   if printf '%s\n' "$tail_sample" | grep -Eqi 'working|thinking|running|responding|esc to cancel|interrupt'; then printf '%s\n' busy
@@ -55,6 +60,15 @@ adapter_detect_activity() {
   elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|>)|Ask anything|ctrl\+p cmd'; then printf '%s\n' idle
   else printf '%s\n' unknown
   fi
+}
+
+adapter_observe_frame() {
+  local frame="$1" pane_facts="${2:-}" hint helper python_bin
+  [[ -n "$pane_facts" ]] || pane_facts='{}'
+  hint="$(adapter_activity_hint "$frame")"
+  helper="${OBSERVATION_HELPER:-$(dirname "$ADAPTER_SOURCE_DIR")/kaola-observation.py}"
+  python_bin="${PYTHON_BIN:-python3}"
+  printf '%s' "$frame" | KPR_ADAPTER_PANE_FACTS="$pane_facts" "$python_bin" "$helper" opencode-frame "$hint"
 }
 
 adapter_extract_session_id() { printf '%s\n' "$1" | sed -nE 's/.*(ses_[A-Za-z0-9_-]+).*/\1/p' | tail -1; }

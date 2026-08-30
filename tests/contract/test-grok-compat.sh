@@ -18,6 +18,10 @@ json_assert() {
     fail "$label" "JSON assertion failed: $input"
 }
 
+snapshot_id() {
+  JSON_INPUT="$1" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])"
+}
+
 expect_fail() {
   local label="$1"
   shift
@@ -78,10 +82,25 @@ else
   "$issue_tmux_bin" set-environment -t "=$legacy_session" GROK_KAOLA_REPO "$canonical_repo"
   legacy_status="$(run_wrapper status --repo "$repo" --session "$legacy_session")"
   json_assert "test_grok_wrapper_reads_legacy_owned_session" "d['owned'] and d['legacy_ownership'] and d['platform_match'] and d['repo_match'] and d['grok_tui']" "$legacy_status"
-  expect_fail "test_grok_wrapper_wrong_repo_legacy_refusal" run_wrapper send --repo "$(issue_new_repo grok-compat-wrong)" --session "$legacy_session" --text wrong-repo >/dev/null
+  legacy_observe="$(run_wrapper observe --repo "$repo" --session "$legacy_session")"
+  json_assert "test_grok_wrapper_legacy_observe_is_reporting_only" "d['result'] == 'observed' and d['relay']['managed'] is False and d['snapshot_id'] is None and 'relay-required' in d['guard_failures']" "$legacy_observe"
+  legacy_token="kpr-snapshot-v2:$(printf '%064d' 0)"
+  expect_fail "test_grok_wrapper_wrong_repo_legacy_refusal" run_wrapper send --repo "$(issue_new_repo grok-compat-wrong)" --session "$legacy_session" --if-snapshot "$legacy_token" --require-empty-editor --text wrong-repo >/dev/null
+  legacy_send="$(expect_fail "test_grok_wrapper_legacy_send_is_reporting_only" run_wrapper send --repo "$repo" --session "$legacy_session" --if-snapshot "$legacy_token" --require-empty-editor --text must-not-inject)"
+  grep -Fq '"result": "relay-required"' <<<"$legacy_send" || fail "test_grok_wrapper_legacy_send_is_reporting_only" "missing relay-required refusal: $legacy_send"
+  legacy_stop="$(expect_fail "test_grok_wrapper_legacy_stop_is_reporting_only" run_wrapper stop --repo "$repo" --session "$legacy_session" --if-snapshot "$legacy_token")"
+  grep -Fq '"result": "relay-required"' <<<"$legacy_stop" || fail "test_grok_wrapper_legacy_stop_is_reporting_only" "missing relay-required refusal: $legacy_stop"
   "$issue_tmux_bin" has-session -t "=$legacy_session" || fail "test_grok_wrapper_preserves_legacy_session" "legacy session disappeared"
 
-  run_wrapper stop --repo "$repo" --session "$session" --force >/dev/null || fail "test_grok_wrapper_force_stop" "force stop failed"
+  force_missing="$(expect_fail "test_grok_wrapper_force_stop_requires_snapshot" run_wrapper stop --repo "$repo" --session "$session" --force)"
+  grep -Fq '"result": "snapshot-required"' <<<"$force_missing" || fail "test_grok_wrapper_force_stop_requires_snapshot" "missing snapshot refusal: $force_missing"
+  managed_observe="$(run_wrapper observe --repo "$repo" --session "$session")"
+  managed_snapshot="$(snapshot_id "$managed_observe")"
+  force_stopped="$(run_wrapper stop --repo "$repo" --session "$session" --if-snapshot "$managed_snapshot" --force)" || \
+    fail "test_grok_wrapper_force_stop" "force stop failed: $force_stopped"
+  if [[ -n "${force_stopped:-}" ]]; then
+    json_assert "test_grok_wrapper_force_stop" "d['result'] == 'stopped' and d['action'] == 'force-stop' and d['final_state']['session_present'] is False" "$force_stopped"
+  fi
   "$issue_tmux_bin" has-session -t "=$unrelated" || fail "test_grok_wrapper_does_not_touch_unrelated" "unrelated session was changed"
   "$issue_tmux_bin" kill-session -t "=$legacy_session" 2>/dev/null || true
 fi

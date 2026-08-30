@@ -50,9 +50,10 @@ scripts/runtime-tmux.sh start --repo "$REPO" --session "$SESSION" --resume "$CLA
 
 ## 3. Verify the live main conversation
 
-Run both status and capture before sending Workflow intake:
+Run observe, status, and capture before sending Workflow intake:
 
 ```bash
+scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
 scripts/runtime-tmux.sh status --repo "$REPO" --session "$SESSION"
 scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 120
 ```
@@ -83,10 +84,14 @@ activity tail does not permanently latch a resumed conversation.
 
 ## 4. Send one intake prompt and supervise
 
-Send the one-shot prompt from [project-run.md](project-run.md) only after the verified idle state:
+Send the one-shot prompt from [project-run.md](project-run.md) only after a fresh observation reports
+an empty editor and returns a non-null `snapshot_id`:
 
 ```bash
-scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" < prompt.txt
+SNAPSHOT_ID="$(scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION" | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["snapshot_id"])')"
+scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" \
+  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor < prompt.txt
 ```
 
 Then observe without injecting while `activity` is `busy` and follow the caller-selected cadence.
@@ -99,5 +104,7 @@ recorded terminal, waiting-human, or uncertain boundary. Neither role answers ap
 
 After every mission is done, use `kaola-workflow-finalize` in this same Claude main conversation.
 Only after validation, sink, remote/Issue truth, claim cleanup, archive, Git cleanliness/alignment,
-and idle state are verified may the exact session be stopped through `runtime-tmux.sh`. Never infer
-completion from an absent pane or a Claude success sentence.
+and idle state are verified may the exact session be stopped through `runtime-tmux.sh`. Observe
+again immediately before stop and pass that exact `snapshot_id` with `--if-snapshot`; force stop has
+the same fresh-snapshot requirement. Never infer completion from an absent pane or a Claude success
+sentence.

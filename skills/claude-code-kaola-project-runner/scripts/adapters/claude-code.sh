@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
+ADAPTER_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 ADAPTER_ID="claude-code"
 ADAPTER_DISPLAY_NAME="Claude Code"
 ADAPTER_DEFAULT_BIN="claude"
 ADAPTER_BIN_ENV="CLAUDE_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
+ADAPTER_ANSWER_MODE="claude-clear-v1"
 
 claude_surface() {
   local root="$1"
@@ -58,7 +61,13 @@ adapter_detect_tui() {
   # has already proved the exact launcher process, ownership, and repository;
   # keep the second predicate on stable live CLI surfaces rather than title alone.
   [[ "$title" =~ [Cc]laude || "$command" == claude* ]] || \
-    printf '%s\n' "$capture" | grep -Eqi 'Claude Code|Opus [0-9]|auto mode on|bypass permissions on'
+    printf '%s\n' "$capture" | grep -Eqi 'Claude Code|Opus [0-9]|auto mode on|bypass permissions on' || \
+    {
+      printf '%s\n' "$capture" | grep -Fq 'Completed work is ready to continue.' &&
+      printf '%s\n' "$capture" | grep -Eq '^[[:space:]]*shells:[[:space:]]*[0-9]+[[:space:]]*$' &&
+      printf '%s\n' "$capture" | grep -Eq '^[[:space:]]*agents:[[:space:]]*[0-9]+[[:space:]]*$' &&
+      printf '%s\n' "$capture" | grep -Eq '^[[:space:]]*(❯|›|>)[[:space:]]*$'
+    }
 }
 
 claude_has_unresolved_decision_conflict() {
@@ -97,7 +106,7 @@ claude_has_unresolved_decision_conflict() {
   '
 }
 
-adapter_detect_activity() {
+adapter_activity_hint() {
   local capture="$1" tail_sample
   tail_sample="$(printf '%s\n' "$capture" | tail -n 18)"
   if printf '%s\n' "$tail_sample" | grep -Eqi \
@@ -109,6 +118,19 @@ adapter_detect_activity() {
   elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|>)'; then printf '%s\n' idle
   else printf '%s\n' unknown
   fi
+}
+
+adapter_observe_frame() {
+  local frame="$1" pane_facts="${2:-}" hint helper python_bin
+  [[ -n "$pane_facts" ]] || pane_facts='{}'
+  hint="$(adapter_activity_hint "$frame")"
+  helper="${OBSERVATION_HELPER:-$(dirname "$ADAPTER_SOURCE_DIR")/kaola-observation.py}"
+  python_bin="${PYTHON_BIN:-python3}"
+  printf '%s' "$frame" | KPR_ADAPTER_PANE_FACTS="$pane_facts" "$python_bin" "$helper" claude-frame "$hint"
+}
+
+adapter_answer_clear_keys() {
+  printf '%s\n' C-u
 }
 
 adapter_extract_session_id() { printf '%s\n' "$1" | sed -nE 's/.*Session ID: ([0-9a-fA-F-]{16,}).*/\1/p' | tail -1; }

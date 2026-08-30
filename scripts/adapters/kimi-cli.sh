@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 
+ADAPTER_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 ADAPTER_ID="kimi-cli"
 ADAPTER_DISPLAY_NAME="Kimi CLI"
 ADAPTER_DEFAULT_BIN="kimi"
 ADAPTER_BIN_ENV="KIMI_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
+ADAPTER_ANSWER_MODE="unsupported"
+ADAPTER_CHILD_PROCESS_TITLE_EXACT="kimi-code"
 
 kimi_surface() {
   local root="$1"
@@ -49,10 +53,15 @@ adapter_detect_tui() {
   local title="$1" command="$2" capture="$3"
   # Kimi 0.39.x leaves the terminal title at the host name. The core has already required either
   # the exact launcher argv path or the exact `kimi-code`/Node process-title identity above.
-  [[ "$title" =~ [Kk]imi || "$command" == node ]]
+  [[ "$title" =~ [Kk]imi || "$command" == node ]] || {
+    [[ "$capture" == *'Trust this folder?'* && \
+       "$capture" == *'Project-level MCP servers are disabled'* && \
+       "$capture" == *'Enter select'* && \
+       "$capture" == *"Don't trust"* ]]
+  }
 }
 
-adapter_detect_activity() {
+adapter_activity_hint() {
   local capture="$1" tail_sample
   tail_sample="$(printf '%s\n' "$capture" | tail -n 18)"
   if printf '%s\n' "$tail_sample" | grep -Eqi 'working|thinking\.\.\.|running tool|responding|esc to cancel|esc to interrupt|Waiting for response'; then printf '%s\n' busy
@@ -61,6 +70,15 @@ adapter_detect_activity() {
   elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|>)|[│|][[:space:]]*>[[:space:]]*[│|]'; then printf '%s\n' idle
   else printf '%s\n' unknown
   fi
+}
+
+adapter_observe_frame() {
+  local frame="$1" pane_facts="${2:-}" hint helper python_bin
+  [[ -n "$pane_facts" ]] || pane_facts='{}'
+  hint="$(adapter_activity_hint "$frame")"
+  helper="${OBSERVATION_HELPER:-$(dirname "$ADAPTER_SOURCE_DIR")/kaola-observation.py}"
+  python_bin="${PYTHON_BIN:-python3}"
+  printf '%s' "$frame" | KPR_ADAPTER_PANE_FACTS="$pane_facts" "$python_bin" "$helper" kimi-frame "$hint"
 }
 
 adapter_extract_session_id() {

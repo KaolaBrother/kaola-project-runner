@@ -18,7 +18,8 @@ repair hint; the Runner never installs, upgrades, adopts, or rewrites runtime co
 
 For a new exact session, run the installed Kaola Cursor authority's fail-closed --ensure-target transaction for the canonical repository, verify its receipt, then launch cursor-agent --workspace <repo>.
 
-Use `scripts/runtime-tmux.sh` for every preflight, start, status, capture, send, and stop operation.
+Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, answer, and
+stop operation. Read [transport.md](transport.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
 ## Scheduling carriers
@@ -74,6 +75,8 @@ For a new exact session, run the installed Kaola Cursor authority's fail-closed 
 already exists, start succeeds only when it is already owned by this runner and bound to the same
 repository; otherwise it fails closed.
 
+Mutation commands use the schema-v2 snapshot and editor guards in [transport.md](transport.md).
+
 ## Observe
 
 ```bash
@@ -95,13 +98,15 @@ counts. Read [status-monitoring.md](status-monitoring.md) before deciding the pr
 ## Send literal input
 
 ```bash
-scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" --text "$PROMPT"
+scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" \
+  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor --text "$PROMPT"
 ```
 
 For a multiline or large prompt, use stdin:
 
 ```bash
-scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" < prompt.txt
+scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" \
+  --if-snapshot "$SNAPSHOT_ID" --require-empty-editor < prompt.txt
 ```
 
 The helper pastes literal bytes and sends Enter separately. Shell metacharacters in the prompt are
@@ -110,7 +115,8 @@ not executed by the tmux pane's shell.
 ## Stop
 
 ```bash
-scripts/runtime-tmux.sh stop --repo "$REPO" --session "$SESSION"
+scripts/runtime-tmux.sh stop --repo "$REPO" --session "$SESSION" \
+  --if-snapshot "$SNAPSHOT_ID"
 ```
 
 This only sends `/exit` to an owned idle Cursor CLI session. If it does not exit promptly, report

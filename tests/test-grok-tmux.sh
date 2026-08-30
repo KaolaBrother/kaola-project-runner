@@ -4,6 +4,8 @@ set -euo pipefail
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 helper="$project_root/scripts/grok-tmux.sh"
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/grok-kaola-runner-test.XXXXXX")"
+socket_tmp_root="$(mktemp -d /tmp/kpr-grok-test.XXXXXX)"
+export TMPDIR="$socket_tmp_root"
 tmux_base_bin="$(command -v tmux)"
 tmux_socket="gkpr-test-$$-${RANDOM}"
 tmux_bin="$tmp_root/tmux"
@@ -26,6 +28,7 @@ cleanup() {
   "$tmux_bin" kill-session -t "$keeper" 2>/dev/null || true
   "$tmux_bin" kill-server 2>/dev/null || true
   rm -rf "$tmp_root"
+  rm -rf "$socket_tmp_root"
 }
 trap cleanup EXIT
 
@@ -52,7 +55,7 @@ if [[ "${1:-}" == "inspect" && "${2:-}" == "--json" ]]; then
 fi
 
 printf '\033]0;grok\007'
-printf 'Grok Build test\nminimal · /help\n❯\n'
+printf 'Grok Build test\nminimal · /help\n❯ '
 while IFS= read -r line; do
   if [[ "$line" == "/quit" ]]; then
     exit 0
@@ -60,9 +63,9 @@ while IFS= read -r line; do
   if [[ "$line" == "BUSY" ]]; then
     printf 'Waiting for response…'
     sleep 2
-    printf '\r\033[2KDONE\nminimal · /help\n❯\n'
+    printf '\r\033[2KDONE\nminimal · /help\n❯ '
   else
-    printf 'ECHO:%s\nminimal · /help\n❯\n' "$line"
+    printf 'ECHO:%s\nminimal · /help\n❯ ' "$line"
   fi
 done
 FAKE
@@ -77,6 +80,30 @@ json_assert() {
   JSON_INPUT="$(cat)" python3 -c "import json,os; d=json.loads(os.environ['JSON_INPUT']); assert $expression, d"
 }
 
+json_value() {
+  local input="$1" expression="$2"
+  JSON_INPUT="$input" python3 -c "import json,os; d=json.loads(os.environ['JSON_INPUT']); print($expression)"
+}
+
+expect_refusal() {
+  local expected="$1"
+  shift
+  local output rc
+  set +e
+  output="$("$@" 2>&1)"
+  rc=$?
+  set -e
+  [[ "$rc" -ne 0 ]] || {
+    printf 'expected non-zero exit: %s\n' "$output" >&2
+    return 1
+  }
+  grep -Fq "$expected" <<<"$output" || {
+    printf 'expected %s: %s\n' "$expected" "$output" >&2
+    return 1
+  }
+  printf '%s\n' "$output"
+}
+
 run_helper preflight --repo "$repo" --session "$session" | \
   json_assert "d['result'] == 'ready' and d['workflow_next'] and d['kaola_workflow_finalize']"
 
@@ -89,28 +116,49 @@ run_helper status --repo "$repo" --session "$session" | \
   json_assert "d['result'] == 'present' and d['activity'] == 'idle' and d['pane_count'] == 1"
 
 literal='literal ; $(touch SHOULD_NOT_EXIST) `touch ALSO_NOT`'
-run_helper send --repo "$repo" --session "$session" --text "$literal" | \
-  json_assert "d['result'] == 'sent'"
+missing_send="$(expect_refusal '"result": "snapshot-required"' run_helper send --repo "$repo" --session "$session" --require-empty-editor --text "$literal")"
+observe_before_send="$(run_helper observe --repo "$repo" --session "$session")"
+snapshot_before_send="$(json_value "$observe_before_send" "d['snapshot_id']")"
+sent_output="$(run_helper send --repo "$repo" --session "$session" --if-snapshot "$snapshot_before_send" --require-empty-editor --text "$literal")" || {
+  printf 'RED: test_grok_send_accepts_idle_literal — tokenized send failed: %s\n' "$sent_output" >&2
+  exit 1
+}
+printf '%s\n' "$sent_output" | json_assert "d['result'] == 'sent' and d['action'] == 'send' and d['based_on_snapshot'] == '$snapshot_before_send'"
 sleep 1
 capture="$(run_helper capture --repo "$repo" --session "$session" --lines 40)"
 printf '%s\n' "$capture" | grep -Fq 'ECHO:literal ; $(touch SHOULD_NOT_EXIST) `touch ALSO_NOT`'
 [[ ! -e "$repo/SHOULD_NOT_EXIST" && ! -e "$repo/ALSO_NOT" ]]
 
-if run_helper send --repo "$other_repo" --session "$session" --text wrong-repo >/dev/null 2>&1; then
+wrong_repo_missing="$(expect_refusal '"result": "snapshot-required"' run_helper send --repo "$other_repo" --session "$session" --require-empty-editor --text wrong-repo)"
+observe_after_send="$(run_helper observe --repo "$repo" --session "$session")"
+snapshot_after_send="$(json_value "$observe_after_send" "d['snapshot_id']")"
+wrong_repo_output="$(run_helper send --repo "$other_repo" --session "$session" --if-snapshot "$snapshot_after_send" --require-empty-editor --text wrong-repo 2>&1)" || true
+if [[ "$wrong_repo_output" != *'repo-mismatch'* ]]; then
   printf 'expected repo mismatch to fail\n' >&2
   exit 1
 fi
 
-run_helper send --repo "$repo" --session "$session" --text BUSY >/dev/null
+busy_start_observe="$(run_helper observe --repo "$repo" --session "$session")"
+busy_start_snapshot="$(json_value "$busy_start_observe" "d['snapshot_id']")"
+run_helper send --repo "$repo" --session "$session" --if-snapshot "$busy_start_snapshot" --require-empty-editor --text BUSY >/dev/null
 sleep 1
-if run_helper send --repo "$repo" --session "$session" --text must-wait >/dev/null 2>&1; then
+busy_observe="$(run_helper observe --repo "$repo" --session "$session")"
+busy_snapshot="$(json_value "$busy_observe" "d['snapshot_id']")"
+busy_output="$(run_helper send --repo "$repo" --session "$session" --if-snapshot "$busy_snapshot" --require-empty-editor --text must-wait 2>&1)" || true
+if [[ "$busy_output" == *'"result": "sent"'* ]]; then
   printf 'expected busy session injection to fail\n' >&2
   exit 1
 fi
 sleep 2
 
-run_helper stop --repo "$repo" --session "$session" | \
-  json_assert "d['result'] == 'stopped' and not d['present']"
+stop_missing="$(expect_refusal '"result": "snapshot-required"' run_helper stop --repo "$repo" --session "$session")"
+stop_observe="$(run_helper observe --repo "$repo" --session "$session")"
+stop_snapshot="$(json_value "$stop_observe" "d['snapshot_id']")"
+stopped_output="$(run_helper stop --repo "$repo" --session "$session" --if-snapshot "$stop_snapshot")" || {
+  printf 'RED: test_grok_stop_exact_owned_session — tokenized stop failed: %s\n' "$stopped_output" >&2
+  exit 1
+}
+printf '%s\n' "$stopped_output" | json_assert "d['result'] == 'stopped' and d['action'] == 'stop'"
 
 "$tmux_bin" has-session -t "$unrelated"
 run_helper status --repo "$repo" --session "$session" | \

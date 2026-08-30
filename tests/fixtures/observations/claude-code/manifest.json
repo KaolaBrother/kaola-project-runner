@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "platform": "claude-code",
+  "fixtures": [
+    {
+      "name": "active-shell",
+      "frame": "active-shell.frame.txt",
+      "sha256": "eab2d600109872a46029767bcd8aaf8d78620060ac441843a04a924e541984af",
+      "pane_facts": {
+        "pane_id": "%7",
+        "pane_dead": false,
+        "pane_width": 120,
+        "pane_height": 24,
+        "cursor_x": 2,
+        "cursor_y": 23,
+        "cursor_flag": true,
+        "alternate_on": true,
+        "history_size": 101,
+        "history_bytes": 1001,
+        "pane_input_off": false
+      },
+      "expected": {
+        "editor_state": "empty",
+        "editor_fingerprint": "known",
+        "visible_shell_count": 1,
+        "visible_agent_count": 0,
+        "native_approval": "absent",
+        "structured_decision_marker": null,
+        "activity_hint": "busy",
+        "send_stop_eligible": false
+      }
+    },
+    {
+      "name": "active-subagent",
+      "frame": "active-subagent.frame.txt",
+      "sha256": "19239390a55b80294fb007777a30640806ff4e110f60bd07c9f21cabc73db0aa",
+      "pane_facts": {
+        "pane_id": "%7",
+        "pane_dead": false,
+        "pane_width": 120,
+        "pane_height": 24,
+        "cursor_x": 2,
+        "cursor_y": 23,
+        "cursor_flag": true,
+        "alternate_on": true,
+        "history_size": 102,
+        "history_bytes": 1002,
+        "pane_input_off": false
+      },
+      "expected": {
+        "editor_state": "empty",
+        "editor_fingerprint": "known",
+        "visible_shell_count": 0,
+        "visible_agent_count": 1,
+        "native_approval": "absent",
+        "structured_decision_marker": null,
+        "activity_hint": "busy",
+        "send_stop_eligible": false
+      }
+    },
+    {
+      "name": "spinner",
+      "frame": "spinner.frame.txt",
+      "sha256": "f83b5a6999fb64ff170ab9dcdd2f9010cfd7c18b19461f69f2a592f55d95d3aa",
+      "pane_facts": {
+        "pane_id": "%7",
+        "pane_dead": false,
+        "pane_width": 120,
+        "pane_height": 24,
+        "cursor_x": 0,
+        "cursor_y": 23,
+        "cursor_flag": true,
+        "alternate_on": true,
+        "history_size": 103,
+        "history_bytes": 1003,
+        "pane_input_off": false
+      },
+      "expected": {
+        "editor_state": "unknown",
+        "editor_fingerprint": "null",
+        "visible_shell_count": null,
+        "visible_agent_count": null,
+        "native_approval": "unknown",
+        "structured_decision_marker": null,
+        "activity_hint": "busy",
+        "send_stop_eligible": false
+      }
+    },
+    {
+      "name": "freeform-decision",
+      "frame": "freeform-decision.frame.txt",
+      "sha256": "adc0ddb77c640d3b7327cb89f03ea511fcf3fddcac12503c3545fcb30dae42e1",
+      "pane_facts": {
+        "pane_id": "%7",
+        "pane_dead": false,
+        "pane_width": 120,
+        "pane_height": 24,
+        "cursor_x": 14,
+        "cursor_y": 23,
+        "cursor_flag": true,
+        "alternate_on": true,
+        "history_size": 104,
+        "history_bytes": 1004,
+        "pane_input_off": false
+      },
+      "expected": {
+        "editor_state": "nonempty",
+        "editor_fingerprint": "known",
+        "visible_shell_count": null,
+        "visible_agent_count": null,
+        "native_approval": "absent",
+        "structured_decision_marker": null,
+        "activity_hint": "waiting-human",
+        "send_stop_eligible": false
+      }
+    },
+    {
+      "name": "populated-draft",
+      "frame": "populated-draft.frame.txt",
+      "sha256": "851750ec6bf90b910a4aeeb97721b4a4e0b9dc61c51bb0d56fcf13717d210f7d",
+      "pane_facts": {
+        "pane_id": "%7",
+        "pane_dead": false,
+        "pane_width": 120,
+        "pane_height": 24,
+        "cursor_x": 15,
+        "cursor_y": 23,
+        "cursor_flag": true,
+        "alternate_on": true,
+        "history_size": 105,
+        "history_bytes": 1005,
+        "pane_input_off": false
+      },
+      "expected": {
+        "editor_state": "nonempty",
+        "editor_fingerprint": "known",
+        "visible_shell_count": 0,
+        "visible_agent_count": 0,
+        "native_approval": "absent",
+        "structured_decision_marker": null,
+        "activity_hint": "idle",
+        "send_stop_eligible": false
+      }
+    },
+    {
+      "name": "completed-empty",
+      "frame": "completed-empty.frame.txt",
+      "sha256": "6b4f8113ee238be6a44ed90d28535ce26b40ede74351df9d36eb0b933beefcfe",
+      "pane_facts": {
+        "pane_id": "%7",
+        "pane_dead": false,
+        "pane_width": 120,
+        "pane_height": 24,
+        "cursor_x": 2,
+        "cursor_y": 23,
+        "cursor_flag": true,
+        "alternate_on": true,
+        "history_size": 106,
+        "history_bytes": 1006,
+        "pane_input_off": false
+      },
+      "expected": {
+        "editor_state": "empty",
+        "editor_fingerprint": "known",
+        "visible_shell_count": 0,
+        "visible_agent_count": 0,
+        "native_approval": "absent",
+        "structured_decision_marker": null,
+        "activity_hint": "idle",
+        "send_stop_eligible": true
+      }
+    },
+    {
+      "name": "native-approval",
+      "frame": "native-approval.frame.txt",
+      "sha256": "45270cb2114666cfb2a692532e82945998abaa884f3ece9f688f258b30d56b07",
+      "pane_facts": {
+        "pane_id": "%7",
+        "pane_dead": false,
+        "pane_width": 120,
+        "pane_height": 24,
+        "cursor_x": 12,
+        "cursor_y": 23,
+        "cursor_flag": true,
+        "alternate_on": true,
+        "history_size": 107,
+        "history_bytes": 1007,
+        "pane_input_off": false
+      },
+      "expected": {
+        "editor_state": "unknown",
+        "editor_fingerprint": "null",
+        "visible_shell_count": null,
+        "visible_agent_count": null,
+        "native_approval": "present:tool",
+        "structured_decision_marker": null,
+        "activity_hint": "waiting-human",
+        "send_stop_eligible": false
+      }
+    },
+    {
+      "name": "trust-screen",
+      "frame": "trust-screen.frame.txt",
+      "sha256": "346ac8fdfce5d8f360563675e7c23e0368ac1446b53f62460623b998aac7f3f2",
+      "pane_facts": {
+        "pane_id": "%7",
+        "pane_dead": false,
+        "pane_width": 120,
+        "pane_height": 24,
+        "cursor_x": 2,
+        "cursor_y": 23,
+        "cursor_flag": true,
+        "alternate_on": true,
+        "history_size": 108,
+        "history_bytes": 1008,
+        "pane_input_off": false
+      },
+      "expected": {
+        "editor_state": "unknown",
+        "editor_fingerprint": "null",
+        "visible_shell_count": null,
+        "visible_agent_count": null,
+        "native_approval": "present:trust",
+        "structured_decision_marker": null,
+        "activity_hint": "waiting-human",
+        "send_stop_eligible": false
+      }
+    }
+  ]
+}
