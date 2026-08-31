@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Replaced normal relay quiesce/prepare/fence/submit transactions with live observation and one direct
+  PTY transfer for send, answer, key, and graceful stop. Action receipts are compact, legacy relays
+  require an Agent-selected exact-session restart, and uncertain partial writes remain truthfully
+  unknown instead of blocking the task behind recovery metadata.
 - Simplified Runner transport for Issue #9: model catalogs, visible editor/activity evidence, and
   changed observations are reported to the controlling Agent instead of blocking communication.
   Cursor launch no longer materializes project files, and force stop now ends only the exact owned

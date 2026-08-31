@@ -92,15 +92,16 @@ scripts/kaola-tmux.sh kimi-cli key \
 命令为 `preflight`、`start`、`observe`、`status`、`capture`、`send`、`key`、`answer`、`stop`。`observe`
 返回 schema-v2 `raw_current_frame`、`hard_evidence`、进程/approval/decision 提示、relay byte revisions
 和 opaque snapshot。它们只供 agent 参考，不定义平台状态，也不授权或阻断普通 `send`/`stop`。
-snapshot 是可选的证据关联：若传入旧 snapshot，回执报告 action-time snapshot 与
-`observation_changed:true`，仍继续执行 agent 选择的传输。prompt 通过 relay
+snapshot 是可选的证据关联：若传入，紧凑回执只在 `based_on_snapshot` 原样返回，不把它变成
+freshness gate。prompt 通过 relay
 literal/bracketed-paste transport 传输，不经过 shell 求值。
 每次 `start` 都先解析主模型：当前请求显式传入的 `--model/--effort` 优先，否则使用上表的
 Runner default；不会把 CLI 保存的 picker/config 冒充默认值。模型不可读或不匹配只作为 Agent
 的事实输入，不会封锁已有会话的普通通信；Runner 也从不自动发送 `workflow-next`。
 CR、ESC、DEL 与其他终端 C0/C1 控制字会在任何子 PTY 写入前被拒绝；LF/TAB 只有在 CLI 已明确
-启用 bracketed paste 时才允许。跨出原 child PGID 的后代也会按启动指纹纳入 quiesce 与
-force-stop 终态证明。send 回执记录实际传输的 payload fingerprint；语义是否合适、如何处理
+启用 bracketed paste 时才允许。跨出原 child PGID 的后代会在只读 observation 中按启动指纹
+登记，供 force-stop 终态证明使用；它们不会因此暂停或阻断普通发送。send 回执记录实际传输的
+payload fingerprint；语义是否合适、如何处理
 retained draft、approval、login/trust 或 active output，都由读过完整 frame 的 agent 判断，Skill
 不把任何一种观察转成阻止动作的规则。
 
@@ -110,14 +111,14 @@ trust UI 而不得不使用的 raw `tmux send-keys Up Enter` 旁路。
 
 发送后必须再次 `observe`/`capture` 读取真实回复，不能把 Enter 回执当成功。Workflow 启动要从
 `workflow-state.md`、`mission-list.md`、branch/worktree 与 forge claim 验证；收口还要验证 sink、
-Issue/PR、claim cleanup、archive 和零 Runner residue。任何拒绝只有在 child/group、pane input、
-fresh relay 与 lease 都得到证明时才会返回 `restored:true`。
+Issue/PR、claim cleanup、archive 和零 Runner residue。普通通信不建立 lease、恢复事务或
+later-output barrier；无法确认是否发生部分写入时，回执把 `mutation_performed` 报告为 `null`。
 
 `answer --replace-editor` 是经过实测的 whole-editor transport capability；目前只有 Claude Code
 adapter 支持，其余平台会如实报告 `answer-unsupported`，由 agent 选择其他路线。decision ID、
-snapshot 与 later-output barrier 都是关联证据，不是后续动作 hardgate。旧版本的 direct-runtime
-session 可以读取；若当前 transport 不能机械写入，Skill 报告 relay 不可用事实，由 agent 决定迁移
-或另开精确会话。
+snapshot 与已有 later-output barrier 都是关联证据，不是后续动作 hardgate。旧 relay session
+仍可读取；发送时会精确报告 `relay-upgrade-required`，由 agent 在安全边界决定是否只重启该精确
+会话，Runner 不会自动迁移或终止它。
 
 `scripts/grok-tmux.sh` 是 frozen Grok surface 的兼容包装器，等价于
 `scripts/kaola-tmux.sh grok ...`，并保留旧 marker 与 `grok_tui` 状态字段。
@@ -134,7 +135,7 @@ authority receipt 和项目级 commands 只作为证据报告；需要 materiali
 - `templates/agents/`、`templates/references/platform.md.tmpl`：UI 与 adapter facts 模板；
 - `scripts/adapters/`：binary、preflight、启动、TUI/editor/approval 事实和退出差异；
 - `scripts/kaola-tmux.sh`：平台中立、安全默认关闭的会话与 guarded-action 核心；
-- `scripts/kaola-pane-relay.py`、`kaola-relay-client.py`：nested PTY、fence、lease 和原子输入 transport；
+- `scripts/kaola-pane-relay.py`、`kaola-relay-client.py`：nested PTY、直接输入 transport 和旧协议兼容；
 - `scripts/kaola-observation.py`：schema-v2 canonical facts、revision、snapshot 与 receipt；
 - `scripts/kaola-model-policy.py`：只读 catalog 解析、per-run 主模型选择与实际模型证据比较；
 - `skills/`：确定性生成并提交的五个自包含 Skill；

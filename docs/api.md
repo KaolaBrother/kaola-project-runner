@@ -91,20 +91,22 @@ Model evidence under `model` includes `requested_model_source`, `requested_model
 
 ## Agent-directed transport results
 
-Every transport action acquires the relay's mechanical write transaction, captures action-time
-evidence, prepares the requested literal bytes, and reports whether submission happened. `send` and
-`stop` do not require a snapshot. If legacy `--if-snapshot` is supplied, the receipt returns
-`based_on_snapshot`, `action_time_snapshot`, and `observation_changed`; a changed frame does not return
+Every transport action verifies the exact session/repository/pane/relay/child identity and performs one
+direct relay transfer. It does not quiesce the CLI, acquire a lease, fence the terminal, or create a
+later-output barrier. `send` and `stop` do not require a snapshot. If legacy `--if-snapshot` is supplied,
+the compact receipt returns it only as `based_on_snapshot`; a changed frame does not return
 `stale-snapshot`. No generic action branches on editor, activity, approval, decision, worker count,
 coordinate, prose, Git, Workflow, or later-output-barrier interpretations.
 
-`send` returns the prepared payload fingerprint plus `mutation_performed:true` after submit.
+`send` returns the transferred payload fingerprint plus `mutation_performed:true`. If the relay reply
+is lost or a partial write cannot be excluded, `mutation_performed` is `null`, never falsely `false`.
 `key` accepts `up`, `down`, `left`, `right`, `enter`, `escape`, `tab`, `backtab`, or `space`; it sends
 only that key's exact bytes, adds no Enter, and returns `result:key-sent` plus `payload_fingerprint`.
 The controlling Agent owns the choice and meaning of the key.
 `answer --replace-editor` is a capability-specific whole-editor transfer; Claude Code is the only v1
 replacement capability, while other adapters report `answer-unsupported`. Decision IDs, revisions,
-and later-output barriers are evidence for the agent and do not become generic follow-up gates.
+and any legacy later-output barriers are evidence for the agent and do not become generic follow-up
+gates.
 
 Before a follow-up, the controlling agent reads the raw frame and chooses how to handle any retained
 draft, approval, output, login/trust, or decision surface. The Runner does not decide that choice.
@@ -113,8 +115,8 @@ Workflow/Git/forge state.
 
 Input payloads reject CR, ESC, DEL, every other C0/C1 control except LF/TAB, invalid raw control
 bytes, and embedded paste delimiters before any child PTY write. LF/TAB are accepted only when the
-relay attests bracketed-paste mode. Send and Claude answer attest the exact relay-prepared payload
-fingerprint before Enter. Answer also attests clear-editor and rechecks the same decision.
+relay attests bracketed-paste mode. Send and Claude answer attest the exact transferred payload
+fingerprint. Answer also attests clear-editor.
 
 Ordinary and force stop do not require a snapshot. A successful force
 stop reports `result: stopped`, `action: force-stop`, and terminal `final_state`; it cannot target a

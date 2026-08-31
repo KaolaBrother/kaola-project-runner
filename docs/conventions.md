@@ -45,18 +45,18 @@ Model mismatch, unreadable actual-model evidence, login failures, and resume beh
 facts for the controlling Agent. Never turn them into a start/send/observe/stop gate or rewrite the
 Agent-selected model literal.
 
-Do not reintroduce direct `SIGSTOP` of the pane leader: tmux resumes it. Do not replace the tokenized
-DECRQM parser fence with a sleep, double capture, plain DSR, control-mode pause, or tmux command-list
-claim. Legacy-direct sessions are reporting-only until the user explicitly authorizes migration.
+Normal observe/send/answer/key/stop paths must not stop the child, disable pane input, acquire a lease,
+or run the tokenized DECRQM compatibility fence. Legacy relays are reporting-only for mutation until
+the Agent explicitly chooses an exact-session restart.
 
 ## Tests and live evidence
 
 Behavioral changes require baseline-failing acceptance. Offline tests use temporary repositories,
 fake binaries, isolated homes, unique tmux sessions, sanitized frame hashes, and public transport
-commands. Relay changes additionally prove nonce-fence neutrality, child process-group quiescence,
-escaped-descendant containment, lease/disconnect recovery, changed-observation reporting without
-hardgate refusal, payload receipts, terminal-control outcomes, coordinate-invariant evidence,
-truthful restoration, and zero residual sockets/processes.
+commands. Relay changes additionally prove live observation without suspension, direct long-prompt
+transfer, escaped-descendant non-blocking plus exact-stop cleanup, payload receipts, terminal-control
+outcomes, coordinate-invariant evidence, legacy protocol compatibility, and zero residual
+sockets/processes.
 Real runtime tests record version, relay/child/pane identity, snapshot, prompt
 delivery, Workflow start evidence, stop result, and zero unintended residual sessions.
 Authentication-blocked command receipt is not reported as successful Workflow execution.

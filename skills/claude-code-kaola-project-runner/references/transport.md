@@ -1,8 +1,9 @@
 # Managed Claude Code transport
 
 The Runner starts the runtime as the exact child of a managed nested-PTY relay. A pre-relay session
-may still be reported as `legacy-direct`; the Skill reports that available surface and lets the
-controlling agent choose a supported migration or a different exact session.
+may still be reported as `legacy-direct`; a running older relay remains readable but reports
+`relay-upgrade-required` for mutation. The controlling agent chooses whether and when to restart only
+that exact session at a safe boundary.
 
 ## Discover and give the evidence to the agent
 
@@ -35,13 +36,13 @@ scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" < prompt.txt
 ```
 
 The optional legacy `--if-snapshot "$SNAPSHOT_ID"` argument only links the receipt to the earlier
-observation. If the action-time observation differs, the receipt reports the earlier identifier,
-the action-time identifier, and `observation_changed:true`; the Runner still performs the requested
-transport when the relay can mechanically do so.
+observation. The compact receipt echoes it as `based_on_snapshot`; the Runner does not recapture it as
+a freshness decision and still performs the requested transport when the relay can mechanically do so.
 
-The relay reports whether bytes were prepared and submitted and attests the literal payload
-fingerprint. It does not judge the runtime prose or decide whether the prompt was appropriate. Shell
-metacharacters remain literal input rather than shell commands.
+The relay performs one direct literal or bracketed-paste transfer and attests the payload fingerprint.
+It does not stop the runtime child, disable pane input, acquire a lease, run a terminal fence, judge the
+runtime prose, or decide whether the prompt was appropriate. Shell metacharacters remain literal input
+rather than shell commands.
 
 If the frame contains retained text, an approval, a trust/login screen, active output, or a human
 decision, show it to the agent. The agent may still choose to send, use a tested whole-editor replacement,
@@ -87,16 +88,15 @@ scripts/runtime-tmux.sh stop --repo "$REPO" --session "$SESSION"
 decision and snapshot identifiers are optional correlation evidence. An adapter that lacks that
 mechanical capability reports `answer-unsupported`, after which the agent chooses another route.
 
-The transport may report objective non-execution when it cannot mechanically complete the requested
-operation, such as an absent exact session, unavailable relay, failed literal-input preparation,
-disconnect, or unknown submit outcome. It reports those concrete facts without assigning semantic
-runtime state.
+The transport reports objective facts when it cannot mechanically complete the requested operation,
+such as an absent exact session, unavailable or legacy relay, rejected literal input, disconnect, or
+unknown transfer outcome. It reports those concrete facts without assigning semantic runtime state.
 
 Payload and answer bytes are transferred as text, not terminal programs. If the relay cannot represent
 a payload literally (for example unsupported terminal controls or multiline input without bracketed
 paste), it reports that mechanical limitation before a partial write. This is a transport outcome, not
 a runtime-status gate.
 
-On timeout or disconnect, `restored:true` is allowed only when fresh evidence proves the child and
-process group resumed, pane input is restored, the relay responds, and the lease is released. Otherwise
-the receipt includes `restored:false` and the available recovery facts for the agent.
+If a connection is lost before a direct-transfer receipt, partial mutation may be impossible to rule
+out. The receipt then reports `mutation_performed:null`; it does not invent a successful recovery or
+block later Agent judgment behind restoration metadata.
