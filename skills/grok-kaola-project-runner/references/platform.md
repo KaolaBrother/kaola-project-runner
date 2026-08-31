@@ -19,8 +19,8 @@ rewrites runtime configuration.
 
 Model catalogs are probed read-only. A user-provided per-run `--model`/`--effort` overrides the
 Runner default; saved picker/config values never become the Runner default. If the requested model
-cannot be resolved from a readable catalog, no model-unspecified session is created. Once a selected
-session exists, actual-model mismatch or unreadable evidence is reported without blocking ordinary
+is absent from or unknown to the readable catalog, the exact declared literal is still launched and
+the catalog fact is reported. Actual-model mismatch or unreadable evidence never blocks ordinary
 observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch

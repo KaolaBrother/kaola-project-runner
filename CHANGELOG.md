@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Simplified Runner transport for Issue #9: model catalogs, visible editor/activity evidence, and
+  changed observations are reported to the controlling Agent instead of blocking communication.
+  Cursor launch no longer materializes project files, and force stop now ends only the exact owned
+  tmux session without process classification or descendant sweeps.
+- Reduced validation to direct start, send, read, connection, and exact-stop proof; unusually long
+  Runner procedures are treated as overengineering evidence and must be simplified. The default
+  validator no longer runs the historical fake-runtime matrix.
+
 - Added verified per-run main-model selection for all five runtimes: explicit user override first,
   otherwise a declared Runner default, with catalog resolution, literal launch parameters,
   actual-model evidence, resume re-verification, and no global-config mutation or communication gate.
@@ -27,7 +35,7 @@
 - Removed the Cursor `cursor_x=2` input-origin blocker and the equivalent coordinate authority from
   shared placeholder interpretation. Added the real Cursor v2026.08.25 x=0 frame as evidence.
 - Made mutation-refusal recovery receipts truthful: `restored:true` now requires proof of resumed
-  child/process group, restored pane input, a responsive relay, and released lease/mutation lock;
+  child/process group, restored pane input, a responsive relay, and released lease;
   otherwise the receipt reports `restored:false` with explicit evidence.
 - Added schema-v2 observations and a managed nested-PTY relay that record independent
   editor/approval/visible-work facts, byte/input/output/resize revisions, recovery evidence, and

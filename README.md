@@ -111,7 +111,7 @@ trust UI 而不得不使用的 raw `tmux send-keys Up Enter` 旁路。
 发送后必须再次 `observe`/`capture` 读取真实回复，不能把 Enter 回执当成功。Workflow 启动要从
 `workflow-state.md`、`mission-list.md`、branch/worktree 与 forge claim 验证；收口还要验证 sink、
 Issue/PR、claim cleanup、archive 和零 Runner residue。任何拒绝只有在 child/group、pane input、
-fresh relay、lease 与 mutation lock 都得到证明时才会返回 `restored:true`。
+fresh relay 与 lease 都得到证明时才会返回 `restored:true`。
 
 `answer --replace-editor` 是经过实测的 whole-editor transport capability；目前只有 Claude Code
 adapter 支持，其余平台会如实报告 `answer-unsupported`，由 agent 选择其他路线。decision ID、
@@ -149,9 +149,10 @@ golden bytes 保持冻结；active Skill、manifest、adapter 或 renderer 修�
 ./scripts/validate.sh
 ```
 
-离线测试使用临时 Git repository、fake CLI、隔离 home 和独立 tmux session。真实验收按五个平台
-分别证明 start/read/send/read-back/stop；原生选择界面还要证明 Agent-selected `key`。Claude Code
-当前无有效账号，只把提示词传输与登录错误回读作为通过证据，不声称认证后的模型执行成功。
+默认离线验证只检查渲染一致性、Skill 格式、shell 语法、冻结 Grok bytes 和最小通信合同；不再
+运行耗时的 fake-runtime 历史矩阵。真实验收按五个平台分别证明 start/read/send/read-back/stop；
+原生选择界面还要证明 Agent-selected `key`。Claude Code 当前无有效账号，只把提示词传输与登录
+错误回读作为通过证据，不声称认证后的模型执行成功。
 
 详细边界见 [架构](docs/architecture.md)、[命令契约](docs/api.md) 和
 [开发约定](docs/conventions.md)。五个平台的真实 tmux 验收、Claude 认证边界和零会话残留见
@@ -160,3 +161,5 @@ Issue #7 的无 hardgate 交互验收和五平台权限边界见
 [2026-08-30 evidence-first live smoke](docs/live-smoke-evidence-first-2026-08-30.md)。
 Issue #8 的逐 runtime 模型选择、`workflow-next` 通信和精确会话关闭证据见
 [2026-08-30 model-policy live smoke](docs/live-smoke-model-policy-2026-08-30.md)。
+Issue #9 的最小五平台通信实跑见
+[2026-08-31 minimal live smoke](docs/live-smoke-issue-9-2026-08-31.md)。

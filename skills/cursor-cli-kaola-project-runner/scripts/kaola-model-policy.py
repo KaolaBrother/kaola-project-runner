@@ -100,32 +100,28 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         if probe.get("returncode") == 0:
             available.update(models_from_output(str(probe.get("output", ""))))
 
+    # The catalog is an evidence source, not a model picker.  Keep the exact
+    # candidate supplied by the Agent (or by the adapter's declared default) as
+    # the launch identifier even when a readable catalog omits it.  In
+    # particular, never rewrite a literal through a display-name match: doing
+    # so would silently select a different runtime model.
     candidate = args.candidate_id
-    resolved = candidate if candidate in available else None
-    if resolved is None:
-        folded = args.requested_name.casefold()
-        matches = [model_id for model_id, name in available.items() if name.casefold() == folded]
-        if len(matches) == 1:
-            resolved = matches[0]
+    resolved = candidate
 
-    # A partial help-only surface can establish documented Claude aliases. If a
-    # legacy/fake runtime has no readable catalog at all, retain the declared
-    # exact candidate as unknown catalog evidence so communication remains usable.
     catalog_readable = bool(available)
-    if resolved is None and not catalog_readable:
-        resolved = candidate
-        resolution_state = "catalog-unknown-declared-candidate"
-    elif resolved is None:
-        resolution_state = "unavailable"
-    else:
+    if candidate in available:
         resolution_state = "resolved"
+    elif catalog_readable:
+        resolution_state = "catalog-missing-declared-candidate"
+    else:
+        resolution_state = "catalog-unknown-declared-candidate"
 
     parameters: dict[str, Any] = {}
     if args.effort:
         parameters["effort"] = args.effort
     if args.fast != "unknown":
         parameters["fast"] = args.fast == "true"
-    display = available.get(resolved or "", args.requested_name if resolved else "")
+    display = available.get(resolved, args.requested_name)
     option_text = "\n".join(str(item.get("output", "")) for item in probes)
     supported_options = sorted(
         option for option in ("--effort", "--reasoning-effort", "--variant")
@@ -154,8 +150,8 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         "resolved_parameters": parameters,
         "actual_runtime_model_id": None,
         "actual_parameters": None,
-        "model_verified": "unknown" if resolved else False,
-        "model_mismatch_reason": "actual-model-evidence-not-yet-read" if resolved else "requested-model-unavailable",
+        "model_verified": "unknown",
+        "model_mismatch_reason": "actual-model-evidence-not-yet-read",
         "model_evidence_provenance": provenance,
     }
 

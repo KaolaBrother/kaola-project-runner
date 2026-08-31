@@ -91,7 +91,7 @@ atomic boundary. The managed relay remains running as pane leader and owns the C
 
 The relay lease attempts to restore the child and input after refusal, disconnect, timeout, or caught
 failure. A receipt reports `restored:true` only after fresh authenticated relay, process-group,
-pane-input, lease and mutation-lock evidence proves that postcondition.
+pane-input, and lease evidence proves that postcondition.
 The transport `pane_revision` and `snapshot_id` summarize visible and deterministic facts for
 correlation. Output, input, editor, process, approval, decision, Git, and Workflow changes may advance
 them, but no such change independently denies an agent-directed action. Later-output barriers remain
@@ -101,8 +101,9 @@ The fence consumes exactly one nonce reply and also checks a separately queued n
 Any other outer-pane input appearing inside the fence-to-submit window aborts or is discarded without
 replay. The relay attests the exact requested payload fingerprint. Payload validation rejects terminal
 controls before PTY mutation; LF/TAB require attested bracketed paste. Placeholder and cursor
-observations remain diagnostics for the agent rather than mutation gates. Force-stop terminal proof includes
-all exact tracked descendants, not only the original child PGID.
+observations remain diagnostics for the agent rather than mutation gates. Force stop proves the exact
+owned tmux identity, ends only that session, and reports any remaining relay/socket evidence without
+classifying or sweeping processes.
 
 ## Failure model
 
@@ -111,10 +112,6 @@ Kaola Workflow, guesses meaning from a process name, evaluates prompt text in a 
 configuration, or treats a supervision heartbeat as an execution loop. An absent session, unavailable
 relay, disconnect, unproved restoration, or unknown submit outcome is reported as objective
 non-execution; a stale snapshot is not. Runtime-semantic uncertainty is given to the controlling agent
-rather than converted into a Runner status gate. Cursor's project catalog is
-the narrow exception to ambient-write avoidance: an explicit new Cursor run uses the installed
-Kaola authority's receipt-backed `--ensure-target` transaction before tmux creation, and refuses
-unmanaged collisions. The materializer helper itself must be present in the authority receipt with
-its exact path, SHA-256, and mode before the Runner may execute its doctor or materialization entry
-point. Successful CLI prose, Git cleanliness, or PR mergeability alone never proves a terminal
-Kaola run.
+rather than converted into a Runner status gate. Cursor launch does not materialize or rewrite project
+files; any installed authority or command surface is evidence for the Agent. Successful CLI prose,
+Git cleanliness, or PR mergeability alone never proves a terminal Kaola run.

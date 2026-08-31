@@ -98,5 +98,5 @@ paste), it reports that mechanical limitation before a partial write. This is a 
 a runtime-status gate.
 
 On timeout or disconnect, `restored:true` is allowed only when fresh evidence proves the child and
-process group resumed, pane input is restored, the relay responds, and the lease and mutation lock are
-released. Otherwise the receipt includes `restored:false` and the available recovery facts for the agent.
+process group resumed, pane input is restored, the relay responds, and the lease is released. Otherwise
+the receipt includes `restored:false` and the available recovery facts for the agent.

@@ -126,13 +126,6 @@ resolve_model_policy() {
   [[ -n "$RESOLVED_MODEL_ID" ]]
 }
 
-emit_model_unavailable() {
-  POLICY_JSON="$MODEL_POLICY_JSON" RESULT=model-unavailable PLATFORM="$platform" SESSION="$session" REPO="$repo" "$PYTHON_BIN" - <<'PY'
-import json, os
-d=json.loads(os.environ["POLICY_JSON"]); d.update(schema_version=2,result=os.environ["RESULT"],platform=os.environ["PLATFORM"],session=os.environ["SESSION"],repo=os.environ["REPO"],mutation_performed=False); print(json.dumps(d,ensure_ascii=False,sort_keys=True))
-PY
-}
-
 load_session_identity() {
   STATE_PRESENT=false STATE_OWNED=false STATE_PLATFORM_MATCH=false STATE_REPO_MATCH=false STATE_TUI=false
   STATE_LEGACY_OWNERSHIP=false
@@ -227,9 +220,14 @@ observe_managed() {
 
 emit_status() { local observation status; observation="$(observe_managed)"; status="$(printf '%s' "$observation" | "$PYTHON_BIN" "$OBSERVATION_HELPER" status-view)"; load_session_identity; STATUS_JSON="$status" STATUS_RESULT="$1" STATUS_LEGACY="$STATE_LEGACY_OWNERSHIP" "$PYTHON_BIN" -c 'import json,os; d=json.loads(os.environ["STATUS_JSON"]); d["result"]=os.environ["STATUS_RESULT"]; d.update({"legacy_ownership":os.environ["STATUS_LEGACY"]=="true"} if d.get("platform")=="grok" else {}); print(json.dumps(d,ensure_ascii=False,sort_keys=True))'; }
 RESTORED=false
-RESTORATION_EVIDENCE='{"child_resumed":false,"pane_input_restored":false,"relay_responsive":false,"process_group_running":false,"lease_released":false,"mutation_lock_released":false}'
+RESTORATION_EVIDENCE='{"child_resumed":false,"pane_input_restored":false,"relay_responsive":false,"process_group_running":false,"lease_released":false}'
 emit_refusal() { emit_json "n:schema_version:2" "s:result:$1" "s:action:${2:-$command_name}" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:false" "b:restored:$RESTORED" "j:restoration_evidence:$RESTORATION_EVIDENCE"; }
 emit_prepared_refusal() { emit_json "n:schema_version:2" "s:result:refused" "s:reason:$1" "s:action:$2" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:false" "b:restored:$RESTORED" "j:restoration_evidence:$RESTORATION_EVIDENCE"; }
+emit_existing_session_not_reusable() {
+  local relay_endpoint_present=false
+  [[ -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]] && relay_endpoint_present=true
+  emit_json "n:schema_version:2" "s:result:existing-session-not-reusable" "s:action:start" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "b:mutation_performed:false" "b:owned:$STATE_OWNED" "b:platform_match:$STATE_PLATFORM_MATCH" "b:repo_match:$STATE_REPO_MATCH" "n:pane_count:$STATE_PANE_COUNT" "b:relay_process_match:$STATE_RELAY_PROCESS_MATCH" "b:relay_endpoint_present:$relay_endpoint_present"
+}
 load_payload() { if [[ "$text_given" == true ]]; then PAYLOAD="$text_value"; else [[ ! -t 0 ]] || die "$command_name needs --text or stdin"; PAYLOAD="$(</dev/stdin)"; fi; [[ -n "$PAYLOAD" ]] || die "prompt must not be empty"; }
 validate_payload_controls() {
   PAYLOAD_VALUE="$PAYLOAD" "$PYTHON_BIN" - <<'PY'
@@ -270,77 +268,15 @@ if path.is_symlink() or not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.get
 path.unlink()
 PY
 }
-tracked_descendants_gone() {
-  TRACKED_DESCENDANTS_JSON="$1" "$PYTHON_BIN" - <<'PY'
-import hashlib
-import json
-import os
-import subprocess
-
-for tracked in json.loads(os.environ["TRACKED_DESCENDANTS_JSON"]):
-    pid = int(tracked["pid"])
-    result = subprocess.run(
-        ["ps", "-ww", "-p", str(pid), "-o", "lstart=", "-o", "command="],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        continue
-    # Read the two fields independently so the fingerprint exactly matches
-    # the relay's process_fingerprint().
-    started = subprocess.run(
-        ["ps", "-p", str(pid), "-o", "lstart="], capture_output=True, text=True
-    ).stdout.strip()
-    command = subprocess.run(
-        ["ps", "-ww", "-p", str(pid), "-o", "command="], capture_output=True, text=True
-    ).stdout.strip()
-    material = f"{pid}\0{started}\0{command}".encode()
-    fingerprint = "sha256:" + hashlib.sha256(material).hexdigest()
-    if fingerprint == tracked["start_fingerprint"]:
-        raise SystemExit(1)
-PY
-}
-prepared_surface_result() { OBS_JSON="$1" EXPECTED_FP="${2:-}" ALLOW_EMPTY="${3:-false}" "$PYTHON_BIN" - <<'PY'
-import hashlib, json, os
-d=json.loads(os.environ["OBS_JSON"]); h=d["hard_evidence"]
-expected=os.environ.get("EXPECTED_FP", "")
-empty_fp="sha256:" + hashlib.sha256(b"").hexdigest()
-editor_fingerprint=d.get("editor_fingerprint")
-tests=[
- (not d["relay"]["managed"], "prepared-relay-missing"),
- (not h["owned"] or not h["platform_match"] or not h["repo_match"] or h["pane_count"] != 1, "prepared-identity-changed"),
- (not h["relay_process_match"] or not h["process_match"], "prepared-runtime-changed"),
- (bool(expected) and editor_fingerprint is not None and editor_fingerprint != empty_fp and editor_fingerprint != expected, "prepared-payload-not-confirmed"),
-]
-print(next((name for failed,name in tests if failed), "ok"))
-PY
-}
-prepared_answer_surface_result() { OBS_JSON="$1" EXPECTED_DECISION="$2" EXPECTED_FP="$3" "$PYTHON_BIN" - <<'PY'
-import hashlib, json, os
-d=json.loads(os.environ["OBS_JSON"]); h=d["hard_evidence"]
-empty_fp="sha256:" + hashlib.sha256(b"").hexdigest()
-editor_fingerprint=d.get("editor_fingerprint")
-tests=[
- (not d["relay"]["managed"], "prepared-relay-missing"),
- (not h["owned"] or not h["platform_match"] or not h["repo_match"] or h["pane_count"] != 1, "prepared-identity-changed"),
- (not h["relay_process_match"] or not h["process_match"], "prepared-runtime-changed"),
- (editor_fingerprint is not None and editor_fingerprint != empty_fp and editor_fingerprint != os.environ["EXPECTED_FP"], "prepared-payload-not-confirmed"),
-]
-print(next((name for failed,name in tests if failed), "ok"))
-PY
-}
-
-MUTATION_LOCK="kaola-project-runner:${platform}:${session}" MUTATION_LOCKED=false TX_LEASE="" TX_CURRENT_SNAPSHOT="" TX_SNAPSHOT_CHANGED=false
-unlock_mutation() { if [[ "$MUTATION_LOCKED" == true ]]; then "$TMUX_BIN" wait-for -U "$MUTATION_LOCK" 2>/dev/null || true; MUTATION_LOCKED=false; fi; }
-trap 'close_relay_channel; unlock_mutation' EXIT HUP INT TERM
-lock_mutation() { "$TMUX_BIN" wait-for -L "$MUTATION_LOCK"; MUTATION_LOCKED=true; }
+TX_LEASE="" TX_CURRENT_SNAPSHOT="" TX_SNAPSHOT_CHANGED=false
+trap 'close_relay_channel' EXIT HUP INT TERM
 renew_transaction() {
   relay_line "{\"operation\":\"renew\",\"lease_id\":\"$TX_LEASE\"}" || { REFUSAL=lease-renewal-failed; return 1; }
   [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == renewed ]] || { REFUSAL=lease-renewal-failed; return 1; }
 }
 prepare_transaction() {
   local bootstrap relay_pid state_reply barrier_json preliminary pane_revision
-  lock_mutation; load_session_identity; [[ "$STATE_PRESENT" == true ]] || { REFUSAL=absent; return 1; }; [[ "$STATE_OWNED" == true ]] || { REFUSAL=unowned; return 1; }; [[ "$STATE_PLATFORM_MATCH" == true ]] || { REFUSAL=platform-mismatch; return 1; }; [[ "$STATE_PANE_COUNT" -eq 1 ]] || { REFUSAL=unexpected-pane-count; return 1; }; [[ "$STATE_REPO_MATCH" == true ]] || { REFUSAL=repo-mismatch; return 1; }; [[ -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]] || { REFUSAL=relay-required; return 1; }
+  load_session_identity; [[ "$STATE_PRESENT" == true ]] || { REFUSAL=absent; return 1; }; [[ "$STATE_OWNED" == true ]] || { REFUSAL=unowned; return 1; }; [[ "$STATE_PLATFORM_MATCH" == true ]] || { REFUSAL=platform-mismatch; return 1; }; [[ "$STATE_PANE_COUNT" -eq 1 ]] || { REFUSAL=unexpected-pane-count; return 1; }; [[ "$STATE_REPO_MATCH" == true ]] || { REFUSAL=repo-mismatch; return 1; }; [[ -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]] || { REFUSAL=relay-required; return 1; }
   bootstrap="$(bootstrap_relay)" || { REFUSAL=relay-attestation-failed; return 1; }; TX_CHILD_FP="$(printf '%s' "$bootstrap" | json_value 'd["child_start_fingerprint"]')"; relay_pid="$(printf '%s' "$bootstrap" | json_value 'd["pid"]')"; [[ "$relay_pid" == "$STATE_PANE_PID" ]] || { REFUSAL=relay-attestation-failed; return 1; }
   open_relay_channel "$STATE_RELAY_SOCKET" "$STATE_RELAY_EPOCH" "$TX_CHILD_FP" "$relay_pid"; relay_line '{"operation":"quiesce"}' || { REFUSAL=quiesce-failed; return 1; }; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == quiesced ]] || { REFUSAL=quiesce-failed; return 1; }; TX_LEASE="$(printf '%s' "$RELAY_REPLY" | json_value 'd["lease_id"]')"
   relay_line '{"operation":"state"}'; state_reply="$RELAY_REPLY"; TX_RELAY="$(printf '%s' "$state_reply" | json_value 'd["relay"]')"; barrier_json="$(printf '%s' "$state_reply" | json_value 'd.get("barrier")')"; [[ -n "$barrier_json" ]] || barrier_json=null; renew_transaction || return 1; preliminary="$(build_sample "$TX_RELAY" "$barrier_json")"; renew_transaction || return 1; pane_revision="$(printf '%s' "$preliminary" | json_value 'd["pane_revision"]')"; current_frame_revision="$(printf '%s' "$preliminary" | frame_revision)"; relay_line "{\"operation\":\"state\",\"pane_revision\":\"$pane_revision\",\"frame_revision\":\"$current_frame_revision\"}"; state_reply="$RELAY_REPLY"; TX_RELAY="$(printf '%s' "$state_reply" | json_value 'd["relay"]')"; barrier_json="$(printf '%s' "$state_reply" | json_value 'd.get("barrier")')"; [[ -n "$barrier_json" ]] || barrier_json=null; renew_transaction || return 1; TX_OBSERVATION="$(build_sample "$TX_RELAY" "$barrier_json")"; renew_transaction || return 1; TX_CURRENT_SNAPSHOT="$(printf '%s' "$TX_OBSERVATION" | json_value 'd.get("snapshot_id")')"; TX_SNAPSHOT_CHANGED=false; [[ -z "$if_snapshot" || "$TX_CURRENT_SNAPSHOT" == "$if_snapshot" ]] || TX_SNAPSHOT_CHANGED=true
@@ -348,7 +284,7 @@ prepare_transaction() {
 restore_transaction() {
   local resume_proved=false bootstrap="" child_fingerprint="" relay_pid="" state_reply=""
   RESTORED=false
-  RESTORATION_EVIDENCE='{"child_resumed":false,"pane_input_restored":false,"relay_responsive":false,"process_group_running":false,"lease_released":false,"mutation_lock_released":false}'
+  RESTORATION_EVIDENCE='{"child_resumed":false,"pane_input_restored":false,"relay_responsive":false,"process_group_running":false,"lease_released":false}'
   if [[ -n "$TX_LEASE" ]]; then
     if relay_line "{\"operation\":\"resume\",\"lease_id\":\"$TX_LEASE\"}" 2>/dev/null && \
        [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")')" == resumed ]]; then
@@ -358,7 +294,6 @@ restore_transaction() {
     resume_proved=true
   fi
   close_relay_channel
-  unlock_mutation
   TX_LEASE=""
   if [[ "$resume_proved" == true ]]; then
     load_session_identity
@@ -390,9 +325,68 @@ raise SystemExit(0 if ok else 1)
 PY
     then
       RESTORED=true
-      RESTORATION_EVIDENCE='{"child_resumed":true,"pane_input_restored":true,"relay_responsive":true,"process_group_running":true,"lease_released":true,"mutation_lock_released":true}'
+      RESTORATION_EVIDENCE='{"child_resumed":true,"pane_input_restored":true,"relay_responsive":true,"process_group_running":true,"lease_released":true}'
     fi
   fi
+}
+
+# Force stop is intentionally small: prove the exact owned tmux identity,
+# end that one session, and report what remains. The relay owns its child
+# lifecycle; the runner does not classify or sweep unrelated processes.
+force_stop_exact() {
+  local relay_pid terminal_socket terminal_epoch session_present relay_running socket_present result
+  load_session_identity
+  if [[ "$STATE_PRESENT" != true ]]; then emit_status already-stopped; return 0; fi
+  if [[ "$STATE_OWNED" != true ]]; then emit_refusal unowned force-stop; return 1; fi
+  if [[ "$STATE_PLATFORM_MATCH" != true ]]; then emit_refusal platform-mismatch force-stop; return 1; fi
+  if [[ "$STATE_PANE_COUNT" -ne 1 ]]; then emit_refusal unexpected-pane-count force-stop; return 1; fi
+  if [[ "$STATE_REPO_MATCH" != true ]]; then emit_refusal repo-mismatch force-stop; return 1; fi
+  if [[ "$STATE_RELAY_PROCESS_MATCH" != true || ! "$STATE_PANE_PID" =~ ^[0-9]+$ ]]; then
+    emit_refusal relay-attestation-failed force-stop
+    return 1
+  fi
+
+  relay_pid="$STATE_PANE_PID"
+  terminal_socket="$STATE_RELAY_SOCKET"
+  terminal_epoch="$STATE_RELAY_EPOCH"
+  "$TMUX_BIN" kill-session -t "$TMUX_SESSION_TARGET" >/dev/null 2>&1 || true
+
+  for _ in {1..20}; do
+    if ! session_exists; then
+      if ! "$PS_BIN" -p "$relay_pid" -o pid= 2>/dev/null | awk 'NF{found=1} END{exit !found}'; then
+        break
+      fi
+    fi
+    sleep 0.05
+  done
+
+  session_present=false
+  session_exists && session_present=true
+  relay_running=false
+  "$PS_BIN" -p "$relay_pid" -o pid= 2>/dev/null | awk 'NF{found=1} END{exit !found}' && relay_running=true
+
+  if [[ "$session_present" == false && "$relay_running" == false && -n "$terminal_socket" && -n "$terminal_epoch" ]]; then
+    cleanup_terminal_socket "$terminal_socket" "$terminal_epoch" >/dev/null 2>&1 || true
+  fi
+  socket_present=false
+  [[ -n "$terminal_socket" && -e "$terminal_socket" ]] && socket_present=true
+
+  result=stopped
+  if [[ "$session_present" == true || "$relay_running" == true || "$socket_present" == true ]]; then
+    result=termination-uncertain
+  fi
+  emit_json \
+    "n:schema_version:2" \
+    "s:result:$result" \
+    "s:action:force-stop" \
+    "s:platform:$platform" \
+    "s:session:$session" \
+    "s:repo:$repo" \
+    "s:based_on_snapshot:$if_snapshot" \
+    "b:mutation_performed:true" \
+    "j:final_state:{\"session_present\":$session_present,\"relay_running\":$relay_running,\"child_running\":null,\"child_group_running\":null,\"socket_present\":$socket_present,\"pane_input_off\":null}" \
+    "s:escaped_descendants:unknown"
+  [[ "$result" == stopped ]]
 }
 
 case "$command_name" in
@@ -410,8 +404,27 @@ PY
   status) load_session_identity; if [[ "$STATE_PRESENT" == true ]]; then emit_status present; else emit_status absent; fi ;;
   capture) [[ "$lines" =~ ^[1-9][0-9]*$ && "$lines" -le 5000 ]] || die "--lines must be 1..5000"; load_session_identity; [[ "$STATE_PRESENT" == true && "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && "$STATE_PANE_COUNT" -eq 1 && -n "$STATE_PANE_ID" ]] || { emit_refusal identity-mismatch capture; exit 1; }; "$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S "-$lines" ;;
   start)
-    [[ -z "$resume_id" || "$continue_mode" == false ]] || die "--resume and --continue are mutually exclusive"; adapter_preflight; resolve_model_policy || { emit_model_unavailable; exit 1; }; load_session_identity
-    if [[ "$STATE_PRESENT" == true ]]; then if [[ "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && -n "$STATE_RELAY_SOCKET" ]]; then emit_status already-running; exit 0; fi; emit_status existing-session-not-reusable; exit 1; fi
+    [[ -z "$resume_id" || "$continue_mode" == false ]] || die "--resume and --continue are mutually exclusive"
+    adapter_preflight
+    # Catalog probes are evidence only. The adapter always receives the
+    # declared exact model literal from resolve_model_policy.
+    resolve_model_policy || true
+    load_session_identity
+    if [[ "$STATE_PRESENT" == true ]]; then
+      if [[ "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && "$STATE_PANE_COUNT" -eq 1 && "$STATE_RELAY_PROCESS_MATCH" == true && -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]]; then
+        existing_bootstrap="$(bootstrap_relay 2>/dev/null || true)"
+        existing_relay_pid="$(printf '%s' "$existing_bootstrap" | json_value 'd.get("pid")' 2>/dev/null || true)"
+        existing_child_fp="$(printf '%s' "$existing_bootstrap" | json_value 'd.get("child_start_fingerprint")' 2>/dev/null || true)"
+        if [[ "$existing_relay_pid" == "$STATE_PANE_PID" && "$existing_child_fp" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          emit_status already-running
+          exit 0
+        fi
+      fi
+      # A present endpoint that cannot complete same-epoch bootstrap is not a
+      # reusable live session. Leave it intact; explicit --force owns recovery.
+      emit_existing_session_not_reusable
+      exit 1
+    fi
     adapter_prepare_model_environment
     session_env_args=(); while IFS='=' read -r name value; do case "$name" in CLAUDE_*|GROK_*|OPENCODE_*|KIMI_*|CURSOR_*|FAKE_*) session_env_args+=(-e "$name=$value") ;; esac; done < <(env)
     set +u
@@ -431,10 +444,10 @@ PY
     if ! prepare_transaction; then restore_transaction; emit_refusal "$REFUSAL" answer; exit 1; fi
     if payload_needs_bracketed_paste && [[ "$(printf '%s' "$TX_RELAY" | json_value 'd.get("bracketed_paste",False)')" != true ]]; then restore_transaction; emit_prepared_refusal bracketed-paste-required answer; exit 1; fi
     editor_fp="$(printf '%s' "$TX_OBSERVATION" | json_value 'd["editor_fingerprint"]')"; answer_fp="$(fingerprint_payload)"; hex="$(payload_hex)"; relay_line "{\"operation\":\"prepare-input\",\"lease_id\":\"$TX_LEASE\",\"clear_editor\":true,\"payload_hex\":\"$hex\"}"; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == prepared ]] || { debug_relay_reply; restore_transaction; emit_refusal action-prepare-uncertain answer; exit 1; }
-    prepared_relay="$(printf '%s' "$RELAY_REPLY" | json_value 'd["relay"]')"; prepared_payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_payload_fingerprint")')"; prepared_clear="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_clear_editor",False)')"; [[ "$prepared_payload_fp" == "$answer_fp" && "$prepared_clear" == true ]] || { restore_transaction; emit_refusal prepared-payload-attestation-mismatch answer; exit 1; }; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" answer; exit 1; }; prepared_observation="$(build_sample "$prepared_relay" null)"; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" answer; exit 1; }; prepared_revision="$(printf '%s' "$prepared_observation" | json_value 'd["pane_revision"]')"; prepared_frame_revision="$(printf '%s' "$prepared_observation" | frame_revision)"; prepared_guard="$(prepared_answer_surface_result "$prepared_observation" "$decision_id" "$answer_fp")"; [[ "$prepared_guard" == ok ]] || { restore_transaction; emit_prepared_refusal "$prepared_guard" answer; exit 1; }; submitted_offset="$(printf '%s' "$prepared_relay" | json_value 'd["child_output_offset"]')"; output_digest="$(printf '%s' "$prepared_relay" | json_value 'd["child_output_digest"]')"; receipt_fields="$(emit_json "n:schema_version:2" "s:action:answer" "s:platform:$platform" "s:session:$session" "s:repo:$PUBLIC_REPO" "s:decision_id:$decision_id" "s:replaced_editor_fingerprint:$editor_fp" "s:answer_fingerprint:$answer_fp" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "s:relay_epoch:$STATE_RELAY_EPOCH" "s:child_start_fingerprint:$TX_CHILD_FP" "s:prepared_pane_revision:$prepared_revision" "n:submitted_output_offset:$submitted_offset" "s:child_output_digest:$output_digest")"; receipt="$(printf '%s' "$receipt_fields" | "$PYTHON_BIN" "$OBSERVATION_HELPER" receipt)"; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" answer; exit 1; }; relay_line "{\"operation\":\"submit\",\"lease_id\":\"$TX_LEASE\",\"receipt_id\":\"$receipt\",\"prepared_pane_revision\":\"$prepared_revision\",\"prepared_frame_revision\":\"$prepared_frame_revision\"}"; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == submitted ]] || { close_relay_channel; unlock_mutation; emit_refusal action-submit-uncertain answer; exit 1; }; close_relay_channel; unlock_mutation; emit_json "n:schema_version:2" "s:result:answer-sent" "s:action:answer" "s:platform:$platform" "s:session:$session" "s:repo:$PUBLIC_REPO" "s:decision_id:$decision_id" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "s:later_output_barrier:pending" "s:receipt_id:$receipt" "s:prepared_pane_revision:$prepared_revision" "s:relay_epoch:$STATE_RELAY_EPOCH" "s:child_start_fingerprint:$TX_CHILD_FP" "s:replaced_editor_fingerprint:$editor_fp" "s:answer_fingerprint:$answer_fp"
+    prepared_relay="$(printf '%s' "$RELAY_REPLY" | json_value 'd["relay"]')"; prepared_payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_payload_fingerprint")')"; prepared_clear="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_clear_editor",False)')"; [[ "$prepared_payload_fp" == "$answer_fp" && "$prepared_clear" == true ]] || { restore_transaction; emit_refusal prepared-payload-attestation-mismatch answer; exit 1; }; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" answer; exit 1; }; prepared_observation="$(build_sample "$prepared_relay" null)"; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" answer; exit 1; }; prepared_revision="$(printf '%s' "$prepared_observation" | json_value 'd["pane_revision"]')"; prepared_frame_revision="$(printf '%s' "$prepared_observation" | frame_revision)"; submitted_offset="$(printf '%s' "$prepared_relay" | json_value 'd["child_output_offset"]')"; output_digest="$(printf '%s' "$prepared_relay" | json_value 'd["child_output_digest"]')"; receipt_fields="$(emit_json "n:schema_version:2" "s:action:answer" "s:platform:$platform" "s:session:$session" "s:repo:$PUBLIC_REPO" "s:decision_id:$decision_id" "s:replaced_editor_fingerprint:$editor_fp" "s:answer_fingerprint:$answer_fp" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "s:relay_epoch:$STATE_RELAY_EPOCH" "s:child_start_fingerprint:$TX_CHILD_FP" "s:prepared_pane_revision:$prepared_revision" "n:submitted_output_offset:$submitted_offset" "s:child_output_digest:$output_digest")"; receipt="$(printf '%s' "$receipt_fields" | "$PYTHON_BIN" "$OBSERVATION_HELPER" receipt)"; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" answer; exit 1; }; relay_line "{\"operation\":\"submit\",\"lease_id\":\"$TX_LEASE\",\"receipt_id\":\"$receipt\",\"prepared_pane_revision\":\"$prepared_revision\",\"prepared_frame_revision\":\"$prepared_frame_revision\"}"; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == submitted ]] || { close_relay_channel; emit_refusal action-submit-uncertain answer; exit 1; }; close_relay_channel; emit_json "n:schema_version:2" "s:result:answer-sent" "s:action:answer" "s:platform:$platform" "s:session:$session" "s:repo:$PUBLIC_REPO" "s:decision_id:$decision_id" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "s:later_output_barrier:pending" "s:receipt_id:$receipt" "s:prepared_pane_revision:$prepared_revision" "s:relay_epoch:$STATE_RELAY_EPOCH" "s:child_start_fingerprint:$TX_CHILD_FP" "s:replaced_editor_fingerprint:$editor_fp" "s:answer_fingerprint:$answer_fp"
     ;;
   send)
-    load_payload; validate_payload_controls || { emit_prepared_refusal unsafe-terminal-control send; exit 1; }; if ! prepare_transaction; then restore_transaction; emit_refusal "$REFUSAL" send; exit 1; fi; if payload_needs_bracketed_paste && [[ "$(printf '%s' "$TX_RELAY" | json_value 'd.get("bracketed_paste",False)')" != true ]]; then restore_transaction; emit_prepared_refusal bracketed-paste-required send; exit 1; fi; send_fp="$(fingerprint_payload)"; hex="$(payload_hex)"; relay_line "{\"operation\":\"prepare-input\",\"lease_id\":\"$TX_LEASE\",\"payload_hex\":\"$hex\"}"; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == prepared ]] || { debug_relay_reply; restore_transaction; emit_refusal action-prepare-uncertain send; exit 1; }; prepared_relay="$(printf '%s' "$RELAY_REPLY" | json_value 'd["relay"]')"; prepared_payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_payload_fingerprint")')"; prepared_clear="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_clear_editor",False)')"; [[ "$prepared_payload_fp" == "$send_fp" ]] || { restore_transaction; emit_refusal prepared-payload-attestation-mismatch send; exit 1; }; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" send; exit 1; }; prepared_observation="$(build_sample "$prepared_relay" null)"; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" send; exit 1; }; prepared_guard="$(prepared_surface_result "$prepared_observation" "$send_fp")"; [[ "$prepared_guard" == ok ]] || { restore_transaction; emit_prepared_refusal "$prepared_guard" send; exit 1; }; relay_line "{\"operation\":\"submit\",\"lease_id\":\"$TX_LEASE\"}" ; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == submitted ]] || { debug_relay_reply; close_relay_channel; unlock_mutation; emit_refusal action-submit-uncertain send; exit 1; }; close_relay_channel; unlock_mutation; TX_LEASE=""; emit_json "n:schema_version:2" "s:result:sent" "s:action:send" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "b:mutation_performed:true" "s:prepared_payload_fingerprint:$prepared_payload_fp" "b:prepared_clear_editor:$prepared_clear"
+    load_payload; validate_payload_controls || { emit_prepared_refusal unsafe-terminal-control send; exit 1; }; if ! prepare_transaction; then restore_transaction; emit_refusal "$REFUSAL" send; exit 1; fi; if payload_needs_bracketed_paste && [[ "$(printf '%s' "$TX_RELAY" | json_value 'd.get("bracketed_paste",False)')" != true ]]; then restore_transaction; emit_prepared_refusal bracketed-paste-required send; exit 1; fi; send_fp="$(fingerprint_payload)"; hex="$(payload_hex)"; relay_line "{\"operation\":\"prepare-input\",\"lease_id\":\"$TX_LEASE\",\"payload_hex\":\"$hex\"}"; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == prepared ]] || { debug_relay_reply; restore_transaction; emit_refusal action-prepare-uncertain send; exit 1; }; prepared_relay="$(printf '%s' "$RELAY_REPLY" | json_value 'd["relay"]')"; prepared_payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_payload_fingerprint")')"; prepared_clear="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_clear_editor",False)')"; [[ "$prepared_payload_fp" == "$send_fp" ]] || { restore_transaction; emit_refusal prepared-payload-attestation-mismatch send; exit 1; }; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" send; exit 1; }; relay_line "{\"operation\":\"submit\",\"lease_id\":\"$TX_LEASE\"}"; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == submitted ]] || { debug_relay_reply; close_relay_channel; emit_refusal action-submit-uncertain send; exit 1; }; close_relay_channel; TX_LEASE=""; emit_json "n:schema_version:2" "s:result:sent" "s:action:send" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "b:mutation_performed:true" "s:prepared_payload_fingerprint:$prepared_payload_fp" "b:prepared_clear_editor:$prepared_clear"
     ;;
   key)
     if ! prepare_transaction; then restore_transaction; emit_refusal "$REFUSAL" key; exit 1; fi
@@ -446,60 +459,18 @@ PY
     relay_line "{\"operation\":\"send-control\",\"lease_id\":\"$TX_LEASE\",\"payload_hex\":\"$key_hex\"}" || { restore_transaction; emit_refusal action-key-uncertain key; exit 1; }
     [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")')" == control-sent ]] || { debug_relay_reply; restore_transaction; emit_refusal action-key-uncertain key; exit 1; }
     key_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
-    [[ "$key_fp" == "$expected_key_fp" ]] || { close_relay_channel; unlock_mutation; TX_LEASE=""; emit_refusal key-attestation-mismatch key; exit 1; }
-    close_relay_channel; unlock_mutation; TX_LEASE=""
+    [[ "$key_fp" == "$expected_key_fp" ]] || { close_relay_channel; TX_LEASE=""; emit_refusal key-attestation-mismatch key; exit 1; }
+    close_relay_channel; TX_LEASE=""
     emit_json "n:schema_version:2" "s:result:key-sent" "s:action:key" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:key:$key_name" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "b:mutation_performed:true" "s:payload_fingerprint:$key_fp"
     ;;
   stop)
-    load_session_identity; if [[ "$STATE_PRESENT" != true ]]; then emit_status already-stopped; exit 0; fi; if ! prepare_transaction; then restore_transaction; emit_refusal "$REFUSAL" stop; exit 1; fi
+    load_session_identity
+    if [[ "$STATE_PRESENT" != true ]]; then emit_status already-stopped; exit 0; fi
     if [[ "$force" == true ]]; then
-      terminal_child_pid="$(printf '%s' "$TX_RELAY" | json_value 'd.get("child_pid")')"
-      terminal_child_pgid="$(printf '%s' "$TX_RELAY" | json_value 'd.get("child_pgid")')"
-      terminal_socket="$(printf '%s' "$TX_RELAY" | json_value 'd.get("socket_path")')"
-      terminal_epoch="$(printf '%s' "$TX_RELAY" | json_value 'd.get("epoch")')"
-      relay_line "{\"operation\":\"containment\",\"lease_id\":\"$TX_LEASE\"}" || { restore_transaction; emit_refusal containment-uncertain force-stop; exit 1; }
-      [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == containment ]] || { restore_transaction; emit_refusal containment-uncertain force-stop; exit 1; }
-      terminal_tracked="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("tracked_descendants",[])')"
-      terminate_reply=false
-      if relay_line "{\"operation\":\"terminate\",\"lease_id\":\"$TX_LEASE\"}"; then
-        terminate_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')"
-        [[ "$terminate_result" == terminating ]] || {
-          [[ "${KAOLA_RUNNER_DEBUG:-0}" == 1 ]] && printf 'kaola-tmux[%s]: terminate reply=%s\n' "$platform" "$terminate_result" >&2
-          restore_transaction; emit_refusal termination-uncertain force-stop; exit 1;
-        }
-        terminate_reply=true
-      elif [[ "${KAOLA_RUNNER_DEBUG:-0}" == 1 ]]; then
-        printf 'kaola-tmux[%s]: terminate reply transport closed; reconciling terminal facts\n' "$platform" >&2
-      fi
-      # The exact child may exit quickly enough to close the relay transport
-      # before its `terminating` frame reaches the controller. Reconcile that
-      # transport loss against terminal facts instead of calling a successful
-      # shutdown uncertain.
-      TX_LEASE=""; close_relay_channel
-      if session_exists; then "$TMUX_BIN" kill-session -t "$TMUX_SESSION_TARGET" || true; fi
-      terminal_absent=false
-      for _ in {1..100}; do
-        session_gone=true child_gone=true group_gone=true socket_gone=true
-        session_exists && session_gone=false
-        if [[ "$terminal_child_pid" =~ ^[0-9]+$ ]] && "$PS_BIN" -p "$terminal_child_pid" -o pid= 2>/dev/null | grep -q '[0-9]'; then child_gone=false; fi
-        if [[ "$terminal_child_pgid" =~ ^[0-9]+$ ]] && "$PS_BIN" -axo pgid= 2>/dev/null | awk -v pgid="$terminal_child_pgid" '$1 == pgid { found=1 } END { exit !found }'; then group_gone=false; fi
-        if [[ "$session_gone" == true && "$child_gone" == true && "$group_gone" == true && -n "$terminal_socket" && -e "$terminal_socket" ]]; then cleanup_terminal_socket "$terminal_socket" "$terminal_epoch" || true; fi
-        [[ -z "$terminal_socket" || ! -e "$terminal_socket" ]] || socket_gone=false
-        tracked_gone=true; tracked_descendants_gone "$terminal_tracked" || tracked_gone=false
-        if [[ "$session_gone" == true && "$child_gone" == true && "$group_gone" == true && "$tracked_gone" == true && "$socket_gone" == true ]]; then terminal_absent=true; break; fi
-        sleep 0.05
-      done
-      if [[ "$terminal_absent" != true ]]; then
-        if [[ "${KAOLA_RUNNER_DEBUG:-0}" == 1 ]]; then
-          printf 'kaola-tmux[%s]: terminal absence unproven session=%s child=%s group=%s tracked=%s socket=%s\n' \
-            "$platform" "$session_gone" "$child_gone" "$group_gone" "$tracked_gone" "$socket_gone" >&2
-        fi
-        unlock_mutation; emit_refusal termination-uncertain force-stop; exit 1
-      fi
-      unlock_mutation
-      emit_json "n:schema_version:2" "s:result:stopped" "s:action:force-stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "b:terminate_reply_received:$terminate_reply" 'j:final_state:{"session_present":false,"child_running":false,"child_group_running":false,"socket_present":false,"pane_input_off":null}'
-      exit 0
+      force_stop_exact
+      exit $?
     fi
-    PAYLOAD="$ADAPTER_QUIT_TEXT"; quit_fp="$(fingerprint_payload)"; hex="$(payload_hex)"; relay_line "{\"operation\":\"prepare-input\",\"lease_id\":\"$TX_LEASE\",\"payload_hex\":\"$hex\"}"; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == prepared ]] || { restore_transaction; emit_refusal action-prepare-uncertain stop; exit 1; }; prepared_relay="$(printf '%s' "$RELAY_REPLY" | json_value 'd["relay"]')"; prepared_payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_payload_fingerprint")')"; [[ "$prepared_payload_fp" == "$quit_fp" ]] || { restore_transaction; emit_refusal prepared-payload-attestation-mismatch stop; exit 1; }; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" stop; exit 1; }; prepared_observation="$(build_sample "$prepared_relay" null)"; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" stop; exit 1; }; prepared_guard="$(prepared_surface_result "$prepared_observation" "$quit_fp")"; [[ "$prepared_guard" == ok ]] || { restore_transaction; emit_prepared_refusal "$prepared_guard" stop; exit 1; }; relay_line "{\"operation\":\"submit\",\"lease_id\":\"$TX_LEASE\"}" || { close_relay_channel; unlock_mutation; emit_refusal action-submit-uncertain stop; exit 1; }; close_relay_channel; unlock_mutation; for _ in {1..100}; do session_exists || { emit_json "n:schema_version:2" "s:result:stopped" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "s:prepared_payload_fingerprint:$prepared_payload_fp"; exit 0; }; sleep 0.1; done; emit_json "n:schema_version:2" "s:result:quit-pending" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "s:prepared_payload_fingerprint:$prepared_payload_fp"; exit 2
+    if ! prepare_transaction; then restore_transaction; emit_refusal "$REFUSAL" stop; exit 1; fi
+    PAYLOAD="$ADAPTER_QUIT_TEXT"; quit_fp="$(fingerprint_payload)"; hex="$(payload_hex)"; relay_line "{\"operation\":\"prepare-input\",\"lease_id\":\"$TX_LEASE\",\"payload_hex\":\"$hex\"}"; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd["result"]')" == prepared ]] || { restore_transaction; emit_refusal action-prepare-uncertain stop; exit 1; }; prepared_relay="$(printf '%s' "$RELAY_REPLY" | json_value 'd["relay"]')"; prepared_payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("prepared_payload_fingerprint")')"; [[ "$prepared_payload_fp" == "$quit_fp" ]] || { restore_transaction; emit_refusal prepared-payload-attestation-mismatch stop; exit 1; }; renew_transaction || { restore_transaction; emit_refusal "$REFUSAL" stop; exit 1; }; relay_line "{\"operation\":\"submit\",\"lease_id\":\"$TX_LEASE\"}" || { close_relay_channel; emit_refusal action-submit-uncertain stop; exit 1; }; [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")')" == submitted ]] || { close_relay_channel; emit_refusal action-submit-uncertain stop; exit 1; }; close_relay_channel; for _ in {1..100}; do session_exists || { emit_json "n:schema_version:2" "s:result:stopped" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "s:prepared_payload_fingerprint:$prepared_payload_fp"; exit 0; }; sleep 0.1; done; emit_json "n:schema_version:2" "s:result:quit-pending" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "s:action_time_snapshot:$TX_CURRENT_SNAPSHOT" "b:observation_changed:$TX_SNAPSHOT_CHANGED" "s:prepared_payload_fingerprint:$prepared_payload_fp"; exit 2
     ;;
 esac

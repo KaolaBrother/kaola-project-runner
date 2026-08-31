@@ -42,9 +42,8 @@ Agent chooses. Workflow/Git/forge verification occurs only when the Agent chose 
 Snapshot changes and retained drafts are evidence, never Skill-owned policy gates.
 
 Model mismatch, unreadable actual-model evidence, login failures, and resume behavior are likewise
-facts for the controlling Agent. Never turn them into a blanket send/observe/stop gate. The one
-pre-session exception is mechanical: when a readable catalog proves the requested model absent,
-do not create a model-unspecified child that would inherit ambient client state.
+facts for the controlling Agent. Never turn them into a start/send/observe/stop gate or rewrite the
+Agent-selected model literal.
 
 Do not reintroduce direct `SIGSTOP` of the pane leader: tmux resumes it. Do not replace the tokenized
 DECRQM parser fence with a sleep, double capture, plain DSR, control-mode pause, or tmux command-list

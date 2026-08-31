@@ -54,6 +54,9 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 - Refuse only objective transport impossibility or ambiguous/foreign target identity. A new classifier
   that blocks previously working automation is regression evidence; remove the restriction instead of
   adding another gate.
+- Treat an unusually long Runner procedure or validation loop as overengineering evidence. Stop and
+  reduce it to direct start, send, read, connection, and exact-stop proof instead of adding harnesses,
+  classifiers, retries, or waiting layers.
 - Keep `templates/grok-golden/` frozen. Change active Skills through shared templates, platform facts,
   and adapters, then run `./scripts/render-skills.py --write` and `--check`.
 - Validate with `./scripts/validate.sh` and record exact outcomes. Live Cursor experiments use

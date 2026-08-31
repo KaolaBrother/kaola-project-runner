@@ -15,5 +15,5 @@ python3 "$repo_root/scripts/render-skills.py" --check
 for skill_dir in "$repo_root"/skills/*-kaola-project-runner; do
   python3 "$validator" "$skill_dir"
 done
-"$repo_root/tests/test-grok-tmux.sh"
-"$repo_root/tests/test-issue-1-acceptance.sh"
+bash -n "$repo_root/scripts/kaola-tmux.sh" "$repo_root"/scripts/adapters/*.sh
+python3 "$repo_root/tests/contract/test-issue-9-contract.py"

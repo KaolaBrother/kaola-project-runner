@@ -31,29 +31,6 @@ adapter_preflight() {
   PREFLIGHT_DETAIL="Cursor CLI communication is available; global Workflow commands are advisory (workflow_next=$workflow_state finalize=$finalize_state authority=$authority_state); Runner start does not materialize project files"
 }
 
-adapter_prepare_launch() {
-  local launch_repo="$1" materialization
-  materialization="$("$CURSOR_NODE_BIN" "$CURSOR_SURFACE_HELPER" \
-    --ensure-target "$launch_repo" --forge "$CURSOR_FORGE")" || \
-    die "Kaola Cursor project materialization failed"
-  MATERIALIZATION_JSON="$materialization" EXPECTED_TARGET="$launch_repo" "$PYTHON_BIN" <<'PY' >/dev/null || \
-    die "Kaola Cursor project materializer returned invalid evidence"
-import json, os, pathlib
-payload = json.loads(os.environ["MATERIALIZATION_JSON"])
-target = pathlib.Path(os.environ["EXPECTED_TARGET"]).resolve()
-reported = pathlib.Path(payload.get("target", "")).resolve()
-if payload.get("status") not in {"current", "materialized"}:
-    raise SystemExit(1)
-if payload.get("scope") != "project" or reported != target:
-    raise SystemExit(1)
-if not isinstance(payload.get("files"), int) or payload["files"] < 2:
-    raise SystemExit(1)
-PY
-  [[ -f "$launch_repo/.cursor/commands/workflow-next.md" && \
-     -f "$launch_repo/.cursor/commands/kaola-workflow-finalize.md" ]] || \
-    die "Kaola Cursor project materialization omitted required commands"
-}
-
 adapter_build_launch() {
   local launch_repo="$1" resume_id="$2" continue_mode="$3"
   ADAPTER_LAUNCH_ARGS=(--workspace "$launch_repo")

@@ -81,10 +81,9 @@ project materialization evidence, and an adapter-specific summary. Missing Workf
 configuration health, or materialization does not block the CLI communication channel.
 
 Preflight also resolves the declared Runner default without starting a session. `start` gives an
-explicit user model/effort precedence; otherwise it uses that Runner default. A readable catalog
-that proves the requested model absent returns typed `model-unavailable` evidence before tmux is
-created, rather than launching with ambient client state. After creation, actual mismatch or
-unreadable evidence never disables generic communication.
+explicit user model/effort precedence; otherwise it uses that Runner default. Catalog output is
+reported as evidence and never rewrites or blocks the declared exact model literal. Actual mismatch,
+catalog absence, or unreadable evidence never disables generic communication.
 
 Model evidence under `model` includes `requested_model_source`, `requested_model_name`,
 `resolved_runtime_model_id`, `resolved_parameters`, `actual_runtime_model_id`,
