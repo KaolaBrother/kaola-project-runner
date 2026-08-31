@@ -209,15 +209,11 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
       fail test_claude_public_answer "public answer failed: $answer_result"
     if [[ -n "${answer_result:-}" ]]; then
       json_assert test_claude_public_answer \
-        "d['schema_version'] == 2 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['decision_id'] == '$answer_decision_id' and d['based_on_snapshot'] == '' and d['action_time_snapshot'].startswith('kpr-snapshot-v2:') and d['observation_changed'] is False and d['receipt_id'].startswith('kpr-answer-v2:') and d['prepared_pane_revision'].startswith('kpr-pane-v2:') and 'chosen-answer' not in json.dumps(d) and 'draft-prefix' not in json.dumps(d)" \
+        "d['schema_version'] == 2 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['decision_id'] == '$answer_decision_id' and d['based_on_snapshot'] == '' and d['mutation_performed'] is True and d['clear_editor'] is True and d['payload_fingerprint'].startswith('sha256:') and 'action_time_snapshot' not in d and 'receipt_id' not in d and 'restoration_evidence' not in d" \
         "$answer_result"
       grep -Fxq 'submitted=chosen-answer' "$answer_log" || \
         fail test_claude_public_answer "replacement receipt missing or appended draft: $(cat "$answer_log")"
 
-      pending_answer_observe="$(run_runner observe --repo "$repo" --session "$answer_session")"
-      json_assert test_claude_public_answer_barrier_pending \
-        "d['later_output_barrier'] is not None and d['later_output_barrier']['state'] == 'pending'" \
-        "$pending_answer_observe"
       touch "$answer_release"
       resumed_capture=''
       for _ in 1 2 3 4 5 6 7 8 9 10; do
@@ -229,26 +225,15 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
       done
       grep -Fq 'Completed work is ready to continue.' <<<"$resumed_capture" || \
         fail test_claude_public_answer_visible_resume "visible resume evidence missing: $resumed_capture"
-      answer_after=''
-      barrier_ready=false
-      for _ in 1 2 3 4 5 6 7 8 9 10; do
-        answer_after="$(run_runner observe --repo "$repo" --session "$answer_session" 2>/dev/null || true)"
-        if grep -Fq '"state": "satisfied"' <<<"$answer_after"; then
-          barrier_ready=true
-          break
-        fi
-        sleep 0.2
-      done
-      [[ "$barrier_ready" == true ]] || fail test_claude_public_answer_barrier "later-output barrier did not become satisfied: $answer_after"
-      if [[ "$barrier_ready" == true ]]; then
-        json_assert test_claude_public_answer_barrier \
-          "d['later_output_barrier']['state'] == 'satisfied'" "$answer_after"
-        answer_after_snapshot="$(JSON_INPUT="$answer_after" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
-        follow_up="$(run_runner send --repo "$repo" --session "$answer_session" --if-snapshot "$answer_after_snapshot" --text follow-up-after-resume)" || \
-          fail test_claude_public_answer_follow_up "fresh guarded send failed: $follow_up"
-        [[ -z "${follow_up:-}" ]] || json_assert test_claude_public_answer_follow_up \
-          "d['result'] == 'sent' and d['action'] == 'send'" "$follow_up"
-      fi
+      answer_after="$(run_runner observe --repo "$repo" --session "$answer_session")"
+      json_assert test_claude_public_answer_later_output \
+        "d['later_output_barrier'] is None and 'Completed work is ready to continue.' in d['raw_current_frame']" \
+        "$answer_after"
+      answer_after_snapshot="$(JSON_INPUT="$answer_after" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"
+      follow_up="$(run_runner send --repo "$repo" --session "$answer_session" --if-snapshot "$answer_after_snapshot" --text follow-up-after-resume)" || \
+        fail test_claude_public_answer_follow_up "direct follow-up failed: $follow_up"
+      [[ -z "${follow_up:-}" ]] || json_assert test_claude_public_answer_follow_up \
+        "d['result'] == 'sent' and d['action'] == 'send' and d['mutation_performed'] is True" "$follow_up"
     fi
     answer_final_observe="$(run_runner observe --repo "$repo" --session "$answer_session")"
     answer_final_snapshot="$(JSON_INPUT="$answer_final_observe" python3 -c "import json, os; print(json.loads(os.environ['JSON_INPUT'])['snapshot_id'])")"

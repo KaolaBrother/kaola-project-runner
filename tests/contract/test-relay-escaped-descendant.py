@@ -111,7 +111,7 @@ class EscapedDescendantTests(unittest.TestCase):
         shutil.rmtree(self.socket_temp, ignore_errors=True)
         self.temporary.cleanup()
 
-    def test_guarded_send_never_authorizes_input_while_tracked_descendant_is_running_outside_child_group(self) -> None:
+    def test_direct_send_does_not_pause_or_gate_on_an_owned_escaped_descendant(self) -> None:
         observed = self._observe()
         tracked = {row["pid"] for row in observed["child_processes"]}
         self.assertIn(self.escaped_pid, tracked, "public snapshot did not track the escaped runtime descendant")
@@ -132,40 +132,25 @@ class EscapedDescendantTests(unittest.TestCase):
             "--if-snapshot",
             observed["snapshot_id"],
             "--text",
-            "containment-must-block",
+            "escaped-descendant-is-evidence",
         )
 
         receipt = json.loads(result.stdout)
         logged = self.state.read_text(encoding="utf-8")
-        payload_hex = "containment-must-block".encode().hex()
+        payload_hex = "escaped-descendant-is-evidence\r".encode().hex()
         payload_events = [
             line
             for line in logged.splitlines()
             if line.startswith("input_descendant_state=") and line.endswith(f";input={payload_hex}")
         ]
-        if result.returncode == 0 and receipt.get("result") == "sent":
-            self.assertEqual(len(payload_events), 1, logged)
-            state = payload_events[0].split("=", 1)[1].split(";", 1)[0]
-            self.assertTrue(
-                state.startswith("T"),
-                f"guarded send authorized input while tracked escaped descendant state was {state!r}",
-            )
-        else:
-            self.assertFalse(receipt.get("mutation_performed", False), receipt)
-            if receipt.get("restored") is True:
-                proof = receipt.get("restoration_evidence") or {}
-                required = (
-                    "child_resumed",
-                    "pane_input_restored",
-                    "relay_responsive",
-                    "process_group_running",
-                    "lease_released",
-                    "mutation_lock_released",
-                )
-                self.assertTrue(all(proof.get(key) is True for key in required), receipt)
-            else:
-                self.assertIs(receipt.get("restored"), False, receipt)
-            self.assertEqual(payload_events, [], logged)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(receipt.get("result"), "sent", receipt)
+        self.assertEqual(len(payload_events), 1, logged)
+        state = payload_events[0].split("=", 1)[1].split(";", 1)[0]
+        self.assertFalse(
+            state.startswith(("T", "Z")),
+            f"direct send changed owned descendant runtime state to {state!r}",
+        )
         self.assertTrue(self._process_exists(self.escaped_pid))
 
     def test_force_stop_never_reports_success_before_tracked_escaped_descendant_is_absent(self) -> None:

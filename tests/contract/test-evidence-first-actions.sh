@@ -174,11 +174,9 @@ d=json.loads(os.environ["RECEIPT"])
 assert d["result"] == "sent", d
 assert d["mutation_performed"] is True, d
 assert d["based_on_snapshot"] == "", d
-assert d["action_time_snapshot"].startswith("kpr-snapshot-v2:"), d
-assert d["observation_changed"] is False, d
-assert d["prepared_payload_fingerprint"] == os.environ["EXPECTED_FP"], d
-assert d["prepared_clear_editor"] is False, d
-' 2>/dev/null || fail "$label" "send receipt omitted or misstated prepared-input facts: $COMMAND_OUTPUT"
+assert d["payload_fingerprint"] == os.environ["EXPECTED_FP"], d
+assert "action_time_snapshot" not in d and "restoration_evidence" not in d, d
+' 2>/dev/null || fail "$label" "send receipt omitted or misstated direct-transfer facts: $COMMAND_OUTPUT"
   fi
 
   changed_snapshot="$snapshot"
@@ -205,9 +203,8 @@ import json, os
 d=json.loads(os.environ["RECEIPT"])
 assert d["result"] == "sent", d
 assert d["based_on_snapshot"] == os.environ["OLD_SNAPSHOT"], d
-assert d["action_time_snapshot"] == os.environ["CURRENT_SNAPSHOT"], d
-assert d["observation_changed"] is True, d
-assert d["prepared_payload_fingerprint"] == os.environ["EXPECTED_FP"], d
+assert d["payload_fingerprint"] == os.environ["EXPECTED_FP"], d
+assert "action_time_snapshot" not in d and "observation_changed" not in d, d
 ' 2>/dev/null || fail test_issue7_changed_snapshot_is_audit_evidence "changed-observation receipt is not factual: $COMMAND_OUTPUT"
   fi
   EXPECTED="$payload"$'\n'"$second_payload" LOG="$log" python3 -c '
@@ -289,64 +286,30 @@ test_generic_stop_uses_agent_decision() {
     fail "$label" "stop receipt returned while the exact session still existed"
 }
 
-test_disconnect_never_claims_unproved_restoration() {
-  local label=test_issue7_prepare_disconnect_never_claims_unproved_restored_true
-  local repo session snapshot payload observation child_pid watcher marker
-  repo="$(issue_new_repo issue7-restore-proof)"
+test_observe_never_suspends_the_cli() {
+  local label=test_direct_observe_never_suspends_the_cli
+  local repo session observation
+  repo="$(issue_new_repo direct-observe-running)"
   prepare_claude_repo "$repo"
-  session="issue7-restore-proof-$$"
-  export FAKE_CLAUDE_SUBMIT_LOG="$issue_tmp_root/issue7-restore-proof.log"
+  session="direct-observe-running-$$"
+  export FAKE_CLAUDE_SUBMIT_LOG="$issue_tmp_root/direct-observe-running.log"
   unset FAKE_CLAUDE_EXIT_ON_PREPARE FAKE_CLAUDE_PREPARE_DRIFT
   start_fixture "$label" "$repo" "$session" empty || return
   capture_command claude-code observe --repo "$repo" --session "$session"
   if [[ "$COMMAND_RC" -ne 0 ]]; then
-    fail "$label" "public observe failed before fault injection: $COMMAND_OUTPUT"
+    fail "$label" "public observe failed: $COMMAND_OUTPUT"
     return
   fi
   observation="$COMMAND_OUTPUT"
-  snapshot="$(json_value "$observation" 'd.get("snapshot_id")')"
-  child_pid="$(json_value "$observation" 'd["relay"]["child_pid"]')"
-  marker="$issue_tmp_root/issue7-killed-quiesced-child"
-  (
-    for _ in $(seq 1 2000); do
-      state="$(ps -o state= -p "$child_pid" 2>/dev/null | tr -d '[:space:]')"
-      if [[ "$state" == T* ]]; then
-        kill -KILL "$child_pid" 2>/dev/null || exit 1
-        : >"$marker"
-        exit 0
-      fi
-      sleep 0.005
-    done
-    exit 1
-  ) &
-  watcher=$!
-  payload='disconnect-after-prepare'
-  capture_command claude-code send --repo "$repo" --session "$session" \
-    --if-snapshot "$snapshot" --require-empty-editor --text "$payload"
-  wait "$watcher"
-  [[ -f "$marker" ]] || {
-    fail "$label" "fault injector never observed and killed the exact quiesced child"
-    "$issue_tmux_bin" kill-session -t "=$session" >/dev/null 2>&1 || true
-    return
-  }
-  [[ "$COMMAND_RC" -ne 0 ]] || fail "$label" "send reported success after the runtime vanished: $COMMAND_OUTPUT"
-  RECEIPT="$COMMAND_OUTPUT" python3 -c '
+  OBSERVATION="$observation" python3 -c '
 import json, os
-raw=os.environ["RECEIPT"]
-try:
-    d=json.loads(raw)
-except json.JSONDecodeError:
-    assert "\"restored\": true" not in raw.lower(), raw
-else:
-    assert d.get("result") != "sent", d
-    if d.get("restored") is True:
-        proof=d.get("restoration_evidence") or {}
-        required=(
-            "child_resumed", "pane_input_restored", "relay_responsive",
-            "process_group_running", "lease_released", "mutation_lock_released",
-        )
-        assert all(proof.get(key) is True for key in required), d
-' 2>/dev/null || fail "$label" "disconnect path claimed success/restoration without complete re-observed proof: $COMMAND_OUTPUT"
+d=json.loads(os.environ["OBSERVATION"])
+assert d["result"] == "observed", d
+assert d["relay"]["state"] == "running", d
+assert d["relay"]["lease_active"] is False, d
+assert d["relay"]["process_group_running"] is True, d
+assert not (d["relay"].get("child_process_state") or "").startswith("T"), d
+' 2>/dev/null || fail "$label" "observe paused or leased the runtime: $observation"
   "$issue_tmux_bin" kill-session -t "=$session" >/dev/null 2>&1 || true
 }
 
@@ -358,7 +321,7 @@ export KAOLA_START_TIMEOUT=5
 test_generic_send_uses_agent_decision
 test_cursor_x0_transports_literal_input
 test_generic_stop_uses_agent_decision
-test_disconnect_never_claims_unproved_restoration
+test_observe_never_suspends_the_cli
 
 if [[ "$failures" -gt 0 ]]; then
   printf 'Issue #7 evidence-first action acceptance: %d failure(s)\n' "$failures" >&2

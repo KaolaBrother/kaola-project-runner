@@ -122,7 +122,7 @@ sent_output="$(run_helper send --repo "$repo" --session "$session" --text "$lite
   printf 'RED: test_grok_send_accepts_idle_literal — tokenized send failed: %s\n' "$sent_output" >&2
   exit 1
 }
-printf '%s\n' "$sent_output" | json_assert "d['result'] == 'sent' and d['action'] == 'send' and d['based_on_snapshot'] == '' and d['action_time_snapshot'].startswith('kpr-snapshot-v2:') and d['observation_changed'] is False"
+printf '%s\n' "$sent_output" | json_assert "d['result'] == 'sent' and d['action'] == 'send' and d['based_on_snapshot'] == '' and d['mutation_performed'] is True and d['payload_fingerprint'].startswith('sha256:') and 'action_time_snapshot' not in d and 'observation_changed' not in d"
 sleep 1
 capture="$(run_helper capture --repo "$repo" --session "$session" --lines 40)"
 printf '%s\n' "$capture" | grep -Fq 'ECHO:literal ; $(touch SHOULD_NOT_EXIST) `touch ALSO_NOT`'

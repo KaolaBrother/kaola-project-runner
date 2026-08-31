@@ -75,9 +75,10 @@ class Issue9ContractTests(unittest.TestCase):
         with self.subTest(action="stop"):
             self.assertNotIn("prepared_surface_result", stop)
             self.assertNotIn("prepared_guard", stop)
-        self.assertRegex(actions, r'operation.{0,12}prepare-input')
-        self.assertRegex(actions, r'operation.{0,12}submit')
-        self.assertIn("prepared_payload_fingerprint", actions)
+        self.assertRegex(actions, r'operation.{0,12}send-input')
+        self.assertNotRegex(actions, r'operation.{0,12}prepare-input')
+        self.assertNotRegex(actions, r'operation.{0,12}submit')
+        self.assertIn("payload_fingerprint", actions)
 
     def test_issue9_force_branch_precedes_relay_transaction(self) -> None:
         source = RUNNER.read_text(encoding="utf-8")
@@ -107,7 +108,7 @@ class Issue9ContractTests(unittest.TestCase):
             "STATE_REPO_MATCH",
             "STATE_PANE_COUNT",
             "expected_child_fingerprint",
-            "prepared_payload_fingerprint",
+            "payload_fingerprint",
             "cleanup_terminal_socket",
         ):
             self.assertIn(marker, source, marker)

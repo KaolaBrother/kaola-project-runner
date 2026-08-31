@@ -95,7 +95,7 @@ else
   idle_observe="$(run_runner grok observe --repo "$repo" --session "$session")"
   idle_snapshot="$(snapshot_id "$idle_observe")"
   if sent="$(run_runner grok send --repo "$repo" --session "$session" --text "$literal")"; then
-    json_assert "test_send_accepts_agent_selected_literal_without_snapshot" "d['result'] == 'sent' and d['action'] == 'send' and d['based_on_snapshot'] == '' and d['action_time_snapshot'].startswith('kpr-snapshot-v2:') and d['observation_changed'] is False" "$sent"
+    json_assert "test_send_accepts_agent_selected_literal_without_snapshot" "d['result'] == 'sent' and d['action'] == 'send' and d['based_on_snapshot'] == '' and d['mutation_performed'] is True and d['payload_fingerprint'].startswith('sha256:') and 'action_time_snapshot' not in d and 'observation_changed' not in d" "$sent"
     sleep 1
     capture="$(run_runner grok capture --repo "$repo" --session "$session" --lines 80)"
     grep -Fq "ECHO:$literal" <<<"$capture" || fail "test_send_accepts_idle_literal" "literal prompt did not reach runtime"
@@ -213,7 +213,7 @@ else
   force_child_pgid="$(JSON_INPUT="$force_observe" python3 -c 'import json,os; print(json.loads(os.environ["JSON_INPUT"])["relay"]["child_pgid"])')"
   force_socket="$(JSON_INPUT="$force_observe" python3 -c 'import json,os; print(json.loads(os.environ["JSON_INPUT"])["relay"]["socket_path"])')"
   force_stopped="$(run_runner grok stop --repo "$repo" --session "$session" --force)"
-  json_assert "test_force_stop_is_exact" "d['result'] == 'stopped' and d['action'] == 'force-stop' and d['final_state'] == {'session_present':False,'child_running':False,'child_group_running':False,'socket_present':False,'pane_input_off':None}" "$force_stopped"
+  json_assert "test_force_stop_is_exact" "d['result'] == 'stopped' and d['action'] == 'force-stop' and d['final_state']['session_present'] is False and d['final_state']['relay_running'] is False and d['final_state']['socket_present'] is False" "$force_stopped"
   [[ ! -e "$force_socket" ]] || fail "test_force_stop_is_exact" "relay socket remains after stopped receipt: $force_socket"
   ps -p "$force_child_pid" -o pid= 2>/dev/null | grep -q '[0-9]' && \
     fail "test_force_stop_is_exact" "runtime child remains after stopped receipt: $force_child_pid"

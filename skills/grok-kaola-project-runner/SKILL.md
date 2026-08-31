@@ -33,6 +33,10 @@ model remains evidence for the Agent and does not disable the communication chan
 configuration health, account state, trust state, editor state, activity hints, or a changed
 snapshot do not authorize or block starting the CLI communication channel.
 
+Use the evidence internally to choose the next communication action. Do not narrate raw relay,
+process, snapshot, model, editor, or activity fields in user progress updates; report only visible
+task progress, an actual transport failure, or a decision that genuinely needs the user.
+
 After reading current evidence, the controlling Agent chooses what to send:
 
 ```bash
@@ -67,8 +71,7 @@ session. Never use raw `tmux send-keys` or broad session/process cleanup.
 - `raw_current_frame`, `capture`, process facts, editor facts, approval facts, activity hints, and
   snapshot changes are evidence for the Agent.
 - Exact session ownership, platform/repository identity, one-pane targeting, relay attestation,
-  literal payload/key fingerprinting, terminal-control rejection, lease serialization, and truthful
-  recovery are transport integrity checks.
+  literal payload/key fingerprinting, and terminal-control rejection are transport integrity checks.
 - The Runner never classifies evidence into permission to act. The Agent handles every runtime or
   Workflow problem after reading the evidence.
 - No invocation implicitly starts `workflow-next`, installs commands, materializes repository files,

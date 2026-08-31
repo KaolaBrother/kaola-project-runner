@@ -573,41 +573,26 @@ class ObservationContractTests(unittest.TestCase):
             r"editor_state|editor_fingerprint|visible_shell_count|visible_agent_count|"
             r"structured_decision_marker|activity_hint|STATE_ACTIVITY|evidence_flags"
         )
-        initial = re.search(r"(?ms)^prepare_transaction\(\).*?^\}\n", core)
-        self.assertIsNotNone(initial, "missing prepare_transaction")
-        assert initial is not None
+        direct = re.search(r"(?ms)^open_transport_channel\(\).*?^\}\n", core)
+        self.assertIsNotNone(direct, "missing open_transport_channel")
+        assert direct is not None
         self.assertNotRegex(
-            initial.group(0),
+            direct.group(0),
             semantic_authority,
-            "initial send/stop transaction turns advisory interpretation into mutation authority",
-        )
-        prepared = re.search(r"(?ms)^prepared_surface_result\(\).*?^\}\n", core)
-        self.assertIsNotNone(prepared, "missing prepared_surface_result")
-        assert prepared is not None
-        self.assertNotRegex(
-            prepared.group(0),
-            re.compile(
-                r"editor_state|visible_shell_count|visible_agent_count|"
-                r"structured_decision_marker|activity_hint|STATE_ACTIVITY|evidence_flags"
-            ),
-            "prepared send/stop surface turns advisory interpretation into mutation authority",
-        )
-        self.assertRegex(
-            prepared.group(0),
-            r"editor_fingerprint.*!=.*expected",
-            "prepared surface does not prove the exact literal payload before Enter",
+            "direct transport turns advisory interpretation into mutation authority",
         )
 
         send = core.split("  send)", 1)[1].split("  stop)", 1)[0]
         self.assertNotIn("--require-empty-editor", send)
         self.assertNotIn("empty-editor-guard-required", send)
-        self.assertRegex(send, r"prepared_payload_fp.*==.*send_fp")
+        self.assertNotIn("prepare_transaction", send)
+        self.assertRegex(send, r"payload_fp.*==.*send_fp")
 
         stop = core.split("  stop)", 1)[1]
         self.assertRegex(
             stop,
-            r"prepared_payload_fp.*==.*quit_fp",
-            "ordinary stop lacks exact prepared quit-payload attestation before submit",
+            r"payload_fp.*==.*quit_fp",
+            "ordinary stop lacks exact quit-payload transfer attestation",
         )
 
     def test_10_frozen_grok_golden_bytes_remain_unchanged(self) -> None:

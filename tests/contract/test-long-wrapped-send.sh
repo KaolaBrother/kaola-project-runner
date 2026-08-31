@@ -173,10 +173,10 @@ run_wrapped_claude_answer() {
   "$issue_tmux_bin" kill-session -t "=$session" >/dev/null 2>&1 || true
 }
 
-run_wrapped_drift_refusal() {
+run_wrapped_drift_evidence() {
   local platform="$1" index="$2" payload="$3"
   local platform_label="${platform//-/_}"
-  local label="test_issue6_${platform_label}_soft_wrap_hard_line_drift_refuses_before_enter"
+  local label="test_direct_${platform_label}_live_editor_change_is_evidence_not_a_gate"
   local repo session submit_log observed snapshot pane_width first_line
   repo="$(issue_new_repo "issue6-wrapped-drift-${platform}-${index}")"
   session="issue6-wrapped-drift-${platform}-${index}-$$"
@@ -214,13 +214,18 @@ run_wrapped_drift_refusal() {
 
     capture_command "$platform" send --repo "$repo" --session "$session" \
       --if-snapshot "$snapshot" --text "$payload"
-    [[ "$COMMAND_RC" -ne 0 ]] || \
-      fail "$label" "public send succeeded after a foreign hard line changed the prepared editor: $COMMAND_OUTPUT"
+    [[ "$COMMAND_RC" -eq 0 ]] || \
+      fail "$label" "live editor change blocked the Agent-selected transport: $COMMAND_OUTPUT"
     JSON_INPUT="$COMMAND_OUTPUT" python3 -c \
-      'import json,os; d=json.loads(os.environ["JSON_INPUT"]); assert d["result"] == "refused", d' 2>/dev/null || \
-      fail "$label" "public send did not return result=refused: $COMMAND_OUTPUT"
-    [[ ! -s "$submit_log" ]] || \
-      fail "$label" "public send pressed Enter on the drifted editor: $(python3 -c 'import pathlib,sys; print(repr(pathlib.Path(sys.argv[1]).read_text()))' "$submit_log")"
+      'import json,os; d=json.loads(os.environ["JSON_INPUT"]); assert d["result"] == "sent", d' 2>/dev/null || \
+      fail "$label" "public send did not return result=sent: $COMMAND_OUTPUT"
+    EXPECTED_PAYLOAD="$payload" SUBMIT_LOG="$submit_log" python3 -c '
+import os
+from pathlib import Path
+actual = Path(os.environ["SUBMIT_LOG"]).read_text(encoding="utf-8")
+expected = "submitted=" + os.environ["EXPECTED_PAYLOAD"] + "\nforeign-hard-line\n"
+assert actual == expected, {"expected": expected, "actual": actual}
+' || fail "$label" "fixture did not expose the live editor change after transport"
     "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1 || \
       fail "$label" "refused send removed the exact managed session"
   fi
@@ -250,8 +255,15 @@ run_wrapped_send grok 2
 run_wrapped_send claude-code 3 "$composed_payload" composed_soft_wrap_lf_tab_send
 run_wrapped_send grok 4 "$composed_payload" composed_soft_wrap_lf_tab_send
 run_wrapped_claude_answer 5 "$composed_payload"
-run_wrapped_drift_refusal claude-code 6 "$composed_payload"
-run_wrapped_drift_refusal grok 7 "$composed_payload"
+relay_regression_payload=''
+for _ in {1..24}; do
+  relay_regression_payload+="long-relay-regression-0123456789-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ-"
+done
+relay_regression_payload+=$'\nsecond line ensures bracketed paste remains literal'
+
+run_wrapped_send claude-code 6 "$relay_regression_payload" relay_timeout_regression
+run_wrapped_drift_evidence claude-code 7 "$composed_payload"
+run_wrapped_drift_evidence grok 8 "$composed_payload"
 
 if [[ "$failures" -gt 0 ]]; then
   printf 'Issue #6 long wrapped send acceptance: %d failure(s)\n' "$failures" >&2

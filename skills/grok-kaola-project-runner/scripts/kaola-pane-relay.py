@@ -76,6 +76,9 @@ class RelayState:
         self.tracked_descendants: dict[int, str] = {}
 
     def facts(self) -> dict[str, Any]:
+        # Remember owned descendants without changing their runtime state so
+        # exact stop can still clean up processes that created a new session.
+        _track_descendants(self, _descendant_states(self.child_pid))
         child_process = process_command(self.child_pid)
         rows = _process_rows()
         child_state = rows.get(self.child_pid, (0, ""))[1]
@@ -518,6 +521,32 @@ def submit_input(state: RelayState) -> None:
     state.lease_owner = None
 
 
+def send_input_direct(
+    state: RelayState, payload: bytes, clear_editor: bool = False
+) -> None:
+    """Transfer one controller-selected prompt without pausing the child."""
+    if not payload:
+        raise RuntimeError("input must not be empty")
+    if state.lease_owner is not None:
+        raise RuntimeError("relay-busy")
+    if clear_editor:
+        _write_child(state, b"\x15")
+    if state.bracketed_paste:
+        _write_child(state, b"\x1b[200~" + payload + b"\x1b[201~")
+    else:
+        _write_child(state, payload)
+    _write_child(state, b"\r")
+
+
+def send_control_direct(state: RelayState, payload: bytes) -> None:
+    """Transfer one controller-selected native key without pausing the child."""
+    if not payload:
+        raise RuntimeError("control input must not be empty")
+    if state.lease_owner is not None:
+        raise RuntimeError("relay-busy")
+    _write_child(state, payload)
+
+
 def send_control_input(state: RelayState, payload: bytes) -> None:
     """Send one controller-selected native key sequence without adding Enter."""
     if not payload:
@@ -695,7 +724,27 @@ def _handle(state: RelayState, connection: socket.socket, request: dict[str, Any
             key: state.barrier[key]
             for key in ("receipt_id", "submitted_output_offset", "prepared_pane_revision", "state")
         }
-        return _reply(state, request, "state", relay=state.facts(), barrier=public_barrier)
+        return _reply(
+            state,
+            request,
+            "state",
+            relay=state.facts(),
+            barrier=public_barrier,
+            direct_input=True,
+        )
+    if operation == "send-input":
+        submitted_offset = state.output_offset
+        payload_fingerprint = "sha256:" + hashlib.sha256(payload).hexdigest()
+        clear_editor = bool(request.get("clear_editor"))
+        send_input_direct(state, payload, clear_editor)
+        return _reply(
+            state,
+            request,
+            "input-sent",
+            submitted_output_offset=submitted_offset,
+            payload_fingerprint=payload_fingerprint,
+            clear_editor=clear_editor,
+        )
     if operation == "containment":
         _require_lease(state, connection, request)
         tracked = [
@@ -740,10 +789,13 @@ def _handle(state: RelayState, connection: socket.socket, request: dict[str, Any
         submit_input(state)
         return _reply(state, request, "submitted", submitted_output_offset=submitted_offset, relay=state.facts())
     if operation == "send-control":
-        _require_lease(state, connection, request)
         submitted_offset = state.output_offset
         payload_fingerprint = "sha256:" + hashlib.sha256(payload).hexdigest()
-        send_control_input(state, payload)
+        if state.lease_owner is None:
+            send_control_direct(state, payload)
+        else:
+            _require_lease(state, connection, request)
+            send_control_input(state, payload)
         return _reply(
             state,
             request,
