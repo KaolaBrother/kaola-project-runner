@@ -423,7 +423,7 @@ PY
     answer_fp="$(fingerprint_payload)"; hex="$(payload_hex)"
     relay_line "{\"operation\":\"send-input\",\"clear_editor\":true,\"payload_hex\":\"$hex\"}" || { close_relay_channel; emit_transport_result transport-uncertain answer unknown; exit 1; }
     relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"
-    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" answer false; exit 1; }
+    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" answer unknown; exit 1; }
     payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"; clear_editor="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("clear_editor",False)')"
     [[ "$payload_fp" == "$answer_fp" && "$clear_editor" == true ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch answer true; exit 1; }
     close_relay_channel
@@ -437,7 +437,7 @@ PY
     send_fp="$(fingerprint_payload)"; hex="$(payload_hex)"
     relay_line "{\"operation\":\"send-input\",\"payload_hex\":\"$hex\"}" || { close_relay_channel; emit_transport_result transport-uncertain send unknown; exit 1; }
     relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"
-    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" send false; exit 1; }
+    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" send unknown; exit 1; }
     payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
     [[ "$payload_fp" == "$send_fp" ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch send true; exit 1; }
     close_relay_channel
@@ -451,7 +451,7 @@ PY
     esac
     expected_key_fp="$(printf '%s' "$key_hex" | "$PYTHON_BIN" -c 'import hashlib,sys; print("sha256:"+hashlib.sha256(bytes.fromhex(sys.stdin.read())).hexdigest())')"
     relay_line "{\"operation\":\"send-control\",\"payload_hex\":\"$key_hex\"}" || { close_relay_channel; emit_transport_result transport-uncertain key unknown; exit 1; }
-    [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")')" == control-sent ]] || { relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"; debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" key false; exit 1; }
+    [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")')" == control-sent ]] || { relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"; debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" key unknown; exit 1; }
     key_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
     [[ "$key_fp" == "$expected_key_fp" ]] || { close_relay_channel; emit_transport_result key-attestation-mismatch key true; exit 1; }
     close_relay_channel
@@ -468,7 +468,7 @@ PY
     PAYLOAD="$ADAPTER_QUIT_TEXT"; quit_fp="$(fingerprint_payload)"; hex="$(payload_hex)"
     relay_line "{\"operation\":\"send-input\",\"payload_hex\":\"$hex\"}" || { close_relay_channel; emit_transport_result transport-uncertain stop unknown; exit 1; }
     relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"
-    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" stop false; exit 1; }
+    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" stop unknown; exit 1; }
     payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
     [[ "$payload_fp" == "$quit_fp" ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch stop true; exit 1; }
     close_relay_channel
