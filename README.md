@@ -64,6 +64,12 @@ $cursor-cli-kaola-project-runner
 Kaola Workflow 时，Workflow 才负责 claim、mission list、finalize、Issue/PR、archive 和 sink。
 Runner 本身不设默认 heartbeat，也不解释 `HUMAN_DECISION_REQUIRED`；它只提供读写通道。
 
+五个平台的 Skill 都提供一项轻量建议：当目标 CLI 已可使用 Kaola Workflow、且适合当前任务时，
+Agent 可以向用户说明其可用性和是否采用，再让 CLI 按自身已安装的 Workflow 指引通过
+`workflow-next` 开始或恢复工作。采用后，建议监督 `kaola-workflow-finalize`，核实所选的合并同步
+或 PR 交付，以及本次任务的工作区、worktree 和分支清理情况；PR 交付不等于已合并，应保留
+未合并 PR 或其他活动工作仍需的资源。这只是供 Agent 判断的建议，不增加自动执行或通信门槛。
+
 ## 控制接口
 
 ```bash

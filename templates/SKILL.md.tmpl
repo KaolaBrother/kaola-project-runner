@@ -66,6 +66,20 @@ scripts/runtime-tmux.sh status --repo "$REPO" --session "$SESSION"
 Use `--force` only when the Agent explicitly chooses terminal containment for this exact owned
 session. Never use raw `tmux send-keys` or broad session/process cleanup.
 
+## Optional Kaola Workflow recommendation
+
+For project work, when Kaola Workflow is available to {{RUNTIME_NAME}} and fits the user's task,
+consider telling the user it is available and whether you plan to use it, then asking the CLI to
+start or resume with `workflow-next` using its installed native Workflow instructions. Existing
+carrier evidence can help; installation for another runtime alone does not establish availability
+here. The controlling Agent decides whether to adopt this recommendation, including for diagnosis
+or ordinary CLI tasks.
+
+If adopted, consider supervising `kaola-workflow-finalize` through the selected merge/sync or PR
+delivery, verifying the actual result and cleanup of this task's workspace, worktrees, and branches.
+PR delivery is not a merged result; preserve resources still needed by an open PR or other active
+work. These are suggestions for the Agent, not automatic Runner actions or communication gates.
+
 ## Evidence boundary
 
 - `raw_current_frame`, `capture`, process facts, editor facts, approval facts, activity hints, and
