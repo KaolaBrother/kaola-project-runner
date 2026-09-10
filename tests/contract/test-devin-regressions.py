@@ -8,6 +8,8 @@ Each test targets a specific bug observed in the original PR commit b341232.
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -39,21 +41,65 @@ class DevinModelPolicyProbeTests(unittest.TestCase):
                        "real_surface_evidence must handle the devin platform")
 
 
+class DevinCatalogParserTests(unittest.TestCase):
+    """models_from_output must parse Devin catalog rows including single-token IDs."""
+
+    def _parse(self, text: str) -> dict[str, str]:
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0,'scripts'); "
+             "from importlib.util import spec_from_file_location, module_from_spec; "
+             f"spec = spec_from_file_location('kmp', {str(MODEL_POLICY)!r}); "
+             "mod = module_from_spec(spec); spec.loader.exec_module(mod); "
+             "import json; print(json.dumps(mod.models_from_output(sys.stdin.read())))"],
+            input=text, capture_output=True, text=True, cwd=str(PROJECT),
+        )
+        if result.returncode != 0:
+            self.fail(f"models_from_output failed: {result.stderr}")
+        import json
+        return json.loads(result.stdout)
+
+    def test_adaptive_single_token_parsed(self):
+        catalog = (
+            "Adaptive (adaptive)\n"
+            "  adaptive                               Adaptive  "
+            "[$0.5 / 1M Input]\n"
+        )
+        found = self._parse(catalog)
+        self.assertIn("adaptive", found, f"adaptive not found in {found}")
+        self.assertEqual(found["adaptive"], "Adaptive")
+
+    def test_multi_token_id_parsed(self):
+        catalog = (
+            "  claude-opus-5-medium                   Claude Opus 5 Medium  "
+            "[1M context, $5 / 1M Input]\n"
+        )
+        found = self._parse(catalog)
+        self.assertIn("claude-opus-5-medium", found)
+
+    def test_header_not_parsed_as_model(self):
+        catalog = "Claude Opus 5 (claude-opus-5)\n"
+        found = self._parse(catalog)
+        # Family header should not appear as a model ID
+        self.assertNotIn("Claude", found)
+
+    def test_alias_line_not_parsed_as_model(self):
+        catalog = "  aliases: opus\n"
+        found = self._parse(catalog)
+        self.assertNotIn("aliases", found)
+
+
 class DevinAdapterLaunchShapeTests(unittest.TestCase):
-    """adapter_build_launch must always pass --model and use valid permission modes."""
+    """adapter_build_launch must always pass --model and pass through permission_mode."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.adapter = ADAPTER.read_text(encoding="utf-8")
 
     def test_model_flag_not_gated_on_adaptive(self):
-        # The original bug: skipping --model for adaptive let saved-picker
-        # override Runner default; RESOLVED_MODEL_ID='' produced --model ''.
         m = re.search(r"adapter_build_launch\(\).*?^\}", self.adapter, re.S | re.M)
         self.assertIsNotNone(m, "adapter_build_launch not found")
         body = m.group(0)
-        # Must pass --model whenever RESOLVED_MODEL_ID is non-empty — no
-        # secondary comparison against a specific default value.
         self.assertNotIn("adaptive", body,
                          "adapter_build_launch must not special-case the adaptive model id")
         self.assertIn('--model "$RESOLVED_MODEL_ID"', body)
@@ -61,16 +107,45 @@ class DevinAdapterLaunchShapeTests(unittest.TestCase):
     def test_no_empty_model_possible(self):
         m = re.search(r"adapter_build_launch\(\).*?^\}", self.adapter, re.S | re.M)
         body = m.group(0)
-        # The guard must require -n (non-empty) before appending --model.
         self.assertIn('-n "$RESOLVED_MODEL_ID"', body)
 
-    def test_permission_mode_uses_dangerous_not_bypass(self):
+    def test_permission_mode_passthrough_not_bypass(self):
         m = re.search(r"adapter_build_launch\(\).*?^\}", self.adapter, re.S | re.M)
         self.assertIsNotNone(m, "adapter_build_launch not found")
         body = m.group(0)
         self.assertNotIn("bypass", body,
-                         "adapter_build_launch must use 'dangerous', not 'bypass'")
-        self.assertIn("dangerous", body)
+                         "adapter_build_launch must not use 'bypass'")
+        # Must pass through $permission_mode from the core, not hardcode a value.
+        self.assertIn('--permission-mode "$permission_mode"', body)
+
+    def test_no_unreachable_dangerous_fallback(self):
+        m = re.search(r"adapter_build_launch\(\).*?^\}", self.adapter, re.S | re.M)
+        body = m.group(0)
+        # The core always sets permission_mode (default: auto), so an
+        # else-branch fallback to "dangerous" would be unreachable dead code.
+        self.assertNotIn("dangerous", body,
+                         "adapter_build_launch must not have an unreachable dangerous fallback")
+
+
+class DevinNoFlagPermissionModeTests(unittest.TestCase):
+    """A no-flag Devin start must launch with --permission-mode auto."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.runner = RUNNER.read_text(encoding="utf-8")
+
+    def test_core_default_permission_mode_is_auto(self):
+        m = re.search(r"permission_mode=(\S+)", self.runner)
+        self.assertIsNotNone(m, "permission_mode default not found in runner")
+        self.assertEqual(m.group(1), "auto",
+                         "core default permission_mode must be auto")
+
+    def test_manifest_launch_summary_says_auto(self):
+        manifest = (PROJECT / "platforms" / "devin.yaml").read_text(encoding="utf-8")
+        m = re.search(r"launch_summary:.*?--permission-mode\s+(\S+)", manifest)
+        self.assertIsNotNone(m, "launch_summary permission-mode not found")
+        self.assertEqual(m.group(1), "auto",
+                         "manifest launch_summary must document auto, not dangerous")
 
 
 class DevinSessionIdTests(unittest.TestCase):
@@ -84,11 +159,8 @@ class DevinSessionIdTests(unittest.TestCase):
         m = re.search(r"adapter_extract_session_id\(\).*?^\}", self.adapter, re.S | re.M)
         self.assertIsNotNone(m, "adapter_extract_session_id not found")
         body = m.group(0)
-        # Must not contain a sed/grep/regex extraction pattern that could
-        # falsely match tmux session names from relay scrollback.
         self.assertNotIn("sed ", body,
                          "adapter_extract_session_id must not regex-extract from TUI output")
-        # Should emit empty string.
         self.assertRegex(body, r'printf.*""',
                          "adapter_extract_session_id should return empty")
 
@@ -101,7 +173,6 @@ class DevinPermissionModeGateTests(unittest.TestCase):
         cls.runner = RUNNER.read_text(encoding="utf-8")
 
     def test_permission_mode_gate_allows_devin(self):
-        # The gate is a single long line; grab the full line containing "platform-specific".
         for line in self.runner.splitlines():
             if "platform-specific" in line:
                 self.assertIn("devin", line,
@@ -134,8 +205,6 @@ class RelaySendSubmitSeparationTests(unittest.TestCase):
         )
         self.assertIsNotNone(m, "send_input_direct not found")
         body = m.group(0)
-        # After the bracketed-paste write and before the CR write, there
-        # must be a time.sleep call.
         paste_to_cr = re.search(
             r"201~.*?time\.sleep\(.*?\).*?\\r",
             body,

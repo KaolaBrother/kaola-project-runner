@@ -41,11 +41,7 @@ adapter_build_launch() {
   if [[ -n "$RESOLVED_MODEL_ID" ]]; then
     ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
   fi
-  if [[ -n "${permission_mode:-}" ]]; then
-    ADAPTER_LAUNCH_ARGS+=(--permission-mode "$permission_mode")
-  else
-    ADAPTER_LAUNCH_ARGS+=(--permission-mode dangerous)
-  fi
+  ADAPTER_LAUNCH_ARGS+=(--permission-mode "$permission_mode")
   ADAPTER_LAUNCH_ARGS+=(--respect-workspace-trust false)
 }
 

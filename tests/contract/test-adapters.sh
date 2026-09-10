@@ -257,7 +257,7 @@ else
     elif [[ "$platform" == devin ]]; then
       grep -Fq -- '--model' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --model: $log_text"
       grep -Eq -- "--model ''" <<<"$log_text" && fail "test_${platform}_new_launch" "Devin launch has empty --model: $log_text"
-      grep -Fq -- '--permission-mode' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --permission-mode: $log_text"
+      grep -Fq -- '--permission-mode auto' <<<"$log_text" || fail "test_${platform}_no_flag_permission_mode" "No-flag Devin start must launch with --permission-mode auto: $log_text"
       grep -Fq -- '--respect-workspace-trust false' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --respect-workspace-trust false: $log_text"
     else
       grep -Fq "args=--cwd $canonical_repo --minimal" <<<"$log_text" || fail "test_${platform}_new_launch" "Grok launch lacks --cwd/--minimal shape: $log_text"

@@ -73,6 +73,14 @@ def models_from_output(output: str) -> dict[str, str]:
         match = re.match(r"^(?:[*+-]\s*)?([a-z0-9][a-z0-9._:/-]+)(?:\s+\(default\))?(?:\s+-\s+(.+))?$", stripped, re.I)
         if match and ("/" in match.group(1) or "-" in match.group(1)):
             found[match.group(1)] = (match.group(2) or match.group(1)).strip()
+        # Devin-style catalog: "  model-id  Display Name  [pricing]" or
+        # single-token IDs like "adaptive" followed by a display name and
+        # a bracketed pricing/context block.
+        catalog_match = re.match(
+            r"^([a-z0-9][a-z0-9._:/-]*)\s{2,}(\S.+?)\s+\[", stripped, re.I,
+        )
+        if catalog_match:
+            found[catalog_match.group(1)] = catalog_match.group(2).strip()
     # Claude currently exposes aliases through help rather than a catalog command.
     for alias in re.findall(r"['\"](fable|opus|sonnet)['\"]", output, re.I):
         found[alias.lower()] = alias.title()
