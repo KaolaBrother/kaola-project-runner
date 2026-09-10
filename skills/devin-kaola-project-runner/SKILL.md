@@ -1,0 +1,96 @@
+---
+name: devin-kaola-project-runner
+description: Use when Codex should communicate with a Devin CLI main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.
+---
+
+# Devin CLI Kaola Project Runner
+
+This Skill is a communication driver for Devin CLI. It gives the controlling Agent a
+measured tmux channel; it does not choose commands, Workflow modes, cadence, state, approvals,
+retries, or completion policy.
+
+## Communication loop
+
+Use the canonical Git root and one exact session name throughout:
+
+```bash
+REPO="$(git rev-parse --show-toplevel)"
+SESSION="devin-kaola-<purpose>"
+scripts/runtime-tmux.sh preflight --repo "$REPO" --session "$SESSION"
+scripts/runtime-tmux.sh start --repo "$REPO" --session "$SESSION"
+scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
+scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 160
+```
+
+The controlling Agent first checks whether the current user request explicitly selects the main
+model. Pass that choice with `--model ID --effort LEVEL`; otherwise `start` resolves this Skill's
+Runner default: **Adaptive** (`adaptive`, effort=default).
+This is per-run input and never rewrites global CLI configuration. `preflight`, `start`, `observe`,
+and `status` report requested, resolved, and actual model evidence. A mismatch or unreadable actual
+model remains evidence for the Agent and does not disable the communication channel.
+
+`preflight` reports runtime and optional Kaola carrier evidence. Missing Workflow commands,
+configuration health, account state, trust state, editor state, activity hints, or a changed
+snapshot do not authorize or block starting the CLI communication channel.
+
+Use the evidence internally to choose the next communication action. Do not narrate raw relay,
+process, snapshot, model, editor, or activity fields in user progress updates; report only visible
+task progress, an actual transport failure, or a decision that genuinely needs the user.
+
+After reading current evidence, the controlling Agent chooses what to send:
+
+```bash
+scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" --text '<agent-selected prompt>'
+scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
+scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 200
+```
+
+For a native selection screen, the Agent may choose one exact key. The Runner transfers it without
+interpreting its meaning or adding Enter:
+
+```bash
+scripts/runtime-tmux.sh key --repo "$REPO" --session "$SESSION" --key down
+scripts/runtime-tmux.sh key --repo "$REPO" --session "$SESSION" --key enter
+```
+
+Supported key names are `up`, `down`, `left`, `right`, `enter`, `escape`, `tab`, `backtab`, and
+`space`. Read the resulting output before choosing another action.
+
+When the Agent decides the exact session is finished, end only that owned session:
+
+```bash
+scripts/runtime-tmux.sh stop --repo "$REPO" --session "$SESSION"
+scripts/runtime-tmux.sh status --repo "$REPO" --session "$SESSION"
+```
+
+Use `--force` only when the Agent explicitly chooses terminal containment for this exact owned
+session. Never use raw `tmux send-keys` or broad session/process cleanup.
+
+## Optional Kaola Workflow recommendation
+
+For project work, when Kaola Workflow is available to Devin CLI and fits the user's task,
+consider telling the user it is available and whether you plan to use it, then asking the CLI to
+start or resume with `workflow-next` using its installed native Workflow instructions. Existing
+carrier evidence can help; installation for another runtime alone does not establish availability
+here. The controlling Agent decides whether to adopt this recommendation, including for diagnosis
+or ordinary CLI tasks.
+
+If adopted, consider supervising `kaola-workflow-finalize` through the selected merge/sync or PR
+delivery, verifying the actual result and cleanup of this task's workspace, worktrees, and branches.
+PR delivery is not a merged result; preserve resources still needed by an open PR or other active
+work. These are suggestions for the Agent, not automatic Runner actions or communication gates.
+
+## Evidence boundary
+
+- `raw_current_frame`, `capture`, process facts, editor facts, approval facts, activity hints, and
+  snapshot changes are evidence for the Agent.
+- Exact session ownership, platform/repository identity, one-pane targeting, relay attestation,
+  literal payload/key fingerprinting, and terminal-control rejection are transport integrity checks.
+- The Runner never classifies evidence into permission to act. The Agent handles every runtime or
+  Workflow problem after reading the evidence.
+- No invocation implicitly starts `workflow-next`, installs commands, materializes repository files,
+  creates a heartbeat, or selects recurring behavior. The Agent may send any of those commands when
+  it decides they serve the user's task.
+
+See [references/platform.md](references/platform.md) for Devin CLI launch/observation facts and
+[references/transport.md](references/transport.md) for receipt and recovery details.

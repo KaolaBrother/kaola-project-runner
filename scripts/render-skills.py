@@ -193,8 +193,8 @@ def main() -> int:
     args = parser.parse_args()
 
     manifests = [parse_manifest(path) for path in sorted(PLATFORMS.glob("*.yaml"))]
-    if [m["id"] for m in manifests] != ["claude-code", "cursor-cli", "grok", "kimi-cli", "opencode"]:
-        raise ValueError("platform inventory must be exactly claude-code,cursor-cli,grok,kimi-cli,opencode")
+    if [m["id"] for m in manifests] != ["claude-code", "cursor-cli", "devin", "grok", "kimi-cli", "opencode"]:
+        raise ValueError("platform inventory must be exactly claude-code,cursor-cli,devin,grok,kimi-cli,opencode")
 
     findings: list[str] = []
     expected_names = {m["skill_name"] for m in manifests}

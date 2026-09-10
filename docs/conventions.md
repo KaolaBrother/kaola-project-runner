@@ -3,12 +3,12 @@
 ## Change boundary
 
 The existing Grok Workflow contract is golden and live-proven historical evidence. Do not rewrite its
-bytes. It is not the active Runner authority: all five active Skills use the shared communication-only
+bytes. It is not the active Runner authority: all six active Skills use the shared communication-only
 template and do not impose task modes, prompts, PR handoff, heartbeat, scheduler, or closing policy.
 
 ## Source of truth
 
-- Active five-platform Skill: `templates/SKILL.md.tmpl`.
+- Active six-platform Skill: `templates/SKILL.md.tmpl`.
 - Frozen historical Workflow lifecycle and prompts: `templates/grok-golden/`.
 - Shared evidence-first transport guidance: `templates/references/transport.md.tmpl` plus exact reversible
   renderer overlays; never broad-replace golden prose.

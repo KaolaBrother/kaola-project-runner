@@ -18,8 +18,8 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/install-local.sh [--platform ID[,ID...]] [--uninstall]
 
-Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli
-With no --platform, installs all five Skills. Existing foreign paths are never replaced.
+Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin
+With no --platform, installs all six Skills. Existing foreign paths are never replaced.
 EOF
 }
 
@@ -30,6 +30,7 @@ skill_name_for() {
     opencode) printf '%s\n' 'opencode-kaola-project-runner' ;;
     kimi-cli) printf '%s\n' 'kimi-cli-kaola-project-runner' ;;
     cursor-cli) printf '%s\n' 'cursor-cli-kaola-project-runner' ;;
+    devin) printf '%s\n' 'devin-kaola-project-runner' ;;
     *) return 1 ;;
   esac
 }
@@ -60,7 +61,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#selection[@]} -eq 0 ]]; then
-  selection=(grok claude-code opencode kimi-cli cursor-cli)
+  selection=(grok claude-code opencode kimi-cli cursor-cli devin)
 fi
 
 deduped=()

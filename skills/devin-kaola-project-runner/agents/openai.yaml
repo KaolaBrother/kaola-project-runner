@@ -1,0 +1,6 @@
+interface:
+  display_name: "Devin CLI Kaola Project Runner"
+  short_description: "Communicate with Devin CLI through exact tmux"
+  default_prompt: "Use $devin-kaola-project-runner to start an exact Devin CLI tmux session, read its output, and send only the input I choose."
+policy:
+  allow_implicit_invocation: true

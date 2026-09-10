@@ -7,7 +7,7 @@ scripts/render-skills.py --write
 scripts/render-skills.py --check
 ```
 
-`--write` deterministically rebuilds five managed Skill directories. `--check` returns nonzero for
+`--write` deterministically rebuilds six managed Skill directories. `--check` returns nonzero for
 any missing, stale, or unexpected file or Skill directory. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency.
 
@@ -17,8 +17,8 @@ flat YAML subset parsed without an external dependency.
 scripts/install-local.sh [--platform ID[,ID...]] [--uninstall]
 ```
 
-IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, and `cursor-cli`. Omit `--platform` for all
-five. Every selected target is preflighted before mutation. Only exact owned symlinks are created,
+IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, and `devin`. Omit `--platform` for all
+six. Every selected target is preflighted before mutation. Only exact owned symlinks are created,
 migrated, or removed.
 
 ## tmux core
@@ -43,8 +43,8 @@ scripts/kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME \
 `--repo` must resolve to the exact Git top-level. Session names match
 `[A-Za-z0-9][A-Za-z0-9_.-]{0,79}`. Without `--text`, `send` reads non-empty stdin.
 
-Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`, and
-`CURSOR_AGENT_BIN`. Test/embedding overrides are `TMUX_BIN`, `PYTHON_BIN`, `PS_BIN`, and
+Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
+`CURSOR_AGENT_BIN`, and `DEVIN_BIN`. Test/embedding overrides are `TMUX_BIN`, `PYTHON_BIN`, `PS_BIN`, and
 `KAOLA_START_TIMEOUT`; `GROK_START_TIMEOUT` remains a Grok-only compatibility alias.
 
 ## Observation schema

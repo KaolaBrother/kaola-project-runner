@@ -5,7 +5,7 @@ tmux 主会话中启动指定 CLI、读取输出、传递控制 Agent 选择的�
 以及结束这个精确会话。
 
 `templates/grok-golden/` 保留已经实跑验证的历史 Grok Workflow 提示词与协议字节，作为兼容和
-回归证据；它们不再是 active Skill 强制执行的编排规则。五个平台的 active Skill 都从同一份
+回归证据；它们不再是 active Skill 强制执行的编排规则。六个平台的 active Skill 都从同一份
 通信模板生成。是否发送 `workflow-next`、选择什么命令、是否创建 heartbeat、如何编排、重试和
 收口，全部由读过现场证据的控制 Agent 决定。
 
@@ -24,6 +24,7 @@ tmux 主会话中启动指定 CLI、读取输出、传递控制 Agent 选择的�
 | OpenCode | `$opencode-kaola-project-runner` | `opencode` | GLM 5.3, max | unsupported |
 | Kimi CLI | `$kimi-cli-kaola-project-runner` | `kimi` | K3, max | unsupported |
 | Cursor CLI | `$cursor-cli-kaola-project-runner` | `cursor-agent` | Cursor Grok 4.6, xhigh, non-FAST | unsupported |
+| Devin CLI | `$devin-kaola-project-runner` | `devin` | Adaptive | unsupported |
 
 裸调用统一表示：使用当前目录所在的 canonical Git repository，启动或恢复该平台的精确
 tmux session 并返回可读证据。它不会隐式发送 `workflow-next`、materialize 项目文件、创建
@@ -37,7 +38,7 @@ tmux session 并返回可读证据。它不会隐式发送 `workflow-next`、mat
 ./scripts/install-local.sh
 ```
 
-默认安装全部五个平台，也可以选择一个或多个：
+默认安装全部六个平台，也可以选择一个或多个：
 
 ```bash
 ./scripts/install-local.sh --platform grok,opencode
@@ -58,13 +59,14 @@ $claude-code-kaola-project-runner
 $opencode-kaola-project-runner
 $kimi-cli-kaola-project-runner
 $cursor-cli-kaola-project-runner
+$devin-kaola-project-runner
 ```
 
 控制 Agent 负责理解输出并选择下一条输入；目标 CLI 负责执行收到的输入；当 Agent 选择使用
 Kaola Workflow 时，Workflow 才负责 claim、mission list、finalize、Issue/PR、archive 和 sink。
 Runner 本身不设默认 heartbeat，也不解释 `HUMAN_DECISION_REQUIRED`；它只提供读写通道。
 
-五个平台的 Skill 都提供一项轻量建议：当目标 CLI 已可使用 Kaola Workflow、且适合当前任务时，
+六个平台的 Skill 都提供一项轻量建议：当目标 CLI 已可使用 Kaola Workflow、且适合当前任务时，
 Agent 可以向用户说明其可用性和是否采用，再让 CLI 按自身已安装的 Workflow 指引通过
 `workflow-next` 开始或恢复工作。采用后，建议监督 `kaola-workflow-finalize`，核实所选的合并同步
 或 PR 交付，以及本次任务的工作区、worktree 和分支清理情况；PR 交付不等于已合并，应保留
@@ -135,16 +137,16 @@ authority receipt 和项目级 commands 只作为证据报告；需要 materiali
 
 ## 仓库结构
 
-- `templates/SKILL.md.tmpl`：五个平台共用的 active 通信驱动合同；
+- `templates/SKILL.md.tmpl`：六个平台共用的 active 通信驱动合同；
 - `templates/grok-golden/`：已实跑验证、字节冻结的历史 Grok Workflow 协议和提示词证据；
-- `platforms/*.yaml`：五个平台的固定事实与能力声明；
+- `platforms/*.yaml`：六个平台的固定事实与能力声明；
 - `templates/agents/`、`templates/references/platform.md.tmpl`：UI 与 adapter facts 模板；
 - `scripts/adapters/`：binary、preflight、启动、TUI/editor/approval 事实和退出差异；
 - `scripts/kaola-tmux.sh`：平台中立、安全默认关闭的会话与 guarded-action 核心；
 - `scripts/kaola-pane-relay.py`、`kaola-relay-client.py`：nested PTY、直接输入 transport 和旧协议兼容；
 - `scripts/kaola-observation.py`：schema-v2 canonical facts、revision、snapshot 与 receipt；
 - `scripts/kaola-model-policy.py`：只读 catalog 解析、per-run 主模型选择与实际模型证据比较；
-- `skills/`：确定性生成并提交的五个自包含 Skill；
+- `skills/`：确定性生成并提交的六个自包含 Skill；
 - `tests/contract/`：golden compatibility、renderer、安装迁移和控制面验收。
 
 golden bytes 保持冻结；active Skill、manifest、adapter 或 renderer 修改后运行 `--write` 并提交
@@ -157,7 +159,7 @@ golden bytes 保持冻结；active Skill、manifest、adapter 或 renderer 修�
 ```
 
 默认离线验证只检查渲染一致性、Skill 格式、shell 语法、冻结 Grok bytes 和最小通信合同；不再
-运行耗时的 fake-runtime 历史矩阵。真实验收按五个平台分别证明 start/read/send/read-back/stop；
+运行耗时的 fake-runtime 历史矩阵。真实验收按六个平台分别证明 start/read/send/read-back/stop；
 原生选择界面还要证明 Agent-selected `key`。Claude Code 当前无有效账号，只把提示词传输与登录
 错误回读作为通过证据，不声称认证后的模型执行成功。
 

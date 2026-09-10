@@ -8,28 +8,28 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Project Snapshot
 
-- Purpose: see `README.md` or project metadata; record `unknown` until verified.
-- Stack: detect from the repository; record `unknown` until verified.
-- Architecture: keep two or three verified bullets here, or record `unknown`.
+- Purpose: Codex-facing CLI communication driver for six AI CLI platforms via tmux.
+- Stack: Bash (macOS-compatible), Python 3, tmux.
+- Architecture: shared template renders six self-contained Skills; each platform has a YAML manifest and shell adapter; relay manages nested PTY.
 
 ## Commands
 
-- Install: `unknown`
-- Test: `unknown`
-- Lint/typecheck/build: `unknown`
-- Dev server: `unknown`
+- Install: `./scripts/render-skills.py --write && ./scripts/install-local.sh`
+- Test: `./scripts/validate.sh`
+- Lint/typecheck/build: `./scripts/render-skills.py --check`
+- Dev server: N/A
 
 ## Project Constraints
 
-- Security boundary: `unknown`
-- Public contract or compatibility constraints: `unknown`
-- Files or generated surfaces requiring special handling: `unknown`
+- Security boundary: prompts via relay literal/bracketed-paste, never shell eval; terminal controls rejected before PTY write.
+- Public contract or compatibility constraints: `templates/grok-golden/` is frozen; active Skills generated from `templates/SKILL.md.tmpl`.
+- Files or generated surfaces requiring special handling: `skills/` is generated output, never hand-edit.
 
 ## Validation Policy
 
-- Focused validation: `unknown`
-- Required integration validation: `unknown`
-- Environment or service acceptance: `unknown`
+- Focused validation: `./scripts/render-skills.py --check` and `./scripts/validate.sh`
+- Required integration validation: live tmux smoke per platform (start/observe/send/capture/stop)
+- Environment or service acceptance: requires tmux, python3, and the target CLI binary
 
 ## Documentation Map
 
