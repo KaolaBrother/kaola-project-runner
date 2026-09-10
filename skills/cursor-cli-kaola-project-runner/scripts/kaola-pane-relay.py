@@ -533,6 +533,12 @@ def send_input_direct(
         _write_child(state, b"\x15")
     if state.bracketed_paste:
         _write_child(state, b"\x1b[200~" + payload + b"\x1b[201~")
+        # Yield so the child processes the bracketed-paste close before
+        # the submit byte arrives.  Without this, TUIs that consume paste
+        # asynchronously (measured: Devin CLI) treat the CR as part of the
+        # paste rather than a submit action.  10 ms is the proven minimum;
+        # harmless for platforms that already handle immediate CR.
+        time.sleep(0.01)
     else:
         _write_child(state, payload)
     _write_child(state, b"\r")

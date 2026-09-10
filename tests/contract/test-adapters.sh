@@ -60,6 +60,11 @@ prepare_surface() {
       printf '%s\n' 'fixture claim hook' >"$repo/.kimi-code/kaola-workflow/scripts/kaola-workflow-claim.js"
       mkdir -p "$KIMI_CODE_HOME/skills"
       ;;
+    devin)
+      mkdir -p "$repo/.devin/skills/workflow-next" "$repo/.devin/skills/kaola-workflow-finalize"
+      printf '%s\n' workflow-next >"$repo/.devin/skills/workflow-next/SKILL.md"
+      printf '%s\n' finalize >"$repo/.devin/skills/kaola-workflow-finalize/SKILL.md"
+      ;;
     cursor-cli)
       mkdir -p "$CURSOR_HOME/commands" "$CURSOR_HOME/kaola-workflow"
       printf '%s\n' workflow-next >"$CURSOR_HOME/commands/workflow-next.md"
@@ -155,8 +160,9 @@ runtime_env() {
     opencode) OPENCODE_BIN="$path" ;;
     kimi-cli) KIMI_BIN="$path" ;;
     cursor-cli) CURSOR_AGENT_BIN="$path" ;;
+    devin) DEVIN_BIN="$path" ;;
   esac
-  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN
+  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN DEVIN_BIN
 }
 
 runtime_env_name() {
@@ -166,6 +172,7 @@ runtime_env_name() {
     opencode) printf '%s\n' OPENCODE_BIN ;;
     kimi-cli) printf '%s\n' KIMI_BIN ;;
     cursor-cli) printf '%s\n' CURSOR_AGENT_BIN ;;
+    devin) printf '%s\n' DEVIN_BIN ;;
   esac
 }
 
@@ -187,7 +194,7 @@ else
   export CURSOR_HOME="$issue_tmp_root/cursor-home"
   export KAOLA_START_TIMEOUT=3
 
-  platforms=(grok claude-code opencode kimi-cli cursor-cli)
+  platforms=(grok claude-code opencode kimi-cli cursor-cli devin)
   for platform in "${platforms[@]}"; do
     IFS=$'\t' read -r fake log < <(issue_make_fake_runtime "$platform")
     fake_paths+=("$fake")
@@ -200,6 +207,7 @@ else
       opencode) runtime_session_id=ses_fixture ;;
       kimi-cli) runtime_session_id=01ARZ3NDEKTSV4RRFFQ69G5FAV ;;
       cursor-cli) runtime_session_id=cursor-fixture ;;
+      devin) runtime_session_id=devin-fixture-session ;;
     esac
     export FAKE_RUNTIME_NAME="$platform" FAKE_RUNTIME_LOG="$log" FAKE_RUNTIME_SESSION_ID="$runtime_session_id"
 
@@ -231,7 +239,14 @@ else
       continue
     fi
     status_json="$(run_runner "$platform" status --repo "$repo" --session "$session")"
-    json_assert "test_${platform}_runtime_session_id" "d['runtime_session_id'] == '$runtime_session_id'" "$status_json"
+    if [[ "$platform" == devin ]]; then
+      # Devin CLI does not expose a session identifier in TUI output; the
+      # adapter honestly returns empty rather than falsely extracting the
+      # tmux session name from relay launch scrollback.
+      json_assert "test_${platform}_runtime_session_id" "d['runtime_session_id'] == ''" "$status_json"
+    else
+      json_assert "test_${platform}_runtime_session_id" "d['runtime_session_id'] == '$runtime_session_id'" "$status_json"
+    fi
     log_text="$(cat "${fake_logs[$(( ${#fake_logs[@]} - 1 ))]}")"
     if [[ "$platform" == claude-code || "$platform" == kimi-cli ]]; then
       grep -Fq $'cwd='"$canonical_repo"$'\targs=' <<<"$log_text" || fail "test_${platform}_new_launch" "runtime did not start from canonical repo cwd: $log_text"
@@ -239,6 +254,11 @@ else
       grep -Fq "args=$canonical_repo --mini" <<<"$log_text" || fail "test_${platform}_new_launch" "OpenCode launch lacks repo --mini shape: $log_text"
     elif [[ "$platform" == cursor-cli ]]; then
       grep -Fq "args=--workspace $canonical_repo" <<<"$log_text" || fail "test_${platform}_new_launch" "Cursor launch lacks --workspace shape: $log_text"
+    elif [[ "$platform" == devin ]]; then
+      grep -Fq -- '--model' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --model: $log_text"
+      grep -Eq -- "--model ''" <<<"$log_text" && fail "test_${platform}_new_launch" "Devin launch has empty --model: $log_text"
+      grep -Fq -- '--permission-mode' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --permission-mode: $log_text"
+      grep -Fq -- '--respect-workspace-trust false' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --respect-workspace-trust false: $log_text"
     else
       grep -Fq "args=--cwd $canonical_repo --minimal" <<<"$log_text" || fail "test_${platform}_new_launch" "Grok launch lacks --cwd/--minimal shape: $log_text"
     fi
@@ -250,7 +270,7 @@ else
     run_runner "$platform" stop --repo "$repo" --session "$session" --force >/dev/null || true
     log_text="$(cat "${fake_logs[$(( ${#fake_logs[@]} - 1 ))]}")"
     case "$platform" in
-      grok|opencode|cursor-cli) grep -Fq -- '--continue' <<<"$log_text" || fail "test_${platform}_continue_launch" "--continue absent from invocation: $log_text" ;;
+      grok|opencode|cursor-cli|devin) grep -Fq -- '--continue' <<<"$log_text" || fail "test_${platform}_continue_launch" "--continue absent from invocation: $log_text" ;;
       claude-code|kimi-cli) grep -Fq -- '--continue' <<<"$log_text" || fail "test_${platform}_continue_launch" "--continue absent from invocation: $log_text" ;;
     esac
 
@@ -262,7 +282,7 @@ else
     grep -Fq -- "$resume_value" <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume identifier absent from invocation: $log_text"
     case "$platform" in
       opencode|kimi-cli) grep -Fq -- '--session' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "session option absent: $log_text" ;;
-      grok|claude-code|cursor-cli) grep -Fq -- '--resume' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume option absent: $log_text" ;;
+      grok|claude-code|cursor-cli|devin) grep -Fq -- '--resume' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume option absent: $log_text" ;;
     esac
 
     # Surface absence is advisory evidence and never refuses CLI communication.
@@ -275,6 +295,9 @@ else
         ;;
       kimi-cli)
         rm "$repo/.kimi-code/skills/workflow-next/SKILL.md"
+        ;;
+      devin)
+        rm "$repo/.devin/skills/workflow-next/SKILL.md"
         ;;
       cursor-cli)
         rm "$CURSOR_HOME/kaola-workflow/cursor-authority.json"
@@ -289,7 +312,7 @@ else
         fail "test_${platform}_missing_kaola_surface_advisory" "preflight blocked CLI communication: $missing_surface"
       json_assert "test_${platform}_missing_kaola_surface_advisory" "d['result'] == 'ready' and d['platform'] == '$platform'" "$missing_surface"
       case "$platform" in
-        claude-code|opencode|kimi-cli)
+        claude-code|opencode|kimi-cli|devin)
           json_assert "test_${platform}_missing_kaola_surface_evidence" "not d['workflow_next'] and not d['kaola_workflow_finalize']" "$missing_surface"
           ;;
         cursor-cli)

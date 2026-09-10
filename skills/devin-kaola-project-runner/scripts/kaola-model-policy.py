@@ -86,6 +86,7 @@ def probes_for(platform: str) -> list[list[str]]:
         "opencode": [["models"], ["--help"]],
         "kimi-cli": [["provider", "list", "--json"], ["models"], ["doctor"], ["--help"]],
         "cursor-cli": [["--list-models"], ["models"], ["--help"]],
+        "devin": [["models", "list"], ["--help"]],
     }[platform]
 
 
@@ -249,6 +250,11 @@ def real_surface_evidence(platform: str, frame: str) -> tuple[str | None, dict[s
         footer = re.findall(r"\byolo\s+K3\s+thinking:\s*(low|high|max)\b", runtime_frame, re.I)
         if footer:
             return "kimi-code/k3", {"effort": footer[-1].lower()}, "kimi-main-tui"
+    elif platform == "devin":
+        # Devin CLI does not expose a runtime model footer in the TUI.
+        # Model identity relies on the KPR_MODEL_EVIDENCE marker (handled
+        # above) or remains unreadable.
+        pass
     return None, None, None
 
 

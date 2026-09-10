@@ -38,13 +38,13 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--resume "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
-  if [[ "$RESOLVED_MODEL_ID" != "adaptive" ]]; then
+  if [[ -n "$RESOLVED_MODEL_ID" ]]; then
     ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
   fi
   if [[ -n "${permission_mode:-}" ]]; then
     ADAPTER_LAUNCH_ARGS+=(--permission-mode "$permission_mode")
   else
-    ADAPTER_LAUNCH_ARGS+=(--permission-mode bypass)
+    ADAPTER_LAUNCH_ARGS+=(--permission-mode dangerous)
   fi
   ADAPTER_LAUNCH_ARGS+=(--respect-workspace-trust false)
 }
@@ -80,5 +80,8 @@ adapter_observe_frame() {
 }
 
 adapter_extract_session_id() {
-  printf '%s\n' "$1" | sed -nE 's/.*[Ss]ession:?[[:space:]]+([a-z]+-[a-z]+(-[a-z0-9]+)*)/\1/p' | tail -1
+  # Devin CLI does not display a session identifier in TUI output.
+  # Return empty to avoid falsely extracting the tmux session name from
+  # the relay launch command visible in scrollback.
+  printf '%s\n' ""
 }

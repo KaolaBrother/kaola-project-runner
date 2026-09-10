@@ -320,6 +320,7 @@ case "$runtime" in
   opencode) title=OpenCode ;;
   kimi-cli) title=Kimi ;;
   cursor-cli) title=Cursor ;;
+  devin) title=Devin ;;
 esac
 printf '\033]0;%s\007' "$title"
 printf '%s\n' "$title Kaola TUI"
@@ -353,7 +354,7 @@ trap issue_cleanup EXIT
 repo="$(issue_new_repo model-policy)"
 export KAOLA_START_TIMEOUT=4
 
-platforms=(grok claude-code opencode kimi-cli cursor-cli)
+platforms=(grok claude-code opencode kimi-cli cursor-cli devin)
 for platform in "${platforms[@]}"; do
   case "$platform" in
     claude-code)
@@ -375,6 +376,10 @@ for platform in "${platforms[@]}"; do
     kimi-cli)
       default_name='Kimi K3 Max'; default_id=kimi-code/k3; default_effort=max; binary_env=KIMI_BIN
       override_id=kimi-code/k2.5; override_effort=high
+      ;;
+    devin)
+      default_name='Adaptive'; default_id=adaptive; default_effort=''; binary_env=DEVIN_BIN
+      override_id=claude-sonnet-5-high; override_effort=high
       ;;
   esac
 

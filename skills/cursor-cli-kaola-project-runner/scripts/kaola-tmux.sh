@@ -86,7 +86,7 @@ repo="$(canonical_dir "$repo")"; git_root="$(git -C "$repo" rev-parse --show-top
 git_root="$(canonical_dir "$git_root")"; [[ "$git_root" == "$repo" ]] || die "--repo must name the Git root: $git_root"
 [[ "$session" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$ ]] || die "invalid session name"
 TMUX_SESSION_TARGET="=$session"
-if [[ "$platform" != claude-code && "$permission_mode_given" == true ]]; then die "permission mode is Claude-only"; fi
+if [[ "$platform" != claude-code && "$platform" != devin && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
 if [[ "$command_name" != start && ( "$model_given" == true || "$effort_given" == true || "$permission_mode_given" == true ) ]]; then die "model, effort, and permission mode are start-only"; fi
 MODEL_VALUE="$model" "$PYTHON_BIN" - <<'PY' || die "model contains unsupported terminal controls"
 import os
@@ -94,7 +94,11 @@ value = os.environ.get("MODEL_VALUE", "")
 raise SystemExit(1 if any(ord(ch) < 32 or ord(ch) == 127 for ch in value) else 0)
 PY
 if [[ -n "$effort" ]]; then case "$effort" in low|medium|high|xhigh|max) ;; *) die "unsupported effort" ;; esac; fi
-case "$permission_mode" in acceptEdits|auto|bypassPermissions|manual|dontAsk|plan) ;; *) die "unsupported Claude permission mode" ;; esac
+if [[ "$platform" == devin ]]; then
+  case "$permission_mode" in auto|accept-edits|smart|dangerous) ;; *) die "unsupported Devin permission mode" ;; esac
+else
+  case "$permission_mode" in acceptEdits|auto|bypassPermissions|manual|dontAsk|plan) ;; *) die "unsupported Claude permission mode" ;; esac
+fi
 if [[ -n "$key_name" && "$command_name" != key ]]; then die "--key is only valid with key"; fi
 if [[ "$command_name" == key ]]; then
   case "$key_name" in up|down|left|right|enter|escape|tab|backtab|space) ;; *) die "--key must be one of up,down,left,right,enter,escape,tab,backtab,space" ;; esac
