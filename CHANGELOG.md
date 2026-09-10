@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added Devin CLI as the sixth Project Runner platform, with deterministic Skill generation and
+  local installation, Adaptive model selection and runtime verification, `auto` permission-mode
+  launch, direct prompt/key transport, exact continue/resume/stop support, honest unsupported and
+  session-ID feedback, and evidence-only activity, model, usage, and snapshot observations.
+
 - Added optional Kaola Workflow advice to all five Runner Skills: suggest task-appropriate startup,
   finalization supervision, delivery verification, and task-owned cleanup while the Agent retains
   every orchestration choice and Runner transport remains unchanged.
