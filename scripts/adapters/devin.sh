@@ -58,10 +58,10 @@ adapter_activity_hint() {
   tail_sample="$(printf '%s\n' "$capture" | tail -n 18)"
   if printf '%s\n' "$tail_sample" | grep -Eqi \
       'Do you want to proceed|requires approval|switch to auto mode|Esc to cancel.*Tab to amend'; then printf '%s\n' waiting-human
-  elif printf '%s\n' "$tail_sample" | grep -Eqi 'esc to interrupt|working|thinking|running tool|responding|press esc|Esc to cancel'; then printf '%s\n' busy
+  elif printf '%s\n' "$tail_sample" | grep -Eqi 'esc to interrupt|working|thinking[[:space:]]*(·|\.{3}|\.\.\.|$)|running tool|responding|press esc|Esc to cancel'; then printf '%s\n' busy
   elif printf '%s\n' "$tail_sample" | grep -Eqi 'Quick safety check|trust this folder|Enter to confirm'; then printf '%s\n' waiting-human
   elif printf '%s\n' "$tail_sample" | grep -Eq '^HUMAN_DECISION_REQUIRED[[:space:]]*$'; then printf '%s\n' waiting-human
-  elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|>)'; then printf '%s\n' idle
+  elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|❭|>)'; then printf '%s\n' idle
   else printf '%s\n' unknown
   fi
 }

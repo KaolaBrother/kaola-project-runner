@@ -234,6 +234,70 @@ class DevinCatalogParserTests(unittest.TestCase):
         self.assertIn("swe-2-max", found)
 
 
+class DevinActivityHintTests(unittest.TestCase):
+    """adapter_activity_hint must not false-positive on footer hints."""
+
+    def _hint(self, capture: str) -> str:
+        result = subprocess.run(
+            ["bash", "-c",
+             f"source {ADAPTER} && adapter_activity_hint \"$1\"",
+             "_", capture],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            self.fail(f"adapter_activity_hint failed: {result.stderr}")
+        return result.stdout.strip()
+
+    def test_idle_footer_thinking_trace_not_busy(self):
+        # Real idle footer: "Press Ctrl+O to view the full thinking trace"
+        # must NOT trigger the busy regex via the bare word "thinking".
+        frame = (
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            "\u276d Ask Devin to build features, fix bugs, or work on your code\n"
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            "Adaptive                Press Ctrl+O to view the full thinking trace\n"
+        )
+        hint = self._hint(frame)
+        self.assertNotEqual(hint, "busy",
+                            "idle footer with 'thinking trace' must not be classified busy")
+
+    def test_completed_prompt_with_devin_glyph_is_idle(self):
+        # After a completed reply, the real Devin prompt glyph is \u276d.
+        frame = (
+            " 42\n"
+            "\n"
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            "\u276d Ask Devin to build features, fix bugs, or work on your code\n"
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            "Adaptive                                                     Context: 14k tokens\n"
+        )
+        hint = self._hint(frame)
+        self.assertEqual(hint, "idle",
+                         "completed prompt with \u276d glyph must be idle")
+
+    def test_thinking_with_timer_is_busy(self):
+        # Real busy status: "Thinking \u00b7" (middle-dot timer).
+        frame = (
+            "\u276d What is 2+2?\n"
+            "\n"
+            "Thinking \u00b7\n"
+        )
+        hint = self._hint(frame)
+        self.assertEqual(hint, "busy",
+                         "Thinking with middle-dot timer must be busy")
+
+    def test_thinking_standalone_is_busy(self):
+        # "Thinking" alone on a line is genuine busy status.
+        frame = (
+            "\u276d What is 2+2?\n"
+            "\n"
+            "Thinking\n"
+        )
+        hint = self._hint(frame)
+        self.assertEqual(hint, "busy",
+                         "standalone Thinking must be busy")
+
+
 class DevinAdapterLaunchShapeTests(unittest.TestCase):
     """adapter_build_launch must always pass --model and pass through permission_mode."""
 
