@@ -88,6 +88,19 @@ class DevinCatalogParserTests(unittest.TestCase):
         found = self._parse(catalog)
         self.assertNotIn("aliases", found)
 
+    def test_help_list_command_not_parsed_as_model(self):
+        # Real Devin --help output: "list" is a CLI command, not a model.
+        # The bracket content "[aliases: ls]" must not trigger the catalog
+        # row parser because it lacks pricing/context indicators.
+        helpline = "  list       List sessions in the current directory [aliases: ls]\n"
+        found = self._parse(helpline)
+        self.assertNotIn("list", found, f"'list' falsely parsed as model: {found}")
+
+    def test_free_tier_model_parsed(self):
+        catalog = "  swe-2-max                              SWE-2 Max  [262K context, Free]\n"
+        found = self._parse(catalog)
+        self.assertIn("swe-2-max", found)
+
 
 class DevinAdapterLaunchShapeTests(unittest.TestCase):
     """adapter_build_launch must always pass --model and pass through permission_mode."""

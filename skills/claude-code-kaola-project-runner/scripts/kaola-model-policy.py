@@ -75,11 +75,15 @@ def models_from_output(output: str) -> dict[str, str]:
             found[match.group(1)] = (match.group(2) or match.group(1)).strip()
         # Devin-style catalog: "  model-id  Display Name  [pricing]" or
         # single-token IDs like "adaptive" followed by a display name and
-        # a bracketed pricing/context block.
+        # a bracketed pricing/context block.  Require the bracket content
+        # to contain a pricing or context indicator ($ or "context") so
+        # CLI help lines like "list  List sessions  [aliases: ls]" are
+        # not falsely parsed as models.
         catalog_match = re.match(
-            r"^([a-z0-9][a-z0-9._:/-]*)\s{2,}(\S.+?)\s+\[", stripped, re.I,
+            r"^([a-z0-9][a-z0-9._:/-]*)\s{2,}(\S.+?)\s+\[([^\]]*)\]",
+            stripped, re.I,
         )
-        if catalog_match:
+        if catalog_match and re.search(r"\$|context|Free", catalog_match.group(3)):
             found[catalog_match.group(1)] = catalog_match.group(2).strip()
     # Claude currently exposes aliases through help rather than a catalog command.
     for alias in re.findall(r"['\"](fable|opus|sonnet)['\"]", output, re.I):
