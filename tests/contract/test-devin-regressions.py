@@ -41,6 +41,138 @@ class DevinModelPolicyProbeTests(unittest.TestCase):
                        "real_surface_evidence must handle the devin platform")
 
 
+class DevinFooterEvidenceTests(unittest.TestCase):
+    """real_surface_evidence must extract the model display name from the Devin footer."""
+
+    def _evidence(self, frame: str):
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; "
+             "from importlib.util import spec_from_file_location, module_from_spec; "
+             f"spec = spec_from_file_location('kmp', {str(MODEL_POLICY)!r}); "
+             "mod = module_from_spec(spec); spec.loader.exec_module(mod); "
+             "import json; "
+             "mid, params, src = mod.real_surface_evidence('devin', sys.stdin.read()); "
+             "print(json.dumps({'model_id': mid, 'parameters': params, 'source': src}))"],
+            input=frame, capture_output=True, text=True, cwd=str(PROJECT),
+        )
+        if result.returncode != 0:
+            self.fail(f"real_surface_evidence failed: {result.stderr}")
+        import json
+        return json.loads(result.stdout)
+
+    def test_adaptive_footer_after_message(self):
+        # Real Devin TUI after a message: model name on last line with context.
+        frame = (
+            "❭ What is 2+2?\n"
+            "\n"
+            " 4\n"
+            "\n"
+            "────────────────────────────────────────\n"
+            "❭ Ask Devin to build features, fix bugs, or work on your code\n"
+            "────────────────────────────────────────\n"
+            "Adaptive                                                     Context: 14k tokens\n"
+        )
+        ev = self._evidence(frame)
+        self.assertEqual(ev["model_id"], "Adaptive")
+        self.assertEqual(ev["source"], "devin-footer")
+
+    def test_adaptive_footer_idle(self):
+        # Real Devin TUI before any message: model name with hint text.
+        frame = (
+            "────────────────────────────────────────\n"
+            "❭ Ask Devin to build features, fix bugs, or work on your code\n"
+            "────────────────────────────────────────\n"
+            "Adaptive                         Type @ to mention files and add them as context\n"
+        )
+        ev = self._evidence(frame)
+        self.assertEqual(ev["model_id"], "Adaptive")
+        self.assertEqual(ev["source"], "devin-footer")
+
+    def test_adaptive_footer_ctrl_hint(self):
+        # Real Devin TUI idle variant: "Press Ctrl+L to clear the screen..."
+        frame = (
+            "────────────────────────────────────────\n"
+            "❭ Ask Devin to build features, fix bugs, or work on your code\n"
+            "────────────────────────────────────────\n"
+            "Adaptive                Press Ctrl+L to clear the screen, Ctrl+Shift+L to redraw\n"
+        )
+        ev = self._evidence(frame)
+        self.assertEqual(ev["model_id"], "Adaptive")
+        self.assertEqual(ev["source"], "devin-footer")
+
+    def test_adaptive_footer_alt_enter_hint(self):
+        # Real Devin TUI idle variant: "Alt+Enter for multiline prompts"
+        frame = (
+            "────────────────────────────────────────\n"
+            "❭ Ask Devin to build features, fix bugs, or work on your code\n"
+            "────────────────────────────────────────\n"
+            "Adaptive                                                                          Alt+Enter for multiline prompts\n"
+        )
+        ev = self._evidence(frame)
+        self.assertEqual(ev["model_id"], "Adaptive")
+        self.assertEqual(ev["source"], "devin-footer")
+
+    def test_non_default_model_footer(self):
+        # If the user switches to a different model, the footer reflects it.
+        frame = (
+            "────────────────────────────────────────\n"
+            "❭ Ask Devin\n"
+            "────────────────────────────────────────\n"
+            "Claude Opus 5 Medium                                         Context: 5k tokens\n"
+        )
+        ev = self._evidence(frame)
+        self.assertEqual(ev["model_id"], "Claude Opus 5 Medium")
+        self.assertEqual(ev["source"], "devin-footer")
+
+    def test_launch_preamble_not_trusted(self):
+        # The shell launch preamble contains --model but must not be treated
+        # as runtime-owned evidence.  Only the TUI footer is trusted.
+        frame = (
+            "exec python3 kaola-pane-relay.py -- --model adaptive --permission-mode auto\n"
+        )
+        ev = self._evidence(frame)
+        self.assertIsNone(ev["model_id"],
+                          "launch preamble must not be trusted as model evidence")
+
+    def test_max_usage_line_not_model(self):
+        # "Max · 97% remaining (resets in 2d 16h)" is capitalized usage text,
+        # not a model name.  It must not be extracted.
+        frame = (
+            "Max \u00b7 97% remaining (resets in 2d 16h)\n"
+            "\n"
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            "\u276d Ask Devin\n"
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+        )
+        ev = self._evidence(frame)
+        self.assertIsNone(ev["model_id"],
+                          "Max usage line must not be classified as a model")
+
+    def test_done_output_not_model(self):
+        # Ordinary capitalized output like "Done" must not match.
+        frame = (
+            "Done\n"
+            "\n"
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            "\u276d Ask Devin\n"
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+        )
+        ev = self._evidence(frame)
+        self.assertIsNone(ev["model_id"],
+                          "ordinary capitalized output must not be classified as a model")
+
+    def test_truncated_frame_without_footer(self):
+        # If the footer is scrolled away, evidence must be None.
+        frame = (
+            "Some long conversation output...\n"
+            "More output lines here\n"
+        )
+        ev = self._evidence(frame)
+        self.assertIsNone(ev["model_id"],
+                          "truncated frame without footer must yield no evidence")
+
+
 class DevinCatalogParserTests(unittest.TestCase):
     """models_from_output must parse Devin catalog rows including single-token IDs."""
 

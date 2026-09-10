@@ -263,10 +263,23 @@ def real_surface_evidence(platform: str, frame: str) -> tuple[str | None, dict[s
         if footer:
             return "kimi-code/k3", {"effort": footer[-1].lower()}, "kimi-main-tui"
     elif platform == "devin":
-        # Devin CLI does not expose a runtime model footer in the TUI.
-        # Model identity relies on the KPR_MODEL_EVIDENCE marker (handled
-        # above) or remains unreadable.
-        pass
+        # Devin TUI footer shape: the model display name followed by 2+
+        # spaces and one of the known trailing annotations:
+        #   "Adaptive                         Context: 14k tokens"
+        #   "Adaptive                         Type @ to mention files ..."
+        # Require this concrete shape so capitalized non-model lines
+        # (e.g. "Max · 97% remaining", "Done", ordinary output) are
+        # never falsely classified as model evidence.
+        footer_re = re.compile(
+            r"^(.+?)\s{2,}(?:Context:\s*\d+k?\s*tokens|Type\s+@\s|Press\s+Ctrl|Alt\+Enter\s)",
+            re.I,
+        )
+        for line in reversed(runtime_frame.splitlines()):
+            m = footer_re.match(line.strip())
+            if m:
+                display = m.group(1).strip()
+                if display and re.match(r"[A-Z]", display):
+                    return display, {}, "devin-footer"
     return None, None, None
 
 
@@ -291,6 +304,13 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         policy["actual_runtime_model_id"] = prior_actual_id
         policy["actual_parameters"] = prior_actual_parameters
         return policy
+    # Devin footer returns a display name (e.g. "Adaptive"), not a model ID.
+    # Resolve it to the policy's model ID by comparing against the resolved
+    # display name; attribute the resolved ID only on exact match.
+    if actual_source == "devin-footer" and actual_id:
+        expected_display = policy.get("resolved_runtime_model_display")
+        if expected_display and actual_id == expected_display:
+            actual_id = policy.get("resolved_runtime_model_id")
     policy["actual_runtime_model_id"] = actual_id
     policy["actual_parameters"] = actual_parameters
     provenance["actual"] = {
