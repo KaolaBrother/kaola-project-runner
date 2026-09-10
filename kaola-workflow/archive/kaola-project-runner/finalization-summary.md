@@ -107,3 +107,10 @@ Files this branch changed outside the run-state and documentation bands:
   before closure rather than filed as new work.
 
 final_status: ready
+
+## Sink Findings
+
+post_rebase_tests: skipped
+
+archived_paths:
+- kaola-workflow/archive/kaola-project-runner/finalization-summary.md
