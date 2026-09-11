@@ -327,6 +327,7 @@ class Holder:
         self.state = "starting"
         self.stop_requested = False
         self.acp_session_id: str | None = None
+        self.session_meta: dict[str, Any] = {}
         self.protocol_version: int | None = None
         self.agent_info: dict[str, Any] = {}
         self.capabilities: dict[str, Any] = {}
@@ -371,6 +372,7 @@ class Holder:
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
             "acp_session_id": self.acp_session_id,
+            "session_meta": self.session_meta,
             "protocol_version": self.protocol_version,
             "agent_info": self.agent_info,
             "capabilities": self.capabilities,
@@ -437,7 +439,8 @@ class Holder:
             response = self.agent.wait_response(request_id, 15.0)
             if response is None or "error" in response:
                 return {"error": {"code": "resume-failed", "message": json.dumps(response)}}
-            self.acp_session_id = (response.get("result") or {}).get("sessionId", resume)
+            self.session_meta = response.get("result") or {}
+            self.acp_session_id = self.session_meta.get("sessionId", resume)
         elif use_continue:
             if not session_caps.get("list"):
                 return {"error": {"code": "continue-unsupported", "message": "agent lacks session/list"}}
@@ -466,7 +469,8 @@ class Holder:
                             return self.initialize_agent()
                     return {"error": {"code": "login-required", "message": error.get("message")}}
                 return {"error": {"code": "acp-session-failed", "message": error}}
-            self.acp_session_id = (response.get("result") or {}).get("sessionId")
+            self.session_meta = response.get("result") or {}
+            self.acp_session_id = self.session_meta.get("sessionId")
         self.state = "ready"
         self.write_record()
         return {"acp_session_id": self.acp_session_id, "agent_info": self.agent_info,
@@ -483,7 +487,8 @@ class Holder:
         response = self.agent.wait_response(request_id, 15.0)
         if response is None or "error" in response:
             return {"error": {"code": "resume-failed", "message": json.dumps(response)}}
-        self.acp_session_id = (response.get("result") or {}).get("sessionId", session_id)
+        self.session_meta = response.get("result") or {}
+        self.acp_session_id = self.session_meta.get("sessionId", session_id)
         self.state = "ready"
         self.write_record()
         return {"acp_session_id": self.acp_session_id, "agent_info": self.agent_info,
@@ -659,6 +664,7 @@ class Holder:
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
             "agent_exit_code": self.agent.exit_code,
             "acp_session_id": self.acp_session_id,
+            "session_meta": self.session_meta,
             "protocol_version": self.protocol_version,
             "agent_info": self.agent_info,
             "capabilities": self.capabilities,
