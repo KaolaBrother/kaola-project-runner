@@ -47,6 +47,12 @@ PLATFORMS = {
         "prompt": "Use $cursor-cli-kaola-project-runner to start an exact Cursor CLI tmux session, read its output, and send only the input I choose.",
         "tokens": ("cursor", "cursor-agent", "cursor-cli", "cursor-cli-kaola-project-runner"),
     },
+    "devin-kaola-project-runner": {
+        "display": "Devin CLI Kaola Project Runner",
+        "short": "Communicate with Devin CLI through exact tmux",
+        "prompt": "Use $devin-kaola-project-runner to start an exact Devin CLI tmux session, read its output, and send only the input I choose.",
+        "tokens": ("devin", "devin-kaola-project-runner"),
+    },
 }
 
 REQUIRED = ("SKILL.md", "agents/openai.yaml")
@@ -265,7 +271,7 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
     }
     assertions.check(
         "test_grok_active_package_has_only_communication_references",
-        generated_references == {"platform.md", "transport.md"},
+        generated_references == {"acp.md", "platform.md", "transport.md"},
         f"active package carries orchestration references: {sorted(generated_references)!r}",
     )
 
@@ -401,7 +407,7 @@ def check_generated_tree(assertions: Assertions, root: Path, require_check: bool
         path.name for path in generated.iterdir() if path.is_dir()
     } if generated.is_dir() else set()
     assertions.check(
-        "test_generated_skill_inventory_is_exactly_five",
+        "test_generated_skill_inventory_is_exactly_six",
         actual_ids == set(PLATFORMS),
         f"generated Skill directories are {sorted(actual_ids)!r}, expected {sorted(PLATFORMS)!r}",
     )

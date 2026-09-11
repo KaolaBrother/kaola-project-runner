@@ -9,6 +9,26 @@ This Skill is a communication driver for Grok CLI. It gives the controlling Agen
 measured tmux channel; it does not choose commands, Workflow modes, cadence, state, approvals,
 retries, or completion policy.
 
+## Transport facts
+
+Default transport: **acp**. The ACP command is `grok agent stdio`; its known quirks are ``, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+
+## Cost hints
+
+ACP usually carries structured text and events with less terminal-rendering overhead. PTY preserves the native interactive UI and is required for terminal-only login or selection flows. These are cost and capability facts; the controlling Agent chooses the transport.
+
+## Fallback
+
+| `mutation_status` | Safe interpretation |
+|---|---|
+| `not_started` | No prompt write began. |
+| `accepted` | The agent accepted the prompt. |
+| `in_progress` | Work may already be mutating state. |
+| `completed` | The turn reached a reported stop reason. |
+| `unknown` | Partial mutation cannot be ruled out. |
+
+Runner never auto-falls back or resends. Read the receipt and let the controlling Agent decide whether another transport or prompt is appropriate.
+
 ## Communication loop
 
 Use the canonical Git root and one exact session name throughout:
@@ -92,5 +112,6 @@ work. These are suggestions for the Agent, not automatic Runner actions or commu
   creates a heartbeat, or selects recurring behavior. The Agent may send any of those commands when
   it decides they serve the user's task.
 
-See [references/platform.md](references/platform.md) for Grok CLI launch/observation facts and
-[references/transport.md](references/transport.md) for receipt and recovery details.
+See [references/platform.md](references/platform.md) for Grok CLI launch/observation facts,
+[references/transport.md](references/transport.md) for PTY receipt and recovery details, and
+[references/acp.md](references/acp.md) for the structured ACP command surface.

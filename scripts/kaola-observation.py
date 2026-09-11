@@ -528,8 +528,14 @@ def build_from_environment() -> dict[str, Any]:
     pane_revision = make_pane_revision(pane_facts, frame) if present and relay.get("managed") else None
     barrier = json.loads(os.environ.get("KPR_BARRIER_JSON", "null"))
     observation = {
-        "schema_version": 2,
+        "schema_version": 3,
         "result": result,
+        "transport": {
+            "selected": "pty",
+            "default": os.environ.get("KPR_DEFAULT_TRANSPORT", "pty"),
+            "alternatives": ["acp"],
+            "reason": os.environ.get("KPR_TRANSPORT_REASON", "caller-override"),
+        },
         "platform": os.environ["KPR_PLATFORM"],
         "runtime": os.environ["KPR_RUNTIME"],
         "session": os.environ["KPR_SESSION"],

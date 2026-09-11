@@ -9,7 +9,11 @@ scripts/render-skills.py --check
 
 `--write` deterministically rebuilds six managed Skill directories. `--check` returns nonzero for
 any missing, stale, or unexpected file or Skill directory. Manifest values are JSON strings in a
-flat YAML subset parsed without an external dependency.
+flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
+`acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
+`acp_env_allowlist`, `acp_login_requires_pty`, `acp_model_config_id`,
+`acp_effort_config_id`, and `acp_wrapper_pin`. They render as `DEFAULT_TRANSPORT`,
+`ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY` template variables.
 
 ## Installer
 
@@ -47,9 +51,13 @@ Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
 `CURSOR_AGENT_BIN`, and `DEVIN_BIN`. Test/embedding overrides are `TMUX_BIN`, `PYTHON_BIN`, `PS_BIN`, and
 `KAOLA_START_TIMEOUT`; `GROK_START_TIMEOUT` remains a Grok-only compatibility alias.
 
+## Transport selection
+
+Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop`; `--model` and `--effort` map through the manifest config-option IDs.
+
 ## Observation schema
 
-`observe` returns evidence for the controlling agent. Schema version 2 includes `snapshot_id`,
+`observe` returns evidence for the controlling agent. Schema version 3 includes `snapshot_id`,
 `pane_revision`, `raw_current_frame`, exact ownership and pane facts, runtime child/process evidence,
 relay input/output facts, Git reporting facts, and compatibility editor/activity/approval/decision
 signals. Those compatibility fields are advisory evidence for the controlling agent; generic

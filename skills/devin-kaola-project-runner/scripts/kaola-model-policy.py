@@ -144,7 +144,8 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         "requested": {"source": args.source, "name": args.requested_name},
         "catalog_probe": {
             "probes": [public_probe(item) for item in probes],
-            "available_models": sorted(available),
+            "available_model_count": len(available),
+            "candidate_present": candidate in available,
             "state": "readable" if catalog_readable else "unknown",
         },
         "resolution": {

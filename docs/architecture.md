@@ -8,10 +8,13 @@ Workflow, implement Workflow, or own a runtime's configuration.
 ```text
 Controlling Agent
     -> communication-only Codex Skill
-        -> fixed platform adapter
-        -> exact owned tmux pane leader: managed relay
-            -> attested nested-PTY runtime child
-                -> Agent-selected prompt, key, or optional Workflow command
+        -> manifest-selected transport
+            -> ACP holder + structured protocol agent
+            OR
+            -> fixed platform adapter
+                -> exact owned tmux pane leader: managed relay
+                    -> attested nested-PTY runtime child
+        -> Agent-selected prompt, key, or optional Workflow command
 ```
 
 The controlling Agent owns every command, orchestration, heartbeat, recovery, decision, and completion

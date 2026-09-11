@@ -25,7 +25,9 @@ REQUIRED = {
     "default_prompt", "description", "session_prefix", "binary_name", "binary_env",
     "continue_syntax", "resume_syntax", "preflight_summary", "launch_summary",
     "recurring_execution", "recurring_summary", "quit_text", "default_model_name",
-    "default_model_id", "default_model_parameters",
+    "default_model_id", "default_model_parameters", "default_transport", "acp_command",
+    "acp_client_capabilities", "acp_quirks", "acp_verified_versions", "acp_env_allowlist",
+    "acp_login_requires_pty", "acp_model_config_id", "acp_effort_config_id", "acp_wrapper_pin",
 }
 
 
@@ -61,6 +63,10 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: invalid skill name {result['skill_name']!r}")
     if result["recurring_execution"] not in {"supported", "unsupported"}:
         raise ValueError(f"{path}: invalid recurring_execution")
+    if result["default_transport"] not in {"acp", "pty"}:
+        raise ValueError(f"{path}: invalid default_transport")
+    if not result["acp_command"]:
+        raise ValueError(f"{path}: empty acp_command")
     return result
 
 
@@ -104,12 +110,19 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     result["references/transport.md"] = render(
         transport.read_text(encoding="utf-8"), manifest, transport
     ).encode()
+    acp = TEMPLATES / "references" / "acp.md.tmpl"
+    result["references/acp.md"] = render(
+        acp.read_text(encoding="utf-8"), manifest, acp
+    ).encode()
 
     core = ROOT / "scripts" / "kaola-tmux.sh"
     adapter = ROOT / "scripts" / "adapters" / f"{manifest['id']}.sh"
     shared_root = ROOT / "scripts"
     shared_sources = (
         (shared_root / "kaola-tmux.sh", "scripts/kaola-tmux.sh"),
+        (shared_root / "kaola-acp.py", "scripts/kaola-acp.py"),
+        (shared_root / "kaola-acp-holder.py", "scripts/kaola-acp-holder.py"),
+        (PLATFORMS / f"{manifest['id']}.yaml", "scripts/platform.yaml"),
         (shared_root / "kaola-model-policy.py", "scripts/kaola-model-policy.py"),
         (shared_root / "kaola-observation.py", "scripts/kaola-observation.py"),
         (shared_root / "kaola-pane-relay.py", "scripts/kaola-pane-relay.py"),

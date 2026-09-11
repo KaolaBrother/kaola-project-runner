@@ -36,8 +36,9 @@ scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" < prompt.txt
 ```
 
 The optional legacy `--if-snapshot "$SNAPSHOT_ID"` argument only links the receipt to the earlier
-observation. The compact receipt echoes it as `based_on_snapshot`; the Runner does not recapture it as
-a freshness decision and still performs the requested transport when the relay can mechanically do so.
+observation as an optional action-time identifier. The compact receipt echoes it as `based_on_snapshot`;
+the Runner does not recapture it as a freshness decision and still performs the requested transport when
+the relay can mechanically do so. Changed evidence is reported as `observation_changed:true`, not refused.
 
 The relay performs one direct literal or bracketed-paste transfer and attests the payload fingerprint.
 It does not stop the runtime child, disable pane input, acquire a lease, run a terminal fence, judge the

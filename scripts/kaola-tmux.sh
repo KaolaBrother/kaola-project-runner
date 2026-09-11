@@ -38,11 +38,15 @@ canonical_dir() { (cd "$1" 2>/dev/null && pwd -P); }
 json_value() { local expression="$1"; JSON_INPUT="$(cat)" "$PYTHON_BIN" -c 'import json,os,sys; d=json.loads(os.environ["JSON_INPUT"]); v=eval(sys.argv[1], {"d":d}); print(json.dumps(v,separators=(",",":")) if isinstance(v,(dict,list,bool)) else ("" if v is None else str(v)))' "$expression"; }
 emit_json() {
   "$PYTHON_BIN" - "$@" <<'PY'
-import json,sys
+import json,os,sys
 d={}
 for raw in sys.argv[1:]:
     kind,key,value=raw.split(":",2)
     d[key]=(value=="true") if kind=="b" else int(value) if kind=="n" else json.loads(value) if kind=="j" else value
+if d.get("schema_version") == 3 and d.get("platform") and "transport" not in d:
+    d["transport"]={"selected":"pty","default":os.environ.get("KPR_DEFAULT_TRANSPORT","pty"),"alternatives":["acp"],"reason":os.environ.get("KPR_TRANSPORT_REASON","caller-override")}
+if "mutation_performed" in d and "mutation_status" not in d:
+    d["mutation_status"]="completed" if d["mutation_performed"] is True else "not_started" if d["mutation_performed"] is False else "unknown"
 print(json.dumps(d,ensure_ascii=False,sort_keys=True))
 PY
 }
@@ -57,10 +61,11 @@ source "$adapter_file"
 [[ "${ADAPTER_ANSWER_MODE:-}" =~ ^(unsupported|claude-clear-v1)$ ]] || die "adapter answer mode missing"
 
 command_name="${1:-}"; [[ -n "$command_name" ]] || { usage; exit 2; }; shift
-case "$command_name" in preflight|start|observe|status|capture|send|key|answer|stop) ;; *) die "unknown command: $command_name" ;; esac
+case "$command_name" in preflight|start|observe|status|capture|send|wait|permit|cancel|key|answer|stop) ;; *) die "unknown command: $command_name" ;; esac
 repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_value="" text_given=false
 if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
-model_given=false effort_given=false permission_mode_given=false key_name=""
+model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false
+acp_wait=true timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;; --session) session="$2"; shift 2 ;; --resume) resume_id="$2"; shift 2 ;;
@@ -69,10 +74,55 @@ while [[ $# -gt 0 ]]; do
     --require-empty-editor) require_empty_editor=true; shift ;; --decision-id) decision_id="$2"; shift 2 ;;
     --replace-editor) replace_editor=true; shift ;; --model) model="$2"; model_given=true; shift 2 ;;
     --effort) effort="$2"; effort_given=true; shift 2 ;; --permission-mode) permission_mode="$2"; permission_mode_given=true; shift 2 ;;
-    --key) key_name="$2"; shift 2 ;;
+    --transport) transport="$2"; transport_given=true; shift 2 ;; --key) key_name="$2"; shift 2 ;;
+    --wait) acp_wait=true; shift ;; --no-wait) acp_wait=false; shift ;; --timeout) timeout="$2"; shift 2 ;;
+    --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
+    --since) capture_since="$2"; shift 2 ;; --full) capture_full=true; shift ;; --inline) capture_inline=true; shift ;;
     -h|--help) usage; exit 0 ;; *) die "unknown argument: $1" ;;
   esac
 done
+
+PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
+manifest_file="$script_dir/platform.yaml"
+[[ -f "$manifest_file" ]] || manifest_file="$(dirname "$script_dir")/platforms/$platform.yaml"
+[[ -f "$manifest_file" ]] || die "platform manifest not found"
+default_transport="$("$PYTHON_BIN" - "$manifest_file" <<'PY'
+import json,sys
+for line in open(sys.argv[1], encoding="utf-8"):
+    key, separator, value = line.partition(":")
+    if separator and key.strip() == "default_transport":
+        print(json.loads(value)); break
+PY
+)"
+[[ "$default_transport" == acp || "$default_transport" == pty ]] || die "invalid manifest default_transport"
+if [[ -z "$transport" ]]; then transport="$default_transport"; transport_reason=manifest-default; else transport_reason=caller-override; fi
+[[ "$transport" == acp || "$transport" == pty ]] || die "--transport must be acp or pty"
+export KPR_DEFAULT_TRANSPORT="$default_transport" KPR_TRANSPORT_REASON="$transport_reason"
+if [[ "$transport" == acp ]]; then
+  [[ -f "$script_dir/kaola-acp.py" ]] || die "ACP transport is not installed"
+  acp_args=("$PYTHON_BIN" "$script_dir/kaola-acp.py" "$platform" "$command_name" --repo "$repo" --transport-reason "$transport_reason")
+  [[ -n "$session" ]] && acp_args+=(--session "$session")
+  [[ -n "$resume_id" ]] && acp_args+=(--resume "$resume_id")
+  [[ "$continue_mode" == true ]] && acp_args+=(--continue)
+  [[ "$force" == true ]] && acp_args+=(--force)
+  [[ "$text_given" == true ]] && acp_args+=(--text "$text_value")
+  [[ "$command_name" == send && "$text_given" == false ]] && acp_args+=(--stdin)
+  [[ "$acp_wait" == false ]] && acp_args+=(--no-wait)
+  [[ -n "$timeout" ]] && acp_args+=(--timeout "$timeout")
+  [[ -n "$request_id" ]] && acp_args+=(--request-id "$request_id")
+  [[ -n "$option" ]] && acp_args+=(--option "$option")
+  [[ "$capture_tools" == true ]] && acp_args+=(--tools)
+  [[ -n "$capture_since" ]] && acp_args+=(--since "$capture_since")
+  [[ "$capture_full" == true ]] && acp_args+=(--full)
+  [[ "$capture_inline" == true ]] && acp_args+=(--inline)
+  [[ "$model_given" == true ]] && acp_args+=(--model "$model")
+  [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
+  [[ "$permission_mode_given" == true ]] && acp_args+=(--mode "$permission_mode")
+  [[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")
+  [[ "$command_name" == key ]] && acp_args+=(--key "$key_name")
+  [[ -n "$decision_id" ]] && acp_args+=(--request-id "$decision_id")
+  exec "${acp_args[@]}"
+fi
 
 TMUX_BIN="$(resolve_tool "${TMUX_BIN:-tmux}")" || die "tmux executable not found"
 PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
@@ -227,22 +277,22 @@ observe_managed() {
 }
 
 emit_status() { local observation status; observation="$(observe_managed)"; status="$(printf '%s' "$observation" | "$PYTHON_BIN" "$OBSERVATION_HELPER" status-view)"; load_session_identity; STATUS_JSON="$status" STATUS_RESULT="$1" STATUS_LEGACY="$STATE_LEGACY_OWNERSHIP" "$PYTHON_BIN" -c 'import json,os; d=json.loads(os.environ["STATUS_JSON"]); d["result"]=os.environ["STATUS_RESULT"]; d.update({"legacy_ownership":os.environ["STATUS_LEGACY"]=="true"} if d.get("platform")=="grok" else {}); print(json.dumps(d,ensure_ascii=False,sort_keys=True))'; }
-emit_refusal() { emit_json "n:schema_version:2" "s:result:$1" "s:action:${2:-$command_name}" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:false"; }
+emit_refusal() { emit_json "n:schema_version:3" "s:result:$1" "s:action:${2:-$command_name}" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:false"; }
 emit_transport_result() {
   local mutation_field
   case "$3" in
     true|false) mutation_field="b:mutation_performed:$3" ;;
     *) mutation_field="j:mutation_performed:null" ;;
   esac
-  emit_json "n:schema_version:2" "s:result:$1" "s:action:$2" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "$mutation_field"
+  emit_json "n:schema_version:3" "s:result:$1" "s:action:$2" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "$mutation_field"
 }
 emit_transport_refusal() {
-  emit_json "n:schema_version:2" "s:result:refused" "s:reason:$1" "s:action:$2" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:false"
+  emit_json "n:schema_version:3" "s:result:refused" "s:reason:$1" "s:action:$2" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:false"
 }
 emit_existing_session_not_reusable() {
   local relay_endpoint_present=false
   [[ -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]] && relay_endpoint_present=true
-  emit_json "n:schema_version:2" "s:result:existing-session-not-reusable" "s:action:start" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "b:mutation_performed:false" "b:owned:$STATE_OWNED" "b:platform_match:$STATE_PLATFORM_MATCH" "b:repo_match:$STATE_REPO_MATCH" "n:pane_count:$STATE_PANE_COUNT" "b:relay_process_match:$STATE_RELAY_PROCESS_MATCH" "b:relay_endpoint_present:$relay_endpoint_present"
+  emit_json "n:schema_version:3" "s:result:existing-session-not-reusable" "s:action:start" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "b:mutation_performed:false" "b:owned:$STATE_OWNED" "b:platform_match:$STATE_PLATFORM_MATCH" "b:repo_match:$STATE_REPO_MATCH" "n:pane_count:$STATE_PANE_COUNT" "b:relay_process_match:$STATE_RELAY_PROCESS_MATCH" "b:relay_endpoint_present:$relay_endpoint_present"
 }
 load_payload() { if [[ "$text_given" == true ]]; then PAYLOAD="$text_value"; else [[ ! -t 0 ]] || die "$command_name needs --text or stdin"; PAYLOAD="$(</dev/stdin)"; fi; [[ -n "$PAYLOAD" ]] || die "prompt must not be empty"; }
 validate_payload_controls() {
@@ -266,6 +316,21 @@ PY
 payload_needs_bracketed_paste() { [[ "$PAYLOAD" == *$'\n'* || "$PAYLOAD" == *$'\t'* ]]; }
 payload_hex() { printf '%s' "$PAYLOAD" | "$PYTHON_BIN" -c 'import sys; print(sys.stdin.buffer.read().hex())'; }
 fingerprint_payload() { printf '%s' "$PAYLOAD" | "$PYTHON_BIN" -c 'import hashlib,sys; print("sha256:"+hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
+journal_pty_prompt() {
+  KAOLA_PLATFORM="$platform" KAOLA_SESSION="$session" KAOLA_REPO="$repo" KAOLA_FINGERPRINT="$1" "$PYTHON_BIN" - <<'PY'
+import hashlib,json,os,pathlib,tempfile,time
+base=pathlib.Path(os.environ.get("KAOLA_ACP_RECORD_ROOT") or tempfile.gettempdir())
+if "KAOLA_ACP_RECORD_ROOT" not in os.environ:
+    base=base/f"kaola-{os.getuid()}"
+digest=hashlib.sha256(os.environ["KAOLA_REPO"].encode()).hexdigest()[:16]
+directory=base/os.environ["KAOLA_PLATFORM"]/os.environ["KAOLA_SESSION"]/digest
+directory.mkdir(parents=True,exist_ok=True); path=directory/"record.json"
+try: record=json.loads(path.read_text())
+except (OSError,ValueError): record={"platform":os.environ["KAOLA_PLATFORM"],"session":os.environ["KAOLA_SESSION"],"repo":os.environ["KAOLA_REPO"]}
+record["last_prompt"]={"fingerprint":os.environ["KAOLA_FINGERPRINT"],"written_at":time.time(),"transport":"pty","mutation_status":"accepted","stop_reason":None}
+temporary=path.with_suffix(".tmp"); temporary.write_text(json.dumps(record,sort_keys=True)); os.replace(temporary,path)
+PY
+}
 cleanup_terminal_socket() {
   "$PYTHON_BIN" - "$1" "$2" <<'PY'
 import os, pathlib, socket, stat, sys, tempfile
@@ -354,7 +419,7 @@ force_stop_exact() {
     result=termination-uncertain
   fi
   emit_json \
-    "n:schema_version:2" \
+    "n:schema_version:3" \
     "s:result:$result" \
     "s:action:force-stop" \
     "s:platform:$platform" \
@@ -431,7 +496,7 @@ PY
     payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"; clear_editor="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("clear_editor",False)')"
     [[ "$payload_fp" == "$answer_fp" && "$clear_editor" == true ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch answer true; exit 1; }
     close_relay_channel
-    emit_json "n:schema_version:2" "s:result:answer-sent" "s:action:answer" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:decision_id:$decision_id" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp" "b:clear_editor:true"
+    emit_json "n:schema_version:3" "s:result:answer-sent" "s:action:answer" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:decision_id:$decision_id" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp" "b:clear_editor:true"
     ;;
   send)
     load_payload
@@ -445,7 +510,8 @@ PY
     payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
     [[ "$payload_fp" == "$send_fp" ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch send true; exit 1; }
     close_relay_channel
-    emit_json "n:schema_version:2" "s:result:sent" "s:action:send" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"
+    journal_pty_prompt "$payload_fp"
+    emit_json "n:schema_version:3" "s:result:sent" "s:action:send" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"
     ;;
   key)
     if ! open_transport_channel; then emit_transport_result "$REFUSAL" key false; exit 1; fi
@@ -459,7 +525,7 @@ PY
     key_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
     [[ "$key_fp" == "$expected_key_fp" ]] || { close_relay_channel; emit_transport_result key-attestation-mismatch key true; exit 1; }
     close_relay_channel
-    emit_json "n:schema_version:2" "s:result:key-sent" "s:action:key" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:key:$key_name" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$key_fp"
+    emit_json "n:schema_version:3" "s:result:key-sent" "s:action:key" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:key:$key_name" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$key_fp"
     ;;
   stop)
     load_session_identity
@@ -476,7 +542,7 @@ PY
     payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
     [[ "$payload_fp" == "$quit_fp" ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch stop true; exit 1; }
     close_relay_channel
-    for _ in {1..100}; do session_exists || { emit_json "n:schema_version:2" "s:result:stopped" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"; exit 0; }; sleep 0.1; done
-    emit_json "n:schema_version:2" "s:result:quit-pending" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"; exit 2
+    for _ in {1..100}; do session_exists || { emit_json "n:schema_version:3" "s:result:stopped" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"; exit 0; }; sleep 0.1; done
+    emit_json "n:schema_version:3" "s:result:quit-pending" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"; exit 2
     ;;
 esac
