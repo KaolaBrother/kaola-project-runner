@@ -1,0 +1,1 @@
+{"login_required":false,"platform":"kimi-cli","schema_version":3,"transport":{"agent_info":{"name":"Kimi Code CLI","version":"0.41.0"},"capabilities":{"cancel":true,"close":false,"list":false,"load_session":true,"permission":true,"prompt":true,"resume":false,"set_config_option":true},"default":"acp","protocol_version":1,"reason":"caller-override","selected":"acp"}}

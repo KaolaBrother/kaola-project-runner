@@ -1,0 +1,1 @@
+{"error":{"code":"acp-initialize-failed","detail":{"code":"probe-eof"}},"login_required":null,"platform":"claude-code","schema_version":3,"transport":{"agent_info":null,"capabilities":null,"default":"pty","protocol_version":null,"reason":"caller-override","selected":"acp"}}

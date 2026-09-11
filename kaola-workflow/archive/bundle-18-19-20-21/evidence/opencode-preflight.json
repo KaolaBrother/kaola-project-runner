@@ -1,0 +1,1 @@
+{"login_required":false,"platform":"opencode","schema_version":3,"transport":{"agent_info":{"name":"OpenCode","version":"1.18.29"},"capabilities":{"cancel":true,"close":false,"list":false,"load_session":true,"permission":true,"prompt":true,"resume":false,"set_config_option":true},"default":"acp","protocol_version":1,"reason":"caller-override","selected":"acp"}}
