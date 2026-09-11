@@ -1,0 +1,112 @@
+[
+ {
+  "transport": "acp",
+  "run": 0,
+  "bytes": 2453,
+  "tokens": 795,
+  "invocations": 3,
+  "observations": 0,
+  "wall_s": 10.2,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "acp",
+  "run": 1,
+  "bytes": 2453,
+  "tokens": 789,
+  "invocations": 3,
+  "observations": 0,
+  "wall_s": 7.6,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "acp",
+  "run": 2,
+  "bytes": 2453,
+  "tokens": 791,
+  "invocations": 3,
+  "observations": 0,
+  "wall_s": 7.9,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "acp",
+  "run": 3,
+  "bytes": 2453,
+  "tokens": 791,
+  "invocations": 3,
+  "observations": 0,
+  "wall_s": 7.1,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "acp",
+  "run": 4,
+  "bytes": 2453,
+  "tokens": 791,
+  "invocations": 3,
+  "observations": 0,
+  "wall_s": 9.3,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "pty",
+  "run": 0,
+  "bytes": 52061,
+  "tokens": 16230,
+  "invocations": 9,
+  "observations": 6,
+  "wall_s": 20.9,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "pty",
+  "run": 1,
+  "bytes": 29982,
+  "tokens": 9279,
+  "invocations": 6,
+  "observations": 3,
+  "wall_s": 12.1,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "pty",
+  "run": 2,
+  "bytes": 29850,
+  "tokens": 9313,
+  "invocations": 6,
+  "observations": 3,
+  "wall_s": 13.1,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "pty",
+  "run": 3,
+  "bytes": 37486,
+  "tokens": 11483,
+  "invocations": 7,
+  "observations": 4,
+  "wall_s": 15.2,
+  "task_ok": true,
+  "retries": 0
+ },
+ {
+  "transport": "pty",
+  "run": 4,
+  "bytes": 29848,
+  "tokens": 9279,
+  "invocations": 6,
+  "observations": 3,
+  "wall_s": 12.9,
+  "task_ok": true,
+  "retries": 0
+ }
+]
