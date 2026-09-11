@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added a prototype ACP transport alongside the tmux/pty path (issue #15 PoC):
+  `scripts/kaola-acp.py` + `scripts/kaola-acp-holder.py` drive `grok agent stdio` and
+  `kimi acp` sessions with blocking `send --wait` receipts, `permit`, `cancel`, and
+  schema-v3 `mutation_status` facts. Not wired into manifests or the installer; see
+  `docs/poc-acp-transport-2026-09-11.md` for measured results (~12× fewer tokens per
+  session cycle than the pty path).
+
 - Added Devin CLI as the sixth Project Runner platform, with deterministic Skill generation and
   local installation, Adaptive model selection and runtime verification, `auto` permission-mode
   launch, direct prompt/key transport, exact continue/resume/stop support, honest unsupported and

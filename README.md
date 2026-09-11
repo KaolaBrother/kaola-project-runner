@@ -172,6 +172,8 @@ Issue #8 的逐 runtime 模型选择、`workflow-next` 通信和精确会话关�
 [2026-08-30 model-policy live smoke](docs/live-smoke-model-policy-2026-08-30.md)。
 Issue #9 的最小五平台通信实跑见
 [2026-08-31 minimal live smoke](docs/live-smoke-issue-9-2026-08-31.md)。
+Issue #15 的 Runner v2 ACP 通道 PoC（Grok + Kimi 实跑、离线合同、token 实测）见
+[2026-09-11 ACP PoC report](docs/poc-acp-transport-2026-09-11.md)。
 
 ## 授权与使用
 
