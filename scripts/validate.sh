@@ -19,3 +19,4 @@ bash -n "$repo_root/scripts/kaola-tmux.sh" "$repo_root"/scripts/adapters/*.sh
 python3 "$repo_root/tests/contract/test-issue-9-contract.py"
 python3 "$repo_root/tests/contract/test-direct-transport-contract.py"
 python3 "$repo_root/tests/contract/test-devin-regressions.py"
+python3 "$repo_root/tests/contract/test-acp-contract.py"
