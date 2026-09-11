@@ -1,9 +1,19 @@
 # Kaola Project Runner v2 设计文档：ACP 优先、tmux 兜底的双通道架构
 
-状态：草案 v0.2（已整合独立评审意见；评审结论 needs_rework → 本版逐条修正）
-范围：设计与决策，不含实现代码
+状态：v0.3 实施基线（PoC #15 已验证；本版按实测事实修正并锁定生产实现范围）
+范围：设计与决策；PoC 代码已在仓库（§9 标注"已有 / 待做"）
 日期：2026-09-11
 
+> v0.2 → v0.3 变更摘要（依据 `docs/poc-acp-transport-2026-09-11.md`）
+> - 默认通道决定：原生 ACP 五平台（Grok / Kimi / Cursor / Devin / OpenCode）`default_transport: acp`，Claude Code 保持 `pty`（§5.1、§12）
+> - `--continue` 改为 `session/load` 最近记录的 `acp_session_id`；`session/list` / `session/resume` / `session/close` 在 Grok/Kimi 上均不存在（§4、§7.2）
+> - permission 流程在实跑中未触发（Grok `always-approve`；Kimi `mode=default` 亦不发 `request_permission`）：`permit` 机制保留（mock 覆盖），live 验收改为条件项（§10.3）
+> - 持有者 socket 改为 `$TMPDIR/kaola-<uid>-acp/<hash>.sock`，记录目录内 `holder.sock` 为 symlink（§3.2）
+> - `configOptions` 落在 `session/new` 结果，记入 `session_meta`；manifest `acp_model_config_id` 取实测 id（§7.5）
+> - Grok 不发 `agentInfo` / `usage_update`，`session_info_update` 为 Grok 私有变体（§7.3、§7.5）
+> - 跨通道 `duplicate-prompt-warning` 需 pty 侧 journal `last_prompt`（issue #18，§5.3）
+> - §9 文件影响表按"PoC 已有 / 生产待做"重排；§10 以 PoC 结论替换 PoC 计划，新增生产验收
+>
 > v0.1 → v0.2 变更摘要（对应评审 4 blocking / 12 major / 10 minor）
 > - 新增 §3.3「每会话 ACP 连接持有者」，回答"start 与 send 之间谁持有 stdio"（blocking 1）
 > - `mutation_status` 改为五态，判定绑定到写入边界，去掉 30s 时间窗（blocking 2）
@@ -22,7 +32,7 @@
 
 ## 0. 一句话结论
 
-Runner v2 向 orchestrator 同时暴露两条通道——**`acp`** 与 **`pty`（现有 tmux/nested-PTY relay）**——共用同一套会话身份、命令面与回执 schema。Runner 只负责"通道能力事实 + 机械传输 + 事件精简"，通道的**选择权**归 orchestrator；Runner 通过默认值与成本事实提示引导它用最少 token 完成任务。PoC 阶段 Grok / Kimi 默认 acp，其余四平台默认 pty 但报告 acp 可用性。
+Runner v2 向 orchestrator 同时暴露两条通道——**`acp`** 与 **`pty`（现有 tmux/nested-PTY relay）**——共用同一套会话身份、命令面与回执 schema。Runner 只负责"通道能力事实 + 机械传输 + 事件精简"，通道的**选择权**归 orchestrator；Runner 通过默认值与成本事实提示引导它用最少 token 完成任务。PoC 实测 acp 比 pty 少约 12× 字节 / token（§10.2）；据此原生 ACP 五平台默认 acp，Claude Code（npx wrapper）默认 pty 但报告 acp 可用性。
 
 ---
 
@@ -137,7 +147,7 @@ Controlling Agent (orchestrator)
 | 组件 | 职责 | 不负责 |
 | --- | --- | --- |
 | Skill 模板 | 告诉 orchestrator：默认通道、通道能力事实、成本事实、fallback 规则 | 任何自动决策 |
-| platform manifest | `default_transport`、`acp_command`、`acp_client_capabilities`、`acp_quirks`、`acp_verified_versions`、`acp_env_allowlist`、`acp_login_requires_pty` | 运行时探测结果 |
+| platform manifest | `default_transport`、`acp_command`、`acp_client_capabilities`、`acp_quirks`、`acp_verified_versions`、`acp_env_allowlist`、`acp_login_requires_pty`、`acp_model_config_id`、`acp_effort_config_id`、`acp_wrapper_pin`（完整表见 §9.2） | 运行时探测结果 |
 | `kaola-acp.py`（CLI） | 解析命令、连接持有者 socket、格式化回执 | 持有 stdio |
 | `kaola-acp-holder.py`（每会话持有者，纯 Python 3） | spawn、stdio JSON-RPC、读线程、事件日志、pending permission、权限应答、cancel、stop 序列 | 判断任务完成、是否 fallback |
 | `kaola-tmux.sh` + relay | 不变 | — |
@@ -146,8 +156,9 @@ Controlling Agent (orchestrator)
 ### 3.2 会话身份与记录
 
 - 会话名仍为 `--session NAME`，正则不变；身份仍是 platform + session + repo 三元组。
-- 会话记录目录：`${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/kaola-<uid>/<platform>/<session>/<sha256(repo)[:16]>/`，含 `record.json`、`holder.sock`、`events.jsonl`、`stderr.log`。
-- `record.json` 字段：`transport`、`platform`、`repo`、`holder_pid`、`agent_pid/pgid`、`acp_session_id`、`protocol_version`、`agent_info{name,version}`、`created_at`、`last_prompt{fingerprint, written_at, transport, mutation_status, stop_reason}`、`pending_permissions[]`。
+- 会话记录目录：`${KAOLA_ACP_RECORD_ROOT:-${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/kaola-<uid>}/<platform>/<session>/<sha256(repo)[:16]>/`，含 `record.json`、`holder.sock`、`events.jsonl`、`stderr.log`。
+- **socket 真身**在 `$TMPDIR/kaola-<uid>-acp/<sha256(record_dir)[:24]>.sock`（macOS AF_UNIX `sun_path` 约 104 字节，记录目录路径可能超长）；记录目录内的 `holder.sock` 是指向它的 symlink（PoC 实测修正）。
+- `record.json` 字段：`transport`、`platform`、`repo`、`holder_pid`、`agent_pid/pgid`、`acp_session_id`、`protocol_version`、`agent_info{name,version}`、`session_meta`（`session/new` 结果，含 `configOptions`）、`created_at`、`last_prompt{fingerprint, written_at, transport, mutation_status, stop_reason}`、`pending_permissions[]`。
 - **一个会话名 + repo 同一时刻只绑定一条通道。** `start` 前同时查 tmux（pty）与记录目录（acp）；对已存在会话使用另一通道 → 回执 `transport-mismatch{other_transport, other_pid, other_repo}`（事实，不是 hardgate）。
 - 记录由持有者进程写；持有者死亡时 `status/observe` 依据 `holder_pid` 不存活 + 记录内容推导（见 §5.3）。
 
@@ -175,7 +186,7 @@ ACP stdio 归属于 spawn 它的进程；`start` 与 `send` 之间必须有人�
 | 命令 | acp 行为 | pty 行为（现有） | 备注 |
 | --- | --- | --- | --- |
 | `preflight` | 检查二进制 → 短生命周期探测：`initialize`（记录 `protocolVersion`、`agentCapabilities`、`authMethods`、`agentInfo.version`）→ 试探 `session/new`（`auth_required` 错误 → `login_required:true`）→ `session/close`（有能力时）→ 退出 | 现有 | 探测进程用 `NO_BROWSER=true`；结果写入回执 `transport.capabilities` |
-| `start [--continue \| --resume ID]` | fork 持有者 → spawn → `initialize` → 版本校验（§7.2）→ `session/new` / `session/load` / `session/resume`；`--continue` 需 `sessionCapabilities.list` → `session/list` 取最近 → resume；能力缺失回执 `resume-unsupported` / `continue-unsupported`，不自动新建 | 现有 | 返回 `acp_session_id` |
+| `start [--continue \| --resume ID]` | fork 持有者 → spawn → `initialize` → 版本校验（§7.2）→ `session/new` / `session/load` / `session/resume`；`--resume ID` 优先 `session/resume`（有能力时），否则 `session/load`；`--continue` 读取同一 platform + session + repo 记录中的上一个 `acp_session_id` 并按同样规则恢复，无记录 → `continue-empty`；能力缺失回执 `resume-unsupported` / `continue-unsupported`，不自动新建 | 现有 | 返回 `acp_session_id`。PoC 实测 Grok/Kimi 仅有 `loadSession`，无 `session/list`，故 `--continue` 不再依赖 `session/list` |
 | `send --text/stdin [--wait \| --no-wait] [--timeout S]` | `session/prompt`；默认 `--wait` 阻塞到 `stopReason` 或超时；turn 进行中再次 send → `prompt-in-progress`（事实，不排队） | 现有（不等待） | §6 |
 | `wait [--timeout S]` | 等待当前 turn 终态 | `wait-unsupported` | 新命令 |
 | `observe` | 会话状态摘要：进程/持有者/最后 turn/`pending_permissions[]`/`context_usage`，无 raw frame | 现有 | 两者都是 schema v3 |
@@ -194,6 +205,19 @@ ACP stdio 归属于 spawn 它的进程；`start` 与 `send` 之间必须有人�
 ## 5. 通道选择模型
 
 ### 5.1 第一层：Runner 给出默认与能力事实（preflight / start 回执）
+
+manifest `default_transport`（v0.3 决定）：
+
+| 平台 | default_transport | 依据 |
+| --- | --- | --- |
+| Grok | `acp` | PoC live 11/13 PASS，Part C 12× |
+| Kimi CLI | `acp` | PoC live 11/13 PASS |
+| Cursor CLI | `acp` | 原生 `cursor-agent acp`（Paseo 生产路径）；生产实现中以 preflight + 场景 1/3/4/7 实跑补证据 |
+| Devin CLI | `acp` | 原生 `devin acp`；同上；`self_hosting_risk` 在 Devin 驱动 Devin 时为 true |
+| OpenCode | `acp` | 原生 `opencode acp`（官方文档）；同上 |
+| Claude Code | `pty` | 依赖 npx wrapper（供应链、首次下载超时、可能需要 `terminal:true`）且当前无有效账号；preflight 仍报告 acp 事实 |
+
+任一平台若在实跑中 preflight `initialize` 失败或版本不支持，回执事实即可让 orchestrator 选 pty；不为此改 manifest 默认值。
 
 ```text
 transport:
@@ -247,7 +271,7 @@ transport:
 
    与 v1 `mutation_performed` 映射：`completed|accepted|in_progress → true`，`not_started → false`，`unknown → null`。
 3. 切通道 = 新会话：`stop` 旧会话后在新通道 `start`。平台支持 `resume` 且 ACP session ID 与 CLI 原生 session ID 同源时可 `--resume`（Grok/Kimi/Devin 在 PoC 验证）；否则 Skill 明示上下文会丢失。
-4. `duplicate-prompt-warning`：对同 platform + session + repo 的 `last_prompt.fingerprint` 做**无时限**比对，回执同时给出上次的 `transport`、`written_at`、`mutation_status`、`stop_reason`。事实，不阻断。
+4. `duplicate-prompt-warning`：对同 platform + session + repo 的 `last_prompt.fingerprint` 做**无时限**比对，回执同时给出上次的 `transport`、`written_at`、`mutation_status`、`stop_reason`。事实，不阻断。PoC 只验证了 acp→acp；pty→acp 需要 `kaola-tmux.sh send` 把 `last_prompt{transport: pty}` journal 到同一身份记录（issue #18，生产实现项）。
 
 ---
 
@@ -327,13 +351,14 @@ spawn -> initialize(protocolVersion=1, clientCapabilities=manifest 值)
       -> 若 agent 返回 protocolVersion != 1 -> 回执 acp-protocol-version-unsupported{agent_version}，走 stop 序列并退出
          （客观 transport 不可能，允许拒绝）
       -> [authenticate 仅当 session/new 返回 auth_required 且 authMethods 非空且 manifest 允许]
-      -> session/new(cwd, mcpServers=[]) | session/load | session/resume | session/list→resume
+      -> session/new(cwd, mcpServers=[]) | session/resume(有能力) | session/load(记录中的 acp_session_id)
       -> [session/set_config_option: 模型/effort，configId 来自 manifest acp_model_config_id]
       -> loop: session/prompt -> stream session/update -> response.stopReason
       -> stop: §7.6
 ```
 
-`agent_info.version` 缺失时回落 `binary --version`，两者都记入回执。
+`agent_info.version` 缺失时回落 `binary --version`，两者都记入回执（PoC 实测 Grok 1.0.25 不返回 `agentInfo`，此回落是必需路径）。
+`session/new` 结果中的 `configOptions` 原样记入 `session_meta`，回执 `transport.config_options` 只给 `[{id, current}]` 摘要。
 
 ### 7.3 agent→client 请求处理（v0.2 补全）
 
@@ -343,7 +368,7 @@ spawn -> initialize(protocolVersion=1, clientCapabilities=manifest 值)
 | `$/cancel_request` | 对被取消的 pending 请求返回 `-32800`，从 `pending_permissions` 移除 |
 | `fs/*`、`terminal/*` | 默认 `clientCapabilities = {fs:{false,false}, terminal:false}`（规范默认，**非** Paseo 取值——Paseo 为 `terminal:true`）。仍被调用时返回 `-32601`。若某平台 wrapper（如 claude-agent-acp）需要 client terminal，在 manifest `acp_client_capabilities` 按平台开启并实现最小 terminal 服务（PoC 决定） |
 | `elicitation/create` 及任何未知方法 | 返回 `-32601`，事件日志记录 |
-| 未知 `sessionUpdate` 变体 | 计数、落盘，不报错 |
+| 未知 `sessionUpdate` 变体 | 计数、落盘，不报错（实测：Grok 发私有 `session_info_update`；Grok 不发 `usage_update`，Kimi 发） |
 
 ### 7.4 超时与死进程
 
@@ -356,11 +381,12 @@ spawn -> initialize(protocolVersion=1, clientCapabilities=manifest 值)
 
 全部放在 manifest `acp_quirks` 与持有者的平台钩子，不进入 Skill 模板与 orchestrator 视野。初始清单：
 
+- grok（实测 1.0.25）：`configOptions` = `model`{grok-4.6, grok-4.5} + `reasoning_effort`{xhigh, high, medium, low}；无 `agentInfo`、无 `usage_update`、私有 `session_info_update`；无 approval configOption，`always-approve`；仅 `loadSession`。`acp_model_config_id: "model"`，effort 走 `reasoning_effort`。
+- kimi（实测 0.41.0）：`configOptions` = `model`{kimi-for-coding, kimi-for-coding-highspeed, k3, k3-256k} + `thinking`{low, high, max} + `mode`{default, plan, auto, yolo}；`mode=default` 实测不发 `request_permission`；仅 `loadSession`。`acp_model_config_id: "model"`，effort 走 `thinking`。不做模型目录探测。
 - cursor：commands/models 异步发布；v2 不等待目录。
-- kimi：不做模型目录探测；`--model/--effort` 通过 `acp_model_config_id` 下发（PoC 记录实际 configId）。
 - devin：resume 必传 `sessionId + cwd + mcpServers`。
 - claude-code：wrapper pin；需 `CLAUDE_CODE_EXECUTABLE`；npx 首次下载可能超时 → preflight 报 `wrapper-fetch-timeout`；可能需要 `terminal:true`。
-- 所有平台：`acp_verified_versions` 记录已验证的 CLI 版本与协商到的 `protocolVersion`；preflight 报 `verified_version_match`（事实）。
+- 所有平台：`acp_verified_versions` 记录已验证的 CLI 版本与协商到的 `protocolVersion`；preflight 报 `verified_version_match`（事实）。Cursor / Devin / OpenCode / Claude Code 的 configOption id 在生产实现 preflight 实跑后补入。
 
 ### 7.6 stop 序列（v0.2 重写）
 
@@ -392,66 +418,84 @@ macOS：不依赖 `/proc`；进程枚举用 `ps -o pid,pgid`（现有 `PS_BIN` �
 
 ---
 
-## 9. 文件与仓库影响（仅列出，不实现）
+## 9. 文件与仓库影响
 
-| 变更 | 类型 | 说明 |
+### 9.1 PoC 已有（commit `13b5770`，issue #15）
+
+| 文件 | 状态 | 说明 |
 | --- | --- | --- |
-| `scripts/kaola-acp.py` | 新增 | CLI / socket 客户端 |
-| `scripts/kaola-acp-holder.py` | 新增 | 每会话持有者 |
-| `scripts/kaola-tmux.sh` | 修改 | `--transport` 分发；pty 回执加 `transport`、`mutation_status` |
-| `platforms/*.yaml` | 修改 | **保持 flat 解析器**，新增前缀键（值均为 JSON 字符串）：`default_transport`、`acp_command`、`acp_client_capabilities`、`acp_quirks`、`acp_verified_versions`、`acp_env_allowlist`、`acp_login_requires_pty`、`acp_model_config_id`、`acp_wrapper_pin` |
-| `scripts/render-skills.py` | 修改 | 读取上述键并校验；`--check` 覆盖 |
-| `templates/SKILL.md.tmpl` | 修改 | 新增变量：`{{DEFAULT_TRANSPORT}}`、`{{ACP_COMMAND}}`、`{{ACP_QUIRKS}}`、`{{ACP_LOGIN_REQUIRES_PTY}}`；通道事实段、成本提示段、fallback 规则段 |
-| `templates/references/transport.md.tmpl` | 修改 | 改名语义为 pty 通道说明 |
-| `templates/references/acp.md.tmpl` | 新增 | acp 通道命令、回执字段、`mutation_status` 表 |
-| `tests/contract/mock-acp-agent.py` | 新增 | 纯 Python mock agent：可脚本化延迟、半行、崩溃、多 permission、`$/cancel_request`、拒绝版本、未知方法调用 |
-| `tests/contract/test-acp-contract.py` | 新增 | 启动 mock，覆盖 §7.3/§7.4/§7.6 全部分支 |
-| `scripts/validate.sh` | 修改 | 接入上述合同测试（离线、快速） |
-| `docs/architecture.md`、`docs/api.md` | 修改 | — |
-| `templates/grok-golden/` | **不动** | Grok 默认 acp 只影响 `skills/grok-*` 渲染输出，不影响 golden |
-| `skills/` | 生成 | 不手编 |
+| `scripts/kaola-acp.py` | 已有 | CLI / socket 客户端；平台 → ACP 命令目前**硬编码** `DEFAULT_COMMANDS = {grok, kimi-cli}`（生产待改为读 manifest） |
+| `scripts/kaola-acp-holder.py` | 已有 | 每会话持有者；§3.3 / §7 全部分支 |
+| `tests/contract/mock-acp-agent.py` | 已有 | 12 场景 mock agent |
+| `tests/contract/test-acp-contract.py` | 已有 | 13 测试，接入 `validate.sh` |
+| `scripts/validate.sh` | 已有 | 已调用 acp 合同测试 |
+
+### 9.2 生产待做（issue #17 拆分项）
+
+| 变更 | 类型 | 说明 | 归属 |
+| --- | --- | --- | --- |
+| `platforms/*.yaml` | 修改 | **保持 flat 解析器**，新增前缀键（值均为 JSON 字符串）：`default_transport`、`acp_command`、`acp_client_capabilities`、`acp_quirks`、`acp_verified_versions`、`acp_env_allowlist`、`acp_login_requires_pty`、`acp_model_config_id`、`acp_effort_config_id`、`acp_wrapper_pin` | A |
+| `scripts/render-skills.py` | 修改 | `REQUIRED` 纳入上述键并校验取值；`--check` 覆盖 | A |
+| `templates/SKILL.md.tmpl` | 修改 | 新增变量：`{{DEFAULT_TRANSPORT}}`、`{{ACP_COMMAND}}`、`{{ACP_QUIRKS}}`、`{{ACP_LOGIN_REQUIRES_PTY}}`；通道事实段、成本提示段（§6.5）、fallback 规则段（§5.3） | A |
+| `templates/references/transport.md.tmpl` | 修改 | 语义收窄为 pty 通道说明 | A |
+| `templates/references/acp.md.tmpl` | 新增 | acp 通道命令、回执字段、`mutation_status` 表 | A |
+| `tests/contract/test-generated-skills.py` | 修改 | 断言六个 Skill 渲染出通道段与正确默认值 | A |
+| `scripts/kaola-acp.py` | 修改 | 删除 `DEFAULT_COMMANDS` 硬编码，从 `platforms/<id>.yaml` 读取 `acp_command` 等键（与 `kaola-tmux.sh` 同一解析口径） | B |
+| `scripts/kaola-tmux.sh` | 修改 | 全局 `--transport acp\|pty`，默认取 manifest；acp → exec `kaola-acp.py`；pty 回执加 `transport` 段与 `mutation_status`（schema v3 超集） | B |
+| `scripts/kaola-observation.py` | 修改 | pty 回执 `schema_version: 3`、`transport`、`mutation_status` 映射（§8） | B |
+| `scripts/kaola-tmux.sh send` | 修改 | 向同一身份记录 journal `last_prompt{transport: pty}`（issue #18） | B |
+| `scripts/render-skills.py`、`scripts/install-local.sh` | 修改 | 生成的 `skills/*/scripts/` 打包 `kaola-acp.py` + `kaola-acp-holder.py`；安装迁移测试覆盖 | B |
+| `docs/architecture.md`、`docs/api.md`、`README.md` | 修改 | 双通道命令面、schema v3 | A/B 各自 dock |
+| `platforms/*.yaml acp_verified_versions` | 修改 | Cursor / Devin / OpenCode / Claude Code 实跑 preflight + 场景 1/3/4/7 后写入版本与 configOption id | C |
+| `templates/grok-golden/` | **不动** | Grok 默认 acp 只影响 `skills/grok-*` 渲染输出，不影响 golden | — |
+| `skills/` | 生成 | 不手编 | — |
 
 ---
 
-## 10. PoC 与验收
+## 10. PoC 结论与生产验收
 
-### 10.1 PoC 范围
+### 10.1 PoC 结论（issue #15，详见 `docs/poc-acp-transport-2026-09-11.md`）
 
-平台：Grok（原生 ACP、最简单）+ Kimi（有 trust UI，验证 pty 兜底）。其余四平台 `default_transport: pty`，preflight 报告 acp 事实。
+平台：Grok 1.0.25 + Kimi 0.41.0。十三个 live 场景：
 
-live 场景：
+| # | 场景 | 结果 |
+| --- | --- | --- |
+| 1 | prompt → `send --wait` → `final_text` / `end_turn` | PASS × 2 |
+| 2 | 权限请求 → `pending_permissions` → `permit` | **未触发**：两家默认自动批准；仅 mock 覆盖 |
+| 3 | `prompt_timeout` → `cancel` → `cancelled` | PASS × 2 |
+| 4 | `stop` 非 force → `residual_pids: []` | PASS × 2 |
+| 5 | `--resume` / `--continue` | `session/load` 成功、上下文保留；`session/list` 缺失 → 改为记录内 `acp_session_id`（§4） |
+| 6 | 未登录 → `login_required:true` | PRECONDITION-NOT-MET（凭据已缓存） |
+| 7 | spawn 失败 → `not_started` → pty 重发 | PASS |
+| 8 | 跨通道 `duplicate-prompt-warning` | acp→acp PASS；pty→acp 需 #18 |
+| 9 | `prompt-in-progress` | PASS × 2 |
+| 10 | 持有者 kill → `holder_lost` / `unknown` → `stop --force` | PASS × 2 |
+| 11 | 非 canonical `--repo` 拒绝 | PASS × 2 |
+| 12 | 同名会话跨 repo 记录独立 | PASS × 2 |
+| 13 | `configOptions` id | 已记入 §7.5 |
 
-1. 普通 prompt → `send --wait` → `final_text`、`stop_reason: end_turn`。
-2. 触发权限请求 → `pending_permissions` → `permit`。
-3. 长任务 → `wait --timeout` → `prompt_timeout` → `cancel` → `stopReason: cancelled`。
-4. `stop` 非 force → 进程组零残留（`residual_pids: []`）。
-5. `--resume` 成功 / `resume-unsupported`；`--continue` 有/无 `session/list`。
-6. 未登录 → preflight `login_required:true` → pty 登录 → acp。
-7. acp spawn 失败 → `mutation_status: not_started` → pty 重发。
-8. pty 完成后误用 acp 重发同一 prompt → `duplicate-prompt-warning`（含上次 transport/时间/状态）。
-9. turn 进行中再次 `send` → `prompt-in-progress`。
-10. 持有者被 kill → `observe` 回执 `holder-lost`、`mutation_status: unknown` → `stop --force` 清理。
-11. `--repo` 非 canonical git root → 与 v1 相同的拒绝事实。
-12. 同名会话跨两个 repo 并发 → 记录互不覆盖。
-13. Grok/Kimi 的 `configOptions` 实际 id 记录到 manifest。
+离线合同（`test-acp-contract.py`）：13/13，覆盖 §7.3 / §7.4 / §7.6 全部分支。
 
-mock 合同场景（validate.sh，离线）：permission pending 时 agent 死亡；半行/非 JSON 行；stderr 高速输出；`cancel` 与 `end_turn` 竞态；`$/cancel_request` 级联；`protocolVersion: 2`；agent 调用 `fs/*`/`elicitation/create` → `-32601`；数字字符串 id；多 permission 并发。
+### 10.2 度量结果（"reply PONG"，5 次中位数）
 
-### 10.2 度量（同一任务，acp vs pty 各 ≥5 次，报中位数）
+| 指标 | acp | pty | 比值 |
+| --- | --- | --- | --- |
+| 送入 orchestrator 字节 | 2,453 | 29,982 | 12.2× less |
+| cl100k token | 791 | 9,313 | 11.8× less |
+| Runner 调用次数 | 3 | 6 | 2× fewer |
+| observe 读取 | 0 | 3 | 轮询消除 |
+| 端到端 | 7.9 s | 13.1 s | 1.7× faster |
 
-- 送入 orchestrator 的 UTF-8 字节数 + 固定 tokenizer（cl100k）token 数。
-- Runner 命令调用次数。
-- orchestrator 推理轮数。
-- 端到端时长。
-- 失败恢复次数及 `mutation_status` 准确率。
+### 10.3 生产验收标准
 
-### 10.3 验收标准
-
-- `./scripts/validate.sh`、`render-skills.py --check` 全绿；pty live smoke 与 v1 一致（仅新增字段）。
-- mock 合同测试覆盖 §7.3、§7.4、§7.6 全部分支。
-- Grok/Kimi live：§10.1 十三个场景全部产出预期回执。
-- Claude Code：当前无有效账号，live 验收标 `PRECONDITION-NOT-MET`，条件通过；条件为账号可用后跑通场景 1–4。
-- token 度量报告出具后，再决定其余四平台是否切默认 acp。
+- `./scripts/validate.sh`、`render-skills.py --check` 全绿；`templates/grok-golden/` 字节不变。
+- pty 通道 live smoke 与 v1 行为一致，回执仅新增 `transport`、`mutation_status`（schema v3 超集）。
+- 六个生成 Skill 均含通道事实段、成本提示段、fallback 规则段，`default_transport` 与 §5.1 表一致。
+- `kaola-tmux.sh <platform> --transport acp` 与直接调用 `kaola-acp.py` 回执一致；`skills/*/scripts/` 打包 acp 脚本，`install-local.sh` 安装后可用。
+- Cursor / Devin / OpenCode：各自 live 跑通场景 1 / 3 / 4 / 7，`acp_verified_versions` 写入实测版本与 configOption id。
+- Claude Code：无有效账号时 preflight 报 acp 事实（wrapper 可拉取 / `wrapper-fetch-timeout`），live 标 `PRECONDITION-NOT-MET`，条件为账号可用后跑通场景 1–4。
+- 权限流程：至少在一个平台的严格模式（候选：Kimi `mode=plan`）下尝试触发 `session/request_permission`；触发则跑通场景 2，不触发则记录事实，`permit` 继续以 mock 为准。
+- pty→acp `duplicate-prompt-warning`（#18）live 复现一次。
 
 ---
 
@@ -486,9 +530,18 @@ mock 合同场景（validate.sh，离线）：permission pending 时 agent 死�
 3. `snapshot_id` → acp 下 null；新增 `event_cursor`；版本字段 `schema_version: 3`。
 4. `send --wait` → 保留，属协议原生请求-响应，不是策略层；Skill 措辞改为成本事实提示。
 5. Claude Code → 走 `claude-agent-acp` wrapper（pin），不引入 `stream-json` 第三 transport。
-6. 默认通道 → PoC 前仅 Grok/Kimi 为 acp。
-7. 命令等价物 → `key escape → cancel`；`decision_id → request_id`；`--continue → session/list`；`--lines → 事件数`。
+6. 默认通道 → PoC 前仅 Grok/Kimi 为 acp。（v0.3 更新，见下）
+7. 命令等价物 → `key escape → cancel`；`decision_id → request_id`；`--continue → session/list`（v0.3 改为 `session/load`）；`--lines → 事件数`。
 
 未采纳/保留意见：无。
 
-下一步：用户确认 v0.2 后进入 PoC（Grok + Kimi），PoC 报告出具后再决定其余四平台默认通道与正式实现排期。
+### v0.3 决定（PoC 后，用户确认 2026-09-11）
+
+1. **默认通道**：原生 ACP 五平台（Grok / Kimi / Cursor / Devin / OpenCode）`default_transport: acp`；Claude Code `pty`。依据：12× token 实测；五家 ACP 入口均为 CLI 原生子命令，Claude 依赖第三方 npx wrapper 且无账号可验。
+2. **`--continue`**：不再依赖 `session/list`；读取同一身份记录的上一个 `acp_session_id` 走 `session/load`（或 `session/resume`）。
+3. **permission**：`permit` / `pending_permissions` 机制按 v0.2 保留，生产验收改为条件项（§10.3）；不为"未触发"引入新 gate。
+4. **socket 路径**：短路径真身 + 记录目录 symlink（§3.2）。
+5. **模型下发**：manifest 拆 `acp_model_config_id` 与 `acp_effort_config_id`（Grok `model`/`reasoning_effort`，Kimi `model`/`thinking`），对应现有 `--model/--effort` 语义。
+6. **实施拆分**：§9.2 归属 A（manifest / 模板 / renderer 合同）、B（`kaola-tmux.sh --transport` 分发、pty schema v3、去硬编码、打包安装、#18）、C（Cursor / Devin / OpenCode / Claude Code 实跑与 `acp_verified_versions`、permission 严格模式探测）。A 与 B 可并行，C 依赖 A + B。
+
+下一步：按 §9.2 A / B / C 建立 issue，用 Kaola-Workflow 逐个跑通；§10.3 全部满足后本设计转为 `docs/architecture.md` / `docs/api.md` 的正式内容。

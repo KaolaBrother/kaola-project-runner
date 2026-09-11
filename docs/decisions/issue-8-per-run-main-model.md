@@ -46,4 +46,4 @@ tmux/relay identity, actual evidence, prompt/reply, and exact shutdown. Claude c
 receipt and UI selection only until account authentication is restored.
 
 The exact live receipts and shutdown proof are recorded in
-[`docs/live-smoke-model-policy-2026-08-30.md`](docs/live-smoke-model-policy-2026-08-30.md).
+[`docs/live-smoke-model-policy-2026-08-30.md`](../live-smoke-model-policy-2026-08-30.md).

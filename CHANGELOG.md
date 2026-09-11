@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Promoted the Runner v2 dual-transport design to v0.3 (implementation baseline) from the PoC
+  results: native-ACP platforms (Grok, Kimi, Cursor, Devin, OpenCode) default to `acp`, Claude
+  Code stays `pty`; `--continue` resumes via `session/load` from the session record; permission
+  gating stays mock-verified with a conditional live acceptance; production work is split into
+  manifest/template (A), dispatch/packaging (B), and per-platform live verification (C). Moved the
+  issue #7 / #8 design records from the repository root into `docs/decisions/`.
+
 - Added a prototype ACP transport alongside the tmux/pty path (issue #15 PoC):
   `scripts/kaola-acp.py` + `scripts/kaola-acp-holder.py` drive `grok agent stdio` and
   `kimi acp` sessions with blocking `send --wait` receipts, `permit`, `cancel`, and
