@@ -315,5 +315,87 @@ class AcpContractTests(unittest.TestCase):
         self.assertEqual(receipt.get("stop_reason"), "cancelled")
 
 
+class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
+    """Issue #22: default kimi ACP start (no --mode) must set mode=yolo."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory(prefix="kaola-acp-issue22-")
+        cls.root = Path(cls._tmp.name)
+        cls.repo = cls.root / "repo"
+        cls.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
+        cls.record_root = cls.root / "records"
+        cls.mock_log = cls.root / "mock-events.jsonl"
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def setUp(self) -> None:
+        self.session = f"acp22-{self._testMethodName.lower()}-{os.getpid()}"[:79]
+        self._started = False
+        if self.mock_log.is_file():
+            self.mock_log.write_text("", encoding="utf-8")
+
+    def tearDown(self) -> None:
+        if self._started:
+            self._run("stop", "--force")
+
+    def env(self) -> dict[str, str]:
+        env = dict(os.environ)
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
+        env["MOCK_ACP_LOG"] = str(self.mock_log)
+        env["KAOLA_ACP_COMMAND"] = (
+            f"{sys.executable} {MOCK} --scenario permission_unless_yolo"
+        )
+        return env
+
+    def _run(self, command: str, *args: str, timeout: float = 30) -> dict:
+        argv = [
+            "bash", str(PROJECT / "scripts" / "kaola-tmux.sh"),
+            "kimi-cli", command, "--repo", str(self.repo), "--session", self.session,
+            *args,
+        ]
+        result = subprocess.run(
+            argv, capture_output=True, text=True, env=self.env(), timeout=timeout
+        )
+        try:
+            return json.loads(result.stdout)
+        except ValueError:
+            self.fail(
+                f"kimi-cli {command} did not emit JSON rc={result.returncode} "
+                f"stdout={result.stdout!r} stderr={result.stderr!r}"
+            )
+
+    def test_public_default_start_sets_mode_yolo(self) -> None:
+        receipt = self._run("start")
+        self._started = True
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        events = [
+            json.loads(line)
+            for line in self.mock_log.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        yolo = [
+            event
+            for event in events
+            if event.get("event") == "set_config_option"
+            and (event.get("params") or {}).get("value") == "yolo"
+            and (
+                (event.get("params") or {}).get("configId") == "mode"
+                or (event.get("params") or {}).get("config_id") == "mode"
+            )
+        ]
+        self.assertTrue(
+            yolo,
+            "default start must set ACP mode=yolo without caller --permission-mode; "
+            f"events={events}",
+        )
+        send = self._run("send", "--text", "use a tool", "--timeout", "15")
+        self.assertEqual(send.get("outcome"), "turn_completed")
+        self.assertEqual(send.get("stop_reason"), "end_turn")
+
+
 if __name__ == "__main__":
     unittest.main()

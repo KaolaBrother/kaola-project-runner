@@ -101,6 +101,7 @@ class MockAgent:
         self.lock = threading.Lock()
         self.active_turn: tuple[Any, str] | None = None
         self.child_proc: subprocess.Popen | None = None
+        self.configured: dict[str, Any] = {}
         log_event({"event": "mock_start", "scenario": scenario, "caps": sorted(caps)})
 
     # -- outbound helpers -------------------------------------------------
@@ -240,6 +241,9 @@ class MockAgent:
         respond(request_id, {})
 
     def on_set_config(self, request_id: Any, params: dict[str, Any]) -> None:
+        config_id = params.get("configId") or params.get("config_id")
+        if config_id is not None:
+            self.configured[str(config_id)] = params.get("value")
         log_event({"event": "set_config_option", "params": params})
         respond(request_id, {})
 
@@ -308,6 +312,12 @@ class MockAgent:
         if scenario == "permission_gate":
             self.ask_permission(session_id, "mock gated op", ["allow", "deny"])
             return  # resumes in on_response
+        if scenario == "permission_unless_yolo":
+            if self.configured.get("mode") == "yolo":
+                log_event({"event": "yolo_skip_permission", "configured": dict(self.configured)})
+            else:
+                self.ask_permission(session_id, "mock gated op", ["allow", "deny"])
+                return
         self.emit_prelude(session_id)
         if self.turn_ms:
             time.sleep(self.turn_ms / 1000.0)
@@ -353,7 +363,10 @@ class MockAgent:
                 sid = next(iter(self.sessions), "")
                 message_chunk(sid, "MOCK-REPLY all permitted")
                 self.finish_active_turn("end_turn")
-        elif method == "session/request_permission" and self.scenario == "permission_gate":
+        elif method == "session/request_permission" and self.scenario in (
+            "permission_gate",
+            "permission_unless_yolo",
+        ):
             sid = next(iter(self.sessions), "")
             message_chunk(sid, "MOCK-REPLY permitted")
             self.finish_active_turn("end_turn")
@@ -441,7 +454,7 @@ def main() -> int:
     parser.add_argument("--caps", default="")
     parser.add_argument("--turn-ms", type=int, default=0)
     parser.add_argument("--flood-bytes", type=int, default=1024 * 1024)
-    args = parser.parse_args()
+    args, _unknown = parser.parse_known_args()
     caps = {item for item in args.caps.split(",") if item}
     agent = MockAgent(args.scenario, caps, args.turn_ms, args.flood_bytes)
     return agent.serve()

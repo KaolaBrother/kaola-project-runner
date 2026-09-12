@@ -65,17 +65,31 @@ if [[ "${1:-}" == --help ]]; then
   printf '%s\n' '--model <model>' '--effort <level>' '--permission-mode <mode>'
   exit 0
 fi
+skip_tool_approval=0
+for argument in "$@"; do
+  case "$argument" in
+    bypassPermissions|dontAsk) skip_tool_approval=1 ;;
+  esac
+done
 printf '\033]0;%s\007' 'Implement selected Kaola batch'
-printf '%s\n' \
-  'Claude Code' \
-  'Opus 5 | high effort' \
-  'This command requires approval' \
-  'Do you want to proceed?' \
-  '❯ 1. Yes' \
-  "   2. Yes, and don't ask again" \
-  '   3. Yes, and switch to auto mode · auto mode handles these prompts for you' \
-  '   4. No' \
-  'Esc to cancel · Tab to amend · ctrl+e to explain'
+if [[ "$skip_tool_approval" -eq 1 ]]; then
+  printf '%s\n' \
+    'Claude Code' \
+    'Opus 5 | high effort' \
+    'Ready' \
+    '❯'
+else
+  printf '%s\n' \
+    'Claude Code' \
+    'Opus 5 | high effort' \
+    'This command requires approval' \
+    'Do you want to proceed?' \
+    '❯ 1. Yes' \
+    "   2. Yes, and don't ask again" \
+    '   3. Yes, and switch to auto mode · auto mode handles these prompts for you' \
+    '   4. No' \
+    'Esc to cancel · Tab to amend · ctrl+e to explain'
+fi
 while IFS= read -r line; do
   [[ "$line" == /exit ]] && exit 0
 done
@@ -99,14 +113,18 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
   json_assert test_claude_base_index_one \
     "d['owned'] and d['repo_match'] and d['process_match'] and d['tui_detected'] and d['pane_id'].startswith('%')" \
     "$status_json"
-  json_assert test_claude_native_approval_waits \
-    "d['activity'] == 'waiting-human'" "$status_json"
-  grep -Fq -- '--model opus --effort high --permission-mode auto' "$claude_log" || \
-    fail test_claude_default_launch_configuration "missing launch args: $(cat "$claude_log")"
+  json_assert test_claude_default_start_does_not_wait_on_tool_approval \
+    "d['activity'] != 'waiting-human'" "$status_json"
+  if grep -Fq -- '--permission-mode auto' "$claude_log"; then
+    fail test_claude_default_launch_configuration "no-flag start must not keep --permission-mode auto: $(cat "$claude_log")"
+  fi
+  grep -Eq -- '--model opus --effort high --permission-mode (bypassPermissions|dontAsk)' "$claude_log" || \
+    fail test_claude_default_launch_configuration "missing skip-all launch args: $(cat "$claude_log")"
 
   approval_observe="$(run_runner observe --repo "$repo" --session "$session")"
-  json_assert test_claude_native_approval_is_reported_as_evidence \
-    "d['native_approval']['state'] == 'present' and 'native-approval-present' in d['evidence_flags']" "$approval_observe"
+  json_assert test_claude_default_start_has_no_native_tool_approval \
+    "(d.get('native_approval') or {}).get('state') != 'present' and 'native-approval-present' not in (d.get('evidence_flags') or [])" \
+    "$approval_observe"
   # The controlling agent chooses force-stop; the generic Runner does not
   # turn approval evidence or a snapshot token into authorization.
   force_stopped="$(run_runner stop --repo "$repo" --session "$session" --force)" || \

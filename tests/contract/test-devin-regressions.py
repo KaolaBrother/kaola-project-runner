@@ -322,39 +322,29 @@ class DevinAdapterLaunchShapeTests(unittest.TestCase):
         m = re.search(r"adapter_build_launch\(\).*?^\}", self.adapter, re.S | re.M)
         self.assertIsNotNone(m, "adapter_build_launch not found")
         body = m.group(0)
+        # Issue #13 aliases (bypass / autonomous) stay rejected; skip-all is "dangerous".
         self.assertNotIn("bypass", body,
-                         "adapter_build_launch must not use 'bypass'")
-        # Must pass through $permission_mode from the core, not hardcode a value.
+                         "adapter_build_launch must not use Issue #13 alias 'bypass'")
         self.assertIn('--permission-mode "$permission_mode"', body)
 
-    def test_no_unreachable_dangerous_fallback(self):
+    def test_dangerous_is_the_skip_all_value_not_dead_code(self):
         m = re.search(r"adapter_build_launch\(\).*?^\}", self.adapter, re.S | re.M)
         body = m.group(0)
-        # The core always sets permission_mode (default: auto), so an
-        # else-branch fallback to "dangerous" would be unreachable dead code.
-        self.assertNotIn("dangerous", body,
-                         "adapter_build_launch must not have an unreachable dangerous fallback")
+        # Issue #22: default Devin start uses dangerous. The adapter may pass
+        # $permission_mode (core default) or mention dangerous; neither is a
+        # regression. An unreachable else-branch is not required.
+        self.assertIn('--permission-mode "$permission_mode"', body)
 
 
 class DevinNoFlagPermissionModeTests(unittest.TestCase):
-    """A no-flag Devin start must launch with --permission-mode auto."""
+    """A no-flag Devin start must launch with --permission-mode dangerous (Issue #22)."""
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.runner = RUNNER.read_text(encoding="utf-8")
-
-    def test_core_default_permission_mode_is_auto(self):
-        m = re.search(r"permission_mode=(\S+)", self.runner)
-        self.assertIsNotNone(m, "permission_mode default not found in runner")
-        self.assertEqual(m.group(1), "auto",
-                         "core default permission_mode must be auto")
-
-    def test_manifest_launch_summary_says_auto(self):
+    def test_manifest_launch_summary_says_dangerous(self):
         manifest = (PROJECT / "platforms" / "devin.yaml").read_text(encoding="utf-8")
         m = re.search(r"launch_summary:.*?--permission-mode\s+(\S+)", manifest)
         self.assertIsNotNone(m, "launch_summary permission-mode not found")
-        self.assertEqual(m.group(1), "auto",
-                         "manifest launch_summary must document auto, not dangerous")
+        self.assertEqual(m.group(1), "dangerous",
+                         "manifest launch_summary must document dangerous, not auto")
 
 
 class DevinSessionIdTests(unittest.TestCase):
