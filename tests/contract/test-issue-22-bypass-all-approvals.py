@@ -146,6 +146,48 @@ class Issue22KimiAcpDefaultYolo(unittest.TestCase):
             f"session/set_config_option mode=yolo; saw {configured!r} ids={values!r}",
         )
 
+    def unanswered_permission_requests(self, send: dict, observe: dict) -> list[dict]:
+        """Unanswered ``session/request_permission`` still listed as pending."""
+        pending: list[dict] = []
+        for receipt in (send, observe):
+            for entry in receipt.get("pending_permissions") or []:
+                if entry not in pending:
+                    pending.append(entry)
+        return pending
+
+    def permit_actions(self, send: dict, observe: dict) -> list[str]:
+        """Permit command or client reply to ``session/request_permission``."""
+        found: list[str] = []
+        for receipt, label in ((send, "send"), (observe, "observe")):
+            if receipt.get("command") == "permit" or receipt.get("action") == "permit":
+                found.append(f"{label}.command=permit")
+            if "permitted" in receipt:
+                found.append(f"{label}.permitted={receipt.get('permitted')!r}")
+        for event in self.read_mock_log():
+            if (
+                event.get("event") == "outbound_response"
+                and event.get("method") == "session/request_permission"
+            ):
+                found.append(f"answered request_permission id={event.get('id')!r}")
+        return found
+
+    def still_waiting_on_permission(self, send: dict, observe: dict) -> list[str]:
+        """Turn still active and blocked on permission, not ``end_turn``."""
+        reasons: list[str] = []
+        pending = self.unanswered_permission_requests(send, observe)
+        if send.get("outcome") in ("prompt_timeout", "in_progress") and pending:
+            reasons.append(
+                f"send outcome={send.get('outcome')!r} with pending_permissions={pending!r}"
+            )
+        if observe.get("turn_active") and (
+            pending or observe.get("activity_hint") == "waiting"
+        ):
+            reasons.append(
+                "observe turn still active waiting on permission: "
+                f"activity_hint={observe.get('activity_hint')!r} pending={pending!r}"
+            )
+        return reasons
+
     def test_default_send_wait_completes_without_permit(self) -> None:
         start = self._tmux("start")
         self._started = True
@@ -157,14 +199,27 @@ class Issue22KimiAcpDefaultYolo(unittest.TestCase):
         self.assertEqual(send.get("outcome"), "turn_completed")
         self.assertEqual(send.get("stop_reason"), "end_turn")
         observe = self._tmux("observe")
-        pending = observe.get("pending_permissions") or []
+        unanswered = self.unanswered_permission_requests(send, observe)
         self.assertEqual(
-            pending,
+            unanswered,
             [],
-            "send --wait must not hang in pending_permissions after default yolo start: "
-            f"{observe}",
+            "send --wait must not leave unanswered session/request_permission: "
+            f"pending={unanswered!r} observe={observe}",
         )
-        self.assertNotIn("permit", json.dumps(send))
+        permit_steps = self.permit_actions(send, observe)
+        self.assertEqual(
+            permit_steps,
+            [],
+            "send --wait must complete without a permit action: "
+            f"{permit_steps}; send={send}",
+        )
+        waiting = self.still_waiting_on_permission(send, observe)
+        self.assertEqual(
+            waiting,
+            [],
+            "send --wait must not leave an active turn waiting on permission: "
+            f"{waiting}",
+        )
 
 
 class Issue22PtyDefaultStart(unittest.TestCase):
