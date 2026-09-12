@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- OpenCode default ACP start stays `opencode acp` with no skip-all (issue #24). There is no
+  measured ACP skip; PTY `--auto` via `--transport pty` is the documented bypass. Do not invent
+  auto-permit or `OPENCODE_PERMISSION` skip.
+
 - Default `start` now enables each platform's measured skip-all permission mode on both
   ACP and PTY (issue #22): Claude `--permission-mode bypassPermissions` / ACP `mode=bypassPermissions`,
   Devin PTY `--permission-mode dangerous` and ACP `mode=bypass`, Kimi PTY `--auto` and ACP `mode=yolo`,

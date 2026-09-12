@@ -1,6 +1,6 @@
 # OpenCode ACP transport
 
-Command: `opencode acp`. Login requires a PTY: `false`. Platform quirks: .
+Command: `opencode acp`. Login requires a PTY: `false`. Platform quirks: no ACP skip-all; PTY --auto via --transport pty is the bypass.
 
 ## Command surface
 

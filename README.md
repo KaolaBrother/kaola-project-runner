@@ -108,7 +108,7 @@ Runner default；不会把 CLI 保存的 picker/config 冒充默认值。模型�
 的事实输入，不会封锁已有会话的普通通信；Runner 也从不自动发送 `workflow-next`。
 默认 `start`（未传 `--permission-mode`）打开各平台已测到的 skip-all 权限模式，避免 ACP
 `session/request_permission` 或 PTY 工具审批 TUI 卡住后续 `send --wait`。OpenCode 的默认 ACP
-通道没有 skip argv（`--auto` 只作用于 PTY）。`permit` 仍可用于仍然发出权限请求的会话；工作区
+通道没有 skip argv（`--auto` 只作用于 PTY，通过 `--transport pty` 选择）。`permit` 仍可用于仍然发出权限请求的会话；工作区
 trust/login 不是这个开关。
 CR、ESC、DEL 与其他终端 C0/C1 控制字会在任何子 PTY 写入前被拒绝；LF/TAB 只有在 CLI 已明确
 启用 bracketed paste 时才允许。跨出原 child PGID 的后代会在只读 observation 中按启动指纹

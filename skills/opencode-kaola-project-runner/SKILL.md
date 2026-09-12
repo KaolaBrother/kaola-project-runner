@@ -11,7 +11,7 @@ retries, or completion policy.
 
 ## Transport facts
 
-Default transport: **acp**. The ACP command is `opencode acp`; its known quirks are ``, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **acp**. The ACP command is `opencode acp`; its known quirks are `no ACP skip-all; PTY --auto via --transport pty is the bypass`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 
