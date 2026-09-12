@@ -177,7 +177,11 @@ runtime_env_name() {
 }
 
 run_runner() {
-  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@"
+  local platform="$1" command="$2"
+  shift 2
+  # This suite drives the fake PTY CLIs. Default transport is ACP for five
+  # platforms; force PTY so preflight/status/stop talk to the same pane as start.
+  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$platform" "$command" --transport pty "$@"
 }
 
 issue_setup
@@ -227,7 +231,7 @@ else
 
     # Every adapter must reject a missing executable before touching tmux.
     binary_env="$(runtime_env_name "$platform")"
-    missing="$(expect_fail "test_${platform}_missing_binary" env TMUX_BIN="$issue_tmux_bin" "$binary_env=$issue_tmp_root/no-such-$platform" bash "$runner" "$platform" preflight --repo "$repo" --session "${platform}-missing-$$")"
+    missing="$(expect_fail "test_${platform}_missing_binary" env TMUX_BIN="$issue_tmux_bin" "$binary_env=$issue_tmp_root/no-such-$platform" bash "$runner" "$platform" preflight --transport pty --repo "$repo" --session "${platform}-missing-$$")"
     grep -Eqi 'not found|missing|executable' <<<"$missing" || fail "test_${platform}_missing_binary" "missing-binary refusal lacks evidence: $missing"
 
     # Verify each PTY launch shape through the real tmux control plane and fake CLI.
@@ -235,7 +239,7 @@ else
     # Claude/Devin are PTY argv, so this loop always requests --transport pty.
     session="${platform}-launch-$$"
     start_output=""
-    if ! start_output="$(run_runner "$platform" start --transport pty --repo "$repo" --session "$session" 2>&1)"; then
+    if ! start_output="$(run_runner "$platform" start --repo "$repo" --session "$session" 2>&1)"; then
       fail "test_${platform}_new_launch" "new start failed: $start_output"
       "$issue_tmux_bin" kill-session -t "=$session" 2>/dev/null || true
       continue
@@ -258,11 +262,15 @@ else
         fi
         grep -Eq -- '--permission-mode (bypassPermissions|dontAsk)' <<<"$log_text" || \
           fail "test_${platform}_no_flag_permission_mode" "No-flag Claude PTY start must launch with bypassPermissions or dontAsk: $log_text"
+      else
+        grep -Fq -- '--auto' <<<"$log_text" || \
+          fail "test_${platform}_no_flag_skip_all" "No-flag Kimi PTY start must launch with --auto: $log_text"
       fi
     elif [[ "$platform" == opencode ]]; then
-      grep -Fq "args=$canonical_repo --mini" <<<"$log_text" || fail "test_${platform}_new_launch" "OpenCode launch lacks repo --mini shape: $log_text"
+      grep -Fq "args=$canonical_repo --mini --auto" <<<"$log_text" || fail "test_${platform}_new_launch" "OpenCode launch lacks repo --mini --auto shape: $log_text"
     elif [[ "$platform" == cursor-cli ]]; then
       grep -Fq "args=--workspace $canonical_repo" <<<"$log_text" || fail "test_${platform}_new_launch" "Cursor launch lacks --workspace shape: $log_text"
+      grep -Fq -- '--yolo' <<<"$log_text" || fail "test_${platform}_no_flag_skip_all" "No-flag Cursor PTY start must launch with --yolo: $log_text"
     elif [[ "$platform" == devin ]]; then
       grep -Fq -- '--model' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --model: $log_text"
       grep -Eq -- "--model ''" <<<"$log_text" && fail "test_${platform}_new_launch" "Devin launch has empty --model: $log_text"
@@ -270,13 +278,13 @@ else
       grep -Fq -- '--permission-mode auto' <<<"$log_text" && fail "test_${platform}_no_flag_permission_mode" "No-flag Devin PTY start must not keep --permission-mode auto: $log_text"
       grep -Fq -- '--respect-workspace-trust false' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --respect-workspace-trust false: $log_text"
     else
-      grep -Fq "args=--cwd $canonical_repo --minimal" <<<"$log_text" || fail "test_${platform}_new_launch" "Grok launch lacks --cwd/--minimal shape: $log_text"
+      grep -Fq "args=--cwd $canonical_repo --minimal --always-approve" <<<"$log_text" || fail "test_${platform}_new_launch" "Grok launch lacks --cwd/--minimal/--always-approve shape: $log_text"
     fi
     run_runner "$platform" stop --repo "$repo" --session "$session" --force >/dev/null || "$issue_tmux_bin" kill-session -t "=$session" 2>/dev/null || true
 
     # Continue and exact resume are separate launch modes and must not be conflated.
     session="${platform}-continue-$$"
-    run_runner "$platform" start --transport pty --repo "$repo" --session "$session" --continue >/dev/null || fail "test_${platform}_continue_launch" "continue start failed"
+    run_runner "$platform" start --repo "$repo" --session "$session" --continue >/dev/null || fail "test_${platform}_continue_launch" "continue start failed"
     run_runner "$platform" stop --repo "$repo" --session "$session" --force >/dev/null || true
     log_text="$(cat "${fake_logs[$(( ${#fake_logs[@]} - 1 ))]}")"
     case "$platform" in
@@ -286,7 +294,7 @@ else
 
     session="${platform}-resume-$$"
     resume_value="$runtime_session_id"
-    run_runner "$platform" start --transport pty --repo "$repo" --session "$session" --resume "$resume_value" >/dev/null || fail "test_${platform}_exact_resume_launch" "resume start failed"
+    run_runner "$platform" start --repo "$repo" --session "$session" --resume "$resume_value" >/dev/null || fail "test_${platform}_exact_resume_launch" "resume start failed"
     run_runner "$platform" stop --repo "$repo" --session "$session" --force >/dev/null || true
     log_text="$(cat "${fake_logs[$(( ${#fake_logs[@]} - 1 ))]}")"
     grep -Fq -- "$resume_value" <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume identifier absent from invocation: $log_text"

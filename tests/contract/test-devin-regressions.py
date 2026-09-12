@@ -339,6 +339,14 @@ class DevinAdapterLaunchShapeTests(unittest.TestCase):
 class DevinNoFlagPermissionModeTests(unittest.TestCase):
     """A no-flag Devin start must launch with --permission-mode dangerous (Issue #22)."""
 
+    def test_core_assigns_dangerous_when_caller_omits_permission_mode(self):
+        runner = RUNNER.read_text(encoding="utf-8")
+        self.assertIn(
+            "devin) permission_mode=dangerous ;;",
+            runner,
+            "no-flag Devin PTY start must assign permission_mode=dangerous",
+        )
+
     def test_manifest_launch_summary_says_dangerous(self):
         manifest = (PROJECT / "platforms" / "devin.yaml").read_text(encoding="utf-8")
         m = re.search(r"launch_summary:.*?--permission-mode\s+(\S+)", manifest)

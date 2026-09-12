@@ -43,6 +43,9 @@ adapter_build_launch() {
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
   ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
+  # Issue #22: `kimi --auto` is Never Ask (skip-all). `--yolo` still asks on
+  # risky actions. Workspace-trust remains a separate TUI surface.
+  ADAPTER_LAUNCH_ARGS+=(--auto)
 }
 
 adapter_prepare_model_environment() {

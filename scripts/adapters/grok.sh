@@ -50,7 +50,7 @@ PY
 
 adapter_build_launch() {
   local launch_repo="$1" resume_id="$2" continue_mode="$3"
-  ADAPTER_LAUNCH_ARGS=(--cwd "$launch_repo" --minimal)
+  ADAPTER_LAUNCH_ARGS=(--cwd "$launch_repo" --minimal --always-approve)
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--resume "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi

@@ -25,7 +25,7 @@ observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 
-Launch grok --cwd <repo> --minimal.
+Launch grok --cwd <repo> --minimal --always-approve. ACP process is grok agent --always-approve stdio.
 
 Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
 and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.

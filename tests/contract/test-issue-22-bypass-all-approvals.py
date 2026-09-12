@@ -2,14 +2,17 @@
 """Issue #22 RED contract: default start bypasses security-permission prompts.
 
 Public ``start`` (no caller ``--permission-mode``) must launch skip-all on both
-ACP and PTY/tmux. Known knobs only:
+ACP and PTY/tmux. Known knobs:
 
-- Claude PTY: ``bypassPermissions`` or ``dontAsk``
-- Devin PTY: ``dangerous`` (workspace-trust false is not enough)
-- Kimi ACP: ``mode=yolo``
+- Claude PTY: ``permission_mode=bypassPermissions``
+- Devin PTY: ``permission_mode=dangerous`` (workspace-trust false is not enough)
+- Kimi PTY: ``--auto``; Kimi ACP: ``mode=yolo``
+- Devin ACP: ``mode=bypass``
+- Cursor PTY/ACP: ``--yolo``
+- OpenCode PTY: ``--auto``
+- Grok PTY: ``--always-approve``; Grok ACP: ``grok agent --always-approve stdio``
 
-Cursor/Devin/OpenCode ACP ``mode`` values are unmeasured and are not asserted.
-Claude ACP initialize is still ``probe-eof``; this file does not invent a knob.
+OpenCode ACP has no skip argv and is not asserted as skipped.
 """
 
 from __future__ import annotations
@@ -26,9 +29,14 @@ from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[2]
 RUNNER = PROJECT / "scripts" / "kaola-tmux.sh"
+ACP = PROJECT / "scripts" / "kaola-acp.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 CLAUDE_ADAPTER = PROJECT / "scripts" / "adapters" / "claude-code.sh"
+CURSOR_ADAPTER = PROJECT / "scripts" / "adapters" / "cursor-cli.sh"
 DEVIN_ADAPTER = PROJECT / "scripts" / "adapters" / "devin.sh"
+GROK_ADAPTER = PROJECT / "scripts" / "adapters" / "grok.sh"
+KIMI_ADAPTER = PROJECT / "scripts" / "adapters" / "kimi-cli.sh"
+OPENCODE_ADAPTER = PROJECT / "scripts" / "adapters" / "opencode.sh"
 
 
 class Issue22StaticSkipKnobs(unittest.TestCase):
@@ -53,6 +61,32 @@ class Issue22StaticSkipKnobs(unittest.TestCase):
         body = DEVIN_ADAPTER.read_text(encoding="utf-8")
         self.assertIn('--permission-mode "$permission_mode"', body)
         self.assertIn("--respect-workspace-trust false", body)
+
+    def test_kimi_pty_launch_passes_auto(self) -> None:
+        self.assertIn("ADAPTER_LAUNCH_ARGS+=(--auto)", KIMI_ADAPTER.read_text(encoding="utf-8"))
+
+    def test_cursor_pty_launch_passes_yolo(self) -> None:
+        self.assertIn("ADAPTER_LAUNCH_ARGS+=(--yolo)", CURSOR_ADAPTER.read_text(encoding="utf-8"))
+
+    def test_opencode_pty_launch_passes_auto(self) -> None:
+        self.assertIn("--mini --auto", OPENCODE_ADAPTER.read_text(encoding="utf-8"))
+
+    def test_grok_pty_launch_passes_always_approve(self) -> None:
+        self.assertIn("--always-approve", GROK_ADAPTER.read_text(encoding="utf-8"))
+
+    def test_cursor_acp_command_includes_yolo(self) -> None:
+        manifest = (PROJECT / "platforms" / "cursor-cli.yaml").read_text(encoding="utf-8")
+        self.assertIn('acp_command: "cursor-agent --yolo acp"', manifest)
+
+    def test_grok_acp_command_includes_always_approve(self) -> None:
+        manifest = (PROJECT / "platforms" / "grok.yaml").read_text(encoding="utf-8")
+        self.assertIn('acp_command: "grok agent --always-approve stdio"', manifest)
+
+    def test_acp_skip_mode_maps_devin_bypass(self) -> None:
+        body = ACP.read_text(encoding="utf-8")
+        self.assertIn('"devin": "bypass"', body)
+        self.assertIn('"kimi-cli": "yolo"', body)
+        self.assertIn('"claude-code": "bypassPermissions"', body)
 
 
 class Issue22KimiAcpDefaultYolo(unittest.TestCase):
@@ -235,27 +269,24 @@ class Issue22PtyDefaultStart(unittest.TestCase):
         cls.runner = RUNNER.read_text(encoding="utf-8")
 
     def test_claude_no_flag_default_is_bypass_or_dont_ask(self) -> None:
-        remainder = re.sub(
-            r'case "\$permission_mode" in acceptEdits\|auto\|bypassPermissions\|manual\|dontAsk\|plan\).*',
-            "",
+        self.assertIn(
+            "claude-code) permission_mode=bypassPermissions ;;",
             self.runner,
-        )
-        self.assertTrue(
-            "bypassPermissions" in remainder or "dontAsk" in remainder,
-            "no-flag Claude PTY start must assign bypassPermissions or dontAsk; "
-            "listing those tokens only in the allowlist is not enough",
+            "no-flag Claude PTY start must assign permission_mode=bypassPermissions",
         )
 
     def test_devin_no_flag_default_is_dangerous(self) -> None:
-        remainder = re.sub(
-            r'case "\$permission_mode" in auto\|accept-edits\|smart\|dangerous\).*',
-            "",
+        self.assertIn(
+            "devin) permission_mode=dangerous ;;",
             self.runner,
+            "no-flag Devin PTY start must assign permission_mode=dangerous",
         )
-        self.assertTrue(
-            "dangerous" in remainder,
-            "no-flag Devin PTY start must assign dangerous; listing it only in "
-            "the allowlist (or only skipping workspace trust) is not enough",
+
+    def test_devin_acp_default_forwards_bypass(self) -> None:
+        self.assertIn(
+            "devin) acp_args+=(--mode bypass) ;;",
+            self.runner,
+            "no-flag Devin ACP start must forward --mode bypass",
         )
 
 

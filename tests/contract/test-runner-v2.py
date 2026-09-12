@@ -11,9 +11,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 RENDERER = ROOT / "scripts/render-skills.py"
 PLATFORMS = {
-    "grok": ("acp", "grok agent stdio"),
+    "grok": ("acp", "grok agent --always-approve stdio"),
     "kimi-cli": ("acp", "kimi acp"),
-    "cursor-cli": ("acp", "cursor-agent acp"),
+    "cursor-cli": ("acp", "cursor-agent --yolo acp"),
     "devin": ("acp", "devin acp"),
     "opencode": ("acp", "opencode acp"),
     "claude-code": ("pty", "npx --yes @agentclientprotocol/claude-agent-acp@"),

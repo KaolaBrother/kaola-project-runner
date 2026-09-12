@@ -1,6 +1,6 @@
 # Grok CLI ACP transport
 
-Command: `grok agent stdio`. Login requires a PTY: `false`. Platform quirks: .
+Command: `grok agent --always-approve stdio`. Login requires a PTY: `false`. Platform quirks: .
 
 ## Command surface
 

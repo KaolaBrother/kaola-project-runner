@@ -11,7 +11,7 @@ retries, or completion policy.
 
 ## Transport facts
 
-Default transport: **acp**. The ACP command is `grok agent stdio`; its known quirks are ``, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **acp**. The ACP command is `grok agent --always-approve stdio`; its known quirks are ``, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 
