@@ -25,7 +25,7 @@ observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 
-Launch opencode <repo> --mini --auto via --transport pty. Default ACP has no skip-all; configOptions.mode is agent identity (build/plan), not skip-all.
+Launch opencode <repo> --mini --auto. Default ACP has no skip-all; PTY --auto via --transport pty is the bypass; configOptions.mode is agent identity (build/plan), not skip-all.
 
 Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
 and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.

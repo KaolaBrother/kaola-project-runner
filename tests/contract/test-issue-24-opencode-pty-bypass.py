@@ -160,6 +160,33 @@ class Issue24PtyAutoBypass(unittest.TestCase):
             "PTY adapter must still launch --mini --auto",
         )
 
+    def test_launch_summary_does_not_steer_default_start_onto_pty(self) -> None:
+        summary = parse_manifest(MANIFEST)["launch_summary"]
+        first = summary.split(".", 1)[0]
+        self.assertNotRegex(
+            first,
+            r"--transport\s+pty",
+            "Launch instruction must not lead with --transport pty; "
+            "default_transport is still acp: "
+            f"{first!r}",
+        )
+        self.assertRegex(
+            summary,
+            r"--transport\s+pty",
+            f"launch_summary must still name --transport pty as the bypass: {summary!r}",
+        )
+        self.assertRegex(
+            summary,
+            r"--auto\b",
+            f"launch_summary must still name PTY --auto: {summary!r}",
+        )
+        self.assertRegex(
+            summary.lower(),
+            r"default acp",
+            "launch_summary must state that default ACP has no skip, "
+            f"not only the PTY argv: {summary!r}",
+        )
+
 
 class Issue24DocumentGeneratedAcpSurface(unittest.TestCase):
     """Generated Skill ACP surface must name the no-skip fact and PTY bypass."""
