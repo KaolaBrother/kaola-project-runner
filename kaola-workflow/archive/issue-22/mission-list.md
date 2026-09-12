@@ -1,0 +1,11 @@
+# Review and merge PR #23 (Fixes #22) then clean leftover Cursor branches
+
+- item: Independently review the frozen PR #23 candidate at `69c87a8` (`cursor/issue-22-permit-oracle-d35d`) for correctness, test-custody, and trust-boundary defects against Issue #22 acceptance (default start skip-all on ACP and PTY; `permit` not the ordinary path; golden Grok frozen; Skills generated not hand-edited).
+  status: done
+  dispatched: three `code-reviewer` children on frozen `69c87a8` in isolated worktrees; handbacks land at `kaola-workflow/issue-22/.cache/review-correctness.md`, `review-test-custody.md`, and `review-trust-boundary.md`.
+  result: DEFECTS — trust-boundary PASS (`review-trust-boundary.md`). Correctness: OpenCode ACP still has no skip knob (measured `opencode acp` rejects `--auto`; `--auto acp` is a project path); Kimi PTY omits live `--auto`; Grok PTY omits live `--always-approve`; Grok ACP parent flag `grok agent --always-approve stdio` exists. Test custody: `validate.sh` FAIL `test-runner-v2.py:16` (`cursor-agent acp` not in `cursor-agent --yolo acp`); Cursor/OpenCode PTY greps still pass without skip flags; Issue #22 PTY static tests match comments/ACP strings; Devin ACP `mode=bypass` untested. Orchestrator verified live `--help` and `VALIDATE_RC=1`.
+
+- item: Prove focused validation of that frozen candidate with `./scripts/render-skills.py --check` and `./scripts/validate.sh`, and record exact live start/send/stop smoke only for platforms whose binaries are actually present.
+  status: done
+  dispatched: self in `.kw/worktrees/issue-22`; logs land at `kaola-workflow/issue-22/.cache/validate.sh.log`, `render-skills-check.log`, `issue-22-tests.log`, and `live-grok-smoke.log`.
+  result: PASS at `0c03c89` after review repairs. Frozen `69c87a8` `validate.sh` FAIL (`test-runner-v2.py` cursor substring). After repair: `./scripts/render-skills.py --check` PASS; `./scripts/validate.sh` PASS; `test-issue-22-bypass-all-approvals.py` 15 OK; `test-adapters.sh` PASS; `test-claude-code-runtime.sh` PASS; `templates/grok-golden/` empty. Live Grok ACP `start` ready / `observe` `pending_permissions=[]` / `--force` `stopped:true` (`live-grok-smoke.log`); no tool `send` on that session. Per-platform live tool-using `send --wait` not executed.
