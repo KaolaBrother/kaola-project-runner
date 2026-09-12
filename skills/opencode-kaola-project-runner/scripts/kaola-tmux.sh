@@ -82,6 +82,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Issue #22: no-flag start uses each platform's measured skip-all permission
+# mode. Caller --permission-mode still wins. ACP skip values can differ from PTY
+# argv (Devin PTY dangerous vs ACP bypass) and are forwarded below / in kaola-acp.py.
+if [[ "$permission_mode_given" != true ]]; then
+  case "$platform" in
+    claude-code) permission_mode=bypassPermissions ;;
+    devin) permission_mode=dangerous ;;
+  esac
+fi
+
 PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
 manifest_file="$script_dir/platform.yaml"
 [[ -f "$manifest_file" ]] || manifest_file="$(dirname "$script_dir")/platforms/$platform.yaml"
@@ -117,7 +127,17 @@ if [[ "$transport" == acp ]]; then
   [[ "$capture_inline" == true ]] && acp_args+=(--inline)
   [[ "$model_given" == true ]] && acp_args+=(--model "$model")
   [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
-  [[ "$permission_mode_given" == true ]] && acp_args+=(--mode "$permission_mode")
+  if [[ "$permission_mode_given" == true ]]; then
+    acp_args+=(--mode "$permission_mode")
+  elif [[ "$command_name" == start ]]; then
+    # Measured ACP skip knobs only. Cursor/OpenCode have no configOptions.mode skip
+    # value; Grok ACP is agent always-approve with no approval option.
+    case "$platform" in
+      kimi-cli) acp_args+=(--mode yolo) ;;
+      devin) acp_args+=(--mode bypass) ;;
+      claude-code) acp_args+=(--mode bypassPermissions) ;;
+    esac
+  fi
   [[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")
   [[ "$command_name" == key ]] && acp_args+=(--key "$key_name")
   [[ -n "$decision_id" ]] && acp_args+=(--request-id "$decision_id")

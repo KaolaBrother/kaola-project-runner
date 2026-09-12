@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Default `start` now enables each platform's measured skip-all permission mode on both
+  ACP and PTY (issue #22): Claude `--permission-mode bypassPermissions` / ACP `mode=bypassPermissions`,
+  Devin PTY `--permission-mode dangerous` and ACP `mode=bypass`, Kimi ACP `mode=yolo`,
+  Cursor `--yolo` (including `cursor-agent --yolo acp`), OpenCode PTY `--auto`. Grok ACP remains
+  agent `always-approve` with no skip option. Workspace-trust flags are unchanged and are not this
+  bypass. `permit` stays available when an agent still emits `request_permission`.
+
 - Promoted the Runner v2 dual-transport design to v0.3 (implementation baseline) from the PoC
   results: native-ACP platforms (Grok, Kimi, Cursor, Devin, OpenCode) default to `acp`, Claude
   Code stays `pty`; `--continue` resumes via `session/load` from the session record; permission

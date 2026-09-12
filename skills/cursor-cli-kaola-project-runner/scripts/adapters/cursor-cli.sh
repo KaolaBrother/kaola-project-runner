@@ -41,6 +41,9 @@ adapter_build_launch() {
   if [[ -n "$RESOLVED_MODEL_EFFORT" && "$MODEL_HAS_EFFORT" == true ]]; then
     ADAPTER_LAUNCH_ARGS+=(--effort "$RESOLVED_MODEL_EFFORT")
   fi
+  # Issue #22: CLI --yolo is the measured skip-all surface (ACP configOptions.mode
+  # has no skip value). Workspace-trust is a separate Cursor layer.
+  ADAPTER_LAUNCH_ARGS+=(--yolo)
 }
 
 adapter_prepare_model_environment() { ADAPTER_MODEL_ENV=(); }

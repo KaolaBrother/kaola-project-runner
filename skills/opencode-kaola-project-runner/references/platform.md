@@ -25,7 +25,7 @@ observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 
-Launch opencode <repo> --mini.
+Launch opencode <repo> --mini --auto. ACP command has no permission flag; configOptions.mode is agent identity (build/plan), not skip-all.
 
 Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
 and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.

@@ -25,7 +25,7 @@ observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 
-Launch kimi from the canonical repository root.
+Launch kimi from the canonical repository root. ACP start sets mode=yolo. PTY has no measured skip-all argv; workspace-trust remains a separate TUI surface.
 
 Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
 and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.

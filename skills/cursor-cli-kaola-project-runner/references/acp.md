@@ -1,6 +1,6 @@
 # Cursor CLI ACP transport
 
-Command: `cursor-agent acp`. Login requires a PTY: `false`. Platform quirks: agentInfo is empty; effort is encoded in model values.
+Command: `cursor-agent --yolo acp`. Login requires a PTY: `false`. Platform quirks: agentInfo is empty; effort is encoded in model values.
 
 ## Command surface
 

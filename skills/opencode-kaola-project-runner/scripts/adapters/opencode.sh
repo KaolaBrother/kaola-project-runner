@@ -39,7 +39,7 @@ adapter_preflight() {
 
 adapter_build_launch() {
   local launch_repo="$1" resume_id="$2" continue_mode="$3"
-  ADAPTER_LAUNCH_ARGS=("$launch_repo" --mini)
+  ADAPTER_LAUNCH_ARGS=("$launch_repo" --mini --auto)
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--session "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi

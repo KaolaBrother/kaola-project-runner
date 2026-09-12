@@ -25,7 +25,7 @@ observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 
-Launch Claude from the canonical repository root; use only the Runner communication commands for the exact session.
+Launch Claude from the canonical repository root with --permission-mode bypassPermissions (default). ACP start sets mode=bypassPermissions after a working initialize; the pinned wrapper remains probe-eof.
 
 Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
 and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.

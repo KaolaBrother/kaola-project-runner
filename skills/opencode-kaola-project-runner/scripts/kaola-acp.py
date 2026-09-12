@@ -30,6 +30,15 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 PLATFORMS = ("claude-code", "cursor-cli", "devin", "grok", "kimi-cli", "opencode")
 START_WAIT = 20.0
 SESSION_PREFIX = "kaola"
+# Issue #22: default start sets session/set_config_option configId=mode to each
+# platform's measured skip-all value. Omitted platforms have no ACP mode skip
+# (Grok: agent always-approve; Cursor/OpenCode: no skip-shaped mode value).
+# Devin ACP `bypass` is not the PTY argv `dangerous`.
+ACP_SKIP_MODE = {
+    "claude-code": "bypassPermissions",
+    "devin": "bypass",
+    "kimi-cli": "yolo",
+}
 
 
 def die(message: str, code: int = 2) -> None:
@@ -391,9 +400,14 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         receipt["error"] = {"code": "start-incomplete", "state": state.get("state")}
     else:
         configured = []
-        for value, key in ((args.model, "acp_model_config_id"), (args.effort, "acp_effort_config_id"), (args.mode, None)):
+        mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
+        option_pairs = [
+            (args.model, "acp_model_config_id"),
+            (args.effort, "acp_effort_config_id"),
+        ]
+        for value, key in option_pairs:
             if value:
-                config_id = "mode" if key is None and args.platform == "kimi-cli" else args.manifest.get(key or "")
+                config_id = args.manifest.get(key or "")
                 if not config_id:
                     receipt["error"] = {"code": "config-option-unavailable", "manifest_key": key}
                     break
@@ -402,6 +416,19 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                     receipt["error"] = result["error"]
                     break
                 configured.append(result)
+        if mode_value and "error" not in receipt:
+            if args.platform in ACP_SKIP_MODE:
+                config_id = "mode"
+            else:
+                config_id = ""
+            if not config_id:
+                receipt["error"] = {"code": "config-option-unavailable", "manifest_key": None}
+            else:
+                result = socket_request(sock, "set_config_option", {"config_id": config_id, "value": mode_value}, 20.0)
+                if result.get("error"):
+                    receipt["error"] = result["error"]
+                else:
+                    configured.append(result)
         if configured:
             receipt["configured_options"] = configured
     return receipt

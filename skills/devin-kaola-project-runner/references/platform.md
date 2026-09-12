@@ -25,7 +25,7 @@ observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 
-Launch devin from the canonical repository root with --permission-mode auto (default) and --respect-workspace-trust false.
+Launch devin from the canonical repository root with --permission-mode dangerous (default) and --respect-workspace-trust false. ACP start sets mode=bypass.
 
 Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
 and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.
