@@ -6,6 +6,10 @@
   measured ACP skip; PTY `--auto` via `--transport pty` is the documented bypass. Do not invent
   auto-permit or `OPENCODE_PERMISSION` skip.
 
+- Documented the ACP Watch Surface design freeze (`docs/acp-watch/`, issues #25/#26/#27):
+  human `list`/`view`/`follow` beside the existing holder, at-most-once permit, no HTTP/SSE
+  and no second agent-stdio client. Not implemented.
+
 - Default `start` now enables each platform's measured skip-all permission mode on both
   ACP and PTY (issue #22): Claude `--permission-mode bypassPermissions` / ACP `mode=bypassPermissions`,
   Devin PTY `--permission-mode dangerous` and ACP `mode=bypass`, Kimi PTY `--auto` and ACP `mode=yolo`,

@@ -248,7 +248,7 @@ transport:
 | --- | --- | --- |
 | 普通 prompt、等待完成、读最终回复、权限应答、resume | acp | 回执已含终态与权限结构，无需 observe/capture 循环 |
 | 首次登录、trust 目录、OAuth 浏览器流程 | pty | preflight `login_required:true`；`authenticate` 各家实现未验证 |
-| 人类旁观或接管 TUI | pty | acp 无可视界面 |
+| 人类旁观或接管 TUI | 旁观：ACP Watch 投影（设计冻结，**未实现**，见 [`docs/acp-watch/`](acp-watch/README.md)）；接管原生 TUI：pty | ACP stdio 仍无 TUI；人类不得成为第二 stdio 客户端。Watch 是 holder 上的独立 spectator，不进 L0 热路径 |
 | 需要原生按键（方向键、菜单） | pty | acp 无按键概念（仅 escape→cancel） |
 | preflight 报二进制/`initialize`/版本不支持，或任务所需 capability 缺失 | pty | 事实驱动 |
 | acp 会话连续出现 `process_exited` / `prompt_timeout` | orchestrator 判断 | Runner 只报事实 |
