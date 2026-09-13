@@ -172,7 +172,7 @@
 
 该样例以文件形式冻结在 `tests/contract/fixtures/kaola-acp-view-1.sample.json`，合同测试必须断言真实 `view` 输出与样例**键集合与类型**一致；Kaola Terminal 把同一文件拷进测试 bundle 作为解码 fixture。
 
-上限（超限只设 `truncated`，不硬门）：thinking 约 8KiB、单工具 32KiB、整 view 256KiB、timeline 约 200。
+上限（超限置 `truncated=true` 并**实际裁剪**，不报错）：thinking 只保留 8KiB 尾巴；单工具 content 裁到 32KiB（整项保留，首个溢出项截断 text/newText）；timeline 只保留最近 200 条；整 view 超过 256KiB 时先丢最旧的工具卡，再丢最旧的消息。没有 `messageId` 的 chunk（Grok 实测全部如此）按同角色连续拼接，直到 tool_call、新 prompt 或回合结束为止。
 
 ### `--since` 语义
 

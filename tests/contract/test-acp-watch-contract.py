@@ -594,5 +594,111 @@ class AcpWatchInstallTests(unittest.TestCase):
             self.assertTrue(foreign.stat().st_mode & stat.S_IFREG)
 
 
+
+def load_holder_module():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("kaola_acp_holder", HOLDER)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+class AcpProjectionOfflineTests(unittest.TestCase):
+    """Reduction facts that the mock stream cannot show: real agents (Grok)
+    send no ``messageId`` and stream thousands of updates, so the caps in
+    list-view.md must be enforced, not only flagged."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.holder_module = load_holder_module()
+
+    def offline_holder(self, tmp: str):
+        import argparse
+
+        args = argparse.Namespace(
+            record_dir=tmp, socket=None, repo="/repo", platform="grok", session="s",
+            command="true", resume=None, use_continue=False,
+        )
+        return self.holder_module.Holder(args)
+
+    @staticmethod
+    def chunk(text: str, message_id: str | None = None) -> dict:
+        update = {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}}
+        if message_id is not None:
+            update["messageId"] = message_id
+        return update
+
+    def test_chunks_without_message_id_join_until_a_boundary(self) -> None:
+        projection = self.holder_module.ViewProjection()
+        projection.add_user_from_prompt("Fix it.", 1)
+        for index, piece in enumerate(("I'll ", "start ", "here.")):
+            projection.apply(self.chunk(piece), 2 + index)
+        projection.apply({"sessionUpdate": "tool_call", "toolCallId": "t1", "title": "Read"}, 5)
+        projection.apply(self.chunk("Done."), 6)
+        projection.close_message()
+        projection.apply(self.chunk("Next turn."), 7)
+        texts = [(m["role"], m["text"], m["cursor"]) for m in projection.snapshot()["messages"]]
+        self.assertEqual(texts, [
+            ("user", "Fix it.", 1),
+            ("assistant", "I'll start here.", 2),
+            ("assistant", "Done.", 6),
+            ("assistant", "Next turn.", 7),
+        ])
+
+    def test_caps_bound_memory_and_view_bytes(self) -> None:
+        mod = self.holder_module
+        with tempfile.TemporaryDirectory() as tmp:
+            holder = self.offline_holder(tmp)
+            projection = holder.projection
+            for index in range(mod.TIMELINE_MAX + 50):
+                projection.apply(self.chunk("x" * 300, message_id=f"m{index}"), index + 1)
+            projection.apply(
+                {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "t" * (mod.THINKING_TAIL_CHARS * 2)}},
+                1000,
+            )
+            big = "y" * (mod.TOOL_VIEW_BYTES * 2)
+            for index in range(40):
+                projection.apply({
+                    "sessionUpdate": "tool_call", "toolCallId": f"big{index}", "title": "Write",
+                    "content": [{"type": "text", "text": big}],
+                }, 2000 + index)
+            snap = projection.snapshot()
+            self.assertEqual(len(snap["messages"]), mod.TIMELINE_MAX)
+            self.assertTrue(snap["messages_dropped"])
+            self.assertEqual(len(snap["thinking_text"]), mod.THINKING_TAIL_CHARS)
+            self.assertEqual(snap["thinking_chars"], mod.THINKING_TAIL_CHARS * 2)
+            for tool in snap["tools"]:
+                self.assertTrue(tool["truncated"])
+                self.assertLessEqual(len(mod.canonical(tool["content"])), mod.TOOL_VIEW_BYTES)
+
+            view = holder.op_view({})
+            encoded = json.dumps(view, ensure_ascii=False).encode("utf-8")
+            self.assertLessEqual(len(encoded), mod.VIEW_BYTES, len(encoded))
+            self.assertTrue(view["truncated"])
+            self.assertEqual(view["schema"], "kaola-acp-view/1")
+            self.assertEqual(view["tools"][-1]["toolCallId"], "big39", "newest tools survive the view cap")
+            self.assertEqual(len(view["thinking"]["text_tail"]), mod.THINKING_TAIL_CHARS)
+
+    def test_event_log_oldest_cursor_is_cached_across_append_and_rotation(self) -> None:
+        mod = self.holder_module
+        with tempfile.TemporaryDirectory() as tmp:
+            live = Path(tmp) / "events.jsonl"
+            live.with_suffix(".jsonl.2").write_text(json.dumps({"cursor": 5}) + "\n", encoding="utf-8")
+            live.write_text(json.dumps({"cursor": 9}) + "\n", encoding="utf-8")
+            log = mod.EventLog(live)
+            self.assertEqual((log.cursor, log.oldest_cursor()), (9, 5))
+            log.append({"kind": "x"})
+            self.assertEqual((log.cursor, log.oldest_cursor()), (10, 5))
+            live.with_suffix(".jsonl.2").unlink()
+            log._rotate()
+            self.assertEqual(log.oldest_cursor(), 9)
+            fresh = mod.EventLog(Path(tmp) / "empty.jsonl")
+            self.assertIsNone(fresh.oldest_cursor())
+            fresh.append({"kind": "first"})
+            self.assertEqual(fresh.oldest_cursor(), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

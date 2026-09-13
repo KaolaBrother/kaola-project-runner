@@ -237,57 +237,80 @@ def follow_error_line(code: str, message: str) -> dict[str, Any]:
     return {"kind": "error", "error": {"code": code, "message": message}}
 
 
-def print_follow_text(event: dict[str, Any]) -> None:
-    kind = event.get("kind")
-    if kind in ("error", "eof"):
-        print(json.dumps(event, ensure_ascii=False), flush=True)
-        return
-    if kind not in ("snapshot", "delta"):
-        return
-    payload = event
-    if event.get("schema") != VIEW_SCHEMA:
-        for key in ("payload", "view", "snapshot", "delta", "data"):
-            inner = event.get(key)
-            if isinstance(inner, dict) and (
-                inner.get("schema") == VIEW_SCHEMA or "event_cursor" in inner
-            ):
-                payload = inner
-                break
-    for message in payload.get("messages") or []:
-        if not isinstance(message, dict):
-            continue
-        text = message.get("text")
-        if text:
-            role = message.get("role") or "message"
-            print(f"{role}: {text}", flush=True)
-    for tool in payload.get("tools") or []:
-        if not isinstance(tool, dict):
-            continue
-        title = tool.get("title")
-        if title:
-            print(f"tool: {title}", flush=True)
+class FollowTextPrinter:
+    """Incremental tty join of message text and tool titles (not a TUI).
+
+    Every snapshot/delta/heartbeat carries the whole ``kaola-acp-view/1``
+    projection, so the printer remembers what it already wrote per message
+    (keyed by cursor/role/messageId) and per tool, and prints only the new
+    suffix or a changed tool status.
+    """
+
+    def __init__(self) -> None:
+        self.printed: dict[tuple[Any, Any, Any], int] = {}
+        self.tools: dict[str, Any] = {}
+        self.open_key: tuple[Any, Any, Any] | None = None
+
+    def _end_line(self) -> None:
+        if self.open_key is not None:
+            sys.stdout.write("\n")
+            self.open_key = None
+
+    def feed(self, event: dict[str, Any]) -> None:
+        kind = event.get("kind")
+        if kind in ("error", "eof"):
+            self._end_line()
+            print(json.dumps(event, ensure_ascii=False), flush=True)
+            return
+        if kind not in ("snapshot", "delta", "heartbeat"):
+            return
+        for message in event.get("messages") or []:
+            if not isinstance(message, dict):
+                continue
+            text = str(message.get("text") or "")
+            key = (message.get("cursor"), message.get("role"), message.get("messageId"))
+            done = self.printed.get(key, 0)
+            if len(text) <= done:
+                continue
+            if self.open_key != key:
+                self._end_line()
+                sys.stdout.write(f"{message.get('role') or 'message'}: ")
+                self.open_key = key
+            sys.stdout.write(text[done:])
+            self.printed[key] = len(text)
+        for tool in event.get("tools") or []:
+            if not isinstance(tool, dict):
+                continue
+            tool_id = str(tool.get("toolCallId") or "")
+            status = tool.get("status")
+            if tool_id in self.tools and self.tools[tool_id] == status:
+                continue
+            self.tools[tool_id] = status
+            self._end_line()
+            title = tool.get("title") or tool_id
+            suffix = f" [{status}]" if status else ""
+            sys.stdout.write(f"tool: {title}{suffix}\n")
+        sys.stdout.flush()
 
 
-def emit_follow_line(raw: bytes, fmt: str) -> None:
+def emit_follow_line(raw: bytes, printer: FollowTextPrinter | None) -> str | None:
+    """Print one holder line; return its ``kind`` when it parses."""
     text = raw.decode("utf-8", "replace")
-    if fmt != "text":
-        print(text, flush=True)
-        return
     try:
         event = json.loads(text)
     except ValueError:
+        event = None
+    if printer is None or not isinstance(event, dict):
         print(text, flush=True)
-        return
-    if isinstance(event, dict):
-        print_follow_text(event)
     else:
-        print(text, flush=True)
+        printer.feed(event)
+    return event.get("kind") if isinstance(event, dict) else None
 
 
 def command_follow(args: argparse.Namespace, repo: str, directory: Path) -> int:
     sock = sock_path(args, repo)
     record = read_record(directory)
-    fmt = getattr(args, "format", "json") or "json"
+    printer = FollowTextPrinter() if getattr(args, "format", "json") == "text" else None
 
     def emit_error(code: str, message: str) -> int:
         print(json.dumps(follow_error_line(code, message), ensure_ascii=False), flush=True)
@@ -336,8 +359,8 @@ def command_follow(args: argparse.Namespace, repo: str, directory: Path) -> int:
             while b"\n" in buffer:
                 line, _, rest = buffer.partition(b"\n")
                 buffer = bytearray(rest)
-                if line.strip():
-                    emit_follow_line(line, fmt)
+                if line.strip() and emit_follow_line(line, printer) == "eof":
+                    return 0
     except OSError as exc:
         latest = read_record(directory) or record
         if not pid_alive(latest.get("holder_pid")):

@@ -95,6 +95,7 @@ class EventLog:
         self.path = path
         self.lock = threading.Lock()
         self.cursor = 0
+        self.oldest: int | None = None
         self._restore_cursor()
 
     def _rotated_paths(self) -> list[Path]:
@@ -122,25 +123,28 @@ class EventLog:
                 continue
 
     def _restore_cursor(self) -> None:
+        """One scan of live + rotated files; max seeds cursor, min seeds oldest."""
         maximum = 0
-        for entry in self._iter_entries():
-            cursor = entry.get("cursor")
-            if isinstance(cursor, int) and not isinstance(cursor, bool) and cursor > maximum:
-                maximum = cursor
-        self.cursor = maximum
-
-    def oldest_cursor(self) -> int | None:
         oldest: int | None = None
         for entry in self._iter_entries():
             cursor = entry.get("cursor")
             if isinstance(cursor, int) and not isinstance(cursor, bool):
+                if cursor > maximum:
+                    maximum = cursor
                 if oldest is None or cursor < oldest:
                     oldest = cursor
-        return oldest
+        self.cursor = maximum
+        self.oldest = oldest
+
+    def oldest_cursor(self) -> int | None:
+        """Cached; updated on append and rotation, never a per-call file scan."""
+        return self.oldest
 
     def append(self, event: dict[str, Any]) -> int:
         with self.lock:
             self.cursor += 1
+            if self.oldest is None:
+                self.oldest = self.cursor
             entry = {"cursor": self.cursor, "ts": round(time.time(), 3), **scrub(event)}
             line = json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n"
             try:
@@ -160,6 +164,13 @@ class EventLog:
                 older.replace(newer)
         if self.path.exists():
             self.path.replace(self.path.with_suffix(".jsonl.1"))
+        oldest: int | None = None
+        for entry in self._iter_entries():
+            cursor = entry.get("cursor")
+            if isinstance(cursor, int) and not isinstance(cursor, bool):
+                if oldest is None or cursor < oldest:
+                    oldest = cursor
+        self.oldest = oldest
 
     def read_since(self, cursor: int, limit: int | None) -> list[dict[str, Any]]:
         entries = []
@@ -358,6 +369,7 @@ VIEW_SCHEMA = "kaola-acp-view/1"
 FOLLOW_QUEUE_CAP = 256
 FOLLOW_HEARTBEAT_SECONDS = 5.0
 FOLLOW_SNDBUF = 4096
+FOLLOW_DROP_GRACE = 2.0
 FOLLOW_WRITE_OPS = frozenset({"prompt", "permit", "cancel", "stop"})
 
 
@@ -396,6 +408,30 @@ def _normalize_content_items(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _cap_content_items(
+    items: list[dict[str, Any]], budget: int
+) -> tuple[list[dict[str, Any]], bool]:
+    """Keep whole items while they fit ``budget`` bytes; clip the first overflow."""
+    out: list[dict[str, Any]] = []
+    used = 2  # list brackets; one comma per item after the first
+    for item in items:
+        size = len(canonical(item)) + (1 if out else 0)
+        if used + size <= budget:
+            out.append(item)
+            used += size
+            continue
+        key = {"text": "text", "diff": "newText"}.get(item.get("type"))
+        if key:
+            raw = canonical(str(item.get(key) or ""))[1:-1]
+            allow = budget - used - (size - len(raw))
+            if allow > 0:
+                clipped = dict(item)
+                clipped[key] = raw[:allow].decode("utf-8", "ignore")
+                out.append(clipped)
+        return out, True
+    return out, False
+
+
 def _normalize_locations(raw: Any) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     if not isinstance(raw, list):
@@ -426,12 +462,21 @@ class ViewProjection:
         self.mode: dict[str, Any] | None = None
         self.commands: list[dict[str, Any]] | None = None
         self.usage: dict[str, Any] | None = None
+        self.messages_dropped = False
         self._prompt_texts: list[str] = []
+        # The last appended message; chunks without messageId append to it
+        # until a tool call, a new prompt, or turn end closes it.
+        self._open_message: dict[str, Any] | None = None
 
     def add_user_from_prompt(self, text: str, cursor: int) -> None:
         with self.lock:
             self._prompt_texts.append(text)
+            self._open_message = None
             self._add_message_locked("user", text, None, cursor)
+
+    def close_message(self) -> None:
+        with self.lock:
+            self._open_message = None
 
     def apply(self, update: dict[str, Any], cursor: int) -> None:
         variant = update.get("sessionUpdate", "unknown")
@@ -458,7 +503,7 @@ class ViewProjection:
             elif variant == "agent_thought_chunk":
                 text = _as_text(update.get("content"))
                 self.thinking_chars += len(text)
-                self.thinking_text += text
+                self.thinking_text = (self.thinking_text + text)[-THINKING_TAIL_CHARS:]
                 message_id = update.get("messageId")
                 if message_id is not None:
                     self.thinking_message_id = str(message_id)
@@ -521,12 +566,28 @@ class ViewProjection:
                 if message["role"] == role and message["messageId"] == message_id:
                     message["text"] += text
                     return
-        self.messages.append({
+        else:
+            open_message = self._open_message
+            if (
+                open_message is not None
+                and self.messages
+                and self.messages[-1] is open_message
+                and open_message["role"] == role
+                and open_message["messageId"] is None
+            ):
+                open_message["text"] += text
+                return
+        message = {
             "role": role,
             "text": text,
             "messageId": message_id,
             "cursor": cursor,
-        })
+        }
+        self.messages.append(message)
+        self._open_message = message
+        if len(self.messages) > TIMELINE_MAX:
+            del self.messages[: len(self.messages) - TIMELINE_MAX]
+            self.messages_dropped = True
 
     def _upsert_tool_locked(self, update: dict[str, Any]) -> None:
         tool_id = update.get("toolCallId")
@@ -546,18 +607,22 @@ class ViewProjection:
             }
             self.tools[tool_id] = tool
             self.tool_order.append(tool_id)
+            self._open_message = None
         for field in ("title", "kind", "status"):
             if update.get(field) is not None:
                 tool[field] = update[field]
         if "locations" in update and update.get("locations") is not None:
             tool["locations"] = _normalize_locations(update.get("locations"))
         if "content" in update and update.get("content") is not None:
-            tool["content"] = _normalize_content_items(update.get("content"))
+            tool["content"], tool["truncated"] = _cap_content_items(
+                _normalize_content_items(update.get("content")), TOOL_VIEW_BYTES
+            )
 
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
             return copy.deepcopy({
                 "messages": self.messages,
+                "messages_dropped": self.messages_dropped,
                 "thinking_chars": self.thinking_chars,
                 "thinking_text": self.thinking_text,
                 "thinking_message_id": self.thinking_message_id,
@@ -663,6 +728,8 @@ class Follower:
                     if self.dropped.is_set():
                         self._emit_drop()
                     return
+                if event.get("kind") == "eof":
+                    return
                 err = event.get("error")
                 if event.get("kind") == "error" and isinstance(err, dict):
                     if err.get("code") == "follow-dropped":
@@ -680,7 +747,10 @@ class Follower:
             "follow-dropped", "follower queue exceeded 256 lines"
         )) + b"\n"
         offset = 0
+        deadline = time.monotonic() + FOLLOW_DROP_GRACE
         while offset < len(payload) and not self.closed.is_set():
+            if time.monotonic() > deadline:
+                return
             try:
                 _, writable, _ = select.select([], [self.connection], [], 0.2)
                 if not writable:
@@ -1026,6 +1096,7 @@ class Holder:
             turn["outcome"] = "turn_canceled" if stop == "cancelled" else "turn_completed"
         turn["mutation_status"] = "completed"
         turn["active"] = False
+        self.projection.close_message()
         self.last_prompt = {
             "fingerprint": turn["fingerprint"],
             "written_at": turn["written_at"],
@@ -1055,6 +1126,7 @@ class Holder:
             }
         for key, entry in list(self.pending_permissions.items()):
             self.pending_permissions.pop(key, None)
+        self.projection.close_message()
         if self.state not in ("stopping", "stopped"):
             self.state = "agent_exited"
         with self.agent.lock:
@@ -1344,25 +1416,20 @@ class Holder:
             except (TypeError, ValueError):
                 since = None
         proj = self.projection.snapshot()
-        thinking_text = proj["thinking_text"]
-        thinking_truncated = len(thinking_text) > THINKING_TAIL_CHARS
+        thinking_truncated = proj["thinking_chars"] > THINKING_TAIL_CHARS
         thinking = {
             "chars": proj["thinking_chars"],
-            "text_tail": thinking_text[-THINKING_TAIL_CHARS:],
+            "text_tail": proj["thinking_text"][-THINKING_TAIL_CHARS:],
             "messageId": proj["thinking_message_id"],
         }
-        tools = []
-        tools_truncated = False
-        for tool in proj["tools"]:
-            encoded = json.dumps(tool.get("content") or [], ensure_ascii=False)
-            if len(encoded.encode("utf-8")) > TOOL_VIEW_BYTES:
-                tool["truncated"] = True
-                tools_truncated = True
-            tools.append(tool)
+        tools = proj["tools"]
+        tools_truncated = any(tool.get("truncated") for tool in tools)
         messages = proj["messages"]
-        timeline_truncated = len(messages) > TIMELINE_MAX
-        oldest = self.events.oldest_cursor()
-        cursor_gap = isinstance(since, int) and oldest is not None and since < oldest
+        timeline_truncated = bool(proj["messages_dropped"])
+        cursor_gap = False
+        if isinstance(since, int):
+            oldest = self.events.oldest_cursor()
+            cursor_gap = oldest is not None and since < oldest
         pending = []
         for entry in self.pending_permissions.values():
             pending.append({
@@ -1408,10 +1475,26 @@ class Holder:
             },
             "unparsed_update_count": self.agent.unknown_updates,
         }
-        encoded = json.dumps(payload, ensure_ascii=False)
-        if len(encoded.encode("utf-8")) > VIEW_BYTES:
-            payload["truncated"] = True
+        self._fit_view(payload)
         return payload
+
+    @staticmethod
+    def _fit_view(payload: dict[str, Any]) -> None:
+        """Whole-view cap: drop oldest tools, then oldest messages, until it fits."""
+        size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        if size <= VIEW_BYTES:
+            return
+        payload["truncated"] = True
+        for key in ("tools", "messages"):
+            items = payload[key]
+            drop = 0
+            while size > VIEW_BYTES and drop < len(items):
+                size -= len(json.dumps(items[drop], ensure_ascii=False).encode("utf-8")) + 1
+                drop += 1
+            if drop:
+                payload[key] = items[drop:]
+            if size <= VIEW_BYTES:
+                return
 
     def fanout_follow_delta(self) -> None:
         with self.followers_lock:
@@ -1454,6 +1537,8 @@ class Holder:
         payload = self.op_view({"since": since} if since is not None else {})
         with self.followers_lock:
             follower.offer_snapshot(payload)
+            if self.agent.exited.is_set():
+                follower.offer_eof()
             self.followers.append(follower)
         follower.start()
         self.fanout_follow_delta()

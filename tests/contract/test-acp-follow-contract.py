@@ -738,6 +738,16 @@ class AcpFollowContractTests(unittest.TestCase):
         self.assertTrue(pid_alive(int(started["holder_pid"])))
         view = self.run_view("grok", session, repo, check=False)
         self.assertEqual(view.get("schema"), "kaola-acp-view/1")
+        # eof ends the stream: nothing follows it and the CLI exits on its own.
+        self.assertTrue(wait_for(lambda: _proc.poll() is not None, 8), "follow CLI must exit after eof")
+        self.assertEqual(_proc.returncode, 0)
+        _, events = collector.snapshot()
+        self.assertEqual(events[-1].get("kind"), "eof", events[-1])
+        # A follower that attaches after the agent exited gets snapshot then eof.
+        late_proc, late = self.spawn_follow("grok", session, repo)
+        self.assertIsNotNone(late.wait_kind("snapshot", 8), late.snapshot()[1])
+        self.assertIsNotNone(late.wait_kind("eof", 8), late.snapshot()[1])
+        self.assertTrue(wait_for(lambda: late_proc.poll() is not None, 8), "late follow CLI must exit after eof")
 
     def test_holder_lost_emits_follow_error_line(self) -> None:
         session, repo, started = self.start("grok")
@@ -791,6 +801,10 @@ class AcpFollowContractTests(unittest.TestCase):
         )
         self.assertFalse(ndjson_only, "follow --format text must not be NDJSON-only")
         self.assertNotRegex(text, r"\x1b\]|\x1bP", "text format is not a second TUI engine")
+        # Every delta carries the whole projection; text mode prints each item once.
+        self.assertEqual(text.count("Fix the login redirect loop."), 1, text)
+        self.assertEqual(text.count("I'll start by"), 1, text)
+        self.assertEqual(text.count("Edit src/auth/middleware.ts"), 1, text)
 
     def test_tool_call_emits_delta_without_permission(self) -> None:
         session, repo, _ = self.start("grok", scenario="tool_call_only")

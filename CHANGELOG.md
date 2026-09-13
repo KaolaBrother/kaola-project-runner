@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- ACP watch projection now holds up on real sessions: chunks without `messageId` (all Grok
+  chunks) join one message instead of one row per token; thinking tail, tool content, timeline,
+  and whole-view caps are enforced in memory and on the wire (`truncated=true`), with the newest
+  tools/messages kept; `EventLog` caches the oldest cursor instead of re-reading every event file
+  on each `view`/follow fan-out. `follow` closes after `eof` and the CLI exits; a follower that
+  attaches after agent exit gets snapshot then `eof`; `--format text` prints each message/tool
+  once. Schemas `kaola-acp-view/1` and `kaola-acp-list/1` are unchanged.
+
 - ACP holder `permit` / `cancel` / `stop` now settle each permission `request_id` at most once
   under the same lock as prompt admission (issue #25). A second settler on that id is the
   structured fact `unknown-request` and does not write another JSON-RPC result to agent stdin.

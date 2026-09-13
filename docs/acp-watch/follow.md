@@ -24,7 +24,7 @@ iOS 远程 v1 **不用**本命令：Citadel `execute()` 15 秒且等进程退出
 - follow FD 上写 `prompt`/`permit` 为错误；agent stdin 无额外 ACP 帧。  
 - 第三条套接字仍可 `permit`（#25 的锁仍然适用）。  
 - 杀掉 follow CLI 不停止 holder/agent。  
-- `process_exited` 后跟 eof；holder-lost 为 error 行。
+- `process_exited` 后跟 eof；eof 之后 holder 关闭该连接，CLI 退出；agent 已退出后再 attach 的 follower 收到 snapshot 后立即 eof。holder-lost 为 error 行。
 
 ## 非本单
 
