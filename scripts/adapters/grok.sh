@@ -12,7 +12,10 @@ ADAPTER_ANSWER_MODE="unsupported"
 ADAPTER_DEFAULT_MODEL_NAME="Grok 4.6 Extra High"
 ADAPTER_DEFAULT_MODEL_ID="grok-4.6"
 ADAPTER_DEFAULT_MODEL_EFFORT="xhigh"
-ADAPTER_DEFAULT_MODEL_FAST="false"
+ADAPTER_UPGRADE_MODEL_NAME="Grok 4.6 Extra High"
+ADAPTER_UPGRADE_MODEL_ID="grok-4.6"
+ADAPTER_UPGRADE_MODEL_EFFORT="xhigh"
+ADAPTER_FAST_MECHANISM="none"
 
 adapter_preflight() {
   local inspect_json parsed inspect_rc=0
@@ -54,7 +57,7 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--resume "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
-  ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
+  if [[ -n "$RESOLVED_MODEL_ID" ]]; then ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID"); fi
   [[ -z "$RESOLVED_MODEL_EFFORT" ]] || ADAPTER_LAUNCH_ARGS+=(--reasoning-effort "$RESOLVED_MODEL_EFFORT")
 }
 

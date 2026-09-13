@@ -571,6 +571,161 @@ class Issue25PermitLockTests(AcpSessionFixture, unittest.TestCase):
             self.assertEqual(set(option), {"id", "kind", "label"}, option)
 
 
+class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
+    """Issue #34: ACP applies resolved model → effort → Fast in order and
+    reports each configuration as a receipt, never a hard gate."""
+
+    def cli(self, command: str, *args: str, platform: str = "grok", **kwargs) -> dict:
+        argv = [
+            sys.executable, str(CLI), platform, command,
+            "--repo", str(self.repo), "--session", self.session,
+            "--command", self.mock_command(
+                kwargs.pop("scenario", "normal"),
+                kwargs.pop("caps", ""),
+                kwargs.pop("turn_ms", 0),
+            ),
+            *args,
+        ]
+        env = self.env()
+        env.update(kwargs.pop("extra_env", {}) or {})
+        result = subprocess.run(
+            argv, capture_output=True, text=True, env=env,
+            timeout=kwargs.pop("timeout", 30),
+        )
+        try:
+            receipt = json.loads(result.stdout)
+        except ValueError:
+            self.fail(
+                f"kaola-acp {platform} {command} did not emit a JSON receipt\n"
+                f"rc={result.returncode}\nstdout={result.stdout!r}\nstderr={result.stderr!r}"
+            )
+        if kwargs.get("check", True) and "error" in receipt:
+            self.fail(f"kaola-acp {platform} {command} returned error {receipt['error']}\nreceipt={receipt}")
+        return receipt
+
+    def start(self, platform: str = "grok", *args: str, **kwargs) -> dict:
+        receipt = self.cli("start", *args, platform=platform, **kwargs)
+        self._started = True
+        return receipt
+
+    def config_events(self) -> list[tuple[str, str]]:
+        events = []
+        for event in self.read_mock_log():
+            if event.get("event") != "set_config_option":
+                continue
+            params = event.get("params") or {}
+            config_id = params.get("configId") or params.get("config_id")
+            events.append((str(config_id), str(params.get("value"))))
+        return events
+
+    def setUp(self) -> None:
+        super().setUp()
+        if self.mock_log.is_file():
+            self.mock_log.write_text("", encoding="utf-8")
+
+    def test_codex_default_applies_model_effort_fast_mode_in_order(self) -> None:
+        receipt = self.start("codex")
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertEqual(
+            self.config_events(),
+            [
+                ("model", "gpt-5.6-sol"),
+                ("reasoning_effort", "high"),
+                ("fast-mode", "off"),
+                ("mode", "agent-full-access"),
+            ],
+        )
+        application = receipt.get("config_application") or {}
+        self.assertTrue((application.get("model") or {}).get("applied"))
+        self.assertTrue((application.get("effort") or {}).get("applied"))
+        self.assertTrue((application.get("fast") or {}).get("applied"))
+        selection = receipt.get("model_selection") or {}
+        self.assertEqual(selection.get("source"), "runner-default")
+        self.assertEqual(selection.get("tier"), "default")
+        self.assertEqual(selection.get("resolved_model"), "gpt-5.6-sol")
+        fast = receipt.get("fast") or {}
+        self.assertEqual(fast.get("requested"), "off")
+        self.assertEqual(fast.get("effective"), "off")
+        self.assertEqual(fast.get("applied_via"), "acp-config")
+
+    def test_codex_upgrade_tier_selects_astra(self) -> None:
+        receipt = self.start("codex", "--tier", "upgrade")
+        self.assertEqual(
+            [event for event in self.config_events() if event[0] == "model"],
+            [("model", "gpt-6-astra")],
+        )
+        selection = receipt.get("model_selection") or {}
+        self.assertEqual(selection.get("source"), "runner-upgrade")
+        self.assertEqual(selection.get("tier"), "upgrade")
+
+    def test_codex_bare_explicit_model_gets_no_invented_effort(self) -> None:
+        receipt = self.start("codex", "--model", "gpt-6-astra")
+        events = self.config_events()
+        self.assertIn(("model", "gpt-6-astra"), events)
+        self.assertNotIn("reasoning_effort", [config_id for config_id, _ in events])
+        application = receipt.get("config_application") or {}
+        self.assertEqual((application.get("effort") or {}).get("reason"), "no-resolved-value")
+        selection = receipt.get("model_selection") or {}
+        self.assertEqual(selection.get("source"), "user")
+
+    def test_codex_explicit_effort_applies_to_explicit_model(self) -> None:
+        self.start("codex", "--model", "gpt-6-astra", "--effort", "low")
+        self.assertIn(("reasoning_effort", "low"), self.config_events())
+
+    def test_codex_fast_on_applies_fast_mode(self) -> None:
+        receipt = self.start("codex", "--fast", "on")
+        self.assertIn(("fast-mode", "on"), self.config_events())
+        self.assertEqual((receipt.get("fast") or {}).get("effective"), "on")
+        self.assertTrue((receipt.get("fast") or {}).get("applied"))
+
+    def test_grok_fast_on_is_reported_unsupported(self) -> None:
+        receipt = self.start("grok", "--fast", "on")
+        fast = receipt.get("fast") or {}
+        self.assertEqual(fast.get("requested"), "on")
+        self.assertEqual(fast.get("effective"), "unsupported")
+        self.assertFalse(fast.get("applied"))
+        self.assertNotIn("fast-mode", [config_id for config_id, _ in self.config_events()])
+        application = receipt.get("config_application") or {}
+        self.assertEqual((application.get("fast") or {}).get("reason"), "no-advertised-config-option")
+
+    def test_codex_rejected_model_is_limitation_not_failure(self) -> None:
+        receipt = self.start(
+            "codex", "--model", "unavailable/model", "--effort", "high",
+            caps="strict-config",
+        )
+        self.assertIsNone(receipt.get("error"), f"rejected option must not fail start: {receipt}")
+        application = receipt.get("config_application") or {}
+        model = application.get("model") or {}
+        self.assertFalse(model.get("applied"))
+        self.assertIsNotNone(model.get("error"))
+        self.assertTrue((application.get("effort") or {}).get("applied"))
+        self.assertTrue((application.get("fast") or {}).get("applied"))
+        send = self.cli("send", "--text", "still usable", platform="codex")
+        self.assertEqual(send.get("outcome"), "turn_completed")
+
+    def test_codex_resume_preserves_saved_selection(self) -> None:
+        pages = [{"sessions": [{"sessionId": "saved-codex-1", "cwd": str(self.repo)}]}]
+        receipt = self.start(
+            "codex", "--resume", "saved-codex-1", caps="resume",
+            extra_env={"MOCK_ACP_LIST_PAGES": json.dumps(pages)},
+        )
+        events = self.config_events()
+        self.assertNotIn("model", [config_id for config_id, _ in events])
+        self.assertNotIn("reasoning_effort", [config_id for config_id, _ in events])
+        selection = receipt.get("model_selection") or {}
+        self.assertTrue(selection.get("preserved"))
+        self.assertIsNone(selection.get("resolved_model"))
+
+    def test_preflight_reports_advertised_config_ids_and_selection(self) -> None:
+        receipt = self.cli("preflight", platform="codex", check=False)
+        advertised = (receipt.get("transport") or {}).get("advertised_config_ids") or []
+        for config_id in ("mode", "model", "reasoning_effort", "fast-mode"):
+            self.assertIn(config_id, advertised)
+        selection = receipt.get("model_selection") or {}
+        self.assertEqual(selection.get("resolved_model"), "gpt-5.6-sol")
+        self.assertFalse((receipt.get("config_application") or {}).get("applied"))
+
+
 class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
     """Issue #22: default kimi ACP start (no --mode) must set mode=yolo."""
 

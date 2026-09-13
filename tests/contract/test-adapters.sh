@@ -289,8 +289,9 @@ else
       grep -Fq -- '--respect-workspace-trust false' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --respect-workspace-trust false: $log_text"
     elif [[ "$platform" == codex ]]; then
       grep -Fq "args=--cd $canonical_repo --no-alt-screen" <<<"$log_text" || fail "test_${platform}_new_launch" "Codex launch lacks --cd/--no-alt-screen shape: $log_text"
-      grep -Fq -- '--model gpt-5.6-luna' <<<"$log_text" || fail "test_${platform}_runner_default_model" "Codex launch lacks Runner default model: $log_text"
-      grep -Fq -- 'model_reasoning_effort=\"low\"' <<<"$log_text" || fail "test_${platform}_runner_default_effort" "Codex launch lacks -c model_reasoning_effort override: $log_text"
+      grep -Fq -- '--model gpt-5.6-sol' <<<"$log_text" || fail "test_${platform}_runner_default_model" "Codex launch lacks Runner default model: $log_text"
+      grep -Fq -- 'model_reasoning_effort=\"high\"' <<<"$log_text" || fail "test_${platform}_runner_default_effort" "Codex launch lacks -c model_reasoning_effort override: $log_text"
+      grep -Fq -- 'service_tier=\"default\"' <<<"$log_text" || fail "test_${platform}_runner_default_fast_off" "Codex launch lacks -c service_tier default: $log_text"
       grep -Fq -- '--sandbox danger-full-access --ask-for-approval never' <<<"$log_text" || fail "test_${platform}_no_flag_permission_mode" "No-flag Codex PTY start must launch with danger-full-access/never: $log_text"
     else
       grep -Fq "args=--cwd $canonical_repo --minimal --always-approve" <<<"$log_text" || fail "test_${platform}_new_launch" "Grok launch lacks --cwd/--minimal/--always-approve shape: $log_text"

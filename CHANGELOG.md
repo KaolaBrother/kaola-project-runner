@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Per-run model presets and explicit Fast opt-in across all seven platforms (issue #34). Every
+  manifest now declares `default` and `upgrade` presets: Claude Opus High → Fable High, Codex
+  `gpt-5.6-sol`/`high` → `gpt-6-astra`/`high`, Grok 4.6 xhigh (upgrade identical), OpenCode keeps the
+  CLI-native opening model on both tiers (no Runner override), Kimi `kimi-for-coding`/`max` → `k3`/`max`,
+  Cursor `cursor-grok-4.6-xhigh` → `claude-fable-5-1-high`, Devin `swe-2-max` → the Fusion High combo
+  model. Selection precedence: explicit `--model` wins, then `--tier`, then the default preset; a bare
+  `--model` does not inherit preset effort, and effort/Fast-encoded model IDs get no invented extra
+  configuration calls. `start`/`preflight` accept `--tier default|upgrade` and `--fast on|off` on both
+  transports — ACP applies model → effort → Fast through manifest `acp_*_config_id` options (Codex adds
+  `fast-mode`) and PTY uses native argv/`-c service_tier`/env mechanisms; `--fast on` is opt-in only and
+  reports `resolved_fast: "unsupported"` where no native mechanism or advertised fast variant exists.
+  `--resume`/`--continue` without selection flags now preserves the saved native session selection
+  (`resume-preserved`) instead of re-applying the preset; supplying any selection flag re-applies it.
+  Receipts carry `model_selection`, `requested_tier`/`requested_fast`/`resolved_fast`, and per-option
+  `config_application` records; a rejected or unadvertised `set_config_option` is a reported
+  limitation, never a session failure or transport gate, and nothing escalates models automatically.
+
 - ACP status/observe now report a recorded, fully exited normal stop as `stopped`,
   preserving `holder-lost` for unexpected loss or remaining process evidence (#32).
 

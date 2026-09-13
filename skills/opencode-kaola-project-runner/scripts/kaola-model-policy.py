@@ -41,7 +41,22 @@ def run_probe(runtime: str, repo: str, argv: list[str]) -> dict[str, Any]:
         }
 
 
-def collect_json_models(value: Any, found: dict[str, str]) -> None:
+def entry_supports_fast(details: Any) -> bool:
+    if not isinstance(details, dict):
+        return False
+    tiers = details.get("service_tiers")
+    if isinstance(tiers, list):
+        for tier in tiers:
+            label = tier.get("id") or tier.get("name") if isinstance(tier, dict) else tier
+            if isinstance(label, str) and ("fast" in label.lower() or "priority" in label.lower()):
+                return True
+    extra = details.get("additional_speed_tiers")
+    if isinstance(extra, list) and any("fast" in str(item).lower() for item in extra):
+        return True
+    return False
+
+
+def collect_json_models(value: Any, found: dict[str, str], fast_ids: set[str] | None = None) -> None:
     if isinstance(value, dict):
         models = value.get("models")
         if isinstance(models, dict):
@@ -49,20 +64,38 @@ def collect_json_models(value: Any, found: dict[str, str]) -> None:
                 if isinstance(model_id, str):
                     display = details.get("displayName", model_id) if isinstance(details, dict) else model_id
                     found[model_id] = str(display)
-        model_id = value.get("id")
+                    if fast_ids is not None and entry_supports_fast(details):
+                        fast_ids.add(model_id)
+        elif isinstance(models, list):
+            for details in models:
+                if isinstance(details, dict):
+                    model_id = details.get("id") or details.get("slug")
+                    if isinstance(model_id, str):
+                        found[model_id] = str(
+                            details.get("name") or details.get("display_name")
+                            or details.get("displayName") or model_id
+                        )
+                        if fast_ids is not None and entry_supports_fast(details):
+                            fast_ids.add(model_id)
+        model_id = value.get("id") or value.get("slug")
         if isinstance(model_id, str):
-            found[model_id] = str(value.get("name") or value.get("displayName") or model_id)
+            found[model_id] = str(
+                value.get("name") or value.get("display_name") or value.get("displayName") or model_id
+            )
+            if fast_ids is not None and entry_supports_fast(value):
+                fast_ids.add(model_id)
         for child in value.values():
-            collect_json_models(child, found)
+            collect_json_models(child, found, fast_ids)
     elif isinstance(value, list):
         for child in value:
-            collect_json_models(child, found)
+            collect_json_models(child, found, fast_ids)
 
 
-def models_from_output(output: str) -> dict[str, str]:
+def models_from_output(output: str) -> tuple[dict[str, str], set[str]]:
     found: dict[str, str] = {}
+    fast_ids: set[str] = set()
     try:
-        collect_json_models(json.loads(output), found)
+        collect_json_models(json.loads(output), found, fast_ids)
     except (json.JSONDecodeError, TypeError):
         pass
     for line in output.splitlines():
@@ -88,7 +121,10 @@ def models_from_output(output: str) -> dict[str, str]:
     # Claude currently exposes aliases through help rather than a catalog command.
     for alias in re.findall(r"['\"](fable|opus|sonnet)['\"]", output, re.I):
         found[alias.lower()] = alias.title()
-    return found
+    for model_id in found:
+        if model_id.endswith(("-fast", "-priority")):
+            fast_ids.add(model_id)
+    return found, fast_ids
 
 
 def probes_for(platform: str) -> list[list[str]]:
@@ -99,9 +135,9 @@ def probes_for(platform: str) -> list[list[str]]:
         "kimi-cli": [["provider", "list", "--json"], ["models"], ["doctor"], ["--help"]],
         "cursor-cli": [["--list-models"], ["models"], ["--help"]],
         "devin": [["models", "list"], ["--help"]],
-        # Codex has no stable read-only catalog surface; help output keeps the
-        # catalog state unknown rather than scraping /model or debug commands.
-        "codex": [["--help"]],
+        # `codex debug models` is a read-only catalog dump; it carries slugs,
+        # supported reasoning levels, and per-model fast service tiers.
+        "codex": [["debug", "models"], ["--help"]],
     }[platform]
 
 
@@ -109,12 +145,20 @@ def public_probe(probe: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in probe.items() if key != "output"}
 
 
+# Platforms whose live TUI evidence parser reports the fast flag; only those
+# get "fast" added to resolved_parameters for verify() to compare.
+FAST_OBSERVABLE_PLATFORMS = {"cursor-cli"}
+
+
 def resolve(args: argparse.Namespace) -> dict[str, Any]:
     probes = [run_probe(args.runtime_bin, args.repo, argv) for argv in probes_for(args.platform)]
     available: dict[str, str] = {}
+    fast_capable: set[str] = set()
     for probe in probes:
         if probe.get("returncode") == 0:
-            available.update(models_from_output(str(probe.get("output", ""))))
+            found, fast_ids = models_from_output(str(probe.get("output", "")))
+            available.update(found)
+            fast_capable.update(fast_ids)
 
     # The catalog is an evidence source, not a model picker.  Keep the exact
     # candidate supplied by the Agent (or by the adapter's declared default) as
@@ -123,9 +167,72 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
     # so would silently select a different runtime model.
     candidate = args.candidate_id
     resolved = candidate
-
     catalog_readable = bool(available)
-    if candidate in available:
+
+    suffixes = [item for item in (args.fast_suffixes or "").split(",") if item]
+    is_fast_id = bool(candidate) and any(candidate.endswith(item) for item in suffixes)
+    fast_requested = {"true": "on", "false": "off"}.get(args.fast, "unknown")
+    fast_block: dict[str, Any] = {
+        "requested": fast_requested,
+        "mechanism": args.fast_mechanism,
+    }
+    resolved_fast = "unknown"
+    if args.fast_mechanism == "model-suffix":
+        fast_block["support"] = "model-variant"
+        if fast_requested == "on":
+            if is_fast_id:
+                resolved_fast = "on"
+                fast_block["detail"] = "explicit fast model ID"
+            elif candidate:
+                variant = next(
+                    (candidate + item for item in suffixes if (candidate + item) in available),
+                    None,
+                )
+                if variant:
+                    resolved = variant
+                    resolved_fast = "on"
+                    fast_block["detail"] = f"catalog fast variant {variant}"
+                elif catalog_readable:
+                    resolved_fast = "unsupported"
+                    fast_block["detail"] = "no advertised fast variant for resolved model"
+                else:
+                    resolved_fast = "unknown"
+                    fast_block["detail"] = "catalog unreadable; fast variant availability unknown"
+            else:
+                resolved_fast = "unknown"
+                fast_block["detail"] = "no resolved model to attach a fast variant"
+        elif fast_requested == "off":
+            if is_fast_id:
+                resolved_fast = "on"
+                fast_block["conflict"] = "explicit fast model ID supplied with --fast off"
+            else:
+                resolved_fast = "off"
+        else:
+            resolved_fast = "on" if is_fast_id else "unknown"
+    elif args.fast_mechanism == "config":
+        fast_block["support"] = "config"
+        if fast_requested in ("on", "off"):
+            resolved_fast = fast_requested
+            if candidate:
+                fast_block["model_support"] = (
+                    candidate in fast_capable if fast_capable else "unknown"
+                )
+        else:
+            resolved_fast = "unknown"
+    else:
+        fast_block["support"] = "none"
+        if fast_requested == "on":
+            resolved_fast = "unsupported"
+            fast_block["detail"] = "no native Fast mechanism; request reported unsupported"
+        elif fast_requested == "off":
+            resolved_fast = "off"
+            fast_block["detail"] = "no native Fast mechanism; nothing to enable"
+
+    if not candidate:
+        resolution_state = (
+            "resume-preserved" if args.source == "resume-preserved" else "native-default"
+        )
+    elif candidate in available:
         resolution_state = "resolved"
     elif catalog_readable:
         resolution_state = "catalog-missing-declared-candidate"
@@ -135,8 +242,12 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
     parameters: dict[str, Any] = {}
     if args.effort:
         parameters["effort"] = args.effort
-    if args.fast != "unknown":
-        parameters["fast"] = args.fast == "true"
+    if (
+        resolved_fast in ("on", "off")
+        and args.fast_mechanism == "model-suffix"
+        and args.platform in FAST_OBSERVABLE_PLATFORMS
+    ):
+        parameters["fast"] = resolved_fast == "on"
     display = available.get(resolved, args.requested_name)
     option_text = "\n".join(str(item.get("output", "")) for item in probes)
     supported_options = sorted(
@@ -145,6 +256,7 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
     )
     provenance = {
         "requested": {"source": args.source, "name": args.requested_name},
+        "selection": {"source": args.source, "tier": args.tier or None},
         "catalog_probe": {
             "probes": [public_probe(item) for item in probes],
             "available_model_count": len(available),
@@ -153,18 +265,24 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         },
         "resolution": {
             "state": resolution_state,
-            "candidate_id": candidate,
-            "resolved_id": resolved,
+            "candidate_id": candidate or None,
+            "resolved_id": resolved or None,
             "display_name": display or None,
             "supported_options": supported_options,
         },
+        "fast": fast_block,
     }
+    if resolved != candidate:
+        provenance["resolution"]["fast_variant_applied"] = resolved
     return {
         "requested_model_source": args.source,
         "requested_model_name": args.requested_name,
+        "requested_tier": args.tier or None,
+        "requested_fast": fast_requested,
         "resolved_runtime_model_id": resolved,
         "resolved_runtime_model_display": display or None,
         "resolved_parameters": parameters,
+        "resolved_fast": resolved_fast,
         "actual_runtime_model_id": None,
         "actual_parameters": None,
         "model_verified": "unknown",
@@ -350,6 +468,18 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         policy["model_mismatch_reason"] = "actual-model-evidence-unreadable"
         return policy
     expected_id = policy.get("resolved_runtime_model_id")
+    if not expected_id:
+        # No Runner model override was resolved (native default or preserved
+        # resume state).  The actual observation is still reported, but it is
+        # not comparable to a Runner-selected target.
+        policy["model_verified"] = "unknown"
+        state = (provenance.get("resolution") or {}).get("state")
+        policy["model_mismatch_reason"] = (
+            "resume-preserved-actual-not-comparable"
+            if state == "resume-preserved"
+            else "native-default-model-not-comparable"
+        )
+        return policy
     if actual_id != expected_id:
         policy["model_verified"] = False
         policy["model_mismatch_reason"] = f"actual-model-mismatch:{actual_id}"
@@ -376,11 +506,20 @@ def main() -> int:
     resolving.add_argument("--platform", required=True)
     resolving.add_argument("--runtime-bin", required=True)
     resolving.add_argument("--repo", required=True)
-    resolving.add_argument("--source", choices=("user", "runner-default"), required=True)
+    resolving.add_argument(
+        "--source",
+        choices=("user", "runner-default", "runner-upgrade", "resume-preserved"),
+        required=True,
+    )
     resolving.add_argument("--requested-name", required=True)
     resolving.add_argument("--candidate-id", required=True)
     resolving.add_argument("--effort", default="")
     resolving.add_argument("--fast", choices=("true", "false", "unknown"), default="unknown")
+    resolving.add_argument("--tier", choices=("default", "upgrade"), default="default")
+    resolving.add_argument(
+        "--fast-mechanism", choices=("none", "config", "model-suffix"), default="none"
+    )
+    resolving.add_argument("--fast-suffixes", default="-fast,-priority")
     verifying = sub.add_parser("verify")
     verifying.add_argument("--platform", required=True)
     verifying.add_argument("--policy-json", required=True)

@@ -183,7 +183,7 @@ class DevinCatalogParserTests(unittest.TestCase):
              "from importlib.util import spec_from_file_location, module_from_spec; "
              f"spec = spec_from_file_location('kmp', {str(MODEL_POLICY)!r}); "
              "mod = module_from_spec(spec); spec.loader.exec_module(mod); "
-             "import json; print(json.dumps(mod.models_from_output(sys.stdin.read())))"],
+             "import json; print(json.dumps(mod.models_from_output(sys.stdin.read())[0]))"],
             input=text, capture_output=True, text=True, cwd=str(PROJECT),
         )
         if result.returncode != 0:

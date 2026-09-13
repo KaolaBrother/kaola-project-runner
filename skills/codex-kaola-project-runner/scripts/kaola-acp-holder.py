@@ -2044,7 +2044,15 @@ def run_probe(args: argparse.Namespace) -> int:
                                        "detail": response["error"]}
             elif response:
                 result["login_required"] = False
-                result["session_probe"] = (response.get("result") or {}).get("sessionId")
+                session_result = response.get("result") or {}
+                result["session_probe"] = session_result.get("sessionId")
+                options = session_result.get("configOptions")
+                if isinstance(options, list):
+                    result["config_option_ids"] = [
+                        option.get("id")
+                        for option in options
+                        if isinstance(option, dict) and option.get("id") is not None
+                    ]
                 if result["capabilities"]["close"] and result.get("session_probe"):
                     wait(send("session/close",
                               {"sessionId": result["session_probe"]}), 5.0)

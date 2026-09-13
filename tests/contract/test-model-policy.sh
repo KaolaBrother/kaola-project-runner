@@ -220,20 +220,36 @@ emit_catalog_json() {
 import json
 import os
 
+def entry(model_id, name, efforts):
+    value = {"id": model_id, "name": name, "efforts": efforts, "fast": False}
+    if os.environ.get("FAKE_CATALOG_SERVICE_TIER"):
+        value["service_tiers"] = [{"id": "priority", "name": "Fast"}]
+        value["additional_speed_tiers"] = ["fast"]
+    return value
+
 models = [
-    {
-        "id": os.environ["FAKE_DEFAULT_MODEL_ID"],
-        "name": os.environ["FAKE_DEFAULT_MODEL_NAME"],
-        "efforts": [os.environ["FAKE_DEFAULT_EFFORT"]],
-        "fast": False,
-    },
-    {
-        "id": os.environ["FAKE_OVERRIDE_MODEL_ID"],
-        "name": os.environ["FAKE_OVERRIDE_MODEL_ID"],
-        "efforts": ["medium", "high", "max"],
-        "fast": False,
-    },
+    entry(
+        os.environ["FAKE_DEFAULT_MODEL_ID"],
+        os.environ["FAKE_DEFAULT_MODEL_NAME"],
+        [os.environ["FAKE_DEFAULT_EFFORT"]],
+    ),
+    entry(
+        os.environ["FAKE_OVERRIDE_MODEL_ID"],
+        os.environ["FAKE_OVERRIDE_MODEL_ID"],
+        ["medium", "high", "max"],
+    ),
+    entry(
+        os.environ["FAKE_UPGRADE_MODEL_ID"],
+        os.environ["FAKE_UPGRADE_MODEL_NAME"],
+        [os.environ["FAKE_UPGRADE_EFFORT"]],
+    ),
 ]
+if os.environ.get("FAKE_CATALOG_FAST_VARIANT"):
+    models.append(entry(
+        os.environ["FAKE_DEFAULT_MODEL_ID"] + "-fast",
+        os.environ["FAKE_DEFAULT_MODEL_NAME"] + " Fast",
+        [os.environ["FAKE_DEFAULT_EFFORT"]],
+    ))
 print(json.dumps({
     "version": "model-policy-fixture 1.0.0",
     "grokVersion": "model-policy-fixture 1.0.0",
@@ -252,6 +268,10 @@ case "${1:-}" in
     emit_catalog_json
     exit 0
     ;;
+  debug|provider)
+    emit_catalog_json
+    exit 0
+    ;;
   --help|-h|help)
     printf '%s\n' \
       '--model <model>' \
@@ -262,7 +282,7 @@ case "${1:-}" in
       "${FAKE_OVERRIDE_MODEL_ID}|${FAKE_OVERRIDE_MODEL_ID}|effort=high|fast=false"
     exit 0
     ;;
-  models|model-list|list-models|catalog|schema)
+  models|model-list|list-models|--list-models|catalog|schema)
     emit_catalog_json
     exit 0
     ;;
@@ -277,6 +297,7 @@ esac
 selected=""
 effort=""
 has_resume=false
+fast_tier=""
 args=("$@")
 index=0
 while (( index < ${#args[@]} )); do
@@ -300,6 +321,11 @@ while (( index < ${#args[@]} )); do
           effort="${effort%\"}"
           effort="${effort#\"}"
           ;;
+        service_tier=*)
+          fast_tier="${args[$index]#service_tier=}"
+          fast_tier="${fast_tier%\"}"
+          fast_tier="${fast_tier#\"}"
+          ;;
       esac
       ;;
     resume)
@@ -318,6 +344,18 @@ fi
 if [[ -z "$effort" && "$runtime" == cursor-cli ]]; then
   effort=xhigh
 fi
+if [[ -z "$effort" ]]; then
+  case "$selected" in
+    *-xhigh) effort=xhigh ;;
+    *-high) effort=high ;;
+    *-medium) effort=medium ;;
+    *-low) effort=low ;;
+    *-max) effort=max ;;
+  esac
+fi
+selected_fast=false
+case "$selected" in *-fast|*-priority) selected_fast=true ;; esac
+[[ "$fast_tier" == fast ]] && selected_fast=true
 
 actual="$selected"
 [[ -n "$actual" ]] || actual="${FAKE_SAVED_MODEL_ID:?}"
@@ -326,8 +364,8 @@ case "${FAKE_MODEL_SCENARIO:-match}" in
   resume-mismatch) [[ "$has_resume" == true ]] && actual="${FAKE_SAVED_MODEL_ID:?}" ;;
 esac
 
-printf 'event=launch\tselected=%q\teffort=%q\tactual=%q\tresume=%s\n' \
-  "$selected" "$effort" "$actual" "$has_resume" >>"$argv_log"
+printf 'event=launch\tselected=%q\teffort=%q\tactual=%q\tresume=%s\tfast_tier=%q\n' \
+  "$selected" "$effort" "$actual" "$has_resume" "$fast_tier" >>"$argv_log"
 
 case "$runtime" in
   grok) title=grok ;;
@@ -343,13 +381,16 @@ printf '%s\n' "$title Kaola TUI"
 if [[ "${FAKE_MODEL_SCENARIO:-match}" == unreadable ]]; then
   printf '%s\n' 'Active model evidence unavailable'
 else
-  printf 'Active model: %s | effort=%s | fast=false\n' "$actual" "$effort"
-  ACTUAL_MODEL="$actual" ACTUAL_EFFORT="$effort" python3 - <<'PY'
+  printf 'Active model: %s | effort=%s | fast=%s\n' "$actual" "$effort" "$selected_fast"
+  ACTUAL_MODEL="$actual" ACTUAL_EFFORT="$effort" ACTUAL_FAST="$selected_fast" python3 - <<'PY'
 import json
 import os
 print("KPR_MODEL_EVIDENCE " + json.dumps({
     "model_id": os.environ["ACTUAL_MODEL"],
-    "parameters": {"effort": os.environ["ACTUAL_EFFORT"], "fast": False},
+    "parameters": {
+        "effort": os.environ["ACTUAL_EFFORT"],
+        "fast": os.environ["ACTUAL_FAST"] == "true",
+    },
     "source": "main-tui",
 }))
 PY
@@ -374,31 +415,38 @@ platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex)
 for platform in "${platforms[@]}"; do
   case "$platform" in
     claude-code)
-      default_name='Opus 5 High'; default_id=opus; default_effort=high; binary_env=CLAUDE_BIN
+      default_name='Opus High'; default_id=opus; default_effort=high; binary_env=CLAUDE_BIN
+      upgrade_name='Fable High'; upgrade_id=fable; upgrade_effort=high
       override_id=sonnet; override_effort=medium
       ;;
     cursor-cli)
       default_name='Grok 4.6 Extra High'; default_id=cursor-grok-4.6-xhigh; default_effort=xhigh; binary_env=CURSOR_AGENT_BIN
+      upgrade_name='Claude Fable 5.1 High'; upgrade_id=claude-fable-5-1-high; upgrade_effort=high
       override_id=cursor-gpt-5.2; override_effort=high
       ;;
     grok)
       default_name='Grok 4.6 Extra High'; default_id=grok-4.6; default_effort=xhigh; binary_env=GROK_BIN
+      upgrade_name='Grok 4.6 Extra High'; upgrade_id=grok-4.6; upgrade_effort=xhigh
       override_id=grok-code-fast-1; override_effort=high
       ;;
     opencode)
-      default_name='GLM 5.3 Max'; default_id=zhipuai-coding-plan/glm-5.3; default_effort=max; binary_env=OPENCODE_BIN
+      default_name='CLI native opening model'; default_id=''; default_effort=''; binary_env=OPENCODE_BIN
+      upgrade_name='CLI native opening model'; upgrade_id=''; upgrade_effort=''
       override_id=openai/gpt-5.2-codex; override_effort=high
       ;;
     kimi-cli)
-      default_name='Kimi K3 Max'; default_id=kimi-code/k3; default_effort=max; binary_env=KIMI_BIN
+      default_name='Kimi 2.8 Max'; default_id=kimi-code/kimi-for-coding; default_effort=max; binary_env=KIMI_BIN
+      upgrade_name='Kimi K3 Max'; upgrade_id=kimi-code/k3; upgrade_effort=max
       override_id=kimi-code/k2.5; override_effort=high
       ;;
     devin)
-      default_name='Adaptive'; default_id=adaptive; default_effort=''; binary_env=DEVIN_BIN
+      default_name='SWE-2 Max'; default_id=swe-2-max; default_effort=''; binary_env=DEVIN_BIN
+      upgrade_name='Fusion High (Fable 5.1 High + SWE-2 Medium)'; upgrade_id=fusion-claude-fable-5-1-high-sidekick-swe-2-medium; upgrade_effort=''
       override_id=claude-sonnet-5-high; override_effort=''
       ;;
     codex)
-      default_name='GPT-5.6 Luna Low'; default_id=gpt-5.6-luna; default_effort=low; binary_env=CODEX_BIN
+      default_name='GPT-5.6 Sol High'; default_id=gpt-5.6-sol; default_effort=high; binary_env=CODEX_BIN
+      upgrade_name='GPT-6 Astra High'; upgrade_id=gpt-6-astra; upgrade_effort=high
       override_id=gpt-6-astra; override_effort=high
       ;;
   esac
@@ -412,7 +460,10 @@ for platform in "${platforms[@]}"; do
   export FAKE_RUNTIME_NAME="$platform" FAKE_ARGV_LOG="$argv_log" FAKE_INPUT_LOG="$input_log"
   export FAKE_DEFAULT_MODEL_NAME="$default_name" FAKE_DEFAULT_MODEL_ID="$default_id"
   export FAKE_DEFAULT_EFFORT="$default_effort" FAKE_OVERRIDE_MODEL_ID="$override_id"
+  export FAKE_UPGRADE_MODEL_NAME="$upgrade_name" FAKE_UPGRADE_MODEL_ID="$upgrade_id"
+  export FAKE_UPGRADE_EFFORT="$upgrade_effort"
   export FAKE_SAVED_MODEL_ID="saved-picker/$platform-other" FAKE_MODEL_SCENARIO=match
+  export FAKE_CATALOG_FAST_VARIANT= FAKE_CATALOG_SERVICE_TIER=
 
   preflight_session="model-preflight-${platform}-$$"
   capture_command "$platform" preflight --repo "$repo" --session "$preflight_session"
@@ -427,28 +478,72 @@ for platform in "${platforms[@]}"; do
     # becomes mandatory for this platform.
     continue
   fi
-  assert_model_evidence "test_${platform}_default_model_preflight" "$COMMAND_OUTPUT" \
-    runner-default "$default_name" "$default_id" __UNREADABLE__ unknown "$default_effort"
+  if [[ "$platform" == opencode ]]; then
+    # Issue #34: OpenCode presets keep the CLI's own opening model — no Runner
+    # model or effort override is resolved or launched.
+    assert_model_evidence "test_${platform}_default_model_preflight" "$COMMAND_OUTPUT" \
+      runner-default "$default_name" "" __UNREADABLE__ unknown ""
+    capture_command "$platform" preflight --repo "$repo" --session "$preflight_session" --tier upgrade
+    assert_model_evidence "test_${platform}_upgrade_tier_preflight" "$COMMAND_OUTPUT" \
+      runner-upgrade "$upgrade_name" "" __UNREADABLE__ unknown ""
+  else
+    assert_model_evidence "test_${platform}_default_model_preflight" "$COMMAND_OUTPUT" \
+      runner-default "$default_name" "$default_id" __UNREADABLE__ unknown "$default_effort"
+    capture_command "$platform" preflight --repo "$repo" --session "$preflight_session" --tier upgrade
+    assert_model_evidence "test_${platform}_upgrade_tier_preflight" "$COMMAND_OUTPUT" \
+      runner-upgrade "$upgrade_name" "$upgrade_id" __UNREADABLE__ unknown "$upgrade_effort"
+  fi
 
   session="model-default-${platform}-$$"
   capture_command "$platform" start --repo "$repo" --session "$session"
   if [[ "$COMMAND_RC" -ne 0 ]]; then
     fail "test_${platform}_runner_default_overrides_saved_picker" "start failed: $COMMAND_OUTPUT"
   else
-    assert_model_evidence "test_${platform}_runner_default_overrides_saved_picker" "$COMMAND_OUTPUT" \
-      runner-default "$default_name" "$default_id" "$default_id" true "$default_effort"
-    status_json="$(TMUX_BIN="$issue_tmux_bin" bash "$runner" "$platform" status --repo "$repo" --session "$session" --transport pty)"
-    assert_model_evidence "test_${platform}_status_preserves_model_provenance" "$status_json" \
-      runner-default "$default_name" "$default_id" "$default_id" true "$default_effort"
-    grep -Fq "event=launch" "$argv_log" || fail "test_${platform}_runner_default_launches" "runtime launch was not recorded"
-    grep -Fq "selected=$default_id" "$argv_log" || fail "test_${platform}_runner_default_overrides_saved_picker" "resolved model absent from launch argv: $(cat "$argv_log")"
-    grep -Fq "selected=${FAKE_SAVED_MODEL_ID}" "$argv_log" && fail "test_${platform}_saved_picker_not_runner_default" "saved picker was launched as Runner default"
+    if [[ "$platform" == opencode ]]; then
+      assert_model_evidence "test_${platform}_runner_default_keeps_native_opening_model" "$COMMAND_OUTPUT" \
+        runner-default "$default_name" "" "$FAKE_SAVED_MODEL_ID" unknown ""
+      status_json="$(TMUX_BIN="$issue_tmux_bin" bash "$runner" "$platform" status --repo "$repo" --session "$session" --transport pty)"
+      assert_model_evidence "test_${platform}_status_preserves_model_provenance" "$status_json" \
+        runner-default "$default_name" "" "$FAKE_SAVED_MODEL_ID" unknown ""
+      grep -Fq "event=launch" "$argv_log" || fail "test_${platform}_runner_default_launches" "runtime launch was not recorded"
+      if grep -Eq -- '--model|--variant' <<<"$(grep 'args=' "$argv_log" | tail -1)"; then
+        fail "test_${platform}_runner_default_keeps_native_opening_model" "Runner forced a model/effort override on the native preset: $(cat "$argv_log")"
+      fi
+    else
+      assert_model_evidence "test_${platform}_runner_default_overrides_saved_picker" "$COMMAND_OUTPUT" \
+        runner-default "$default_name" "$default_id" "$default_id" true "$default_effort"
+      status_json="$(TMUX_BIN="$issue_tmux_bin" bash "$runner" "$platform" status --repo "$repo" --session "$session" --transport pty)"
+      assert_model_evidence "test_${platform}_status_preserves_model_provenance" "$status_json" \
+        runner-default "$default_name" "$default_id" "$default_id" true "$default_effort"
+      grep -Fq "event=launch" "$argv_log" || fail "test_${platform}_runner_default_launches" "runtime launch was not recorded"
+      grep -Fq "selected=$default_id" "$argv_log" || fail "test_${platform}_runner_default_overrides_saved_picker" "resolved model absent from launch argv: $(cat "$argv_log")"
+      grep -Fq "selected=${FAKE_SAVED_MODEL_ID}" "$argv_log" && fail "test_${platform}_saved_picker_not_runner_default" "saved picker was launched as Runner default"
+    fi
   fi
   assert_no_workflow_injection "test_${platform}_default_does_not_inject_workflow" "$input_log"
   stop_or_kill "$platform" "$repo" "$session"
 
   : >"$input_log"
   export FAKE_MODEL_SCENARIO=match
+  session="model-upgrade-${platform}-$$"
+  capture_command "$platform" start --repo "$repo" --session "$session" --tier upgrade
+  if [[ "$COMMAND_RC" -ne 0 ]]; then
+    fail "test_${platform}_upgrade_tier_launch" "upgrade-tier start failed: $COMMAND_OUTPUT"
+  else
+    if [[ "$platform" == opencode ]]; then
+      assert_model_evidence "test_${platform}_upgrade_tier_launch" "$COMMAND_OUTPUT" \
+        runner-upgrade "$upgrade_name" "" "$FAKE_SAVED_MODEL_ID" unknown ""
+    else
+      assert_model_evidence "test_${platform}_upgrade_tier_launch" "$COMMAND_OUTPUT" \
+        runner-upgrade "$upgrade_name" "$upgrade_id" "$upgrade_id" true "$upgrade_effort"
+      grep -Fq "selected=$upgrade_id" "$argv_log" || \
+        fail "test_${platform}_upgrade_tier_launch" "upgrade model absent from launch argv: $(cat "$argv_log")"
+    fi
+  fi
+  assert_no_workflow_injection "test_${platform}_upgrade_does_not_inject_workflow" "$input_log"
+  stop_or_kill "$platform" "$repo" "$session"
+
+  : >"$input_log"
   session="model-user-${platform}-$$"
   override_effort_args=()
   [[ -n "$override_effort" ]] && override_effort_args=(--effort "$override_effort")
@@ -463,13 +558,26 @@ for platform in "${platforms[@]}"; do
   stop_or_kill "$platform" "$repo" "$session"
 
   : >"$input_log"
+  session="model-user-noeffort-${platform}-$$"
+  capture_command "$platform" start --repo "$repo" --session "$session" --model "$override_id"
+  if [[ "$COMMAND_RC" -ne 0 ]]; then
+    fail "test_${platform}_user_model_without_effort" "start failed: $COMMAND_OUTPUT"
+  else
+    # Issue #34: a different explicit model without explicit effort leaves the
+    # native effort alone — no preset effort is attached.
+    assert_model_evidence "test_${platform}_user_model_without_effort_keeps_native_effort" "$COMMAND_OUTPUT" \
+      user "$override_id" "$override_id" "$override_id" true ""
+  fi
+  stop_or_kill "$platform" "$repo" "$session"
+
+  : >"$input_log"
   session="model-unavailable-${platform}-$$"
   capture_command "$platform" start --repo "$repo" --session "$session" --model "unavailable/$platform"
   if [[ "$COMMAND_RC" -ne 0 ]]; then
     fail "test_${platform}_unavailable_model_is_not_a_launch_gate" "catalog-missing literal was refused: $COMMAND_OUTPUT"
   else
     assert_model_evidence "test_${platform}_unavailable_model_launches_literal_with_catalog_evidence" \
-      "$COMMAND_OUTPUT" user "unavailable/$platform" "unavailable/$platform" "unavailable/$platform" true "$default_effort"
+      "$COMMAND_OUTPUT" user "unavailable/$platform" "unavailable/$platform" "unavailable/$platform" true ""
     grep -Fq "selected=unavailable/$platform" "$argv_log" || \
       fail "test_${platform}_unavailable_model_launches_literal" "literal model absent from launch argv: $(cat "$argv_log")"
   fi
@@ -485,8 +593,13 @@ for platform in "${platforms[@]}"; do
   if [[ "$COMMAND_RC" -ne 0 ]]; then
     fail "test_${platform}_actual_mismatch_is_evidence_not_communication_gate" "start was blocked: $COMMAND_OUTPUT"
   else
-    assert_model_evidence "test_${platform}_actual_mismatch_is_reported" "$COMMAND_OUTPUT" \
-      runner-default "$default_name" "$default_id" "$FAKE_SAVED_MODEL_ID" false "$default_effort"
+    if [[ "$platform" == opencode ]]; then
+      assert_model_evidence "test_${platform}_actual_mismatch_is_reported" "$COMMAND_OUTPUT" \
+        runner-default "$default_name" "" "$FAKE_SAVED_MODEL_ID" unknown ""
+    else
+      assert_model_evidence "test_${platform}_actual_mismatch_is_reported" "$COMMAND_OUTPUT" \
+        runner-default "$default_name" "$default_id" "$FAKE_SAVED_MODEL_ID" false "$default_effort"
+    fi
   fi
   assert_no_workflow_injection "test_${platform}_mismatch_does_not_inject_workflow" "$input_log"
   stop_or_kill "$platform" "$repo" "$session"
@@ -498,8 +611,13 @@ for platform in "${platforms[@]}"; do
   if [[ "$COMMAND_RC" -ne 0 ]]; then
     fail "test_${platform}_unreadable_actual_is_evidence_not_communication_gate" "start was blocked: $COMMAND_OUTPUT"
   else
-    assert_model_evidence "test_${platform}_unreadable_actual_is_unknown" "$COMMAND_OUTPUT" \
-      runner-default "$default_name" "$default_id" __UNREADABLE__ unknown "$default_effort"
+    if [[ "$platform" == opencode ]]; then
+      assert_model_evidence "test_${platform}_unreadable_actual_is_unknown" "$COMMAND_OUTPUT" \
+        runner-default "$default_name" "" __UNREADABLE__ unknown ""
+    else
+      assert_model_evidence "test_${platform}_unreadable_actual_is_unknown" "$COMMAND_OUTPUT" \
+        runner-default "$default_name" "$default_id" __UNREADABLE__ unknown "$default_effort"
+    fi
   fi
   assert_no_workflow_injection "test_${platform}_unreadable_does_not_inject_workflow" "$input_log"
   stop_or_kill "$platform" "$repo" "$session"
@@ -509,12 +627,45 @@ for platform in "${platforms[@]}"; do
   session="model-continue-${platform}-$$"
   capture_command "$platform" start --repo "$repo" --session "$session" --continue
   if [[ "$COMMAND_RC" -ne 0 ]]; then
-    fail "test_${platform}_continue_reverifies_model" "continue failed: $COMMAND_OUTPUT"
+    fail "test_${platform}_continue_preserves_saved_model" "continue failed: $COMMAND_OUTPUT"
   else
-    assert_model_evidence "test_${platform}_continue_reverifies_model" "$COMMAND_OUTPUT" \
-      runner-default "$default_name" "$default_id" "$default_id" true "$default_effort"
+    # Issue #34: --continue/--resume with no tier/model/effort preserves the
+    # saved native session selection; the actual model is evidence, not a
+    # comparison against a Runner-resolved target.
+    assert_model_evidence "test_${platform}_continue_preserves_saved_model" "$COMMAND_OUTPUT" \
+      resume-preserved "native saved session selection" "" "$FAKE_SAVED_MODEL_ID" unknown ""
+    if grep -Eq -- '--model|--reasoning-effort|--variant|model_reasoning_effort' <<<"$(grep 'args=' "$argv_log" | tail -1)"; then
+      fail "test_${platform}_continue_preserves_saved_model" "Runner overrode the preserved selection: $(cat "$argv_log")"
+    fi
   fi
   assert_no_workflow_injection "test_${platform}_continue_does_not_inject_workflow" "$input_log"
+  stop_or_kill "$platform" "$repo" "$session"
+
+  : >"$input_log"
+  session="model-resume-preserve-${platform}-$$"
+  capture_command "$platform" start --repo "$repo" --session "$session" --resume "fixture-$platform-session"
+  if [[ "$COMMAND_RC" -ne 0 ]]; then
+    fail "test_${platform}_resume_preserves_saved_model" "resume failed: $COMMAND_OUTPUT"
+  else
+    assert_model_evidence "test_${platform}_resume_preserves_saved_model" "$COMMAND_OUTPUT" \
+      resume-preserved "native saved session selection" "" "$FAKE_SAVED_MODEL_ID" unknown ""
+  fi
+  stop_or_kill "$platform" "$repo" "$session"
+
+  : >"$input_log"
+  session="model-resume-tier-${platform}-$$"
+  capture_command "$platform" start --repo "$repo" --session "$session" --resume "fixture-$platform-session" --tier upgrade
+  if [[ "$COMMAND_RC" -ne 0 ]]; then
+    fail "test_${platform}_resume_tier_overrides_preserved" "resume+tier failed: $COMMAND_OUTPUT"
+  else
+    if [[ "$platform" == opencode ]]; then
+      assert_model_evidence "test_${platform}_resume_tier_overrides_preserved" "$COMMAND_OUTPUT" \
+        runner-upgrade "$upgrade_name" "" "$FAKE_SAVED_MODEL_ID" unknown ""
+    else
+      assert_model_evidence "test_${platform}_resume_tier_overrides_preserved" "$COMMAND_OUTPUT" \
+        runner-upgrade "$upgrade_name" "$upgrade_id" "$upgrade_id" true "$upgrade_effort"
+    fi
+  fi
   stop_or_kill "$platform" "$repo" "$session"
 
   : >"$input_log"
@@ -541,7 +692,7 @@ for platform in "${platforms[@]}"; do
     fail "test_${platform}_malicious_model_is_not_a_launch_gate" "malicious literal was refused: $COMMAND_OUTPUT"
   else
     assert_model_evidence "test_${platform}_malicious_model_is_reported_literally" \
-      "$COMMAND_OUTPUT" user "$malicious" "$malicious" "$malicious" true "$default_effort"
+      "$COMMAND_OUTPUT" user "$malicious" "$malicious" "$malicious" true ""
   fi
   [[ ! -e "$marker" && ! -e "$marker.backtick" ]] || \
     fail "test_${platform}_model_input_is_literal_safe" "model input executed shell syntax"
@@ -549,6 +700,85 @@ for platform in "${platforms[@]}"; do
     stop_or_kill "$platform" "$repo" "$session"
   fi
   assert_no_workflow_injection "test_${platform}_malicious_input_does_not_inject_workflow" "$input_log"
+
+  : >"$input_log"
+  session="model-fast-${platform}-$$"
+  case "$platform" in
+    codex)
+      # Config-mechanism platform: Fast off is applied as service_tier=default;
+      # --fast on applies service_tier=fast — per-run, never a global write.
+      capture_command "$platform" start --repo "$repo" --session "$session"
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        grep -Fq 'service_tier=\"default\"' "$argv_log" || \
+          fail "test_${platform}_fast_off_applies_default_tier" "launch argv lacks service_tier=default: $(cat "$argv_log")"
+      else
+        fail "test_${platform}_fast_off_applies_default_tier" "start failed: $COMMAND_OUTPUT"
+      fi
+      stop_or_kill "$platform" "$repo" "$session"
+      session="model-fast-on-${platform}-$$"
+      capture_command "$platform" start --repo "$repo" --session "$session" --fast on
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        grep -Fq 'service_tier=\"fast\"' "$argv_log" || \
+          fail "test_${platform}_fast_on_applies_fast_tier" "launch argv lacks service_tier=fast: $(cat "$argv_log")"
+        assert_model_evidence "test_${platform}_fast_on_applies_fast_tier" "$COMMAND_OUTPUT" \
+          runner-default "$default_name" "$default_id" "$default_id" true "$default_effort"
+      else
+        fail "test_${platform}_fast_on_applies_fast_tier" "start failed: $COMMAND_OUTPUT"
+      fi
+      ;;
+    cursor-cli)
+      # Model-variant platform: --fast on picks the catalog's -fast variant.
+      export FAKE_CATALOG_FAST_VARIANT=true
+      capture_command "$platform" start --repo "$repo" --session "$session" --fast on
+      export FAKE_CATALOG_FAST_VARIANT=
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        grep -Fq "selected=${default_id}-fast" "$argv_log" || \
+          fail "test_${platform}_fast_on_resolves_catalog_variant" "fast variant absent from launch argv: $(cat "$argv_log")"
+      else
+        fail "test_${platform}_fast_on_resolves_catalog_variant" "start failed: $COMMAND_OUTPUT"
+      fi
+      session="model-fast-fable-${platform}-$$"
+      capture_command "$platform" start --repo "$repo" --session "$session" --tier upgrade --fast on
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        grep -Fq "selected=$upgrade_id" "$argv_log" || \
+          fail "test_${platform}_fable_fast_unsupported_keeps_base_model" "unexpected model in launch argv: $(cat "$argv_log")"
+        if ! JSON_INPUT="$COMMAND_OUTPUT" python3 -c 'import json,os; d=json.loads(os.environ["JSON_INPUT"]); assert d["model"].get("resolved_fast") == "unsupported", d.get("model")'; then
+          fail "test_${platform}_fable_fast_unsupported_keeps_base_model" "expected resolved_fast=unsupported: $COMMAND_OUTPUT"
+        fi
+      else
+        fail "test_${platform}_fable_fast_unsupported_keeps_base_model" "start failed: $COMMAND_OUTPUT"
+      fi
+      ;;
+    devin)
+      # Model-variant platform whose presets advertise no fast variant.
+      capture_command "$platform" start --repo "$repo" --session "$session" --fast on
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        grep -Fq "selected=$default_id" "$argv_log" || \
+          fail "test_${platform}_preset_fast_unsupported_keeps_base_model" "unexpected model in launch argv: $(cat "$argv_log")"
+        if ! JSON_INPUT="$COMMAND_OUTPUT" python3 -c 'import json,os; d=json.loads(os.environ["JSON_INPUT"]); assert d["model"].get("resolved_fast") == "unsupported", d.get("model")'; then
+          fail "test_${platform}_preset_fast_unsupported_keeps_base_model" "expected resolved_fast=unsupported: $COMMAND_OUTPUT"
+        fi
+      else
+        fail "test_${platform}_preset_fast_unsupported_keeps_base_model" "start failed: $COMMAND_OUTPUT"
+      fi
+      ;;
+    *)
+      # No native Fast mechanism: --fast on is reported unsupported, never
+      # applied, and never blocks the launch.
+      capture_command "$platform" start --repo "$repo" --session "$session" --fast on
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        if ! JSON_INPUT="$COMMAND_OUTPUT" python3 -c 'import json,os; d=json.loads(os.environ["JSON_INPUT"]); assert d["model"].get("resolved_fast") == "unsupported", d.get("model")'; then
+          fail "test_${platform}_fast_on_unsupported_is_reported" "expected resolved_fast=unsupported: $COMMAND_OUTPUT"
+        fi
+      else
+        fail "test_${platform}_fast_on_unsupported_is_reported" "start failed: $COMMAND_OUTPUT"
+      fi
+      ;;
+  esac
+  if "$issue_tmux_bin" has-session -t "=$session" 2>/dev/null; then
+    stop_or_kill "$platform" "$repo" "$session"
+  fi
+  export FAKE_MODEL_SCENARIO=match
 done
 
 assert_launch_preamble_is_not_actual_evidence() {

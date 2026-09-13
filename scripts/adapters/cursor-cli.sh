@@ -12,7 +12,11 @@ ADAPTER_ANSWER_MODE="unsupported"
 ADAPTER_DEFAULT_MODEL_NAME="Grok 4.6 Extra High"
 ADAPTER_DEFAULT_MODEL_ID="cursor-grok-4.6-xhigh"
 ADAPTER_DEFAULT_MODEL_EFFORT="xhigh"
-ADAPTER_DEFAULT_MODEL_FAST="false"
+ADAPTER_UPGRADE_MODEL_NAME="Claude Fable 5.1 High"
+ADAPTER_UPGRADE_MODEL_ID="claude-fable-5-1-high"
+ADAPTER_UPGRADE_MODEL_EFFORT="high"
+ADAPTER_FAST_MECHANISM="model-suffix"
+ADAPTER_FAST_SUFFIXES="-fast"
 
 adapter_preflight() {
   local cursor_root="${CURSOR_HOME:-$HOME/.cursor}" authority workflow_state=false finalize_state=false authority_state=missing
@@ -37,7 +41,7 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--resume "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
-  ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
+  if [[ -n "$RESOLVED_MODEL_ID" ]]; then ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID"); fi
   if [[ -n "$RESOLVED_MODEL_EFFORT" && "$MODEL_HAS_EFFORT" == true ]]; then
     ADAPTER_LAUNCH_ARGS+=(--effort "$RESOLVED_MODEL_EFFORT")
   fi

@@ -244,7 +244,7 @@ class MockAgent:
         session_id = f"mock-session-{self.session_counter}"
         self.sessions[session_id] = {"cwd": params.get("cwd", "")}
         log_event({"event": "session_new", "sessionId": session_id})
-        respond(request_id, {"sessionId": session_id})
+        respond(request_id, {"sessionId": session_id, "configOptions": self.CONFIG_OPTIONS})
 
     def on_session_list(self, request_id: Any, params: dict[str, Any]) -> None:
         if "list" not in self.caps:
@@ -321,8 +321,10 @@ class MockAgent:
         {"id": "model", "name": "Model",
          "description": "Model Codex uses for the session",
          "category": "model", "type": "select", "options": [
-             {"value": "gpt-5.6-luna", "name": "5.6 Luna",
+             {"value": "gpt-5.6-sol", "name": "5.6 Sol",
               "description": "Fast and affordable agentic coding model."},
+             {"value": "gpt-6-astra", "name": "6 Astra",
+              "description": "Frontier agentic coding model."},
          ]},
         {"id": "reasoning_effort", "name": "Reasoning effort",
          "description": "Reasoning effort Codex uses for the session",
@@ -331,13 +333,34 @@ class MockAgent:
              {"value": "medium", "name": "Medium"},
              {"value": "high", "name": "High"},
          ]},
+        {"id": "fast-mode", "name": "Fast mode",
+         "description": "Fast service tier for the session",
+         "category": "fast-mode", "type": "select", "options": [
+             {"value": "off", "name": "Off"},
+             {"value": "on", "name": "On"},
+         ]},
     ]
 
     def on_set_config(self, request_id: Any, params: dict[str, Any]) -> None:
         config_id = params.get("configId") or params.get("config_id")
+        log_event({"event": "set_config_option", "params": params})
+        if "strict-config" in self.caps:
+            option = next(
+                (entry for entry in self.CONFIG_OPTIONS if entry.get("id") == config_id),
+                None,
+            )
+            values = {entry.get("value") for entry in (option or {}).get("options") or []}
+            if option is None or (values and params.get("value") not in values):
+                respond(
+                    request_id,
+                    error={
+                        "code": -32602,
+                        "message": f"unsupported config option {config_id}={params.get('value')}",
+                    },
+                )
+                return
         if config_id is not None:
             self.configured[str(config_id)] = params.get("value")
-        log_event({"event": "set_config_option", "params": params})
         respond(request_id, {"configOptions": self.CONFIG_OPTIONS})
 
     # -- prompt turn scenarios -----------------------------------------------

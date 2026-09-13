@@ -16,6 +16,13 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 
 `mutation_status` is one of `not_started`, `accepted`, `in_progress`, `completed`, or `unknown`. These are transport facts, not permission to retry.
 
+`start` resolves the same tier/model/effort/Fast selection as PTY and applies it through the
+agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
+`model`/`effort`/`` when non-empty.
+`config_application` records each attempted option's requested value and applied result;
+`configured_options` carries the adapter's returned receipts. An option with no advertised config
+ID, or one the adapter rejects, is reported as a limitation — the session stays usable.
+
 ## Ending and resuming an ACP session
 
 A turn reaching `end_turn` is a reply boundary, not task completion; the Agent judges from the
