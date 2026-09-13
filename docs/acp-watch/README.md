@@ -1,6 +1,6 @@
 # ACP Watch Surface
 
-状态：设计冻结（2026-09-13）；**#26 已实现**（`kaola-acp list` / `view`）；#25 / #27 仍未实现。  
+状态：设计冻结（2026-09-13）；**#25 / #26 已实现**（permit/cancel/stop at-most-once；`kaola-acp list` / `view`）；#27 仍未实现。  
 范围：人类旁观 ACP 会话，不把编排器拉回 PTY 刮屏，也不做第二条 agent stdio 客户端。
 
 本目录是 GitHub **#25 / #26 / #27** 的设计权威。实现必须按对应文件的 Boundary 施工，不得把后继 issue 的内容提前塞进当前 issue。

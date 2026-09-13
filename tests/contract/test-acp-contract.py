@@ -19,12 +19,16 @@ and covers every branch in design §7.3/§7.4/§7.6:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import secrets
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -35,6 +39,44 @@ CLI = PROJECT / "scripts" / "kaola-acp.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 
 SESSION_RE = "acpt"
+
+# Issue #25: sequential second permit on a still-pending *other* id already
+# returns this code. Concurrent same-id loser is frozen to the same fact.
+SETTLED_PERMISSION_ERROR = "unknown-request"
+
+L0_SEND_WAIT_KEYS = frozenset({
+    "schema_version",
+    "transport",
+    "acp_session_id",
+    "prompt_fingerprint",
+    "outcome",
+    "stop_reason",
+    "mutation_status",
+    "mutation_performed",
+    "duration_ms",
+    "final_text",
+    "final_text_truncated",
+    "tool_calls",
+    "side_effects",
+    "failed_tools",
+    "thinking_chars",
+    "context_usage",
+    "pending_permissions",
+    "event_cursor",
+    "event_log_bytes",
+    "git",
+})
+L0_FORBIDDEN_WATCH_KEYS = frozenset({
+    "timeline", "thinking_text", "plan", "messages", "tools",
+})
+
+
+def rpc_ids_match(left, right) -> bool:
+    if left is None or right is None:
+        return False
+    if left == right:
+        return True
+    return str(left) == str(right)
 
 
 def wait_for(predicate, timeout: float, interval: float = 0.05):
@@ -47,7 +89,7 @@ def wait_for(predicate, timeout: float, interval: float = 0.05):
     return predicate()
 
 
-class AcpContractTests(unittest.TestCase):
+class AcpSessionFixture:
     @classmethod
     def setUpClass(cls) -> None:
         if not CLI.is_file():
@@ -130,6 +172,95 @@ class AcpContractTests(unittest.TestCase):
         self._started = True
         return receipt
 
+    def pending_permissions(self) -> list:
+        obs = self.cli("observe", check=False)
+        return obs.get("pending_permissions") or []
+
+    def jsonrpc_results_for(self, request_id) -> list[dict]:
+        """JSON-RPC responses (no method) whose id matches the permission request."""
+        found = []
+        for event in self.read_mock_log():
+            if event.get("event") != "outbound_response":
+                continue
+            message = event.get("message") or {}
+            if "method" in message:
+                continue
+            event_id = message.get("id", event.get("id"))
+            if not rpc_ids_match(event_id, request_id):
+                continue
+            found.append(event)
+        return found
+
+    def holder_sock(self) -> Path:
+        repo = os.path.realpath(str(self.repo))
+        digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
+        directory = self.record_root / "grok" / self.session / digest
+        sock_digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
+        return Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{sock_digest}.sock"
+
+    def concurrent_holder_ops(self, n: int, op: str, params: dict, timeout: float = 15) -> list[dict]:
+        """Two already-connected Unix clients send the same op after one barrier.
+
+        Matches ``kaola-acp.py`` socket framing so the holder race is not hidden
+        by CLI process startup.
+        """
+        path = self.holder_sock()
+        self.assertTrue(path.exists(), f"missing holder socket {path}")
+        barrier = threading.Barrier(n)
+        slots: list[dict | None] = [None] * n
+        errors: list[BaseException] = []
+
+        def worker(index: int) -> None:
+            connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                connection.settimeout(timeout)
+                connection.connect(str(path))
+                payload = json.dumps({
+                    "op": op,
+                    "request_id": secrets.token_hex(8),
+                    "params": params,
+                }).encode("utf-8") + b"\n"
+                barrier.wait(timeout=10)
+                connection.sendall(payload)
+                buffer = bytearray()
+                while True:
+                    data = connection.recv(65536)
+                    if not data:
+                        break
+                    buffer.extend(data)
+                    if b"\n" in buffer:
+                        line, _, _ = buffer.partition(b"\n")
+                        slots[index] = json.loads(line.decode("utf-8"))
+                        return
+                if buffer:
+                    slots[index] = json.loads(buffer.decode("utf-8"))
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+            finally:
+                connection.close()
+
+        threads = [threading.Thread(target=worker, args=(i,), daemon=True) for i in range(n)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=timeout + 5)
+        still = [thread for thread in threads if thread.is_alive()]
+        self.assertFalse(still, f"holder op {op} hung under concurrency")
+        self.assertFalse(errors, f"holder op {op} raised {errors!r}")
+        return [slot if slot is not None else {} for slot in slots]
+
+    def wait_for_jsonrpc_results(self, request_id, minimum: int, timeout: float = 1.0) -> list[dict]:
+        deadline = time.monotonic() + timeout
+        found: list[dict] = []
+        while time.monotonic() < deadline:
+            found = self.jsonrpc_results_for(request_id)
+            if len(found) >= minimum:
+                return found
+            time.sleep(0.05)
+        return self.jsonrpc_results_for(request_id)
+
+
+class AcpContractTests(AcpSessionFixture, unittest.TestCase):
     # -- happy path ----------------------------------------------------------
 
     def test_send_wait_end_turn_receipt(self) -> None:
@@ -313,6 +444,131 @@ class AcpContractTests(unittest.TestCase):
         self.assertIn(cancel.get("outcome"), ("turn_canceled", None))
         receipt = self.cli("wait", "--timeout", "10", check=False)
         self.assertEqual(receipt.get("stop_reason"), "cancelled")
+
+
+class Issue25PermitLockTests(AcpSessionFixture, unittest.TestCase):
+    """Issue #25: at-most-once permit/cancel on one request_id.
+
+    Distinct-id concurrency stays in ``test_multiple_concurrent_permissions``.
+    """
+
+    def env(self) -> dict[str, str]:
+        env = super().env()
+        hook = PROJECT / "tests" / "contract" / "hooks"
+        env["PYTHONPATH"] = str(hook) + os.pathsep + env.get("PYTHONPATH", "")
+        return env
+
+    def setUp(self) -> None:
+        super().setUp()
+        if self.mock_log.is_file():
+            self.mock_log.write_text("", encoding="utf-8")
+
+    def test_sequential_second_permit_same_id_is_unknown_request(self) -> None:
+        self.start(scenario="multi_permission")
+        self.cli("send", "--text", "needs permits", "--no-wait", scenario="multi_permission")
+        found = wait_for(lambda: self.pending_permissions() if len(self.pending_permissions()) == 3 else None, 10)
+        self.assertTrue(found, f"expected 3 pending permissions, saw {self.pending_permissions()}")
+        request_id = found[0]["request_id"]
+        first = self.cli(
+            "permit", "--request-id", str(request_id), "--option", "allow",
+            check=False, scenario="multi_permission",
+        )
+        self.assertIsNone(first.get("error"), f"first permit failed: {first}")
+        self.assertIn("permitted", first)
+        second = self.cli(
+            "permit", "--request-id", str(request_id), "--option", "allow",
+            check=False, scenario="multi_permission",
+        )
+        error = second.get("error") or {}
+        self.assertEqual(
+            error.get("code"), SETTLED_PERMISSION_ERROR,
+            f"sequential second permit must be {SETTLED_PERMISSION_ERROR}, got {second}",
+        )
+        self.assertNotIn("permitted", second)
+        results = self.wait_for_jsonrpc_results(request_id, 1)
+        self.assertEqual(
+            len(results), 1,
+            f"sequential second permit must not write agent stdin again: {results}",
+        )
+
+    def test_concurrent_permit_same_request_id_at_most_once(self) -> None:
+        self.start(scenario="multi_permission")
+        self.cli("send", "--text", "needs permits", "--no-wait", scenario="multi_permission")
+        found = wait_for(lambda: self.pending_permissions() if len(self.pending_permissions()) == 3 else None, 10)
+        self.assertTrue(found, f"expected 3 pending permissions, saw {self.pending_permissions()}")
+        request_id = found[0]["request_id"]
+        receipts = self.concurrent_holder_ops(
+            2, "permit", {"request_id": request_id, "option": "allow"},
+        )
+        results = self.wait_for_jsonrpc_results(request_id, 2, timeout=1.0)
+        winners = [
+            receipt for receipt in receipts
+            if receipt.get("error") is None and "permitted" in receipt
+        ]
+        losers = [receipt for receipt in receipts if (receipt.get("error") or {}).get("code")]
+        self.assertEqual(
+            len(winners), 1,
+            f"exactly one concurrent permit may succeed; receipts={receipts}",
+        )
+        self.assertEqual(
+            len(losers), 1,
+            f"loser must return a structured error fact, not hang or success; receipts={receipts}",
+        )
+        self.assertEqual(
+            (losers[0].get("error") or {}).get("code"), SETTLED_PERMISSION_ERROR,
+            f"loser error.code frozen to {SETTLED_PERMISSION_ERROR}; receipts={receipts}",
+        )
+        self.assertNotIn("permitted", losers[0])
+        tagged = [
+            event for event in results
+            if event.get("method") == "session/request_permission"
+            or ((event.get("message") or {}).get("result") or {}).get("outcome")
+        ]
+        self.assertEqual(
+            len(results), 1,
+            f"agent stdin must see one JSON-RPC result for {request_id}; events={results}",
+        )
+        self.assertEqual(len(tagged), 1, f"permission results for {request_id}: {tagged}")
+
+    def test_concurrent_cancel_same_pending_id_at_most_once(self) -> None:
+        self.start(scenario="permission_gate")
+        self.cli("send", "--text", "gate", "--no-wait", scenario="permission_gate")
+        found = wait_for(lambda: self.pending_permissions() if self.pending_permissions() else None, 10)
+        self.assertTrue(found, f"expected a pending permission, saw {self.pending_permissions()}")
+        request_id = found[0]["request_id"]
+        self.concurrent_holder_ops(2, "cancel", {"timeout": 10})
+        results = self.wait_for_jsonrpc_results(request_id, 2, timeout=1.0)
+        cancelled = []
+        for event in results:
+            message = event.get("message") or {}
+            outcome = (message.get("result") or {}).get("outcome")
+            if outcome == "cancelled" or (
+                isinstance(outcome, dict) and outcome.get("outcome") == "cancelled"
+            ):
+                cancelled.append(event)
+        self.assertLessEqual(
+            len(cancelled), 1,
+            f"op_cancel must not double-cancel {request_id}; events={cancelled}",
+        )
+        self.assertEqual(
+            len(results), 1,
+            f"at most one JSON-RPC result for pending id {request_id}; events={results}",
+        )
+
+    def test_l0_send_wait_receipt_keys_unchanged(self) -> None:
+        self.start()
+        receipt = self.cli("send", "--text", "hello mock")
+        missing = sorted(L0_SEND_WAIT_KEYS - set(receipt))
+        self.assertFalse(missing, f"L0 send --wait lost keys {missing}")
+        leaked = sorted(L0_FORBIDDEN_WATCH_KEYS & set(receipt))
+        self.assertFalse(leaked, f"L0 send --wait grew watch keys {leaked}")
+        self.assertEqual(receipt.get("schema_version"), 3)
+        self.assertEqual((receipt.get("transport") or {}).get("selected"), "acp")
+        options = []
+        for entry in receipt.get("pending_permissions") or []:
+            options.extend(entry.get("options") or [])
+        for option in options:
+            self.assertEqual(set(option), {"id", "kind", "label"}, option)
 
 
 class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):

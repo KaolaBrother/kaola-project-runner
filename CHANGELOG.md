@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- ACP holder `permit` / `cancel` / `stop` now settle each permission `request_id` at most once
+  under the same lock as prompt admission (issue #25). A second settler on that id is the
+  structured fact `unknown-request` and does not write another JSON-RPC result to agent stdin.
+  `session/cancel` is unchanged. L0 `send --wait` keys are unchanged.
+
 - OpenCode default ACP start stays `opencode acp` with no skip-all (issue #24). There is no
   measured ACP skip; PTY `--auto` via `--transport pty` is the documented bypass. Do not invent
   auto-permit or `OPENCODE_PERMISSION` skip.
@@ -11,11 +16,11 @@
   [--since CURSOR]` emits typed `kaola-acp-view/1`. EventLog reloads max cursor from live plus
   rotated `.jsonl.1–.3`. `install-local.sh` installs owned `$HOME/.local/bin/kaola-acp` and
   `kaola-acp-holder` symlinks. L0 `send --wait` keys are unchanged. `kaola-tmux.sh … view`
-  returns `view-unsupported`. Follow (#27) and permit lock (#25) remain unimplemented.
+  returns `view-unsupported`. Follow (#27) remains unimplemented.
 
 - Documented the ACP Watch Surface design freeze (`docs/acp-watch/`, issues #25/#26/#27):
   human `list`/`view`/`follow` beside the existing holder, at-most-once permit, no HTTP/SSE
-  and no second agent-stdio client. #26 is implemented; #25/#27 are not.
+  and no second agent-stdio client. #25 and #26 are implemented; #27 is not.
 
 - Default `start` now enables each platform's measured skip-all permission mode on both
   ACP and PTY (issue #22): Claude `--permission-mode bypassPermissions` / ACP `mode=bypassPermissions`,

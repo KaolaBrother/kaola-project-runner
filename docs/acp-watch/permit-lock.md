@@ -1,7 +1,7 @@
 # Issue #25 — ACP holder permit/cancel at-most-once
 
 设计权威：[GitHub #25](https://github.com/KaolaBrother/kaola-project-runner/issues/25)。  
-状态：设计冻结（2026-09-13）；**未实现**。
+状态：设计冻结（2026-09-13）；**已实现**（issue #25）。败者事实码冻结为 `unknown-request`（未新增 `already-answered`）。下面「当前代码事实」是施工前快照；实现以 `scripts/kaola-acp-holder.py` 为准。
 
 ## 决策
 

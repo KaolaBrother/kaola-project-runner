@@ -1101,45 +1101,58 @@ class Holder:
                 self.turn_cond.wait(timeout=max(remaining, 0.05))
         return self.turn_receipt()
 
-    def op_permit(self, params: dict[str, Any]) -> dict[str, Any]:
-        request_id = params.get("request_id")
-        option = params.get("option")
-        pending = self.pending_permissions
-        if not pending:
-            return {"error": {"code": "no-pending-permission",
-                              "message": "no permission request is pending"}}
-        if request_id is None:
-            if len(pending) > 1:
-                return {"error": {"code": "request-id-required",
-                                  "message": f"{len(pending)} permissions pending; --request-id required"}}
-            request_id = next(iter(pending))
-        key = normalize_id(request_id)
-        entry = pending.get(key)
+    def _settle_pending_permission_locked(self, key: str, option: Any) -> dict[str, Any] | None:
+        """Lookup pending → one JSON-RPC result → pop. Caller holds self.lock.
+
+        Same lock as prompt admission. A missing/already-settled id returns None
+        and must not write agent stdin again.
+        """
+        entry = self.pending_permissions.get(key)
         if entry is None:
-            return {"error": {"code": "unknown-request",
-                              "message": f"no pending permission with id {request_id}"}}
+            return None
         outcome = {"outcome": "cancelled"} if option in (None, "cancelled", "cancel") else {
             "outcome": "selected", "optionId": option
         }
         self.agent.send_message(
             {"jsonrpc": "2.0", "id": entry["request_id"], "result": {"outcome": outcome}}
         )
-        pending.pop(key, None)
-        self.events.append({"kind": "permission_answered", "request_id": request_id,
-                            "option": option})
-        self.write_record()
-        return {"permitted": request_id, "option": option,
-                "pending_permissions": list(pending.values())}
+        self.pending_permissions.pop(key, None)
+        return entry
+
+    def _cancel_pending_permissions(self) -> None:
+        """Cancel every still-pending permission at most once under self.lock."""
+        with self.lock:
+            for key in list(self.pending_permissions):
+                self._settle_pending_permission_locked(key, "cancelled")
+
+    def op_permit(self, params: dict[str, Any]) -> dict[str, Any]:
+        request_id = params.get("request_id")
+        option = params.get("option")
+        with self.lock:
+            pending = self.pending_permissions
+            if not pending:
+                return {"error": {"code": "no-pending-permission",
+                                  "message": "no permission request is pending"}}
+            if request_id is None:
+                if len(pending) > 1:
+                    return {"error": {"code": "request-id-required",
+                                      "message": f"{len(pending)} permissions pending; --request-id required"}}
+                request_id = next(iter(pending))
+            key = normalize_id(request_id)
+            entry = self._settle_pending_permission_locked(key, option)
+            if entry is None:
+                return {"error": {"code": "unknown-request",
+                                  "message": f"no pending permission with id {request_id}"}}
+            self.events.append({"kind": "permission_answered", "request_id": request_id,
+                                "option": option})
+            self.write_record()
+            return {"permitted": request_id, "option": option,
+                    "pending_permissions": list(pending.values())}
 
     def op_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
         if not self.turn["active"]:
             return {"outcome": "no-active-turn", "mutation_status": self.turn.get("mutation_status")}
-        for key, entry in list(self.pending_permissions.items()):
-            self.agent.send_message(
-                {"jsonrpc": "2.0", "id": entry["request_id"],
-                 "result": {"outcome": {"outcome": "cancelled"}}}
-            )
-            self.pending_permissions.pop(key, None)
+        self._cancel_pending_permissions()
         self.turn["cancel_requested"] = True
         self.agent.send_message(
             {"jsonrpc": "2.0", "method": "session/cancel",
@@ -1262,12 +1275,7 @@ class Holder:
         self.stop_requested = True
         self.state = "stopping"
         self.write_record()
-        for key, entry in list(self.pending_permissions.items()):
-            self.agent.send_message(
-                {"jsonrpc": "2.0", "id": entry["request_id"],
-                 "result": {"outcome": {"outcome": "cancelled"}}}
-            )
-            self.pending_permissions.pop(key, None)
+        self._cancel_pending_permissions()
         if not force:
             if self.turn["active"]:
                 self.agent.send_message(
