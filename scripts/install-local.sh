@@ -247,12 +247,35 @@ PY
 place_staged() {
   # Move $1 into place at $2; an existing $2 is set aside at $3 and removed
   # after the staged tree lands, so the destination never holds partial content.
+  # If the staged rename fails, the previous target is restored from backup;
+  # if restoration itself fails, the backup is retained and its recovery path
+  # is reported instead of being deleted.
   "$installer_python" - "$1" "$2" "$3" <<'PY'
 import os, shutil, sys
 staged, target, backup = sys.argv[1:4]
+moved = False
 if os.path.lexists(target):
-    os.replace(target, backup)
-os.replace(staged, target)
+    try:
+        os.replace(target, backup)
+        moved = True
+    except OSError as exc:
+        sys.exit("place_staged: could not set aside %s -> %s: %s" % (target, backup, exc))
+try:
+    os.replace(staged, target)
+except OSError as exc:
+    if not moved:
+        sys.exit("place_staged: rename %s -> %s failed: %s" % (staged, target, exc))
+    try:
+        os.replace(backup, target)
+    except OSError as rb_exc:
+        sys.exit(
+            "place_staged: rename %s -> %s failed: %s; rollback failed: %s; "
+            "previous installation retained at %s" % (staged, target, exc, rb_exc, backup)
+        )
+    sys.exit(
+        "place_staged: rename %s -> %s failed: %s; previous installation restored from %s"
+        % (staged, target, exc, backup)
+    )
 if os.path.lexists(backup):
     if os.path.isdir(backup) and not os.path.islink(backup):
         shutil.rmtree(backup)
@@ -431,7 +454,7 @@ for row in "${actions[@]}"; do
         ln -s "$source" "$temp"
       fi
       if ! place_staged "$temp" "$target" "$backup"; then
-        rm -rf "$temp" "$backup" 2>/dev/null || true
+        rm -rf "$temp" 2>/dev/null || true
         printf 'atomic replacement failed: %s\n' "$target" >&2
         exit 1
       fi
@@ -449,7 +472,7 @@ for row in "${actions[@]}"; do
         printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
       ln -s "$source" "$temp"
       if ! place_staged "$temp" "$target" "$backup"; then
-        rm -rf "$temp" "$backup" 2>/dev/null || true
+        rm -rf "$temp" 2>/dev/null || true
         printf 'atomic replacement failed: %s\n' "$target" >&2
         exit 1
       fi

@@ -301,6 +301,84 @@ set -e
 [[ "$rc" -ne 0 ]] || fail "test_foreign_bin_link_uninstall_refused" "unexpected success"
 assert_link "test_foreign_bin_link_uninstall_refused" "$home/.local/bin/kaola-acp" "/foreign/path"
 
+# --- place_staged fault injection: second rename failure + failed rollback ---
+# PYTHON_BIN stub prepends an os.replace patch to every `python3 -` heredoc;
+# it raises only on the staged (.<name>.tmp.$$) and rollback (.<name>.old.$$)
+# source basenames, so only place_staged's second/third renames are faulted.
+repo="$tmp_root/repo-rollback"
+make_fixture "$repo"
+home="$tmp_root/home-rollback"
+dest="$tmp_root/rollback-dest/skills"
+run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok >/dev/null
+assert_file "test_rollback_setup" "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+printf '%s\n' '# updated fixture' >>"$repo/skills/grok-kaola-project-runner/SKILL.md"
+
+pybin="$tmp_root/fault-python"
+real_python="$(command -v python3)"
+cat >"$pybin" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == "-" ]]; then
+  shift
+  { printf '%s\n' \
+    'import os' \
+    '_orig_replace = os.replace' \
+    'def _patched(src, dst):' \
+    '    b = os.path.basename(str(src))' \
+    '    if ".tmp." in b and os.environ.get("KPR_TEST_FAIL_STAGED"):' \
+    '        raise OSError(13, "injected staged->target rename failure")' \
+    '    if ".old." in b and os.environ.get("KPR_TEST_FAIL_ROLLBACK"):' \
+    '        raise OSError(13, "injected rollback rename failure")' \
+    '    return _orig_replace(src, dst)' \
+    'os.replace = _patched'
+    cat; } | "$real_python" - "\$@"
+else
+  exec "$real_python" "\$@"
+fi
+EOF
+chmod +x "$pybin"
+
+# staged->target rename fails once; rollback restores the previous install
+set +e
+output="$(KPR_TEST_FAIL_STAGED=1 PYTHON_BIN="$pybin" \
+  run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_staged_rename_fail_rc" "unexpected success"
+[[ "$output" == *"previous installation restored"* ]] \
+  || fail "test_staged_rename_fail_restored" "no restore report: $output"
+assert_dir "test_staged_rename_fail_target" "$dest/grok-kaola-project-runner"
+[[ "$(cat "$dest/grok-kaola-project-runner/SKILL.md")" == "# fixture Skill" ]] \
+  || fail "test_staged_rename_fail_old_content" "old contents lost"
+assert_file "test_staged_rename_fail_receipt" \
+  "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+tmp_leftovers=("$dest"/.grok-kaola-project-runner.tmp.*)
+old_leftovers=("$dest"/.grok-kaola-project-runner.old.*)
+if [[ -e "${tmp_leftovers[0]}" || -L "${tmp_leftovers[0]}" \
+  || -e "${old_leftovers[0]}" || -L "${old_leftovers[0]}" ]]; then
+  fail "test_staged_rename_fail_no_leftovers" "staged/backup path left behind"
+fi
+
+# staged->target AND rollback both fail: backup retained and reported
+set +e
+output="$(KPR_TEST_FAIL_STAGED=1 KPR_TEST_FAIL_ROLLBACK=1 PYTHON_BIN="$pybin" \
+  run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_rollback_fail_rc" "unexpected success"
+[[ "$output" == *"previous installation retained at"* ]] \
+  || fail "test_rollback_fail_reported" "recovery path not reported: $output"
+assert_absent "test_rollback_fail_target_absent" "$dest/grok-kaola-project-runner"
+backup_dirs=("$dest"/.grok-kaola-project-runner.old.*)
+[[ -d "${backup_dirs[0]}" ]] || fail "test_rollback_fail_backup_retained" "backup deleted"
+[[ "$(cat "${backup_dirs[0]}/SKILL.md" 2>/dev/null)" == "# fixture Skill" ]] \
+  || fail "test_rollback_fail_backup_content" "old contents not usable at backup"
+assert_file "test_rollback_fail_receipt" \
+  "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+tmp_leftovers=("$dest"/.grok-kaola-project-runner.tmp.*)
+if [[ -e "${tmp_leftovers[0]}" || -L "${tmp_leftovers[0]}" ]]; then
+  fail "test_rollback_fail_no_tmp" "staged temp left behind"
+fi
+
 # --- neutral validator --------------------------------------------------------
 good="$tmp_root/validator/good-skill"
 mkdir -p "$good"
