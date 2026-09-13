@@ -42,12 +42,31 @@ scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
 scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent first checks whether the current user request explicitly selects the main
-model. Pass that choice with `--model ID --effort LEVEL`; otherwise `start` resolves this Skill's
-Runner default: **Opus 5 High** (`opus`, effort=high).
-This is per-run input and never rewrites global CLI configuration. `preflight`, `start`, `observe`,
-and `status` report requested, resolved, and actual model evidence. A mismatch or unreadable actual
-model remains evidence for the Agent and does not disable the communication channel.
+The controlling Agent owns model selection for each `start`. This Skill declares two per-run
+presets — `--tier default` (**Opus High**: `opus`,
+effort=high) and `--tier upgrade` (**Fable High**:
+`fable`, effort=high) — and `default` applies whenever the user did
+not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
+or upgraded model or describes this work as complex; never infer the upgrade from code size,
+failures, elapsed time, or your own complexity assessment.
+
+An explicit user model choice always wins: pass it with `--model ID`, adding `--effort LEVEL` only
+when the user also named an effort. A bare explicit `--model` leaves the runtime's native effort
+alone — never attach a preset's effort to a different model. If the user picks a model ID that
+already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the Runner does not
+invent extra effort or Fast configuration for it.
+
+Fast is OFF by default. Pass `--fast on` only on an explicit user request for Fast; this platform's
+Fast support: Fast via process-scoped `--settings '{"fastMode": ...}'` at launch: `--fast on` passes fastMode=true, `--fast off` pins fastMode=false for the session; the native CLI determines model support — effective stays unknown without native evidence and the selected model is never changed. Fast and tier are independent selections. When a native fast model
+ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
+conflict honestly if it is also passed with `--fast off`.
+
+`preflight`, `start`, `observe`, and `status` report requested, resolved, configured, and actual
+model evidence, including unavailable, unsupported, and unknown outcomes. `--resume`/`--continue`
+preserve the saved native session model and effort unless the caller supplies `--tier`, `--model`,
+or `--effort`; Fast stays a per-run request (off unless explicitly on). All of this is per-run
+input and never rewrites global CLI configuration. A mismatch or unreadable actual model remains
+evidence for the Agent and does not disable the communication channel.
 
 `preflight` reports runtime and optional Kaola carrier evidence. Missing Workflow commands,
 configuration health, account state, trust state, editor state, activity hints, or a changed

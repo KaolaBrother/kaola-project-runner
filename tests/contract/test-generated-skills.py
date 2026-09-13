@@ -60,7 +60,7 @@ PLATFORMS = {
         # "codex" alone is the controlling runtime name and legitimately
         # appears in every package's description, so only Codex-specific facts
         # are leakage tokens.
-        "tokens": ("codex-kaola-project-runner", "gpt-5.6-luna", "codex-acp"),
+        "tokens": ("codex-kaola-project-runner", "gpt-5.6-sol", "gpt-6-astra", "codex-acp"),
     },
 }
 
@@ -196,11 +196,22 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
     text = text.replace("roadmap cursor", "roadmap")
     text = text.replace("grok golden-contract parity target", "")
     if package_id == "cursor-cli-kaola-project-runner":
-        # Cursor's user-selected Runner default is intentionally a Cursor Grok
-        # model. Remove only those exact declared model facts before checking
-        # for accidental Grok adapter/protocol leakage.
+        # Cursor's user-selected Runner presets are intentionally Cursor Grok /
+        # Claude Fable models. Remove only those exact declared model facts
+        # before checking for accidental adapter/protocol leakage.
         text = text.replace("grok 4.6 extra high", "cursor-default-model")
         text = text.replace("cursor-grok-4.6-xhigh", "cursor-default-model-id")
+        text = text.replace("claude fable 5.1 high", "cursor-upgrade-model")
+        text = text.replace("claude-fable-5-1-high", "cursor-upgrade-model-id")
+        # Cursor's ACP option values are the adapter's own bracketed model
+        # descriptors; they are declared manifest facts, not Grok adapter
+        # leakage. Remove only the exact advertised value strings.
+        text = text.replace("grok-4.6[effort=high,fast=true]", "cursor-acp-model-value")
+        text = text.replace("claude-fable-5-1[thinking=true,context=300k,effort=high]", "cursor-acp-model-value")
+    if package_id == "devin-kaola-project-runner":
+        # Devin's declared upgrade preset ID is a Fusion combo that literally
+        # names the Claude Fable sidecar. Remove only that exact declared fact.
+        text = text.replace("fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "devin-upgrade-model-id")
     for other_id, tokens in forbidden.items():
         for token in tokens:
             # A common word such as "cursor" is intentionally not exempted: a

@@ -25,9 +25,14 @@ REQUIRED = {
     "default_prompt", "description", "session_prefix", "binary_name", "binary_env",
     "continue_syntax", "resume_syntax", "preflight_summary", "launch_summary",
     "recurring_execution", "recurring_summary", "quit_text", "default_model_name",
-    "default_model_id", "default_model_parameters", "default_transport", "acp_command",
+    "default_model_id", "default_model_parameters", "default_model_effort",
+    "upgrade_model_name", "upgrade_model_id", "upgrade_model_parameters",
+    "upgrade_model_effort", "fast_support", "fast_summary",
+    "default_transport", "acp_command",
     "acp_client_capabilities", "acp_quirks", "acp_verified_versions", "acp_env_allowlist",
-    "acp_login_requires_pty", "acp_model_config_id", "acp_effort_config_id", "acp_wrapper_pin",
+    "acp_login_requires_pty", "acp_model_config_id", "acp_effort_config_id",
+    "acp_fast_config_id", "acp_model_map", "acp_wrapper_pin",
+    "acp_init_meta", "acp_fast_values",
 }
 
 

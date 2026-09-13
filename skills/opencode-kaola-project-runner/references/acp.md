@@ -16,6 +16,25 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 
 `mutation_status` is one of `not_started`, `accepted`, `in_progress`, `completed`, or `unknown`. These are transport facts, not permission to retry.
 
+`start` resolves the same tier/model/effort/Fast selection as PTY and applies it through the
+agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
+`model`/`effort`/`` when non-empty.
+A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
+during `initialize`): agents that negotiate a parameterized model picker advertise separate
+`model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead
+of fixed variant descriptors. When a manifest declares `acp_model_map`, a resolved PTY picker ID decomposes onto
+the ACP model value the agent advertises for the same model — effort encoded in the picker ID
+suffix then travels through the effort option and Fast through the fast option (values converted
+per `acp_fast_values`), recorded as `requested_id`/`mapped`/`declared` in the model application.
+Model semantics are never substituted: an unmapped ID is sent literally and its rejection is
+reported as a limitation. `config_application` records each attempted option's requested value and
+applied result; `configured_options` carries the adapter's returned receipts. An option with no
+advertised config ID, or one the adapter rejects, is reported as a limitation — the session stays
+usable. The `fast` receipt's `effective` reflects proven native state only: a rejected fast option
+or an unapplied fast-variant model ID reports `unknown`, and an applied model value's own
+descriptor (e.g. `[..,fast=true]`) is reported as the effective fast evidence with any request
+conflict noted — never a false on/off.
+
 ## Ending and resuming an ACP session
 
 A turn reaching `end_turn` is a reply boundary, not task completion; the Agent judges from the

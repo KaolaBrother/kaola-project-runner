@@ -21,7 +21,7 @@ usage() {
   cat <<'EOF'
 Usage:
   kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
-  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--model ID --effort LEVEL]
+  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|upgrade] [--model ID --effort LEVEL] [--fast on|off]
   kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N]
@@ -73,6 +73,7 @@ case "$command_name" in preflight|start|observe|status|capture|send|wait|permit|
 repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_value="" text_given=false
 if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
 model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false
+tier="" tier_given=false fast="off" fast_given=false
 acp_wait=true timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -81,7 +82,8 @@ while [[ $# -gt 0 ]]; do
     --text) text_value="$2"; text_given=true; shift 2 ;; --if-snapshot) if_snapshot="$2"; shift 2 ;;
     --require-empty-editor) require_empty_editor=true; shift ;; --decision-id) decision_id="$2"; shift 2 ;;
     --replace-editor) replace_editor=true; shift ;; --model) model="$2"; model_given=true; shift 2 ;;
-    --effort) effort="$2"; effort_given=true; shift 2 ;; --permission-mode) permission_mode="$2"; permission_mode_given=true; shift 2 ;;
+    --effort) effort="$2"; effort_given=true; shift 2 ;; --tier) tier="$2"; tier_given=true; shift 2 ;;
+    --fast) fast="$2"; fast_given=true; shift 2 ;; --permission-mode) permission_mode="$2"; permission_mode_given=true; shift 2 ;;
     --transport) transport="$2"; transport_given=true; shift 2 ;; --key) key_name="$2"; shift 2 ;;
     --wait) acp_wait=true; shift ;; --no-wait) acp_wait=false; shift ;; --timeout) timeout="$2"; shift 2 ;;
     --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
@@ -134,14 +136,14 @@ if [[ "$transport" == acp ]]; then
   [[ -n "$capture_since" ]] && acp_args+=(--since "$capture_since")
   [[ "$capture_full" == true ]] && acp_args+=(--full)
   [[ "$capture_inline" == true ]] && acp_args+=(--inline)
-  if [[ "$platform" == codex ]]; then
-    # Issue #28: Codex ACP applies the Runner default so saved CLI config never
-    # silently selects the model; explicit --model/--effort still win.
-    if [[ "$model_given" == true ]]; then acp_args+=(--model "$model"); else acp_args+=(--model "$ADAPTER_DEFAULT_MODEL_ID"); fi
-    if [[ "$effort_given" == true ]]; then acp_args+=(--effort "$effort"); else acp_args+=(--effort "$ADAPTER_DEFAULT_MODEL_EFFORT"); fi
-  else
+  if [[ "$command_name" == start || "$command_name" == preflight ]]; then
+    # Selection inputs pass through raw; kaola-acp.py resolves presets,
+    # explicit overrides, resume preservation, and Fast itself through the
+    # shared model-policy helper so both transports resolve identically.
     [[ "$model_given" == true ]] && acp_args+=(--model "$model")
     [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
+    [[ "$tier_given" == true ]] && acp_args+=(--tier "$tier")
+    [[ "$fast_given" == true ]] && acp_args+=(--fast "$fast")
   fi
   if [[ "$permission_mode_given" == true ]]; then
     acp_args+=(--mode "$permission_mode")
@@ -174,7 +176,16 @@ git_root="$(canonical_dir "$git_root")"; [[ "$git_root" == "$repo" ]] || die "--
 [[ "$session" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$ ]] || die "invalid session name"
 TMUX_SESSION_TARGET="=$session"
 if [[ "$platform" != claude-code && "$platform" != devin && "$platform" != codex && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
-if [[ "$command_name" != start && ( "$model_given" == true || "$effort_given" == true || "$permission_mode_given" == true ) ]]; then die "model, effort, and permission mode are start-only"; fi
+if [[ "$command_name" != start && "$command_name" != preflight && ( "$model_given" == true || "$effort_given" == true || "$tier_given" == true || "$fast_given" == true ) ]]; then die "model, effort, tier, and fast are start/preflight-only"; fi
+if [[ "$command_name" != start && "$permission_mode_given" == true ]]; then die "permission mode is start-only"; fi
+if [[ "$tier_given" == true ]]; then
+  case "$tier" in default|upgrade) ;; *) die "--tier must be default or upgrade" ;; esac
+else
+  tier=default
+fi
+if [[ "$fast_given" == true ]]; then
+  case "$fast" in on|off) ;; *) die "--fast must be on or off" ;; esac
+fi
 MODEL_VALUE="$model" "$PYTHON_BIN" - <<'PY' || die "model contains unsupported terminal controls"
 import os
 value = os.environ.get("MODEL_VALUE", "")
@@ -212,17 +223,32 @@ path_leads_command() {
 }
 runtime_process_matches() { path_leads_command "$1" "$RUNTIME_BIN" && return 0; [[ "$RUNTIME_BIN_REAL" != "$RUNTIME_BIN" ]] && path_leads_command "$1" "$RUNTIME_BIN_REAL" && return 0; type adapter_process_matches >/dev/null 2>&1 && adapter_process_matches "$1" "$2"; }
 
-MODEL_POLICY_JSON="" RESOLVED_MODEL_ID="" RESOLVED_MODEL_EFFORT="" MODEL_HAS_EFFORT=false MODEL_HAS_VARIANT=false
+MODEL_POLICY_JSON="" RESOLVED_MODEL_ID="" RESOLVED_MODEL_EFFORT="" RESOLVED_FAST="" MODEL_HAS_EFFORT=false MODEL_HAS_VARIANT=false
 resolve_model_policy() {
-  local source requested candidate chosen_effort
-  if [[ "$model_given" == true ]]; then source=user requested="$model" candidate="$model"; else source=runner-default requested="$ADAPTER_DEFAULT_MODEL_NAME" candidate="$ADAPTER_DEFAULT_MODEL_ID"; fi
-  if [[ "$effort_given" == true ]]; then chosen_effort="$effort"; else chosen_effort="$ADAPTER_DEFAULT_MODEL_EFFORT"; fi
-  MODEL_POLICY_JSON="$("$PYTHON_BIN" "$MODEL_POLICY_HELPER" resolve --platform "$platform" --runtime-bin "$RUNTIME_BIN" --repo "$repo" --source "$source" --requested-name "$requested" --candidate-id "$candidate" --effort "$chosen_effort" --fast "$ADAPTER_DEFAULT_MODEL_FAST")"
+  local source requested candidate chosen_effort fast_arg
+  if [[ "$tier" == upgrade ]]; then
+    source=runner-upgrade requested="$ADAPTER_UPGRADE_MODEL_NAME" candidate="$ADAPTER_UPGRADE_MODEL_ID" chosen_effort="$ADAPTER_UPGRADE_MODEL_EFFORT"
+  else
+    source=runner-default requested="$ADAPTER_DEFAULT_MODEL_NAME" candidate="$ADAPTER_DEFAULT_MODEL_ID" chosen_effort="$ADAPTER_DEFAULT_MODEL_EFFORT"
+  fi
+  if [[ "$model_given" == true ]]; then
+    source=user requested="$model" candidate="$model"
+    # An explicit model without explicit effort leaves native effort alone;
+    # a preset effort only attaches to its own preset model.
+    [[ "$effort_given" == true ]] || chosen_effort=""
+  fi
+  if [[ "$effort_given" == true ]]; then chosen_effort="$effort"; fi
+  if [[ ( -n "$resume_id" || "$continue_mode" == true ) && "$model_given" == false && "$effort_given" == false && "$tier_given" == false ]]; then
+    source=resume-preserved requested="native saved session selection" candidate="" chosen_effort=""
+  fi
+  fast_arg=false; [[ "$fast" == on ]] && fast_arg=true
+  MODEL_POLICY_JSON="$("$PYTHON_BIN" "$MODEL_POLICY_HELPER" resolve --platform "$platform" --runtime-bin "$RUNTIME_BIN" --repo "$repo" --source "$source" --requested-name "$requested" --candidate-id "$candidate" --effort "$chosen_effort" --fast "$fast_arg" --tier "$tier" --fast-mechanism "${ADAPTER_FAST_MECHANISM:-none}" "--fast-suffixes=${ADAPTER_FAST_SUFFIXES:--fast,-priority}")"
   RESOLVED_MODEL_ID="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_runtime_model_id")')"
   RESOLVED_MODEL_EFFORT="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_parameters",{}).get("effort")')"
+  RESOLVED_FAST="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_fast")')"
   [[ "$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("model_evidence_provenance",{}).get("resolution",{}).get("supported_options",[])')" == *'--effort'* ]] && MODEL_HAS_EFFORT=true
   [[ "$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("model_evidence_provenance",{}).get("resolution",{}).get("supported_options",[])')" == *'--variant'* ]] && MODEL_HAS_VARIANT=true
-  [[ -n "$RESOLVED_MODEL_ID" ]]
+  [[ -n "$MODEL_POLICY_JSON" ]]
 }
 
 load_session_identity() {

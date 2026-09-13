@@ -11,8 +11,19 @@ scripts/render-skills.py --check
 any missing, stale, or unexpected file or Skill directory. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
-`acp_env_allowlist`, `acp_login_requires_pty`, `acp_model_config_id`,
-`acp_effort_config_id`, and `acp_wrapper_pin`. They render as `DEFAULT_TRANSPORT`,
+`acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
+`acp_effort_config_id`, `acp_fast_config_id`, `acp_fast_values`, `acp_model_map`, and
+`acp_wrapper_pin`. `acp_init_meta` is an optional `key=value;...` list sent as
+`clientCapabilities._meta` during `initialize` — Cursor's `parameterizedModelPicker=true` makes
+its ACP surface advertise separate `model`/`effort`/`fast` options with base model IDs and string
+`"true"`/`"false"` fast values. `acp_model_map` is an optional `picker-id=acp-option-value;...`
+list mapping resolved PTY model IDs onto the ACP model value the agent advertises for the same
+model; an effort encoded in the picker ID suffix travels through the effort option and Fast
+through `acp_fast_values`-converted values, so semantics are never substituted — an unmapped ID
+is sent literally and a rejection is reported as a limitation. Model-selection fields are
+`default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`,
+`upgrade_model_name`/`upgrade_model_id`/`upgrade_model_parameters`/`upgrade_model_effort`, and
+`fast_support`/`fast_summary`. They render as `DEFAULT_TRANSPORT`,
 `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY` template variables.
 
 ## Installer
@@ -30,7 +41,7 @@ migrated, or removed.
 ```text
 scripts/kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] \
-  [--model ID --effort low|medium|high|xhigh|max]
+  [--tier default|upgrade] [--model ID --effort low|medium|high|xhigh|max] [--fast on|off]
 scripts/kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N]
@@ -53,7 +64,7 @@ Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
 
 ## Transport selection
 
-Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; `--model` and `--effort` map through the manifest config-option IDs. `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin.
+Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin.
 
 Codex `--permission-mode` values are the same literal IDs on both transports but not the same semantics. ACP passes the ID through to the upstream adapter's `mode` option: `read-only` is upstream display name "Ask for approval" (workspace-write sandbox + on-request approval — workspace file writes are permitted without a permission request), `agent` is "Approve for me" (auto_review reviewer), `agent-full-access` is "Full access". PTY maps the same IDs to strict `--sandbox read-only|workspace-write|danger-full-access` plus `--ask-for-approval on-request|never`; OS-level read-only exists only via `--transport pty`. ACP does not claim equivalent enforcement. Start receipts surface the adapter's own display names/descriptions as factual evidence in `configured_options[*].option_name` / `option_description` / `value_name` / `value_description` when the adapter returns them.
 
@@ -95,13 +106,28 @@ project materialization evidence, and an adapter-specific summary. Missing Workf
 configuration health, or materialization does not block the CLI communication channel.
 
 Preflight also resolves the declared Runner default without starting a session. `start` gives an
-explicit user model/effort precedence; otherwise it uses that Runner default. Catalog output is
+explicit user model/effort precedence; otherwise `--tier default|upgrade` selects the manifest preset
+(`default` when `--tier` is omitted). A bare `--model` wins over the tier preset and does not inherit
+its effort; `--effort` only applies to the model selected in the same request. Model IDs that already
+encode effort or Fast variants get no invented extra effort/configuration calls. `--fast` defaults to
+`off`; `--fast on` is the per-run opt-in and is applied through the platform's native mechanism (Codex
+ACP `fast-mode` configId / PTY `-c service_tier`, Cursor parameterized `fast` option or
+`-fast`-style model variants, Claude process-scoped `--settings '{"fastMode": ...}'` passed
+verbatim — the native CLI determines model support and effective reports `unknown` without
+native evidence). Where no
+native mechanism or advertised fast variant exists, the request is reported `resolved_fast:
+"unsupported"`, never silently claimed. `--resume`/`--continue` without tier/model/effort preserves the
+saved native session selection (`resume-preserved`); supplying any of them re-applies that selection.
+There is no automatic escalation based on complexity, failures, or elapsed time. Catalog output is
 reported as evidence and never rewrites or blocks the declared exact model literal. Actual mismatch,
 catalog absence, or unreadable evidence never disables generic communication.
 
 Model evidence under `model` includes `requested_model_source`, `requested_model_name`,
-`resolved_runtime_model_id`, `resolved_parameters`, `actual_runtime_model_id`,
-`actual_parameters`, tri-state `model_verified`, `model_mismatch_reason`, and structured provenance.
+`requested_tier`, `requested_fast`, `resolved_runtime_model_id`, `resolved_parameters`,
+`resolved_fast`, `actual_runtime_model_id`, `actual_parameters`, tri-state `model_verified`,
+`model_mismatch_reason`, and structured provenance. ACP `start` receipts additionally carry
+`model_selection` and per-option `config_application` receipts; a rejected or unadvertised
+`set_config_option` is reported as a limitation and leaves the session usable.
 
 ## Agent-directed transport results
 

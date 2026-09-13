@@ -120,7 +120,7 @@ class MockAgent:
         """Issue #33 fixture. ``MOCK_ACP_CONFIG`` JSON object keys:
 
         - ``new``/``resume``: configOptions list embedded in session/new and
-          session/resume|load results
+          session/resume|load results (``null`` omits the key entirely)
         - ``set_result``: full result object for session/set_config_option
         - ``set_error``: error object returned instead of a result
         - ``set_drop``: truthy -> never respond (client timeout path)
@@ -266,9 +266,13 @@ class MockAgent:
         session_id = f"mock-session-{self.session_counter}"
         self.sessions[session_id] = {"cwd": params.get("cwd", "")}
         log_event({"event": "session_new", "sessionId": session_id})
-        result: dict[str, Any] = {"sessionId": session_id}
+        result: dict[str, Any] = {"sessionId": session_id,
+                                "configOptions": self.config_options()}
         if "new" in self.config_fixture:
-            result["configOptions"] = self.config_fixture["new"]
+            if self.config_fixture["new"] is None:
+                result.pop("configOptions", None)
+            else:
+                result["configOptions"] = self.config_fixture["new"]
         respond(request_id, result)
 
     def on_session_list(self, request_id: Any, params: dict[str, Any]) -> None:
@@ -322,7 +326,7 @@ class MockAgent:
             respond(request_id, error={"code": -32002, "message": "unknown sessionId"})
             return
         result: dict[str, Any] = {"sessionId": session_id}
-        if "resume" in self.config_fixture:
+        if self.config_fixture.get("resume") is not None:
             result["configOptions"] = self.config_fixture["resume"]
         respond(request_id, result)
 
@@ -349,8 +353,10 @@ class MockAgent:
         {"id": "model", "name": "Model",
          "description": "Model Codex uses for the session",
          "category": "model", "type": "select", "options": [
-             {"value": "gpt-5.6-luna", "name": "5.6 Luna",
+             {"value": "gpt-5.6-sol", "name": "5.6 Sol",
               "description": "Fast and affordable agentic coding model."},
+             {"value": "gpt-6-astra", "name": "6 Astra",
+              "description": "Frontier agentic coding model."},
          ]},
         {"id": "reasoning_effort", "name": "Reasoning effort",
          "description": "Reasoning effort Codex uses for the session",
@@ -359,12 +365,55 @@ class MockAgent:
              {"value": "medium", "name": "Medium"},
              {"value": "high", "name": "High"},
          ]},
+        {"id": "fast-mode", "name": "Fast mode",
+         "description": "Fast service tier for the session",
+         "category": "fast-mode", "type": "select", "options": [
+             {"value": "off", "name": "Off"},
+             {"value": "on", "name": "On"},
+         ]},
     ]
+
+    # Cursor's parameterized picker surface (client _meta
+    # parameterizedModelPicker): separate model/effort/fast options with
+    # base model IDs and string "true"/"false" fast values.
+    CURSOR_CONFIG_OPTIONS = [
+        {"id": "mode", "name": "Mode",
+         "description": "Controls how the agent executes tasks",
+         "category": "mode", "type": "select", "options": [
+             {"value": "agent", "name": "Agent"},
+             {"value": "plan", "name": "Plan"},
+             {"value": "ask", "name": "Ask"},
+         ]},
+        {"id": "model", "name": "Model",
+         "description": "Controls which model variant is used for responses",
+         "category": "model", "type": "select", "options": [
+             {"value": "default", "name": "Auto"},
+             {"value": "grok-4.6", "name": "Cursor Grok 4.6"},
+             {"value": "claude-fable-5-1", "name": "Claude Fable 5.1"},
+         ]},
+        {"id": "effort", "name": "Effort",
+         "description": "Reasoning effort for the session",
+         "category": "effort", "type": "select", "options": [
+             {"value": "low", "name": "Low"},
+             {"value": "medium", "name": "Medium"},
+             {"value": "high", "name": "High"},
+             {"value": "xhigh", "name": "Extra High"},
+         ]},
+        {"id": "fast", "name": "Fast",
+         "description": "Fast serving tier for the session",
+         "category": "fast", "type": "select", "options": [
+             {"value": "false", "name": "Off"},
+             {"value": "true", "name": "Fast"},
+         ]},
+    ]
+
+    def config_options(self) -> list[dict[str, Any]]:
+        if "cursor-params" in self.caps:
+            return self.CURSOR_CONFIG_OPTIONS
+        return self.CONFIG_OPTIONS
 
     def on_set_config(self, request_id: Any, params: dict[str, Any]) -> None:
         config_id = params.get("configId") or params.get("config_id")
-        if config_id is not None:
-            self.configured[str(config_id)] = params.get("value")
         log_event({"event": "set_config_option", "params": params})
         fixture = self.config_fixture
         if fixture.get("set_drop"):
@@ -373,9 +422,35 @@ class MockAgent:
         if error is not None:
             respond(request_id, error=error)
             return
+        if "reject-fast" in self.caps and config_id in ("fast-mode", "fast"):
+            respond(
+                request_id,
+                error={
+                    "code": -32602,
+                    "message": f"fast-mode unavailable in this build: {params.get('value')}",
+                },
+            )
+            return
+        if "strict-config" in self.caps:
+            option = next(
+                (entry for entry in self.config_options() if entry.get("id") == config_id),
+                None,
+            )
+            values = {entry.get("value") for entry in (option or {}).get("options") or []}
+            if option is None or (values and params.get("value") not in values):
+                respond(
+                    request_id,
+                    error={
+                        "code": -32602,
+                        "message": f"unsupported config option {config_id}={params.get('value')}",
+                    },
+                )
+                return
+        if config_id is not None:
+            self.configured[str(config_id)] = params.get("value")
         result = fixture.get("set_result")
         if not isinstance(result, dict):
-            result = {"configOptions": self.CONFIG_OPTIONS}
+            result = {"configOptions": self.config_options()}
         respond(request_id, result)
         notify_options = fixture.get("set_notify")
         if isinstance(notify_options, list):

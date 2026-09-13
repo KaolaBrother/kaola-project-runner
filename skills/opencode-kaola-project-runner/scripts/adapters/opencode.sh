@@ -9,10 +9,13 @@ ADAPTER_BIN_ENV="OPENCODE_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
 ADAPTER_ANSWER_MODE="unsupported"
-ADAPTER_DEFAULT_MODEL_NAME="GLM 5.3 Max"
-ADAPTER_DEFAULT_MODEL_ID="zhipuai-coding-plan/glm-5.3"
-ADAPTER_DEFAULT_MODEL_EFFORT="max"
-ADAPTER_DEFAULT_MODEL_FAST="unknown"
+ADAPTER_DEFAULT_MODEL_NAME="CLI native opening model"
+ADAPTER_DEFAULT_MODEL_ID=""
+ADAPTER_DEFAULT_MODEL_EFFORT=""
+ADAPTER_UPGRADE_MODEL_NAME="CLI native opening model"
+ADAPTER_UPGRADE_MODEL_ID=""
+ADAPTER_UPGRADE_MODEL_EFFORT=""
+ADAPTER_FAST_MECHANISM="none"
 
 opencode_surface() {
   local root="$1"
@@ -43,13 +46,19 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--session "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
-  ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
+  # Issue #34: presets keep OpenCode's own opening model — no Runner model or
+  # effort override unless the caller passes an explicit --model.
+  if [[ -n "$RESOLVED_MODEL_ID" ]]; then ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID"); fi
   if [[ -n "$RESOLVED_MODEL_EFFORT" && "$MODEL_HAS_VARIANT" == true ]]; then
     ADAPTER_LAUNCH_ARGS+=(--variant "$RESOLVED_MODEL_EFFORT")
   fi
 }
 
 adapter_prepare_model_environment() {
+  if [[ -z "$RESOLVED_MODEL_ID" && -z "$RESOLVED_MODEL_EFFORT" ]]; then
+    ADAPTER_MODEL_ENV=()
+    return 0
+  fi
   local existing="${OPENCODE_CONFIG_CONTENT:-}" merged
   merged="$(EXISTING_OPENCODE_CONFIG="$existing" MODEL_ID="$RESOLVED_MODEL_ID" MODEL_EFFORT="$RESOLVED_MODEL_EFFORT" "$PYTHON_BIN" - <<'PY'
 import json, os
@@ -58,7 +67,8 @@ try:
 except json.JSONDecodeError:
     value = {}
 agent = value.setdefault("agent", {}).setdefault("build", {})
-agent["model"] = os.environ["MODEL_ID"]
+if os.environ.get("MODEL_ID"):
+    agent["model"] = os.environ["MODEL_ID"]
 if os.environ.get("MODEL_EFFORT"):
     agent["variant"] = os.environ["MODEL_EFFORT"]
 print(json.dumps(value, ensure_ascii=False, separators=(",", ":")))

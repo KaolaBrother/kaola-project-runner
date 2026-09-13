@@ -6,8 +6,9 @@
 - Default tmux session prefix: `codex-kaola`
 - Continue: `resume --last`
 - Exact resume: `resume <session-id>`
-- Runner default main model: **GPT-5.6 Luna Low**
-- Current resolved launch identity: `gpt-5.6-luna` with `effort=low`
+- Runner default preset (`--tier default`): **GPT-5.6 Sol High** — `gpt-5.6-sol` with `effort=high`
+- Runner upgrade preset (`--tier upgrade`): **GPT-6 Astra High** — `gpt-6-astra` with `effort=high`
+- Fast support: Codex fast mode via ACP `fast-mode` configId (off/on) and PTY `-c service_tier` (`default`=off, `fast`=on); explicit off is applied, not assumed
 
 ## Preflight
 
@@ -17,11 +18,15 @@ Preflight is read-only. Optional Kaola/Workflow surfaces and runtime health are 
 their absence does not block starting the CLI. The Runner never installs, upgrades, adopts, or
 rewrites runtime configuration.
 
-Model catalogs are probed read-only. A user-provided per-run `--model`/`--effort` overrides the
-Runner default; saved picker/config values never become the Runner default. If the requested model
-is absent from or unknown to the readable catalog, the exact declared literal is still launched and
-the catalog fact is reported. Actual-model mismatch or unreadable evidence never blocks ordinary
-observe, capture, send, key, or stop transport chosen by the Agent.
+Model catalogs are probed read-only. Selection precedence is explicit `--model` over the chosen
+`--tier` preset; explicit `--effort` overrides preset effort only on the model it was given with,
+and a different explicit model without explicit effort leaves native effort untouched. Encoded
+effort/Fast model IDs are not followed by invented extra configuration calls. Saved picker/config
+values never become the Runner default; on `--resume`/`--continue` the saved native selection is
+preserved unless the caller supplies tier/model/effort, while Fast stays a per-run request. If the
+requested model is absent from or unknown to the readable catalog, the exact declared literal is
+still launched and the catalog fact is reported. Actual-model mismatch or unreadable evidence never
+blocks ordinary observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 

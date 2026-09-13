@@ -17,15 +17,15 @@ tmux 主会话中启动指定 CLI、读取输出、传递控制 Agent 选择的�
 
 ## 支持的平台
 
-| Platform | Codex Skill | CLI | Runner 默认主模型 | runtime-native recurring |
-|---|---|---|---|---|
-| Grok CLI | `$grok-kaola-project-runner` | `grok` | Grok 4.6, xhigh, non-FAST | supported，需显式请求 |
-| Claude Code | `$claude-code-kaola-project-runner` | `claude` | Opus 5, high | unsupported |
-| OpenCode | `$opencode-kaola-project-runner` | `opencode` | GLM 5.3, max | unsupported |
-| Kimi CLI | `$kimi-cli-kaola-project-runner` | `kimi` | K3, max | unsupported |
-| Cursor CLI | `$cursor-cli-kaola-project-runner` | `cursor-agent` | Cursor Grok 4.6, xhigh, non-FAST | unsupported |
-| Devin CLI | `$devin-kaola-project-runner` | `devin` | Adaptive | unsupported |
-| Codex CLI | `$codex-kaola-project-runner` | `codex` | GPT-5.6 Luna, low | unsupported |
+| Platform | Codex Skill | CLI | Runner 默认主模型 (`--tier default`) | Runner 升级主模型 (`--tier upgrade`) | runtime-native recurring |
+|---|---|---|---|---|---|
+| Grok CLI | `$grok-kaola-project-runner` | `grok` | Grok 4.6 Extra High | 同默认 | supported，需显式请求 |
+| Claude Code | `$claude-code-kaola-project-runner` | `claude` | Opus High | Fable High | unsupported |
+| OpenCode | `$opencode-kaola-project-runner` | `opencode` | CLI 原生开场模型（不覆盖） | 同默认 | unsupported |
+| Kimi CLI | `$kimi-cli-kaola-project-runner` | `kimi` | Kimi 2.8 Max | Kimi K3 Max | unsupported |
+| Cursor CLI | `$cursor-cli-kaola-project-runner` | `cursor-agent` | Grok 4.6 Extra High | Claude Fable 5.1 High | unsupported |
+| Devin CLI | `$devin-kaola-project-runner` | `devin` | SWE-2 Max | Fusion High | unsupported |
+| Codex CLI | `$codex-kaola-project-runner` | `codex` | GPT-5.6 Sol High | GPT-6 Astra High | unsupported |
 
 裸调用统一表示：使用当前目录所在的 canonical Git repository，启动或恢复该平台的精确
 tmux session 并返回可读证据。它不会隐式发送 `workflow-next`、materialize 项目文件、创建
@@ -107,9 +107,17 @@ scripts/kaola-tmux.sh kimi-cli key \
 snapshot 是可选的证据关联：若传入，紧凑回执只在 `based_on_snapshot` 原样返回，不把它变成
 freshness gate。prompt 通过 relay
 literal/bracketed-paste transport 传输，不经过 shell 求值。
-每次 `start` 都先解析主模型：当前请求显式传入的 `--model/--effort` 优先，否则使用上表的
-Runner default；不会把 CLI 保存的 picker/config 冒充默认值。模型不可读或不匹配只作为 Agent
-的事实输入，不会封锁已有会话的普通通信；Runner 也从不自动发送 `workflow-next`。
+每次 `start` 都先解析主模型：当前请求显式传入的 `--model` 最优先，否则 `--tier default|upgrade`
+选择上表对应预设，默认 `--tier default`。显式 `--effort` 只作用于同一次选择中的模型；单独的
+`--model` 不会继承预设 effort。预设按各自原生机制应用（`--model` + `--effort`、`-c
+model_reasoning_effort`、环境变量或 ACP configId），不重写 CLI 全局配置。`--fast on` 是每次运行的
+显式 opt-in（默认 off）：Codex 走 ACP `fast-mode` configId 或 PTY `-c service_tier`，Cursor 走
+参数化 ACP `fast` 选项（`true`/`"false"` 字符串）或 PTY `-fast` 类模型变体，Claude 走
+进程级 `--settings '{"fastMode": ...}'`（按请求原样传递 on/off；模型是否支持由原生 CLI
+判定，无原生证据时 effective 记 unknown，选定模型永不改动），Devin 走 `-fast` 类模型变体
+（当前预设无已公布 Fast 变体则报告 unsupported），其余平台如实报告 unsupported。`--resume/--continue` 不带 tier/model/effort 时保留原生已保存选择；带上则重新应用。
+Runner 从不按复杂度、失败或耗时自动升级模型；模型不可读或不匹配只作为 Agent 的事实输入，不会
+封锁已有会话的普通通信；Runner 也从不自动发送 `workflow-next`。
 默认 `start`（未传 `--permission-mode`）打开各平台已测到的 skip-all 权限模式，避免 ACP
 `session/request_permission` 或 PTY 工具审批 TUI 卡住后续 `send --wait`。OpenCode 的默认 ACP
 通道没有 skip argv（`--auto` 只作用于 PTY，通过 `--transport pty` 选择）。Codex 默认 ACP 通道是

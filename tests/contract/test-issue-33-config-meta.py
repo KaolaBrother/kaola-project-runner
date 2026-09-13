@@ -324,7 +324,8 @@ class Issue33ConfigMetaTests(unittest.TestCase):
 
     def test_absent_config_options_not_invented(self) -> None:
         native_x = options(model="native-x", mode="agent")
-        self.start(config={"set_result": {"configOptions": native_x}})
+        self.start(config={"new": None,
+                           "set_result": {"configOptions": native_x}})
         obs = self.cli("observe")
         meta = obs.get("session_meta") or {}
         self.assertNotIn("configOptions", meta)

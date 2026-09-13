@@ -12,10 +12,13 @@ ADAPTER_BIN_ENV="CODEX_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/quit"
 ADAPTER_ANSWER_MODE="unsupported"
-ADAPTER_DEFAULT_MODEL_NAME="GPT-5.6 Luna Low"
-ADAPTER_DEFAULT_MODEL_ID="gpt-5.6-luna"
-ADAPTER_DEFAULT_MODEL_EFFORT="low"
-ADAPTER_DEFAULT_MODEL_FAST="unknown"
+ADAPTER_DEFAULT_MODEL_NAME="GPT-5.6 Sol High"
+ADAPTER_DEFAULT_MODEL_ID="gpt-5.6-sol"
+ADAPTER_DEFAULT_MODEL_EFFORT="high"
+ADAPTER_UPGRADE_MODEL_NAME="GPT-6 Astra High"
+ADAPTER_UPGRADE_MODEL_ID="gpt-6-astra"
+ADAPTER_UPGRADE_MODEL_EFFORT="high"
+ADAPTER_FAST_MECHANISM="config"
 
 codex_surface() {
   local root="$1"
@@ -71,6 +74,11 @@ adapter_build_launch() {
   if [[ -n "$RESOLVED_MODEL_EFFORT" ]]; then
     ADAPTER_LAUNCH_ARGS+=(-c "model_reasoning_effort=\"$RESOLVED_MODEL_EFFORT\"")
   fi
+  # Fast is a per-run service tier override scoped to this launch only.
+  case "$RESOLVED_FAST" in
+    on) ADAPTER_LAUNCH_ARGS+=(-c "service_tier=\"fast\"") ;;
+    off) ADAPTER_LAUNCH_ARGS+=(-c "service_tier=\"default\"") ;;
+  esac
   case "$permission_mode" in
     read-only)
       ADAPTER_LAUNCH_ARGS+=(--sandbox read-only --ask-for-approval on-request)

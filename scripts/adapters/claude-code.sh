@@ -9,10 +9,13 @@ ADAPTER_BIN_ENV="CLAUDE_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
 ADAPTER_ANSWER_MODE="claude-clear-v1"
-ADAPTER_DEFAULT_MODEL_NAME="Opus 5 High"
+ADAPTER_DEFAULT_MODEL_NAME="Opus High"
 ADAPTER_DEFAULT_MODEL_ID="opus"
 ADAPTER_DEFAULT_MODEL_EFFORT="high"
-ADAPTER_DEFAULT_MODEL_FAST="unknown"
+ADAPTER_UPGRADE_MODEL_NAME="Fable High"
+ADAPTER_UPGRADE_MODEL_ID="fable"
+ADAPTER_UPGRADE_MODEL_EFFORT="high"
+ADAPTER_FAST_MECHANISM="settings"
 
 claude_surface() {
   local root="$1"
@@ -48,8 +51,16 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--resume "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
-  ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
+  if [[ -n "$RESOLVED_MODEL_ID" ]]; then ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID"); fi
   if [[ -n "$RESOLVED_MODEL_EFFORT" ]]; then ADAPTER_LAUNCH_ARGS+=(--effort "$RESOLVED_MODEL_EFFORT"); fi
+  # Process-scoped fastMode pin carries the explicit request verbatim:
+  # true only on --fast on, false otherwise so a saved user preference
+  # cannot leak in. The native CLI decides model support — the Runner
+  # never infers it and never changes the selected model.
+  case "$RESOLVED_FAST" in
+    on) ADAPTER_LAUNCH_ARGS+=(--settings '{"fastMode": true}') ;;
+    *)  ADAPTER_LAUNCH_ARGS+=(--settings '{"fastMode": false}') ;;
+  esac
   if [[ -n "${permission_mode:-}" ]]; then
     ADAPTER_LAUNCH_ARGS+=(--permission-mode "$permission_mode")
   fi
