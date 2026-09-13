@@ -19,8 +19,10 @@ ADAPTER_DEFAULT_MODEL_FAST="unknown"
 
 codex_surface() {
   local root="$1"
-  [[ -f "$root/skills/workflow-next/SKILL.md" && \
-     -f "$root/skills/kaola-workflow-finalize/SKILL.md" ]]
+  { [[ -f "$root/skills/kaola-workflow-next/SKILL.md" ]] || \
+    [[ -f "$root/skills/workflow-next/SKILL.md" ]]; } && \
+  { [[ -f "$root/skills/kaola-workflow-finalize/SKILL.md" ]] || \
+    [[ -f "$root/skills/workflow-finalize/SKILL.md" ]]; }
 }
 
 adapter_preflight() {
@@ -34,10 +36,10 @@ adapter_preflight() {
   else
     local skills_dir
     for skills_dir in "$codex_root"/plugins/cache/*/*/*/skills; do
-      if [[ -f "$skills_dir/workflow-next/SKILL.md" && \
-            -f "$skills_dir/kaola-workflow-finalize/SKILL.md" ]]; then
+      [[ -d "$skills_dir" ]] || continue
+      if codex_surface "${skills_dir%/skills}"; then
         carrier="${skills_dir%/skills}"
-        source="plugin"
+        source="plugin-cache"
         break
       fi
     done

@@ -362,6 +362,34 @@ else
     fi
   done
 
+  # Codex plugin carrier discovery must recognize the real installed plugin
+  # layout (canonical kaola-workflow-* skill names under plugins/cache) as
+  # carrier evidence — never claimed as enabled installation, never a gate.
+  plugin_repo="$(issue_new_repo adapters-codex-plugin-repo)"
+  plugin_root="$CODEX_HOME/plugins/cache/kaolabrother-kaola-workflow/kaola-workflow/12.0.1"
+  mkdir -p "$plugin_root/skills/kaola-workflow-next" "$plugin_root/skills/kaola-workflow-finalize"
+  printf '%s\n' workflow-next >"$plugin_root/skills/kaola-workflow-next/SKILL.md"
+  printf '%s\n' finalize >"$plugin_root/skills/kaola-workflow-finalize/SKILL.md"
+  plugin_preflight="$(run_runner codex preflight --repo "$plugin_repo" --session "codex-plugin-$$")" || \
+    fail "test_codex_plugin_carrier_preflight" "preflight failed: $plugin_preflight"
+  json_assert "test_codex_plugin_carrier_evidence" "d['workflow_next'] and d['kaola_workflow_finalize'] and 'plugin-cache' in d['detail'] and '$plugin_root' in d['detail']" "$plugin_preflight"
+
+  # An unrelated or empty plugin cache directory alone is not carrier evidence.
+  legacy_repo="$(issue_new_repo adapters-codex-legacy-repo)"
+  mkdir -p "$legacy_repo/.codex/skills/workflow-next" "$legacy_repo/.codex/skills/workflow-finalize"
+  printf '%s\n' workflow-next >"$legacy_repo/.codex/skills/workflow-next/SKILL.md"
+  printf '%s\n' finalize >"$legacy_repo/.codex/skills/workflow-finalize/SKILL.md"
+  legacy_preflight="$(run_runner codex preflight --repo "$legacy_repo" --session "codex-legacy-$$")" || \
+    fail "test_codex_legacy_names_preflight" "preflight failed: $legacy_preflight"
+  json_assert "test_codex_legacy_names_evidence" "d['workflow_next'] and d['kaola_workflow_finalize']" "$legacy_preflight"
+
+  bare_home_repo="$(issue_new_repo adapters-codex-bare-repo)"
+  bare_home="$issue_tmp_root/codex-home-bare"
+  mkdir -p "$bare_home/plugins/cache/vendor/plugin/1.0.0/skills"
+  bare_preflight="$(CODEX_HOME="$bare_home" run_runner codex preflight --repo "$bare_home_repo" --session "codex-bare-$$")" || \
+    fail "test_codex_bare_cache_preflight" "preflight failed: $bare_preflight"
+  json_assert "test_codex_bare_cache_not_claimed" "not d['workflow_next'] and not d['kaola_workflow_finalize'] and 'not-discovered' in d['detail']" "$bare_preflight"
+
   # Grok inspect is evidence only; a missing optional Workflow capability must
   # not block the already verified CLI transport.
   grok_fake="${fake_paths[0]}"
