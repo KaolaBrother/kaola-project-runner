@@ -22,7 +22,7 @@ choice. The Runner owns exact-session control, evidence collection, prompt/key t
 readback, and truthful mechanical receipts. Kaola Workflow owns lifecycle state only when the Agent
 chooses to invoke it.
 
-ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 holder 上的投影，不得成为第二条 agent stdio 客户端，也不得把原始 `session/update` 塞进 Skill 热路径。permit lock（#25）与 `list`/`view`（#26）已实现；`follow`（#27）仍未实现。PTY 仍是登录与原生 TUI 接管。
+ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 holder 上的投影，不得成为第二条 agent stdio 客户端，也不得把原始 `session/update` 塞进 Skill 热路径。permit lock（#25）、`list`/`view`（#26）与本机 `follow`（#27）已实现。PTY 仍是登录与原生 TUI 接管。
 
 Main-model choice is a per-run transport fact. A current-request user override wins; otherwise the
 adapter's declared Runner default is resolved from the current catalog. The selection enters the

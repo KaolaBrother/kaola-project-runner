@@ -1,7 +1,7 @@
 # Issue #27 — ACP watch local `follow` stream
 
 设计权威：[GitHub #27](https://github.com/KaolaBrother/kaola-project-runner/issues/27)。  
-状态：设计冻结（2026-09-13）；**未实现**。依赖 [#26](list-view.md) 的 `kaola-acp-view/1`。
+状态：设计冻结（2026-09-13）；**已实现**（issue #27）。依赖 [#26](list-view.md) 的 `kaola-acp-view/1`。
 
 ## 决策
 

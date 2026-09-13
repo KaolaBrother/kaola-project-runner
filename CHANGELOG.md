@@ -16,11 +16,18 @@
   [--since CURSOR]` emits typed `kaola-acp-view/1`. EventLog reloads max cursor from live plus
   rotated `.jsonl.1–.3`. `install-local.sh` installs owned `$HOME/.local/bin/kaola-acp` and
   `kaola-acp-holder` symlinks. L0 `send --wait` keys are unchanged. `kaola-tmux.sh … view`
-  returns `view-unsupported`. Follow (#27) remains unimplemented.
+  returns `view-unsupported`.
+
+- Implemented ACP Watch local `follow` (issue #27): `kaola-acp <platform> follow --repo …
+  --session … [--since CURSOR] [--format text]` streams NDJSON `snapshot`/`delta`/`heartbeat`/
+  `eof`/`error` on a long-lived Unix connection. Snapshot/delta reuse `kaola-acp-view/1`.
+  The follow FD is read-only after the first op; a 256-line per-follower queue drop emits
+  `follow-dropped` without pausing agent stdio. Killing follow does not stop holder/agent.
+  `kaola-tmux.sh … follow` returns `follow-unsupported`.
 
 - Documented the ACP Watch Surface design freeze (`docs/acp-watch/`, issues #25/#26/#27):
   human `list`/`view`/`follow` beside the existing holder, at-most-once permit, no HTTP/SSE
-  and no second agent-stdio client. #25 and #26 are implemented; #27 is not.
+  and no second agent-stdio client. #25, #26, and #27 are implemented.
 
 - Default `start` now enables each platform's measured skip-all permission mode on both
   ACP and PTY (issue #22): Claude `--permission-mode bypassPermissions` / ACP `mode=bypassPermissions`,

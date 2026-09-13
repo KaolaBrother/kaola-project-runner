@@ -16,7 +16,9 @@ import ctypes
 import hashlib
 import json
 import os
+import queue
 import secrets
+import select
 import shlex
 import signal
 import socket
@@ -353,6 +355,10 @@ TOOL_VIEW_BYTES = 32 * 1024
 VIEW_BYTES = 256 * 1024
 TIMELINE_MAX = 200
 VIEW_SCHEMA = "kaola-acp-view/1"
+FOLLOW_QUEUE_CAP = 256
+FOLLOW_HEARTBEAT_SECONDS = 5.0
+FOLLOW_SNDBUF = 4096
+FOLLOW_WRITE_OPS = frozenset({"prompt", "permit", "cancel", "stop"})
 
 
 def _as_text(value: Any) -> str:
@@ -563,6 +569,160 @@ class ViewProjection:
             })
 
 
+def follow_error_event(code: str, message: str) -> dict[str, Any]:
+    return {"kind": "error", "error": {"code": code, "message": message}}
+
+
+class Follower:
+    """Per-connection follow stream: bounded queue, dedicated writer, never agent stdin."""
+
+    def __init__(self, holder: "Holder", connection: socket.socket, since: int | None):
+        self.holder = holder
+        self.connection = connection
+        self.since = since
+        self.queue: queue.Queue = queue.Queue(maxsize=FOLLOW_QUEUE_CAP)
+        self.closed = threading.Event()
+        self.dropped = threading.Event()
+        self.offer_lock = threading.Lock()
+        self.last_enqueued_cursor: int | None = None
+        self.writer = threading.Thread(target=self._write_loop, daemon=True)
+
+    def start(self) -> None:
+        self.writer.start()
+
+    def offer_snapshot(self, payload: dict[str, Any]) -> None:
+        cursor = payload.get("event_cursor")
+        if self.since is not None and isinstance(cursor, int) and cursor < self.since:
+            return
+        with self.offer_lock:
+            if isinstance(cursor, int):
+                self.last_enqueued_cursor = cursor
+            self._offer_locked({"kind": "snapshot", **payload})
+
+    def offer_delta(self, payload: dict[str, Any]) -> None:
+        cursor = payload.get("event_cursor")
+        if self.since is not None and isinstance(cursor, int) and cursor < self.since:
+            return
+        with self.offer_lock:
+            if isinstance(cursor, int) and self.last_enqueued_cursor is not None:
+                if cursor <= self.last_enqueued_cursor:
+                    return
+            if self._offer_locked({"kind": "delta", **payload}):
+                if isinstance(cursor, int):
+                    self.last_enqueued_cursor = cursor
+
+    def offer_heartbeat(self, payload: dict[str, Any]) -> None:
+        with self.offer_lock:
+            self._offer_locked({"kind": "heartbeat", **payload})
+
+    def offer_eof(self) -> None:
+        with self.offer_lock:
+            self._offer_locked({"kind": "eof"})
+
+    def offer_error(self, code: str, message: str) -> None:
+        with self.offer_lock:
+            self._offer_locked(follow_error_event(code, message))
+
+    def _offer_locked(self, event: dict[str, Any]) -> bool:
+        if self.closed.is_set() or self.dropped.is_set():
+            return False
+        try:
+            self.queue.put_nowait(event)
+            return True
+        except queue.Full:
+            self._drop_locked()
+            return False
+
+    def _drop_locked(self) -> None:
+        if self.dropped.is_set():
+            return
+        self.dropped.set()
+        drop = follow_error_event(
+            "follow-dropped", "follower queue exceeded 256 lines"
+        )
+        try:
+            self.queue.put_nowait(drop)
+        except queue.Full:
+            pass
+
+    def _write_loop(self) -> None:
+        try:
+            while not self.closed.is_set():
+                if self.dropped.is_set():
+                    self._emit_drop()
+                    return
+                try:
+                    event = self.queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                if event is None:
+                    if self.dropped.is_set():
+                        self._emit_drop()
+                    return
+                if not self._send(event):
+                    if self.dropped.is_set():
+                        self._emit_drop()
+                    return
+                err = event.get("error")
+                if event.get("kind") == "error" and isinstance(err, dict):
+                    if err.get("code") == "follow-dropped":
+                        return
+        finally:
+            self.closed.set()
+            self.holder.unregister_follower(self)
+            try:
+                self.connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    def _emit_drop(self) -> None:
+        payload = canonical(follow_error_event(
+            "follow-dropped", "follower queue exceeded 256 lines"
+        )) + b"\n"
+        offset = 0
+        while offset < len(payload) and not self.closed.is_set():
+            try:
+                _, writable, _ = select.select([], [self.connection], [], 0.2)
+                if not writable:
+                    continue
+                sent = self.connection.send(payload[offset:])
+                if sent == 0:
+                    return
+                offset += sent
+            except OSError:
+                return
+
+    def _send(self, event: dict[str, Any]) -> bool:
+        payload = canonical(event) + b"\n"
+        offset = 0
+        while offset < len(payload):
+            if self.closed.is_set() or self.dropped.is_set():
+                return False
+            try:
+                _, writable, _ = select.select([], [self.connection], [], 0.2)
+                if not writable:
+                    continue
+                sent = self.connection.send(payload[offset:])
+                if sent == 0:
+                    return False
+                offset += sent
+            except OSError:
+                return False
+        return True
+
+    def close(self) -> None:
+        if self.closed.is_set():
+            return
+        self.closed.set()
+        try:
+            self.queue.put_nowait(None)
+        except queue.Full:
+            try:
+                self.connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+
 class Holder:
     def __init__(self, args: argparse.Namespace):
         self.args = args
@@ -585,6 +745,8 @@ class Holder:
         self.auth_methods: list[dict[str, Any]] = []
         self.pending_permissions: dict[str, dict[str, Any]] = {}
         self.projection = ViewProjection()
+        self.followers: list[Follower] = []
+        self.followers_lock = threading.Lock()
         self.turn: dict[str, Any] = self._empty_turn()
         try:
             previous_record = json.loads(self.record_path.read_text(encoding="utf-8"))
@@ -777,6 +939,7 @@ class Holder:
                 self.pending_permissions.pop(key, None)
                 self.events.append({"kind": "permission_cancelled", "request_id": cancelled})
                 self.write_record()
+                self.fanout_follow_delta()
             else:
                 self.events.append({"kind": "cancel_request_unknown", "id": cancelled})
         else:
@@ -802,6 +965,7 @@ class Holder:
                 self.turn["mutation_status"] = "accepted"
             self.events.append({"kind": "request_permission", "request": entry})
             self.write_record()
+            self.fanout_follow_delta()
             with self.turn_cond:
                 self.turn_cond.notify_all()
             return
@@ -840,10 +1004,11 @@ class Holder:
             turn["context_usage"] = {"used": update.get("used"), "size": update.get("size")}
         elif variant not in KNOWN_UPDATES:
             self.agent.unknown_updates += 1
+        self.projection.apply(update, self.events.cursor + 1)
         cursor = self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
                                      "update": update})
-        self.projection.apply(update, cursor)
         self.write_record()
+        self.fanout_follow_delta()
 
     def on_prompt_response(self, request_id: int, response: dict[str, Any] | None) -> None:
         turn = self.turn
@@ -869,6 +1034,7 @@ class Holder:
             "stop_reason": turn["stop_reason"],
         }
         self.write_record()
+        self.fanout_follow_delta()
         with self.turn_cond:
             self.turn_cond.notify_all()
 
@@ -900,6 +1066,7 @@ class Holder:
                                               "message": "agent process exited"}}
             slot["event"].set()
         self.write_record()
+        self.fanout_follow_eof()
         with self.turn_cond:
             self.turn_cond.notify_all()
 
@@ -1146,6 +1313,7 @@ class Holder:
             self.events.append({"kind": "permission_answered", "request_id": request_id,
                                 "option": option})
             self.write_record()
+            self.fanout_follow_delta()
             return {"permitted": request_id, "option": option,
                     "pending_permissions": list(pending.values())}
 
@@ -1244,6 +1412,60 @@ class Holder:
         if len(encoded.encode("utf-8")) > VIEW_BYTES:
             payload["truncated"] = True
         return payload
+
+    def fanout_follow_delta(self) -> None:
+        with self.followers_lock:
+            if not self.followers:
+                return
+            payload = self.op_view({})
+            for follower in list(self.followers):
+                follower.offer_delta(payload)
+
+    def fanout_follow_heartbeat(self) -> None:
+        with self.followers_lock:
+            if not self.followers:
+                return
+            payload = self.op_view({})
+            for follower in list(self.followers):
+                follower.offer_heartbeat(payload)
+
+    def fanout_follow_eof(self) -> None:
+        with self.followers_lock:
+            followers = list(self.followers)
+        for follower in followers:
+            follower.offer_eof()
+
+    def unregister_follower(self, follower: Follower) -> None:
+        with self.followers_lock:
+            self.followers = [item for item in self.followers if item is not follower]
+
+    def start_follow(self, connection: socket.socket, params: dict[str, Any]) -> Follower:
+        since = params.get("since")
+        if since is not None:
+            try:
+                since = int(since)
+            except (TypeError, ValueError):
+                since = None
+        follower = Follower(self, connection, since)
+        try:
+            connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, FOLLOW_SNDBUF)
+        except OSError:
+            pass
+        payload = self.op_view({"since": since} if since is not None else {})
+        with self.followers_lock:
+            follower.offer_snapshot(payload)
+            self.followers.append(follower)
+        follower.start()
+        self.fanout_follow_delta()
+        return follower
+
+    def follow_heartbeat_loop(self) -> None:
+        while True:
+            time.sleep(FOLLOW_HEARTBEAT_SECONDS)
+            try:
+                self.fanout_follow_heartbeat()
+            except Exception:
+                continue
 
     def op_capture(self, params: dict[str, Any]) -> dict[str, Any]:
         if params.get("full"):
@@ -1379,6 +1601,7 @@ class Holder:
         return {"error": {"code": "unknown-op", "message": f"unsupported op {op}"}}
 
     def serve_connection(self, connection: socket.socket) -> None:
+        follower: Follower | None = None
         try:
             buffer = bytearray()
             while True:
@@ -1394,7 +1617,28 @@ class Holder:
                     try:
                         message = json.loads(line.decode("utf-8"))
                     except ValueError:
-                        connection.sendall(b'{"error":{"code":"bad-request"}}\n')
+                        if follower is not None:
+                            follower.offer_error("bad-request", "invalid JSON")
+                        else:
+                            connection.sendall(b'{"error":{"code":"bad-request"}}\n')
+                        continue
+                    op = message.get("op") if isinstance(message, dict) else None
+                    if follower is not None:
+                        if op in FOLLOW_WRITE_OPS:
+                            follower.offer_error(
+                                "follow-readonly",
+                                "follow connection is read-only; use a separate socket",
+                            )
+                        else:
+                            follower.offer_error(
+                                "follow-readonly",
+                                f"unsupported op on follow connection: {op}",
+                            )
+                        continue
+                    if op == "follow":
+                        follower = self.start_follow(
+                            connection, message.get("params") or {}
+                        )
                         continue
                     response = self.handle_request(message)
                     exit_after = bool(response.pop("_exit_after_reply", False))
@@ -1405,6 +1649,8 @@ class Holder:
         except (OSError, ValueError):
             return
         finally:
+            if follower is not None:
+                follower.close()
             try:
                 connection.close()
             except OSError:
@@ -1468,6 +1714,7 @@ class Holder:
             elif self.agent.proc and not self.agent.exited.is_set():
                 pass
         threading.Thread(target=self.idle_watcher, daemon=True).start()
+        threading.Thread(target=self.follow_heartbeat_loop, daemon=True).start()
         while not self.stop_requested or self.listener:
             try:
                 connection, _ = self.listener.accept()

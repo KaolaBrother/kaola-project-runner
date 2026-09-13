@@ -233,6 +233,125 @@ def command_view(args: argparse.Namespace, repo: str, directory: Path) -> dict[s
     return response
 
 
+def follow_error_line(code: str, message: str) -> dict[str, Any]:
+    return {"kind": "error", "error": {"code": code, "message": message}}
+
+
+def print_follow_text(event: dict[str, Any]) -> None:
+    kind = event.get("kind")
+    if kind in ("error", "eof"):
+        print(json.dumps(event, ensure_ascii=False), flush=True)
+        return
+    if kind not in ("snapshot", "delta"):
+        return
+    payload = event
+    if event.get("schema") != VIEW_SCHEMA:
+        for key in ("payload", "view", "snapshot", "delta", "data"):
+            inner = event.get(key)
+            if isinstance(inner, dict) and (
+                inner.get("schema") == VIEW_SCHEMA or "event_cursor" in inner
+            ):
+                payload = inner
+                break
+    for message in payload.get("messages") or []:
+        if not isinstance(message, dict):
+            continue
+        text = message.get("text")
+        if text:
+            role = message.get("role") or "message"
+            print(f"{role}: {text}", flush=True)
+    for tool in payload.get("tools") or []:
+        if not isinstance(tool, dict):
+            continue
+        title = tool.get("title")
+        if title:
+            print(f"tool: {title}", flush=True)
+
+
+def emit_follow_line(raw: bytes, fmt: str) -> None:
+    text = raw.decode("utf-8", "replace")
+    if fmt != "text":
+        print(text, flush=True)
+        return
+    try:
+        event = json.loads(text)
+    except ValueError:
+        print(text, flush=True)
+        return
+    if isinstance(event, dict):
+        print_follow_text(event)
+    else:
+        print(text, flush=True)
+
+
+def command_follow(args: argparse.Namespace, repo: str, directory: Path) -> int:
+    sock = sock_path(args, repo)
+    record = read_record(directory)
+    fmt = getattr(args, "format", "json") or "json"
+
+    def emit_error(code: str, message: str) -> int:
+        print(json.dumps(follow_error_line(code, message), ensure_ascii=False), flush=True)
+        return 0
+
+    if record is None:
+        return emit_error("no-session", "no ACP session record for this platform/session/repo")
+    if not pid_alive(record.get("holder_pid")):
+        return emit_error("holder-lost", "holder process is not alive")
+    if not sock.exists():
+        if pid_alive(record.get("holder_pid")):
+            return emit_error("holder-unreachable", "holder alive but socket path is absent")
+        return emit_error("holder-lost", "holder process is not alive")
+
+    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        try:
+            connection.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+        except OSError:
+            pass
+        connection.connect(str(sock))
+        params: dict[str, Any] = {}
+        if args.since is not None:
+            params["since"] = args.since
+        payload = json.dumps({
+            "op": "follow",
+            "request_id": secrets.token_hex(8),
+            "params": params,
+        }).encode("utf-8") + b"\n"
+        connection.sendall(payload)
+        buffer = bytearray()
+        while True:
+            try:
+                data = connection.recv(65536)
+            except OSError:
+                latest = read_record(directory) or record
+                if not pid_alive(latest.get("holder_pid")):
+                    emit_error("holder-lost", "holder process is not alive")
+                return 0
+            if not data:
+                latest = read_record(directory) or record
+                if not pid_alive(latest.get("holder_pid")):
+                    emit_error("holder-lost", "holder process is not alive")
+                break
+            buffer.extend(data)
+            while b"\n" in buffer:
+                line, _, rest = buffer.partition(b"\n")
+                buffer = bytearray(rest)
+                if line.strip():
+                    emit_follow_line(line, fmt)
+    except OSError as exc:
+        latest = read_record(directory) or record
+        if not pid_alive(latest.get("holder_pid")):
+            emit_error("holder-lost", "holder process is not alive")
+        else:
+            emit_error("holder-unreachable", str(exc))
+    finally:
+        try:
+            connection.close()
+        except OSError:
+            pass
+    return 0
+
+
 def read_record(directory: Path) -> dict[str, Any] | None:
     path = directory / "record.json"
     try:
@@ -566,6 +685,7 @@ def main() -> int:
     parser.add_argument("command", choices=[
         "preflight", "start", "send", "wait", "observe", "capture",
         "permit", "key", "answer", "cancel", "stop", "status", "view",
+        "follow",
     ])
     parser.add_argument("--repo", required=True)
     parser.add_argument("--session")
@@ -586,6 +706,7 @@ def main() -> int:
     parser.add_argument("--lines", type=int)
     parser.add_argument("--tools", action="store_true")
     parser.add_argument("--since", type=int)
+    parser.add_argument("--format", choices=("json", "text"), default="json")
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--inline", action="store_true")
     parser.add_argument("--model")
@@ -623,6 +744,10 @@ def main() -> int:
         receipt = command_view(args, repo, directory)
         print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
         return 0
+    if args.command == "follow":
+        if directory is None:
+            die("invalid or missing --session name")
+        return command_follow(args, repo, directory)
 
     timeout = args.timeout
     sock_timeout = (timeout + 30.0) if timeout else None

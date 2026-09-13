@@ -411,6 +411,41 @@ class MockAgent:
             )
             log_event({"event": "watch_projection_emitted"})
             return
+        if scenario == "follow_flood":
+            # >256 session/update notifications so a stalled follower queue can
+            # hit the follow.md drop cap without needing the test to count them.
+            for index in range(280):
+                message_chunk(session_id, f"flood-{index}", message_id="flood")
+            session_update(
+                session_id,
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "call_flood",
+                    "title": "Flood complete marker",
+                    "kind": "read",
+                    "status": "completed",
+                    "locations": [{"path": "flood.txt", "line": 1}],
+                    "content": [{"type": "text", "text": "flood-complete"}],
+                },
+            )
+            log_event({"event": "follow_flood_emitted"})
+            self.finish_turn(request_id)
+            return
+        if scenario == "tool_call_only":
+            session_update(
+                session_id,
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "call_solo",
+                    "title": "Read flood.txt",
+                    "kind": "read",
+                    "status": "completed",
+                    "locations": [{"path": "flood.txt", "line": 1}],
+                    "content": [{"type": "text", "text": "solo-tool"}],
+                },
+            )
+            log_event({"event": "tool_call_only_emitted"})
+            return
         self.emit_prelude(session_id)
         if self.turn_ms:
             time.sleep(self.turn_ms / 1000.0)
@@ -430,7 +465,8 @@ class MockAgent:
         log_event({"event": "prompt", "sessionId": session_id, "text": text})
         self.begin_turn(request_id, session_id)
         if self.scenario in (
-            "normal", "garbage_lines", "stderr_flood", "slow", "cancel_race", "watch_projection",
+            "normal", "garbage_lines", "stderr_flood", "slow", "cancel_race",
+            "watch_projection", "follow_flood", "tool_call_only",
         ):
             thread = threading.Thread(
                 target=self.run_prompt, args=(request_id, session_id, text), daemon=True
@@ -472,6 +508,13 @@ class MockAgent:
                 self.finish_active_turn("end_turn")
 
     def dispatch(self, message: dict[str, Any]) -> None:
+        log_event({
+            "event": "inbound_frame",
+            "method": message.get("method"),
+            "id": message.get("id"),
+            "has_result": "result" in message,
+            "has_error": "error" in message,
+        })
         if "method" not in message:
             self.on_response(message)
             return

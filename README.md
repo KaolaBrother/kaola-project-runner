@@ -99,7 +99,7 @@ scripts/kaola-tmux.sh kimi-cli key \
   --key up
 ```
 
-命令为 `preflight`、`start`、`observe`、`status`、`capture`、`send`、`key`、`answer`、`stop`。ACP 人类旁观走 `kaola-acp`，不经 `kaola-tmux.sh`：`kaola-acp list [--platform P] [--repo ROOT]` 列出本机活 holder（stdout `kaola-acp-list/1`）；`kaola-acp <platform> view --repo … --session … [--since CURSOR]` 返回当前压实投影（stdout `kaola-acp-view/1`）。`kaola-tmux.sh … view` 给出 `view-unsupported`，不回退到 PTY。`observe`
+命令为 `preflight`、`start`、`observe`、`status`、`capture`、`send`、`key`、`answer`、`stop`。ACP 人类旁观走 `kaola-acp`，不经 `kaola-tmux.sh`：`kaola-acp list [--platform P] [--repo ROOT]` 列出本机活 holder（stdout `kaola-acp-list/1`）；`kaola-acp <platform> view --repo … --session … [--since CURSOR]` 返回当前压实投影（stdout `kaola-acp-view/1`）；`kaola-acp <platform> follow --repo … --session … [--since CURSOR] [--format json|text]` 保持 Unix 长连接并写 NDJSON `{kind:snapshot|delta|heartbeat|eof|error}`（snapshot/delta 复用 `kaola-acp-view/1`；`--format text` 拼接消息/工具标题）。`kaola-tmux.sh … view` 给出 `view-unsupported`，`kaola-tmux.sh … follow` 给出 `follow-unsupported`，都不回退到 PTY。`observe`
 返回 schema-v2 `raw_current_frame`、`hard_evidence`、进程/approval/decision 提示、relay byte revisions
 和 opaque snapshot。它们只供 agent 参考，不定义平台状态，也不授权或阻断普通 `send`/`stop`。
 snapshot 是可选的证据关联：若传入，紧凑回执只在 `based_on_snapshot` 原样返回，不把它变成
