@@ -31,9 +31,9 @@ Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, captu
 and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
-`--continue` and `--resume` above are this platform's own launch flags, passed through unchanged.
-The native session ID is the CLI's own conversation identifier, distinct from the Runner's tmux
-session name. What a platform persists and can resume is its own verified behavior, not a
+Runner `--continue` and `--resume` select the native continuation/resume syntax listed above;
+adapters translate these options for the platform. The native session ID is the CLI's own
+conversation identifier, distinct from the Runner's tmux session name. What a platform persists and can resume is its own verified behavior, not a
 universal Runner promise; when exact resume is unavailable or ambiguous, the Agent chooses
 `--continue`, a new session, or existing work records. `stop` releases only the owned runtime
 resources and never deletes platform history.
