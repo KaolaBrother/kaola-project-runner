@@ -111,9 +111,11 @@ literal/bracketed-paste transport 传输，不经过 shell 求值。
 选择上表对应预设，默认 `--tier default`。显式 `--effort` 只作用于同一次选择中的模型；单独的
 `--model` 不会继承预设 effort。预设按各自原生机制应用（`--model` + `--effort`、`-c
 model_reasoning_effort`、环境变量或 ACP configId），不重写 CLI 全局配置。`--fast on` 是每次运行的
-显式 opt-in（默认 off）：Codex 走 ACP `fast-mode` configId 或 PTY `-c service_tier`，Cursor/Devin
-走 `-fast` 类模型变体（当前预设无已公布 Fast 变体则报告 unsupported），其余平台如实报告
-unsupported。`--resume/--continue` 不带 tier/model/effort 时保留原生已保存选择；带上则重新应用。
+显式 opt-in（默认 off）：Codex 走 ACP `fast-mode` configId 或 PTY `-c service_tier`，Cursor 走
+参数化 ACP `fast` 选项（`true`/`"false"` 字符串）或 PTY `-fast` 类模型变体，Claude 走
+进程级 `--settings '{"fastMode": ...}'`（仅 Opus 系模型支持；不支持的模型保留选择并报告
+unsupported），Devin 走 `-fast` 类模型变体（当前预设无已公布 Fast 变体则报告
+unsupported），其余平台如实报告 unsupported。`--resume/--continue` 不带 tier/model/effort 时保留原生已保存选择；带上则重新应用。
 Runner 从不按复杂度、失败或耗时自动升级模型；模型不可读或不匹配只作为 Agent 的事实输入，不会
 封锁已有会话的普通通信；Runner 也从不自动发送 `workflow-next`。
 默认 `start`（未传 `--permission-mode`）打开各平台已测到的 skip-all 权限模式，避免 ACP

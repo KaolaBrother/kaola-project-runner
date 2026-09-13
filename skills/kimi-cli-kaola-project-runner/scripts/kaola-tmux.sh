@@ -242,7 +242,7 @@ resolve_model_policy() {
     source=resume-preserved requested="native saved session selection" candidate="" chosen_effort=""
   fi
   fast_arg=false; [[ "$fast" == on ]] && fast_arg=true
-  MODEL_POLICY_JSON="$("$PYTHON_BIN" "$MODEL_POLICY_HELPER" resolve --platform "$platform" --runtime-bin "$RUNTIME_BIN" --repo "$repo" --source "$source" --requested-name "$requested" --candidate-id "$candidate" --effort "$chosen_effort" --fast "$fast_arg" --tier "$tier" --fast-mechanism "${ADAPTER_FAST_MECHANISM:-none}" "--fast-suffixes=${ADAPTER_FAST_SUFFIXES:--fast,-priority}")"
+  MODEL_POLICY_JSON="$("$PYTHON_BIN" "$MODEL_POLICY_HELPER" resolve --platform "$platform" --runtime-bin "$RUNTIME_BIN" --repo "$repo" --source "$source" --requested-name "$requested" --candidate-id "$candidate" --effort "$chosen_effort" --fast "$fast_arg" --tier "$tier" --fast-mechanism "${ADAPTER_FAST_MECHANISM:-none}" "--fast-suffixes=${ADAPTER_FAST_SUFFIXES:--fast,-priority}" "--fast-capable=${ADAPTER_FAST_CAPABLE_MODELS:-}" "--fast-uncapable=${ADAPTER_FAST_UNCAPABLE_MODELS:-}")"
   RESOLVED_MODEL_ID="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_runtime_model_id")')"
   RESOLVED_MODEL_EFFORT="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_parameters",{}).get("effort")')"
   RESOLVED_FAST="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_fast")')"

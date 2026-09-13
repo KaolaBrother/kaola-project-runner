@@ -762,6 +762,52 @@ for platform in "${platforms[@]}"; do
         fail "test_${platform}_preset_fast_unsupported_keeps_base_model" "start failed: $COMMAND_OUTPUT"
       fi
       ;;
+    claude-code)
+      # Settings-mechanism platform: --settings '{"fastMode": ...}' is a
+      # process-scoped launch pin — false by default, true only when the
+      # resolved model is documented fast-capable (Opus).
+      capture_command "$platform" start --repo "$repo" --session "$session"
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        grep -Eq -- 'fastMode.{0,6}false' "$argv_log" || \
+          fail "test_${platform}_fast_off_pins_settings" "launch argv lacks fastMode=false pin: $(cat "$argv_log")"
+      else
+        fail "test_${platform}_fast_off_pins_settings" "start failed: $COMMAND_OUTPUT"
+      fi
+      stop_or_kill "$platform" "$repo" "$session"
+      session="model-fast-on-${platform}-$$"
+      capture_command "$platform" start --repo "$repo" --session "$session" --fast on
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        launch_args="$(grep 'args=' "$argv_log" | tail -1)"
+        grep -Eq -- 'fastMode.{0,6}true' <<<"$launch_args" || \
+          fail "test_${platform}_fast_on_applies_settings" "launch argv lacks fastMode=true: $launch_args"
+        if ! JSON_INPUT="$COMMAND_OUTPUT" python3 -c 'import json,os; d=json.loads(os.environ["JSON_INPUT"]); assert d["model"].get("resolved_fast") == "on", d.get("model")'; then
+          fail "test_${platform}_fast_on_applies_settings" "expected resolved_fast=on: $COMMAND_OUTPUT"
+        fi
+      else
+        fail "test_${platform}_fast_on_applies_settings" "start failed: $COMMAND_OUTPUT"
+      fi
+      stop_or_kill "$platform" "$repo" "$session"
+      session="model-fast-fable-${platform}-$$"
+      capture_command "$platform" start --repo "$repo" --session "$session" --tier upgrade --fast on
+      if [[ "$COMMAND_RC" -eq 0 ]]; then
+        # Fable is not fast-capable: the model selection is preserved, the
+        # launch stays pinned fastMode=false, and the request reports
+        # unsupported — never a silent model switch to Opus.
+        grep -Fq "selected=$upgrade_id" "$argv_log" || \
+          fail "test_${platform}_fable_fast_keeps_selected_model" "unexpected model in launch argv: $(cat "$argv_log")"
+        fable_args="$(grep 'args=' "$argv_log" | grep -F -- "--model $upgrade_id" | tail -1)"
+        if grep -Eq -- 'fastMode.{0,6}true' <<<"$fable_args"; then
+          fail "test_${platform}_fable_fast_keeps_selected_model" "fastMode=true emitted for an unsupported model: $fable_args"
+        fi
+        grep -Eq -- 'fastMode.{0,6}false' <<<"$fable_args" || \
+          fail "test_${platform}_fable_fast_keeps_selected_model" "launch argv lacks fastMode=false pin: $fable_args"
+        if ! JSON_INPUT="$COMMAND_OUTPUT" python3 -c 'import json,os; d=json.loads(os.environ["JSON_INPUT"]); assert d["model"].get("resolved_fast") == "unsupported", d.get("model")'; then
+          fail "test_${platform}_fable_fast_keeps_selected_model" "expected resolved_fast=unsupported: $COMMAND_OUTPUT"
+        fi
+      else
+        fail "test_${platform}_fable_fast_keeps_selected_model" "start failed: $COMMAND_OUTPUT"
+      fi
+      ;;
     *)
       # No native Fast mechanism: --fast on is reported unsupported, never
       # applied, and never blocks the launch.

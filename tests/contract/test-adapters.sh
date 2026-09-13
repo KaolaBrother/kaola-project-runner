@@ -272,6 +272,10 @@ else
         fi
         grep -Eq -- '--permission-mode (bypassPermissions|dontAsk)' <<<"$log_text" || \
           fail "test_${platform}_no_flag_permission_mode" "No-flag Claude PTY start must launch with bypassPermissions or dontAsk: $log_text"
+        grep -Eq -- 'fastMode.{0,6}false' <<<"$log_text" || \
+          fail "test_${platform}_fast_off_settings_pin" "No-flag Claude PTY start must pin --settings fastMode=false: $log_text"
+        grep -Eq -- 'fastMode.{0,6}true' <<<"$log_text" && \
+          fail "test_${platform}_fast_off_no_opt_in" "No-flag Claude PTY start must not enable fastMode: $log_text"
       else
         grep -Fq -- '--auto' <<<"$log_text" || \
           fail "test_${platform}_no_flag_skip_all" "No-flag Kimi PTY start must launch with --auto: $log_text"

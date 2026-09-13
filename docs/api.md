@@ -109,7 +109,9 @@ explicit user model/effort precedence; otherwise `--tier default|upgrade` select
 its effort; `--effort` only applies to the model selected in the same request. Model IDs that already
 encode effort or Fast variants get no invented extra effort/configuration calls. `--fast` defaults to
 `off`; `--fast on` is the per-run opt-in and is applied through the platform's native mechanism (Codex
-ACP `fast-mode` configId / PTY `-c service_tier`, Cursor/Devin `-fast`-style model variants). Where no
+ACP `fast-mode` configId / PTY `-c service_tier`, Cursor parameterized `fast` option or
+`-fast`-style model variants, Claude process-scoped `--settings '{"fastMode": ...}'` on
+fast-capable models). Where no
 native mechanism or advertised fast variant exists, the request is reported `resolved_fast:
 "unsupported"`, never silently claimed. `--resume`/`--continue` without tier/model/effort preserves the
 saved native session selection (`resume-preserved`); supplying any of them re-applies that selection.

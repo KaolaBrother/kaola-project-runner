@@ -28,7 +28,8 @@ Main-model choice is a per-run transport fact. A current-request `--model` wins;
 `--tier default|upgrade` selects the manifest's declared preset (`default` when unset), resolved
 against the current catalog. `--effort` applies only to the model selected in the same request, and
 `--fast on` is an explicit per-run opt-in applied through the native mechanism (config option,
-`-c service_tier`, or `-fast` model variant) — reported `unsupported` where none exists. The
+`-c service_tier`, `-fast` model variant, or process-scoped `--settings '{"fastMode": ...}'`) —
+reported `unsupported` where none exists or the selected model is not fast-capable. The
 selection enters the child as literal argv plus narrowly scoped invocation parameters, never by
 rewriting global CLI configuration. `--resume`/`--continue` without selection flags preserves the
 saved native session selection. There is no automatic escalation on complexity, failures, or elapsed

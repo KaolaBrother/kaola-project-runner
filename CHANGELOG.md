@@ -13,6 +13,10 @@
   transports — ACP applies model → effort → Fast through manifest `acp_*_config_id` options (Codex adds
   `fast-mode`) and PTY uses native argv/`-c service_tier`/env mechanisms; `--fast on` is opt-in only and
   reports `resolved_fast: "unsupported"` where no native mechanism or advertised fast variant exists.
+  Claude Code applies Fast through a process-scoped `--settings '{"fastMode": ...}'` launch pin —
+  `false` by default and `true` only on explicit opt-in with a documented fast-capable model (Opus);
+  non-capable selections such as Fable keep their model and report `unsupported` rather than
+  switching.
   `--resume`/`--continue` without selection flags now preserves the saved native session selection
   (`resume-preserved`) instead of re-applying the preset; supplying any selection flag re-applies it.
   Receipts carry `model_selection`, `requested_tier`/`requested_fast`/`resolved_fast`, and per-option

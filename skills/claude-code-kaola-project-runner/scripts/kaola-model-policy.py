@@ -219,6 +219,36 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
                 )
         else:
             resolved_fast = "unknown"
+    elif args.fast_mechanism == "settings":
+        # A process-scoped launch setting (e.g. claude --settings
+        # '{"fastMode": ...}') carries the request; whether it can turn on
+        # depends on the selected model's documented fast capability, not
+        # on the platform mechanism existing.
+        fast_block["support"] = "settings"
+        capable_terms = [t.lower() for t in (args.fast_capable or "").split(",") if t]
+        uncapable_terms = [t.lower() for t in (args.fast_uncapable or "").split(",") if t]
+        lowered = (candidate or "").lower()
+        model_capable = (
+            bool(candidate)
+            and any(term in lowered for term in capable_terms)
+            and not any(term in lowered for term in uncapable_terms)
+        )
+        if candidate:
+            fast_block["model_support"] = model_capable
+        if fast_requested == "on":
+            if not candidate:
+                resolved_fast = "unknown"
+                fast_block["detail"] = "no resolved model to apply the fast setting to"
+            elif model_capable:
+                resolved_fast = "on"
+                fast_block["detail"] = "fast-capable model; applied via launch settings"
+            else:
+                resolved_fast = "unsupported"
+                fast_block["detail"] = "selected model does not support fast mode; launch pinned fastMode off"
+        elif fast_requested == "off":
+            resolved_fast = "off"
+        else:
+            resolved_fast = "unknown"
     else:
         fast_block["support"] = "none"
         if fast_requested == "on":
@@ -517,9 +547,11 @@ def main() -> int:
     resolving.add_argument("--fast", choices=("true", "false", "unknown"), default="unknown")
     resolving.add_argument("--tier", choices=("default", "upgrade"), default="default")
     resolving.add_argument(
-        "--fast-mechanism", choices=("none", "config", "model-suffix"), default="none"
+        "--fast-mechanism", choices=("none", "config", "model-suffix", "settings"), default="none"
     )
     resolving.add_argument("--fast-suffixes", default="-fast,-priority")
+    resolving.add_argument("--fast-capable", default="")
+    resolving.add_argument("--fast-uncapable", default="")
     verifying = sub.add_parser("verify")
     verifying.add_argument("--platform", required=True)
     verifying.add_argument("--policy-json", required=True)
