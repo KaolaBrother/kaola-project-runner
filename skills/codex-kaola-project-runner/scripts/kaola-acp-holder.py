@@ -858,9 +858,26 @@ class Follower:
                 pass
 
 
+def parse_init_meta(raw: str) -> dict[str, Any]:
+    """Parse the --init-meta JSON object into clientCapabilities._meta entries.
+
+    Some agents negotiate optional protocol surfaces through _meta (Cursor's
+    parameterizedModelPicker advertises separate model/effort/fast config
+    options instead of fixed variant descriptors).
+    """
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 class Holder:
     def __init__(self, args: argparse.Namespace):
         self.args = args
+        self.init_meta = parse_init_meta(getattr(args, "init_meta", "") or "")
         self.record_dir = Path(args.record_dir)
         self.record_dir.mkdir(parents=True, exist_ok=True)
         self.events = EventLog(self.record_dir / "events.jsonl")
@@ -954,12 +971,15 @@ class Holder:
         except (OSError, ValueError) as exc:
             return {"error": {"code": "acp-spawn-failed", "message": str(exc)}}
         self.write_record()
+        capabilities = {"fs": {"readTextFile": False, "writeTextFile": False},
+                        "terminal": False}
+        if self.init_meta:
+            capabilities["_meta"] = self.init_meta
         request_id = self.agent.send_request(
             "initialize",
             {
                 "protocolVersion": PROTOCOL_VERSION,
-                "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False},
-                                       "terminal": False},
+                "clientCapabilities": capabilities,
             },
         )
         response = self.agent.wait_response(request_id, 15.0)
@@ -2004,10 +2024,14 @@ def run_probe(args: argparse.Namespace) -> int:
         target=lambda: [proc.stderr.read(65536) for _ in iter(int, 1) if not proc.stderr.closed],
         daemon=True,
     ).start()
+    capabilities = {"fs": {"readTextFile": False, "writeTextFile": False},
+                    "terminal": False}
+    init_meta = parse_init_meta(getattr(args, "init_meta", "") or "")
+    if init_meta:
+        capabilities["_meta"] = init_meta
     response = wait(send("initialize", {
         "protocolVersion": PROTOCOL_VERSION,
-        "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False},
-                               "terminal": False},
+        "clientCapabilities": capabilities,
     }), 15.0)
     if response is None:
         result["error"] = {"code": "acp-initialize-timeout"}
@@ -2106,6 +2130,7 @@ def main() -> int:
     parser.add_argument("--command", required=True)
     parser.add_argument("--resume")
     parser.add_argument("--continue", dest="use_continue", action="store_true")
+    parser.add_argument("--init-meta", default="")
     parser.add_argument("--probe", action="store_true")
     args = parser.parse_args()
     if args.probe:

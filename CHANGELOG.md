@@ -18,14 +18,21 @@
   Receipts carry `model_selection`, `requested_tier`/`requested_fast`/`resolved_fast`, and per-option
   `config_application` records; a rejected or unadvertised `set_config_option` is a reported
   limitation, never a session failure or transport gate, and nothing escalates models automatically.
-  Manifests may declare `acp_model_map` (`picker-id=acp-option-value;...`) so resolved PTY picker
-  IDs apply as the ACP option values the agent advertises for the same model — Cursor maps
-  `cursor-grok-4.6-xhigh` onto `grok-4.6[effort=high,fast=true]` (verified live). The `fast`
-  receipt's `effective` now reflects proven native state only: a rejected fast config option or an
-  unapplied fast-variant model ID reports `unknown`, and an applied model value's own descriptor
-  (`[..,fast=true]`) is reported as the effective evidence with any request conflict noted — never
-  a false on/off. ACP `preflight` additionally reports `advertised_config_options` (id, type,
-  current value, and allowed values) from `session/new`.
+  Manifests may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
+  during `initialize`): Cursor negotiates `parameterizedModelPicker=true`, which makes its ACP
+  surface advertise separate `model`/`effort`/`fast` options — base model IDs, effort
+  `low..xhigh`, and fast `"true"`/`"false"` strings — instead of fixed variant descriptors.
+  `acp_model_map` (`picker-id=acp-option-value;...`) then decomposes resolved PTY picker IDs onto
+  the advertised model value for the same model while the ID's effort suffix travels through the
+  effort option and Fast through `acp_fast_values`-converted fast values — Cursor resolves
+  `cursor-grok-4.6-xhigh` to `model=grok-4.6`, `effort=xhigh`, `fast=false` exactly, and
+  `claude-fable-5-1-high` to `claude-fable-5-1`/`high`/`false`. Fast conversion is
+  platform-specific (`acp_fast_values`: Cursor `off=false,on=true`; Codex keeps `off`/`on`). The
+  `fast` receipt's `effective` now reflects proven native state only: a rejected fast config option
+  or an unapplied fast-variant model ID reports `unknown`, and an applied model value's own
+  descriptor (`[..,fast=true]`) is reported as the effective evidence with any request conflict
+  noted — never a false on/off. ACP `preflight` additionally reports `advertised_config_options`
+  (id, type, current value, and allowed values) from `session/new`.
 
 - ACP status/observe now report a recorded, fully exited normal stop as `stopped`,
   preserving `holder-lost` for unexpected loss or remaining process evidence (#32).

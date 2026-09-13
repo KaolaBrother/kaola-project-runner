@@ -746,11 +746,13 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         send = self.cli("send", "--text", "still usable", platform="codex")
         self.assertEqual(send.get("outcome"), "turn_completed")
 
-    def test_cursor_rejected_fast_model_reports_unknown(self) -> None:
+    def test_fast_variant_model_rejected_reports_unknown(self) -> None:
         # A fast-suffix model ID that the agent rejects must not report
-        # fast-on — the fast variant was never applied.
+        # fast-on — the fast variant was never applied (model-id path on a
+        # platform without a native fast config option).
         receipt = self.start(
-            "cursor-cli", "--model", "experimental-7-fast", "--fast", "on",
+            "devin", "--model", "experimental-7-fast", "--fast", "on",
+            "--mode", "agent",
             caps="strict-config",
         )
         application = receipt.get("config_application") or {}
@@ -760,36 +762,125 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(fast.get("effective"), "unknown")
         self.assertEqual(fast.get("applied_via"), "model-id")
 
-    def test_cursor_acp_model_map_applies_descriptor_value(self) -> None:
-        # The PTY picker ID maps onto the ACP option value the agent
-        # advertises for the same model; the value's own descriptor is the
-        # native fast evidence.
-        receipt = self.start("cursor-cli")
-        self.assertIn(
-            ("model", "grok-4.6[effort=high,fast=true]"), self.config_events(),
+    # -- Cursor parameterized picker (client _meta parameterizedModelPicker) --
+
+    def initialize_meta(self) -> dict:
+        for event in self.read_mock_log():
+            if event.get("event") == "initialize":
+                capabilities = (event.get("params") or {}).get("clientCapabilities") or {}
+                return capabilities.get("_meta") or {}
+        return {}
+
+    def test_cursor_sends_parameterized_picker_init_meta(self) -> None:
+        # Cursor unlocks separate model/effort/fast options only when the
+        # client negotiates _meta.parameterizedModelPicker during initialize.
+        self.start("cursor-cli", caps="cursor-params")
+        self.assertEqual(self.initialize_meta(), {"parameterizedModelPicker": True})
+
+    def test_codex_does_not_send_cursor_init_meta(self) -> None:
+        # The capability is Cursor-only: other platforms' initialize must not
+        # carry the parameterizedModelPicker _meta.
+        self.cli("preflight", platform="codex", check=False)
+        self.assertEqual(self.initialize_meta(), {})
+
+    def test_cursor_preflight_reports_parameterized_options(self) -> None:
+        receipt = self.cli("preflight", platform="cursor-cli", check=False,
+                           caps="cursor-params")
+        options = (receipt.get("transport") or {}).get("advertised_config_options") or []
+        ids = {option.get("id") for option in options}
+        self.assertTrue({"model", "effort", "fast"} <= ids, f"options={options}")
+        fast = next((o for o in options if o.get("id") == "fast"), {})
+        self.assertEqual(set(fast.get("values") or []), {"false", "true"})
+
+    def test_cursor_default_exact_order_and_semantics(self) -> None:
+        # Grok 4.6 Extra High Fast Off: the picker ID decomposes onto the
+        # parameterized surface — native model id, then effort, then the
+        # fast STRING "false" — with no semantic substitution.
+        receipt = self.start("cursor-cli", caps="cursor-params,strict-config")
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertEqual(
+            self.config_events(),
+            [
+                ("model", "grok-4.6"),
+                ("effort", "xhigh"),
+                ("fast", "false"),
+            ],
         )
         application = receipt.get("config_application") or {}
         model = application.get("model") or {}
         self.assertTrue(model.get("applied"))
         self.assertEqual(model.get("requested_id"), "cursor-grok-4.6-xhigh")
         self.assertTrue(model.get("mapped"))
-        self.assertEqual((model.get("declared") or {}).get("fast"), "true")
+        self.assertNotIn("[", str(model.get("value")))
+        self.assertTrue((application.get("effort") or {}).get("applied"))
+        self.assertTrue((application.get("fast") or {}).get("applied"))
+        selection = receipt.get("model_selection") or {}
+        self.assertEqual(selection.get("resolved_model"), "cursor-grok-4.6-xhigh")
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("requested"), "off")
-        self.assertEqual(fast.get("effective"), "on")
-        self.assertEqual(fast.get("applied_via"), "model-id")
-        self.assertIsNotNone(fast.get("conflict"))
+        self.assertEqual(fast.get("effective"), "off")
+        self.assertEqual(fast.get("applied_via"), "acp-config")
+        send = self.cli("send", "--text", "verify exact semantics", platform="cursor-cli")
+        self.assertEqual(send.get("outcome"), "turn_completed")
 
-    def test_cursor_upgrade_maps_fable_descriptor_value(self) -> None:
-        receipt = self.start("cursor-cli", "--tier", "upgrade")
-        application = receipt.get("config_application") or {}
-        model = application.get("model") or {}
-        self.assertTrue(model.get("applied"))
-        self.assertEqual(
-            model.get("value"),
-            "claude-fable-5-1[thinking=true,context=300k,effort=high]",
+    def test_cursor_upgrade_tier_maps_fable_base_id(self) -> None:
+        receipt = self.start(
+            "cursor-cli", "--tier", "upgrade", caps="cursor-params,strict-config",
         )
+        self.assertEqual(
+            self.config_events(),
+            [
+                ("model", "claude-fable-5-1"),
+                ("effort", "high"),
+                ("fast", "false"),
+            ],
+        )
+        model = (receipt.get("config_application") or {}).get("model") or {}
+        self.assertTrue(model.get("applied"))
         self.assertEqual(model.get("requested_id"), "claude-fable-5-1-high")
+
+    def test_cursor_explicit_fast_variant_id_decomposes(self) -> None:
+        # A bare explicit fast-variant picker ID carries its semantics in the
+        # ID: base model value, suffix-derived effort, fast on.
+        receipt = self.start(
+            "cursor-cli", "--model", "cursor-grok-4.6-xhigh-fast",
+            caps="cursor-params,strict-config",
+        )
+        self.assertIn(("model", "grok-4.6"), self.config_events())
+        self.assertIn(("effort", "xhigh"), self.config_events())
+        self.assertIn(("fast", "true"), self.config_events())
+        fast = receipt.get("fast") or {}
+        self.assertEqual(fast.get("effective"), "on")
+
+    def test_cursor_fast_on_sends_string_true(self) -> None:
+        # Cursor's fast option takes "true"/"false" strings, never the
+        # on/off vocabulary other agents use.
+        receipt = self.start(
+            "cursor-cli", "--fast", "on", caps="cursor-params,strict-config",
+        )
+        self.assertIn(("fast", "true"), self.config_events())
+        self.assertNotIn(("fast", "on"), self.config_events())
+        self.assertEqual((receipt.get("fast") or {}).get("effective"), "on")
+
+    def test_cursor_manifest_maps_only_base_ids(self) -> None:
+        # Regression for the rejected mapping: acp_model_map may only map
+        # picker IDs onto advertised base model values — never a bracketed
+        # descriptor that smuggles different effort/fast semantics.
+        manifest = (PROJECT / "platforms" / "cursor-cli.yaml").read_text()
+        raw = next(
+            line.split(":", 1)[1].strip()
+            for line in manifest.splitlines()
+            if line.startswith("acp_model_map:")
+        )
+        mapped_values = [
+            pair.split("=", 1)[1]
+            for pair in json.loads(raw).split(";")
+            if "=" in pair
+        ]
+        self.assertTrue(mapped_values)
+        for value in mapped_values:
+            self.assertNotIn("[", value, f"descriptor substitution in map: {value}")
+            self.assertIn(value, {"grok-4.6", "claude-fable-5-1"})
 
 
 class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):

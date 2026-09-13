@@ -621,8 +621,11 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         or manifest.get("binary_name")
         or ""
     )
-    mechanism = {"config": "config", "model-variant": "model-suffix"}.get(
-        manifest.get("fast_support") or "", "none"
+    fast_support = manifest.get("fast_support") or ""
+    mechanism = (
+        "model-suffix" if "model-variant" in fast_support
+        else "config" if "config" in fast_support
+        else "none"
     )
     policy: dict[str, Any] | None = None
     if MODEL_POLICY_HELPER.is_file():
@@ -701,6 +704,51 @@ def parse_acp_model_map(raw: str) -> dict[str, str]:
     return mapping
 
 
+def parse_manifest_meta(raw: str) -> dict[str, Any]:
+    """Parse a manifest ``acp_init_meta`` entry: ``key=value;key=value``.
+
+    Values decode as JSON literals (``true``/``false``/numbers) falling back
+    to strings; the result is sent as ``clientCapabilities._meta`` during
+    ``initialize`` — e.g. Cursor's ``parameterizedModelPicker=true``.
+    """
+    meta: dict[str, Any] = {}
+    for pair in (raw or "").split(";"):
+        key, separator, value = pair.partition("=")
+        if not separator or not key.strip():
+            continue
+        try:
+            meta[key.strip()] = json.loads(value.strip())
+        except json.JSONDecodeError:
+            meta[key.strip()] = value.strip()
+    return meta
+
+
+def parse_manifest_value_map(raw: str) -> dict[str, str]:
+    """Parse ``key=value,key=value`` manifest lists such as ``acp_fast_values``."""
+    mapping: dict[str, str] = {}
+    for pair in (raw or "").split(","):
+        key, separator, value = pair.partition("=")
+        if separator and key.strip() and value.strip():
+            mapping[key.strip()] = value.strip()
+    return mapping
+
+
+def picker_effort_suffix(model_id: str) -> str:
+    """Extract an effort encoded in a picker-style model ID.
+
+    Picker IDs like ``cursor-grok-4.6-xhigh`` or ``...-xhigh-fast`` encode
+    effort in the trailing token; parameterized ACP transports carry that
+    effort through their own effort config option instead.
+    """
+    base = model_id or ""
+    for suffix in FAST_VARIANT_SUFFIXES:
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+            break
+    match = re.search(r"-(low|medium|high|xhigh|max)$", base)
+    return match.group(1) if match else ""
+
+
 def acp_value_params(value: str) -> dict[str, str]:
     """Parse a trailing ``[k=v,...]`` descriptor from an ACP option value.
 
@@ -742,9 +790,15 @@ def fast_report(args: argparse.Namespace, policy: dict[str, Any],
 
 def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt = base_receipt(args, repo)
+    probe_argv = [
+        sys.executable, str(HOLDER), "--probe", "--repo", repo,
+        "--platform", args.platform, "--command", args.agent_command,
+    ]
+    init_meta = parse_manifest_meta(args.manifest.get("acp_init_meta") or "")
+    if init_meta:
+        probe_argv += ["--init-meta", json.dumps(init_meta)]
     result = subprocess.run(
-        [sys.executable, str(HOLDER), "--probe", "--repo", repo,
-         "--platform", args.platform, "--command", args.agent_command],
+        probe_argv,
         capture_output=True, text=True, timeout=60,
     )
     try:
@@ -810,6 +864,9 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         holder_argv += ["--resume", args.resume]
     if args.use_continue:
         holder_argv += ["--continue"]
+    init_meta = parse_manifest_meta(args.manifest.get("acp_init_meta") or "")
+    if init_meta:
+        holder_argv += ["--init-meta", json.dumps(init_meta)]
     with open(log_path, "ab") as log:
         proc = subprocess.Popen(
             holder_argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
@@ -854,19 +911,25 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         merge_policy_evidence(receipt, policy)
         resolved_model = policy.get("resolved_runtime_model_id") or ""
         resolved_effort = (policy.get("resolved_parameters") or {}).get("effort") or ""
-        # ACP option values can differ from PTY picker IDs for the same model
-        # (Cursor advertises bracketed values like grok-4.6[effort=high,...]).
-        # The manifest map selects the same owner-selected model, not another.
-        acp_model_value = parse_acp_model_map(
-            args.manifest.get("acp_model_map") or ""
-        ).get(resolved_model, resolved_model)
+        # ACP option values can differ from PTY picker IDs for the same model.
+        # ``acp_model_map`` decomposes a resolved picker ID onto the ACP model
+        # value for the same model — effort and fast then travel through their
+        # own advertised config options, so semantics are never substituted.
+        acp_model_map = parse_acp_model_map(args.manifest.get("acp_model_map") or "")
+        acp_model_value = acp_model_map.get(resolved_model, resolved_model)
+        # A mapped picker ID carries its effort in the ID suffix; when the
+        # caller supplied no explicit effort the suffix preserves it through
+        # the effort option. A bare unmapped model gets no invented effort.
+        effort_value = resolved_effort or (
+            picker_effort_suffix(resolved_model) if resolved_model in acp_model_map else ""
+        )
         application: dict[str, Any] = {}
         mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
         # Model first, then effort, then Fast — the ACP config order the
         # upstream adapter expects.
         option_pairs = [
             ("model", acp_model_value, "acp_model_config_id"),
-            ("effort", resolved_effort, "acp_effort_config_id"),
+            ("effort", effort_value, "acp_effort_config_id"),
         ]
         for label, value, key in option_pairs:
             if not value:
@@ -904,13 +967,26 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         fast_id = args.manifest.get("acp_fast_config_id") or ""
         if "error" not in receipt:
             if fast_id:
+                # Fast intent follows the resolved selection: an explicit
+                # fast-variant model ID asserts on by identity; otherwise the
+                # --fast flag decides. Values convert per platform
+                # (acp_fast_values: Cursor true/false, Codex on/off).
+                resolved_fast_state = policy.get("resolved_fast")
+                fast_intent = (
+                    resolved_fast_state
+                    if resolved_fast_state in ("on", "off")
+                    else args.fast
+                )
+                fast_value = parse_manifest_value_map(
+                    args.manifest.get("acp_fast_values") or ""
+                ).get(fast_intent, fast_intent)
                 result = socket_request(
                     sock, "set_config_option",
-                    {"config_id": fast_id, "value": args.fast}, 20.0,
+                    {"config_id": fast_id, "value": fast_value}, 20.0,
                 )
                 if result.get("error"):
                     application["fast"] = {"applied": False, "config_id": fast_id,
-                                           "value": args.fast, "error": result["error"]}
+                                           "value": fast_value, "error": result["error"]}
                     # Rejected: native fast state is unproven — report unknown,
                     # never the resolved intent as if it had taken effect.
                     receipt["fast"] = fast_report(
@@ -921,8 +997,11 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 else:
                     configured.append(result)
                     application["fast"] = {"applied": True, "config_id": fast_id,
-                                           "value": args.fast}
-                    receipt["fast"] = fast_report(args, policy, "acp-config", True)
+                                           "value": fast_value}
+                    receipt["fast"] = fast_report(
+                        args, policy, "acp-config", True,
+                        effective="on" if fast_intent == "on" else "off",
+                    )
             else:
                 model_applied = application.get("model", {}).get("applied") is True
                 declared = acp_value_params(acp_model_value) if model_applied else {}

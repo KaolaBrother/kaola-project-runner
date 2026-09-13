@@ -8,7 +8,7 @@
 - Exact resume: `--resume <chat-id>`
 - Runner default preset (`--tier default`): **Grok 4.6 Extra High** — `cursor-grok-4.6-xhigh` with `effort=xhigh (encoded in model ID), fast=false`
 - Runner upgrade preset (`--tier upgrade`): **Claude Fable 5.1 High** — `claude-fable-5-1-high` with `effort=high (encoded in model ID)`
-- Fast support: Fast via native `-fast` model variants (e.g. cursor-grok-4.6-xhigh-fast); models without an advertised fast variant, including Fable, report Fast unsupported rather than inventing one
+- Fast support: Fast via native `-fast` PTY picker variants (e.g. cursor-grok-4.6-xhigh-fast); over ACP the parameterized `fast` option (true/false strings) applies to any model; unsupported PTY variants reported rather than invented
 
 ## Preflight
 

@@ -1,6 +1,6 @@
 # Cursor CLI ACP transport
 
-Command: `cursor-agent --yolo acp`. Login requires a PTY: `false`. Platform quirks: agentInfo is empty; effort is encoded in model values; ACP model option values are bracketed descriptors (grok-4.6[effort=high,fast=true]) mapped from PTY picker IDs via acp_model_map.
+Command: `cursor-agent --yolo acp`. Login requires a PTY: `false`. Platform quirks: agentInfo is empty; initialize with _meta.parameterizedModelPicker=true so ACP advertises separate model/effort/fast options (base model IDs, effort low..xhigh, fast true/false strings); picker IDs decompose via acp_model_map + effort suffix + fast option.
 
 ## Command surface
 
@@ -18,10 +18,16 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 
 `start` resolves the same tier/model/effort/Fast selection as PTY and applies it through the
 agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
-`model`/``/`` when non-empty.
-When a manifest declares `acp_model_map`, a resolved PTY picker ID is sent as the ACP option value
-the agent advertises for the same model (recorded as `requested_id`/`mapped`/`declared` in the
-model application). `config_application` records each attempted option's requested value and
+`model`/`effort`/`fast` when non-empty.
+A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
+during `initialize`): agents that negotiate a parameterized model picker advertise separate
+`model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead
+of fixed variant descriptors. When a manifest declares `acp_model_map`, a resolved PTY picker ID decomposes onto
+the ACP model value the agent advertises for the same model — effort encoded in the picker ID
+suffix then travels through the effort option and Fast through the fast option (values converted
+per `acp_fast_values`), recorded as `requested_id`/`mapped`/`declared` in the model application.
+Model semantics are never substituted: an unmapped ID is sent literally and its rejection is
+reported as a limitation. `config_application` records each attempted option's requested value and
 applied result; `configured_options` carries the adapter's returned receipts. An option with no
 advertised config ID, or one the adapter rejects, is reported as a limitation — the session stays
 usable. The `fast` receipt's `effective` reflects proven native state only: a rejected fast option

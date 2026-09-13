@@ -11,7 +11,7 @@ retries, or completion policy.
 
 ## Transport facts
 
-Default transport: **acp**. The ACP command is `cursor-agent --yolo acp`; its known quirks are `agentInfo is empty; effort is encoded in model values; ACP model option values are bracketed descriptors (grok-4.6[effort=high,fast=true]) mapped from PTY picker IDs via acp_model_map`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **acp**. The ACP command is `cursor-agent --yolo acp`; its known quirks are `agentInfo is empty; initialize with _meta.parameterizedModelPicker=true so ACP advertises separate model/effort/fast options (base model IDs, effort low..xhigh, fast true/false strings); picker IDs decompose via acp_model_map + effort suffix + fast option`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 
@@ -57,7 +57,7 @@ already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the R
 invent extra effort or Fast configuration for it.
 
 Fast is OFF by default. Pass `--fast on` only on an explicit user request for Fast; this platform's
-Fast support: Fast via native `-fast` model variants (e.g. cursor-grok-4.6-xhigh-fast); models without an advertised fast variant, including Fable, report Fast unsupported rather than inventing one. Fast and tier are independent selections. When a native fast model
+Fast support: Fast via native `-fast` PTY picker variants (e.g. cursor-grok-4.6-xhigh-fast); over ACP the parameterized `fast` option (true/false strings) applies to any model; unsupported PTY variants reported rather than invented. Fast and tier are independent selections. When a native fast model
 ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
 conflict honestly if it is also passed with `--fast off`.
 
