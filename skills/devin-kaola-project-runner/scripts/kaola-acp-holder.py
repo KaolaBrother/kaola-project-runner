@@ -874,6 +874,7 @@ class Holder:
         self.stop_requested = False
         self.acp_session_id: str | None = None
         self.session_meta: dict[str, Any] = {}
+        self.initial_config_options: Any = None
         self.protocol_version: int | None = None
         self.agent_info: dict[str, Any] = {}
         self.capabilities: dict[str, Any] = {}
@@ -926,6 +927,7 @@ class Holder:
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
             "acp_session_id": self.acp_session_id,
             "session_meta": self.session_meta,
+            "initial_config_options": self.initial_config_options,
             "protocol_version": self.protocol_version,
             "agent_info": self.agent_info,
             "capabilities": self.capabilities,
@@ -945,6 +947,22 @@ class Holder:
             tmp.replace(self.record_path)
 
     # -- ACP lifecycle ----------------------------------------------------------
+
+    def _apply_config_options(self, options: Any, source: str) -> bool:
+        """Mirror a native ``configOptions`` payload into ``session_meta``.
+
+        Only a well-formed list is usable native evidence; anything else leaves
+        the previously attested state untouched so no value is fabricated.
+        """
+        if not isinstance(options, list):
+            return False
+        self.session_meta["configOptions"] = options
+        self.events.append({
+            "kind": "config_options_applied",
+            "source": source,
+            "option_count": len(options),
+        })
+        return True
 
     def initialize_agent(self, resume: str | None = None, use_continue: bool = False,
                          list_supported: bool = False) -> dict[str, Any]:
@@ -994,6 +1012,7 @@ class Holder:
             if response is None or "error" in response:
                 return {"error": {"code": "resume-failed", "message": json.dumps(response)}}
             self.session_meta = response.get("result") or {}
+            self.initial_config_options = self.session_meta.get("configOptions")
             self.acp_session_id = self.session_meta.get("sessionId", resume)
         elif use_continue:
             if not capability_supported(session_caps, "list"):
@@ -1034,6 +1053,7 @@ class Holder:
                     return {"error": {"code": "login-required", "message": error.get("message")}}
                 return {"error": {"code": "acp-session-failed", "message": error}}
             self.session_meta = response.get("result") or {}
+            self.initial_config_options = self.session_meta.get("configOptions")
             self.acp_session_id = self.session_meta.get("sessionId")
         self.state = "ready"
         self.write_record()
@@ -1078,6 +1098,7 @@ class Holder:
         if response is None or "error" in response:
             return {"error": {"code": "resume-failed", "message": json.dumps(response)}}
         self.session_meta = response.get("result") or {}
+        self.initial_config_options = self.session_meta.get("configOptions")
         self.acp_session_id = self.session_meta.get("sessionId", session_id)
         self.state = "ready"
         self.write_record()
@@ -1174,6 +1195,10 @@ class Holder:
                 turn["tool_order"].append(tool_id)
         elif variant == "usage_update":
             turn["context_usage"] = {"used": update.get("used"), "size": update.get("size")}
+        elif variant == "config_option_update":
+            if params.get("sessionId") in (None, self.acp_session_id):
+                self._apply_config_options(
+                    update.get("configOptions"), "config_option_update")
         elif variant not in KNOWN_UPDATES:
             self.agent.unknown_updates += 1
         self.projection.apply(update, self.events.cursor + 1)
@@ -1263,6 +1288,7 @@ class Holder:
             "agent_exit_code": self.agent.exit_code,
             "acp_session_id": self.acp_session_id,
             "session_meta": self.session_meta,
+            "initial_config_options": self.initial_config_options,
             "protocol_version": self.protocol_version,
             "agent_info": self.agent_info,
             "capabilities": self.capabilities,
@@ -1764,12 +1790,16 @@ class Holder:
             return {"error": {"code": "config-option-failed", "config_id": option_id, "detail": response["error"]}}
         evidence = {"config_id": option_id, "value": params["value"], "configured": True}
         result = response.get("result") or {}
+        if self._apply_config_options(result.get("configOptions"), "set_config_option"):
+            self.write_record()
         for option in result.get("configOptions") or []:
             if isinstance(option, dict) and option.get("id") == option_id:
                 if option.get("name") is not None:
                     evidence["option_name"] = option["name"]
                 if option.get("description") is not None:
                     evidence["option_description"] = option["description"]
+                if option.get("currentValue") is not None:
+                    evidence["current_value"] = option["currentValue"]
                 for choice in option.get("options") or []:
                     if isinstance(choice, dict) and choice.get("value") == params["value"]:
                         if choice.get("name") is not None:

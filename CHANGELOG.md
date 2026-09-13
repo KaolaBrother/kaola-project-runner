@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- ACP `observe`/`status` `session_meta.configOptions` now reports the current native
+  configuration instead of the initialization snapshot: successful
+  `session/set_config_option` results and `config_option_update` notifications merge the
+  native-returned option list, `configured_options[*].current_value` attests the adapter's
+  reported `currentValue`, and the session-establishment baseline stays visible as
+  `initial_config_options`. Failed, timed-out, or fact-free responses never fabricate
+  current configuration (#33).
+
 - ACP status/observe now report a recorded, fully exited normal stop as `stopped`,
   preserving `holder-lost` for unexpected loss or remaining process evidence (#32).
 

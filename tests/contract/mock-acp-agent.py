@@ -104,6 +104,7 @@ class MockAgent:
         self.active_turn: tuple[Any, str] | None = None
         self.child_proc: subprocess.Popen | None = None
         self.configured: dict[str, Any] = {}
+        self.config_fixture = self._load_config_fixture()
         self.list_pages = self._load_list_pages()
         if self.list_pages:
             for page in self.list_pages:
@@ -113,6 +114,27 @@ class MockAgent:
                             entry["sessionId"], {"cwd": entry.get("cwd", "")}
                         )
         log_event({"event": "mock_start", "scenario": scenario, "caps": sorted(caps)})
+
+    @staticmethod
+    def _load_config_fixture() -> dict[str, Any]:
+        """Issue #33 fixture. ``MOCK_ACP_CONFIG`` JSON object keys:
+
+        - ``new``/``resume``: configOptions list embedded in session/new and
+          session/resume|load results
+        - ``set_result``: full result object for session/set_config_option
+        - ``set_error``: error object returned instead of a result
+        - ``set_drop``: truthy -> never respond (client timeout path)
+        - ``set_notify``: configOptions list emitted as a config_option_update
+          shortly after a successful set response
+        """
+        raw = os.environ.get("MOCK_ACP_CONFIG", "")
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return {}
+        return data if isinstance(data, dict) else {}
 
     @staticmethod
     def _load_list_pages() -> list[dict[str, Any]] | None:
@@ -244,7 +266,10 @@ class MockAgent:
         session_id = f"mock-session-{self.session_counter}"
         self.sessions[session_id] = {"cwd": params.get("cwd", "")}
         log_event({"event": "session_new", "sessionId": session_id})
-        respond(request_id, {"sessionId": session_id})
+        result: dict[str, Any] = {"sessionId": session_id}
+        if "new" in self.config_fixture:
+            result["configOptions"] = self.config_fixture["new"]
+        respond(request_id, result)
 
     def on_session_list(self, request_id: Any, params: dict[str, Any]) -> None:
         if "list" not in self.caps:
@@ -296,7 +321,10 @@ class MockAgent:
         if session_id not in self.sessions:
             respond(request_id, error={"code": -32002, "message": "unknown sessionId"})
             return
-        respond(request_id, {"sessionId": session_id})
+        result: dict[str, Any] = {"sessionId": session_id}
+        if "resume" in self.config_fixture:
+            result["configOptions"] = self.config_fixture["resume"]
+        respond(request_id, result)
 
     def on_session_close(self, request_id: Any, params: dict[str, Any]) -> None:
         if "close" not in self.caps:
@@ -338,7 +366,27 @@ class MockAgent:
         if config_id is not None:
             self.configured[str(config_id)] = params.get("value")
         log_event({"event": "set_config_option", "params": params})
-        respond(request_id, {"configOptions": self.CONFIG_OPTIONS})
+        fixture = self.config_fixture
+        if fixture.get("set_drop"):
+            return  # no response: client-side timeout path
+        error = fixture.get("set_error")
+        if error is not None:
+            respond(request_id, error=error)
+            return
+        result = fixture.get("set_result")
+        if not isinstance(result, dict):
+            result = {"configOptions": self.CONFIG_OPTIONS}
+        respond(request_id, result)
+        notify_options = fixture.get("set_notify")
+        if isinstance(notify_options, list):
+            time.sleep(0.4)
+            session_update(
+                params.get("sessionId", ""),
+                {
+                    "sessionUpdate": "config_option_update",
+                    "configOptions": notify_options,
+                },
+            )
 
     # -- prompt turn scenarios -----------------------------------------------
 
