@@ -8,7 +8,7 @@
 | Issue | 文件 | 可独立验收的结果 |
 |---|---|---|
 | [#25](https://github.com/KaolaBrother/kaola-project-runner/issues/25) | [permit-lock.md](permit-lock.md) | 同一 `request_id` 至多一次 JSON-RPC 应答 |
-| [#26](https://github.com/KaolaBrother/kaola-project-runner/issues/26) | [list-view.md](list-view.md) | 冻结 `kaola-acp-view/1`；`list` / `view`；cursor 重载；`~/.local/bin` 安装 |
+| [#26](https://github.com/KaolaBrother/kaola-project-runner/issues/26) | [list-view.md](list-view.md) | 主机级无参数 `list`（`kaola-acp-list/1`）；类型化 `kaola-acp-view/1` + 样例 fixture；cursor 重载；`~/.local/bin` 安装 |
 | [#27](https://github.com/KaolaBrother/kaola-project-runner/issues/27) | [follow.md](follow.md) | 本机 `follow` NDJSON；follow FD 只读 |
 
 消费方：Kaola Terminal [docs/acp-watch](https://github.com/KaolaBrother/KaolaTerminal/blob/main/docs/acp-watch/README.md)（#254 / #255 / #256）。Terminal **不得**在 #26 的 stdout schema 冻结前开工 UI。
