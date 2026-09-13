@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- All Skills now carry the same end-of-delegation and resume guidance (issue #30): a finished
+  reply (`end_turn`, idle frame, successful receipt) is never task completion; when delegated
+  work is delivered the Agent is recommended — never forced — to `stop` exactly-owned runtime
+  resources (PTY child/relay/tmux; ACP `session/close` plus holder/agent exit), while keeping
+  already-available resume facts such as the native session ID. `stop` never deletes history;
+  missing identifiers never block it; resume stays the Agent's choice among
+  `--resume <native-id>`, `--continue`, or a fresh session with existing records. Guidance is
+  prompt-level only — no automatic shutdown, watchdog, completion classifier, or mandatory
+  checkpoint was added, and platform resume claims stay limited to each platform's verified
+  capability.
+
 - Codex CLI is the seventh platform (issue #28). Default transport is ACP over the pinned
   `npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0
   codex-acp` adapter; `--transport pty` runs `codex --cd <repo> --no-alt-screen`. Runner default

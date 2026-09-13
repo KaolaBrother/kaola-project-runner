@@ -135,6 +135,15 @@ stop reports `result: stopped`, `action: force-stop`, and terminal `final_state`
 session that the current transport cannot mechanically reach, and it is not emitted until the original
 child/group and every exact fingerprint-tracked escaped descendant are absent.
 
+Stop releases only the exactly-owned runtime: the PTY child/relay/tmux session, or — on ACP — a
+`session/close` when the adapter advertises that capability followed by holder/agent exit, with
+residual processes reported. Stopping never deletes CLI history, session records, or work artifacts,
+and no completion signal (`end_turn`, idle frame, successful receipt) triggers or gates it. Resume is
+a separate Agent choice: `--resume <native-session-id>` (ACP `session/resume`/`session/load` per
+advertised capability, or the platform's PTY flag) or `--continue` for the platform's latest
+conversation; a missing identifier never blocks `stop`, and unsupported resume never blocks a fresh
+`start`. The Runner performs no automatic shutdown, fallback, re-prompt, or Workflow continuation.
+
 ## Adapter interface
 
 Each adapter declares identity, display name, executable, environment override, recurring support,

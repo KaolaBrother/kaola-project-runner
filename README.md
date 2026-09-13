@@ -147,6 +147,15 @@ snapshot 与已有 later-output barrier 都是关联证据，不是后续动作 
 仍可读取；发送时会精确报告 `relay-upgrade-required`，由 agent 在安全边界决定是否只重启该精确
 会话，Runner 不会自动迁移或终止它。
 
+收尾与恢复遵循同一原则：单轮回复结束（`end_turn`、终端空闲、send 成功回执）不代表任务完成；
+本次委派交付完成且预计不再立即交互时，默认建议 `stop` 精确拥有的运行资源——PTY 释放
+child/relay/tmux，ACP 按能力 `session/close` 后退出 holder/agent——并以 `status` 的实际结果为证。
+`stop` 不删除 CLI 历史或工作记录；预计立即继续或用户明确要求持续运行时可以保留。原生会话 ID
+是 CLI 自己的会话标识，区别于 Runner 的 tmux 会话名；缺失标识不阻止 stop。后续恢复由 Agent
+选择：`--resume <native-id>` 优先（ACP 按能力 `session/resume`/`session/load`，PTY 走平台原生
+flag），`--continue` 选平台最近会话，能力不支持时新建会话并读取既有工作记录。Runner 不自动
+fallback、不重发旧 prompt、不自动继续 Workflow，也不把缺少记录当作拒绝 stop/send 的理由。
+
 `scripts/grok-tmux.sh` 是 frozen Grok surface 的兼容包装器，等价于
 `scripts/kaola-tmux.sh grok ...`，并保留旧 marker 与 `grok_tui` 状态字段。
 
