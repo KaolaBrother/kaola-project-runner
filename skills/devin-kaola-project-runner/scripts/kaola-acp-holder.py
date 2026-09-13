@@ -28,6 +28,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -97,21 +98,58 @@ def capability_supported(container: dict, key: str) -> bool:
     return value is not None and value is not False
 
 
-def latest_session(sessions: list[dict]) -> tuple[dict | None, list[dict]]:
-    """Pick the eligible session with the newest ``updatedAt``.
+def rfc3339_instant(value: Any) -> float | None:
+    """Parse an RFC3339 timestamp into a POSIX instant.
 
-    Returns ``(entry, [])`` on a unique winner, ``(None, candidates)`` when the
-    latest identity cannot be determined (no timestamps, or a tie).
+    Returns ``None`` when the value is absent, malformed, or carries no
+    numeric offset — a naive timestamp is not an orderable instant.
     """
-    dated = []
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text[-1] in ("Z", "z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.timestamp()
+
+
+def latest_session(sessions: list[dict]) -> tuple[dict | None, list[dict]]:
+    """Pick the eligible session with the newest ``updatedAt`` instant.
+
+    Identical ``sessionId`` entries observed across pages collapse to one
+    identity before selection; a repeated identity never creates ambiguity.
+    A distinct eligible candidate with a missing or invalid ``updatedAt``
+    makes the latest identity unknowable. Returns ``(entry, [])`` on a
+    unique winner, ``(None, candidates)`` when indeterminate.
+    """
+    by_id: dict[str, dict] = {}
     for entry in sessions:
-        updated = entry.get("updatedAt")
-        if isinstance(updated, str) and updated:
-            dated.append((updated, entry))
-    if not dated:
-        return None, sessions
-    best_stamp = max(stamp for stamp, _entry in dated)
-    tied = [entry for stamp, entry in dated if stamp == best_stamp]
+        if not isinstance(entry, dict):
+            continue
+        session_id = entry.get("sessionId")
+        if not session_id:
+            continue
+        previous = by_id.get(session_id)
+        if previous is None:
+            by_id[session_id] = entry
+            continue
+        new_instant = rfc3339_instant(entry.get("updatedAt"))
+        old_instant = rfc3339_instant(previous.get("updatedAt"))
+        if new_instant is not None and (old_instant is None or new_instant > old_instant):
+            by_id[session_id] = entry
+    candidates = list(by_id.values())
+    if not candidates:
+        return None, []
+    dated = [(rfc3339_instant(entry.get("updatedAt")), entry) for entry in candidates]
+    if any(instant is None for instant, _entry in dated):
+        return None, candidates
+    best = max(instant for instant, _entry in dated)
+    tied = [entry for instant, entry in dated if instant == best]
     if len(tied) != 1:
         return None, tied
     return tied[0], []
@@ -1462,7 +1500,9 @@ class Holder:
             {"jsonrpc": "2.0", "method": "session/cancel",
              "params": {"sessionId": self.acp_session_id}}
         )
-        timeout = params.get("timeout", CANCEL_GRACE)
+        timeout = params.get("timeout")
+        if timeout is None:
+            timeout = CANCEL_GRACE
         deadline = time.monotonic() + timeout
         with self.turn_cond:
             while self.turn["active"]:
@@ -1722,7 +1762,22 @@ class Holder:
             return {"error": {"code": "config-option-timeout", "config_id": option_id}}
         if "error" in response:
             return {"error": {"code": "config-option-failed", "config_id": option_id, "detail": response["error"]}}
-        return {"config_id": option_id, "value": params["value"], "configured": True}
+        evidence = {"config_id": option_id, "value": params["value"], "configured": True}
+        result = response.get("result") or {}
+        for option in result.get("configOptions") or []:
+            if isinstance(option, dict) and option.get("id") == option_id:
+                if option.get("name") is not None:
+                    evidence["option_name"] = option["name"]
+                if option.get("description") is not None:
+                    evidence["option_description"] = option["description"]
+                for choice in option.get("options") or []:
+                    if isinstance(choice, dict) and choice.get("value") == params["value"]:
+                        if choice.get("name") is not None:
+                            evidence["value_name"] = choice["name"]
+                        if choice.get("description") is not None:
+                            evidence["value_description"] = choice["description"]
+                break
+        return evidence
 
     # -- socket server ------------------------------------------------------------
 

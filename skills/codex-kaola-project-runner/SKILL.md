@@ -11,7 +11,7 @@ retries, or completion policy.
 
 ## Transport facts
 
-Default transport: **acp**. The ACP command is `npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0 codex-acp`; its known quirks are `adapter translates ACP stdio to Codex App Server; CODEX_PATH selects the Codex binary, otherwise its bundled @openai/codex pin; session capabilities advertise empty objects`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **acp**. The ACP command is `npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0 codex-acp`; its known quirks are `adapter translates ACP stdio to Codex App Server; CODEX_PATH selects the Codex binary, otherwise its bundled @openai/codex pin; session capabilities advertise empty objects; native ACP mode read-only is upstream 'Ask for approval' (workspace-write + on-request, permits workspace writes) and agent is 'Approve for me' (auto_review) — strict OS read-only exists only via --transport pty`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 

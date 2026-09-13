@@ -116,6 +116,13 @@ Runner default；不会把 CLI 保存的 picker/config 冒充默认值。模型�
 pinned `npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0 codex-acp`，
 `--transport pty` 使用 `codex --cd <repo> --no-alt-screen`；两种通道默认权限模式都是
 `agent-full-access`（PTY 映射为 `--sandbox danger-full-access --ask-for-approval never`）。
+Codex 的 `--permission-mode` 取值在两条通道上是同一组字面 ID，但语义不同：ACP 通道把 ID
+原样传给上游 adapter 的 `mode` 选项——`read-only` 是上游显示名 “Ask for approval”
+（workspace-write 沙箱 + on-request 审批，**允许写入工作区文件**），`agent` 是 “Approve for
+me”（auto_review），`agent-full-access` 是 “Full access”；PTY 通道映射为严格的
+`--sandbox read-only|workspace-write|danger-full-access` + `--ask-for-approval on-request|never`。
+需要 OS 级只读沙箱时用 `--transport pty --permission-mode read-only`；ACP `read-only`
+不承诺等价强制的。
 `permit` 仍可用于仍然发出权限请求的会话；同一 `request_id` 至多一次 JSON-RPC 应答，第二位结算者是 `unknown-request`。工作区
 trust/login 不是这个开关。
 CR、ESC、DEL 与其他终端 C0/C1 控制字会在任何子 PTY 写入前被拒绝；LF/TAB 只有在 CLI 已明确

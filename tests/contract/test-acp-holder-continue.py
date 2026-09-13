@@ -95,6 +95,82 @@ class LatestSessionTests(unittest.TestCase):
         self.assertIsNone(latest)
         self.assertEqual(len(candidates), 2)
 
+    def test_offsets_compare_instants_not_strings(self) -> None:
+        # "2026-09-13T10:00:00+08:00" sorts after "2026-09-13T03:00:00Z"
+        # lexically but is the older instant (02:00Z < 03:00Z).
+        sessions = [
+            {"sessionId": "plus-eight", "updatedAt": "2026-09-13T10:00:00+08:00"},
+            {"sessionId": "utc", "updatedAt": "2026-09-13T03:00:00Z"},
+        ]
+        latest, _ = holder.latest_session(sessions)
+        self.assertIsNotNone(latest)
+        self.assertEqual(latest["sessionId"], "utc")
+
+    def test_fractional_offsets_compare_instants(self) -> None:
+        sessions = [
+            {"sessionId": "a", "updatedAt": "2026-09-13T10:00:00.500+08:00"},
+            {"sessionId": "b", "updatedAt": "2026-09-13T02:00:00.600Z"},
+        ]
+        latest, _ = holder.latest_session(sessions)
+        self.assertEqual(latest["sessionId"], "b")
+
+    def test_missing_timestamp_is_indeterminate(self) -> None:
+        sessions = [
+            {"sessionId": "dated", "updatedAt": "2026-08-30T15:41:06.316Z"},
+            {"sessionId": "undated"},
+        ]
+        latest, candidates = holder.latest_session(sessions)
+        self.assertIsNone(latest)
+        self.assertEqual(
+            sorted(e["sessionId"] for e in candidates), ["dated", "undated"])
+
+    def test_invalid_timestamp_is_indeterminate(self) -> None:
+        sessions = [
+            {"sessionId": "dated", "updatedAt": "2026-08-30T15:41:06.316Z"},
+            {"sessionId": "garbage", "updatedAt": "not-a-timestamp"},
+        ]
+        latest, candidates = holder.latest_session(sessions)
+        self.assertIsNone(latest)
+        self.assertEqual(len(candidates), 2)
+
+    def test_naive_timestamp_is_not_an_instant(self) -> None:
+        self.assertIsNone(holder.rfc3339_instant("2026-09-13T03:00:00"))
+        sessions = [
+            {"sessionId": "dated", "updatedAt": "2026-08-30T15:41:06.316Z"},
+            {"sessionId": "naive", "updatedAt": "2026-09-13T03:00:00"},
+        ]
+        latest, _ = holder.latest_session(sessions)
+        self.assertIsNone(latest)
+
+    def test_duplicate_identity_never_creates_ambiguity(self) -> None:
+        sessions = [
+            {"sessionId": "same", "updatedAt": "2026-08-30T15:41:06.316Z"},
+            {"sessionId": "same", "updatedAt": "2026-09-01T00:00:00.000Z"},
+        ]
+        latest, candidates = holder.latest_session(sessions)
+        self.assertIsNotNone(latest)
+        self.assertEqual(latest["sessionId"], "same")
+        self.assertEqual(latest["updatedAt"], "2026-09-01T00:00:00.000Z")
+        self.assertEqual(candidates, [])
+
+    def test_duplicate_identity_with_missing_timestamp_still_resolves(self) -> None:
+        sessions = [
+            {"sessionId": "same", "updatedAt": "2026-09-01T00:00:00.000Z"},
+            {"sessionId": "same"},
+        ]
+        latest, _ = holder.latest_session(sessions)
+        self.assertIsNotNone(latest)
+        self.assertEqual(latest["sessionId"], "same")
+
+    def test_distinct_ids_at_equal_instant_stay_ambiguous(self) -> None:
+        sessions = [
+            {"sessionId": "a", "updatedAt": "2026-09-13T03:00:00Z"},
+            {"sessionId": "b", "updatedAt": "2026-09-13T11:00:00+08:00"},
+        ]
+        latest, candidates = holder.latest_session(sessions)
+        self.assertIsNone(latest)
+        self.assertEqual(len(candidates), 2)
+
 
 class CodexContinueIntegrationTests(unittest.TestCase):
     """Drive ``kaola-acp.py codex`` against the mock agent with object caps."""
@@ -213,6 +289,20 @@ class CodexContinueIntegrationTests(unittest.TestCase):
         self.assertIsNone(stop.get("error"), f"stop failed: {stop}")
         self.assertIn("session/close", self.inbound_methods())
 
+    def test_configured_options_surface_upstream_display_names(self) -> None:
+        receipt = self.start("--mode", "read-only")
+        options = {
+            entry.get("config_id"): entry
+            for entry in receipt.get("configured_options") or []
+        }
+        mode = options.get("mode") or {}
+        self.assertEqual(mode.get("value"), "read-only")
+        self.assertEqual(mode.get("value_name"), "Ask for approval")
+        self.assertEqual(
+            mode.get("value_description"),
+            "Always ask to edit external files and use the internet")
+        self.assertEqual(mode.get("option_name"), "Mode")
+
     # -- paginated continue -----------------------------------------------------
 
     def test_continue_follows_next_cursor_and_picks_newest(self) -> None:
@@ -271,6 +361,47 @@ class CodexContinueIntegrationTests(unittest.TestCase):
     def test_continue_no_sessions_reports_empty(self) -> None:
         receipt = self.start("--continue", pages=[{"sessions": []}], check=False)
         self.assertEqual((receipt.get("error") or {}).get("code"), "continue-empty", receipt)
+
+    def test_continue_compares_offsets_as_instants(self) -> None:
+        pages = [{"sessions": [
+            {"sessionId": "s-plus-eight", "updatedAt": "2026-09-13T10:00:00+08:00",
+             "cwd": str(self.repo)},
+            {"sessionId": "s-utc-newer", "updatedAt": "2026-09-13T03:00:00Z",
+             "cwd": str(self.repo)},
+        ]}]
+        receipt = self.start("--continue", pages=pages)
+        self.assertIsNone(receipt.get("error"), f"continue failed: {receipt}")
+        self.assertEqual(receipt.get("acp_session_id"), "s-utc-newer")
+
+    def test_continue_duplicate_identity_across_pages_resumes(self) -> None:
+        pages = [
+            {"sessions": [
+                {"sessionId": "s-dup", "updatedAt": "2026-08-30T15:41:06.316Z",
+                 "cwd": str(self.repo)},
+            ], "nextCursor": "page-2"},
+            {"sessions": [
+                {"sessionId": "s-dup", "updatedAt": "2026-09-01T00:00:00.000Z",
+                 "cwd": str(self.repo)},
+            ]},
+        ]
+        receipt = self.start("--continue", pages=pages)
+        self.assertIsNone(receipt.get("error"), f"continue failed: {receipt}")
+        self.assertEqual(receipt.get("acp_session_id"), "s-dup")
+        self.assertIn("session/resume", self.inbound_methods())
+
+    def test_continue_missing_updated_at_reports_ambiguity(self) -> None:
+        pages = [{"sessions": [
+            {"sessionId": "s-dated", "updatedAt": "2026-08-30T15:41:06.316Z",
+             "cwd": str(self.repo)},
+            {"sessionId": "s-undated", "cwd": str(self.repo)},
+        ]}]
+        receipt = self.start("--continue", pages=pages, check=False)
+        error = receipt.get("error") or {}
+        self.assertEqual(error.get("code"), "continue-ambiguous", receipt)
+        candidate_ids = sorted(
+            entry.get("sessionId") for entry in error.get("candidates") or []
+        )
+        self.assertEqual(candidate_ids, ["s-dated", "s-undated"])
 
 
 if __name__ == "__main__":

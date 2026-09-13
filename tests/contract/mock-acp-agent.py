@@ -305,12 +305,40 @@ class MockAgent:
         self.sessions.pop(params.get("sessionId", ""), None)
         respond(request_id, {})
 
+    # Mirrors the codex-acp adapter's session/set_config_option result: the
+    # full configOptions list with upstream display names and descriptions.
+    CONFIG_OPTIONS = [
+        {"id": "mode", "name": "Mode",
+         "description": "Approval and sandboxing preset for the session",
+         "category": "mode", "type": "select", "options": [
+             {"value": "read-only", "name": "Ask for approval",
+              "description": "Always ask to edit external files and use the internet"},
+             {"value": "agent", "name": "Approve for me",
+              "description": "Only ask for actions detected as potentially unsafe"},
+             {"value": "agent-full-access", "name": "Full access",
+              "description": "Unrestricted access to the internet and any file on your computer"},
+         ]},
+        {"id": "model", "name": "Model",
+         "description": "Model Codex uses for the session",
+         "category": "model", "type": "select", "options": [
+             {"value": "gpt-5.6-luna", "name": "5.6 Luna",
+              "description": "Fast and affordable agentic coding model."},
+         ]},
+        {"id": "reasoning_effort", "name": "Reasoning effort",
+         "description": "Reasoning effort Codex uses for the session",
+         "category": "reasoning_effort", "type": "select", "options": [
+             {"value": "low", "name": "Low"},
+             {"value": "medium", "name": "Medium"},
+             {"value": "high", "name": "High"},
+         ]},
+    ]
+
     def on_set_config(self, request_id: Any, params: dict[str, Any]) -> None:
         config_id = params.get("configId") or params.get("config_id")
         if config_id is not None:
             self.configured[str(config_id)] = params.get("value")
         log_event({"event": "set_config_option", "params": params})
-        respond(request_id, {})
+        respond(request_id, {"configOptions": self.CONFIG_OPTIONS})
 
     # -- prompt turn scenarios -----------------------------------------------
 
