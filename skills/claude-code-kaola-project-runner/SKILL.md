@@ -57,7 +57,7 @@ already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the R
 invent extra effort or Fast configuration for it.
 
 Fast is OFF by default. Pass `--fast on` only on an explicit user request for Fast; this platform's
-Fast support: Fast via process-scoped `--settings '{"fastMode": ...}'` at launch (Opus-only per Claude Code docs): `--fast on` applies fastMode=true on fast-capable models, `--fast off` pins fastMode=false for the session; unsupported models keep their selection and report unsupported. Fast and tier are independent selections. When a native fast model
+Fast support: Fast via process-scoped `--settings '{"fastMode": ...}'` at launch: `--fast on` passes fastMode=true, `--fast off` pins fastMode=false for the session; the native CLI determines model support — effective stays unknown without native evidence and the selected model is never changed. Fast and tier are independent selections. When a native fast model
 ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
 conflict honestly if it is also passed with `--fast off`.
 

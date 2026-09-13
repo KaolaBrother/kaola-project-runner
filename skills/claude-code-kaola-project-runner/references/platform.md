@@ -8,7 +8,7 @@
 - Exact resume: `--resume <session-id>`
 - Runner default preset (`--tier default`): **Opus High** — `opus` with `effort=high`
 - Runner upgrade preset (`--tier upgrade`): **Fable High** — `fable` with `effort=high`
-- Fast support: Fast via process-scoped `--settings '{"fastMode": ...}'` at launch (Opus-only per Claude Code docs): `--fast on` applies fastMode=true on fast-capable models, `--fast off` pins fastMode=false for the session; unsupported models keep their selection and report unsupported
+- Fast support: Fast via process-scoped `--settings '{"fastMode": ...}'` at launch: `--fast on` passes fastMode=true, `--fast off` pins fastMode=false for the session; the native CLI determines model support — effective stays unknown without native evidence and the selected model is never changed
 
 ## Preflight
 

@@ -16,8 +16,6 @@ ADAPTER_UPGRADE_MODEL_NAME="Fable High"
 ADAPTER_UPGRADE_MODEL_ID="fable"
 ADAPTER_UPGRADE_MODEL_EFFORT="high"
 ADAPTER_FAST_MECHANISM="settings"
-ADAPTER_FAST_CAPABLE_MODELS="opus"
-ADAPTER_FAST_UNCAPABLE_MODELS="4.7,4-7,4_7"
 
 claude_surface() {
   local root="$1"
@@ -55,9 +53,10 @@ adapter_build_launch() {
   fi
   if [[ -n "$RESOLVED_MODEL_ID" ]]; then ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID"); fi
   if [[ -n "$RESOLVED_MODEL_EFFORT" ]]; then ADAPTER_LAUNCH_ARGS+=(--effort "$RESOLVED_MODEL_EFFORT"); fi
-  # Process-scoped fastMode pin: explicit on only when the resolved model
-  # supports it; false otherwise so a saved user preference cannot leak in
-  # and no model is ever switched to satisfy Fast.
+  # Process-scoped fastMode pin carries the explicit request verbatim:
+  # true only on --fast on, false otherwise so a saved user preference
+  # cannot leak in. The native CLI decides model support — the Runner
+  # never infers it and never changes the selected model.
   case "$RESOLVED_FAST" in
     on) ADAPTER_LAUNCH_ARGS+=(--settings '{"fastMode": true}') ;;
     *)  ADAPTER_LAUNCH_ARGS+=(--settings '{"fastMode": false}') ;;
