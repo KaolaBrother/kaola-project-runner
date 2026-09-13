@@ -15,3 +15,21 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 `capture` defaults to compact final text. `--tools` includes tool events, `--since EVENT_OFFSET` selects newer events, `--full` includes the complete event record, and `--inline` returns content inline when supported.
 
 `mutation_status` is one of `not_started`, `accepted`, `in_progress`, `completed`, or `unknown`. These are transport facts, not permission to retry.
+
+## Ending and resuming an ACP session
+
+A turn reaching `end_turn` is a reply boundary, not task completion; the Agent judges from the
+result whether work continues. When the Agent chooses `stop`, the Runner sends `session/close`
+when the adapter advertises that capability, then exits the exactly-owned holder and agent
+processes and reports actual exit plus any residue. `stop` does not call `session/delete`,
+wipe CLI-side history, or imply the adapter persisted anything — a platform's resume and
+history behavior stands on its own verified capability, not on the close call's name. If
+in-flight work exists when the Agent has already chosen to stop, the existing `cancel`/exit
+path applies.
+
+To resume later work, the Agent chooses `start --resume <session-id>` (the Runner uses
+`session/resume` or `session/load` per the advertised capability) or `start --continue`,
+which selects the latest `session/list` entry for the repository's canonical cwd. Neither is
+guaranteed by the protocol universally; when a platform cannot resume or history is
+unavailable, the Agent starts a fresh session and continues from existing work records. The
+Runner never auto-resumes, retries an old prompt, or continues a Workflow on its own.

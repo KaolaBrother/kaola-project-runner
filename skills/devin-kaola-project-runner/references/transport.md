@@ -85,6 +85,11 @@ approval, decision, process-count, coordinate, prose, Git, or Workflow interpret
 scripts/runtime-tmux.sh stop --repo "$REPO" --session "$SESSION"
 ```
 
+`stop` releases exactly the owned PTY child, relay, and tmux session, then reports the actual
+exit result; `status` confirms absence afterward. Stopping never deletes CLI history, session
+records, or work artifacts — a later `start --resume`/`--continue` or a fresh session is the
+Agent's separate choice, using identifiers preserved in earlier receipts when available.
+
 `answer --replace-editor` is a tested whole-editor transport capability where an adapter implements it;
 decision and snapshot identifiers are optional correlation evidence. An adapter that lacks that
 mechanical capability reports `answer-unsupported`, after which the agent chooses another route.

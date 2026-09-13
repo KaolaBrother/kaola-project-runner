@@ -86,6 +86,31 @@ scripts/runtime-tmux.sh status --repo "$REPO" --session "$SESSION"
 Use `--force` only when the Agent explicitly chooses terminal containment for this exact owned
 session. Never use raw `tmux send-keys` or broad session/process cleanup.
 
+## Ending, releasing, and resuming
+
+The controlling Agent owns every completion judgment; the Runner only executes the chosen
+operation and reports the true result. These are suggestions, never gates:
+
+- A finished reply is not a finished task. An `end_turn` event, an idle terminal, or a
+  successful `send` receipt never establishes completion; the Agent reads the result and
+  decides whether to continue, review, fix, or end.
+- When this delegation's work is delivered and no immediate interaction is expected, the
+  default recommendation is to `stop` the exactly-owned running session. Keep it running
+  when the Agent expects to resume interacting right away or the user asked for it to stay.
+- `stop` releases the owned runtime (PTY child/relay/tmux session, or ACP holder/agent). It
+  does not delete CLI history, session records, work artifacts, or unrelated resources, and
+  it is never coupled to a history wipe. Judge success by the `stop`/`status` result
+  evidence, not by a completed call.
+- Before stopping, the Agent may keep whatever resume facts are already available —
+  platform, canonical repo, any reported native session ID, outcome, and remaining work —
+  reusing existing receipts and Workflow records. The native session ID is the CLI's own
+  conversation identifier and is not the Runner's tmux session name. Missing identifiers
+  never block a chosen `stop`; nothing here is a required checkpoint.
+- Later work resumes through the Agent's choice: `start --resume <native-session-id>` when
+  an exact identifier is known, `start --continue` to let the platform pick its latest
+  conversation, or a fresh `start` plus existing work records when the platform cannot
+  resume. The Runner never auto-falls back, resends an old prompt, or restarts on its own.
+
 ## Optional Kaola Workflow recommendation
 
 For project work, when Kaola Workflow is available to {{RUNTIME_NAME}} and fits the user's task,

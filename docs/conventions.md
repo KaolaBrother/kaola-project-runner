@@ -39,7 +39,11 @@ Generic send/stop may not branch on those advisory fields.
 Each platform Skill must teach the same measured loop: start, observe/capture, let the Agent decide,
 transfer the chosen prompt or key, observe/capture the response, and stop the exact session when the
 Agent chooses. Workflow/Git/forge verification occurs only when the Agent chose a Workflow task.
-Snapshot changes and retained drafts are evidence, never Skill-owned policy gates.
+Snapshot changes and retained drafts are evidence, never Skill-owned policy gates. The same Skills
+recommend — never require — stopping owned runtime once delegated work is delivered, keeping
+already-available resume facts (native session ID is not the Runner session name); `stop` never
+deletes history, and resume stays the Agent's choice among `--resume`, `--continue`, or a fresh
+session.
 
 Model mismatch, unreadable actual-model evidence, login failures, and resume behavior are likewise
 facts for the controlling Agent. Never turn them into a start/send/observe/stop gate or rewrite the
