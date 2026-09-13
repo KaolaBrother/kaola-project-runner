@@ -32,7 +32,9 @@ CLI = PROJECT / "scripts" / "kaola-acp.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 
 CONFIG_ENV = "MOCK_ACP_CONFIG"
-PLATFORM = "grok"  # no implicit mode skip: only scripted set_config_option calls run
+# opencode resolves to the CLI-native opening model: no implicit preset or
+# mode-skip set_config_option calls, so fixtures fully control native state.
+PLATFORM = "opencode"
 
 
 def wait_for(predicate, timeout: float, interval: float = 0.05):
