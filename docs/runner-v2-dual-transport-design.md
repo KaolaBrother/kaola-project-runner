@@ -158,7 +158,7 @@ Controlling Agent (orchestrator)
 - 会话名仍为 `--session NAME`，正则不变；身份仍是 platform + session + repo 三元组。
 - 会话记录目录：`${KAOLA_ACP_RECORD_ROOT:-${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/kaola-<uid>}/<platform>/<session>/<sha256(repo)[:16]>/`，含 `record.json`、`holder.sock`、`events.jsonl`、`stderr.log`。
 - **socket 真身**在 `$TMPDIR/kaola-<uid>-acp/<sha256(record_dir)[:24]>.sock`（macOS AF_UNIX `sun_path` 约 104 字节，记录目录路径可能超长）；记录目录内的 `holder.sock` 是指向它的 symlink（PoC 实测修正）。
-- `record.json` 字段：`transport`、`platform`、`repo`、`holder_pid`、`agent_pid/pgid`、`acp_session_id`、`protocol_version`、`agent_info{name,version}`、`session_meta`（`session/new` 结果，含 `configOptions`）、`created_at`、`last_prompt{fingerprint, written_at, transport, mutation_status, stop_reason}`、`pending_permissions[]`。
+- `record.json` 字段：`transport`、`platform`、`repo`、`holder_pid`、`agent_pid/pgid`、`acp_session_id`、`protocol_version`、`agent_info{name,version}`、`session_meta`（`session/new`·`resume`·`load` 结果；`configOptions` 随后按原生 `set_config_option` 成功结果与同会话 `config_option_update` 通知刷新为当前值）、`initial_config_options`（建立时原生基线）、`created_at`、`last_prompt{fingerprint, written_at, transport, mutation_status, stop_reason}`、`pending_permissions[]`。
 - **一个会话名 + repo 同一时刻只绑定一条通道。** `start` 前同时查 tmux（pty）与记录目录（acp）；对已存在会话使用另一通道 → 回执 `transport-mismatch{other_transport, other_pid, other_repo}`（事实，不是 hardgate）。
 - 记录由持有者进程写；持有者死亡时 `status/observe` 依据 `holder_pid` 不存活 + 记录内容推导（见 §5.3）。
 

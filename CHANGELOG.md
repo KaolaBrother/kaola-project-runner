@@ -38,6 +38,14 @@
   noted — never a false on/off. ACP `preflight` additionally reports `advertised_config_options`
   (id, type, current value, and allowed values) from `session/new`.
 
+- ACP `observe`/`status` `session_meta.configOptions` now reports the current native
+  configuration instead of the initialization snapshot: successful
+  `session/set_config_option` results and `config_option_update` notifications merge the
+  native-returned option list, `configured_options[*].current_value` attests the adapter's
+  reported `currentValue`, and the session-establishment baseline stays visible as
+  `initial_config_options`. Failed, timed-out, or fact-free responses never fabricate
+  current configuration (#33).
+
 - The Skills are now runtime-neutral Agent Skills (issue #36): SKILL.md frontmatter and universal
   instructions use generic controlling-Agent wording (Codex-specific display metadata stays in the
   optional `agents/openai.yaml`), and every invocation example resolves the installed Skill's
