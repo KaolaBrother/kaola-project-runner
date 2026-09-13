@@ -60,7 +60,9 @@ export GROK_START_TIMEOUT=5
 export KAOLA_START_TIMEOUT=5
 
 run_runner() {
-  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@"
+  # These cases exercise the PTY/tmux transport surface; ACP-default manifests
+  # would route to the holder instead of the fake runtime binary.
+  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@" --transport pty
 }
 
 if [[ ! -f "$runner" ]]; then

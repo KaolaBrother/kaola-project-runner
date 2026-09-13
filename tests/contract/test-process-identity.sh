@@ -49,6 +49,9 @@ case "${WRONG_PROCESS_PLATFORM:?}" in
   cursor-cli)
     printf '%s\n' 'Cursor Agent' '→ Plan, search, build anything'
     ;;
+  codex)
+    printf '%s\n' 'OpenAI Codex' '› Ask Codex to do anything'
+    ;;
 esac
 
 printf 'argv0=%s\nargv1=%s\nargv2=%s\n' "$0" "${1-}" "${2-}" >"${WRONG_PROCESS_ARGS_LOG:?}"
@@ -108,15 +111,16 @@ set_runtime_binary() {
     opencode) OPENCODE_BIN="$path" ;;
     kimi-cli) KIMI_BIN="$path" ;;
     cursor-cli) CURSOR_AGENT_BIN="$path" ;;
+    codex) CODEX_BIN="$path" ;;
   esac
-  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN
+  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN CODEX_BIN
 }
 
 issue_setup
 trap issue_cleanup EXIT
 
 wrong_shell="$(make_wrong_shell)"
-platforms=(grok claude-code opencode kimi-cli cursor-cli)
+platforms=(grok claude-code opencode kimi-cli cursor-cli codex)
 
 for platform in "${platforms[@]}"; do
   repo="$(issue_new_repo "wrong-process-$platform")"
@@ -144,7 +148,7 @@ for platform in "${platforms[@]}"; do
   "$issue_tmux_bin" select-pane -t "=$session:0.0" -T "$platform"
   sleep 0.2
 
-  status_before="$(run_runner "$platform" status --repo "$repo" --session "$session")"
+  status_before="$(run_runner "$platform" status --repo "$repo" --session "$session" --transport pty)"
   runtime_name="${fake_runtime##*/}"
   json_assert "test_${platform}_wrong_process_is_spoofed_but_owned" \
     "d['present'] and d['owned'] and d['platform_match'] and d['repo_match'] and d['pane_count'] == 1 and d['tui_detected'] is False and d['activity'] == 'unknown' and d['pane_command'] != '$runtime_name'" \
@@ -157,6 +161,7 @@ for platform in "${platforms[@]}"; do
     opencode) spoof_marker='OpenCode' ;;
     kimi-cli) spoof_marker='Kimi Code' ;;
     cursor-cli) spoof_marker='Cursor Agent' ;;
+    codex) spoof_marker='OpenAI Codex' ;;
   esac
   grep -Fq "$spoof_marker" <<<"$pane_before" || \
     fail "test_${platform}_wrong_process_is_spoofed_but_owned" "fixture did not expose spoofed runtime marker: $pane_before"
@@ -165,7 +170,7 @@ for platform in "${platforms[@]}"; do
   grep -Fq "argv2=$fake_runtime" "$args_log" || \
     fail "test_${platform}_wrong_process_is_spoofed_but_owned" "fake runtime path was not an unused later argv[2]: $(cat "$args_log")"
   set +e
-  send_output="$(run_runner "$platform" send --repo "$repo" --session "$session" --text "WRONG_PROCESS_PROMPT_$platform" 2>&1)"
+  send_output="$(run_runner "$platform" send --repo "$repo" --session "$session" --transport pty --text "WRONG_PROCESS_PROMPT_$platform" 2>&1)"
   send_rc=$?
   set -e
   [[ "$send_rc" -ne 0 ]] || fail "test_${platform}_wrong_process_rejects_send" "send succeeded through wrong process: $send_output"
@@ -189,13 +194,13 @@ export KIMI_BIN="$kimi_title_bin" KIMI_CODE_HOME="$issue_tmp_root/kimi-code-home
 mkdir -p "$KIMI_CODE_HOME"
 kimi_title_session="kimi-process-title-$$"
 set +e
-kimi_title_start="$(run_runner kimi-cli start --repo "$kimi_repo" --session "$kimi_title_session" 2>&1)"
+kimi_title_start="$(run_runner kimi-cli start --repo "$kimi_repo" --session "$kimi_title_session" --transport pty 2>&1)"
 kimi_title_start_rc=$?
 set -e
 [[ "$kimi_title_start_rc" -eq 0 ]] || \
   fail test_kimi_process_title_rewrite "start failed for process.title=kimi-code: $kimi_title_start"
 if "$issue_tmux_bin" has-session -t "=$kimi_title_session" >/dev/null 2>&1; then
-  kimi_title_status="$(run_runner kimi-cli status --repo "$kimi_repo" --session "$kimi_title_session")"
+  kimi_title_status="$(run_runner kimi-cli status --repo "$kimi_repo" --session "$kimi_title_session" --transport pty)"
   json_assert test_kimi_process_title_rewrite \
     "d['present'] and d['owned'] and d['platform_match'] and d['repo_match'] and d['pane_count'] == 1 and d['process_match'] is True and d['tui_detected'] is True and d['activity'] == 'idle' and 'Kimi' in d['pane_title']" \
     "$kimi_title_status"

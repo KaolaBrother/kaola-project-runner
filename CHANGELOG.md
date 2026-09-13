@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Codex CLI is the seventh platform (issue #28). Default transport is ACP over the pinned
+  `npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0
+  codex-acp` adapter; `--transport pty` runs `codex --cd <repo> --no-alt-screen`. Runner default
+  model is `gpt-5.6-luna` at `low` reasoning effort, applied on both transports unless the
+  caller passes `--model`/`--effort` (ACP configIds `model` / `reasoning_effort`; PTY
+  `--model` / `-c model_reasoning_effort`). Permission modes map `read-only` / `agent` /
+  `agent-full-access` to the same ACP mode ids; PTY maps them to `read-only`+`on-request`,
+  `workspace-write`+`on-request`, `danger-full-access`+`never`. Default is
+  `agent-full-access`. ACP capability detection now treats an advertised `{}` object as
+  supported, and `continue` follows `session/list` `nextCursor` across all cwd-filtered pages
+  before selecting the latest `updatedAt`. `CODEX_PATH` selects the Codex binary for the ACP
+  adapter; no global Codex config is written.
+
 - ACP watch projection now holds up on real sessions: chunks without `messageId` (all Grok
   chunks) join one message instead of one row per token; thinking tail, tool content, timeline,
   and whole-view caps are enforced in memory and on the wire (`truncated=true`), with the newest

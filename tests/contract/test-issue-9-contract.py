@@ -23,6 +23,8 @@ PLATFORMS = (
     "opencode-kaola-project-runner",
     "kimi-cli-kaola-project-runner",
     "cursor-cli-kaola-project-runner",
+    "devin-kaola-project-runner",
+    "codex-kaola-project-runner",
 )
 
 GOLDEN_SHA256 = {

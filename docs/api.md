@@ -7,7 +7,7 @@ scripts/render-skills.py --write
 scripts/render-skills.py --check
 ```
 
-`--write` deterministically rebuilds six managed Skill directories. `--check` returns nonzero for
+`--write` deterministically rebuilds seven managed Skill directories. `--check` returns nonzero for
 any missing, stale, or unexpected file or Skill directory. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
@@ -21,8 +21,8 @@ flat YAML subset parsed without an external dependency. Transport fields are `de
 scripts/install-local.sh [--platform ID[,ID...]] [--uninstall]
 ```
 
-IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, and `devin`. Omit `--platform` for all
-six. Every selected target is preflighted before mutation. Only exact owned symlinks are created,
+IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, and `codex`. Omit `--platform` for all
+seven. Every selected target is preflighted before mutation. Only exact owned symlinks are created,
 migrated, or removed.
 
 ## tmux core

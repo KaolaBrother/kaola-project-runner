@@ -730,7 +730,7 @@ class MissingHelperRedTest(unittest.TestCase):
         )
 
     def test_01_non_claude_adapters_declare_answer_unsupported(self) -> None:
-        for platform in ("grok", "opencode", "kimi-cli", "cursor-cli"):
+        for platform in ("grok", "opencode", "kimi-cli", "cursor-cli", "devin", "codex"):
             path = PROJECT / "scripts" / "adapters" / f"{platform}.sh"
             text = path.read_text(encoding="utf-8")
             self.assertTrue(

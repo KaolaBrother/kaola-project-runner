@@ -99,6 +99,9 @@ def probes_for(platform: str) -> list[list[str]]:
         "kimi-cli": [["provider", "list", "--json"], ["models"], ["doctor"], ["--help"]],
         "cursor-cli": [["--list-models"], ["models"], ["--help"]],
         "devin": [["models", "list"], ["--help"]],
+        # Codex has no stable read-only catalog surface; help output keeps the
+        # catalog state unknown rather than scraping /model or debug commands.
+        "codex": [["--help"]],
     }[platform]
 
 
@@ -199,6 +202,7 @@ def real_surface_evidence(platform: str, frame: str) -> tuple[str | None, dict[s
     # not proof of what the child actually selected.
     anchors = {
         "claude-code": "Claude Code",
+        "codex": "OpenAI Codex",
         "cursor-cli": "Cursor Agent",
         "opencode": "OpenCode",
         "kimi-cli": "Kimi Code",
@@ -214,6 +218,11 @@ def real_surface_evidence(platform: str, frame: str) -> tuple[str | None, dict[s
             elif platform == "kimi-cli" and re.search(r"\byolo\s+K3\s+thinking:\s*(?:low|high|max)\b", frame, re.I):
                 runtime_frame = frame
             elif platform == "opencode" and re.search(r"\b(?:Build|Plan)\s+·\s+GLM[- ]?5\.3\b", frame, re.I):
+                runtime_frame = frame
+            elif platform == "codex" and re.search(
+                r"^\s*[a-z0-9][a-z0-9._:/-]+\s+(?:low|medium|high|xhigh|max|ultra)\s+·\s+\S",
+                frame, re.I | re.M,
+            ):
                 runtime_frame = frame
             else:
                 return None, None, None
@@ -263,6 +272,23 @@ def real_surface_evidence(platform: str, frame: str) -> tuple[str | None, dict[s
         footer = re.findall(r"\byolo\s+K3\s+thinking:\s*(low|high|max)\b", runtime_frame, re.I)
         if footer:
             return "kimi-code/k3", {"effort": footer[-1].lower()}, "kimi-main-tui"
+    elif platform == "codex":
+        # Codex TUI header row:  "model:       gpt-6-astra medium   /model to change"
+        # Codex TUI footer row:  "  gpt-6-astra medium · /private/tmp"
+        header = re.findall(
+            r"\bmodel:\s*([a-z0-9][a-z0-9._:/-]*)\s+(low|medium|high|xhigh|max|ultra)\b",
+            runtime_frame, re.I,
+        )
+        if header:
+            model_id, effort = header[-1]
+            return model_id.lower(), {"effort": effort.lower()}, "codex-main-tui"
+        footer = re.findall(
+            r"^\s*([a-z0-9][a-z0-9._:/-]+)\s+(low|medium|high|xhigh|max|ultra)\s+·\s+\S",
+            runtime_frame, re.I | re.M,
+        )
+        if footer:
+            model_id, effort = footer[-1]
+            return model_id.lower(), {"effort": effort.lower()}, "codex-main-tui"
     elif platform == "devin":
         # Devin TUI footer shape: the model display name followed by 2+
         # spaces and one of the known trailing annotations:

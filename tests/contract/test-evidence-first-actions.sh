@@ -25,7 +25,8 @@ fail() {
 }
 
 run_runner() {
-  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@"
+  # PTY/tmux transport surface; ACP-default manifests would route to the holder.
+  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@" --transport pty
 }
 
 capture_command() {

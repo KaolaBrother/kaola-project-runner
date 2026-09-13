@@ -27,7 +27,7 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
-PLATFORMS = ("claude-code", "cursor-cli", "devin", "grok", "kimi-cli", "opencode")
+PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode")
 START_WAIT = 20.0
 SESSION_PREFIX = "kaola"
 # Issue #22: default start sets session/set_config_option configId=mode to each
@@ -36,6 +36,7 @@ SESSION_PREFIX = "kaola"
 # Devin ACP `bypass` is not the PTY argv `dangerous`.
 ACP_SKIP_MODE = {
     "claude-code": "bypassPermissions",
+    "codex": "agent-full-access",
     "devin": "bypass",
     "kimi-cli": "yolo",
 }

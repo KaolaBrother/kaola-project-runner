@@ -11,6 +11,8 @@ ACP and PTY/tmux. Known knobs:
 - Cursor PTY/ACP: ``--yolo``
 - OpenCode PTY: ``--auto``
 - Grok PTY: ``--always-approve``; Grok ACP: ``grok agent --always-approve stdio``
+- Codex PTY: ``--sandbox danger-full-access --ask-for-approval never``;
+  Codex ACP: ``mode=agent-full-access``
 
 OpenCode ACP has no skip argv and is not asserted as skipped.
 """
@@ -288,6 +290,54 @@ class Issue22PtyDefaultStart(unittest.TestCase):
             self.runner,
             "no-flag Devin ACP start must forward --mode bypass",
         )
+
+    def test_codex_no_flag_default_is_agent_full_access(self) -> None:
+        self.assertIn(
+            "codex) permission_mode=agent-full-access ;;",
+            self.runner,
+            "no-flag Codex PTY start must assign permission_mode=agent-full-access",
+        )
+
+    def test_codex_acp_default_forwards_agent_full_access(self) -> None:
+        self.assertIn(
+            "codex) acp_args+=(--mode agent-full-access) ;;",
+            self.runner,
+            "no-flag Codex ACP start must forward --mode agent-full-access",
+        )
+
+
+class Issue22CodexPermissionMappings(unittest.TestCase):
+    """Codex ACP mode names and PTY sandbox/approval pairs (issue #28)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.acp = (PROJECT / "scripts" / "kaola-acp.py").read_text(encoding="utf-8")
+        cls.adapter = (PROJECT / "scripts" / "adapters" / "codex.sh").read_text(encoding="utf-8")
+        cls.runner = RUNNER.read_text(encoding="utf-8")
+        cls.manifest = (PROJECT / "platforms" / "codex.yaml").read_text(encoding="utf-8")
+
+    def test_acp_skip_mode_maps_codex_agent_full_access(self) -> None:
+        self.assertIn('"codex": "agent-full-access"', self.acp)
+
+    def test_manifest_pins_codex_acp_command(self) -> None:
+        self.assertIn(
+            'acp_command: "npx --yes --package @openai/codex@0.153.4 '
+            '--package @agentclientprotocol/codex-acp@1.11.0 codex-acp"',
+            self.manifest,
+        )
+        self.assertIn('default_transport: "acp"', self.manifest)
+
+    def test_pty_read_only_maps_sandbox_and_approval(self) -> None:
+        self.assertIn("--sandbox read-only --ask-for-approval on-request", self.adapter)
+
+    def test_pty_agent_maps_workspace_write_and_approval(self) -> None:
+        self.assertIn("--sandbox workspace-write --ask-for-approval on-request", self.adapter)
+
+    def test_pty_agent_full_access_maps_danger_and_never(self) -> None:
+        self.assertIn("--sandbox danger-full-access --ask-for-approval never", self.adapter)
+
+    def test_runner_validates_codex_permission_values(self) -> None:
+        self.assertIn("read-only|agent|agent-full-access", self.runner)
 
 
 if __name__ == "__main__":

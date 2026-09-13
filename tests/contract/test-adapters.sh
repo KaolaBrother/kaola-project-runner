@@ -65,6 +65,12 @@ prepare_surface() {
       printf '%s\n' workflow-next >"$repo/.devin/skills/workflow-next/SKILL.md"
       printf '%s\n' finalize >"$repo/.devin/skills/kaola-workflow-finalize/SKILL.md"
       ;;
+    codex)
+      mkdir -p "$repo/.codex/skills/workflow-next" "$repo/.codex/skills/kaola-workflow-finalize"
+      printf '%s\n' workflow-next >"$repo/.codex/skills/workflow-next/SKILL.md"
+      printf '%s\n' finalize >"$repo/.codex/skills/kaola-workflow-finalize/SKILL.md"
+      mkdir -p "$CODEX_HOME"
+      ;;
     cursor-cli)
       mkdir -p "$CURSOR_HOME/commands" "$CURSOR_HOME/kaola-workflow"
       printf '%s\n' workflow-next >"$CURSOR_HOME/commands/workflow-next.md"
@@ -161,8 +167,9 @@ runtime_env() {
     kimi-cli) KIMI_BIN="$path" ;;
     cursor-cli) CURSOR_AGENT_BIN="$path" ;;
     devin) DEVIN_BIN="$path" ;;
+    codex) CODEX_BIN="$path" ;;
   esac
-  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN DEVIN_BIN
+  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN DEVIN_BIN CODEX_BIN
 }
 
 runtime_env_name() {
@@ -173,6 +180,7 @@ runtime_env_name() {
     kimi-cli) printf '%s\n' KIMI_BIN ;;
     cursor-cli) printf '%s\n' CURSOR_AGENT_BIN ;;
     devin) printf '%s\n' DEVIN_BIN ;;
+    codex) printf '%s\n' CODEX_BIN ;;
   esac
 }
 
@@ -196,9 +204,10 @@ else
   canonical_repo="$(cd "$repo" && pwd -P)"
   export KIMI_CODE_HOME="$issue_tmp_root/kimi-home"
   export CURSOR_HOME="$issue_tmp_root/cursor-home"
+  export CODEX_HOME="$issue_tmp_root/codex-home"
   export KAOLA_START_TIMEOUT=3
 
-  platforms=(grok claude-code opencode kimi-cli cursor-cli devin)
+  platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex)
   for platform in "${platforms[@]}"; do
     IFS=$'\t' read -r fake log < <(issue_make_fake_runtime "$platform")
     fake_paths+=("$fake")
@@ -212,6 +221,7 @@ else
       kimi-cli) runtime_session_id=01ARZ3NDEKTSV4RRFFQ69G5FAV ;;
       cursor-cli) runtime_session_id=cursor-fixture ;;
       devin) runtime_session_id=devin-fixture-session ;;
+      codex) runtime_session_id=codex-fixture-session ;;
     esac
     export FAKE_RUNTIME_NAME="$platform" FAKE_RUNTIME_LOG="$log" FAKE_RUNTIME_SESSION_ID="$runtime_session_id"
 
@@ -245,10 +255,10 @@ else
       continue
     fi
     status_json="$(run_runner "$platform" status --repo "$repo" --session "$session")"
-    if [[ "$platform" == devin ]]; then
-      # Devin CLI does not expose a session identifier in TUI output; the
-      # adapter honestly returns empty rather than falsely extracting the
-      # tmux session name from relay launch scrollback.
+    if [[ "$platform" == devin || "$platform" == codex ]]; then
+      # Neither CLI exposes a session identifier in TUI output; each adapter
+      # honestly returns empty rather than falsely extracting the tmux session
+      # name from relay launch scrollback.
       json_assert "test_${platform}_runtime_session_id" "d['runtime_session_id'] == ''" "$status_json"
     else
       json_assert "test_${platform}_runtime_session_id" "d['runtime_session_id'] == '$runtime_session_id'" "$status_json"
@@ -277,6 +287,11 @@ else
       grep -Fq -- '--permission-mode dangerous' <<<"$log_text" || fail "test_${platform}_no_flag_permission_mode" "No-flag Devin PTY start must launch with --permission-mode dangerous: $log_text"
       grep -Fq -- '--permission-mode auto' <<<"$log_text" && fail "test_${platform}_no_flag_permission_mode" "No-flag Devin PTY start must not keep --permission-mode auto: $log_text"
       grep -Fq -- '--respect-workspace-trust false' <<<"$log_text" || fail "test_${platform}_new_launch" "Devin launch lacks --respect-workspace-trust false: $log_text"
+    elif [[ "$platform" == codex ]]; then
+      grep -Fq "args=--cd $canonical_repo --no-alt-screen" <<<"$log_text" || fail "test_${platform}_new_launch" "Codex launch lacks --cd/--no-alt-screen shape: $log_text"
+      grep -Fq -- '--model gpt-5.6-luna' <<<"$log_text" || fail "test_${platform}_runner_default_model" "Codex launch lacks Runner default model: $log_text"
+      grep -Fq -- 'model_reasoning_effort=\"low\"' <<<"$log_text" || fail "test_${platform}_runner_default_effort" "Codex launch lacks -c model_reasoning_effort override: $log_text"
+      grep -Fq -- '--sandbox danger-full-access --ask-for-approval never' <<<"$log_text" || fail "test_${platform}_no_flag_permission_mode" "No-flag Codex PTY start must launch with danger-full-access/never: $log_text"
     else
       grep -Fq "args=--cwd $canonical_repo --minimal --always-approve" <<<"$log_text" || fail "test_${platform}_new_launch" "Grok launch lacks --cwd/--minimal/--always-approve shape: $log_text"
     fi
@@ -288,8 +303,11 @@ else
     run_runner "$platform" stop --repo "$repo" --session "$session" --force >/dev/null || true
     log_text="$(cat "${fake_logs[$(( ${#fake_logs[@]} - 1 ))]}")"
     case "$platform" in
-      grok|opencode|cursor-cli|devin) grep -Fq -- '--continue' <<<"$log_text" || fail "test_${platform}_continue_launch" "--continue absent from invocation: $log_text" ;;
-      claude-code|kimi-cli) grep -Fq -- '--continue' <<<"$log_text" || fail "test_${platform}_continue_launch" "--continue absent from invocation: $log_text" ;;
+      codex)
+        grep -Fq -- 'args=resume --last' <<<"$log_text" || fail "test_${platform}_continue_launch" "Codex continue must be resume --last: $log_text"
+        grep -Fq -- '--all' <<<"$log_text" && fail "test_${platform}_continue_launch" "Codex continue must never use --all: $log_text"
+        ;;
+      *) grep -Fq -- '--continue' <<<"$log_text" || fail "test_${platform}_continue_launch" "--continue absent from invocation: $log_text" ;;
     esac
 
     session="${platform}-resume-$$"
@@ -300,6 +318,7 @@ else
     grep -Fq -- "$resume_value" <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume identifier absent from invocation: $log_text"
     case "$platform" in
       opencode|kimi-cli) grep -Fq -- '--session' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "session option absent: $log_text" ;;
+      codex) grep -Fq -- "args=resume $resume_value" <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume subcommand absent: $log_text" ;;
       grok|claude-code|cursor-cli|devin) grep -Fq -- '--resume' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume option absent: $log_text" ;;
     esac
 
@@ -317,6 +336,9 @@ else
       devin)
         rm "$repo/.devin/skills/workflow-next/SKILL.md"
         ;;
+      codex)
+        rm "$repo/.codex/skills/workflow-next/SKILL.md"
+        ;;
       cursor-cli)
         rm "$CURSOR_HOME/kaola-workflow/cursor-authority.json"
         ;;
@@ -330,7 +352,7 @@ else
         fail "test_${platform}_missing_kaola_surface_advisory" "preflight blocked CLI communication: $missing_surface"
       json_assert "test_${platform}_missing_kaola_surface_advisory" "d['result'] == 'ready' and d['platform'] == '$platform'" "$missing_surface"
       case "$platform" in
-        claude-code|opencode|kimi-cli|devin)
+        claude-code|opencode|kimi-cli|devin|codex)
           json_assert "test_${platform}_missing_kaola_surface_evidence" "not d['workflow_next'] and not d['kaola_workflow_finalize']" "$missing_surface"
           ;;
         cursor-cli)

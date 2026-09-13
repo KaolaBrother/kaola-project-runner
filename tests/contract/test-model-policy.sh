@@ -13,9 +13,11 @@ fail() {
 }
 
 capture_command() {
+  # The Issue #8 model contract is a PTY-surface receipt; ACP-default manifests
+  # would route these calls to the holder instead of the adapter/fake binary.
   local output rc
   set +e
-  output="$(TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@" 2>&1)"
+  output="$(TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@" --transport pty 2>&1)"
   rc=$?
   set -e
   COMMAND_OUTPUT="$output"
@@ -191,7 +193,7 @@ assert_no_workflow_injection() {
 
 stop_or_kill() {
   local platform="$1" repo="$2" session="$3"
-  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$platform" stop --repo "$repo" --session "$session" --force >/dev/null 2>&1 ||
+  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$platform" stop --repo "$repo" --session "$session" --force --transport pty >/dev/null 2>&1 ||
     "$issue_tmux_bin" kill-session -t "=$session" 2>/dev/null || true
 }
 
@@ -290,6 +292,19 @@ while (( index < ${#args[@]} )); do
       effort="${args[$index]:-}"
       ;;
     --effort=*|--reasoning-effort=*|--variant=*) effort="${argument#*=}" ;;
+    -c|--config)
+      index=$((index + 1))
+      case "${args[$index]:-}" in
+        model_reasoning_effort=*)
+          effort="${args[$index]#model_reasoning_effort=}"
+          effort="${effort%\"}"
+          effort="${effort#\"}"
+          ;;
+      esac
+      ;;
+    resume)
+      has_resume=true
+      ;;
     --resume|--session)
       has_resume=true
       index=$((index + 1))
@@ -321,6 +336,7 @@ case "$runtime" in
   kimi-cli) title=Kimi ;;
   cursor-cli) title=Cursor ;;
   devin) title=Devin ;;
+  codex) title='OpenAI Codex' ;;
 esac
 printf '\033]0;%s\007' "$title"
 printf '%s\n' "$title Kaola TUI"
@@ -354,7 +370,7 @@ trap issue_cleanup EXIT
 repo="$(issue_new_repo model-policy)"
 export KAOLA_START_TIMEOUT=4
 
-platforms=(grok claude-code opencode kimi-cli cursor-cli devin)
+platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex)
 for platform in "${platforms[@]}"; do
   case "$platform" in
     claude-code)
@@ -379,7 +395,11 @@ for platform in "${platforms[@]}"; do
       ;;
     devin)
       default_name='Adaptive'; default_id=adaptive; default_effort=''; binary_env=DEVIN_BIN
-      override_id=claude-sonnet-5-high; override_effort=high
+      override_id=claude-sonnet-5-high; override_effort=''
+      ;;
+    codex)
+      default_name='GPT-5.6 Luna Low'; default_id=gpt-5.6-luna; default_effort=low; binary_env=CODEX_BIN
+      override_id=gpt-6-astra; override_effort=high
       ;;
   esac
 
@@ -417,7 +437,7 @@ for platform in "${platforms[@]}"; do
   else
     assert_model_evidence "test_${platform}_runner_default_overrides_saved_picker" "$COMMAND_OUTPUT" \
       runner-default "$default_name" "$default_id" "$default_id" true "$default_effort"
-    status_json="$(TMUX_BIN="$issue_tmux_bin" bash "$runner" "$platform" status --repo "$repo" --session "$session")"
+    status_json="$(TMUX_BIN="$issue_tmux_bin" bash "$runner" "$platform" status --repo "$repo" --session "$session" --transport pty)"
     assert_model_evidence "test_${platform}_status_preserves_model_provenance" "$status_json" \
       runner-default "$default_name" "$default_id" "$default_id" true "$default_effort"
     grep -Fq "event=launch" "$argv_log" || fail "test_${platform}_runner_default_launches" "runtime launch was not recorded"
@@ -430,7 +450,9 @@ for platform in "${platforms[@]}"; do
   : >"$input_log"
   export FAKE_MODEL_SCENARIO=match
   session="model-user-${platform}-$$"
-  capture_command "$platform" start --repo "$repo" --session "$session" --model "$override_id" --effort "$override_effort"
+  override_effort_args=()
+  [[ -n "$override_effort" ]] && override_effort_args=(--effort "$override_effort")
+  capture_command "$platform" start --repo "$repo" --session "$session" --model "$override_id" "${override_effort_args[@]}"
   if [[ "$COMMAND_RC" -ne 0 ]]; then
     fail "test_${platform}_user_model_override" "start failed: $COMMAND_OUTPUT"
   else
@@ -443,15 +465,16 @@ for platform in "${platforms[@]}"; do
   : >"$input_log"
   session="model-unavailable-${platform}-$$"
   capture_command "$platform" start --repo "$repo" --session "$session" --model "unavailable/$platform"
-  if [[ "$COMMAND_RC" -eq 0 ]]; then
-    fail "test_${platform}_unavailable_model_refuses_unselected_launch" "unavailable target unexpectedly launched: $COMMAND_OUTPUT"
+  if [[ "$COMMAND_RC" -ne 0 ]]; then
+    fail "test_${platform}_unavailable_model_is_not_a_launch_gate" "catalog-missing literal was refused: $COMMAND_OUTPUT"
   else
-    assert_unavailable_evidence "test_${platform}_unavailable_model_reports_catalog_evidence" \
-      "$COMMAND_OUTPUT" "unavailable/$platform"
+    assert_model_evidence "test_${platform}_unavailable_model_launches_literal_with_catalog_evidence" \
+      "$COMMAND_OUTPUT" user "unavailable/$platform" "unavailable/$platform" "unavailable/$platform" true "$default_effort"
+    grep -Fq "selected=unavailable/$platform" "$argv_log" || \
+      fail "test_${platform}_unavailable_model_launches_literal" "literal model absent from launch argv: $(cat "$argv_log")"
   fi
   if "$issue_tmux_bin" has-session -t "=$session" 2>/dev/null; then
-    fail "test_${platform}_unavailable_model_creates_no_session" "unavailable target created a session"
-    "$issue_tmux_bin" kill-session -t "=$session" 2>/dev/null || true
+    stop_or_kill "$platform" "$repo" "$session"
   fi
   assert_no_workflow_injection "test_${platform}_unavailable_does_not_inject_workflow" "$input_log"
 
@@ -498,7 +521,7 @@ for platform in "${platforms[@]}"; do
   export FAKE_MODEL_SCENARIO=resume-mismatch
   session="model-resume-${platform}-$$"
   capture_command "$platform" start --repo "$repo" --session "$session" --resume "fixture-$platform-session" \
-    --model "$override_id" --effort "$override_effort"
+    --model "$override_id" "${override_effort_args[@]}"
   if [[ "$COMMAND_RC" -ne 0 ]]; then
     fail "test_${platform}_resume_mismatch_is_evidence_not_communication_gate" "resume was blocked: $COMMAND_OUTPUT"
   else
@@ -514,18 +537,18 @@ for platform in "${platforms[@]}"; do
   malicious="model with spaces (x) [y]; \$(touch $marker); \`touch $marker.backtick\`"
   session="model-literal-${platform}-$$"
   capture_command "$platform" start --repo "$repo" --session "$session" --model "$malicious"
-  if [[ "$COMMAND_RC" -eq 0 ]]; then
-    fail "test_${platform}_malicious_unknown_model_refuses_unselected_launch" "malicious unknown model unexpectedly launched"
+  if [[ "$COMMAND_RC" -ne 0 ]]; then
+    fail "test_${platform}_malicious_model_is_not_a_launch_gate" "malicious literal was refused: $COMMAND_OUTPUT"
   else
-    assert_unavailable_evidence "test_${platform}_malicious_model_is_reported_literally" "$COMMAND_OUTPUT" "$malicious"
+    assert_model_evidence "test_${platform}_malicious_model_is_reported_literally" \
+      "$COMMAND_OUTPUT" user "$malicious" "$malicious" "$malicious" true "$default_effort"
   fi
   [[ ! -e "$marker" && ! -e "$marker.backtick" ]] || \
     fail "test_${platform}_model_input_is_literal_safe" "model input executed shell syntax"
   if "$issue_tmux_bin" has-session -t "=$session" 2>/dev/null; then
-    fail "test_${platform}_malicious_model_creates_no_session" "malicious unknown model created a session"
+    stop_or_kill "$platform" "$repo" "$session"
   fi
   assert_no_workflow_injection "test_${platform}_malicious_input_does_not_inject_workflow" "$input_log"
-  stop_or_kill "$platform" "$repo" "$session"
 done
 
 assert_launch_preamble_is_not_actual_evidence() {
@@ -564,6 +587,11 @@ ylpromax5@YanleiMacBook-Pro-M5-Max issue-8 %
 Trust this folder?
 Exit Kimi Code. Asked again next launch.' \
   kimi-code/k3 max
+assert_launch_preamble_is_not_actual_evidence codex \
+  'exec kaola-pane-relay.py --runtime-path codex -- --cd /repo --no-alt-screen --model gpt-5.6-luna -c model_reasoning_effort=\"low\"
+ylpromax5@YanleiMacBook-Pro-M5-Max issue-8 %
+OpenAI Codex' \
+  gpt-5.6-luna low
 
 verified_frame="$(mktemp "${TMPDIR:-/tmp}/kpr-model-frame.XXXXXX")"
 scrolled_frame="$(mktemp "${TMPDIR:-/tmp}/kpr-model-frame.XXXXXX")"
