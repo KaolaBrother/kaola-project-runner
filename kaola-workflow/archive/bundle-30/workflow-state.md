@@ -23,6 +23,6 @@ selection_record_digest: 1323ab90123344ec4dabe3159e03044e0dddd7a57f46f3a0cd8ef6d
 archived_at: 2026-09-13T10:15:08.863Z
 issue_disposition: closed
 claim_label_removed: removed
-worktree_removed: kept
+worktree_removed: removed
 closure_invariants: ok
 issues_closed: 1

@@ -51,7 +51,44 @@ tests/contract/test-generated-skills.py`).
 
 ## Changed Paths
 
-Recorded by the finalize transaction below.
+Verified issue-scoped paths (`b5854f0..ccc1e8d`):
+
+- `CHANGELOG.md`
+- `README.md`
+- `docs/api.md`
+- `docs/conventions.md`
+- `skills/claude-code-kaola-project-runner/SKILL.md`
+- `skills/claude-code-kaola-project-runner/references/acp.md`
+- `skills/claude-code-kaola-project-runner/references/platform.md`
+- `skills/claude-code-kaola-project-runner/references/transport.md`
+- `skills/codex-kaola-project-runner/SKILL.md`
+- `skills/codex-kaola-project-runner/references/acp.md`
+- `skills/codex-kaola-project-runner/references/platform.md`
+- `skills/codex-kaola-project-runner/references/transport.md`
+- `skills/cursor-cli-kaola-project-runner/SKILL.md`
+- `skills/cursor-cli-kaola-project-runner/references/acp.md`
+- `skills/cursor-cli-kaola-project-runner/references/platform.md`
+- `skills/cursor-cli-kaola-project-runner/references/transport.md`
+- `skills/devin-kaola-project-runner/SKILL.md`
+- `skills/devin-kaola-project-runner/references/acp.md`
+- `skills/devin-kaola-project-runner/references/platform.md`
+- `skills/devin-kaola-project-runner/references/transport.md`
+- `skills/grok-kaola-project-runner/SKILL.md`
+- `skills/grok-kaola-project-runner/references/acp.md`
+- `skills/grok-kaola-project-runner/references/platform.md`
+- `skills/grok-kaola-project-runner/references/transport.md`
+- `skills/kimi-cli-kaola-project-runner/SKILL.md`
+- `skills/kimi-cli-kaola-project-runner/references/acp.md`
+- `skills/kimi-cli-kaola-project-runner/references/platform.md`
+- `skills/kimi-cli-kaola-project-runner/references/transport.md`
+- `skills/opencode-kaola-project-runner/SKILL.md`
+- `skills/opencode-kaola-project-runner/references/acp.md`
+- `skills/opencode-kaola-project-runner/references/platform.md`
+- `skills/opencode-kaola-project-runner/references/transport.md`
+- `templates/SKILL.md.tmpl`
+- `templates/references/acp.md.tmpl`
+- `templates/references/platform.md.tmpl`
+- `templates/references/transport.md.tmpl`
 
 ## Documentation Docking
 

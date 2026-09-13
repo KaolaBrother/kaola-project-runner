@@ -1,7 +1,32 @@
 # Finalization Summary — bundle-28 (issue #28)
 
 Issue: https://github.com/KaolaBrother/kaola-project-runner/issues/28
-Candidate: `workflow/bundle-28` @ `9923974`
+## Final supervisor acceptance and closure
+
+Final accepted candidate: `b5854f007891751485bc6b1fbd57542f8d6f9c76`.
+PR #29 merged as `9a9a91da396eeb4f9d6a3f104ffdac7b4c981e8c`; issue #28 closed.
+PR #31 then merged as `10f109bdbc7d622de8fe515fd8347cf0313bf4b3`.
+Codex independently verified render/check, validate.sh, adapter contracts, actual
+ACP two-turn memory, exact stop/resume with memory, PTY reply and exact stop.
+Post-merge render/check and validate.sh also passed (exit 0). Evidence is in
+`/Users/ylpromax5/Documents/Codex/runner-issue28-design/`.
+
+Corrections to the initial record below: `820a228` fixed RFC3339 ordering,
+missing timestamp handling and deduplication, and the real null-timeout cancel
+crash (the earlier cosmetic-race attribution was wrong). The native ACP mode
+`read-only` means workspace-write/on-request; this is documented and is distinct
+from strict PTY read-only. Real permission requests and permit settlement were
+subsequently verified. `b5854f0` fixed advisory native plugin discovery.
+Authenticated Devin/Claude smoke limitations remain quota/expired-login facts,
+not claims of all-platform authenticated PASS.
+
+Both run archives are published. Exact bundle-28 and bundle-30 worktrees and
+local/remote branches were removed after merged/pushed proof; main is synced.
+No release was performed. Completed Mission List results remain unchanged.
+
+## Initial PR handoff record (historical; superseded above)
+
+Initial candidate: `workflow/bundle-28` @ `9923974`
 Spec: frozen issue body (2026-09-13 rewrite); Codex supervisor owns review/validation.
 
 ## Delivered
@@ -81,7 +106,7 @@ Spec: frozen issue body (2026-09-13 rewrite); Codex supervisor owns review/valid
 `.cache/doc-docking.md` — DOCKED. All current-state platform enumerations moved
 to seven; historical dated records preserved.
 
-## Follow-Up Items (for supervisor review)
+## Initial review findings (resolved or qualified above)
 
 - FACTUAL FINDING: ACP `mode: read-only` was accepted (`configured: true`) but
   the codex-acp adapter still executed a file-write turn (`HELLO.txt` created).
@@ -95,7 +120,7 @@ to seven; historical dated records preserved.
 - devin/claude-code live turns unexecuted due to upstream quota/auth —
   transport proven, agent-side limits recorded honestly.
 
-## Readiness
+## Initial readiness (historical)
 
 Candidate `9923974` on `workflow/bundle-28` is ready for independent Codex
 supervisor validation via reviewable PR. No merge, issue closure, or release

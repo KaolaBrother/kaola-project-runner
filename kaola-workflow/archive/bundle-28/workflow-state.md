@@ -21,8 +21,8 @@ selection_record_digest: 4b9738fdd1b61fdde49496f28d7be7d46e94c8a9be20aa9b186c807
 
 ## Closure
 archived_at: 2026-09-13T07:35:18.503Z
-issue_disposition: close-pending
+issue_disposition: closed
 claim_label_removed: removed
-worktree_removed: kept
+worktree_removed: removed
 closure_invariants: ok
 issues_closed: 1
