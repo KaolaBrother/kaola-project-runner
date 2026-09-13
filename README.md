@@ -1,8 +1,14 @@
 # Kaola Project Runner
 
-Kaola Project Runner 是一组面向 Codex 的 CLI 通信驱动 Skill。每个 Skill 只负责在所有权可验证的
-tmux 主会话中启动指定 CLI、读取输出、传递控制 Agent 选择的提示词或原生按键、读取真实回复，
-以及结束这个精确会话。
+Kaola Project Runner 是一组运行时中立的 Agent Skills：任何具备 Skill/文件加载与 shell 执行
+能力、且运行环境里装有目标 CLI 的控制 Agent，都可以使用同一组七个 Skill。Codex 仍是完整
+支持的消费运行时之一；本仓库不新增目标 CLI，也不承诺在缺少必要工具的纯聊天/沙箱宿主中
+执行。每个 Skill 只负责在所有权可验证的 tmux 主会话中启动指定 CLI、读取输出、传递控制
+Agent 选择的提示词或原生按键、读取真实回复，以及结束这个精确会话。
+
+术语：**消费运行时（consuming runtime）**指加载并使用 Skill 的 Agent 宿主；**目标平台
+（target platform）**指被 Skill 驱动的 CLI。安装时的 `--runtime` 选择消费运行时的技能
+目录，`--platform` 选择七个目标 CLI Skill 中的哪一个，二者是独立维度。
 
 `templates/grok-golden/` 保留已经实跑验证的历史 Grok Workflow 提示词与协议字节，作为兼容和
 回归证据；它们不再是 active Skill 强制执行的编排规则。七个平台的 active Skill 都从同一份
@@ -17,7 +23,7 @@ tmux 主会话中启动指定 CLI、读取输出、传递控制 Agent 选择的�
 
 ## 支持的平台
 
-| Platform | Codex Skill | CLI | Runner 默认主模型 | runtime-native recurring |
+| Platform | Skill | CLI | Runner 默认主模型 | runtime-native recurring |
 |---|---|---|---|---|
 | Grok CLI | `$grok-kaola-project-runner` | `grok` | Grok 4.6, xhigh, non-FAST | supported，需显式请求 |
 | Claude Code | `$claude-code-kaola-project-runner` | `claude` | Opus 5, high | unsupported |
@@ -47,24 +53,61 @@ tmux session 并返回可读证据。它不会隐式发送 `workflow-next`、mat
 ./scripts/install-local.sh --uninstall
 ```
 
-安装目标是 `${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>`。同一趟安装还会写入属主拥有的
-`$HOME/.local/bin/kaola-acp` 与 `kaola-acp-holder` 符号链接（指向本仓库 `scripts/`）；外源文件
-拒绝覆盖，卸载只拆这些属主链接。旧的
+### 安装目标：`--runtime` 与 `--skills-dir`
+
+不带目标参数时保持向后兼容：安装到 Codex 运行时目录
+`${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>`。`--runtime NAME` 选择已核实的消费运行时
+技能目录，`--skills-dir ABS_PATH` 选择任意绝对路径（包括项目内目录），两者互斥：
+
+```bash
+./scripts/install-local.sh --runtime codex          # ${CODEX_HOME:-$HOME/.codex}/skills
+./scripts/install-local.sh --runtime claude-code    # ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
+./scripts/install-local.sh --runtime cursor         # $HOME/.cursor/skills
+./scripts/install-local.sh --runtime devin          # ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
+./scripts/install-local.sh --skills-dir "$PWD/.agent/skills"   # 任意绝对路径，含空格亦可
+```
+
+其他消费运行时的原生技能目录一旦核实即可加入别名表；未列名的运行时始终可用
+`--skills-dir`。--platform 选择要安装的七个目标平台 Skill 子集，与 --runtime 独立。
+
+### 安装方式：`--method link|copy`
+
+`--method link`（默认）把每个 Skill 目录符号链接到本仓库，便于开发；`--method copy` 复制
+完整自包含内容，便于脱离 checkout 分发。两种方式安装的内容相同。copy 模式在每个目标下
+`<skills-dir>/.kaola-install-receipts/<skill>.json` 记录属主/内容回执（不在生成载荷内）：
+内容不变的属主安装是 no-op；只有未修改过的属主安装才会被替换或卸载，用户改动与外来文件
+一律保留并拒绝覆盖。单独的 `.generated` 标记不会被视为删除目录的授权。替换在目标文件系统
+上先暂存再落位，不会留下半个 Skill；路径（含空格）均按字面传递。
+
+### Helper 链接：`--bin-links`
+
+`--bin-links` 控制是否写入属主拥有的 `$HOME/.local/bin/kaola-acp` 与 `kaola-acp-holder`
+符号链接（指向本仓库 `scripts/`）。仅在 Codex 运行时目标（默认或 `--runtime codex`）下默认
+开启；`--skills-dir` 与其他命名运行时默认不创建。普通卸载**不**移除这些可能与其他安装共享
+的链接，除非显式传 `--uninstall --bin-links`，且只移除精确属主链接。旧版
 `grok-kaola-project-runner -> <repository-root>` 只有在 canonical target 精确等于当前仓库根
-时才会迁移。其他 symlink、普通文件、目录和 dangling link 均拒绝覆盖；卸载也只移除精确指向
-本仓库生成目录的 owned symlink。
+时才会迁移。外源文件、目录、symlink 与 dangling link 均拒绝覆盖；卸载也只移除精确属主的
+symlink 或带未修改回执的 copy 安装。
 
 ## 快速使用
 
+七个 Skill 名称：
+
 ```text
-$grok-kaola-project-runner
-$claude-code-kaola-project-runner
-$opencode-kaola-project-runner
-$kimi-cli-kaola-project-runner
-$cursor-cli-kaola-project-runner
-$devin-kaola-project-runner
-$codex-kaola-project-runner
+grok-kaola-project-runner
+claude-code-kaola-project-runner
+opencode-kaola-project-runner
+kimi-cli-kaola-project-runner
+cursor-cli-kaola-project-runner
+devin-kaola-project-runner
+codex-kaola-project-runner
 ```
+
+各消费运行时按自身机制发现并加载 Skill：Codex 用 `$<skill-name>` 调用安装在其技能目录中的
+Skill；Claude Code、Cursor、Devin 等运行时自动发现其原生技能目录中的 Skill，也可由 Agent
+直接读取 `SKILL.md` 显式加载。Skill 内部示例统一先解析安装目录绝对路径（如
+`"$SKILL_DIR/scripts/runtime-tmux.sh"`），用户项目只通过 `--repo` 传递；复制安装可脱离本
+checkout、在含空格路径下、且无全局 `kaola-acp` 链接时独立工作。
 
 控制 Agent 负责理解输出并选择下一条输入；目标 CLI 负责执行收到的输入；当 Agent 选择使用
 Kaola Workflow 时，Workflow 才负责 claim、mission list、finalize、Issue/PR、archive 和 sink。
@@ -168,7 +211,7 @@ authority receipt 和项目级 commands 只作为证据报告；需要 materiali
 - `templates/SKILL.md.tmpl`：七个平台共用的 active 通信驱动合同；
 - `templates/grok-golden/`：已实跑验证、字节冻结的历史 Grok Workflow 协议和提示词证据；
 - `platforms/*.yaml`：七个平台的固定事实与能力声明；
-- `templates/agents/`、`templates/references/platform.md.tmpl`：UI 与 adapter facts 模板；
+- `templates/agents/`、`templates/references/`：UI metadata、adapter facts、transport 与 ACP 模板；
 - `scripts/adapters/`：binary、preflight、启动、TUI/editor/approval 事实和退出差异；
 - `scripts/kaola-tmux.sh`：平台中立、安全默认关闭的会话与 guarded-action 核心；
 - `scripts/kaola-pane-relay.py`、`kaola-relay-client.py`：nested PTY、直接输入 transport 和旧协议兼容；
@@ -187,8 +230,12 @@ golden bytes 保持冻结；active Skill、manifest、adapter 或 renderer 修�
 ```
 
 默认离线验证只检查渲染一致性、Skill 格式、shell 语法、冻结 Grok bytes 和最小通信合同；不再
-运行耗时的 fake-runtime 历史矩阵。真实验收按七个平台分别证明 start/read/send/read-back/stop；
-原生选择界面还要证明 Agent-selected `key`。Claude Code 当前无有效账号，只把提示词传输与登录
+运行耗时的 fake-runtime 历史矩阵。Skill 格式由仓库自带的运行时中立校验器
+`scripts/validate-skill.py` 检查，不再依赖外部 Codex 安装；整个套件在不含 `.codex` 的临时
+`HOME`、且 `CODEX_HOME` 未设置的环境中运行，不读写真实用户配置。真实验收按七个平台分别证明
+start/read/send/read-back/stop；原生选择界面还要证明 Agent-selected `key`。已实测的组合为：
+认证过的 Codex/Devin 控制端分别驱动相应目标 CLI；其余运行时按同一 Agent Skills 标准格式
+加载，属标准格式兼容而非逐组合实跑。Claude Code 当前无有效账号，只把提示词传输与登录
 错误回读作为通过证据，不声称认证后的模型执行成功。
 
 详细边界见 [架构](docs/architecture.md)、[命令契约](docs/api.md) 和

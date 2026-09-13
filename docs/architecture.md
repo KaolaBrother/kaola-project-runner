@@ -2,12 +2,14 @@
 
 ## Product boundary
 
-Kaola Project Runner is a Codex-facing CLI communication driver. It does not orchestrate Kaola
-Workflow, implement Workflow, or own a runtime's configuration.
+Kaola Project Runner is a runtime-neutral Agent Skills CLI communication driver: any agent that
+can load a skill directory and run shell commands in an environment containing the target CLI can
+use the same seven Skills, and Codex remains a fully supported consuming runtime. It does not
+orchestrate Kaola Workflow, implement Workflow, or own a runtime's configuration.
 
 ```text
 Controlling Agent
-    -> communication-only Codex Skill
+    -> communication-only Agent Skill
         -> manifest-selected transport
             -> ACP holder + structured protocol agent
             OR
@@ -51,6 +53,19 @@ directories under `skills/`. Every managed
 directory has a `.generated-by-kaola-project-runner` marker. A published Skill never follows a path
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
 byte inventories.
+
+`install-local.sh` delivers those directories to a consuming runtime: a verified named alias via
+`--runtime` (`codex`, `claude-code`, `cursor`, `devin`), or any absolute `--skills-dir` (the two are
+mutually exclusive; the flag-free default remains the Codex skills directory). `--method link`
+(the default) symlinks each Skill to the checkout for development; `--method copy` installs the
+identical payload as a standalone directory plus a per-Skill ownership/content receipt kept outside
+the generated payload under `<skills-dir>/.kaola-install-receipts/`. Only an unmodified owned
+installation is replaced or removed — user edits, foreign additions, and receipt-less paths are
+preserved, and a `.generated` marker alone is never delete authority. Skill destination selection
+(`--runtime`/`--skills-dir`) and target platform selection (`--platform`) are independent
+dimensions. Owned `$HOME/.local/bin/kaola-acp*` helper links are created only for the Codex runtime
+destination or on explicit `--bin-links`; uninstall never removes them unless `--bin-links` is
+passed, and then only exact-owned links.
 
 ## Session ownership
 

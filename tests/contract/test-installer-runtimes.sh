@@ -1,0 +1,338 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Contract coverage for the runtime-neutral installer: named runtimes,
+# --skills-dir, link/copy methods, receipts, coexistence, and bin-link scope.
+
+project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+installer_source="$project_root/scripts/install-local.sh"
+validator_source="$project_root/scripts/validate-skill.py"
+
+failures=0
+fail() {
+  printf 'RED: %s — %s\n' "$1" "$2" >&2
+  failures=$((failures + 1))
+}
+
+assert_link() {
+  local name="$1" target="$2" expected="$3"
+  if [[ ! -L "$target" ]]; then
+    fail "$name" "expected symlink at $target"
+    return
+  fi
+  local actual
+  actual="$(readlink "$target")"
+  [[ "$actual" == "$expected" ]] || fail "$name" "link is $actual, expected $expected"
+}
+
+assert_absent() {
+  local name="$1" path="$2"
+  [[ ! -e "$path" && ! -L "$path" ]] || fail "$name" "unexpected path remains: $path"
+}
+
+assert_dir() {
+  local name="$1" path="$2"
+  [[ -d "$path" && ! -L "$path" ]] || fail "$name" "expected real directory at $path"
+}
+
+assert_file() {
+  local name="$1" path="$2"
+  [[ -f "$path" ]] || fail "$name" "expected file at $path"
+}
+
+source_for() {
+  local root="$1" name="$2"
+  (cd "$root/skills/$name" && pwd -P)
+}
+
+make_fixture() {
+  local root="$1"
+  mkdir -p "$root/scripts" "$root/skills"
+  cp "$installer_source" "$root/scripts/install-local.sh"
+  chmod +x "$root/scripts/install-local.sh"
+  cp "$project_root/scripts/kaola-acp.py" "$root/scripts/kaola-acp.py"
+  cp "$project_root/scripts/kaola-acp-holder.py" "$root/scripts/kaola-acp-holder.py"
+  for id in grok claude-code opencode kimi-cli cursor-cli devin codex; do
+    case "$id" in
+      grok) name=grok-kaola-project-runner ;;
+      claude-code) name=claude-code-kaola-project-runner ;;
+      opencode) name=opencode-kaola-project-runner ;;
+      kimi-cli) name=kimi-cli-kaola-project-runner ;;
+      cursor-cli) name=cursor-cli-kaola-project-runner ;;
+      devin) name=devin-kaola-project-runner ;;
+      codex) name=codex-kaola-project-runner ;;
+    esac
+    mkdir -p "$root/skills/$name/scripts"
+    printf '%s\n' "$name" >"$root/skills/$name/.generated-by-kaola-project-runner"
+    printf '%s\n' '# fixture Skill' >"$root/skills/$name/SKILL.md"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$root/skills/$name/scripts/runtime-tmux.sh"
+    chmod +x "$root/skills/$name/scripts/runtime-tmux.sh"
+  done
+}
+
+run_installer() {
+  # HOME/DEVIN_CONFIG_DIR/CODEX_HOME are redirected so nothing touches real
+  # user dirs; a caller-provided CODEX_HOME still wins for codex-runtime cases.
+  local root="$1" home="$2"
+  shift 2
+  HOME="$home" DEVIN_CONFIG_DIR="$home/devin-config" \
+    CODEX_HOME="${CODEX_HOME:-$home/codex-default}" "$root/scripts/install-local.sh" "$@"
+}
+
+tmp_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/kaola-installer-runtimes.XXXXXX")" && pwd -P)"
+trap 'rm -rf "$tmp_root"' EXIT
+
+# --- named runtimes resolve to their verified native directories ------------
+repo="$tmp_root/repo-runtimes"
+make_fixture "$repo"
+home="$tmp_root/home-runtimes"
+output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok 2>&1)" \
+  || fail "test_runtime_claude_code_install" "install failed: $output"
+assert_link "test_runtime_claude_code_install" "$home/.claude/skills/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+assert_absent "test_runtime_claude_code_no_bin_links" "$home/.local/bin/kaola-acp"
+
+output="$(run_installer "$repo" "$home" --runtime cursor --platform grok 2>&1)" \
+  || fail "test_runtime_cursor_install" "install failed: $output"
+assert_link "test_runtime_cursor_install" "$home/.cursor/skills/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+
+output="$(run_installer "$repo" "$home" --runtime devin --platform grok 2>&1)" \
+  || fail "test_runtime_devin_install" "install failed: $output"
+assert_link "test_runtime_devin_install" "$home/devin-config/skills/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+assert_absent "test_runtime_devin_no_bin_links" "$home/.local/bin/kaola-acp"
+
+# --- argument validation -----------------------------------------------------
+set +e
+output="$(run_installer "$repo" "$home" --runtime bogus --platform grok 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_unknown_runtime_refused" "unexpected success"
+set +e
+output="$(run_installer "$repo" "$home" --runtime codex --skills-dir "$tmp_root/x" 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_runtime_skills_dir_mutually_exclusive" "unexpected success"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir relative/path 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_relative_skills_dir_refused" "unexpected success"
+set +e
+output="$(run_installer "$repo" "$home" --method bogus 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_unknown_method_refused" "unexpected success"
+
+# --- --skills-dir with spaces, link method -----------------------------------
+repo="$tmp_root/repo-spaces"
+make_fixture "$repo"
+home="$tmp_root/home-spaces"
+dest="$tmp_root/dest with spaces/skills"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok,codex 2>&1)" \
+  || fail "test_skills_dir_with_spaces" "install failed: $output"
+assert_link "test_skills_dir_with_spaces_grok" "$dest/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+assert_link "test_skills_dir_with_spaces_codex" "$dest/codex-kaola-project-runner" \
+  "$(source_for "$repo" codex-kaola-project-runner)"
+assert_absent "test_skills_dir_no_bin_links" "$home/.local/bin/kaola-acp"
+
+# --- copy method: payload identical, receipt outside the payload -------------
+repo="$tmp_root/repo-copy"
+make_fixture "$repo"
+home="$tmp_root/home-copy"
+dest="$tmp_root/copy-dest/skills"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)" \
+  || fail "test_copy_install" "install failed: $output"
+assert_dir "test_copy_install_is_real_dir" "$dest/grok-kaola-project-runner"
+assert_file "test_copy_install_payload" "$dest/grok-kaola-project-runner/SKILL.md"
+assert_file "test_copy_install_marker" "$dest/grok-kaola-project-runner/.generated-by-kaola-project-runner"
+assert_file "test_copy_install_receipt" "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+[[ -x "$dest/grok-kaola-project-runner/scripts/runtime-tmux.sh" ]] \
+  || fail "test_copy_install_exec_bits" "copied script lost execute permission"
+if [[ -e "$dest/grok-kaola-project-runner/.kaola-install-receipts" ]]; then
+  fail "test_copy_receipt_outside_payload" "receipt written inside Skill payload"
+fi
+diff -r "$repo/skills/grok-kaola-project-runner" "$dest/grok-kaola-project-runner" >/dev/null \
+  || fail "test_copy_identical_content" "copied content differs from source payload"
+
+# identical owned content is a no-op
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)" \
+  || fail "test_copy_reinstall_noop" "reinstall failed: $output"
+[[ "$output" == *"already installed:"* ]] \
+  || fail "test_copy_reinstall_noop" "expected no-op report, got: $output"
+
+# source update replaces the unmodified owned copy and refreshes the receipt
+printf '%s\n' '# updated fixture' >>"$repo/skills/grok-kaola-project-runner/SKILL.md"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)" \
+  || fail "test_copy_update" "update failed: $output"
+[[ "$output" == *"update:"* ]] || fail "test_copy_update" "expected update report, got: $output"
+grep -q 'updated fixture' "$dest/grok-kaola-project-runner/SKILL.md" \
+  || fail "test_copy_update" "destination did not receive updated content"
+
+# a user-edited copy is preserved against replace and remove
+printf '%s\n' '# user edit' >>"$dest/grok-kaola-project-runner/SKILL.md"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_edited_copy_replace_refused" "unexpected success"
+grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
+  || fail "test_edited_copy_replace_refused" "edited content was overwritten"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok --uninstall 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_edited_copy_uninstall_refused" "unexpected success"
+assert_dir "test_edited_copy_uninstall_refused" "$dest/grok-kaola-project-runner"
+grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
+  || fail "test_edited_copy_uninstall_refused" "edited content was removed"
+python3 - "$dest/grok-kaola-project-runner/SKILL.md" <<'PY'
+import sys
+path = sys.argv[1]
+text = open(path).read()
+open(path, "w").write(text.replace("# user edit\n", ""))
+PY
+
+# uninstall of an unmodified owned copy removes dir, receipt, and empty receipt dir
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok --uninstall 2>&1)" \
+  || fail "test_copy_uninstall" "uninstall failed: $output"
+assert_absent "test_copy_uninstall_dir" "$dest/grok-kaola-project-runner"
+assert_absent "test_copy_uninstall_receipt" "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+assert_absent "test_copy_uninstall_receipts_dir" "$dest/.kaola-install-receipts"
+
+# --- method switching --------------------------------------------------------
+repo="$tmp_root/repo-switch"
+make_fixture "$repo"
+home="$tmp_root/home-switch"
+dest="$tmp_root/switch-dest/skills"
+run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok >/dev/null
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method link --platform grok 2>&1)" \
+  || fail "test_copy_to_link" "relink failed: $output"
+assert_link "test_copy_to_link" "$dest/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+assert_absent "test_copy_to_link_receipt" "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)" \
+  || fail "test_link_to_copy" "copy-over-link failed: $output"
+assert_dir "test_link_to_copy" "$dest/grok-kaola-project-runner"
+assert_file "test_link_to_copy_receipt" "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+
+# --- foreign paths are never replaced, even with a .generated marker ---------
+repo="$tmp_root/repo-foreign-dir"
+make_fixture "$repo"
+home="$tmp_root/home-foreign-dir"
+dest="$tmp_root/foreign-dest/skills"
+mkdir -p "$dest/grok-kaola-project-runner"
+printf '%s\n' 'grok-kaola-project-runner' >"$dest/grok-kaola-project-runner/.generated-by-kaola-project-runner"
+printf '%s\n' 'foreign' >"$dest/grok-kaola-project-runner/SKILL.md"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_foreign_dir_marker_not_authority" "copy replaced receipt-less directory"
+[[ "$(cat "$dest/grok-kaola-project-runner/SKILL.md")" == foreign ]] \
+  || fail "test_foreign_dir_marker_not_authority" "foreign content changed"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok --uninstall 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_foreign_dir_uninstall_refused" "removed receipt-less directory"
+assert_dir "test_foreign_dir_uninstall_refused" "$dest/grok-kaola-project-runner"
+
+# --- two installations coexist; scoped uninstall + shared bin links ----------
+repo="$tmp_root/repo-coexist"
+make_fixture "$repo"
+home="$tmp_root/home-coexist"
+codex_home="$tmp_root/coexist-codex"
+dest_b="$tmp_root/coexist-b/skills"
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok 2>&1)" \
+  || fail "test_coexist_install_a" "install failed: $output"
+assert_link "test_coexist_install_a_link" "$codex_home/skills/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_b" --method copy --platform grok --bin-links 2>&1)" \
+  || fail "test_coexist_install_b" "install failed: $output"
+assert_dir "test_coexist_install_b_copy" "$dest_b/grok-kaola-project-runner"
+assert_link "test_coexist_bin_link" "$home/.local/bin/kaola-acp" "$repo/scripts/kaola-acp.py"
+# uninstall the --skills-dir copy: the codex link install and bin links survive
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_b" --platform grok --uninstall 2>&1)" \
+  || fail "test_coexist_uninstall_b" "uninstall failed: $output"
+assert_absent "test_coexist_uninstall_b_dir" "$dest_b/grok-kaola-project-runner"
+assert_link "test_coexist_bin_link_preserved" "$home/.local/bin/kaola-acp" "$repo/scripts/kaola-acp.py"
+assert_link "test_coexist_install_a_survives" "$codex_home/skills/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+# explicit --bin-links removal only touches exact-owned links
+ln -s /foreign/path "$home/.local/bin/kaola-acp-foreign"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_b" --platform grok --uninstall --bin-links 2>&1)" \
+  || fail "test_bin_links_explicit_removal" "uninstall failed: $output"
+assert_absent "test_bin_links_explicit_removal" "$home/.local/bin/kaola-acp"
+assert_absent "test_bin_links_explicit_removal_holder" "$home/.local/bin/kaola-acp-holder"
+assert_link "test_foreign_bin_link_preserved" "$home/.local/bin/kaola-acp-foreign" "/foreign/path"
+
+# --- codex default uninstall keeps shared bin links --------------------------
+repo="$tmp_root/repo-legacy"
+make_fixture "$repo"
+home="$tmp_root/home-legacy"
+output="$(CODEX_HOME="$tmp_root/legacy-codex" run_installer "$repo" "$home" --platform grok 2>&1)" \
+  || fail "test_legacy_install_bin_links" "install failed: $output"
+assert_link "test_legacy_install_bin_links" "$home/.local/bin/kaola-acp" "$repo/scripts/kaola-acp.py"
+output="$(CODEX_HOME="$tmp_root/legacy-codex" run_installer "$repo" "$home" --platform grok --uninstall 2>&1)" \
+  || fail "test_legacy_uninstall_keeps_bin_links" "uninstall failed: $output"
+assert_absent "test_legacy_uninstall_skill" "$tmp_root/legacy-codex/skills/grok-kaola-project-runner"
+assert_link "test_legacy_uninstall_keeps_bin_links" "$home/.local/bin/kaola-acp" "$repo/scripts/kaola-acp.py"
+
+# --- foreign helper links are refused on both install and uninstall ----------
+repo="$tmp_root/repo-foreign-bin"
+make_fixture "$repo"
+home="$tmp_root/home-foreign-bin"
+mkdir -p "$home/.local/bin"
+ln -s /foreign/path "$home/.local/bin/kaola-acp"
+set +e
+output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --bin-links 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_foreign_bin_link_install_refused" "unexpected success"
+assert_link "test_foreign_bin_link_install_refused" "$home/.local/bin/kaola-acp" "/foreign/path"
+assert_absent "test_foreign_bin_link_no_partial_install" "$home/.claude/skills/grok-kaola-project-runner"
+set +e
+output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --uninstall --bin-links 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_foreign_bin_link_uninstall_refused" "unexpected success"
+assert_link "test_foreign_bin_link_uninstall_refused" "$home/.local/bin/kaola-acp" "/foreign/path"
+
+# --- neutral validator --------------------------------------------------------
+good="$tmp_root/validator/good-skill"
+mkdir -p "$good"
+printf '%s\n' '---' 'name: good-skill' 'description: A portable skill.' '---' '' '# Body' >"$good/SKILL.md"
+python3 "$validator_source" "$good" >/dev/null \
+  || fail "test_validator_accepts_valid_skill" "valid skill rejected"
+
+for case in missing badname mismatch unknownfield nodescription; do
+  dir="$tmp_root/validator/$case-skill"
+  mkdir -p "$dir"
+  case "$case" in
+    missing) ;;
+    badname) printf '%s\n' '---' 'name: Bad_Name' 'description: x' '---' >"$dir/SKILL.md" ;;
+    mismatch) printf '%s\n' '---' 'name: other-name' 'description: x' '---' >"$dir/SKILL.md" ;;
+    unknownfield) printf '%s\n' '---' 'name: unknownfield-skill' 'description: x' 'bogus: y' '---' >"$dir/SKILL.md" ;;
+    nodescription) printf '%s\n' '---' 'name: nodescription-skill' '---' >"$dir/SKILL.md" ;;
+  esac
+  set +e
+  python3 "$validator_source" "$dir" >/dev/null 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" -ne 0 ]] || fail "test_validator_rejects_$case" "invalid skill accepted"
+done
+
+# --- generated payload stays valid under the neutral validator ----------------
+for skill_dir in "$project_root"/skills/*-kaola-project-runner; do
+  python3 "$validator_source" "$skill_dir" >/dev/null \
+    || fail "test_validator_generated_$(basename "$skill_dir")" "generated Skill failed neutral validation"
+done
+
+if [[ "$failures" -gt 0 ]]; then
+  printf 'installer runtimes acceptance: %d failure(s)\n' "$failures" >&2
+  exit 1
+fi
+printf 'installer runtimes acceptance: PASS\n'

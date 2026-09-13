@@ -27,8 +27,10 @@ observe, capture, send, key, or stop transport chosen by the Agent.
 
 Launch codex --cd <repo> --no-alt-screen with literal --model, -c model_reasoning_effort, and the mapped sandbox/approval pair (default agent-full-access). ACP process is the pinned npx codex-acp wrapper.
 
-Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
-and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.
+Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
+send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill
+directory containing SKILL.md (quote it — the destination may contain spaces). Read
+[transport.md](transport.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
 Runner `--continue` and `--resume` select the native continuation/resume syntax listed above;

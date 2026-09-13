@@ -27,8 +27,10 @@ observe, capture, send, key, or stop transport chosen by the Agent.
 
 Launch Claude from the canonical repository root with --permission-mode bypassPermissions (default). ACP start sets mode=bypassPermissions after a working initialize; the pinned wrapper remains probe-eof.
 
-Use `scripts/runtime-tmux.sh` for every preflight, start, observe, status, capture, send, key, answer,
-and stop operation. Read [transport.md](transport.md) before any action that can change the runtime.
+Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
+send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill
+directory containing SKILL.md (quote it — the destination may contain spaces). Read
+[transport.md](transport.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy tmux matches.
 
 Runner `--continue` and `--resume` select the native continuation/resume syntax listed above;

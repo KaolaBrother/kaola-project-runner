@@ -1,6 +1,6 @@
 ---
 name: opencode-kaola-project-runner
-description: Use when Codex should communicate with an OpenCode main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.
+description: Use when the controlling Agent should communicate with an OpenCode main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.
 ---
 
 # OpenCode Kaola Project Runner
@@ -31,15 +31,18 @@ Runner never auto-falls back or resends. Read the receipt and let the controllin
 
 ## Communication loop
 
-Use the canonical Git root and one exact session name throughout:
+Resolve this Skill's installed directory once and call its scripts by absolute path — the install
+destination may contain spaces, and the user's project is passed only through `--repo` (relative
+paths in these references resolve against the Skill, never the project cwd):
 
 ```bash
+SKILL_DIR="/absolute/path/to/opencode-kaola-project-runner"   # the directory containing this SKILL.md
 REPO="$(git rev-parse --show-toplevel)"
 SESSION="opencode-kaola-<purpose>"
-scripts/runtime-tmux.sh preflight --repo "$REPO" --session "$SESSION"
-scripts/runtime-tmux.sh start --repo "$REPO" --session "$SESSION"
-scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
-scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 160
+"$SKILL_DIR/scripts/runtime-tmux.sh" preflight --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" start --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" observe --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
 The controlling Agent first checks whether the current user request explicitly selects the main
@@ -60,17 +63,17 @@ task progress, an actual transport failure, or a decision that genuinely needs t
 After reading current evidence, the controlling Agent chooses what to send:
 
 ```bash
-scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" --text '<agent-selected prompt>'
-scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
-scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 200
+"$SKILL_DIR/scripts/runtime-tmux.sh" send --repo "$REPO" --session "$SESSION" --text '<agent-selected prompt>'
+"$SKILL_DIR/scripts/runtime-tmux.sh" observe --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 200
 ```
 
 For a native selection screen, the Agent may choose one exact key. The Runner transfers it without
 interpreting its meaning or adding Enter:
 
 ```bash
-scripts/runtime-tmux.sh key --repo "$REPO" --session "$SESSION" --key down
-scripts/runtime-tmux.sh key --repo "$REPO" --session "$SESSION" --key enter
+"$SKILL_DIR/scripts/runtime-tmux.sh" key --repo "$REPO" --session "$SESSION" --key down
+"$SKILL_DIR/scripts/runtime-tmux.sh" key --repo "$REPO" --session "$SESSION" --key enter
 ```
 
 Supported key names are `up`, `down`, `left`, `right`, `enter`, `escape`, `tab`, `backtab`, and
@@ -79,8 +82,8 @@ Supported key names are `up`, `down`, `left`, `right`, `enter`, `escape`, `tab`,
 When the Agent decides the exact session is finished, end only that owned session:
 
 ```bash
-scripts/runtime-tmux.sh stop --repo "$REPO" --session "$SESSION"
-scripts/runtime-tmux.sh status --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" stop --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" status --repo "$REPO" --session "$SESSION"
 ```
 
 Use `--force` only when the Agent explicitly chooses terminal containment for this exact owned

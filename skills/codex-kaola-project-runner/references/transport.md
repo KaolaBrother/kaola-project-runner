@@ -7,9 +7,12 @@ that exact session at a safe boundary.
 
 ## Discover and give the evidence to the agent
 
+`SKILL_DIR` below is the absolute path of the installed Skill directory containing SKILL.md; quote it
+because the destination may contain spaces.
+
 ```bash
-scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
-scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 160
+"$SKILL_DIR/scripts/runtime-tmux.sh" observe --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
 Read `raw_current_frame`, terminal coordinates, editor and approval observations, process/relay facts,
@@ -32,7 +35,7 @@ They never independently permit or prevent an agent-directed `send` or `stop`.
 After the agent chooses the prompt, transfer it directly:
 
 ```bash
-scripts/runtime-tmux.sh send --repo "$REPO" --session "$SESSION" < prompt.txt
+"$SKILL_DIR/scripts/runtime-tmux.sh" send --repo "$REPO" --session "$SESSION" < prompt.txt
 ```
 
 The optional legacy `--if-snapshot "$SNAPSHOT_ID"` argument only links the receipt to the earlier
@@ -55,8 +58,8 @@ observations into a policy gate.
 When a visible native selection screen needs a key, the Agent reads the screen and chooses one:
 
 ```bash
-scripts/runtime-tmux.sh key --repo "$REPO" --session "$SESSION" --key up
-scripts/runtime-tmux.sh key --repo "$REPO" --session "$SESSION" --key enter
+"$SKILL_DIR/scripts/runtime-tmux.sh" key --repo "$REPO" --session "$SESSION" --key up
+"$SKILL_DIR/scripts/runtime-tmux.sh" key --repo "$REPO" --session "$SESSION" --key enter
 ```
 
 The Runner accepts `up`, `down`, `left`, `right`, `enter`, `escape`, `tab`, `backtab`, or `space`.
@@ -68,8 +71,8 @@ the option meaning nor chooses the key. Observe/capture again after every key.
 After every transfer, observe and capture again:
 
 ```bash
-scripts/runtime-tmux.sh observe --repo "$REPO" --session "$SESSION"
-scripts/runtime-tmux.sh capture --repo "$REPO" --session "$SESSION" --lines 160
+"$SKILL_DIR/scripts/runtime-tmux.sh" observe --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
 The Agent reads the real response and decides what happened. Enter or a successful transfer receipt is
@@ -82,7 +85,7 @@ An agent-directed ordinary stop does not require a snapshot and is not gated by 
 approval, decision, process-count, coordinate, prose, Git, or Workflow interpretations:
 
 ```bash
-scripts/runtime-tmux.sh stop --repo "$REPO" --session "$SESSION"
+"$SKILL_DIR/scripts/runtime-tmux.sh" stop --repo "$REPO" --session "$SESSION"
 ```
 
 `stop` releases exactly the owned PTY child, relay, and tmux session, then reports the actual

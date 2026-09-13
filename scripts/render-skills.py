@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the self-contained Codex Skills from canonical templates."""
+"""Render the self-contained portable Agent Skills from canonical templates."""
 
 from __future__ import annotations
 

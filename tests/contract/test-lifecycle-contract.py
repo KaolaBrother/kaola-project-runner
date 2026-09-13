@@ -44,12 +44,12 @@ SKILL_MARKERS = (
     "does not choose commands, Workflow modes, cadence, state, approvals, retries, or completion policy",
     "No invocation implicitly starts `workflow-next`",
     "creates a heartbeat",
-    "runtime-tmux.sh start",
-    "runtime-tmux.sh observe",
-    "runtime-tmux.sh capture",
-    "runtime-tmux.sh send",
-    "runtime-tmux.sh key",
-    "runtime-tmux.sh stop",
+    '"$SKILL_DIR/scripts/runtime-tmux.sh" start',
+    '"$SKILL_DIR/scripts/runtime-tmux.sh" observe',
+    '"$SKILL_DIR/scripts/runtime-tmux.sh" capture',
+    '"$SKILL_DIR/scripts/runtime-tmux.sh" send',
+    '"$SKILL_DIR/scripts/runtime-tmux.sh" key',
+    '"$SKILL_DIR/scripts/runtime-tmux.sh" stop',
 )
 
 PLATFORM_MARKERS = (

@@ -8,13 +8,13 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Project Snapshot
 
-- Purpose: Codex-facing CLI communication driver for seven AI CLI platforms via tmux.
+- Purpose: runtime-neutral Agent Skills CLI communication driver for seven AI CLI platforms via tmux; Codex remains a supported consuming runtime.
 - Stack: Bash (macOS-compatible), Python 3, tmux.
 - Architecture: shared template renders seven self-contained Skills; each platform has a YAML manifest and shell adapter; relay manages nested PTY.
 
 ## Commands
 
-- Install: `./scripts/render-skills.py --write && ./scripts/install-local.sh`
+- Install: `./scripts/render-skills.py --write && ./scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH] [--method link|copy]`
 - Test: `./scripts/validate.sh`
 - Lint/typecheck/build: `./scripts/render-skills.py --check`
 - Dev server: N/A

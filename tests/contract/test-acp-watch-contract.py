@@ -569,6 +569,15 @@ class AcpWatchInstallTests(unittest.TestCase):
                 capture_output=True, text=True, env=env, cwd=str(PROJECT),
             )
             self.assertEqual(uninstalled.returncode, 0, uninstalled.stderr)
+            # Ordinary uninstall leaves shared helper links alone; they may be
+            # needed by another installation.
+            self.assertTrue(acp.is_symlink())
+            self.assertTrue(holder.is_symlink())
+            removed = subprocess.run(
+                [str(INSTALLER), "--uninstall", "--platform", "grok", "--bin-links"],
+                capture_output=True, text=True, env=env, cwd=str(PROJECT),
+            )
+            self.assertEqual(removed.returncode, 0, removed.stderr)
             self.assertFalse(acp.exists() or acp.is_symlink())
             self.assertFalse(holder.exists() or holder.is_symlink())
 

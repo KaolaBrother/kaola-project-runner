@@ -3,9 +3,11 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "$script_dir/.." && pwd -P)"
-codex_root="${CODEX_HOME:-$HOME/.codex}"
-target_parent="$codex_root/skills"
 mode=install
+method=link
+runtime_alias=""
+skills_dir=""
+bin_links_request=""
 selection=()
 installer_python="${PYTHON_BIN:-python3}"
 
@@ -16,10 +18,26 @@ command -v "$installer_python" >/dev/null 2>&1 || {
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/install-local.sh [--platform ID[,ID...]] [--uninstall]
+Usage: ./scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
+                                  [--method link|copy] [--platform ID[,ID...]]
+                                  [--bin-links | --no-bin-links] [--uninstall]
 
+Consuming runtimes (verified native skill directories):
+  codex        ${CODEX_HOME:-$HOME/.codex}/skills
+  claude-code  ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
+  cursor       $HOME/.cursor/skills
+  devin        ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
+
+--skills-dir installs into any explicit destination parent (including
+project-local paths) and is mutually exclusive with --runtime.
+--method link (default) symlinks each Skill to this checkout; --method copy
+installs a standalone copy tracked by a per-Skill receipt.
 Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex
-With no --platform, installs all seven Skills. Existing foreign paths are never replaced.
+With no --platform, installs all seven Skills. With no destination flags the
+legacy Codex destination is used. Existing foreign paths are never replaced.
+--bin-links also manages $HOME/.local/bin/kaola-acp* helper links; it is on by
+default only for the Codex runtime destination. Uninstall never removes bin
+links unless --bin-links is passed explicitly.
 EOF
 }
 
@@ -32,6 +50,16 @@ skill_name_for() {
     cursor-cli) printf '%s\n' 'cursor-cli-kaola-project-runner' ;;
     devin) printf '%s\n' 'devin-kaola-project-runner' ;;
     codex) printf '%s\n' 'codex-kaola-project-runner' ;;
+    *) return 1 ;;
+  esac
+}
+
+runtime_skills_dir() {
+  case "$1" in
+    codex) printf '%s\n' "${CODEX_HOME:-$HOME/.codex}/skills" ;;
+    claude-code) printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" ;;
+    cursor) printf '%s\n' "$HOME/.cursor/skills" ;;
+    devin) printf '%s\n' "${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills" ;;
     *) return 1 ;;
   esac
 }
@@ -55,11 +83,62 @@ while [[ $# -gt 0 ]]; do
       append_selection "$2"
       shift 2
       ;;
+    --runtime)
+      [[ $# -ge 2 ]] || { printf '%s\n' '--runtime needs a value' >&2; exit 2; }
+      runtime_skills_dir "$2" >/dev/null || { printf 'unknown runtime: %s\n' "$2" >&2; exit 2; }
+      [[ -z "$runtime_alias" ]] || { printf '%s\n' '--runtime may be given once' >&2; exit 2; }
+      runtime_alias="$2"
+      shift 2
+      ;;
+    --skills-dir)
+      [[ $# -ge 2 ]] || { printf '%s\n' '--skills-dir needs a value' >&2; exit 2; }
+      [[ -z "$skills_dir" ]] || { printf '%s\n' '--skills-dir may be given once' >&2; exit 2; }
+      skills_dir="$2"
+      shift 2
+      ;;
+    --method)
+      [[ $# -ge 2 ]] || { printf '%s\n' '--method needs a value' >&2; exit 2; }
+      case "$2" in link|copy) ;; *) printf 'unknown method: %s\n' "$2" >&2; exit 2 ;; esac
+      method="$2"
+      shift 2
+      ;;
+    --bin-links) bin_links_request=on; shift ;;
+    --no-bin-links) bin_links_request=off; shift ;;
     --uninstall) mode=uninstall; shift ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ -n "$runtime_alias" && -n "$skills_dir" ]]; then
+  printf '%s\n' '--runtime and --skills-dir are mutually exclusive' >&2
+  exit 2
+fi
+
+if [[ -n "$skills_dir" ]]; then
+  [[ "$skills_dir" == /* ]] || { printf '%s\n' '--skills-dir must be an absolute path' >&2; exit 2; }
+  target_parent="$skills_dir"
+  resolved_runtime=generic
+elif [[ -n "$runtime_alias" ]]; then
+  target_parent="$(runtime_skills_dir "$runtime_alias")"
+  resolved_runtime="$runtime_alias"
+else
+  target_parent="${CODEX_HOME:-$HOME/.codex}/skills"
+  resolved_runtime=codex
+fi
+receipts_dir="$target_parent/.kaola-install-receipts"
+
+if [[ "$mode" == install ]]; then
+  if [[ "$bin_links_request" == on || ( -z "$bin_links_request" && "$resolved_runtime" == codex ) ]]; then
+    want_bin_links=true
+  else
+    want_bin_links=false
+  fi
+else
+  # Uninstall leaves shared helper links alone unless removal was explicitly
+  # requested; they may belong to another installation.
+  [[ "$bin_links_request" == on ]] && want_bin_links=true || want_bin_links=false
+fi
 
 if [[ ${#selection[@]} -eq 0 ]]; then
   selection=(grok claude-code opencode kimi-cli cursor-cli devin codex)
@@ -87,6 +166,102 @@ canonical_existing_target() {
   fi
 }
 
+tree_digest() {
+  "$installer_python" - "$1" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]
+entries = []
+for dirpath, dirnames, filenames in os.walk(root):
+    dirnames.sort()
+    for name in dirnames + filenames:
+        entries.append(os.path.join(dirpath, name))
+digest = hashlib.sha256()
+for path in sorted(entries, key=lambda p: os.path.relpath(p, root)):
+    rel = os.path.relpath(path, root).replace(os.sep, "/")
+    if os.path.islink(path):
+        digest.update(b"L" + rel.encode() + b"=" + os.readlink(path).encode() + b"\n")
+    elif os.path.isdir(path):
+        digest.update(b"D" + rel.encode() + b"\n")
+    else:
+        with open(path, "rb") as handle:
+            content = hashlib.sha256(handle.read()).hexdigest()
+        digest.update(b"F" + rel.encode() + b"=" + content.encode() + b"\n")
+print(digest.hexdigest())
+PY
+}
+
+receipt_digest() {
+  # Print the recorded content hash when $1 is an exact-owned receipt for $2.
+  "$installer_python" - "$1" "$2" <<'PY'
+import json, sys
+path, skill = sys.argv[1], sys.argv[2]
+try:
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, ValueError):
+    sys.exit(0)
+if (
+    data.get("receipt") == "kaola-project-runner-install/1"
+    and data.get("skill") == skill
+    and data.get("method") == "copy"
+    and isinstance(data.get("content_sha256"), str)
+):
+    sys.stdout.write(data["content_sha256"])
+PY
+}
+
+write_receipt() {
+  # $1 skill name, $2 source dir, $3 content digest
+  mkdir -p "$receipts_dir"
+  "$installer_python" - "$receipts_dir/$1.json" "$1" "$2" "$3" <<'PY'
+import json, sys, time
+path, skill, source, digest = sys.argv[1:5]
+data = {
+    "receipt": "kaola-project-runner-install/1",
+    "skill": skill,
+    "method": "copy",
+    "content_sha256": digest,
+    "source": source,
+    "installed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+PY
+}
+
+drop_owned_receipt() {
+  # Remove $1's receipt only when it parses as an exact-owned receipt for $2.
+  local path="$receipts_dir/$1.json"
+  [[ -f "$path" ]] || return 0
+  [[ -n "$(receipt_digest "$path" "$1")" ]] && rm -f "$path" || true
+}
+
+stage_copy() {
+  "$installer_python" - "$1" "$2" <<'PY'
+import shutil, sys
+shutil.copytree(sys.argv[1], sys.argv[2], symlinks=True)
+PY
+}
+
+place_staged() {
+  # Move $1 into place at $2; an existing $2 is set aside at $3 and removed
+  # after the staged tree lands, so the destination never holds partial content.
+  "$installer_python" - "$1" "$2" "$3" <<'PY'
+import os, shutil, sys
+staged, target, backup = sys.argv[1:4]
+if os.path.lexists(target):
+    os.replace(target, backup)
+os.replace(staged, target)
+if os.path.lexists(backup):
+    if os.path.isdir(backup) and not os.path.islink(backup):
+        shutil.rmtree(backup)
+    else:
+        os.unlink(backup)
+PY
+}
+
+# Plan every action before any write; a refusal anywhere aborts the whole run.
 actions=()
 for platform in "${selection[@]}"; do
   name="$(skill_name_for "$platform")"
@@ -98,21 +273,66 @@ for platform in "${selection[@]}"; do
       printf 'generated Skill is missing; run ./scripts/render-skills.py --write: %s\n' "$source" >&2
       exit 1
     }
-    if [[ -L "$target" ]]; then
-      current="$(canonical_existing_target "$target" || true)"
-      if [[ -n "$current" && "$current" -ef "$source" ]]; then
-        actions+=("already|$platform|$source|$target")
-      elif [[ "$platform" == grok && -n "$current" && "$current" -ef "$repo_root" ]]; then
-        actions+=("migrate|$platform|$source|$target")
-      else
-        printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
+    if [[ "$method" == link ]]; then
+      if [[ -L "$target" ]]; then
+        current="$(canonical_existing_target "$target" || true)"
+        if [[ -n "$current" && "$current" -ef "$source" ]]; then
+          actions+=("already|$platform|$source|$target")
+        elif [[ "$platform" == grok && -n "$current" && "$current" -ef "$repo_root" ]]; then
+          actions+=("migrate|$platform|$source|$target")
+        else
+          printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
+          exit 1
+        fi
+      elif [[ -d "$target" ]]; then
+        recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
+        actual="$(tree_digest "$target")"
+        if [[ -n "$recorded" && "$actual" == "$recorded" ]]; then
+          actions+=("relink|$platform|$source|$target")
+        elif [[ -n "$recorded" ]]; then
+          printf 'refusing to replace modified installed copy (user edits preserved): %s\n' "$target" >&2
+          exit 1
+        else
+          printf 'refusing to replace foreign directory without ownership receipt: %s\n' "$target" >&2
+          exit 1
+        fi
+      elif [[ -e "$target" ]]; then
+        printf 'refusing to replace existing path: %s\n' "$target" >&2
         exit 1
+      else
+        actions+=("install|$platform|$source|$target")
       fi
-    elif [[ -e "$target" ]]; then
-      printf 'refusing to replace existing path: %s\n' "$target" >&2
-      exit 1
     else
-      actions+=("install|$platform|$source|$target")
+      if [[ -L "$target" ]]; then
+        current="$(canonical_existing_target "$target" || true)"
+        if [[ -n "$current" && ( "$current" -ef "$source" || ( "$platform" == grok && "$current" -ef "$repo_root" ) ) ]]; then
+          actions+=("copy-over-link|$platform|$source|$target")
+        else
+          printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
+          exit 1
+        fi
+      elif [[ -d "$target" ]]; then
+        recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
+        if [[ -z "$recorded" ]]; then
+          printf 'refusing to replace foreign directory without ownership receipt: %s\n' "$target" >&2
+          exit 1
+        fi
+        actual="$(tree_digest "$target")"
+        if [[ "$actual" != "$recorded" ]]; then
+          printf 'refusing to replace modified installed copy (user edits preserved): %s\n' "$target" >&2
+          exit 1
+        fi
+        if [[ "$actual" == "$(tree_digest "$source")" ]]; then
+          actions+=("already|$platform|$source|$target")
+        else
+          actions+=("update|$platform|$source|$target")
+        fi
+      elif [[ -e "$target" ]]; then
+        printf 'refusing to replace existing path: %s\n' "$target" >&2
+        exit 1
+      else
+        actions+=("install|$platform|$source|$target")
+      fi
     fi
   else
     if [[ -L "$target" ]]; then
@@ -123,6 +343,17 @@ for platform in "${selection[@]}"; do
         printf 'refusing to remove foreign symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
         exit 1
       fi
+    elif [[ -d "$target" ]]; then
+      recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
+      if [[ -z "$recorded" ]]; then
+        printf 'refusing to remove foreign directory without ownership receipt: %s\n' "$target" >&2
+        exit 1
+      fi
+      if [[ "$(tree_digest "$target")" != "$recorded" ]]; then
+        printf 'refusing to remove modified installed copy (user edits preserved): %s\n' "$target" >&2
+        exit 1
+      fi
+      actions+=("uninstall-copy|$platform|$source|$target")
     elif [[ -e "$target" ]]; then
       printf 'refusing to remove non-symlink path: %s\n' "$target" >&2
       exit 1
@@ -138,76 +369,110 @@ bin_specs=(
   "kaola-acp-holder|$script_dir/kaola-acp-holder.py"
 )
 bin_actions=()
-for spec in "${bin_specs[@]}"; do
-  IFS='|' read -r name source <<<"$spec"
-  target="$bin_dir/$name"
-  if [[ "$mode" == install ]]; then
-    if [[ -L "$target" ]]; then
-      if [[ "$target" -ef "$source" ]]; then
-        bin_actions+=("already|$source|$target")
-      else
-        printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
+if [[ "$want_bin_links" == true ]]; then
+  for spec in "${bin_specs[@]}"; do
+    IFS='|' read -r name source <<<"$spec"
+    target="$bin_dir/$name"
+    if [[ "$mode" == install ]]; then
+      if [[ -L "$target" ]]; then
+        if [[ "$target" -ef "$source" ]]; then
+          bin_actions+=("already|$source|$target")
+        else
+          printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
+          exit 1
+        fi
+      elif [[ -e "$target" ]]; then
+        printf 'refusing to replace existing path: %s\n' "$target" >&2
         exit 1
-      fi
-    elif [[ -e "$target" ]]; then
-      printf 'refusing to replace existing path: %s\n' "$target" >&2
-      exit 1
-    else
-      bin_actions+=("install|$source|$target")
-    fi
-  else
-    if [[ -L "$target" ]]; then
-      if [[ "$target" -ef "$source" ]]; then
-        bin_actions+=("uninstall|$source|$target")
       else
-        printf 'refusing to remove foreign symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
-        exit 1
+        bin_actions+=("install|$source|$target")
       fi
-    elif [[ -e "$target" ]]; then
-      printf 'refusing to remove non-symlink path: %s\n' "$target" >&2
-      exit 1
     else
-      bin_actions+=("absent|$source|$target")
+      if [[ -L "$target" ]]; then
+        if [[ "$target" -ef "$source" ]]; then
+          bin_actions+=("uninstall|$source|$target")
+        else
+          printf 'refusing to remove foreign symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
+          exit 1
+        fi
+      elif [[ -e "$target" ]]; then
+        printf 'refusing to remove non-symlink path: %s\n' "$target" >&2
+        exit 1
+      else
+        bin_actions+=("absent|$source|$target")
+      fi
     fi
-  fi
-done
+  done
+fi
 
-mkdir -p "$target_parent"
+[[ "$mode" == install ]] && mkdir -p "$target_parent"
+[[ "$want_bin_links" == true && "$mode" == install ]] && mkdir -p "$bin_dir"
 
 for row in "${actions[@]}"; do
   IFS='|' read -r action platform source target <<<"$row"
+  name="$(skill_name_for "$platform")"
   case "$action" in
     already)
-      printf 'already installed: %s -> %s\n' "$target" "$source"
+      printf 'already installed: %s\n' "$target"
       ;;
-    install|migrate)
-      temp="$target_parent/.${target##*/}.tmp.$$"
-      [[ ! -e "$temp" && ! -L "$temp" ]] || { printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
-      ln -s "$source" "$temp"
-      if ! "$installer_python" - "$temp" "$target" <<'PY'
-import os, sys
-os.replace(sys.argv[1], sys.argv[2])
-PY
-      then
-        unlink "$temp" 2>/dev/null || true
-        printf 'atomic symlink replacement failed: %s\n' "$target" >&2
+    install|update|copy-over-link)
+      temp="$target_parent/.${name}.tmp.$$"
+      backup="$target_parent/.${name}.old.$$"
+      [[ ! -e "$temp" && ! -L "$temp" && ! -e "$backup" && ! -L "$backup" ]] || {
+        printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
+      if [[ "$method" == copy ]]; then
+        if ! stage_copy "$source" "$temp"; then
+          rm -rf "$temp" 2>/dev/null || true
+          printf 'staging copy failed: %s\n' "$source" >&2
+          exit 1
+        fi
+        new_digest="$(tree_digest "$temp")"
+      else
+        ln -s "$source" "$temp"
+      fi
+      if ! place_staged "$temp" "$target" "$backup"; then
+        rm -rf "$temp" "$backup" 2>/dev/null || true
+        printf 'atomic replacement failed: %s\n' "$target" >&2
         exit 1
       fi
+      if [[ "$method" == copy ]]; then
+        write_receipt "$name" "$source" "$new_digest"
+      else
+        drop_owned_receipt "$name"
+      fi
+      printf '%s: %s\n' "$action" "$target"
+      ;;
+    migrate|relink)
+      temp="$target_parent/.${name}.tmp.$$"
+      backup="$target_parent/.${name}.old.$$"
+      [[ ! -e "$temp" && ! -L "$temp" && ! -e "$backup" && ! -L "$backup" ]] || {
+        printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
+      ln -s "$source" "$temp"
+      if ! place_staged "$temp" "$target" "$backup"; then
+        rm -rf "$temp" "$backup" 2>/dev/null || true
+        printf 'atomic replacement failed: %s\n' "$target" >&2
+        exit 1
+      fi
+      [[ "$action" == relink ]] && drop_owned_receipt "$name"
       printf '%s: %s -> %s\n' "$action" "$target" "$source"
       ;;
     uninstall)
       unlink "$target"
+      drop_owned_receipt "$name"
+      printf 'uninstalled: %s\n' "$target"
+      ;;
+    uninstall-copy)
+      rm -rf "$target"
+      drop_owned_receipt "$name"
       printf 'uninstalled: %s\n' "$target"
       ;;
     absent)
+      drop_owned_receipt "$name"
       printf 'already absent: %s\n' "$target"
       ;;
   esac
 done
-
-if [[ "$mode" == install ]]; then
-  mkdir -p "$bin_dir"
-fi
+[[ "$mode" == uninstall ]] && rmdir "$receipts_dir" 2>/dev/null || true
 
 for row in "${bin_actions[@]}"; do
   IFS='|' read -r action source target <<<"$row"

@@ -267,9 +267,9 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
             for marker in (
                 "communication driver",
                 "does not choose commands",
-                "scripts/runtime-tmux.sh send",
-                "scripts/runtime-tmux.sh key",
-                "scripts/runtime-tmux.sh capture",
+                '"$SKILL_DIR/scripts/runtime-tmux.sh" send',
+                '"$SKILL_DIR/scripts/runtime-tmux.sh" key',
+                '"$SKILL_DIR/scripts/runtime-tmux.sh" capture',
                 "No invocation implicitly starts `workflow-next`",
             )
         ),
@@ -310,7 +310,7 @@ def check_evidence_first_transport_guidance(
         "raw_current_frame" in transport_text
         and "terminal" in lowered
         and "process/relay" in normalized
-        and any("scripts/runtime-tmux.sh observe" in command for command in observe_examples)
+        and any('"$SKILL_DIR/scripts/runtime-tmux.sh" observe' in command for command in observe_examples)
         and ("agent decides" in normalized or "controlling agent decides" in normalized),
         "transport must expose raw frame/tmux/process/relay evidence and say that the controlling agent decides",
     )

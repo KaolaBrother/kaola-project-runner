@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- The Skills are now runtime-neutral Agent Skills (issue #36): SKILL.md frontmatter and universal
+  instructions use generic controlling-Agent wording (Codex-specific display metadata stays in the
+  optional `agents/openai.yaml`), and every invocation example resolves the installed Skill's
+  absolute `"$SKILL_DIR/scripts/runtime-tmux.sh"` path so a copied Skill works outside the
+  checkout, under destinations containing spaces, and without repository scripts or global
+  `kaola-acp` links. `install-local.sh` gains `--runtime codex|claude-code|cursor|devin` for
+  verified consuming-runtime skill directories, `--skills-dir ABS_PATH` for arbitrary destinations
+  (mutually exclusive), `--method link|copy` for symlink development installs versus standalone
+  copies with per-Skill ownership/content receipts under
+  `<skills-dir>/.kaola-install-receipts/` (identical owned content is a no-op; only unmodified
+  owned installations are replaced or removed; edits and foreign paths are preserved), and
+  `--bin-links` control over the optional `$HOME/.local/bin/kaola-acp*` helper links — on by
+  default only for the Codex runtime destination and never removed by an ordinary uninstall.
+  `scripts/validate.sh` now validates the Agent Skills format with the repository-owned
+  `scripts/validate-skill.py` instead of an external Codex-installed validator, and the whole
+  suite runs under a temporary HOME without `.codex` or `CODEX_HOME`.
+
 - ACP status/observe now report a recorded, fully exited normal stop as `stopped`,
   preserving `holder-lost` for unexpected loss or remaining process evidence (#32).
 
