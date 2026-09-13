@@ -545,9 +545,11 @@ for platform in "${platforms[@]}"; do
 
   : >"$input_log"
   session="model-user-${platform}-$$"
-  override_effort_args=()
-  [[ -n "$override_effort" ]] && override_effort_args=(--effort "$override_effort")
-  capture_command "$platform" start --repo "$repo" --session "$session" --model "$override_id" "${override_effort_args[@]}"
+  if [[ -n "$override_effort" ]]; then
+    capture_command "$platform" start --repo "$repo" --session "$session" --model "$override_id" --effort "$override_effort"
+  else
+    capture_command "$platform" start --repo "$repo" --session "$session" --model "$override_id"
+  fi
   if [[ "$COMMAND_RC" -ne 0 ]]; then
     fail "test_${platform}_user_model_override" "start failed: $COMMAND_OUTPUT"
   else
@@ -671,8 +673,13 @@ for platform in "${platforms[@]}"; do
   : >"$input_log"
   export FAKE_MODEL_SCENARIO=resume-mismatch
   session="model-resume-${platform}-$$"
-  capture_command "$platform" start --repo "$repo" --session "$session" --resume "fixture-$platform-session" \
-    --model "$override_id" "${override_effort_args[@]}"
+  if [[ -n "$override_effort" ]]; then
+    capture_command "$platform" start --repo "$repo" --session "$session" --resume "fixture-$platform-session" \
+      --model "$override_id" --effort "$override_effort"
+  else
+    capture_command "$platform" start --repo "$repo" --session "$session" --resume "fixture-$platform-session" \
+      --model "$override_id"
+  fi
   if [[ "$COMMAND_RC" -ne 0 ]]; then
     fail "test_${platform}_resume_mismatch_is_evidence_not_communication_gate" "resume was blocked: $COMMAND_OUTPUT"
   else
