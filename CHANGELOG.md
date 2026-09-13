@@ -6,9 +6,16 @@
   measured ACP skip; PTY `--auto` via `--transport pty` is the documented bypass. Do not invent
   auto-permit or `OPENCODE_PERMISSION` skip.
 
+- Implemented ACP Watch `list`/`view` (issue #26): host-wide `kaola-acp list [--platform P]
+  [--repo ROOT]` emits `kaola-acp-list/1`; `kaola-acp <platform> view --repo … --session …
+  [--since CURSOR]` emits typed `kaola-acp-view/1`. EventLog reloads max cursor from live plus
+  rotated `.jsonl.1–.3`. `install-local.sh` installs owned `$HOME/.local/bin/kaola-acp` and
+  `kaola-acp-holder` symlinks. L0 `send --wait` keys are unchanged. `kaola-tmux.sh … view`
+  returns `view-unsupported`. Follow (#27) and permit lock (#25) remain unimplemented.
+
 - Documented the ACP Watch Surface design freeze (`docs/acp-watch/`, issues #25/#26/#27):
   human `list`/`view`/`follow` beside the existing holder, at-most-once permit, no HTTP/SSE
-  and no second agent-stdio client. Not implemented.
+  and no second agent-stdio client. #26 is implemented; #25/#27 are not.
 
 - Default `start` now enables each platform's measured skip-all permission mode on both
   ACP and PTY (issue #22): Claude `--permission-mode bypassPermissions` / ACP `mode=bypassPermissions`,

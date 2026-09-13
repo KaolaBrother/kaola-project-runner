@@ -53,7 +53,9 @@ Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
 
 ## Transport selection
 
-Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop`; `--model` and `--effort` map through the manifest config-option IDs.
+Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, and `view`; `--model` and `--effort` map through the manifest config-option IDs.
+
+Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` is the only command without a required platform positional or `--repo`; stdout is one `kaola-acp-list/1` object of live holders. `kaola-acp <platform> view --repo ROOT --session NAME [--since CURSOR]` stdout is one `kaola-acp-view/1` object. Runtime facts use `error.code` in `holder-lost` / `holder-unreachable` / `no-session`. `kaola-tmux.sh PLATFORM view` prints `{"schema":"kaola-acp-view/1","error":{"code":"view-unsupported","message":"view is not a pty/tmux command; use kaola-acp"}}` and does not fall back to PTY. `install-local.sh` also installs owned `$HOME/.local/bin/kaola-acp` and `kaola-acp-holder` symlinks.
 
 ## Observation schema
 

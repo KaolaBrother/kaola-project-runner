@@ -1,6 +1,6 @@
 # ACP Watch Surface
 
-状态：设计冻结（2026-09-13）；**未实现**。  
+状态：设计冻结（2026-09-13）；**#26 已实现**（`kaola-acp list` / `view`）；#25 / #27 仍未实现。  
 范围：人类旁观 ACP 会话，不把编排器拉回 PTY 刮屏，也不做第二条 agent stdio 客户端。
 
 本目录是 GitHub **#25 / #26 / #27** 的设计权威。实现必须按对应文件的 Boundary 施工，不得把后继 issue 的内容提前塞进当前 issue。
@@ -11,7 +11,7 @@
 | [#26](https://github.com/KaolaBrother/kaola-project-runner/issues/26) | [list-view.md](list-view.md) | 主机级无参数 `list`（`kaola-acp-list/1`）；类型化 `kaola-acp-view/1` + 样例 fixture；cursor 重载；`~/.local/bin` 安装 |
 | [#27](https://github.com/KaolaBrother/kaola-project-runner/issues/27) | [follow.md](follow.md) | 本机 `follow` NDJSON；follow FD 只读 |
 
-消费方：Kaola Terminal [docs/acp-watch](https://github.com/KaolaBrother/KaolaTerminal/blob/main/docs/acp-watch/README.md)（#254 / #255 / #256）。Terminal **不得**在 #26 的 stdout schema 冻结前开工 UI。
+消费方：Kaola Terminal [docs/acp-watch](https://github.com/KaolaBrother/KaolaTerminal/blob/main/docs/acp-watch/README.md)（#254 / #255 / #256）。`kaola-acp-list/1` 与 `kaola-acp-view/1` 已落地；Terminal 远程旁观以该 stdout 为准。
 
 ## 一句话架构
 

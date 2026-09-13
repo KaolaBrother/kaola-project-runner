@@ -1,7 +1,7 @@
 # Issue #26 — ACP human watch CLI `list` / `view`
 
 设计权威：[GitHub #26](https://github.com/KaolaBrother/kaola-project-runner/issues/26)。  
-状态：设计冻结（2026-09-13；2026-09-13 第二次修订补齐发现入口与类型化 schema）；**未实现**。这是与 Kaola Terminal 共享的 stdout **契约**，单独落地。
+状态：设计冻结（2026-09-13；2026-09-13 第二次修订补齐发现入口与类型化 schema）；**已实现**（issue #26）。这是与 Kaola Terminal 共享的 stdout **契约**，单独落地。下面「当前代码事实」是施工前快照；实现以 `scripts/kaola-acp.py`、`scripts/kaola-acp-holder.py`、`scripts/install-local.sh` 为准。
 
 ## 决策
 

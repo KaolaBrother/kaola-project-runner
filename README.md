@@ -46,7 +46,9 @@ tmux session 并返回可读证据。它不会隐式发送 `workflow-next`、mat
 ./scripts/install-local.sh --uninstall
 ```
 
-安装目标是 `${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>`。旧的
+安装目标是 `${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>`。同一趟安装还会写入属主拥有的
+`$HOME/.local/bin/kaola-acp` 与 `kaola-acp-holder` 符号链接（指向本仓库 `scripts/`）；外源文件
+拒绝覆盖，卸载只拆这些属主链接。旧的
 `grok-kaola-project-runner -> <repository-root>` 只有在 canonical target 精确等于当前仓库根
 时才会迁移。其他 symlink、普通文件、目录和 dangling link 均拒绝覆盖；卸载也只移除精确指向
 本仓库生成目录的 owned symlink。
@@ -97,7 +99,7 @@ scripts/kaola-tmux.sh kimi-cli key \
   --key up
 ```
 
-命令为 `preflight`、`start`、`observe`、`status`、`capture`、`send`、`key`、`answer`、`stop`。`observe`
+命令为 `preflight`、`start`、`observe`、`status`、`capture`、`send`、`key`、`answer`、`stop`。ACP 人类旁观走 `kaola-acp`，不经 `kaola-tmux.sh`：`kaola-acp list [--platform P] [--repo ROOT]` 列出本机活 holder（stdout `kaola-acp-list/1`）；`kaola-acp <platform> view --repo … --session … [--since CURSOR]` 返回当前压实投影（stdout `kaola-acp-view/1`）。`kaola-tmux.sh … view` 给出 `view-unsupported`，不回退到 PTY。`observe`
 返回 schema-v2 `raw_current_frame`、`hard_evidence`、进程/approval/decision 提示、relay byte revisions
 和 opaque snapshot。它们只供 agent 参考，不定义平台状态，也不授权或阻断普通 `send`/`stop`。
 snapshot 是可选的证据关联：若传入，紧凑回执只在 `based_on_snapshot` 原样返回，不把它变成
