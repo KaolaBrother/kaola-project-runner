@@ -497,7 +497,7 @@ for row in "${actions[@]}"; do
 done
 [[ "$mode" == uninstall ]] && rmdir "$receipts_dir" 2>/dev/null || true
 
-for row in "${bin_actions[@]}"; do
+for row in ${bin_actions[@]+"${bin_actions[@]}"}; do
   IFS='|' read -r action source target <<<"$row"
   case "$action" in
     already)
