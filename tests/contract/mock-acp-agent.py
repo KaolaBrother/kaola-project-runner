@@ -67,24 +67,24 @@ def session_update(session_id: str, update: dict[str, Any]) -> None:
     notify("session/update", {"sessionId": session_id, "update": update})
 
 
-def message_chunk(session_id: str, text: str) -> None:
-    session_update(
-        session_id,
-        {
-            "sessionUpdate": "agent_message_chunk",
-            "content": {"type": "text", "text": text},
-        },
-    )
+def message_chunk(session_id: str, text: str, message_id: str | None = None) -> None:
+    update = {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {"type": "text", "text": text},
+    }
+    if message_id is not None:
+        update["messageId"] = message_id
+    session_update(session_id, update)
 
 
-def thought_chunk(session_id: str, text: str) -> None:
-    session_update(
-        session_id,
-        {
-            "sessionUpdate": "agent_thought_chunk",
-            "content": {"type": "text", "text": text},
-        },
-    )
+def thought_chunk(session_id: str, text: str, message_id: str | None = None) -> None:
+    update = {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {"type": "text", "text": text},
+    }
+    if message_id is not None:
+        update["messageId"] = message_id
+    session_update(session_id, update)
 
 
 class MockAgent:
@@ -110,19 +110,31 @@ class MockAgent:
         self.next_outbound_id += 1
         return self.next_outbound_id
 
-    def ask_permission(self, session_id: str, title: str, options: list[str]) -> int:
+    def ask_permission(
+        self,
+        session_id: str,
+        title: str,
+        options: list,
+        tool_call_id: str | None = None,
+    ) -> int:
         request_id = self.outbound_id()
         self.pending[request_id] = "session/request_permission"
+        option_objs = []
+        for option in options:
+            if isinstance(option, str):
+                option_objs.append({"optionId": option, "name": option, "kind": "allow_once"})
+            else:
+                option_objs.append(option)
         request(
             request_id,
             "session/request_permission",
             {
                 "sessionId": session_id,
-                "toolCall": {"toolCallId": f"tc-{request_id}", "title": title},
-                "options": [
-                    {"optionId": option, "name": option, "kind": "allow_once"}
-                    for option in options
-                ],
+                "toolCall": {
+                    "toolCallId": tool_call_id or f"tc-{request_id}",
+                    "title": title,
+                },
+                "options": option_objs,
             },
         )
         return request_id
@@ -318,6 +330,87 @@ class MockAgent:
             else:
                 self.ask_permission(session_id, "mock gated op", ["allow", "deny"])
                 return
+        if scenario == "watch_projection":
+            thought_chunk(
+                session_id,
+                "the cookie is cleared before redirect.",
+                message_id="m1",
+            )
+            session_update(
+                session_id,
+                {
+                    "sessionUpdate": "user_message_chunk",
+                    "content": {"type": "text", "text": text or "Fix the login redirect loop."},
+                },
+            )
+            message_chunk(session_id, "I'll start by ", message_id="m1")
+            message_chunk(session_id, "reading the auth middleware.", message_id="m1")
+            session_update(
+                session_id,
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "call_7",
+                    "title": "Edit src/auth/middleware.ts",
+                    "kind": "edit",
+                    "status": "completed",
+                    "locations": [{"path": "src/auth/middleware.ts", "line": 88}],
+                    "content": [
+                        {
+                            "type": "diff",
+                            "path": "src/auth/middleware.ts",
+                            "oldText": "res.redirect('/login')",
+                            "newText": "if (!req.path.startsWith('/login')) res.redirect('/login')",
+                        },
+                        {"type": "text", "text": "patched redirect guard"},
+                    ],
+                },
+            )
+            session_update(
+                session_id,
+                {
+                    "sessionUpdate": "plan",
+                    "entries": [
+                        {"content": "Read middleware", "priority": "high", "status": "completed"},
+                        {"content": "Stale merged entry", "priority": "low", "status": "pending"},
+                    ],
+                },
+            )
+            session_update(
+                session_id,
+                {
+                    "sessionUpdate": "plan",
+                    "entries": [
+                        {"content": "Read middleware", "priority": "high", "status": "completed"},
+                        {"content": "Patch redirect guard", "priority": "high", "status": "in_progress"},
+                    ],
+                },
+            )
+            session_update(
+                session_id,
+                {"sessionUpdate": "usage_update", "used": 38211, "size": 262144},
+            )
+            session_update(
+                session_id,
+                {
+                    "sessionUpdate": "current_mode_update",
+                    "currentModeId": "plan",
+                    "availableModes": [
+                        {"id": "plan", "name": "Plan"},
+                        {"id": "yolo", "name": "Yolo"},
+                    ],
+                },
+            )
+            self.ask_permission(
+                session_id,
+                "Exit plan mode and start editing?",
+                [
+                    {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
+                    {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"},
+                ],
+                tool_call_id="call_8",
+            )
+            log_event({"event": "watch_projection_emitted"})
+            return
         self.emit_prelude(session_id)
         if self.turn_ms:
             time.sleep(self.turn_ms / 1000.0)
@@ -336,7 +429,9 @@ class MockAgent:
         )
         log_event({"event": "prompt", "sessionId": session_id, "text": text})
         self.begin_turn(request_id, session_id)
-        if self.scenario in ("normal", "garbage_lines", "stderr_flood", "slow", "cancel_race"):
+        if self.scenario in (
+            "normal", "garbage_lines", "stderr_flood", "slow", "cancel_race", "watch_projection",
+        ):
             thread = threading.Thread(
                 target=self.run_prompt, args=(request_id, session_id, text), daemon=True
             )

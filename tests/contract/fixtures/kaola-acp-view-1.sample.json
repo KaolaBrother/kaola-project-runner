@@ -1,0 +1,50 @@
+{
+  "schema": "kaola-acp-view/1",
+  "platform": "kimi-cli",
+  "session": "fix-login",
+  "repo": "/Users/me/src/app",
+  "state": "ready",
+  "holder_pid": 48213,
+  "agent_alive": true,
+  "event_cursor": 418,
+  "truncated": false,
+  "cursor_gap": false,
+  "messages": [
+    {"role": "user", "text": "Fix the login redirect loop.", "messageId": null, "cursor": 12},
+    {"role": "assistant", "text": "I'll start by reading the auth middleware.", "messageId": "m1", "cursor": 40}
+  ],
+  "thinking": {"chars": 1532, "text_tail": "…the cookie is cleared before redirect.", "messageId": "m1"},
+  "tools": [
+    {
+      "toolCallId": "call_7",
+      "title": "Edit src/auth/middleware.ts",
+      "kind": "edit",
+      "status": "completed",
+      "locations": [{"path": "src/auth/middleware.ts", "line": 88}],
+      "content": [
+        {"type": "diff", "path": "src/auth/middleware.ts", "oldText": "res.redirect('/login')", "newText": "if (!req.path.startsWith('/login')) res.redirect('/login')"}
+      ],
+      "truncated": false
+    }
+  ],
+  "plan": {"entries": [
+    {"content": "Read middleware", "priority": "high", "status": "completed"},
+    {"content": "Patch redirect guard", "priority": "high", "status": "in_progress"}
+  ]},
+  "pending_permissions": [
+    {
+      "request_id": "42",
+      "title": "Exit plan mode and start editing?",
+      "tool_call_id": "call_8",
+      "options": [
+        {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
+        {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"}
+      ]
+    }
+  ],
+  "mode": {"current": "plan", "available": [{"id": "plan", "name": "Plan"}, {"id": "yolo", "name": "Yolo"}]},
+  "commands": null,
+  "usage": {"used": 38211, "size": 262144},
+  "turn": {"mutation_status": "clean", "outcome": null, "stop_reason": null, "active": true},
+  "unparsed_update_count": 0
+}

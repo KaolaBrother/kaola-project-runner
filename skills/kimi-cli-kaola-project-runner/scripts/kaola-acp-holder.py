@@ -11,6 +11,7 @@ setsid binary).
 from __future__ import annotations
 
 import argparse
+import copy
 import ctypes
 import hashlib
 import json
@@ -90,8 +91,50 @@ def scrub(value: Any) -> Any:
 class EventLog:
     def __init__(self, path: Path):
         self.path = path
-        self.cursor = 0
         self.lock = threading.Lock()
+        self.cursor = 0
+        self._restore_cursor()
+
+    def _rotated_paths(self) -> list[Path]:
+        paths = []
+        for index in range(EVENT_LOG_KEEP, 0, -1):
+            rotated = self.path.with_suffix(f".jsonl.{index}")
+            if rotated.exists():
+                paths.append(rotated)
+        if self.path.exists():
+            paths.append(self.path)
+        return paths
+
+    def _iter_entries(self):
+        for path in self._rotated_paths():
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    for line in handle:
+                        try:
+                            entry = json.loads(line)
+                        except ValueError:
+                            continue
+                        if isinstance(entry, dict):
+                            yield entry
+            except OSError:
+                continue
+
+    def _restore_cursor(self) -> None:
+        maximum = 0
+        for entry in self._iter_entries():
+            cursor = entry.get("cursor")
+            if isinstance(cursor, int) and not isinstance(cursor, bool) and cursor > maximum:
+                maximum = cursor
+        self.cursor = maximum
+
+    def oldest_cursor(self) -> int | None:
+        oldest: int | None = None
+        for entry in self._iter_entries():
+            cursor = entry.get("cursor")
+            if isinstance(cursor, int) and not isinstance(cursor, bool):
+                if oldest is None or cursor < oldest:
+                    oldest = cursor
+        return oldest
 
     def append(self, event: dict[str, Any]) -> int:
         with self.lock:
@@ -118,18 +161,13 @@ class EventLog:
 
     def read_since(self, cursor: int, limit: int | None) -> list[dict[str, Any]]:
         entries = []
-        if not self.path.exists():
-            return entries
-        with open(self.path, encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    entry = json.loads(line)
-                except ValueError:
-                    continue
-                if entry.get("cursor", 0) > cursor:
-                    entries.append(entry)
-                    if limit and len(entries) >= limit:
-                        break
+        for entry in self._iter_entries():
+            item_cursor = entry.get("cursor", 0)
+            if isinstance(item_cursor, int) and not isinstance(item_cursor, bool) and item_cursor > cursor:
+                entries.append(entry)
+        entries.sort(key=lambda item: item.get("cursor", 0))
+        if limit:
+            return entries[:limit]
         return entries
 
 
@@ -310,6 +348,219 @@ KNOWN_UPDATES = {
     "usage_update",
     "user_message_chunk",
 }
+THINKING_TAIL_CHARS = 8 * 1024
+TOOL_VIEW_BYTES = 32 * 1024
+VIEW_BYTES = 256 * 1024
+TIMELINE_MAX = 200
+VIEW_SCHEMA = "kaola-acp-view/1"
+
+
+def _as_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("text") or "")
+    if isinstance(value, list):
+        return "".join(_as_text(item) for item in value)
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _normalize_content_items(raw: Any) -> list[dict[str, Any]]:
+    items = raw if isinstance(raw, list) else []
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("type")
+        if kind == "text":
+            out.append({"type": "text", "text": str(item.get("text") or "")})
+        elif kind == "diff":
+            old = item.get("oldText")
+            out.append({
+                "type": "diff",
+                "path": str(item.get("path") or ""),
+                "oldText": None if old is None else str(old),
+                "newText": str(item.get("newText") or ""),
+            })
+        elif kind == "terminal":
+            out.append({
+                "type": "terminal",
+                "terminalId": str(item.get("terminalId") or ""),
+            })
+    return out
+
+
+def _normalize_locations(raw: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        line = item.get("line")
+        if not isinstance(line, int) or isinstance(line, bool):
+            line = None
+        out.append({"path": "" if path is None else str(path), "line": line})
+    return out
+
+
+class ViewProjection:
+    """In-memory compacted human projection; separate from L0 turn state."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.messages: list[dict[str, Any]] = []
+        self.thinking_chars = 0
+        self.thinking_text = ""
+        self.thinking_message_id: str | None = None
+        self.tools: dict[str, dict[str, Any]] = {}
+        self.tool_order: list[str] = []
+        self.plan: dict[str, Any] | None = None
+        self.mode: dict[str, Any] | None = None
+        self.commands: list[dict[str, Any]] | None = None
+        self.usage: dict[str, Any] | None = None
+        self._prompt_texts: list[str] = []
+
+    def add_user_from_prompt(self, text: str, cursor: int) -> None:
+        with self.lock:
+            self._prompt_texts.append(text)
+            self._add_message_locked("user", text, None, cursor)
+
+    def apply(self, update: dict[str, Any], cursor: int) -> None:
+        variant = update.get("sessionUpdate", "unknown")
+        with self.lock:
+            if variant == "agent_message_chunk":
+                message_id = update.get("messageId")
+                if message_id is not None:
+                    message_id = str(message_id)
+                self._add_message_locked(
+                    "assistant", _as_text(update.get("content")), message_id, cursor
+                )
+            elif variant == "user_message_chunk":
+                text = _as_text(update.get("content"))
+                message_id = update.get("messageId")
+                if message_id is not None:
+                    message_id = str(message_id)
+                if message_id is None and any(
+                    text == previous or text in previous or previous in text
+                    for previous in self._prompt_texts
+                    if previous
+                ):
+                    return
+                self._add_message_locked("user", text, message_id, cursor)
+            elif variant == "agent_thought_chunk":
+                text = _as_text(update.get("content"))
+                self.thinking_chars += len(text)
+                self.thinking_text += text
+                message_id = update.get("messageId")
+                if message_id is not None:
+                    self.thinking_message_id = str(message_id)
+            elif variant in ("tool_call", "tool_call_update"):
+                self._upsert_tool_locked(update)
+            elif variant == "plan":
+                entries = []
+                for entry in update.get("entries") or []:
+                    if not isinstance(entry, dict):
+                        continue
+                    priority = entry.get("priority")
+                    status = entry.get("status")
+                    entries.append({
+                        "content": str(entry.get("content") or ""),
+                        "priority": None if priority is None else str(priority),
+                        "status": None if status is None else str(status),
+                    })
+                self.plan = {"entries": entries}
+            elif variant == "current_mode_update":
+                available = []
+                for item in update.get("availableModes") or []:
+                    if not isinstance(item, dict):
+                        continue
+                    available.append({
+                        "id": str(item.get("id") or ""),
+                        "name": str(item.get("name") or ""),
+                    })
+                current = update.get("currentModeId")
+                self.mode = {
+                    "current": None if current is None else str(current),
+                    "available": available,
+                }
+            elif variant == "available_commands_update":
+                commands = []
+                raw = update.get("availableCommands")
+                if raw is None:
+                    raw = update.get("commands")
+                for item in raw or []:
+                    if not isinstance(item, dict):
+                        continue
+                    description = item.get("description")
+                    commands.append({
+                        "name": str(item.get("name") or ""),
+                        "description": None if description is None else str(description),
+                    })
+                self.commands = commands
+            elif variant == "usage_update":
+                used = update.get("used")
+                size = update.get("size")
+                try:
+                    self.usage = {"used": int(used), "size": int(size)}
+                except (TypeError, ValueError):
+                    pass
+
+    def _add_message_locked(
+        self, role: str, text: str, message_id: str | None, cursor: int
+    ) -> None:
+        if message_id is not None:
+            for message in reversed(self.messages):
+                if message["role"] == role and message["messageId"] == message_id:
+                    message["text"] += text
+                    return
+        self.messages.append({
+            "role": role,
+            "text": text,
+            "messageId": message_id,
+            "cursor": cursor,
+        })
+
+    def _upsert_tool_locked(self, update: dict[str, Any]) -> None:
+        tool_id = update.get("toolCallId")
+        if not tool_id:
+            tool_id = f"anon-{len(self.tool_order)}"
+        tool_id = str(tool_id)
+        tool = self.tools.get(tool_id)
+        if tool is None:
+            tool = {
+                "toolCallId": tool_id,
+                "title": None,
+                "kind": None,
+                "status": None,
+                "locations": [],
+                "content": [],
+                "truncated": False,
+            }
+            self.tools[tool_id] = tool
+            self.tool_order.append(tool_id)
+        for field in ("title", "kind", "status"):
+            if update.get(field) is not None:
+                tool[field] = update[field]
+        if "locations" in update and update.get("locations") is not None:
+            tool["locations"] = _normalize_locations(update.get("locations"))
+        if "content" in update and update.get("content") is not None:
+            tool["content"] = _normalize_content_items(update.get("content"))
+
+    def snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            return copy.deepcopy({
+                "messages": self.messages,
+                "thinking_chars": self.thinking_chars,
+                "thinking_text": self.thinking_text,
+                "thinking_message_id": self.thinking_message_id,
+                "tools": [self.tools[tid] for tid in self.tool_order],
+                "plan": self.plan,
+                "mode": self.mode,
+                "commands": self.commands,
+                "usage": self.usage,
+            })
 
 
 class Holder:
@@ -333,6 +584,7 @@ class Holder:
         self.capabilities: dict[str, Any] = {}
         self.auth_methods: list[dict[str, Any]] = []
         self.pending_permissions: dict[str, dict[str, Any]] = {}
+        self.projection = ViewProjection()
         self.turn: dict[str, Any] = self._empty_turn()
         try:
             previous_record = json.loads(self.record_path.read_text(encoding="utf-8"))
@@ -588,8 +840,9 @@ class Holder:
             turn["context_usage"] = {"used": update.get("used"), "size": update.get("size")}
         elif variant not in KNOWN_UPDATES:
             self.agent.unknown_updates += 1
-        self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
-                            "update": update})
+        cursor = self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
+                                     "update": update})
+        self.projection.apply(update, cursor)
         self.write_record()
 
     def on_prompt_response(self, request_id: int, response: dict[str, Any] | None) -> None:
@@ -803,6 +1056,7 @@ class Holder:
                 "mutation_status": "in_progress",
                 "stop_reason": None,
             }
+            self.projection.add_user_from_prompt(text, self.events.cursor)
             self.write_record()
 
         threading.Thread(
@@ -900,6 +1154,83 @@ class Holder:
                     return {**self.turn_receipt(), "outcome": "cancel-unconfirmed"}
                 self.turn_cond.wait(timeout=remaining)
         return self.turn_receipt()
+
+    def op_view(self, params: dict[str, Any]) -> dict[str, Any]:
+        since = params.get("since")
+        if since is not None:
+            try:
+                since = int(since)
+            except (TypeError, ValueError):
+                since = None
+        proj = self.projection.snapshot()
+        thinking_text = proj["thinking_text"]
+        thinking_truncated = len(thinking_text) > THINKING_TAIL_CHARS
+        thinking = {
+            "chars": proj["thinking_chars"],
+            "text_tail": thinking_text[-THINKING_TAIL_CHARS:],
+            "messageId": proj["thinking_message_id"],
+        }
+        tools = []
+        tools_truncated = False
+        for tool in proj["tools"]:
+            encoded = json.dumps(tool.get("content") or [], ensure_ascii=False)
+            if len(encoded.encode("utf-8")) > TOOL_VIEW_BYTES:
+                tool["truncated"] = True
+                tools_truncated = True
+            tools.append(tool)
+        messages = proj["messages"]
+        timeline_truncated = len(messages) > TIMELINE_MAX
+        oldest = self.events.oldest_cursor()
+        cursor_gap = isinstance(since, int) and oldest is not None and since < oldest
+        pending = []
+        for entry in self.pending_permissions.values():
+            pending.append({
+                "request_id": "" if entry.get("request_id") is None else str(entry.get("request_id")),
+                "title": entry.get("title"),
+                "tool_call_id": entry.get("tool_call_id"),
+                "options": [
+                    {
+                        "optionId": opt.get("id"),
+                        "name": opt.get("label"),
+                        "kind": opt.get("kind"),
+                    }
+                    for opt in entry.get("options") or []
+                ],
+            })
+        truncated = bool(
+            thinking_truncated or tools_truncated or timeline_truncated or cursor_gap
+        )
+        payload = {
+            "schema": VIEW_SCHEMA,
+            "platform": self.args.platform,
+            "session": self.args.session,
+            "repo": self.args.repo,
+            "state": self.state,
+            "holder_pid": os.getpid(),
+            "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
+            "event_cursor": self.events.cursor,
+            "truncated": truncated,
+            "cursor_gap": cursor_gap,
+            "messages": messages,
+            "thinking": thinking,
+            "tools": tools,
+            "plan": proj["plan"],
+            "pending_permissions": pending,
+            "mode": proj["mode"],
+            "commands": proj["commands"],
+            "usage": proj["usage"],
+            "turn": {
+                "mutation_status": self.turn.get("mutation_status") or "not_started",
+                "outcome": self.turn.get("outcome"),
+                "stop_reason": self.turn.get("stop_reason"),
+                "active": bool(self.turn.get("active")),
+            },
+            "unparsed_update_count": self.agent.unknown_updates,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False)
+        if len(encoded.encode("utf-8")) > VIEW_BYTES:
+            payload["truncated"] = True
+        return payload
 
     def op_capture(self, params: dict[str, Any]) -> dict[str, Any]:
         if params.get("full"):
@@ -1031,6 +1362,8 @@ class Holder:
             return self.op_cancel(params)
         if op == "capture":
             return self.op_capture(params)
+        if op == "view":
+            return self.op_view(params)
         if op == "set_config_option":
             return self.op_set_config_option(params)
         if op == "stop":

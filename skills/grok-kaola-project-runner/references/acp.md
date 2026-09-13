@@ -6,6 +6,8 @@ Command: `grok agent --always-approve stdio`. Login requires a PTY: `false`. Pla
 
 Use `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; other native keys and editor replacement are PTY-only capabilities.
 
+Humans watch with Terminal or host-wide `list` and session `view`. Orchestrator ordinary turns must not poll raw frames as a human UI. PTY remains login and native TUI takeover.
+
 ## Level-zero receipt
 
 Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `transport`, and Git facts. Mutation receipts also report `mutation_status`, outcome, stop reason, and available protocol events or final text.

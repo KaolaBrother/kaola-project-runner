@@ -106,10 +106,130 @@ def record_dir(args: argparse.Namespace, repo: str) -> Path:
     return record_root(args) / args.platform / args.session / digest
 
 
-def sock_path(args: argparse.Namespace, repo: str) -> Path:
+def sock_path_for_directory(directory: Path) -> Path:
     """Short deterministic socket path; AF_UNIX sun_path is ~104 bytes on macOS."""
-    digest = hashlib.sha256(str(record_dir(args, repo)).encode("utf-8")).hexdigest()[:24]
+    digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
     return Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+
+
+def sock_path(args: argparse.Namespace, repo: str) -> Path:
+    return sock_path_for_directory(record_dir(args, repo))
+
+
+LIST_SCHEMA = "kaola-acp-list/1"
+VIEW_SCHEMA = "kaola-acp-view/1"
+HOLDER_STATES = {
+    "starting", "ready", "agent_exited", "stopping", "stopped", "error",
+}
+
+
+def probe_socket_ok(path: Path) -> bool:
+    if not path.exists():
+        return False
+    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        connection.settimeout(0.5)
+        connection.connect(str(path))
+        return True
+    except OSError:
+        return False
+    finally:
+        connection.close()
+
+
+def parse_list_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="kaola-acp.py list")
+    parser.add_argument("--platform", choices=PLATFORMS)
+    parser.add_argument("--repo")
+    parser.add_argument("--record-root")
+    return parser.parse_args(argv)
+
+
+def command_list(args: argparse.Namespace) -> dict[str, Any]:
+    root = record_root(args)
+    repo_filter = resolve_repo(args.repo) if args.repo else None
+    rows: list[dict[str, Any]] = []
+    if not root.is_dir():
+        return {"schema": LIST_SCHEMA, "rows": rows}
+    for path in sorted(root.glob("*/*/*/record.json")):
+        platform = path.parent.parent.parent.name
+        session = path.parent.parent.name
+        if platform not in PLATFORMS:
+            continue
+        if args.platform and platform != args.platform:
+            continue
+        if not SESSION_PATTERN.match(session):
+            continue
+        directory = path.parent
+        record = read_record(directory)
+        if not record:
+            continue
+        pid = record.get("holder_pid")
+        if not pid_alive(pid):
+            continue
+        repo = record.get("repo")
+        if not isinstance(repo, str):
+            continue
+        if repo_filter is not None and repo != repo_filter:
+            continue
+        pending = record.get("pending_permissions") or []
+        last = record.get("last_prompt") or {}
+        mutation = last.get("mutation_status") if isinstance(last, dict) else None
+        if not isinstance(mutation, str) or not mutation:
+            mutation = "not_started"
+        cursor = record.get("event_cursor")
+        if not isinstance(cursor, int) or isinstance(cursor, bool) or cursor < 0:
+            cursor = 0
+        state = record.get("state")
+        if state not in HOLDER_STATES:
+            state = str(state) if state is not None else "error"
+        rows.append({
+            "platform": record.get("platform") or platform,
+            "session": record.get("session") or session,
+            "repo": repo,
+            "state": state,
+            "holder_pid": pid,
+            "agent_alive": bool(record.get("agent_alive")),
+            "event_cursor": cursor,
+            "mutation_status": mutation,
+            "pending_count": len(pending) if isinstance(pending, list) else 0,
+            "socket_ok": probe_socket_ok(sock_path_for_directory(directory)),
+            "transport": "acp",
+        })
+    return {"schema": LIST_SCHEMA, "rows": rows}
+
+
+def view_error(code: str, message: str) -> dict[str, Any]:
+    return {"schema": VIEW_SCHEMA, "error": {"code": code, "message": message}}
+
+
+def command_view(args: argparse.Namespace, repo: str, directory: Path) -> dict[str, Any]:
+    sock = sock_path(args, repo)
+    record = read_record(directory)
+    if record is None:
+        return view_error("no-session", "no ACP session record for this platform/session/repo")
+    if not pid_alive(record.get("holder_pid")):
+        return view_error("holder-lost", "holder process is not alive")
+    if not sock.exists():
+        if pid_alive(record.get("holder_pid")):
+            return view_error("holder-unreachable", "holder alive but socket path is absent")
+        return view_error("holder-lost", "holder process is not alive")
+    params: dict[str, Any] = {}
+    if args.since is not None:
+        params["since"] = args.since
+    response = socket_request(sock, "view", params, 15.0)
+    err = response.get("error")
+    if isinstance(err, dict) and err.get("code") == "holder-unreachable":
+        if not pid_alive(record.get("holder_pid")):
+            return view_error("holder-lost", "holder process is not alive")
+        return view_error(
+            "holder-unreachable",
+            err.get("message") or "holder socket is unreachable",
+        )
+    if isinstance(err, dict) and "schema" not in response:
+        return view_error(str(err.get("code") or "holder-unreachable"),
+                          str(err.get("message") or "view failed"))
+    return response
 
 
 def read_record(directory: Path) -> dict[str, Any] | None:
@@ -435,11 +555,16 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "list":
+        payload = command_list(parse_list_args(sys.argv[2:]))
+        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        return 0
+
     parser = argparse.ArgumentParser(prog="kaola-acp.py")
     parser.add_argument("platform", choices=PLATFORMS)
     parser.add_argument("command", choices=[
         "preflight", "start", "send", "wait", "observe", "capture",
-        "permit", "key", "answer", "cancel", "stop", "status",
+        "permit", "key", "answer", "cancel", "stop", "status", "view",
     ])
     parser.add_argument("--repo", required=True)
     parser.add_argument("--session")
@@ -489,6 +614,12 @@ def main() -> int:
         return 0
     if args.command == "start":
         receipt = command_start(args, repo)
+        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        return 0
+    if args.command == "view":
+        if directory is None:
+            die("invalid or missing --session name")
+        receipt = command_view(args, repo, directory)
         print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
         return 0
 

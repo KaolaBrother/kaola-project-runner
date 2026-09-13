@@ -131,6 +131,46 @@ for platform in "${selection[@]}"; do
   fi
 done
 
+bin_dir="$HOME/.local/bin"
+bin_specs=(
+  "kaola-acp|$script_dir/kaola-acp.py"
+  "kaola-acp-holder|$script_dir/kaola-acp-holder.py"
+)
+bin_actions=()
+for spec in "${bin_specs[@]}"; do
+  IFS='|' read -r name source <<<"$spec"
+  target="$bin_dir/$name"
+  if [[ "$mode" == install ]]; then
+    if [[ -L "$target" ]]; then
+      if [[ "$target" -ef "$source" ]]; then
+        bin_actions+=("already|$source|$target")
+      else
+        printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
+        exit 1
+      fi
+    elif [[ -e "$target" ]]; then
+      printf 'refusing to replace existing path: %s\n' "$target" >&2
+      exit 1
+    else
+      bin_actions+=("install|$source|$target")
+    fi
+  else
+    if [[ -L "$target" ]]; then
+      if [[ "$target" -ef "$source" ]]; then
+        bin_actions+=("uninstall|$source|$target")
+      else
+        printf 'refusing to remove foreign symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
+        exit 1
+      fi
+    elif [[ -e "$target" ]]; then
+      printf 'refusing to remove non-symlink path: %s\n' "$target" >&2
+      exit 1
+    else
+      bin_actions+=("absent|$source|$target")
+    fi
+  fi
+done
+
 mkdir -p "$target_parent"
 
 for row in "${actions[@]}"; do
@@ -153,6 +193,41 @@ PY
         exit 1
       fi
       printf '%s: %s -> %s\n' "$action" "$target" "$source"
+      ;;
+    uninstall)
+      unlink "$target"
+      printf 'uninstalled: %s\n' "$target"
+      ;;
+    absent)
+      printf 'already absent: %s\n' "$target"
+      ;;
+  esac
+done
+
+if [[ "$mode" == install ]]; then
+  mkdir -p "$bin_dir"
+fi
+
+for row in "${bin_actions[@]}"; do
+  IFS='|' read -r action source target <<<"$row"
+  case "$action" in
+    already)
+      printf 'already installed: %s -> %s\n' "$target" "$source"
+      ;;
+    install)
+      temp="$bin_dir/.${target##*/}.tmp.$$"
+      [[ ! -e "$temp" && ! -L "$temp" ]] || { printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
+      ln -s "$source" "$temp"
+      if ! "$installer_python" - "$temp" "$target" <<'PY'
+import os, sys
+os.replace(sys.argv[1], sys.argv[2])
+PY
+      then
+        unlink "$temp" 2>/dev/null || true
+        printf 'atomic symlink replacement failed: %s\n' "$target" >&2
+        exit 1
+      fi
+      printf 'install: %s -> %s\n' "$target" "$source"
       ;;
     uninstall)
       unlink "$target"
