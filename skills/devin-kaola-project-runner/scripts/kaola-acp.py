@@ -118,6 +118,7 @@ def sock_path(args: argparse.Namespace, repo: str) -> Path:
 
 LIST_SCHEMA = "kaola-acp-list/1"
 VIEW_SCHEMA = "kaola-acp-view/1"
+VIEW_RUNTIME_CODES = ("holder-lost", "holder-unreachable", "no-session")
 HOLDER_STATES = {
     "starting", "ready", "agent_exited", "stopping", "stopped", "error",
 }
@@ -219,16 +220,16 @@ def command_view(args: argparse.Namespace, repo: str, directory: Path) -> dict[s
         params["since"] = args.since
     response = socket_request(sock, "view", params, 15.0)
     err = response.get("error")
-    if isinstance(err, dict) and err.get("code") == "holder-unreachable":
+    if isinstance(err, dict):
         if not pid_alive(record.get("holder_pid")):
             return view_error("holder-lost", "holder process is not alive")
+        code = err.get("code")
+        if code in VIEW_RUNTIME_CODES:
+            return view_error(str(code), str(err.get("message") or "view failed"))
         return view_error(
             "holder-unreachable",
-            err.get("message") or "holder socket is unreachable",
+            str(err.get("message") or "holder socket is unreachable"),
         )
-    if isinstance(err, dict) and "schema" not in response:
-        return view_error(str(err.get("code") or "holder-unreachable"),
-                          str(err.get("message") or "view failed"))
     return response
 
 

@@ -11,10 +11,12 @@ import hashlib
 import json
 import os
 import signal
+import socket
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -26,6 +28,7 @@ CLI = PROJECT / "scripts" / "kaola-acp.py"
 HOLDER = PROJECT / "scripts" / "kaola-acp-holder.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 INSTALLER = PROJECT / "scripts" / "install-local.sh"
+TMUX = PROJECT / "scripts" / "kaola-tmux.sh"
 SAMPLE = PROJECT / "tests" / "contract" / "fixtures" / "kaola-acp-view-1.sample.json"
 ACP_TMPL = PROJECT / "templates" / "references" / "acp.md.tmpl"
 GROK_ACP_REF = PROJECT / "skills" / "grok-kaola-project-runner" / "references" / "acp.md"
@@ -103,7 +106,7 @@ def assert_shape(test: unittest.TestCase, sample: Any, actual: Any, path: str) -
 class AcpWatchContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        for path in (CLI, HOLDER, MOCK, SAMPLE, INSTALLER):
+        for path in (CLI, HOLDER, MOCK, SAMPLE, INSTALLER, TMUX):
             if not path.is_file():
                 raise AssertionError(f"missing {path}")
         cls.sample = json.loads(SAMPLE.read_text(encoding="utf-8"))
@@ -351,9 +354,27 @@ class AcpWatchContractTests(unittest.TestCase):
         kinds = {item["type"] for item in tool["content"]}
         self.assertTrue(kinds <= CONTENT_TYPES)
         self.assertIn("diff", kinds)
+        for item in tool["content"]:
+            self.assertIn(item["type"], CONTENT_TYPES)
+            if item["type"] == "text":
+                self.assertIsInstance(item.get("text"), str)
+            elif item["type"] == "diff":
+                self.assertIsInstance(item.get("path"), str)
+                self.assertTrue(item.get("oldText") is None or isinstance(item.get("oldText"), str))
+                self.assertIsInstance(item.get("newText"), str)
+            elif item["type"] == "terminal":
+                self.assertIsInstance(item.get("terminalId"), str)
         diff = next(item for item in tool["content"] if item["type"] == "diff")
         self.assertIn("oldText", diff)
         self.assertIn("newText", diff)
+        for message in view["messages"]:
+            self.assertTrue(
+                message.get("messageId") is None or isinstance(message.get("messageId"), str)
+            )
+        self.assertTrue(view["commands"] is None or isinstance(view["commands"], list))
+        self.assertTrue(
+            view["turn"]["outcome"] is None or isinstance(view["turn"]["outcome"], str)
+        )
 
         self.assertIsInstance(view["plan"], dict)
         contents = [entry["content"] for entry in view["plan"]["entries"]]
@@ -368,8 +389,8 @@ class AcpWatchContractTests(unittest.TestCase):
         self.assertEqual(options[0]["optionId"], "allow_once")
 
         gapped = self.run_view("grok", session, repo, "--since", "0")
-        self.assertIsInstance(gapped["cursor_gap"], bool)
-        self.assertIsInstance(gapped["truncated"], bool)
+        self.assertTrue(gapped["cursor_gap"], gapped)
+        self.assertTrue(gapped["truncated"], gapped)
 
     def test_holder_restart_does_not_reuse_low_cursors(self) -> None:
         session, repo, _ = self.start("grok")
@@ -382,8 +403,6 @@ class AcpWatchContractTests(unittest.TestCase):
             json.dumps({"cursor": 800, "kind": "seed-rotated"}) + "\n",
             encoding="utf-8",
         )
-        with live.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"cursor": 900, "kind": "seed-live"}) + "\n")
         self.run_cli("grok", "stop", session=session, repo=repo, extra=["--force"])
         self._started.clear()
 
@@ -391,8 +410,8 @@ class AcpWatchContractTests(unittest.TestCase):
         self.run_cli("grok", "send", "--text", "after restart", session=session, repo=repo)
         view = self.run_view("grok", session, repo)
         self.assertGreater(
-            view["event_cursor"], 900,
-            f"restart reused a low cursor: {view['event_cursor']}",
+            view["event_cursor"], 800,
+            f"restart ignored rotated jsonl max cursor: {view['event_cursor']}",
         )
         self.assertGreater(started.get("holder_pid") or 0, 0)
 
@@ -450,6 +469,54 @@ class AcpWatchContractTests(unittest.TestCase):
         self.assertEqual(lost["error"].get("code"), "holder-lost")
         self.assertIn("schema", lost)
         self.assertIsInstance(lost["error"].get("message"), str)
+
+    def test_view_accept_then_close_uses_frozen_runtime_code(self) -> None:
+        session, repo, _ = self.start("grok")
+        directory = self.record_dir("grok", session, repo)
+        sock = (
+            Path(tempfile.gettempdir())
+            / f"kaola-{os.getuid()}-acp"
+            / f"{hashlib.sha256(str(directory).encode('utf-8')).hexdigest()[:24]}.sock"
+        )
+        try:
+            sock.unlink()
+        except FileNotFoundError:
+            pass
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(sock))
+        listener.listen(1)
+
+        def serve() -> None:
+            try:
+                connection, _unused = listener.accept()
+                connection.close()
+            except OSError:
+                pass
+
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        try:
+            payload = self.run_view("grok", session, repo, check=False)
+        finally:
+            listener.close()
+            thread.join(timeout=2)
+        self.assertEqual(payload.get("schema"), "kaola-acp-view/1")
+        self.assertIn((payload.get("error") or {}).get("code"), {
+            "holder-lost", "holder-unreachable", "no-session",
+        }, payload)
+
+    def test_tmux_view_emits_view_unsupported(self) -> None:
+        result = subprocess.run(
+            [
+                str(TMUX), "grok", "view",
+                "--repo", str(self.repo), "--session", f"wch-tmux-{os.getpid()}",
+            ],
+            capture_output=True, text=True, env=self.env(), timeout=15,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        payload = self.load_object(result, "kaola-tmux view")
+        self.assertEqual(payload.get("schema"), "kaola-acp-view/1")
+        self.assertEqual((payload.get("error") or {}).get("code"), "view-unsupported")
 
     def test_acp_reference_names_human_list_and_view(self) -> None:
         for path in (ACP_TMPL, GROK_ACP_REF):

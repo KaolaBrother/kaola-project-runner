@@ -61,6 +61,10 @@ source "$adapter_file"
 [[ "${ADAPTER_ANSWER_MODE:-}" =~ ^(unsupported|claude-clear-v1)$ ]] || die "adapter answer mode missing"
 
 command_name="${1:-}"; [[ -n "$command_name" ]] || { usage; exit 2; }; shift
+if [[ "$command_name" == view ]]; then
+  printf '%s\n' '{"error":{"code":"view-unsupported","message":"view is not a pty/tmux command; use kaola-acp"},"schema":"kaola-acp-view/1"}'
+  exit 1
+fi
 case "$command_name" in preflight|start|observe|status|capture|send|wait|permit|cancel|key|answer|stop) ;; *) die "unknown command: $command_name" ;; esac
 repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_value="" text_given=false
 if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
