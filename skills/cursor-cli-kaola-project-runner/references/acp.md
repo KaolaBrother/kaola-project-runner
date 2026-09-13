@@ -1,6 +1,6 @@
 # Cursor CLI ACP transport
 
-Command: `cursor-agent --yolo acp`. Login requires a PTY: `false`. Platform quirks: agentInfo is empty; effort is encoded in model values.
+Command: `cursor-agent --yolo acp`. Login requires a PTY: `false`. Platform quirks: agentInfo is empty; effort is encoded in model values; ACP model option values are bracketed descriptors (grok-4.6[effort=high,fast=true]) mapped from PTY picker IDs via acp_model_map.
 
 ## Command surface
 
@@ -19,9 +19,15 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 `start` resolves the same tier/model/effort/Fast selection as PTY and applies it through the
 agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
 `model`/``/`` when non-empty.
-`config_application` records each attempted option's requested value and applied result;
-`configured_options` carries the adapter's returned receipts. An option with no advertised config
-ID, or one the adapter rejects, is reported as a limitation — the session stays usable.
+When a manifest declares `acp_model_map`, a resolved PTY picker ID is sent as the ACP option value
+the agent advertises for the same model (recorded as `requested_id`/`mapped`/`declared` in the
+model application). `config_application` records each attempted option's requested value and
+applied result; `configured_options` carries the adapter's returned receipts. An option with no
+advertised config ID, or one the adapter rejects, is reported as a limitation — the session stays
+usable. The `fast` receipt's `effective` reflects proven native state only: a rejected fast option
+or an unapplied fast-variant model ID reports `unknown`, and an applied model value's own
+descriptor (e.g. `[..,fast=true]`) is reported as the effective fast evidence with any request
+conflict noted — never a false on/off.
 
 ## Ending and resuming an ACP session
 

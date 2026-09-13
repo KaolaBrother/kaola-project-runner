@@ -2053,6 +2053,21 @@ def run_probe(args: argparse.Namespace) -> int:
                         for option in options
                         if isinstance(option, dict) and option.get("id") is not None
                     ]
+                    result["config_options"] = [
+                        {
+                            "id": option.get("id"),
+                            "name": option.get("name"),
+                            "type": option.get("type"),
+                            "current": option.get("currentValue"),
+                            "values": [
+                                entry.get("value")
+                                for entry in option.get("options") or []
+                                if isinstance(entry, dict)
+                            ],
+                        }
+                        for option in options
+                        if isinstance(option, dict)
+                    ]
                 if result["capabilities"]["close"] and result.get("session_probe"):
                     wait(send("session/close",
                               {"sessionId": result["session_probe"]}), 5.0)

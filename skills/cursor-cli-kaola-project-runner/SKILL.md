@@ -11,7 +11,7 @@ retries, or completion policy.
 
 ## Transport facts
 
-Default transport: **acp**. The ACP command is `cursor-agent --yolo acp`; its known quirks are `agentInfo is empty; effort is encoded in model values`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **acp**. The ACP command is `cursor-agent --yolo acp`; its known quirks are `agentInfo is empty; effort is encoded in model values; ACP model option values are bracketed descriptors (grok-4.6[effort=high,fast=true]) mapped from PTY picker IDs via acp_model_map`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 

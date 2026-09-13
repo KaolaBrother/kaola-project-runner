@@ -344,6 +344,15 @@ class MockAgent:
     def on_set_config(self, request_id: Any, params: dict[str, Any]) -> None:
         config_id = params.get("configId") or params.get("config_id")
         log_event({"event": "set_config_option", "params": params})
+        if "reject-fast" in self.caps and config_id == "fast-mode":
+            respond(
+                request_id,
+                error={
+                    "code": -32602,
+                    "message": f"fast-mode unavailable in this build: {params.get('value')}",
+                },
+            )
+            return
         if "strict-config" in self.caps:
             option = next(
                 (entry for entry in self.CONFIG_OPTIONS if entry.get("id") == config_id),

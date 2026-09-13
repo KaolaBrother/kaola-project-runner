@@ -721,9 +721,75 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         advertised = (receipt.get("transport") or {}).get("advertised_config_ids") or []
         for config_id in ("mode", "model", "reasoning_effort", "fast-mode"):
             self.assertIn(config_id, advertised)
+        options = (receipt.get("transport") or {}).get("advertised_config_options") or []
+        model_option = next((o for o in options if o.get("id") == "model"), {})
+        self.assertIn("gpt-5.6-sol", model_option.get("values") or [])
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("resolved_model"), "gpt-5.6-sol")
         self.assertFalse((receipt.get("config_application") or {}).get("applied"))
+
+    def test_codex_rejected_fast_config_reports_unknown(self) -> None:
+        # A rejected fast config option is a limitation: applied=False and
+        # effective=unknown — never the resolved intent reported as fact.
+        receipt = self.start(
+            "codex", "--fast", "on", caps="strict-config,reject-fast",
+        )
+        self.assertIsNone(receipt.get("error"), f"rejected fast must not fail start: {receipt}")
+        fast = receipt.get("fast") or {}
+        self.assertEqual(fast.get("requested"), "on")
+        self.assertFalse(fast.get("applied"))
+        self.assertEqual(fast.get("effective"), "unknown")
+        application = receipt.get("config_application") or {}
+        fast_app = application.get("fast") or {}
+        self.assertFalse(fast_app.get("applied"))
+        self.assertIsNotNone(fast_app.get("error"))
+        send = self.cli("send", "--text", "still usable", platform="codex")
+        self.assertEqual(send.get("outcome"), "turn_completed")
+
+    def test_cursor_rejected_fast_model_reports_unknown(self) -> None:
+        # A fast-suffix model ID that the agent rejects must not report
+        # fast-on — the fast variant was never applied.
+        receipt = self.start(
+            "cursor-cli", "--model", "experimental-7-fast", "--fast", "on",
+            caps="strict-config",
+        )
+        application = receipt.get("config_application") or {}
+        self.assertFalse((application.get("model") or {}).get("applied"))
+        fast = receipt.get("fast") or {}
+        self.assertFalse(fast.get("applied"))
+        self.assertEqual(fast.get("effective"), "unknown")
+        self.assertEqual(fast.get("applied_via"), "model-id")
+
+    def test_cursor_acp_model_map_applies_descriptor_value(self) -> None:
+        # The PTY picker ID maps onto the ACP option value the agent
+        # advertises for the same model; the value's own descriptor is the
+        # native fast evidence.
+        receipt = self.start("cursor-cli")
+        self.assertIn(
+            ("model", "grok-4.6[effort=high,fast=true]"), self.config_events(),
+        )
+        application = receipt.get("config_application") or {}
+        model = application.get("model") or {}
+        self.assertTrue(model.get("applied"))
+        self.assertEqual(model.get("requested_id"), "cursor-grok-4.6-xhigh")
+        self.assertTrue(model.get("mapped"))
+        self.assertEqual((model.get("declared") or {}).get("fast"), "true")
+        fast = receipt.get("fast") or {}
+        self.assertEqual(fast.get("requested"), "off")
+        self.assertEqual(fast.get("effective"), "on")
+        self.assertEqual(fast.get("applied_via"), "model-id")
+        self.assertIsNotNone(fast.get("conflict"))
+
+    def test_cursor_upgrade_maps_fable_descriptor_value(self) -> None:
+        receipt = self.start("cursor-cli", "--tier", "upgrade")
+        application = receipt.get("config_application") or {}
+        model = application.get("model") or {}
+        self.assertTrue(model.get("applied"))
+        self.assertEqual(
+            model.get("value"),
+            "claude-fable-5-1[thinking=true,context=300k,effort=high]",
+        )
+        self.assertEqual(model.get("requested_id"), "claude-fable-5-1-high")
 
 
 class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):

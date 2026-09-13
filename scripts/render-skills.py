@@ -31,7 +31,7 @@ REQUIRED = {
     "default_transport", "acp_command",
     "acp_client_capabilities", "acp_quirks", "acp_verified_versions", "acp_env_allowlist",
     "acp_login_requires_pty", "acp_model_config_id", "acp_effort_config_id",
-    "acp_fast_config_id", "acp_wrapper_pin",
+    "acp_fast_config_id", "acp_model_map", "acp_wrapper_pin",
 }
 
 

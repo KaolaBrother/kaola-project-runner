@@ -686,13 +686,49 @@ def merge_policy_evidence(receipt: dict[str, Any], policy: dict[str, Any]) -> No
     }
 
 
+def parse_acp_model_map(raw: str) -> dict[str, str]:
+    """Parse a manifest ``acp_model_map`` entry: ``id=value;id=value``.
+
+    Maps resolved runtime model IDs (PTY picker IDs) onto the ACP option
+    values the agent actually advertises for the same model — e.g. Cursor's
+    ``cursor-grok-4.6-xhigh`` onto ``grok-4.6[effort=high,fast=true]``.
+    """
+    mapping: dict[str, str] = {}
+    for pair in (raw or "").split(";"):
+        key, separator, value = pair.partition("=")
+        if separator and key.strip() and value.strip():
+            mapping[key.strip()] = value.strip()
+    return mapping
+
+
+def acp_value_params(value: str) -> dict[str, str]:
+    """Parse a trailing ``[k=v,...]`` descriptor from an ACP option value.
+
+    Cursor-style values carry their declared settings in the value itself
+    (``grok-4.6[effort=high,fast=true]``); the bracket is the agent's own
+    statement of what selecting that value does.
+    """
+    match = re.search(r"\[([^\]]+)\]\s*$", value or "")
+    params: dict[str, str] = {}
+    if match:
+        for item in match.group(1).split(","):
+            key, _, val = item.partition("=")
+            if key.strip():
+                params[key.strip()] = val.strip()
+    return params
+
+
 def fast_report(args: argparse.Namespace, policy: dict[str, Any],
-                applied_via: str, applied: bool, detail: str | None = None) -> dict[str, Any]:
+                applied_via: str, applied: bool, detail: str | None = None,
+                effective: str | None = None) -> dict[str, Any]:
     provenance_fast = (policy.get("model_evidence_provenance") or {}).get("fast") or {}
     report = {
         "requested": args.fast,
         "support": args.manifest.get("fast_support") or "none",
-        "effective": policy.get("resolved_fast") or "unknown",
+        # ``effective`` reflects proven native state only: a resolved intent is
+        # reported when nothing had to be applied, but a failed or unapplied
+        # mechanism reports ``unknown``/``unsupported`` — never a false on/off.
+        "effective": effective if effective is not None else (policy.get("resolved_fast") or "unknown"),
         "applied": applied,
         "applied_via": applied_via,
     }
@@ -723,6 +759,7 @@ def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt["login_required"] = probe.pop("login_required", None)
     receipt["transport"]["auth_methods"] = probe.pop("auth_methods", [])
     receipt["transport"]["advertised_config_ids"] = probe.pop("config_option_ids", None)
+    receipt["transport"]["advertised_config_options"] = probe.pop("config_options", None)
     receipt.update(probe)
     policy = resolve_selection(args, repo)
     merge_policy_evidence(receipt, policy)
@@ -817,12 +854,18 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         merge_policy_evidence(receipt, policy)
         resolved_model = policy.get("resolved_runtime_model_id") or ""
         resolved_effort = (policy.get("resolved_parameters") or {}).get("effort") or ""
+        # ACP option values can differ from PTY picker IDs for the same model
+        # (Cursor advertises bracketed values like grok-4.6[effort=high,...]).
+        # The manifest map selects the same owner-selected model, not another.
+        acp_model_value = parse_acp_model_map(
+            args.manifest.get("acp_model_map") or ""
+        ).get(resolved_model, resolved_model)
         application: dict[str, Any] = {}
         mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
         # Model first, then effort, then Fast — the ACP config order the
         # upstream adapter expects.
         option_pairs = [
-            ("model", resolved_model, "acp_model_config_id"),
+            ("model", acp_model_value, "acp_model_config_id"),
             ("effort", resolved_effort, "acp_effort_config_id"),
         ]
         for label, value, key in option_pairs:
@@ -839,14 +882,23 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 }
                 continue
             result = socket_request(sock, "set_config_option", {"config_id": config_id, "value": value}, 20.0)
+            record: dict[str, Any] = {"applied": not result.get("error"),
+                                      "config_id": config_id, "value": value}
+            if label == "model":
+                if value != resolved_model:
+                    record["requested_id"] = resolved_model
+                    record["mapped"] = True
+                declared = acp_value_params(value)
+                if declared:
+                    record["declared"] = declared
             if result.get("error"):
                 # A rejected option is a limitation receipt, not a session
                 # failure — the agent stays usable on its own selection.
-                application[label] = {"applied": False, "config_id": config_id,
-                                      "value": value, "error": result["error"]}
+                record["error"] = result["error"]
+                application[label] = record
                 continue
             configured.append(result)
-            application[label] = {"applied": True, "config_id": config_id, "value": value}
+            application[label] = record
         # Fast rides the native config option when the agent advertises one;
         # model-variant platforms carry it in the resolved model ID instead.
         fast_id = args.manifest.get("acp_fast_config_id") or ""
@@ -859,9 +911,12 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 if result.get("error"):
                     application["fast"] = {"applied": False, "config_id": fast_id,
                                            "value": args.fast, "error": result["error"]}
+                    # Rejected: native fast state is unproven — report unknown,
+                    # never the resolved intent as if it had taken effect.
                     receipt["fast"] = fast_report(
                         args, policy, "acp-config", False,
                         detail="fast config option rejected",
+                        effective="unknown",
                     )
                 else:
                     configured.append(result)
@@ -869,11 +924,52 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                                            "value": args.fast}
                     receipt["fast"] = fast_report(args, policy, "acp-config", True)
             else:
-                via = "model-id" if any(
+                model_applied = application.get("model", {}).get("applied") is True
+                declared = acp_value_params(acp_model_value) if model_applied else {}
+                declared_fast = declared.get("fast")
+                if declared_fast in ("true", "false"):
+                    # The applied model value itself declares a fast tier
+                    # (Cursor-style [..,fast=true]) — that descriptor is the
+                    # native evidence for what is effective.
+                    effective = "on" if declared_fast == "true" else "off"
+                    application["fast"] = {
+                        "applied": declared_fast == "true",
+                        "via": "model-id",
+                        "declared_fast": declared_fast,
+                    }
+                    receipt["fast"] = fast_report(
+                        args, policy, "model-id", declared_fast == "true",
+                        detail=f"applied model value declares fast={declared_fast}",
+                        effective=effective,
+                    )
+                    if args.fast != effective:
+                        receipt["fast"]["conflict"] = (
+                            f"requested --fast {args.fast}; applied model value "
+                            f"declares fast={declared_fast} and ACP exposes no "
+                            "separate fast toggle"
+                        )
+                elif model_applied and any(
                     resolved_model.endswith(suffix) for suffix in FAST_VARIANT_SUFFIXES
-                ) else "none"
-                application["fast"] = {"applied": False, "reason": "no-advertised-config-option"}
-                receipt["fast"] = fast_report(args, policy, via, via == "model-id")
+                ):
+                    application["fast"] = {"applied": True, "via": "model-id"}
+                    receipt["fast"] = fast_report(args, policy, "model-id", True)
+                elif not model_applied and any(
+                    resolved_model.endswith(suffix) for suffix in FAST_VARIANT_SUFFIXES
+                ):
+                    # A fast-variant ID was resolved but the model option failed
+                    # — fast was never applied; native state is unproven.
+                    application["fast"] = {
+                        "applied": False,
+                        "reason": "model-config-not-applied",
+                    }
+                    receipt["fast"] = fast_report(
+                        args, policy, "model-id", False,
+                        detail="fast model ID resolved but model option was not applied",
+                        effective="unknown",
+                    )
+                else:
+                    application["fast"] = {"applied": False, "reason": "no-advertised-config-option"}
+                    receipt["fast"] = fast_report(args, policy, "none", False)
         if mode_value and "error" not in receipt:
             if args.platform in ACP_SKIP_MODE:
                 config_id = "mode"

@@ -12,7 +12,10 @@ any missing, stale, or unexpected file or Skill directory. Manifest values are J
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_model_config_id`,
-`acp_effort_config_id`, `acp_fast_config_id`, and `acp_wrapper_pin`. Model-selection fields are
+`acp_effort_config_id`, `acp_fast_config_id`, `acp_model_map`, and `acp_wrapper_pin`.
+`acp_model_map` is an optional `picker-id=acp-option-value;...` list mapping resolved PTY model
+IDs onto the ACP option values the agent advertises for the same model (empty or omitted means
+IDs pass literally). Model-selection fields are
 `default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`,
 `upgrade_model_name`/`upgrade_model_id`/`upgrade_model_parameters`/`upgrade_model_effort`, and
 `fast_support`/`fast_summary`. They render as `DEFAULT_TRANSPORT`,

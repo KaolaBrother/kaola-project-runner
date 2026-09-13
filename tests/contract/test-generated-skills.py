@@ -203,6 +203,11 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         text = text.replace("cursor-grok-4.6-xhigh", "cursor-default-model-id")
         text = text.replace("claude fable 5.1 high", "cursor-upgrade-model")
         text = text.replace("claude-fable-5-1-high", "cursor-upgrade-model-id")
+        # Cursor's ACP option values are the adapter's own bracketed model
+        # descriptors; they are declared manifest facts, not Grok adapter
+        # leakage. Remove only the exact advertised value strings.
+        text = text.replace("grok-4.6[effort=high,fast=true]", "cursor-acp-model-value")
+        text = text.replace("claude-fable-5-1[thinking=true,context=300k,effort=high]", "cursor-acp-model-value")
     if package_id == "devin-kaola-project-runner":
         # Devin's declared upgrade preset ID is a Fusion combo that literally
         # names the Claude Fable sidecar. Remove only that exact declared fact.
