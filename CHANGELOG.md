@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0 — 2026-09-14
+
 - Per-run model presets and explicit Fast opt-in across all seven platforms (issue #34). Every
   manifest now declares `default` and `upgrade` presets: Claude Opus High → Fable High, Codex
   `gpt-5.6-sol`/`high` → `gpt-6-astra`/`high`, Grok 4.6 xhigh (upgrade identical), OpenCode keeps the
