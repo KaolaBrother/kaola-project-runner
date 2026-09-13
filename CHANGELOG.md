@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- Per-run model presets and explicit Fast opt-in across all seven platforms (issue #34). Every
+  manifest now declares `default` and `upgrade` presets: Claude Opus High → Fable High, Codex
+  `gpt-5.6-sol`/`high` → `gpt-6-astra`/`high`, Grok 4.6 xhigh (upgrade identical), OpenCode keeps the
+  CLI-native opening model on both tiers (no Runner override), Kimi `kimi-for-coding`/`max` → `k3`/`max`,
+  Cursor `cursor-grok-4.6-xhigh` → `claude-fable-5-1-high`, Devin `swe-2-max` → the Fusion High combo
+  model. Selection precedence: explicit `--model` wins, then `--tier`, then the default preset; a bare
+  `--model` does not inherit preset effort, and effort/Fast-encoded model IDs get no invented extra
+  configuration calls. `start`/`preflight` accept `--tier default|upgrade` and `--fast on|off` on both
+  transports — ACP applies model → effort → Fast through manifest `acp_*_config_id` options (Codex adds
+  `fast-mode`) and PTY uses native argv/`-c service_tier`/env mechanisms; `--fast on` is opt-in only and
+  reports `resolved_fast: "unsupported"` where no native mechanism or advertised fast variant exists.
+  Claude Code applies Fast through a process-scoped `--settings '{"fastMode": ...}'` launch pin —
+  `false` by default and `true` on explicit opt-in, passed verbatim; the native CLI determines
+  model support, effective reports `unknown` without native evidence, and the selected model is
+  never changed to satisfy Fast.
+  `--resume`/`--continue` without selection flags now preserves the saved native session selection
+  (`resume-preserved`) instead of re-applying the preset; supplying any selection flag re-applies it.
+  Receipts carry `model_selection`, `requested_tier`/`requested_fast`/`resolved_fast`, and per-option
+  `config_application` records; a rejected or unadvertised `set_config_option` is a reported
+  limitation, never a session failure or transport gate, and nothing escalates models automatically.
+  Manifests may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
+  during `initialize`): Cursor negotiates `parameterizedModelPicker=true`, which makes its ACP
+  surface advertise separate `model`/`effort`/`fast` options — base model IDs, effort
+  `low..xhigh`, and fast `"true"`/`"false"` strings — instead of fixed variant descriptors.
+  `acp_model_map` (`picker-id=acp-option-value;...`) then decomposes resolved PTY picker IDs onto
+  the advertised model value for the same model while the ID's effort suffix travels through the
+  effort option and Fast through `acp_fast_values`-converted fast values — Cursor resolves
+  `cursor-grok-4.6-xhigh` to `model=grok-4.6`, `effort=xhigh`, `fast=false` exactly, and
+  `claude-fable-5-1-high` to `claude-fable-5-1`/`high`/`false`. Fast conversion is
+  platform-specific (`acp_fast_values`: Cursor `off=false,on=true`; Codex keeps `off`/`on`). The
+  `fast` receipt's `effective` now reflects proven native state only: a rejected fast config option
+  or an unapplied fast-variant model ID reports `unknown`, and an applied model value's own
+  descriptor (`[..,fast=true]`) is reported as the effective evidence with any request conflict
+  noted — never a false on/off. ACP `preflight` additionally reports `advertised_config_options`
+  (id, type, current value, and allowed values) from `session/new`.
+
 - The Skills are now runtime-neutral Agent Skills (issue #36): SKILL.md frontmatter and universal
   instructions use generic controlling-Agent wording (Codex-specific display metadata stays in the
   optional `agents/openai.yaml`), and every invocation example resolves the installed Skill's

@@ -6,8 +6,9 @@
 - Default tmux session prefix: `devin-kaola`
 - Continue: `--continue`
 - Exact resume: `--resume <session-id>`
-- Runner default main model: **Adaptive**
-- Current resolved launch identity: `adaptive` with `effort=default`
+- Runner default preset (`--tier default`): **SWE-2 Max** — `swe-2-max` with `effort=max (encoded in model ID)`
+- Runner upgrade preset (`--tier upgrade`): **Fusion High (Fable 5.1 High + SWE-2 Medium)** — `fusion-claude-fable-5-1-high-sidekick-swe-2-medium` with `effort=high (encoded in model ID)`
+- Fast support: Fast via catalog `-fast`/`-priority` model variants only when the resolved model advertises one; preset models have no fast variant
 
 ## Preflight
 
@@ -17,11 +18,15 @@ Preflight is read-only. Optional Kaola/Workflow surfaces and runtime health are 
 their absence does not block starting the CLI. The Runner never installs, upgrades, adopts, or
 rewrites runtime configuration.
 
-Model catalogs are probed read-only. A user-provided per-run `--model`/`--effort` overrides the
-Runner default; saved picker/config values never become the Runner default. If the requested model
-is absent from or unknown to the readable catalog, the exact declared literal is still launched and
-the catalog fact is reported. Actual-model mismatch or unreadable evidence never blocks ordinary
-observe, capture, send, key, or stop transport chosen by the Agent.
+Model catalogs are probed read-only. Selection precedence is explicit `--model` over the chosen
+`--tier` preset; explicit `--effort` overrides preset effort only on the model it was given with,
+and a different explicit model without explicit effort leaves native effort untouched. Encoded
+effort/Fast model IDs are not followed by invented extra configuration calls. Saved picker/config
+values never become the Runner default; on `--resume`/`--continue` the saved native selection is
+preserved unless the caller supplies tier/model/effort, while Fast stays a per-run request. If the
+requested model is absent from or unknown to the readable catalog, the exact declared literal is
+still launched and the catalog fact is reported. Actual-model mismatch or unreadable evidence never
+blocks ordinary observe, capture, send, key, or stop transport chosen by the Agent.
 
 ## Launch
 

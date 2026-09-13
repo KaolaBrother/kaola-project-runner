@@ -26,11 +26,18 @@ chooses to invoke it.
 
 ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 holder 上的投影，不得成为第二条 agent stdio 客户端，也不得把原始 `session/update` 塞进 Skill 热路径。permit lock（#25）、`list`/`view`（#26）与本机 `follow`（#27）已实现。PTY 仍是登录与原生 TUI 接管。
 
-Main-model choice is a per-run transport fact. A current-request user override wins; otherwise the
-adapter's declared Runner default is resolved from the current catalog. The selection enters the
-child as literal argv plus narrowly scoped invocation parameters, never by rewriting global CLI
-configuration. Runtime-owned post-launch evidence is returned to the Agent and does not become
-permission to use the communication channel.
+Main-model choice is a per-run transport fact. A current-request `--model` wins; otherwise
+`--tier default|upgrade` selects the manifest's declared preset (`default` when unset), resolved
+against the current catalog. `--effort` applies only to the model selected in the same request, and
+`--fast on` is an explicit per-run opt-in applied through the native mechanism (config option,
+`-c service_tier`, `-fast` model variant, or process-scoped `--settings '{"fastMode": ...}'`) —
+reported `unsupported` where none exists; where a mechanism exists the native CLI determines
+model support and effective stays `unknown` without native evidence. The
+selection enters the child as literal argv plus narrowly scoped invocation parameters, never by
+rewriting global CLI configuration. `--resume`/`--continue` without selection flags preserves the
+saved native session selection. There is no automatic escalation on complexity, failures, or elapsed
+time; runtime-owned post-launch evidence is returned to the Agent and does not become permission to
+use the communication channel.
 
 ## Grok golden contract
 

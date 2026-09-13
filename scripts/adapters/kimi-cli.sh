@@ -10,10 +10,13 @@ ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
 ADAPTER_ANSWER_MODE="unsupported"
 ADAPTER_CHILD_PROCESS_TITLE_EXACT="kimi-code"
-ADAPTER_DEFAULT_MODEL_NAME="Kimi K3 Max"
-ADAPTER_DEFAULT_MODEL_ID="kimi-code/k3"
+ADAPTER_DEFAULT_MODEL_NAME="Kimi 2.8 Max"
+ADAPTER_DEFAULT_MODEL_ID="kimi-code/kimi-for-coding"
 ADAPTER_DEFAULT_MODEL_EFFORT="max"
-ADAPTER_DEFAULT_MODEL_FAST="unknown"
+ADAPTER_UPGRADE_MODEL_NAME="Kimi K3 Max"
+ADAPTER_UPGRADE_MODEL_ID="kimi-code/k3"
+ADAPTER_UPGRADE_MODEL_EFFORT="max"
+ADAPTER_FAST_MECHANISM="none"
 
 kimi_surface() {
   local root="$1"
@@ -42,7 +45,7 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--session "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
-  ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID")
+  if [[ -n "$RESOLVED_MODEL_ID" ]]; then ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID"); fi
   # Issue #22: `kimi --auto` is Never Ask (skip-all). `--yolo` still asks on
   # risky actions. Workspace-trust remains a separate TUI surface.
   ADAPTER_LAUNCH_ARGS+=(--auto)
