@@ -21,7 +21,8 @@ fail() {
 }
 
 run_runner() {
-  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@"
+  # PTY/tmux transport surface; ACP-default manifests would route to the holder.
+  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@" --transport pty
 }
 
 capture_command() {
@@ -147,7 +148,7 @@ expect_refusal test_issue6_legacy_stop_refuses 'relay-required'
 
 capture_command claude-code stop --repo "$legacy_repo" --session "$legacy_session" \
   --if-snapshot "$fake_snapshot" --force || true
-expect_refusal test_issue6_legacy_force_stop_refuses 'relay-required'
+expect_refusal test_issue6_legacy_force_stop_refuses 'relay-attestation-failed'
 
 capture_command claude-code answer --repo "$legacy_repo" --session "$legacy_session" \
   --if-snapshot "$fake_snapshot" --decision-id "kpr-decision-v1:$(printf '%064d' 1)" \

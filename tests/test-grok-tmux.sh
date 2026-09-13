@@ -72,7 +72,9 @@ FAKE
 chmod +x "$fake_grok"
 
 run_helper() {
-  TMUX_BIN="$tmux_bin" GROK_BIN="$fake_grok" GROK_START_TIMEOUT=5 "$helper" "$@"
+  # PTY/tmux transport surface; Grok's ACP-default manifest would route to the
+  # holder instead of the fake runtime binary.
+  TMUX_BIN="$tmux_bin" GROK_BIN="$fake_grok" GROK_START_TIMEOUT=5 "$helper" "$@" --transport pty
 }
 
 json_assert() {

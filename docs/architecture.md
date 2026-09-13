@@ -35,7 +35,7 @@ permission to use the communication channel.
 `templates/grok-golden/` is an immutable historical copy of the live-proven Grok Skill, metadata, lifecycle,
 prompt, PR handoff, heartbeat, foreground scheduler, and closing references. Project prompt, task-mode,
 scheduling, handoff, and lifecycle bytes. Those bytes remain frozen as reference evidence; active
-generated Skills do not impose them. `templates/SKILL.md.tmpl` is the authoritative six-platform
+generated Skills do not impose them. `templates/SKILL.md.tmpl` is the authoritative seven-platform
 communication-only contract.
 
 Only platform facts may vary: executable, runtime carrier preflight, launch/continue/resume syntax,
@@ -46,7 +46,7 @@ outer Codex carrier.
 ## Generated Skills
 
 `render-skills.py` combines the active communication template, frozen optional references, fixed manifests, metadata templates, shared tmux
-core, relay/client/protocol/observation helpers, and one matching adapter into six self-contained
+core, relay/client/protocol/observation helpers, and one matching adapter into seven self-contained
 directories under `skills/`. Every managed
 directory has a `.generated-by-kaola-project-runner` marker. A published Skill never follows a path
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
@@ -54,7 +54,7 @@ byte inventories.
 
 ## Session ownership
 
-The core accepts `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, or `devin`. New sessions
+The core accepts `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, or `codex`. New sessions
 receive:
 
 ```text

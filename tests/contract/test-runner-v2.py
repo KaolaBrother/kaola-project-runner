@@ -17,6 +17,11 @@ PLATFORMS = {
     "devin": ("acp", "devin acp"),
     "opencode": ("acp", "opencode acp"),
     "claude-code": ("pty", "npx --yes @agentclientprotocol/claude-agent-acp@"),
+    "codex": (
+        "acp",
+        "npx --yes --package @openai/codex@0.153.4 "
+        "--package @agentclientprotocol/codex-acp@1.11.0 codex-acp",
+    ),
 }
 
 spec = importlib.util.spec_from_file_location("renderer", RENDERER)

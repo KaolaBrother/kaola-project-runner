@@ -28,6 +28,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +89,70 @@ def scrub(value: Any) -> Any:
     if isinstance(value, list):
         return [scrub(item) for item in value]
     return value
+
+
+def capability_supported(container: dict, key: str) -> bool:
+    """ACP capability presence means support: a present object (even ``{}``) or
+    ``true`` is supported; absent, ``null``, or ``false`` is not."""
+    value = container.get(key)
+    return value is not None and value is not False
+
+
+def rfc3339_instant(value: Any) -> float | None:
+    """Parse an RFC3339 timestamp into a POSIX instant.
+
+    Returns ``None`` when the value is absent, malformed, or carries no
+    numeric offset — a naive timestamp is not an orderable instant.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text[-1] in ("Z", "z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.timestamp()
+
+
+def latest_session(sessions: list[dict]) -> tuple[dict | None, list[dict]]:
+    """Pick the eligible session with the newest ``updatedAt`` instant.
+
+    Identical ``sessionId`` entries observed across pages collapse to one
+    identity before selection; a repeated identity never creates ambiguity.
+    A distinct eligible candidate with a missing or invalid ``updatedAt``
+    makes the latest identity unknowable. Returns ``(entry, [])`` on a
+    unique winner, ``(None, candidates)`` when indeterminate.
+    """
+    by_id: dict[str, dict] = {}
+    for entry in sessions:
+        if not isinstance(entry, dict):
+            continue
+        session_id = entry.get("sessionId")
+        if not session_id:
+            continue
+        previous = by_id.get(session_id)
+        if previous is None:
+            by_id[session_id] = entry
+            continue
+        new_instant = rfc3339_instant(entry.get("updatedAt"))
+        old_instant = rfc3339_instant(previous.get("updatedAt"))
+        if new_instant is not None and (old_instant is None or new_instant > old_instant):
+            by_id[session_id] = entry
+    candidates = list(by_id.values())
+    if not candidates:
+        return None, []
+    dated = [(rfc3339_instant(entry.get("updatedAt")), entry) for entry in candidates]
+    if any(instant is None for instant, _entry in dated):
+        return None, candidates
+    best = max(instant for instant, _entry in dated)
+    tied = [entry for instant, entry in dated if instant == best]
+    if len(tied) != 1:
+        return None, tied
+    return tied[0], []
 
 
 class EventLog:
@@ -918,9 +983,10 @@ class Holder:
             }
         session_caps = self.capabilities.get("sessionCapabilities") or {}
         if resume is not None:
-            if not session_caps.get("resume") and not self.capabilities.get("loadSession"):
+            if not capability_supported(session_caps, "resume") \
+                    and not capability_supported(self.capabilities, "loadSession"):
                 return {"error": {"code": "resume-unsupported", "message": "agent lacks resume/loadSession"}}
-            method = "session/resume" if session_caps.get("resume") else "session/load"
+            method = "session/resume" if capability_supported(session_caps, "resume") else "session/load"
             request_id = self.agent.send_request(
                 method, {"sessionId": resume, "cwd": self.args.repo, "mcpServers": []}
             )
@@ -930,14 +996,24 @@ class Holder:
             self.session_meta = response.get("result") or {}
             self.acp_session_id = self.session_meta.get("sessionId", resume)
         elif use_continue:
-            if not session_caps.get("list"):
+            if not capability_supported(session_caps, "list"):
                 return {"error": {"code": "continue-unsupported", "message": "agent lacks session/list"}}
-            request_id = self.agent.send_request("session/list", {"cwd": self.args.repo})
-            response = self.agent.wait_response(request_id, 15.0)
-            sessions = ((response or {}).get("result") or {}).get("sessions") or []
+            sessions, list_error = self._list_repo_sessions()
+            if list_error is not None:
+                return {"error": list_error}
             if not sessions:
                 return {"error": {"code": "continue-empty", "message": "no sessions to resume"}}
-            return self.initialize_agent_resume(sessions[-1]["sessionId"])
+            latest, candidates = latest_session(sessions)
+            if latest is None:
+                return {"error": {
+                    "code": "continue-ambiguous",
+                    "message": "cannot determine the latest session from factual identity",
+                    "candidates": [
+                        {"sessionId": entry.get("sessionId"), "updatedAt": entry.get("updatedAt")}
+                        for entry in candidates
+                    ],
+                }}
+            return self.initialize_agent_resume(latest["sessionId"])
         else:
             request_id = self.agent.send_request(
                 "session/new", {"cwd": self.args.repo, "mcpServers": []}
@@ -964,11 +1040,37 @@ class Holder:
         return {"acp_session_id": self.acp_session_id, "agent_info": self.agent_info,
                 "protocol_version": self.protocol_version, "capabilities": self.capabilities}
 
+    def _list_repo_sessions(self) -> tuple[list[dict], dict | None]:
+        """Collect all cwd-filtered sessions by following ``nextCursor`` pages."""
+        collected: list[dict] = []
+        seen_cursors: set[str] = set()
+        cursor: str | None = None
+        while True:
+            params: dict[str, Any] = {"cwd": self.args.repo}
+            if cursor:
+                params["cursor"] = cursor
+            request_id = self.agent.send_request("session/list", params)
+            response = self.agent.wait_response(request_id, 15.0)
+            if response is None or "error" in response:
+                return [], {"code": "continue-list-failed", "message": json.dumps(response)}
+            result = (response or {}).get("result") or {}
+            collected.extend(
+                entry for entry in (result.get("sessions") or [])
+                if isinstance(entry, dict) and entry.get("sessionId")
+            )
+            cursor = result.get("nextCursor") or None
+            if not cursor:
+                return collected, None
+            if cursor in seen_cursors:
+                return collected, {"code": "continue-list-cursor-loop", "cursor": cursor}
+            seen_cursors.add(cursor)
+
     def initialize_agent_resume(self, session_id: str) -> dict[str, Any]:
         session_caps = self.capabilities.get("sessionCapabilities") or {}
-        if not session_caps.get("resume") and not self.capabilities.get("loadSession"):
+        if not capability_supported(session_caps, "resume") \
+                and not capability_supported(self.capabilities, "loadSession"):
             return {"error": {"code": "resume-unsupported"}}
-        method = "session/resume" if session_caps.get("resume") else "session/load"
+        method = "session/resume" if capability_supported(session_caps, "resume") else "session/load"
         request_id = self.agent.send_request(
             method, {"sessionId": session_id, "cwd": self.args.repo, "mcpServers": []}
         )
@@ -1398,7 +1500,9 @@ class Holder:
             {"jsonrpc": "2.0", "method": "session/cancel",
              "params": {"sessionId": self.acp_session_id}}
         )
-        timeout = params.get("timeout", CANCEL_GRACE)
+        timeout = params.get("timeout")
+        if timeout is None:
+            timeout = CANCEL_GRACE
         deadline = time.monotonic() + timeout
         with self.turn_cond:
             while self.turn["active"]:
@@ -1594,7 +1698,7 @@ class Holder:
                     while self.turn["active"] and time.monotonic() < deadline:
                         self.turn_cond.wait(timeout=deadline - time.monotonic())
             session_caps = self.capabilities.get("sessionCapabilities") or {}
-            if session_caps.get("close") and self.acp_session_id and not self.agent.exited.is_set():
+            if capability_supported(session_caps, "close") and self.acp_session_id and not self.agent.exited.is_set():
                 request_id = self.agent.send_request(
                     "session/close", {"sessionId": self.acp_session_id}
                 )
@@ -1658,7 +1762,22 @@ class Holder:
             return {"error": {"code": "config-option-timeout", "config_id": option_id}}
         if "error" in response:
             return {"error": {"code": "config-option-failed", "config_id": option_id, "detail": response["error"]}}
-        return {"config_id": option_id, "value": params["value"], "configured": True}
+        evidence = {"config_id": option_id, "value": params["value"], "configured": True}
+        result = response.get("result") or {}
+        for option in result.get("configOptions") or []:
+            if isinstance(option, dict) and option.get("id") == option_id:
+                if option.get("name") is not None:
+                    evidence["option_name"] = option["name"]
+                if option.get("description") is not None:
+                    evidence["option_description"] = option["description"]
+                for choice in option.get("options") or []:
+                    if isinstance(choice, dict) and choice.get("value") == params["value"]:
+                        if choice.get("name") is not None:
+                            evidence["value_name"] = choice["name"]
+                        if choice.get("description") is not None:
+                            evidence["value_description"] = choice["description"]
+                break
+        return evidence
 
     # -- socket server ------------------------------------------------------------
 
@@ -1904,10 +2023,10 @@ def run_probe(args: argparse.Namespace) -> int:
             "prompt": True,
             "cancel": True,
             "permission": True,
-            "load_session": bool(caps.get("loadSession")),
-            "resume": bool(session_caps.get("resume")),
-            "list": bool(session_caps.get("list")),
-            "close": bool(session_caps.get("close")),
+            "load_session": capability_supported(caps, "loadSession"),
+            "resume": capability_supported(session_caps, "resume"),
+            "list": capability_supported(session_caps, "list"),
+            "close": capability_supported(session_caps, "close"),
             "set_config_option": True,
         }
         result["auth_methods"] = init.get("authMethods") or []

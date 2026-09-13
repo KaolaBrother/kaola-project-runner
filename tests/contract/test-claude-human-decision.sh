@@ -21,7 +21,8 @@ json_assert() {
 }
 
 run_runner() {
-  TMUX_BIN="$issue_tmux_bin" bash "$runner" claude-code "$@"
+  # PTY/tmux transport surface; ACP manifests would route to the holder.
+  TMUX_BIN="$issue_tmux_bin" bash "$runner" claude-code "$@" --transport pty
 }
 
 make_claude_fixture() {
@@ -209,7 +210,7 @@ if "$issue_tmux_bin" has-session -t "=$decision_session" >/dev/null 2>&1; then
       fail test_claude_public_answer "public answer failed: $answer_result"
     if [[ -n "${answer_result:-}" ]]; then
       json_assert test_claude_public_answer \
-        "d['schema_version'] == 2 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['decision_id'] == '$answer_decision_id' and d['based_on_snapshot'] == '' and d['mutation_performed'] is True and d['clear_editor'] is True and d['payload_fingerprint'].startswith('sha256:') and 'action_time_snapshot' not in d and 'receipt_id' not in d and 'restoration_evidence' not in d" \
+        "d['schema_version'] == 3 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['decision_id'] == '$answer_decision_id' and d['based_on_snapshot'] == '' and d['mutation_performed'] is True and d['clear_editor'] is True and d['payload_fingerprint'].startswith('sha256:') and 'action_time_snapshot' not in d and 'receipt_id' not in d and 'restoration_evidence' not in d" \
         "$answer_result"
       grep -Fxq 'submitted=chosen-answer' "$answer_log" || \
         fail test_claude_public_answer "replacement receipt missing or appended draft: $(cat "$answer_log")"

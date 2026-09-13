@@ -52,7 +52,7 @@ PY
 }
 
 platform="${1:-}"; [[ -n "$platform" ]] || { usage; exit 2; }; shift
-case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin) ;; *) die "unknown platform: $platform" ;; esac
+case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex) ;; *) die "unknown platform: $platform" ;; esac
 adapter_file="$script_dir/adapters/$platform.sh"; [[ -f "$adapter_file" ]] || die "adapter not installed"
 [[ -f "$OBSERVATION_HELPER" && -f "$RELAY" && -f "$RELAY_CLIENT" && -f "$MODEL_POLICY_HELPER" ]] || die "relay control plane is incomplete"
 # shellcheck source=/dev/null
@@ -97,6 +97,7 @@ if [[ "$permission_mode_given" != true ]]; then
   case "$platform" in
     claude-code) permission_mode=bypassPermissions ;;
     devin) permission_mode=dangerous ;;
+    codex) permission_mode=agent-full-access ;;
   esac
 fi
 
@@ -133,8 +134,15 @@ if [[ "$transport" == acp ]]; then
   [[ -n "$capture_since" ]] && acp_args+=(--since "$capture_since")
   [[ "$capture_full" == true ]] && acp_args+=(--full)
   [[ "$capture_inline" == true ]] && acp_args+=(--inline)
-  [[ "$model_given" == true ]] && acp_args+=(--model "$model")
-  [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
+  if [[ "$platform" == codex ]]; then
+    # Issue #28: Codex ACP applies the Runner default so saved CLI config never
+    # silently selects the model; explicit --model/--effort still win.
+    if [[ "$model_given" == true ]]; then acp_args+=(--model "$model"); else acp_args+=(--model "$ADAPTER_DEFAULT_MODEL_ID"); fi
+    if [[ "$effort_given" == true ]]; then acp_args+=(--effort "$effort"); else acp_args+=(--effort "$ADAPTER_DEFAULT_MODEL_EFFORT"); fi
+  else
+    [[ "$model_given" == true ]] && acp_args+=(--model "$model")
+    [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
+  fi
   if [[ "$permission_mode_given" == true ]]; then
     acp_args+=(--mode "$permission_mode")
   elif [[ "$command_name" == start ]]; then
@@ -144,6 +152,7 @@ if [[ "$transport" == acp ]]; then
       kimi-cli) acp_args+=(--mode yolo) ;;
       devin) acp_args+=(--mode bypass) ;;
       claude-code) acp_args+=(--mode bypassPermissions) ;;
+      codex) acp_args+=(--mode agent-full-access) ;;
     esac
   fi
   [[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")
@@ -164,15 +173,23 @@ repo="$(canonical_dir "$repo")"; git_root="$(git -C "$repo" rev-parse --show-top
 git_root="$(canonical_dir "$git_root")"; [[ "$git_root" == "$repo" ]] || die "--repo must name the Git root: $git_root"
 [[ "$session" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$ ]] || die "invalid session name"
 TMUX_SESSION_TARGET="=$session"
-if [[ "$platform" != claude-code && "$platform" != devin && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
+if [[ "$platform" != claude-code && "$platform" != devin && "$platform" != codex && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
 if [[ "$command_name" != start && ( "$model_given" == true || "$effort_given" == true || "$permission_mode_given" == true ) ]]; then die "model, effort, and permission mode are start-only"; fi
 MODEL_VALUE="$model" "$PYTHON_BIN" - <<'PY' || die "model contains unsupported terminal controls"
 import os
 value = os.environ.get("MODEL_VALUE", "")
 raise SystemExit(1 if any(ord(ch) < 32 or ord(ch) == 127 for ch in value) else 0)
 PY
-if [[ -n "$effort" ]]; then case "$effort" in low|medium|high|xhigh|max) ;; *) die "unsupported effort" ;; esac; fi
-if [[ "$platform" == devin ]]; then
+if [[ -n "$effort" ]]; then
+  case "$effort" in
+    low|medium|high|xhigh|max) ;;
+    ultra) [[ "$platform" == codex ]] || die "unsupported effort" ;;
+    *) die "unsupported effort" ;;
+  esac
+fi
+if [[ "$platform" == codex ]]; then
+  case "$permission_mode" in read-only|agent|agent-full-access) ;; *) die "unsupported Codex permission mode" ;; esac
+elif [[ "$platform" == devin ]]; then
   case "$permission_mode" in auto|accept-edits|smart|dangerous) ;; *) die "unsupported Devin permission mode" ;; esac
 else
   case "$permission_mode" in acceptEdits|auto|bypassPermissions|manual|dontAsk|plan) ;; *) die "unsupported Claude permission mode" ;; esac
@@ -497,7 +514,7 @@ PY
       exit 1
     fi
     adapter_prepare_model_environment
-    session_env_args=(); while IFS='=' read -r name value; do case "$name" in CLAUDE_*|GROK_*|OPENCODE_*|KIMI_*|CURSOR_*|FAKE_*) session_env_args+=(-e "$name=$value") ;; esac; done < <(env)
+    session_env_args=(); while IFS='=' read -r name value; do case "$name" in CLAUDE_*|GROK_*|OPENCODE_*|KIMI_*|CURSOR_*|CODEX_*|OPENAI_API_KEY|FAKE_*) session_env_args+=(-e "$name=$value") ;; esac; done < <(env)
     set +u
     for value in "${ADAPTER_MODEL_ENV[@]}"; do session_env_args+=(-e "$value"); done
     set -u

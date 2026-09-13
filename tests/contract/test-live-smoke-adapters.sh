@@ -39,7 +39,9 @@ stop_force() {
 }
 
 run_runner() {
-  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@"
+  # PTY/tmux transport surface; ACP-default manifests would route to the holder
+  # instead of the fake runtime binary.
+  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@" --transport pty
 }
 
 prepare_kimi_surface() {

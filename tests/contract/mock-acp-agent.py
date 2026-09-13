@@ -88,9 +88,11 @@ def thought_chunk(session_id: str, text: str, message_id: str | None = None) -> 
 
 
 class MockAgent:
-    def __init__(self, scenario: str, caps: set[str], turn_ms: int, flood_bytes: int):
+    def __init__(self, scenario: str, caps: set[str], turn_ms: int, flood_bytes: int,
+                 caps_objects: bool = False):
         self.scenario = scenario
         self.caps = caps
+        self.caps_objects = caps_objects
         self.turn_ms = turn_ms
         self.flood_bytes = flood_bytes
         self.next_outbound_id = 1000
@@ -102,7 +104,26 @@ class MockAgent:
         self.active_turn: tuple[Any, str] | None = None
         self.child_proc: subprocess.Popen | None = None
         self.configured: dict[str, Any] = {}
+        self.list_pages = self._load_list_pages()
+        if self.list_pages:
+            for page in self.list_pages:
+                for entry in page.get("sessions") or []:
+                    if isinstance(entry, dict) and entry.get("sessionId"):
+                        self.sessions.setdefault(
+                            entry["sessionId"], {"cwd": entry.get("cwd", "")}
+                        )
         log_event({"event": "mock_start", "scenario": scenario, "caps": sorted(caps)})
+
+    @staticmethod
+    def _load_list_pages() -> list[dict[str, Any]] | None:
+        raw = os.environ.get("MOCK_ACP_LIST_PAGES", "")
+        if not raw:
+            return None
+        try:
+            pages = json.loads(raw)
+        except ValueError:
+            return None
+        return pages if isinstance(pages, list) else None
 
     # -- outbound helpers -------------------------------------------------
 
@@ -141,13 +162,17 @@ class MockAgent:
 
     # -- capability map ----------------------------------------------------
 
+    def _cap(self, name: str) -> Any:
+        enabled = name in self.caps
+        return {} if (enabled and self.caps_objects) else enabled
+
     def capabilities(self) -> dict[str, Any]:
         return {
             "loadSession": "load" in self.caps,
             "sessionCapabilities": {
-                "list": "list" in self.caps,
-                "resume": "resume" in self.caps,
-                "close": "close" in self.caps,
+                "list": self._cap("list"),
+                "resume": self._cap("resume"),
+                "close": self._cap("close"),
             },
             "promptCapabilities": {"embeddedContext": True},
         }
@@ -221,9 +246,37 @@ class MockAgent:
         log_event({"event": "session_new", "sessionId": session_id})
         respond(request_id, {"sessionId": session_id})
 
-    def on_session_list(self, request_id: Any) -> None:
+    def on_session_list(self, request_id: Any, params: dict[str, Any]) -> None:
         if "list" not in self.caps:
             respond(request_id, error={"code": -32601, "message": "session/list unsupported"})
+            return
+        if self.list_pages is not None:
+            cursor = params.get("cursor")
+            index = 0
+            if cursor is not None:
+                index = next(
+                    (i + 1 for i, page in enumerate(self.list_pages)
+                     if page.get("nextCursor") == cursor),
+                    -1,
+                )
+            if index < 0 or index >= len(self.list_pages):
+                respond(request_id, {"sessions": []})
+                return
+            page = self.list_pages[index]
+            entries = []
+            for entry in page.get("sessions") or []:
+                if isinstance(entry, dict):
+                    entries.append(entry)
+                    if entry.get("sessionId"):
+                        self.sessions.setdefault(
+                            entry["sessionId"],
+                            {"cwd": entry.get("cwd", params.get("cwd", ""))},
+                        )
+            result: dict[str, Any] = {"sessions": entries}
+            if page.get("nextCursor") is not None:
+                result["nextCursor"] = page["nextCursor"]
+            log_event({"event": "session_list_page", "index": index, "cursor": cursor})
+            respond(request_id, result)
             return
         respond(
             request_id,
@@ -252,12 +305,40 @@ class MockAgent:
         self.sessions.pop(params.get("sessionId", ""), None)
         respond(request_id, {})
 
+    # Mirrors the codex-acp adapter's session/set_config_option result: the
+    # full configOptions list with upstream display names and descriptions.
+    CONFIG_OPTIONS = [
+        {"id": "mode", "name": "Mode",
+         "description": "Approval and sandboxing preset for the session",
+         "category": "mode", "type": "select", "options": [
+             {"value": "read-only", "name": "Ask for approval",
+              "description": "Always ask to edit external files and use the internet"},
+             {"value": "agent", "name": "Approve for me",
+              "description": "Only ask for actions detected as potentially unsafe"},
+             {"value": "agent-full-access", "name": "Full access",
+              "description": "Unrestricted access to the internet and any file on your computer"},
+         ]},
+        {"id": "model", "name": "Model",
+         "description": "Model Codex uses for the session",
+         "category": "model", "type": "select", "options": [
+             {"value": "gpt-5.6-luna", "name": "5.6 Luna",
+              "description": "Fast and affordable agentic coding model."},
+         ]},
+        {"id": "reasoning_effort", "name": "Reasoning effort",
+         "description": "Reasoning effort Codex uses for the session",
+         "category": "reasoning_effort", "type": "select", "options": [
+             {"value": "low", "name": "Low"},
+             {"value": "medium", "name": "Medium"},
+             {"value": "high", "name": "High"},
+         ]},
+    ]
+
     def on_set_config(self, request_id: Any, params: dict[str, Any]) -> None:
         config_id = params.get("configId") or params.get("config_id")
         if config_id is not None:
             self.configured[str(config_id)] = params.get("value")
         log_event({"event": "set_config_option", "params": params})
-        respond(request_id, {})
+        respond(request_id, {"configOptions": self.CONFIG_OPTIONS})
 
     # -- prompt turn scenarios -----------------------------------------------
 
@@ -549,7 +630,7 @@ class MockAgent:
             "session/set_config_option": self.on_set_config,
         }
         if method == "session/list":
-            self.on_session_list(request_id)
+            self.on_session_list(request_id, params)
             return
         handler = handlers.get(method)
         if handler is None:
@@ -590,11 +671,13 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", default="normal")
     parser.add_argument("--caps", default="")
+    parser.add_argument("--caps-objects", action="store_true")
     parser.add_argument("--turn-ms", type=int, default=0)
     parser.add_argument("--flood-bytes", type=int, default=1024 * 1024)
     args, _unknown = parser.parse_known_args()
     caps = {item for item in args.caps.split(",") if item}
-    agent = MockAgent(args.scenario, caps, args.turn_ms, args.flood_bytes)
+    agent = MockAgent(args.scenario, caps, args.turn_ms, args.flood_bytes,
+                      caps_objects=args.caps_objects)
     return agent.serve()
 
 

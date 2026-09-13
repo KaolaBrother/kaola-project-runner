@@ -8,9 +8,9 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Project Snapshot
 
-- Purpose: Codex-facing CLI communication driver for six AI CLI platforms via tmux.
+- Purpose: Codex-facing CLI communication driver for seven AI CLI platforms via tmux.
 - Stack: Bash (macOS-compatible), Python 3, tmux.
-- Architecture: shared template renders six self-contained Skills; each platform has a YAML manifest and shell adapter; relay manages nested PTY.
+- Architecture: shared template renders seven self-contained Skills; each platform has a YAML manifest and shell adapter; relay manages nested PTY.
 
 ## Commands
 

@@ -20,10 +20,13 @@ SKILL_IDS = (
     "opencode-kaola-project-runner",
     "kimi-cli-kaola-project-runner",
     "cursor-cli-kaola-project-runner",
+    "devin-kaola-project-runner",
+    "codex-kaola-project-runner",
 )
 
 EXPECTED_MARKDOWN = {
     "SKILL.md",
+    "references/acp.md",
     "references/platform.md",
     "references/transport.md",
 }
@@ -31,6 +34,7 @@ EXPECTED_MARKDOWN = {
 EXPECTED_ACTIVE_TEMPLATES = {
     "SKILL.md.tmpl",
     "agents/openai.yaml.tmpl",
+    "references/acp.md.tmpl",
     "references/platform.md.tmpl",
     "references/transport.md.tmpl",
 }
@@ -89,9 +93,8 @@ def main() -> int:
     if not all(
         marker in agents_text
         for marker in (
-            "Cursor CLI live experiments must pass `cursor-grok-4.6-xhigh`",
-            "without a `Fast` suffix",
-            "Do not use native `/model` as a read-only probe",
+            "Live Cursor experiments use `cursor-grok-4.6-xhigh` with Fast disabled",
+            "never use `/model` as a read-only probe",
         )
     ):
         failures.append(

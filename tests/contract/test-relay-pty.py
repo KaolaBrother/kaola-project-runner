@@ -112,7 +112,7 @@ class RelayPtyTests(unittest.TestCase):
                 self.assertTrue(self._wait_for(state, "ready"), "managed child did not start")
 
                 first = self._observe(env, repo, session)
-                self.assertEqual(first["schema_version"], 2)
+                self.assertEqual(first["schema_version"], 3)
                 self.assertTrue(first["relay"]["managed"])
                 relay = first["relay"]
                 self.assertEqual(relay["pid"], first["hard_evidence"]["pane_pid"])

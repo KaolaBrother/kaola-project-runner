@@ -36,13 +36,17 @@ make_fixture() {
   mkdir -p "$root/scripts" "$root/skills"
   cp "$installer_source" "$root/scripts/install-local.sh"
   chmod +x "$root/scripts/install-local.sh"
-  for id in grok claude-code opencode kimi-cli cursor-cli; do
+  cp "$project_root/scripts/kaola-acp.py" "$root/scripts/kaola-acp.py"
+  cp "$project_root/scripts/kaola-acp-holder.py" "$root/scripts/kaola-acp-holder.py"
+  for id in grok claude-code opencode kimi-cli cursor-cli devin codex; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;
       claude-code) name=claude-code-kaola-project-runner ;;
       opencode) name=opencode-kaola-project-runner ;;
       kimi-cli) name=kimi-cli-kaola-project-runner ;;
       cursor-cli) name=cursor-cli-kaola-project-runner ;;
+      devin) name=devin-kaola-project-runner ;;
+      codex) name=codex-kaola-project-runner ;;
     esac
     mkdir -p "$root/skills/$name"
     printf '%s\n' "$name" >"$root/skills/$name/.generated-by-kaola-project-runner"
@@ -53,25 +57,28 @@ make_fixture() {
 run_installer() {
   local root="$1" codex_home="$2"
   shift 2
-  CODEX_HOME="$codex_home" "$root/scripts/install-local.sh" "$@"
+  # HOME is redirected (uniquely per codex_home) so the installer's
+  # ~/.local/bin links stay inside the fixture instead of touching the
+  # developer's real bin directory.
+  HOME="$tmp_root/home-$(basename "$codex_home")" CODEX_HOME="$codex_home" "$root/scripts/install-local.sh" "$@"
 }
 
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/kaola-installer-issue-1.XXXXXX")"
 trap 'rm -rf "$tmp_root"' EXIT
 
-ids=(grok claude-code opencode kimi-cli cursor-cli)
-names=(grok-kaola-project-runner claude-code-kaola-project-runner opencode-kaola-project-runner kimi-cli-kaola-project-runner cursor-cli-kaola-project-runner)
+ids=(grok claude-code opencode kimi-cli cursor-cli devin codex)
+names=(grok-kaola-project-runner claude-code-kaola-project-runner opencode-kaola-project-runner kimi-cli-kaola-project-runner cursor-cli-kaola-project-runner devin-kaola-project-runner codex-kaola-project-runner)
 
 if [[ ! -f "$installer_source" ]]; then
   fail "test_installer_exists" "missing $installer_source"
 else
-  # A normal install must atomically prepare all five generated Skill carriers.
+  # A normal install must atomically prepare all seven generated Skill carriers.
   repo="$tmp_root/repo-all"
   codex="$tmp_root/codex-all"
   make_fixture "$repo"
-  output="$(run_installer "$repo" "$codex" 2>&1)" || fail "test_install_all_five" "install failed: $output"
+  output="$(run_installer "$repo" "$codex" 2>&1)" || fail "test_install_all_seven" "install failed: $output"
   for i in "${!ids[@]}"; do
-    assert_link "test_install_all_five_${ids[$i]}" "$codex/skills/${names[$i]}" "$(source_for "$repo" "${names[$i]}")"
+    assert_link "test_install_all_seven_${ids[$i]}" "$codex/skills/${names[$i]}" "$(source_for "$repo" "${names[$i]}")"
   done
 
   # The exact old root link is the one and only legacy carrier that may migrate.

@@ -47,7 +47,9 @@ legacy_session="grok-legacy-$$"
 unrelated="grok-compat-unrelated-$$"
 
 run_wrapper() {
-  TMUX_BIN="$issue_tmux_bin" bash "$wrapper" "$@"
+  # PTY/tmux transport surface; Grok's ACP-default manifest would route to the
+  # holder instead of the fake runtime binary.
+  TMUX_BIN="$issue_tmux_bin" bash "$wrapper" "$@" --transport pty
 }
 
 if [[ ! -f "$wrapper" ]]; then

@@ -21,7 +21,8 @@ fail() {
 }
 
 run_runner() {
-  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@"
+  # PTY/tmux transport surface; ACP-default manifests would route to the holder.
+  TMUX_BIN="$issue_tmux_bin" bash "$runner" "$@" --transport pty
 }
 
 capture_command() {
@@ -98,7 +99,7 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
   if capture_command claude-code observe --repo "$repo" --session "$session"; then
     observe_before="$COMMAND_OUTPUT"
     json_assert test_issue6_observe_schema \
-      "set(d) == {'schema_version','result','platform','runtime','session','repo','snapshot_id','pane_revision','raw_current_frame','editor_state','editor_fingerprint','hard_evidence','relay','child_processes','child_process_count','visible_shell_count','visible_agent_count','native_approval','structured_decision_marker','later_output_barrier','activity_hint','runtime_session_id','git','evidence_flags','model'} and d['schema_version'] == 2 and d['result'] == 'observed' and d['platform'] == 'claude-code' and d['relay']['managed'] is True and d['model']['requested_model_source'] == 'runner-default'" \
+      "set(d) == {'schema_version','result','platform','runtime','session','repo','snapshot_id','pane_revision','raw_current_frame','editor_state','editor_fingerprint','hard_evidence','relay','child_processes','child_process_count','visible_shell_count','visible_agent_count','native_approval','structured_decision_marker','later_output_barrier','activity_hint','runtime_session_id','git','evidence_flags','model','transport'} and d['schema_version'] == 3 and d['result'] == 'observed' and d['platform'] == 'claude-code' and d['relay']['managed'] is True and d['model']['requested_model_source'] == 'runner-default'" \
       "$observe_before"
     json_assert test_issue6_observe_hard_evidence \
       "set(d['hard_evidence']) == {'present','owned','platform_match','repo_match','pane_count','pane_id','pane_dead','pane_input_off','pane_path','pane_pid','pane_command','pane_title','pane_process','relay_process_match','process_match','tui_detected','pane_width','pane_height','cursor_x','cursor_y','cursor_flag','alternate_on','history_size','history_bytes'} and d['hard_evidence']['pane_count'] == 1 and d['hard_evidence']['pane_id'].startswith('%') and d['hard_evidence']['relay_process_match'] is True" \
@@ -211,7 +212,7 @@ if "$issue_tmux_bin" has-session -t "=$session" >/dev/null 2>&1; then
       answer_result="$COMMAND_OUTPUT"
       canonical_repo="$(cd "$repo" && pwd -P)"
       json_assert test_issue6_answer_receipt \
-        "d['schema_version'] == 2 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['platform'] == 'claude-code' and d['session'] == '$session' and d['repo'] == '$canonical_repo' and d['decision_id'] == '' and d['based_on_snapshot'] == '$changed_snapshot' and d['mutation_performed'] is True and d['clear_editor'] is True and d['payload_fingerprint'].startswith('sha256:') and 'receipt_id' not in d and 'restoration_evidence' not in d" \
+        "d['schema_version'] == 3 and d['result'] == 'answer-sent' and d['action'] == 'answer' and d['platform'] == 'claude-code' and d['session'] == '$session' and d['repo'] == '$canonical_repo' and d['decision_id'] == '' and d['based_on_snapshot'] == '$changed_snapshot' and d['mutation_performed'] is True and d['clear_editor'] is True and d['payload_fingerprint'].startswith('sha256:') and 'receipt_id' not in d and 'restoration_evidence' not in d" \
         "$answer_result"
       grep -Fxq 'submitted=chosen-answer' "$submit_log" || \
         fail test_issue6_answer_replaces_editor "raw-mode receipt did not contain exactly chosen-answer: $(cat "$submit_log")"

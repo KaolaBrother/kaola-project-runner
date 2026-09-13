@@ -83,7 +83,7 @@ case "$runtime:$*" in
     printf '%s\n' '{"kaolaWorkflow":true,"workflowNext":true,"finalize":true,"authority":"fixture"}'
     exit 0
     ;;
-  claude-code:--help|opencode:--help|kimi-cli:--help|cursor-cli:--help|devin:--help)
+  claude-code:--help|opencode:--help|kimi-cli:--help|cursor-cli:--help|devin:--help|codex:--help)
     printf '%s\n' 'workflow-next kaola-workflow-finalize'
     exit 0
     ;;
