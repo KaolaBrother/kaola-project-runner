@@ -1,0 +1,27 @@
+{
+  "project": "bundle-34",
+  "branch": "workflow/bundle-34",
+  "issue_number": 34,
+  "issue_numbers": [
+    34
+  ],
+  "resolved_default_branch": "main",
+  "branch_head": null,
+  "keep_open_requested": false,
+  "claim_ts": "2026-09-13T12:53:23.600Z",
+  "started_at": "2026-09-13T17:23:17.054Z",
+  "updated_at": "2026-09-13T17:23:17.153Z",
+  "removed_duplicates": [],
+  "archived_paths": [],
+  "steps": {
+    "preflight": "done",
+    "push_upstream": "pending",
+    "merge": "pending",
+    "finalize": "pending",
+    "stash_restore": "pending",
+    "archive_commit": "pending",
+    "push_main": "pending",
+    "closure": "pending"
+  },
+  "push_upstream": "failed"
+}
