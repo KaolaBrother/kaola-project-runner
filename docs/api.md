@@ -143,6 +143,11 @@ a separate Agent choice: `--resume <native-session-id>` (ACP `session/resume`/`s
 advertised capability, or the platform's PTY flag) or `--continue` for the platform's latest
 conversation; a missing identifier never blocks `stop`, and unsupported resume never blocks a fresh
 `start`. The Runner performs no automatic shutdown, fallback, re-prompt, or Workflow continuation.
+After a recorded normal ACP stop, `status`/`observe` report `outcome: stopped`,
+`state: stopped`, `stopped: true`, and `residual_pids: []` when the recorded
+holder, agent, and process group are absent. Unexpected holder death or remaining
+process evidence continues to report `holder-lost`; other commands do not gain a
+successful terminal receipt from this read-only distinction.
 
 ## Adapter interface
 

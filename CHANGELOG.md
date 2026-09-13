@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- ACP status/observe now report a recorded, fully exited normal stop as `stopped`,
+  preserving `holder-lost` for unexpected loss or remaining process evidence (#32).
+
 - All Skills now carry the same end-of-delegation and resume guidance (issue #30): a finished
   reply (`end_turn`, idle frame, successful receipt) is never task completion; when delegated
   work is delivered the Agent is recommended — never forced — to `stop` exactly-owned runtime

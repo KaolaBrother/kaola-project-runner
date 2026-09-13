@@ -653,5 +653,39 @@ class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
         self.assertEqual(send.get("stop_reason"), "end_turn")
 
 
+
+class StoppedStatusTests(unittest.TestCase):
+    def test_normal_stop_is_distinct_from_loss(self):
+        import argparse
+        import importlib.util
+        from unittest.mock import patch
+        spec = importlib.util.spec_from_file_location("acp_status_test", CLI)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        args = argparse.Namespace(command="status")
+        record = {"state": "stopped", "holder_pid": 101, "agent_pid": 102,
+                  "agent_pgid": 102, "last_prompt": {"written_at": 1,
+                  "stop_reason": "end_turn", "mutation_status": "completed"}}
+        with patch.object(module, "base_receipt", return_value={}), \
+             patch.object(module, "pid_alive", return_value=False), \
+             patch.object(module.subprocess, "run") as ps:
+            ps.return_value = subprocess.CompletedProcess([], 0, "", "")
+            result = module.holder_lost_receipt(args, "/unused", record)
+            self.assertEqual(result["outcome"], "stopped")
+            self.assertNotIn("error", result)
+            for state in ("ready", "stopping"):
+                changed = dict(record, state=state, last_prompt={"written_at": 1})
+                result = module.holder_lost_receipt(args, "/unused", changed)
+                self.assertEqual(result["error"]["code"], "holder-lost")
+                self.assertEqual(result["mutation_status"], "unknown")
+            ps.return_value = subprocess.CompletedProcess([], 0, "103 102 S\n", "")
+            self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"], "holder_lost")
+            ps.return_value = subprocess.CompletedProcess([], 1, "", "unavailable")
+            self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"], "holder_lost")
+            ps.return_value = subprocess.CompletedProcess([], 0, "", "")
+            args.command = "send"
+            self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"], "holder_lost")
+
+
 if __name__ == "__main__":
     unittest.main()

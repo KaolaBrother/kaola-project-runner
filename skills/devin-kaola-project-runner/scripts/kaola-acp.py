@@ -468,6 +468,26 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
             None if receipt["mutation_status"] == "unknown"
             else receipt["mutation_status"] in ("completed", "accepted", "in_progress")
         )
+    # A recorded normal shutdown is not an unexpected connection loss. Only
+    # status/observe use this terminal receipt; mutations retain their errors.
+    ids = [record.get(key) for key in ("holder_pid", "agent_pid", "agent_pgid")]
+    if (args.command in ("status", "observe") and record.get("state") == "stopped"
+            and all(isinstance(pid, int) and pid > 0 for pid in ids)
+            and not any(pid_alive(pid) for pid in ids)):
+        members = subprocess.run(
+            ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
+        )
+        residual = []
+        for line in members.stdout.splitlines():
+            fields = line.split()
+            if (len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit()
+                    and int(fields[1]) == record["agent_pgid"]
+                    and not fields[2].upper().startswith("Z")):
+                residual.append(int(fields[0]))
+        if members.returncode == 0 and not residual:
+            receipt.update(outcome="stopped", state="stopped", stopped=True,
+                           residual_pids=[], record=record)
+            return receipt
     receipt["error"] = {
         "code": "holder-lost",
         "message": "holder process is not alive",
