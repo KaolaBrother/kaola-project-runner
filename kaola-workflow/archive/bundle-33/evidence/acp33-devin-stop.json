@@ -1,0 +1,1 @@
+{"agent_exit_code": 0, "agent_exit_signal": null, "git": {"branch": null, "dirty": false}, "mutation_status": "completed", "platform": "devin", "repo": "/private/tmp/kpr-33-live", "residual_pids": [], "schema_version": 3, "session": "acp33-devin", "stopped": true, "transport": {"alternatives": ["pty"], "default": "acp", "reason": "manifest-default", "selected": "acp"}}
