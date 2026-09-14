@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Main orchestrator Skill `kaola-project-runner` (issue #44): completion stops leftover idle
+  owned sessions including ACP (idle is not keep-alive). A stop boundary such as "run until
+  5pm" / "until done" / "until CONDITION" blocks new tasks and new issues; time-up is not
+  drop-everything. The default end of a run still finishes in-hand issues, merges
+  worktrees/branches with no leftover branch tails, and leaves the workspace clean per Kaola
+  Workflow. Only an explicit "stop here, continue later" skips that cleanup and may leave
+  recovery-preserving unfinished branches.
+
 ## 0.2.0 — 2026-09-14
 
 - Generated main orchestrator Skill `kaola-project-runner` (display name Project Runner, issue #41).

@@ -5,7 +5,7 @@
 The existing Grok Workflow contract is golden and live-proven historical evidence. Do not rewrite its
 bytes. It is not the active Runner authority: all seven worker Skills use the shared communication-only
 template and do not impose task modes, prompts, PR handoff, heartbeat, scheduler, or closing policy.
-Project-level heartbeat and acceptance live in the generated main Skill `kaola-project-runner`.
+Project-level heartbeat, acceptance, idle-session stop, and end-of-run close-out live in the generated main Skill `kaola-project-runner`.
 
 ## Source of truth
 

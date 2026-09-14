@@ -125,18 +125,54 @@ completion.
    repair using existing tools; do not fabricate claim identities or introduce
    a parallel lifecycle system.
 5. **Release and report.** Stop an idle exact session only when no suitable
-   authorized work is executable. Preserve its existing recovery information
-   and give any remaining delivery/sync/cleanup a named owner. Direct safe
-   cleanup of completed, unreferenced worktrees and branches; protect
-   in-flight work and evidence. Report active workers and outstanding
-   close-out work, then continue the same heartbeat. Session stop, candidate
+   authorized work is executable. ACP and PTY/tmux are the same stop action:
+   exact owned session `stop` via the matching platform Runner Skill,
+   including ACP holders. Idle is not keep-alive. ACP idle left running is
+   not completion and not keep-alive. When the authorized goal is complete,
+   or no suitable authorized work is executable, stop remaining idle owned
+   sessions, including ACP holders. Then cancel heartbeat once no unfinished
+   delivery/sync/cleanup remains. Preserve its existing recovery information
+   and give any remaining delivery/sync/cleanup a named owner. Direct safe cleanup of completed, unreferenced worktrees
+   and branches; protect in-flight work and evidence. Report active workers
+   and outstanding close-out work, then continue the same heartbeat while
+   authorized work or unfinished close-out remains. Session stop, candidate
    acceptance, merge, Issue closure and workspace cleanup are different facts,
    not interchangeable completion labels.
+
+## Ending a run
+
+When ending a project run, the default is to finish every in-hand authorized
+task and every in-hand issue of this run (already claimed / in flight), then
+merge their worktrees and branches, leave no leftover branch tails, and leave
+the workspace clean, matching Kaola Workflow close-out (finalize/archive/sink
+and unreferenced worktree/branch cleanup already in this Skill). That default
+is not an extra engine. Do not park unfinished branches as the normal end of
+a project run.
+
+A human stop boundary such as "run until 5pm", "run until done", or
+"run until CONDITION" means: after that line, do not accept or dispatch new
+tasks, and do not claim or start new issues. Time-up is not drop-everything.
+Default after any such termination: still finish in-hand authorized work and
+in-hand issues, merge worktrees/branches, and leave the workspace clean. A
+clock or condition boundary must not be treated as that skip-cleanup pause.
+
+Only an explicit "stop here and continue later" (stated scope) is a scoped
+pause: do not force merge/cleanup beyond that scope; preserve recovery so
+work can resume. Only an explicit "stop here and continue later" skips that
+cleanup and may leave recovery-preserving unfinished branches.
 
 Honor a user stop request within its stated scope. Otherwise cancel the
 heartbeat when the authorized goal is complete, no unfinished
 delivery/sync/cleanup remains, and remaining idle owned sessions have been
 stopped.
+
+Restart a session only when there is new authorized work. After remaining
+idle owned sessions have been stopped, later authorized work starts or
+resumes a session only then. Resume with `--resume` when a native session id
+is known, otherwise `--continue` or a fresh `start`. Do not keep an idle ACP
+or PTY session running as a holder for future work. Reuse existing Runner
+`stop` / `start` / `--resume` / `--continue`. Do not invent a session state
+machine, quota engine, or extra dashboards.
 
 ## Dispatch notes
 
