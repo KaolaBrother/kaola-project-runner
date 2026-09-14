@@ -889,6 +889,7 @@ class Holder:
         self.turn_cond = threading.Condition()
         self.state = "starting"
         self.stop_requested = False
+        self.holder_instance_id = secrets.token_hex(16)
         self.acp_session_id: str | None = None
         self.session_meta: dict[str, Any] = {}
         self.initial_config_options: Any = None
@@ -939,6 +940,7 @@ class Holder:
             "session": self.args.session,
             "repo": self.args.repo,
             "holder_pid": os.getpid(),
+            "holder_instance_id": self.holder_instance_id,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
@@ -1302,6 +1304,7 @@ class Holder:
         return {
             "state": self.state,
             "holder_pid": os.getpid(),
+            "holder_instance_id": self.holder_instance_id,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
@@ -1512,10 +1515,29 @@ class Holder:
             for key in list(self.pending_permissions):
                 self._settle_pending_permission_locked(key, "cancelled")
 
+    def _holder_instance_mismatch(self, op: str, expected: Any) -> dict[str, Any]:
+        self.events.append({"kind": "holder_instance_mismatch", "op": op,
+                            "expected_holder_instance_id": expected})
+        return {
+            "error": {
+                "code": "holder-instance-mismatch",
+                "message": "expected holder instance does not match this holder process",
+                "expected_holder_instance_id": expected,
+                "holder_instance_id": self.holder_instance_id,
+                "mutation_status": "not_started",
+                "mutation_performed": False,
+            },
+            "mutation_status": "not_started",
+            "mutation_performed": False,
+        }
+
     def op_permit(self, params: dict[str, Any]) -> dict[str, Any]:
         request_id = params.get("request_id")
         option = params.get("option")
+        expected = params.get("expected_holder_instance_id")
         with self.lock:
+            if expected is not None and expected != self.holder_instance_id:
+                return self._holder_instance_mismatch("permit", expected)
             pending = self.pending_permissions
             if not pending:
                 return {"error": {"code": "no-pending-permission",
@@ -1538,14 +1560,19 @@ class Holder:
                     "pending_permissions": list(pending.values())}
 
     def op_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
-        if not self.turn["active"]:
-            return {"outcome": "no-active-turn", "mutation_status": self.turn.get("mutation_status")}
-        self._cancel_pending_permissions()
-        self.turn["cancel_requested"] = True
-        self.agent.send_message(
-            {"jsonrpc": "2.0", "method": "session/cancel",
-             "params": {"sessionId": self.acp_session_id}}
-        )
+        expected = params.get("expected_holder_instance_id")
+        with self.lock:
+            if expected is not None and expected != self.holder_instance_id:
+                return self._holder_instance_mismatch("cancel", expected)
+            if not self.turn["active"]:
+                return {"outcome": "no-active-turn", "mutation_status": self.turn.get("mutation_status")}
+            for key in list(self.pending_permissions):
+                self._settle_pending_permission_locked(key, "cancelled")
+            self.turn["cancel_requested"] = True
+            self.agent.send_message(
+                {"jsonrpc": "2.0", "method": "session/cancel",
+                 "params": {"sessionId": self.acp_session_id}}
+            )
         timeout = params.get("timeout")
         if timeout is None:
             timeout = CANCEL_GRACE
@@ -1605,6 +1632,7 @@ class Holder:
             "repo": self.args.repo,
             "state": self.state,
             "holder_pid": os.getpid(),
+            "holder_instance_id": self.holder_instance_id,
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
             "event_cursor": self.events.cursor,
             "truncated": truncated,

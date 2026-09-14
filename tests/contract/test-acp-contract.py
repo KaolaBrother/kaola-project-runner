@@ -571,6 +571,317 @@ class Issue25PermitLockTests(AcpSessionFixture, unittest.TestCase):
             self.assertEqual(set(option), {"id", "kind", "label"}, option)
 
 
+class Issue39HolderInstanceTests(AcpSessionFixture, unittest.TestCase):
+    """Issue #39: optional expected-holder-instance binding on permit/cancel.
+
+    A restarted holder at the same platform/session/repo socket identity is a
+    different instance. A caller that pins a stale ``holder_instance_id`` must
+    get ``holder-instance-mismatch`` with zero agent writes; an omitted flag
+    keeps legacy behavior.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        if self.mock_log.is_file():
+            self.mock_log.write_text("", encoding="utf-8")
+
+    # -- helpers -------------------------------------------------------------
+
+    def record(self) -> dict:
+        repo = os.path.realpath(str(self.repo))
+        digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
+        path = self.record_root / "grok" / self.session / digest / "record.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def pending_id(self, timeout: float = 10) -> str:
+        found = wait_for(lambda: self.pending_permissions() or None, timeout)
+        self.assertTrue(found, f"no pending permission appeared: {self.pending_permissions()}")
+        return str(found[0]["request_id"])
+
+    def session_cancels(self) -> list[dict]:
+        return [
+            event for event in self.read_mock_log()
+            if event.get("event") == "session_cancel"
+        ]
+
+    def assert_mismatch(self, receipt: dict, expected, actual) -> None:
+        error = receipt.get("error") or {}
+        self.assertEqual(
+            error.get("code"), "holder-instance-mismatch",
+            f"expected holder-instance-mismatch, got {receipt}",
+        )
+        self.assertEqual(error.get("expected_holder_instance_id"), expected)
+        self.assertEqual(error.get("holder_instance_id"), actual)
+        self.assertEqual(receipt.get("mutation_status"), "not_started")
+        self.assertIs(receipt.get("mutation_performed"), False)
+
+    def follow_snapshot(self, timeout: float = 10) -> dict:
+        path = self.holder_sock()
+        self.assertTrue(path.exists(), f"missing holder socket {path}")
+        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            connection.settimeout(timeout)
+            connection.connect(str(path))
+            connection.sendall(json.dumps({
+                "op": "follow", "request_id": secrets.token_hex(8), "params": {},
+            }).encode("utf-8") + b"\n")
+            buffer = bytearray()
+            while True:
+                data = connection.recv(65536)
+                if not data:
+                    break
+                buffer.extend(data)
+                while b"\n" in buffer:
+                    line, _, rest = buffer.partition(b"\n")
+                    buffer = bytearray(rest)
+                    if not line.strip():
+                        continue
+                    event = json.loads(line.decode("utf-8"))
+                    if event.get("kind") == "snapshot":
+                        return event
+        finally:
+            connection.close()
+        return {}
+
+    def run_list(self) -> dict:
+        result = subprocess.run(
+            [sys.executable, str(CLI), "list",
+             "--platform", "grok", "--repo", str(self.repo)],
+            capture_output=True, text=True, env=self.env(), timeout=15,
+        )
+        return json.loads(result.stdout)
+
+    # -- restart at the same triplet: stale binding must not write -----------
+
+    def test_restart_same_triplet_stale_instance_gets_mismatch(self) -> None:
+        self.start(scenario="permission_gate")
+        self.cli("send", "--text", "gate", "--no-wait", scenario="permission_gate")
+        request_id = self.pending_id()
+        holder_a = self.cli("view").get("holder_instance_id")
+        self.assertIsInstance(holder_a, str)
+        self.assertTrue(holder_a)
+        self.assertEqual(self.record().get("holder_instance_id"), holder_a)
+        self.cli("stop", "--force")
+        self._started = False
+
+        # The restarted holder is a different process instance; the fresh mock
+        # reuses the same ACP request id for its first permission.
+        self.mock_log.write_text("", encoding="utf-8")
+        self.start(scenario="permission_gate")
+        self.cli("send", "--text", "gate again", "--no-wait", scenario="permission_gate")
+        reused = self.pending_id()
+        self.assertEqual(
+            reused, request_id,
+            "same-triplet restart must surface the reused request_id scenario",
+        )
+        holder_b = self.cli("view").get("holder_instance_id")
+        self.assertNotEqual(holder_b, holder_a)
+
+        stale_permit = self.cli(
+            "permit", "--request-id", reused, "--option", "allow",
+            "--expected-holder-instance-id", holder_a, check=False,
+        )
+        self.assert_mismatch(stale_permit, holder_a, holder_b)
+        stale_cancel = self.cli(
+            "cancel", "--expected-holder-instance-id", holder_a,
+            check=False, timeout=15,
+        )
+        self.assert_mismatch(stale_cancel, holder_a, holder_b)
+        stale_escape = self.cli(
+            "key", "--key", "escape",
+            "--expected-holder-instance-id", holder_a, check=False,
+        )
+        self.assert_mismatch(stale_escape, holder_a, holder_b)
+
+        # Zero writes reached B's agent; pending permission and turn intact.
+        self.assertEqual(
+            self.jsonrpc_results_for(reused), [],
+            "stale permit/cancel wrote a permission result to the agent",
+        )
+        self.assertEqual(
+            self.session_cancels(), [],
+            "stale cancel wrote session/cancel to the agent",
+        )
+        self.assertIn(
+            reused,
+            [str(entry["request_id"]) for entry in self.pending_permissions()],
+        )
+        observe = self.cli("observe", check=False)
+        self.assertTrue(observe.get("turn_active"), observe)
+
+        # Fresh call with B's identity settles; omitted flag keeps legacy path.
+        granted = self.cli(
+            "permit", "--request-id", reused, "--option", "allow",
+            "--expected-holder-instance-id", holder_b, check=False,
+        )
+        self.assertIsNone(granted.get("error"), granted)
+        self.assertIn("permitted", granted)
+        self.assertTrue(
+            wait_for(lambda: len(self.jsonrpc_results_for(reused)) == 1, 5),
+            "correctly bound permit never reached the agent",
+        )
+
+        self.cli("send", "--text", "legacy cancel", "--no-wait", scenario="permission_gate")
+        legacy_pending = self.pending_id()
+        legacy = self.cli("cancel", "--timeout", "10", check=False)
+        self.assertIsNone(legacy.get("error"), legacy)
+        self.assertTrue(
+            wait_for(lambda: self.session_cancels(), 5),
+            "legacy cancel without the flag never wrote session/cancel",
+        )
+        self.assertTrue(
+            wait_for(
+                lambda: self.jsonrpc_results_for(legacy_pending), 5,
+            ),
+            "legacy cancel did not settle the pending permission",
+        )
+
+        # With no turn/pending active a stale binding still mismatches instead
+        # of masquerading as the factual no-active-turn outcome.
+        settled = self.cli(
+            "cancel", "--expected-holder-instance-id", holder_a, check=False,
+        )
+        self.assert_mismatch(settled, holder_a, holder_b)
+
+    def test_explicit_empty_expected_token_is_not_omitted(self) -> None:
+        self.start(scenario="permission_gate")
+        self.cli("send", "--text", "gate", "--no-wait", scenario="permission_gate")
+        request_id = self.pending_id()
+        holder_id = self.cli("view").get("holder_instance_id")
+        receipt = self.cli(
+            "permit", "--request-id", request_id, "--option", "allow",
+            "--expected-holder-instance-id", "", check=False,
+        )
+        error = receipt.get("error") or {}
+        self.assertEqual(error.get("code"), "holder-instance-mismatch", receipt)
+        self.assertEqual(error.get("expected_holder_instance_id"), "")
+        self.assertEqual(error.get("holder_instance_id"), holder_id)
+        self.assertEqual(
+            self.jsonrpc_results_for(request_id), [],
+            "an explicit empty expected token must not run unguarded",
+        )
+        self.assertIn(
+            request_id,
+            [str(entry["request_id"]) for entry in self.pending_permissions()],
+        )
+
+    def test_instance_id_exposed_on_all_projections(self) -> None:
+        started = self.start()
+        holder_id = started.get("holder_instance_id")
+        self.assertIsInstance(holder_id, str)
+        self.assertTrue(holder_id)
+        self.assertEqual(self.record().get("holder_instance_id"), holder_id)
+        for command in ("observe", "status", "view"):
+            receipt = self.cli(command, check=False)
+            self.assertEqual(
+                receipt.get("holder_instance_id"), holder_id,
+                f"{command} lost holder_instance_id: {receipt}",
+            )
+        rows = [
+            row for row in self.run_list().get("rows", [])
+            if row.get("session") == self.session
+        ]
+        self.assertEqual(len(rows), 1, f"own session missing from list: {rows}")
+        self.assertEqual(rows[0].get("holder_instance_id"), holder_id)
+        snapshot = self.follow_snapshot()
+        self.assertEqual(snapshot.get("kind"), "snapshot", snapshot)
+        self.assertEqual(snapshot.get("holder_instance_id"), holder_id)
+
+    def test_native_resume_still_mints_new_instance_id(self) -> None:
+        pages = json.dumps({
+            "sessions": [{"sessionId": "mock-session-1", "cwd": str(self.repo)}],
+        })
+        extra_env = {"MOCK_ACP_LIST_PAGES": f"[{pages}]"}
+        first = self.cli("start", caps="resume", extra_env=extra_env)
+        self._started = True
+        holder_a = first.get("holder_instance_id")
+        self.assertIsInstance(holder_a, str)
+        self.assertTrue(holder_a)
+        acp_session = first.get("acp_session_id")
+        self.cli("stop", "--force")
+        self._started = False
+
+        resumed = self.cli(
+            "start", "--resume", str(acp_session), caps="resume",
+            extra_env=extra_env, check=False,
+        )
+        self._started = True
+        self.assertIsNone(resumed.get("error"), resumed)
+        self.assertEqual(
+            resumed.get("acp_session_id"), acp_session,
+            "resume must keep the native session id",
+        )
+        self.assertNotEqual(
+            resumed.get("holder_instance_id"), holder_a,
+            "native resume must still mint a fresh holder_instance_id",
+        )
+
+    def test_concurrent_permit_with_matching_expected_at_most_once(self) -> None:
+        self.start(scenario="multi_permission")
+        self.cli("send", "--text", "needs permits", "--no-wait", scenario="multi_permission")
+        found = wait_for(
+            lambda: self.pending_permissions() if len(self.pending_permissions()) == 3 else None,
+            10,
+        )
+        self.assertTrue(found, f"expected 3 pending, saw {self.pending_permissions()}")
+        request_id = found[0]["request_id"]
+        holder_id = self.cli("view").get("holder_instance_id")
+        receipts = self.concurrent_holder_ops(
+            2, "permit",
+            {"request_id": request_id, "option": "allow",
+             "expected_holder_instance_id": holder_id},
+        )
+        results = self.wait_for_jsonrpc_results(request_id, 2, timeout=1.0)
+        winners = [r for r in receipts if r.get("error") is None and "permitted" in r]
+        losers = [r for r in receipts if (r.get("error") or {}).get("code")]
+        self.assertEqual(len(winners), 1, f"receipts={receipts}")
+        self.assertEqual(len(losers), 1, f"receipts={receipts}")
+        self.assertEqual(
+            (losers[0].get("error") or {}).get("code"), SETTLED_PERMISSION_ERROR,
+            f"loser error.code frozen to {SETTLED_PERMISSION_ERROR}; receipts={receipts}",
+        )
+        self.assertEqual(
+            len(results), 1,
+            f"agent stdin must see one JSON-RPC result for {request_id}; events={results}",
+        )
+
+    def test_shell_wrapper_forwards_expected_flag(self) -> None:
+        stub = self.root / f"python-stub-{os.getpid()}"
+        stub.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"-\" ]; then cat >/dev/null; printf 'pty\\n'; exit 0; fi\n"
+            "printf '%s\\n' \"$@\"\n",
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+        env = self.env()
+        env["PYTHON_BIN"] = str(stub)
+        runner = PROJECT / "scripts" / "kaola-tmux.sh"
+        for value in ("holder-abc-123", ""):
+            result = subprocess.run(
+                [
+                    "bash", str(runner), "grok", "permit",
+                    "--repo", str(self.repo), "--session", self.session,
+                    "--transport", "acp", "--request-id", "7",
+                    "--expected-holder-instance-id", value,
+                ],
+                capture_output=True, text=True, env=env, timeout=15,
+            )
+            self.assertEqual(
+                result.returncode, 0,
+                f"wrapper run failed\nstdout={result.stdout!r}\nstderr={result.stderr!r}",
+            )
+            argv = result.stdout.splitlines()
+            self.assertIn("kaola-acp.py", argv[0])
+            self.assertIn("--expected-holder-instance-id", argv)
+            index = argv.index("--expected-holder-instance-id")
+            self.assertEqual(
+                argv[index + 1] if index + 1 < len(argv) else None,
+                value,
+                f"wrapper must forward the exact value incl. empty: {argv}",
+            )
+
+
 class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
     """Issue #34: ACP applies resolved model → effort → Fast in order and
     reports each configuration as a receipt, never a hard gate."""

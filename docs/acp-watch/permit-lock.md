@@ -33,3 +33,7 @@
 ## 非本单
 
 Watch UI、`list`/`view`/`follow`、HTTP、hydra、改 skip-all 默认值。
+
+## 附录（issue #39，已实现）
+
+holder 进程在构造时铸一次不透明随机 `holder_instance_id`（不可变，不从 record/原生会话 ID 恢复，非 PID 派生），经 record、`status`/`observe`/`start` 回执、`kaola-acp-list/1` 行与 `kaola-acp-view/1` 顶层暴露。`permit`/`cancel`（含 `key escape` 别名）接受可选 `--expected-holder-instance-id`；提供时（含显式空值）在同一把结算锁内、任何许可结算/挂起取消/回合改写/出站 cancel 之前比对——即便当前无活动许可或回合。不匹配返回 `error.code` `holder-instance-mismatch`，error 对象内含 `expected_holder_instance_id` 与实际 `holder_instance_id`，顶层 `mutation_status`=`not_started`、`mutation_performed`=false，且不写 agent stdin。省略则保持既有未绑定行为；该字段只属 Runner 信封，不进原生 ACP 方法参数。

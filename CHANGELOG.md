@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- ACP `permit`/`cancel` (and the `key escape`→cancel alias) accept an optional
+  `--expected-holder-instance-id` binding (issue #39). Each holder process mints an opaque
+  random `holder_instance_id` at construction — immutable for that process, never restored
+  from `record.json` or the native session id, never derived from the PID — exposed on
+  `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level
+  on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). When
+  supplied — including an explicit empty value — the holder compares it under the settlement
+  lock before any permission settlement, pending-permission cancellation, turn mutation, or
+  outbound cancel, even when no permission/turn is active. A mismatch returns `error.code`
+  `holder-instance-mismatch` with `expected_holder_instance_id` and the actual
+  `holder_instance_id` in the error object plus `mutation_status` `not_started` /
+  `mutation_performed` `false`, writing nothing to the agent. Omitting the flag keeps legacy
+  unbound behavior; the value is Runner envelope only and is never forwarded into native ACP
+  method params.
+
 ## 0.1.0 — 2026-09-14
 
 - Per-run model presets and explicit Fast opt-in across all seven platforms (issue #34). Every

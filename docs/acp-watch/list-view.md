@@ -73,6 +73,7 @@
 | `repo` | string，绝对规范 git 根 |
 | `state` | string，∈ `starting` `ready` `agent_exited` `stopping` `stopped` `error` |
 | `holder_pid` | int |
+| `holder_instance_id` | string \| null；holder 进程实例身份（#39，随机一次铸造）；老版本记录可为 null |
 | `agent_alive` | bool |
 | `event_cursor` | int ≥ 0 |
 | `mutation_status` | string，既有五态 |
@@ -92,6 +93,7 @@
 | `platform` `session` `repo` | 身份三元组，同 list 行 |
 | `state` | 同 list 行 |
 | `holder_pid` | int；世代栅栏，Terminal permit 必须核对 |
+| `holder_instance_id` | string；本 holder 进程实例身份（#39），比 PID 更强的绑定，`permit`/`cancel` 可用 `--expected-holder-instance-id` 钉住 |
 | `agent_alive` | bool |
 | `event_cursor` | int，单调 |
 | `truncated` | bool；任一 cap 生效或 `cursor_gap` 时为 true |
@@ -125,6 +127,7 @@
   "repo": "/Users/me/src/app",
   "state": "ready",
   "holder_pid": 48213,
+  "holder_instance_id": "9f2ab1c4d8e0736fa051b2c9d4e68a71",
   "agent_alive": true,
   "event_cursor": 418,
   "truncated": false,

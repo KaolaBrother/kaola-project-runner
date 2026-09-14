@@ -75,6 +75,7 @@ if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false mo
 model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false
 tier="" tier_given=false fast="off" fast_given=false
 acp_wait=true timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
+expected_holder_instance_id="" expected_holder_instance_id_given=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;; --session) session="$2"; shift 2 ;; --resume) resume_id="$2"; shift 2 ;;
@@ -87,6 +88,7 @@ while [[ $# -gt 0 ]]; do
     --transport) transport="$2"; transport_given=true; shift 2 ;; --key) key_name="$2"; shift 2 ;;
     --wait) acp_wait=true; shift ;; --no-wait) acp_wait=false; shift ;; --timeout) timeout="$2"; shift 2 ;;
     --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
+    --expected-holder-instance-id) expected_holder_instance_id="$2"; expected_holder_instance_id_given=true; shift 2 ;;
     --since) capture_since="$2"; shift 2 ;; --full) capture_full=true; shift ;; --inline) capture_inline=true; shift ;;
     -h|--help) usage; exit 0 ;; *) die "unknown argument: $1" ;;
   esac
@@ -132,6 +134,7 @@ if [[ "$transport" == acp ]]; then
   [[ -n "$timeout" ]] && acp_args+=(--timeout "$timeout")
   [[ -n "$request_id" ]] && acp_args+=(--request-id "$request_id")
   [[ -n "$option" ]] && acp_args+=(--option "$option")
+  [[ "$expected_holder_instance_id_given" == true ]] && acp_args+=(--expected-holder-instance-id "$expected_holder_instance_id")
   [[ "$capture_tools" == true ]] && acp_args+=(--tools)
   [[ -n "$capture_since" ]] && acp_args+=(--since "$capture_since")
   [[ "$capture_full" == true ]] && acp_args+=(--full)

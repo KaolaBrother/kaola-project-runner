@@ -194,6 +194,7 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             "repo": repo,
             "state": state,
             "holder_pid": pid,
+            "holder_instance_id": record.get("holder_instance_id"),
             "agent_alive": bool(record.get("agent_alive")),
             "event_cursor": cursor,
             "mutation_status": mutation,
@@ -892,6 +893,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         return receipt
     receipt.update({
         "holder_pid": state.get("holder_pid", proc.pid),
+        "holder_instance_id": state.get("holder_instance_id"),
         "agent_pid": state.get("agent_pid"),
         "acp_session_id": state.get("acp_session_id"),
         "state": state.get("state"),
@@ -1102,6 +1104,7 @@ def main() -> int:
     parser.add_argument("--max-final-chars", type=int, default=4000)
     parser.add_argument("--request-id")
     parser.add_argument("--option")
+    parser.add_argument("--expected-holder-instance-id")
     parser.add_argument("--key")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--lines", type=int)
@@ -1184,13 +1187,18 @@ def main() -> int:
             15.0,
         )
     elif args.command == "permit":
+        params: dict[str, Any] = {"request_id": args.request_id, "option": args.option}
+        if args.expected_holder_instance_id is not None:
+            params["expected_holder_instance_id"] = args.expected_holder_instance_id
         receipt = op_or_holder_lost(
-            args, repo, directory, "permit",
-            {"request_id": args.request_id, "option": args.option}, 10.0,
+            args, repo, directory, "permit", params, 10.0,
         )
     elif args.command == "cancel":
+        params = {"timeout": timeout}
+        if args.expected_holder_instance_id is not None:
+            params["expected_holder_instance_id"] = args.expected_holder_instance_id
         receipt = op_or_holder_lost(
-            args, repo, directory, "cancel", {"timeout": timeout}, sock_timeout
+            args, repo, directory, "cancel", params, sock_timeout
         )
     elif args.command == "key":
         if args.key != "escape":
@@ -1198,8 +1206,11 @@ def main() -> int:
             receipt["error"] = {"code": "key-unsupported",
                                 "message": "acp transport supports only escape→cancel"}
         else:
+            params = {"timeout": timeout}
+            if args.expected_holder_instance_id is not None:
+                params["expected_holder_instance_id"] = args.expected_holder_instance_id
             receipt = op_or_holder_lost(
-                args, repo, directory, "cancel", {"timeout": timeout}, sock_timeout
+                args, repo, directory, "cancel", params, sock_timeout
             )
     elif args.command == "answer":
         receipt = base_receipt(args, repo)
