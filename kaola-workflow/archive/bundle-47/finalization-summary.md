@@ -26,7 +26,7 @@ Issue #47 acceptance:
 
 ## Changed Paths
 
-Recorded after finalize `--check`.
+Finalize `--check` reported: `skills/kaola-project-runner/SKILL.md`, `skills/kaola-project-runner/references/heartbeat-skeleton.md`, `templates/orchestrator/SKILL.md.tmpl`, `templates/orchestrator/references/heartbeat-skeleton.txt`, `tests/contract/test-issue-41-orchestrator.py`. The same candidate also changes `README.md`, `docs/architecture.md`, `docs/conventions.md`, and `CHANGELOG.md`.
 
 ## Documentation Docking
 
