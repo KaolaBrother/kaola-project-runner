@@ -389,7 +389,7 @@ class Issue41GoldenAndWorkerPreservation(unittest.TestCase):
             for marker in WORKER_STOP_RESUME + WORKER_RECEIPT_NOT_COMPLETION:
                 self.assertIn(normalize(marker), body, f"{skill_id}: {marker}")
             for forbidden in WORKER_NO_PROJECT_POLICY:
-                self.assertNotIn(normalize(forbidden), body, f"{skill_id}: {forbidden}"                )
+                self.assertNotIn(normalize(forbidden), body, f"{skill_id}: {forbidden}")
 
     def test_worker_skills_omit_idle_stop_on_complete_policy(self) -> None:
         """Issue #44: workers stay transport-only; no completion/idle-stop policy."""
