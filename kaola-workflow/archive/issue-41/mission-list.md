@@ -23,5 +23,6 @@ control plane, not an eighth platform: no platform manifest or transport adapter
 ## PR #42 review continuation (2026-09-14)
 
 - item: Repair PR review findings and establish merge readiness for Issue 41.
-  status: in-flight
+  status: done
   dispatched: Cursor CLI session cursor-cli-kaola-pr42-review in /Users/ylpromax5/Workspace/kaola-project-runner-pr42 on codex/pr-42-review; fixes and review evidence land in this worktree and archive/issue-41/.cache/pr-42-review.md. Main Codex owns acceptance and sink.
+  result: Repairs delivered by Cursor at e4ef8c7 and accepted by main Codex; current closeout owned by kaola-workflow/pr-42-review.
