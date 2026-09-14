@@ -71,12 +71,14 @@ byte inventories, including the orchestrator package.
 
 `install-local.sh` delivers those directories to a consuming runtime: a verified named alias via
 `--runtime` (`codex`, `claude-code`, `cursor`, `devin`), or any absolute `--skills-dir` (the two are
-mutually exclusive; the flag-free default remains the Codex skills directory). `--method link`
-(the default) symlinks each Skill to the checkout for development; `--method copy` installs the
-identical payload as a standalone directory plus a per-Skill ownership/content receipt kept outside
-the generated payload under `<skills-dir>/.kaola-install-receipts/`. Only an unmodified owned
-installation is replaced or removed — user edits, foreign additions, and receipt-less paths are
-preserved, and a `.generated` marker alone is never delete authority. Skill destination selection
+mutually exclusive; the flag-free default remains the Codex skills directory). `--method copy`
+(the default) installs the identical payload as a standalone directory plus a per-Skill
+ownership/content receipt kept outside the generated payload under
+`<skills-dir>/.kaola-install-receipts/`; `--method link` is the explicit development choice that
+symlinks each Skill to the checkout. An owned source link migrates to a copy on a default or
+`--method copy` reinstall. Only an unmodified owned installation is replaced or removed — user
+edits, foreign additions, and receipt-less paths are preserved, and a `.generated` marker alone is
+never delete authority. Skill destination selection
 (`--runtime`/`--skills-dir`) and target platform selection (`--platform`) are independent
 dimensions: `--platform` filters worker Skills only. The main Skill is installed for every
 destination unless `--no-orchestrator` is passed; its directory name is not a platform id.

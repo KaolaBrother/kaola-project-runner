@@ -492,6 +492,25 @@ def check_orchestrator_package(assertions: Assertions, root: Path) -> None:
             f"control-plane Skill must not ship transport/adapter bytes: {leaked!r}",
         )
     check_self_contained(assertions, package, ORCHESTRATOR_ID, required=("SKILL.md",))
+    normalized_heading = re.sub(r"\s+", " ", heading)
+    assertions.check(
+        "test_orchestrator_consumer_boundary_is_read_only",
+        all(
+            marker in normalized_heading
+            for marker in (
+                "For consumer-project work, the Project Runner checkout, templates, generated files, and installed Skill payload are read-only.",
+                "Store project-specific authorization, heartbeat, and run facts in the consuming project.",
+                "Do not edit this repository, its templates, generated files, or an installed Skill payload unless a human explicitly assigned Project Runner development.",
+            )
+        ),
+        "main Skill must tell consumer-project agents the checkout/templates/generated/installed payload are read-only and to store facts in the consuming project",
+    )
+    assertions.check(
+        "test_orchestrator_records_authorization_in_consuming_project",
+        "Record the human's CLI, model/effort, count, and capability restrictions in the consuming project's run records, not in this Skill."
+        in normalized_heading,
+        "authorization facts must be stored in the consuming project, not in this Skill",
+    )
 
 
 def check_generated_tree(assertions: Assertions, root: Path, require_check: bool = True) -> None:

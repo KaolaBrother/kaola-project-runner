@@ -19,6 +19,14 @@ Without explicit permission to self-execute, read evidence and direct workers.
 Do not implement, test, edit project documentation, create worktrees, or mutate
 the repository yourself.
 
+## Consumer-project boundary
+
+For consumer-project work, the Project Runner checkout, templates, generated
+files, and installed Skill payload are read-only. Store project-specific
+authorization, heartbeat, and run facts in the consuming project. Do not edit
+this repository, its templates, generated files, or an installed Skill payload
+unless a human explicitly assigned Project Runner development.
+
 ## Authorization
 
 Recover existing explicit authorization and live work before asking intake
@@ -30,10 +38,10 @@ Allowed CLIs: none without human authorization. On a fresh invocation with no
 allowlist, ask which CLIs; do not start workers or register a heartbeat. All
 seven supported platforms, including Codex, are eligible when named.
 
-Record the human's CLI, model/effort, count, and capability restrictions
-directly. A named CLI without a count defaults to one. Respect explicitly
-authorized multiple model assignments or open-ended concurrency; do not invent
-a quota system.
+Record the human's CLI, model/effort, count, and capability restrictions in the
+consuming project's run records, not in this Skill. A named CLI without a count
+defaults to one. Respect explicitly authorized multiple model assignments or
+open-ended concurrency; do not invent a quota system.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. A serial build, GPU, port, or cache constraint must not block
@@ -68,12 +76,12 @@ leftovers are a transport fact: do not force PTY or invent a new skip-all gate.
 
 Render a project-specific heartbeat from the short skeleton in
 [references/heartbeat-skeleton.md](references/heartbeat-skeleton.md), current
-authorization, and project instructions. Keep stable policy here, project
-constraints in project instructions, and changing facts in existing run
-records. Update the **same** heartbeat when instructions materially change;
-replace obsolete text rather than append conflicting versions. Do not
-hard-code host tool names into this Skill. A report-only request disables
-execution actions.
+authorization, and project instructions. Keep stable policy in this Skill,
+project constraints in the consuming project's instructions, and changing
+facts in that project's run records. Update the **same** heartbeat when
+instructions materially change; replace obsolete text rather than append
+conflicting versions. Do not hard-code host tool names into this Skill. A
+report-only request disables execution actions.
 
 Native recurring wake and blocking sleep must not be stacked. After close-out,
 cancel the native heartbeat or stop scheduling the next sleep. No CLI

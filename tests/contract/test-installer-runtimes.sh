@@ -89,18 +89,18 @@ trap 'rm -rf "$tmp_root"' EXIT
 repo="$tmp_root/repo-runtimes"
 make_fixture "$repo"
 home="$tmp_root/home-runtimes"
-output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok 2>&1)" \
+output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --method link 2>&1)" \
   || fail "test_runtime_claude_code_install" "install failed: $output"
 assert_link "test_runtime_claude_code_install" "$home/.claude/skills/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
 assert_absent "test_runtime_claude_code_no_bin_links" "$home/.local/bin/kaola-acp"
 
-output="$(run_installer "$repo" "$home" --runtime cursor --platform grok 2>&1)" \
+output="$(run_installer "$repo" "$home" --runtime cursor --platform grok --method link 2>&1)" \
   || fail "test_runtime_cursor_install" "install failed: $output"
 assert_link "test_runtime_cursor_install" "$home/.cursor/skills/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
 
-output="$(run_installer "$repo" "$home" --runtime devin --platform grok 2>&1)" \
+output="$(run_installer "$repo" "$home" --runtime devin --platform grok --method link 2>&1)" \
   || fail "test_runtime_devin_install" "install failed: $output"
 assert_link "test_runtime_devin_install" "$home/devin-config/skills/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
@@ -133,7 +133,7 @@ repo="$tmp_root/repo-spaces"
 make_fixture "$repo"
 home="$tmp_root/home-spaces"
 dest="$tmp_root/dest with spaces/skills"
-output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok,codex 2>&1)" \
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method link --platform grok,codex 2>&1)" \
   || fail "test_skills_dir_with_spaces" "install failed: $output"
 assert_link "test_skills_dir_with_spaces_grok" "$dest/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
@@ -249,7 +249,7 @@ make_fixture "$repo"
 home="$tmp_root/home-coexist"
 codex_home="$tmp_root/coexist-codex"
 dest_b="$tmp_root/coexist-b/skills"
-output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok 2>&1)" \
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok --method link 2>&1)" \
   || fail "test_coexist_install_a" "install failed: $output"
 assert_link "test_coexist_install_a_link" "$codex_home/skills/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
@@ -392,13 +392,13 @@ assert_orchestrator_link() {
   assert_link "$name" "$dest/kaola-project-runner" "$(source_for "$repo" kaola-project-runner)"
 }
 
-output="$(run_installer "$repo" "$home" --runtime claude-code 2>&1)" \
+output="$(run_installer "$repo" "$home" --runtime claude-code --method link 2>&1)" \
   || fail "test_orchestrator_runtime_claude_code" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_runtime_claude_code" "$home/.claude/skills"
 assert_link "test_orchestrator_runtime_claude_code_still_installs_workers" \
   "$home/.claude/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
 
-output="$(run_installer "$repo" "$home" --runtime cursor --platform grok 2>&1)" \
+output="$(run_installer "$repo" "$home" --runtime cursor --platform grok --method link 2>&1)" \
   || fail "test_orchestrator_runtime_cursor_with_platform" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_runtime_cursor_with_platform" "$home/.cursor/skills"
 assert_link "test_platform_filter_still_selects_named_worker" \
@@ -406,17 +406,17 @@ assert_link "test_platform_filter_still_selects_named_worker" \
 assert_absent "test_platform_filter_does_not_select_other_workers" \
   "$home/.cursor/skills/codex-kaola-project-runner"
 
-output="$(run_installer "$repo" "$home" --runtime devin --platform grok 2>&1)" \
+output="$(run_installer "$repo" "$home" --runtime devin --platform grok --method link 2>&1)" \
   || fail "test_orchestrator_runtime_devin" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_runtime_devin" "$home/devin-config/skills"
 
 codex_home="$tmp_root/orch-codex"
-output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok 2>&1)" \
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok --method link 2>&1)" \
   || fail "test_orchestrator_runtime_codex" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_runtime_codex" "$codex_home/skills"
 
 dest="$tmp_root/orch-skills-dir/skills"
-output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok,codex 2>&1)" \
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method link --platform grok,codex 2>&1)" \
   || fail "test_orchestrator_skills_dir" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_skills_dir" "$dest"
 assert_link "test_orchestrator_skills_dir_workers_filtered" \
@@ -427,14 +427,14 @@ assert_absent "test_orchestrator_skills_dir_unselected_worker" \
   "$dest/devin-kaola-project-runner"
 
 set +e
-output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --no-orchestrator 2>&1)"
+output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --method link --no-orchestrator 2>&1)"
 rc=$?
 set -e
 [[ "$rc" -eq 0 ]] || fail "test_no_orchestrator_flag_accepted" "install failed: $output"
 
 home_skip="$tmp_root/home-no-orch"
 set +e
-output="$(run_installer "$repo" "$home_skip" --runtime cursor --platform grok --no-orchestrator 2>&1)"
+output="$(run_installer "$repo" "$home_skip" --runtime cursor --platform grok --method link --no-orchestrator 2>&1)"
 rc=$?
 set -e
 if [[ "$rc" -ne 0 ]]; then
@@ -447,7 +447,7 @@ fi
 
 dest_skip="$tmp_root/no-orch-skills/skills"
 set +e
-output="$(run_installer "$repo" "$home" --skills-dir "$dest_skip" --no-orchestrator 2>&1)"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_skip" --method link --no-orchestrator 2>&1)"
 rc=$?
 set -e
 if [[ "$rc" -ne 0 ]]; then
@@ -468,7 +468,7 @@ set -e
 
 # Uninstall --platform filters workers only; --no-orchestrator leaves the main Skill.
 dest_un="$tmp_root/orch-uninstall/skills"
-output="$(run_installer "$repo" "$home" --skills-dir "$dest_un" --platform grok 2>&1)" \
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_un" --method link --platform grok 2>&1)" \
   || fail "test_orchestrator_uninstall_setup" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_uninstall_setup" "$dest_un"
 set +e
@@ -481,6 +481,97 @@ else
   assert_absent "test_uninstall_platform_keeps_orchestrator_worker" "$dest_un/grok-kaola-project-runner"
   assert_orchestrator_link "test_uninstall_platform_keeps_orchestrator" "$dest_un"
 fi
+
+# --- Issue #46: omitted --method is an owned copy; owned links migrate --------
+repo="$tmp_root/repo-issue-46"
+make_fixture "$repo"
+home="$tmp_root/home-issue-46"
+dest="$tmp_root/issue-46-dest/skills"
+source_skill="$(source_for "$repo" grok-kaola-project-runner)/SKILL.md"
+source_orch="$(source_for "$repo" kaola-project-runner)/SKILL.md"
+
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok 2>&1)" \
+  || fail "test_default_method_is_copy" "install failed: $output"
+assert_dir "test_default_method_is_copy_worker" "$dest/grok-kaola-project-runner"
+assert_dir "test_default_method_is_copy_orchestrator" "$dest/kaola-project-runner"
+assert_file "test_default_method_is_copy_worker_receipt" \
+  "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+assert_file "test_default_method_is_copy_orchestrator_receipt" \
+  "$dest/.kaola-install-receipts/kaola-project-runner.json"
+if [[ "$dest/grok-kaola-project-runner/SKILL.md" -ef "$source_skill" ]]; then
+  fail "test_default_copy_isolates_worker_inode" "installed worker SKILL.md still shares the source inode"
+fi
+if [[ "$dest/kaola-project-runner/SKILL.md" -ef "$source_orch" ]]; then
+  fail "test_default_copy_isolates_orchestrator_inode" "installed orchestrator SKILL.md still shares the source inode"
+fi
+printf '%s\n' '# consumer edit' >>"$dest/kaola-project-runner/SKILL.md"
+grep -q 'consumer edit' "$source_orch" \
+  && fail "test_default_copy_isolates_orchestrator_inode" "consumer edit leaked into the source Skill"
+python3 - "$dest/kaola-project-runner/SKILL.md" <<'PY'
+import sys
+path = sys.argv[1]
+text = open(path).read()
+open(path, "w").write(text.replace("# consumer edit\n", ""))
+PY
+
+# Owned source link migrates to a copy when --method is omitted.
+link_dest="$tmp_root/issue-46-link-migrate/skills"
+output="$(run_installer "$repo" "$home" --skills-dir "$link_dest" --method link --platform grok 2>&1)" \
+  || fail "test_owned_link_to_copy_setup" "link install failed: $output"
+assert_link "test_owned_link_to_copy_setup" "$link_dest/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+assert_link "test_owned_link_to_copy_setup_orchestrator" "$link_dest/kaola-project-runner" \
+  "$(source_for "$repo" kaola-project-runner)"
+output="$(run_installer "$repo" "$home" --skills-dir "$link_dest" --platform grok 2>&1)" \
+  || fail "test_owned_link_migrates_to_copy" "default reinstall failed: $output"
+assert_dir "test_owned_link_migrates_to_copy" "$link_dest/grok-kaola-project-runner"
+assert_dir "test_owned_link_migrates_to_copy_orchestrator" "$link_dest/kaola-project-runner"
+assert_file "test_owned_link_migrates_to_copy_receipt" \
+  "$link_dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+assert_file "test_owned_link_migrates_to_copy_orchestrator_receipt" \
+  "$link_dest/.kaola-install-receipts/kaola-project-runner.json"
+if [[ "$link_dest/grok-kaola-project-runner/SKILL.md" -ef "$source_skill" ]]; then
+  fail "test_owned_link_migrates_to_copy_inode" "migrated copy still shares the source inode"
+fi
+[[ "$output" == *"copy-over-link:"* ]] \
+  || fail "test_owned_link_migrates_to_copy" "expected copy-over-link report, got: $output"
+
+# Legacy grok root link also migrates to a copy under the omitted --method.
+root_dest="$tmp_root/issue-46-grok-root/skills"
+mkdir -p "$root_dest"
+ln -s "$repo" "$root_dest/grok-kaola-project-runner"
+output="$(run_installer "$repo" "$home" --skills-dir "$root_dest" --platform grok --no-orchestrator 2>&1)" \
+  || fail "test_grok_root_link_migrates_to_copy" "install failed: $output"
+assert_dir "test_grok_root_link_migrates_to_copy" "$root_dest/grok-kaola-project-runner"
+assert_file "test_grok_root_link_migrates_to_copy_receipt" \
+  "$root_dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+if [[ "$root_dest/grok-kaola-project-runner/SKILL.md" -ef "$source_skill" ]]; then
+  fail "test_grok_root_link_migrates_to_copy_inode" "migrated grok copy still shares the source inode"
+fi
+
+# Foreign symlink and modified owned copy stay protected under the default.
+foreign="$tmp_root/issue-46-foreign-target"
+foreign_dest="$tmp_root/issue-46-foreign/skills"
+mkdir -p "$foreign" "$foreign_dest"
+ln -s "$foreign" "$foreign_dest/grok-kaola-project-runner"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$foreign_dest" --platform grok 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_default_copy_foreign_symlink_refused" "installer unexpectedly succeeded"
+[[ "$(readlink "$foreign_dest/grok-kaola-project-runner")" == "$foreign" ]] \
+  || fail "test_default_copy_foreign_symlink_refused" "foreign symlink changed"
+assert_absent "test_default_copy_foreign_symlink_no_partial_orchestrator" \
+  "$foreign_dest/kaola-project-runner"
+
+printf '%s\n' '# user edit' >>"$dest/grok-kaola-project-runner/SKILL.md"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_default_copy_modified_refused" "unexpected success"
+grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
+  || fail "test_default_copy_modified_refused" "edited content was overwritten"
 
 # --- neutral validator --------------------------------------------------------
 good="$tmp_root/validator/good-skill"

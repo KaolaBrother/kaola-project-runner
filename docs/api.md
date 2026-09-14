@@ -47,12 +47,14 @@ preflighted before mutation; foreign paths are never replaced.
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
 `cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`.
 `--skills-dir` is a mutually exclusive explicit absolute destination (project-local paths included).
-With neither flag the legacy Codex destination is used. `--method link` (default) creates exact
-owned symlinks; `--method copy` stages an identical standalone copy on the destination filesystem
-and records a per-Skill receipt at `<skills-dir>/.kaola-install-receipts/<skill>.json` (outside the
-generated payload). An unchanged owned copy is a no-op; only an unmodified owned installation is
-replaced or removed; a `.generated` marker without a valid receipt is not delete authority.
-`--uninstall` affects only the selected destination and selected owned Skills.
+With neither flag the legacy Codex destination is used. `--method copy` (default) stages an
+identical standalone copy on the destination filesystem and records a per-Skill receipt at
+`<skills-dir>/.kaola-install-receipts/<skill>.json` (outside the generated payload). `--method link`
+is an explicit development choice that creates exact owned symlinks to this checkout. An owned
+source symlink migrates to a copy when reinstalled with the default or `--method copy`. An
+unchanged owned copy is a no-op; only an unmodified owned installation is replaced or removed; a
+`.generated` marker without a valid receipt is not delete authority. `--uninstall` affects only the
+selected destination and selected owned Skills.
 
 `--bin-links` additionally manages owned `$HOME/.local/bin/kaola-acp` / `kaola-acp-holder` symlinks
 to this repository's scripts. It defaults on only for the Codex runtime destination; uninstall

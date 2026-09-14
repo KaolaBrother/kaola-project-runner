@@ -471,5 +471,54 @@ class Issue41ScenarioMeaning(unittest.TestCase):
         self.assertIsNone(wrong, f"stop policy drops close-out duties: {wrong!r}")
 
 
+class Issue46ConsumerIsolation(unittest.TestCase):
+    def test_consumer_project_facts_stay_out_of_this_skill(self) -> None:
+        text = require_orchestrator_markdown(PROJECT)
+        self.assertIsNotNone(
+            clause_present(
+                text,
+                (
+                    r"installed Skill payload are read-only",
+                    r"store project-specific authorization, heartbeat, and run facts in the consuming project",
+                    r"consuming project's run records, not in this Skill",
+                ),
+            ),
+            "orchestrator must keep consumer-project authorization/heartbeat/run facts out of this Skill",
+        )
+        self.assertIsNotNone(
+            clause_present(
+                text,
+                (
+                    r"unless a human explicitly assigned Project Runner development",
+                    r"only when a human explicitly assigned Project Runner development",
+                ),
+            ),
+            "edits to this checkout or installed payload require an explicit Project Runner assignment",
+        )
+        wrong = authorizes_wrong_move(
+            text,
+            (
+                r"write (?:project-specific )?authorization into (?:this|the installed) Skill",
+                r"edit the installed Skill payload for consumer-project work",
+                r"keep project-specific authorization in this Skill",
+            ),
+        )
+        self.assertIsNone(wrong, f"consumer-project policy authorizes Skill mutation: {wrong!r}")
+
+    def test_installer_default_is_copy(self) -> None:
+        installer = INSTALLER.read_text(encoding="utf-8")
+        self.assertRegex(
+            installer,
+            r"(?m)^method=copy\s*$",
+            "install-local.sh must default to copy when --method is omitted",
+        )
+        self.assertNotRegex(installer, r"(?m)^method=link\s*$")
+        self.assertRegex(
+            installer,
+            r"--method copy \(default\)",
+            "usage must describe copy as the omitted --method default",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

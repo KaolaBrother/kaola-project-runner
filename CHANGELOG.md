@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Default local install is now an owned standalone copy (issue #46). `--method link` remains
+  the explicit maintainer/development choice. Owned source links migrate to copies; foreign paths
+  and modified copies stay protected. The main Skill tells consumer-project agents to keep
+  authorization, heartbeat, and run facts in the consuming project and to treat the Project Runner
+  checkout, templates, generated files, and installed Skill payload as read-only unless a human
+  assigned Project Runner development.
+
 ## 0.2.0 — 2026-09-14
 
 - Generated main orchestrator Skill `kaola-project-runner` (display name Project Runner, issue #41).

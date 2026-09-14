@@ -79,7 +79,7 @@ else
   repo="$tmp_root/repo-all"
   codex="$tmp_root/codex-all"
   make_fixture "$repo"
-  output="$(run_installer "$repo" "$codex" 2>&1)" || fail "test_install_all_seven" "install failed: $output"
+  output="$(run_installer "$repo" "$codex" --method link 2>&1)" || fail "test_install_all_seven" "install failed: $output"
   for i in "${!ids[@]}"; do
     assert_link "test_install_all_seven_${ids[$i]}" "$codex/skills/${names[$i]}" "$(source_for "$repo" "${names[$i]}")"
   done
@@ -92,7 +92,7 @@ else
   make_fixture "$repo"
   mkdir -p "$codex/skills"
   ln -s "$repo" "$codex/skills/grok-kaola-project-runner"
-  output="$(run_installer "$repo" "$codex" 2>&1)" || fail "test_legacy_grok_root_symlink_migrates" "install failed: $output"
+  output="$(run_installer "$repo" "$codex" --method link 2>&1)" || fail "test_legacy_grok_root_symlink_migrates" "install failed: $output"
   for i in "${!ids[@]}"; do
     assert_link "test_legacy_grok_root_symlink_migrates_${ids[$i]}" "$codex/skills/${names[$i]}" "$(source_for "$repo" "${names[$i]}")"
   done
@@ -100,7 +100,7 @@ else
     "$(source_for "$repo" kaola-project-runner)"
 
   before="$(find "$codex/skills" -maxdepth 1 -type l -print -exec readlink {} \; | sort)"
-  output="$(run_installer "$repo" "$codex" 2>&1)" || fail "test_install_is_idempotent" "second install failed: $output"
+  output="$(run_installer "$repo" "$codex" --method link 2>&1)" || fail "test_install_is_idempotent" "second install failed: $output"
   after="$(find "$codex/skills" -maxdepth 1 -type l -print -exec readlink {} \; | sort)"
   [[ "$before" == "$after" ]] || fail "test_install_is_idempotent" "second install changed carrier set"
 
@@ -112,7 +112,7 @@ else
   mkdir -p "$foreign" "$codex/skills"
   ln -s "$foreign" "$codex/skills/grok-kaola-project-runner"
   set +e
-  output="$(run_installer "$repo" "$codex" 2>&1)"
+  output="$(run_installer "$repo" "$codex" --method link 2>&1)"
   rc=$?
   set -e
   [[ "$rc" -ne 0 ]] || fail "test_foreign_symlink_is_refused" "installer unexpectedly succeeded"
@@ -134,7 +134,7 @@ else
       fifo) mkfifo "$codex/skills/grok-kaola-project-runner" ;;
     esac
     set +e
-    output="$(run_installer "$repo" "$codex" 2>&1)"
+    output="$(run_installer "$repo" "$codex" --method link 2>&1)"
     rc=$?
     set -e
     [[ "$rc" -ne 0 ]] || fail "test_${carrier}_carrier_is_refused" "installer unexpectedly succeeded"

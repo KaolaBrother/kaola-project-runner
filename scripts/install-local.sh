@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "$script_dir/.." && pwd -P)"
 mode=install
-method=link
+method=copy
 runtime_alias=""
 skills_dir=""
 bin_links_request=""
@@ -33,8 +33,10 @@ Consuming runtimes (verified native skill directories):
 
 --skills-dir installs into any explicit destination parent (including
 project-local paths) and is mutually exclusive with --runtime.
---method link (default) symlinks each Skill to this checkout; --method copy
-installs a standalone copy tracked by a per-Skill receipt.
+--method copy (default) installs a standalone copy tracked by a per-Skill
+receipt. --method link is an explicit development choice that symlinks each
+Skill to this checkout. An owned source link migrates to a copy on a default
+or --method copy reinstall.
 Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex
 --platform filters worker Skills only. The main Skill kaola-project-runner
 (display name Project Runner) is installed for every destination unless

@@ -138,8 +138,9 @@ cd kaola-project-runner
 ```
 
 The default installs all seven worker Skills plus the main orchestrator Skill into
-`${CODEX_HOME:-$HOME/.codex}/skills` as symlinks to this checkout. Select another host, a worker
-subset, skip the orchestrator, or install a standalone copy:
+`${CODEX_HOME:-$HOME/.codex}/skills` as standalone copies. Use `--method link` to symlink
+Skills to this checkout for Project Runner development. Select another host, a worker
+subset, or skip the orchestrator:
 
 ```bash
 # Install all worker Skills plus the orchestrator for Claude Code, Cursor, or Devin.
@@ -153,14 +154,19 @@ subset, skip the orchestrator, or install a standalone copy:
 # Workers only (no main Skill).
 ./scripts/install-local.sh --runtime cursor --no-orchestrator
 
-# Install standalone Skills into an explicit host or project directory.
-./scripts/install-local.sh --skills-dir "$PWD/.agent/skills" --method copy
+# Explicit destination; copy is the default, so --method copy is optional.
+./scripts/install-local.sh --skills-dir "$PWD/.agent/skills"
+
+# Maintainer development: symlink Skills to this checkout.
+./scripts/install-local.sh --method link
 ```
 
 `--runtime` selects the host's skill directory; `--platform` selects worker CLI Skills only.
 `--no-orchestrator` skips `kaola-project-runner`. That name is not a `--platform` id.
 `--runtime` and `--skills-dir` are mutually exclusive. Copies work without this checkout;
-symlinks require it to remain in place. The installer preserves foreign files and modified copies.
+`--method link` requires it to remain in place. Reinstalling the default over an owned
+source link migrates that Skill to a copy. The installer preserves foreign files and
+modified copies.
 
 Use the host's Skill discovery mechanism, or have the agent read the installed `SKILL.md` directly.
 In Codex, a Skill can be invoked as `$claude-code-kaola-project-runner`, for example.
