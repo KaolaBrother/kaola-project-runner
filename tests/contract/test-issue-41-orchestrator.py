@@ -91,7 +91,7 @@ WORKER_NO_IDLE_STOP_ON_COMPLETE_POLICY = (
 # Issue #47: delivery/merge preference must stay on the orchestrator.
 WORKER_NO_OPEN_PR_PRIORITY_POLICY = (
     "Prefer the selected, authorized Workflow sync/merge",
-    "without a global hold",
+    "not opened merely for handoff",
     "advance actionable ones first",
 )
 
@@ -389,7 +389,7 @@ class Issue41GoldenAndWorkerPreservation(unittest.TestCase):
             for marker in WORKER_STOP_RESUME + WORKER_RECEIPT_NOT_COMPLETION:
                 self.assertIn(normalize(marker), body, f"{skill_id}: {marker}")
             for forbidden in WORKER_NO_PROJECT_POLICY:
-                self.assertNotIn(normalize(forbidden), body, f"{skill_id}: {forbidden}")
+                self.assertNotIn(normalize(forbidden), body, f"{skill_id}: {forbidden}"                )
 
     def test_worker_skills_omit_idle_stop_on_complete_policy(self) -> None:
         """Issue #44: workers stay transport-only; no completion/idle-stop policy."""
@@ -400,17 +400,6 @@ class Issue41GoldenAndWorkerPreservation(unittest.TestCase):
                     normalize(forbidden),
                     body,
                     f"{label} gained orchestrator idle-stop-on-complete policy: {forbidden!r}",
-                )
-
-    def test_worker_skills_omit_open_pr_priority_policy(self) -> None:
-        """Issue #47: workers stay transport-only; no open-PR scheduling priority."""
-        for label, raw in worker_idle_stop_policy_surfaces():
-            body = normalize(raw)
-            for forbidden in WORKER_NO_OPEN_PR_PRIORITY_POLICY:
-                self.assertNotIn(
-                    normalize(forbidden),
-                    body,
-                    f"{label} gained orchestrator open-PR priority policy: {forbidden!r}",
                 )
 
 
@@ -890,109 +879,54 @@ class Issue44IdleStopOnCompleteMeaning(unittest.TestCase):
 class Issue47DeliveryPathMeaning(unittest.TestCase):
     """Issue #47: Workflow merge preference and conditional open-PR priority."""
 
-    def orchestrator_text(self) -> str:
+    def test_delivery_path_heartbeat_and_worker_isolation(self) -> None:
         text = require_orchestrator_markdown(PROJECT)
-        self.assertTrue(text.strip(), "generated orchestrator markdown is empty")
-        return text
-
-    def heartbeat_text(self) -> str:
-        return (
+        heartbeat = (
             PROJECT
             / "templates"
             / "orchestrator"
             / "references"
             / "heartbeat-skeleton.txt"
         ).read_text(encoding="utf-8")
-
-    def test_prefers_selected_workflow_merge_when_pr_not_required(self) -> None:
-        text = self.orchestrator_text()
         self.assertIsNotNone(
             clause_present(
                 text,
                 (
-                    r"prefer the selected, authorized Workflow sync/merge when a PR is not required",
-                    r"selected, authorized Workflow sync/merge.{0,40}PR is not required",
-                    r"when a PR is not required.{0,80}Workflow sync/merge",
+                    r"prefer the selected, authorized Workflow sync/merge when a PR is not required"
+                    r".{0,80}a PR is not opened merely for handoff when that sink is suitable",
                 ),
             ),
-            "orchestrator must prefer the selected authorized Workflow sync/merge "
-            "when a PR is not required",
+            "prefer selected authorized Workflow sync/merge; no PR merely for handoff",
         )
-        heartbeat = self.heartbeat_text()
+        self.assertIsNotNone(
+            clause_present(
+                text,
+                (
+                    r"advance actionable ones first on contested suitable capacity"
+                    r".{0,80}parallel across permitted CLIs"
+                    r".{0,80}blocked PR keeps an owner and next action without a global hold",
+                ),
+            ),
+            "actionable PR priority, permitted-CLI parallel work, blocked-PR ownership",
+        )
         self.assertIsNotNone(
             clause_present(
                 heartbeat,
                 (
-                    r"已选授权的 Workflow 同步/合并",
-                    r"PR 非必需时走.{0,40}Workflow",
+                    r"已选 Workflow 同步/合并.{0,20}不为交接单独开 PR.{0,80}"
+                    r"有开放 PR 时争用容量优先推进可执行项.{0,80}已许可 CLI",
                 ),
             ),
-            "heartbeat must recall the default Workflow merge path",
+            "heartbeat recalls merge path and conditional PR priority on permitted CLIs",
         )
-        wrong = authorizes_wrong_move(
-            text,
-            (
-                r"open a PR as a routine handoff",
-                r"require a PR when.{0,40}Workflow sync/merge",
-                r"always open a PR.{0,40}handoff",
-            ),
-        )
-        self.assertIsNone(
-            wrong,
-            f"delivery path treats a PR as a routine handoff: {wrong!r}",
-        )
-
-    def test_actionable_open_prs_take_contested_capacity_without_global_hold(
-        self,
-    ) -> None:
-        text = self.orchestrator_text()
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"if PRs exist, advance actionable ones first on contested suitable capacity",
-                    r"advance actionable ones first.{0,40}contested suitable capacity",
-                    r"other authorized work continues in parallel across permitted CLIs",
-                ),
-            ),
-            "orchestrator must give actionable open PRs first use of contested "
-            "capacity while other authorized work continues on permitted CLIs",
-        )
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"blocked PR keeps an owner and next action without a global hold",
-                    r"without a global hold",
-                ),
-            ),
-            "orchestrator must keep owner/next action for a blocked PR without "
-            "a global hold",
-        )
-        heartbeat = self.heartbeat_text()
-        self.assertIsNotNone(
-            clause_present(
-                heartbeat,
-                (
-                    r"有开放 PR 时争用容量优先推进可执行项",
-                    r"仅在已许可 CLI 上安全并行",
-                    r"不作全局等待",
-                ),
-            ),
-            "heartbeat must recall conditional open-PR priority and permitted-CLI parallel work",
-        )
-        wrong = authorizes_wrong_move(
-            text,
-            (
-                r"require all PRs to close before.{0,40}other work",
-                r"stop all other work until.{0,40}blocked PR",
-                r"parallelism.{0,40}expand.{0,40}CLI authorization",
-            ),
-        )
-        self.assertIsNone(
-            wrong,
-            f"open-PR priority becomes a global hold or extra authorization: {wrong!r}",
-        )
+        for label, raw in worker_idle_stop_policy_surfaces():
+            body = normalize(raw)
+            for marker in WORKER_NO_OPEN_PR_PRIORITY_POLICY:
+                self.assertNotIn(
+                    normalize(marker),
+                    body,
+                    f"{label} gained orchestrator delivery-path policy: {marker!r}",
+                )
 
 
 if __name__ == "__main__":

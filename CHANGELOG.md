@@ -3,9 +3,10 @@
 ## Unreleased
 
 - Main orchestrator Skill `kaola-project-runner` (issue #47): prefer the selected authorized
-  Workflow sync/merge when a PR is not required. If PRs exist, advance actionable ones first on
-  contested suitable capacity; other authorized work continues in parallel across permitted CLIs.
-  A blocked PR keeps an owner and next action without a global hold.
+  Workflow sync/merge when a PR is not required; a PR is not opened merely for handoff when
+  that sink is suitable. If PRs exist, advance actionable ones first on contested suitable
+  capacity; other authorized work continues in parallel across permitted CLIs. A blocked PR
+  keeps an owner and next action without a global hold.
 
 ## 0.2.1 — 2026-09-14
 
