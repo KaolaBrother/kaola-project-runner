@@ -13,7 +13,7 @@ export HOME="$sandbox_home"
 unset CODEX_HOME CLAUDE_CONFIG_DIR DEVIN_CONFIG_DIR
 
 python3 "$repo_root/scripts/render-skills.py" --check
-for skill_dir in "$repo_root"/skills/*-kaola-project-runner; do
+for skill_dir in "$repo_root"/skills/*kaola-project-runner; do
   python3 "$repo_root/scripts/validate-skill.py" "$skill_dir"
 done
 bash -n "$repo_root/scripts/kaola-tmux.sh" "$repo_root"/scripts/adapters/*.sh \
@@ -31,3 +31,4 @@ python3 "$repo_root/tests/contract/test-issue-33-config-meta.py"
 python3 "$repo_root/tests/contract/test-runner-v2.py"
 python3 "$repo_root/tests/contract/test-generated-skills.py"
 python3 "$repo_root/tests/contract/test-issue-24-opencode-pty-bypass.py"
+python3 "$repo_root/tests/contract/test-issue-41-orchestrator.py"

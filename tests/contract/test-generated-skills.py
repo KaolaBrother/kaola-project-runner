@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Independent acceptance checks for the generated seven-Skill distribution."""
+"""Independent acceptance checks for the generated Skill distribution.
+
+Seven platform worker packages remain transport-only. Issue #41 adds one
+control-plane package, ``kaola-project-runner``, which is generated through
+the same byte inventory/write/check path and is not an eighth platform.
+"""
 
 from __future__ import annotations
 
@@ -65,6 +70,15 @@ PLATFORMS = {
 }
 
 REQUIRED = ("SKILL.md", "agents/openai.yaml")
+ORCHESTRATOR_ID = "kaola-project-runner"
+ORCHESTRATOR_DISPLAY = "Project Runner"
+ORCHESTRATOR_MARKER = ".generated-by-kaola-project-runner"
+WORKER_TRANSPORT_FILES = (
+    "scripts/runtime-tmux.sh",
+    "scripts/kaola-tmux.sh",
+    "scripts/platform.yaml",
+    "scripts/adapters",
+)
 
 
 class Assertions:
@@ -134,11 +148,16 @@ def file_hashes(root: Path) -> dict[str, str]:
     return result
 
 
-def check_self_contained(assertions: Assertions, package: Path, package_id: str) -> None:
+def check_self_contained(
+    assertions: Assertions,
+    package: Path,
+    package_id: str,
+    required: tuple[str, ...] = REQUIRED,
+) -> None:
     assertions.check(
         f"test_skill_{package_id}_has_required_files",
-        all((package / relative).is_file() for relative in REQUIRED),
-        f"missing one of {REQUIRED} under {package}",
+        all((package / relative).is_file() for relative in required),
+        f"missing one of {required} under {package}",
     )
     if not package.is_dir():
         return
@@ -421,16 +440,72 @@ def check_evidence_first_transport_guidance(
     )
 
 
+def check_orchestrator_package(assertions: Assertions, root: Path) -> None:
+    package = root / "skills" / ORCHESTRATOR_ID
+    assertions.check(
+        "test_orchestrator_package_exists",
+        package.is_dir(),
+        f"missing generated control-plane Skill directory: {package}",
+    )
+    if not package.is_dir():
+        return
+
+    marker = package / ORCHESTRATOR_MARKER
+    assertions.check(
+        "test_orchestrator_generated_marker",
+        marker.is_file() and marker.read_bytes() == f"{ORCHESTRATOR_ID}\n".encode(),
+        f"marker must be {ORCHESTRATOR_MARKER} containing {ORCHESTRATOR_ID!r}",
+    )
+    skill = package / "SKILL.md"
+    if not skill.is_file():
+        assertions.check("test_orchestrator_skill_md", False, f"missing {skill}")
+        return
+    try:
+        skill_name, description = frontmatter(skill)
+    except (OSError, ValueError) as exc:
+        assertions.check("test_orchestrator_frontmatter", False, str(exc))
+        return
+    assertions.check(
+        "test_orchestrator_frontmatter_name",
+        skill_name == ORCHESTRATOR_ID,
+        f"YAML name is {skill_name!r}, expected {ORCHESTRATOR_ID!r}",
+    )
+    assertions.check(
+        "test_orchestrator_frontmatter_description",
+        bool(description),
+        "description is empty",
+    )
+    heading = skill.read_text(encoding="utf-8")
+    metadata_path = package / "agents" / "openai.yaml"
+    display = yaml_scalar(metadata_path.read_text(encoding="utf-8"), "display_name") if metadata_path.is_file() else ""
+    assertions.check(
+        "test_orchestrator_display_name_project_runner",
+        display == ORCHESTRATOR_DISPLAY or re.search(r"(?m)^# Project Runner\s*$", heading) is not None,
+        f"display name must be {ORCHESTRATOR_DISPLAY!r} (heading or agents/openai.yaml)",
+    )
+    relative_files = {path.relative_to(package).as_posix() for path in all_files(package)}
+    for forbidden in WORKER_TRANSPORT_FILES:
+        leaked = [name for name in relative_files if name == forbidden or name.startswith(forbidden + "/")]
+        assertions.check(
+            f"test_orchestrator_has_no_{forbidden.replace('/', '_')}",
+            not leaked,
+            f"control-plane Skill must not ship transport/adapter bytes: {leaked!r}",
+        )
+    check_self_contained(assertions, package, ORCHESTRATOR_ID, required=("SKILL.md",))
+
+
 def check_generated_tree(assertions: Assertions, root: Path, require_check: bool = True) -> None:
     generated = root / "skills"
     actual_ids = {
         path.name for path in generated.iterdir() if path.is_dir()
     } if generated.is_dir() else set()
+    expected_ids = set(PLATFORMS) | {ORCHESTRATOR_ID}
     assertions.check(
-        "test_generated_skill_inventory_is_exactly_seven",
-        actual_ids == set(PLATFORMS),
-        f"generated Skill directories are {sorted(actual_ids)!r}, expected {sorted(PLATFORMS)!r}",
+        "test_generated_skill_inventory_is_seven_workers_and_orchestrator",
+        actual_ids == expected_ids,
+        f"generated Skill directories are {sorted(actual_ids)!r}, expected {sorted(expected_ids)!r}",
     )
+    check_orchestrator_package(assertions, root)
     for package_id, details in PLATFORMS.items():
         package = generated / package_id
         check_self_contained(assertions, package, package_id)
@@ -506,6 +581,11 @@ def check_deterministic_renderer(assertions: Assertions) -> None:
         if first is None or first.returncode != 0:
             return
         first_hashes = file_hashes(copy / "skills")
+        assertions.check(
+            "test_renderer_write_includes_orchestrator_inventory",
+            any(path == f"{ORCHESTRATOR_ID}/SKILL.md" or path.startswith(f"{ORCHESTRATOR_ID}/") for path in first_hashes),
+            "first --write did not emit skills/kaola-project-runner through the generated inventory",
+        )
         second = assertions.run("test_renderer_write_second_run", [sys.executable, "scripts/render-skills.py", "--write"], copy)
         if second is None or second.returncode != 0:
             return
@@ -525,6 +605,20 @@ def check_deterministic_renderer(assertions: Assertions) -> None:
             drift.returncode != 0,
             "--check accepted a modified generated Skill",
         )
+        orchestrator_skill = copy / "skills" / ORCHESTRATOR_ID / "SKILL.md"
+        if orchestrator_skill.is_file():
+            candidate.write_text(candidate.read_text(encoding="utf-8").replace("\nDRIFT\n", ""), encoding="utf-8")
+            orchestrator_skill.write_text(
+                orchestrator_skill.read_text(encoding="utf-8") + "\nDRIFT\n", encoding="utf-8"
+            )
+            orch_drift = subprocess.run(
+                [sys.executable, "scripts/render-skills.py", "--check"], cwd=copy, text=True, capture_output=True
+            )
+            assertions.check(
+                "test_render_skills_check_rejects_orchestrator_drift",
+                orch_drift.returncode != 0,
+                "--check accepted a modified generated orchestrator Skill",
+            )
 
 
 def main() -> int:

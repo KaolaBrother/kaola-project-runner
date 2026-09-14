@@ -38,6 +38,9 @@ make_fixture() {
   chmod +x "$root/scripts/install-local.sh"
   cp "$project_root/scripts/kaola-acp.py" "$root/scripts/kaola-acp.py"
   cp "$project_root/scripts/kaola-acp-holder.py" "$root/scripts/kaola-acp-holder.py"
+  mkdir -p "$root/skills/kaola-project-runner"
+  printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
+  printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
   for id in grok claude-code opencode kimi-cli cursor-cli devin codex; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;
@@ -72,7 +75,7 @@ names=(grok-kaola-project-runner claude-code-kaola-project-runner opencode-kaola
 if [[ ! -f "$installer_source" ]]; then
   fail "test_installer_exists" "missing $installer_source"
 else
-  # A normal install must atomically prepare all seven generated Skill carriers.
+  # A normal install must atomically prepare all seven workers plus the orchestrator.
   repo="$tmp_root/repo-all"
   codex="$tmp_root/codex-all"
   make_fixture "$repo"
@@ -80,6 +83,8 @@ else
   for i in "${!ids[@]}"; do
     assert_link "test_install_all_seven_${ids[$i]}" "$codex/skills/${names[$i]}" "$(source_for "$repo" "${names[$i]}")"
   done
+  assert_link "test_install_all_includes_orchestrator" "$codex/skills/kaola-project-runner" \
+    "$(source_for "$repo" kaola-project-runner)"
 
   # The exact old root link is the one and only legacy carrier that may migrate.
   repo="$tmp_root/repo-migrate"
@@ -91,6 +96,8 @@ else
   for i in "${!ids[@]}"; do
     assert_link "test_legacy_grok_root_symlink_migrates_${ids[$i]}" "$codex/skills/${names[$i]}" "$(source_for "$repo" "${names[$i]}")"
   done
+  assert_link "test_legacy_migrate_includes_orchestrator" "$codex/skills/kaola-project-runner" \
+    "$(source_for "$repo" kaola-project-runner)"
 
   before="$(find "$codex/skills" -maxdepth 1 -type l -print -exec readlink {} \; | sort)"
   output="$(run_installer "$repo" "$codex" 2>&1)" || fail "test_install_is_idempotent" "second install failed: $output"
@@ -113,6 +120,7 @@ else
   for name in "${names[@]:1}"; do
     assert_absent "test_foreign_symlink_is_refused_no_partial_${name}" "$codex/skills/$name"
   done
+  assert_absent "test_foreign_symlink_is_refused_no_partial_orchestrator" "$codex/skills/kaola-project-runner"
 
   # A refusal applies equally to directories, regular files, and FIFOs.
   for carrier in directory file fifo; do
@@ -138,6 +146,7 @@ else
     for name in "${names[@]:1}"; do
       assert_absent "test_${carrier}_carrier_is_refused_no_partial_${name}" "$codex/skills/$name"
     done
+    assert_absent "test_${carrier}_carrier_is_refused_no_partial_orchestrator" "$codex/skills/kaola-project-runner"
   done
 fi
 

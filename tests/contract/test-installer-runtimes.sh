@@ -52,6 +52,9 @@ make_fixture() {
   chmod +x "$root/scripts/install-local.sh"
   cp "$project_root/scripts/kaola-acp.py" "$root/scripts/kaola-acp.py"
   cp "$project_root/scripts/kaola-acp-holder.py" "$root/scripts/kaola-acp-holder.py"
+  mkdir -p "$root/skills/kaola-project-runner"
+  printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
+  printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
   for id in grok claude-code opencode kimi-cli cursor-cli devin codex; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;
@@ -379,6 +382,106 @@ if [[ -e "${tmp_leftovers[0]}" || -L "${tmp_leftovers[0]}" ]]; then
   fail "test_rollback_fail_no_tmp" "staged temp left behind"
 fi
 
+# --- Issue #41: orchestrator installs with every destination; --platform is workers only ---
+repo="$tmp_root/repo-orch"
+make_fixture "$repo"
+home="$tmp_root/home-orch"
+
+assert_orchestrator_link() {
+  local name="$1" dest="$2"
+  assert_link "$name" "$dest/kaola-project-runner" "$(source_for "$repo" kaola-project-runner)"
+}
+
+output="$(run_installer "$repo" "$home" --runtime claude-code 2>&1)" \
+  || fail "test_orchestrator_runtime_claude_code" "install failed: $output"
+assert_orchestrator_link "test_orchestrator_runtime_claude_code" "$home/.claude/skills"
+assert_link "test_orchestrator_runtime_claude_code_still_installs_workers" \
+  "$home/.claude/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
+
+output="$(run_installer "$repo" "$home" --runtime cursor --platform grok 2>&1)" \
+  || fail "test_orchestrator_runtime_cursor_with_platform" "install failed: $output"
+assert_orchestrator_link "test_orchestrator_runtime_cursor_with_platform" "$home/.cursor/skills"
+assert_link "test_platform_filter_still_selects_named_worker" \
+  "$home/.cursor/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
+assert_absent "test_platform_filter_does_not_select_other_workers" \
+  "$home/.cursor/skills/codex-kaola-project-runner"
+
+output="$(run_installer "$repo" "$home" --runtime devin --platform grok 2>&1)" \
+  || fail "test_orchestrator_runtime_devin" "install failed: $output"
+assert_orchestrator_link "test_orchestrator_runtime_devin" "$home/devin-config/skills"
+
+codex_home="$tmp_root/orch-codex"
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok 2>&1)" \
+  || fail "test_orchestrator_runtime_codex" "install failed: $output"
+assert_orchestrator_link "test_orchestrator_runtime_codex" "$codex_home/skills"
+
+dest="$tmp_root/orch-skills-dir/skills"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok,codex 2>&1)" \
+  || fail "test_orchestrator_skills_dir" "install failed: $output"
+assert_orchestrator_link "test_orchestrator_skills_dir" "$dest"
+assert_link "test_orchestrator_skills_dir_workers_filtered" \
+  "$dest/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
+assert_link "test_orchestrator_skills_dir_codex_worker" \
+  "$dest/codex-kaola-project-runner" "$(source_for "$repo" codex-kaola-project-runner)"
+assert_absent "test_orchestrator_skills_dir_unselected_worker" \
+  "$dest/devin-kaola-project-runner"
+
+set +e
+output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --no-orchestrator 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -eq 0 ]] || fail "test_no_orchestrator_flag_accepted" "install failed: $output"
+
+home_skip="$tmp_root/home-no-orch"
+set +e
+output="$(run_installer "$repo" "$home_skip" --runtime cursor --platform grok --no-orchestrator 2>&1)"
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  fail "test_no_orchestrator_skips_main_skill" "install failed: $output"
+else
+  assert_link "test_no_orchestrator_skips_main_skill_worker" \
+    "$home_skip/.cursor/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
+  assert_absent "test_no_orchestrator_skips_main_skill" "$home_skip/.cursor/skills/kaola-project-runner"
+fi
+
+dest_skip="$tmp_root/no-orch-skills/skills"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_skip" --no-orchestrator 2>&1)"
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  fail "test_no_orchestrator_skills_dir" "install failed: $output"
+else
+  assert_absent "test_no_orchestrator_skills_dir" "$dest_skip/kaola-project-runner"
+  assert_link "test_no_orchestrator_skills_dir_worker" \
+    "$dest_skip/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
+fi
+
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$tmp_root/platform-id-refuse/skills" --platform kaola-project-runner 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_orchestrator_is_not_a_platform_id" "unexpected success"
+[[ "$output" == *"unknown platform"* ]] \
+  || fail "test_orchestrator_is_not_a_platform_id" "expected unknown platform, got: $output"
+
+# Uninstall --platform filters workers only; --no-orchestrator leaves the main Skill.
+dest_un="$tmp_root/orch-uninstall/skills"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_un" --platform grok 2>&1)" \
+  || fail "test_orchestrator_uninstall_setup" "install failed: $output"
+assert_orchestrator_link "test_orchestrator_uninstall_setup" "$dest_un"
+set +e
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_un" --platform grok --no-orchestrator --uninstall 2>&1)"
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  fail "test_uninstall_platform_keeps_orchestrator" "uninstall failed: $output"
+else
+  assert_absent "test_uninstall_platform_keeps_orchestrator_worker" "$dest_un/grok-kaola-project-runner"
+  assert_orchestrator_link "test_uninstall_platform_keeps_orchestrator" "$dest_un"
+fi
+
 # --- neutral validator --------------------------------------------------------
 good="$tmp_root/validator/good-skill"
 mkdir -p "$good"
@@ -404,7 +507,7 @@ for case in missing badname mismatch unknownfield nodescription; do
 done
 
 # --- generated payload stays valid under the neutral validator ----------------
-for skill_dir in "$project_root"/skills/*-kaola-project-runner; do
+for skill_dir in "$project_root"/skills/*kaola-project-runner; do
   python3 "$validator_source" "$skill_dir" >/dev/null \
     || fail "test_validator_generated_$(basename "$skill_dir")" "generated Skill failed neutral validation"
 done
