@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 — 2026-09-14
+
 - Generated main orchestrator Skill `kaola-project-runner` (display name Project Runner, issue #41).
   It is a control-plane Skill rendered from `templates/orchestrator/` through the existing
   `--write`/`--check` byte inventory, not an eighth platform: no platform manifest or transport
@@ -9,6 +11,10 @@
   still filters workers only; `--no-orchestrator` skips the main Skill. Worker Skills remain
   transport-only, with an optional pointer to the main Skill name. `templates/grok-golden/` is
   unchanged.
+
+- Fixed the main Skill description YAML encoding so descriptions containing colon-space load
+  correctly in standard YAML parsers; added regression coverage. Removed an expired credential
+  from the current archived repository URL (published history is unchanged).
 
 - ACP `permit`/`cancel` (and the `key escape`→cancel alias) accept an optional
   `--expected-holder-instance-id` binding (issue #39). Each holder process mints an opaque
