@@ -4,23 +4,28 @@
 
 Kaola Project Runner is a runtime-neutral Agent Skills CLI communication driver: any agent that
 can load a skill directory and run shell commands in an environment containing the target CLI can
-use the same seven Skills, and Codex remains a fully supported consuming runtime. It does not
-orchestrate Kaola Workflow, implement Workflow, or own a runtime's configuration.
+use the same seven worker Skills, and Codex remains a fully supported consuming runtime. A separate
+generated control-plane Skill, `kaola-project-runner` (display name Project Runner), supervises
+explicitly authorized workers through those transport Skills. Worker Skills do not orchestrate
+Kaola Workflow, implement Workflow, or own a runtime's configuration.
 
 ```text
-Controlling Agent
-    -> communication-only Agent Skill
-        -> manifest-selected transport
-            -> ACP holder + structured protocol agent
-            OR
-            -> fixed platform adapter
-                -> exact owned tmux pane leader: managed relay
-                    -> attested nested-PTY runtime child
-        -> Agent-selected prompt, key, or optional Workflow command
+Host Agent
+    -> optional main Skill kaola-project-runner (heartbeat, dispatch, acceptance, close-out)
+        -> communication-only worker Agent Skill
+            -> manifest-selected transport
+                -> ACP holder + structured protocol agent
+                OR
+                -> fixed platform adapter
+                    -> exact owned tmux pane leader: managed relay
+                        -> attested nested-PTY runtime child
+            -> Agent-selected prompt, key, or optional Workflow command
 ```
 
 The controlling Agent owns every command, orchestration, heartbeat, recovery, decision, and completion
-choice. The Runner owns exact-session control, evidence collection, prompt/key transfer, response
+choice. When the main Skill is in use, that Skill states how the host Agent recovers authorization,
+dispatches workers, accepts work before finalize, and keeps close-out ownership after session stop.
+The Runner owns exact-session control, evidence collection, prompt/key transfer, response
 readback, and truthful mechanical receipts. Kaola Workflow owns lifecycle state only when the Agent
 chooses to invoke it.
 
@@ -44,8 +49,9 @@ use the communication channel.
 `templates/grok-golden/` is an immutable historical copy of the live-proven Grok Skill, metadata, lifecycle,
 prompt, PR handoff, heartbeat, foreground scheduler, and closing references. Project prompt, task-mode,
 scheduling, handoff, and lifecycle bytes. Those bytes remain frozen as reference evidence; active
-generated Skills do not impose them. `templates/SKILL.md.tmpl` is the authoritative seven-platform
-communication-only contract.
+generated worker Skills do not impose them, and they are not the contract for `kaola-project-runner`.
+`templates/SKILL.md.tmpl` is the authoritative seven-platform communication-only contract.
+`templates/orchestrator/` is the authoritative main-Skill contract.
 
 Only platform facts may vary: executable, runtime carrier preflight, launch/continue/resume syntax,
 TUI/editor/approval/session observation, graceful quit, and capability declarations. Unsupported
@@ -56,10 +62,12 @@ outer Codex carrier.
 
 `render-skills.py` combines the active communication template, frozen optional references, fixed manifests, metadata templates, shared tmux
 core, relay/client/protocol/observation helpers, and one matching adapter into seven self-contained
-directories under `skills/`. Every managed
+worker directories under `skills/`, and renders the fixed orchestrator directory
+`skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
+derived from the seven manifests (no orchestrator platform manifest or adapter). Every managed
 directory has a `.generated-by-kaola-project-runner` marker. A published Skill never follows a path
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
-byte inventories.
+byte inventories, including the orchestrator package.
 
 `install-local.sh` delivers those directories to a consuming runtime: a verified named alias via
 `--runtime` (`codex`, `claude-code`, `cursor`, `devin`), or any absolute `--skills-dir` (the two are
@@ -70,7 +78,9 @@ the generated payload under `<skills-dir>/.kaola-install-receipts/`. Only an unm
 installation is replaced or removed — user edits, foreign additions, and receipt-less paths are
 preserved, and a `.generated` marker alone is never delete authority. Skill destination selection
 (`--runtime`/`--skills-dir`) and target platform selection (`--platform`) are independent
-dimensions. Owned `$HOME/.local/bin/kaola-acp*` helper links are created only for the Codex runtime
+dimensions: `--platform` filters worker Skills only. The main Skill is installed for every
+destination unless `--no-orchestrator` is passed; its directory name is not a platform id.
+Owned `$HOME/.local/bin/kaola-acp*` helper links are created only for the Codex runtime
 destination or on explicit `--bin-links`; uninstall never removes them unless `--bin-links` is
 passed, and then only exact-owned links.
 

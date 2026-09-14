@@ -9,6 +9,8 @@ runtime_alias=""
 skills_dir=""
 bin_links_request=""
 selection=()
+install_orchestrator=true
+orchestrator_skill_name="kaola-project-runner"
 installer_python="${PYTHON_BIN:-python3}"
 
 command -v "$installer_python" >/dev/null 2>&1 || {
@@ -20,6 +22,7 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
                                   [--method link|copy] [--platform ID[,ID...]]
+                                  [--no-orchestrator]
                                   [--bin-links | --no-bin-links] [--uninstall]
 
 Consuming runtimes (verified native skill directories):
@@ -33,8 +36,12 @@ project-local paths) and is mutually exclusive with --runtime.
 --method link (default) symlinks each Skill to this checkout; --method copy
 installs a standalone copy tracked by a per-Skill receipt.
 Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex
-With no --platform, installs all seven Skills. With no destination flags the
-legacy Codex destination is used. Existing foreign paths are never replaced.
+--platform filters worker Skills only. The main Skill kaola-project-runner
+(display name Project Runner) is installed for every destination unless
+--no-orchestrator is passed. It is not a platform ID.
+With no --platform, installs all seven worker Skills plus the orchestrator
+(unless skipped). With no destination flags the legacy Codex destination is
+used. Existing foreign paths are never replaced.
 --bin-links also manages $HOME/.local/bin/kaola-acp* helper links; it is on by
 default only for the Codex runtime destination. Uninstall never removes bin
 links unless --bin-links is passed explicitly.
@@ -102,6 +109,7 @@ while [[ $# -gt 0 ]]; do
       method="$2"
       shift 2
       ;;
+    --no-orchestrator) install_orchestrator=false; shift ;;
     --bin-links) bin_links_request=on; shift ;;
     --no-bin-links) bin_links_request=off; shift ;;
     --uninstall) mode=uninstall; shift ;;
@@ -285,11 +293,13 @@ PY
 }
 
 # Plan every action before any write; a refusal anywhere aborts the whole run.
-actions=()
-for platform in "${selection[@]}"; do
-  name="$(skill_name_for "$platform")"
-  source="$repo_root/skills/$name"
-  target="$target_parent/$name"
+# $1 is the generated Skill directory name. $2 is the worker platform id, or
+# empty for the main orchestrator Skill (not a platform id).
+plan_skill() {
+  local name="$1"
+  local platform="${2-}"
+  local source="$repo_root/skills/$name"
+  local target="$target_parent/$name"
 
   if [[ "$mode" == install ]]; then
     [[ -f "$source/SKILL.md" && -f "$source/.generated-by-kaola-project-runner" ]] || {
@@ -300,9 +310,9 @@ for platform in "${selection[@]}"; do
       if [[ -L "$target" ]]; then
         current="$(canonical_existing_target "$target" || true)"
         if [[ -n "$current" && "$current" -ef "$source" ]]; then
-          actions+=("already|$platform|$source|$target")
+          actions+=("already|$name|$source|$target")
         elif [[ "$platform" == grok && -n "$current" && "$current" -ef "$repo_root" ]]; then
-          actions+=("migrate|$platform|$source|$target")
+          actions+=("migrate|$name|$source|$target")
         else
           printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
           exit 1
@@ -311,7 +321,7 @@ for platform in "${selection[@]}"; do
         recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
         actual="$(tree_digest "$target")"
         if [[ -n "$recorded" && "$actual" == "$recorded" ]]; then
-          actions+=("relink|$platform|$source|$target")
+          actions+=("relink|$name|$source|$target")
         elif [[ -n "$recorded" ]]; then
           printf 'refusing to replace modified installed copy (user edits preserved): %s\n' "$target" >&2
           exit 1
@@ -323,13 +333,13 @@ for platform in "${selection[@]}"; do
         printf 'refusing to replace existing path: %s\n' "$target" >&2
         exit 1
       else
-        actions+=("install|$platform|$source|$target")
+        actions+=("install|$name|$source|$target")
       fi
     else
       if [[ -L "$target" ]]; then
         current="$(canonical_existing_target "$target" || true)"
         if [[ -n "$current" && ( "$current" -ef "$source" || ( "$platform" == grok && "$current" -ef "$repo_root" ) ) ]]; then
-          actions+=("copy-over-link|$platform|$source|$target")
+          actions+=("copy-over-link|$name|$source|$target")
         else
           printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
           exit 1
@@ -346,22 +356,22 @@ for platform in "${selection[@]}"; do
           exit 1
         fi
         if [[ "$actual" == "$(tree_digest "$source")" ]]; then
-          actions+=("already|$platform|$source|$target")
+          actions+=("already|$name|$source|$target")
         else
-          actions+=("update|$platform|$source|$target")
+          actions+=("update|$name|$source|$target")
         fi
       elif [[ -e "$target" ]]; then
         printf 'refusing to replace existing path: %s\n' "$target" >&2
         exit 1
       else
-        actions+=("install|$platform|$source|$target")
+        actions+=("install|$name|$source|$target")
       fi
     fi
   else
     if [[ -L "$target" ]]; then
       current="$(canonical_existing_target "$target" || true)"
       if [[ -n "$current" && ( "$current" -ef "$source" || ( "$platform" == grok && "$current" -ef "$repo_root" ) ) ]]; then
-        actions+=("uninstall|$platform|$source|$target")
+        actions+=("uninstall|$name|$source|$target")
       else
         printf 'refusing to remove foreign symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
         exit 1
@@ -376,15 +386,23 @@ for platform in "${selection[@]}"; do
         printf 'refusing to remove modified installed copy (user edits preserved): %s\n' "$target" >&2
         exit 1
       fi
-      actions+=("uninstall-copy|$platform|$source|$target")
+      actions+=("uninstall-copy|$name|$source|$target")
     elif [[ -e "$target" ]]; then
       printf 'refusing to remove non-symlink path: %s\n' "$target" >&2
       exit 1
     else
-      actions+=("absent|$platform|$source|$target")
+      actions+=("absent|$name|$source|$target")
     fi
   fi
+}
+
+actions=()
+for platform in "${selection[@]}"; do
+  plan_skill "$(skill_name_for "$platform")" "$platform"
 done
+if [[ "$install_orchestrator" == true ]]; then
+  plan_skill "$orchestrator_skill_name"
+fi
 
 bin_dir="$HOME/.local/bin"
 bin_specs=(
@@ -432,8 +450,7 @@ fi
 [[ "$want_bin_links" == true && "$mode" == install ]] && mkdir -p "$bin_dir"
 
 for row in "${actions[@]}"; do
-  IFS='|' read -r action platform source target <<<"$row"
-  name="$(skill_name_for "$platform")"
+  IFS='|' read -r action name source target <<<"$row"
   case "$action" in
     already)
       printf 'already installed: %s\n' "$target"

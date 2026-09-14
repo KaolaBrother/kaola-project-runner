@@ -2,14 +2,18 @@
 
 **Let one agent work through another agent's CLI.**
 
-Kaola Project Runner provides seven self-contained Agent Skills for **Claude Code, Codex CLI,
-Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, and OpenCode**. A controlling agent can start a session
-in a Git repository, send instructions, read replies and runtime evidence, and stop that exact
-owned session. Communication uses structured ACP (Agent Client Protocol) or a tmux terminal.
+Kaola Project Runner provides seven self-contained **worker** Agent Skills for **Claude Code,
+Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, and OpenCode**, plus one generated **main
+orchestrator** Skill (`kaola-project-runner`, display name **Project Runner**). A controlling
+agent can start a session in a Git repository, send instructions, read replies and runtime
+evidence, and stop that exact owned session. Communication uses structured ACP (Agent Client
+Protocol) or a tmux terminal.
 
-Use it to delegate implementation, request a second review, or continue work in another runtime.
-Pair it with [Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow) to give that work a
-recoverable path from issue to verified delivery.
+Use a worker Skill to delegate implementation, request a second review, or continue work in
+another runtime. Use the main Skill when the host Agent should supervise explicitly authorized
+CLI workers through those seven transport Skills. Pair either with
+[Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow) to give that work a recoverable
+path from issue to verified delivery.
 
 ## Agent runtime support
 
@@ -18,7 +22,8 @@ For example, Claude Code can load the Codex Runner Skill to work through Codex C
 
 ### Target CLIs
 
-Each target has its own generated Skill, platform manifest, and launch adapter.
+Each target has its own generated **worker** Skill, platform manifest, and launch adapter.
+The main orchestrator Skill is generated separately and is not an eighth platform.
 
 | Target runtime | Skill | CLI executable | Default transport |
 |---|---|---|---|
@@ -33,6 +38,15 @@ Each target has its own generated Skill, platform manifest, and launch adapter.
 ACP returns structured replies and events. PTY preserves the native terminal UI, including
 terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
 capabilities vary by platform. Claude's ACP wrapper remains experimental; PTY is its default.
+
+### Main orchestrator Skill
+
+`kaola-project-runner` (display name Project Runner) is a control-plane Skill for a host Agent
+that already has explicit CLI authorization. It recovers live work, dispatches through the seven
+worker Skills, reviews evidence before finalize, and keeps close-out ownership after a session
+stops. It does not add a platform manifest, transport adapter, scheduler, or backlog mirror.
+Heartbeat and completion policy live here; worker Skills stay transport-only.
+`templates/grok-golden/` remains frozen historical evidence, not this Skill's contract.
 
 ### Agents that load the Skills
 
@@ -55,8 +69,9 @@ and Devin; see [validation and evidence](#validation-and-evidence) for the limit
 
 The controlling agent chooses the task, interprets the output, and decides what to do next.
 Runner reports runtime and model observations as evidence. A successful send or a finished reply
-alone does not establish that the task is complete. Runner does not automatically retry prompts,
-switch transports, upgrade models, or schedule recurring work.
+alone does not establish that the task is complete. Worker Skills do not automatically retry
+prompts, switch transports, upgrade models, or schedule recurring work. Project-level heartbeat
+and acceptance belong to the main orchestrator Skill when that Skill is in use.
 
 ## Collaborative delivery with Kaola Workflow
 
@@ -66,11 +81,12 @@ Runner provides the communication channel through which an agent asks another ru
 work. Both can be used independently.
 
 ```text
-Controlling agent
-  └─ Runner Skill → ACP or PTY → Target CLI
-                                  └─ Kaola Workflow
-                                      Issue → Claim → Mission List → Work & validation
-                                            → Finalize → Archive & sink
+Host Agent
+  └─ Main Skill kaola-project-runner (optional control plane)
+        └─ Worker Runner Skill → ACP or PTY → Target CLI
+                                              └─ Kaola Workflow
+                                                  Issue → Claim → Mission List → Work & validation
+                                                        → Finalize → Archive & sink
 ```
 
 A typical collaboration works like this:
@@ -96,9 +112,11 @@ This combination gives you:
 - **Verifiable handoffs:** replies show what the CLI says; repository changes, validation evidence,
   and forge state establish what it delivered. A delivered PR is distinct from a merged change.
 
-All seven Runner Skills include this optional Workflow guidance. Starting Runner alone does not
-install Workflow, claim an issue, send `workflow-next`, or create a heartbeat. Runtime coverage is
-also independent: Workflow's support for a runtime does not imply a Runner adapter exists for it.
+All seven worker Skills include this optional Workflow guidance. Starting a worker Skill alone does
+not install Workflow, claim an issue, send `workflow-next`, or create a heartbeat. The main
+orchestrator Skill may register a host heartbeat after an authorized CLI allowlist exists. Runtime
+coverage is also independent: Workflow's support for a runtime does not imply a Runner adapter
+exists for it.
 
 Example instruction to an agent with the Claude Code Runner Skill loaded:
 
@@ -119,32 +137,38 @@ cd kaola-project-runner
 ./scripts/install-local.sh
 ```
 
-The default installs all seven Skills into `${CODEX_HOME:-$HOME/.codex}/skills` as symlinks to this
-checkout. Select another host, a target subset, or a standalone copy:
+The default installs all seven worker Skills plus the main orchestrator Skill into
+`${CODEX_HOME:-$HOME/.codex}/skills` as symlinks to this checkout. Select another host, a worker
+subset, skip the orchestrator, or install a standalone copy:
 
 ```bash
-# Install all Runner Skills for Claude Code, Cursor, or Devin.
+# Install all worker Skills plus the orchestrator for Claude Code, Cursor, or Devin.
 ./scripts/install-local.sh --runtime claude-code
 ./scripts/install-local.sh --runtime cursor
 ./scripts/install-local.sh --runtime devin
 
-# Let Claude Code drive only Codex CLI and OpenCode.
+# Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode
+
+# Workers only (no main Skill).
+./scripts/install-local.sh --runtime cursor --no-orchestrator
 
 # Install standalone Skills into an explicit host or project directory.
 ./scripts/install-local.sh --skills-dir "$PWD/.agent/skills" --method copy
 ```
 
-`--runtime` selects the host's skill directory; `--platform` selects the target CLI Skills.
+`--runtime` selects the host's skill directory; `--platform` selects worker CLI Skills only.
+`--no-orchestrator` skips `kaola-project-runner`. That name is not a `--platform` id.
 `--runtime` and `--skills-dir` are mutually exclusive. Copies work without this checkout;
 symlinks require it to remain in place. The installer preserves foreign files and modified copies.
 
 Use the host's Skill discovery mechanism, or have the agent read the installed `SKILL.md` directly.
 In Codex, a Skill can be invoked as `$claude-code-kaola-project-runner`, for example.
 
-To uninstall, repeat the same destination and platform selection with `--uninstall`.
-Optional `kaola-acp` helper links in `~/.local/bin` are installed by default only for the Codex
-destination. Use `--bin-links` elsewhere; removing those links requires `--uninstall --bin-links`.
+To uninstall, repeat the same destination and worker selection with `--uninstall`. Add
+`--no-orchestrator` to leave the main Skill in place. Optional `kaola-acp` helper links in
+`~/.local/bin` are installed by default only for the Codex destination. Use `--bin-links`
+elsewhere; removing those links requires `--uninstall --bin-links`.
 See the [installer reference](docs/api.md#installer) for all options.
 
 ## Direct command example
@@ -205,10 +229,11 @@ execution; its ACP wrapper failed initialization in the published September 11 r
 
 ## Development
 
-Edit the shared [Skill template](templates/SKILL.md.tmpl), [platform manifests](platforms/), or
+Edit the shared [worker Skill template](templates/SKILL.md.tmpl),
+[orchestrator templates](templates/orchestrator/), [platform manifests](platforms/), or
 [adapters](scripts/adapters/), then run `./scripts/render-skills.py --write` and validate. Commit the
 generated `skills/` output; do not edit it by hand. `templates/grok-golden/` is frozen historical
-compatibility evidence.
+compatibility evidence, not the main orchestrator contract.
 
 See [architecture](docs/architecture.md), [development conventions](docs/conventions.md), and
 [the changelog](CHANGELOG.md).

@@ -7,7 +7,9 @@ scripts/render-skills.py --write
 scripts/render-skills.py --check
 ```
 
-`--write` deterministically rebuilds seven managed Skill directories. `--check` returns nonzero for
+`--write` deterministically rebuilds seven managed worker Skill directories plus
+`skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eighth
+platform). `--check` returns nonzero for
 any missing, stale, or unexpected file or Skill directory. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
@@ -31,12 +33,15 @@ is sent literally and a rejection is reported as a limitation. Model-selection f
 ```text
 scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
                          [--method link|copy] [--platform ID[,ID...]]
+                         [--no-orchestrator]
                          [--bin-links | --no-bin-links] [--uninstall]
 ```
 
 Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, and `codex`.
-Omit `--platform` for all seven. Every selected destination is preflighted before mutation; foreign
-paths are never replaced.
+Omit `--platform` for all seven workers. `--platform` never selects the main Skill;
+`kaola-project-runner` is not a platform ID. The orchestrator is installed for every `--runtime`
+and `--skills-dir` destination unless `--no-orchestrator` is passed. Every selected destination is
+preflighted before mutation; foreign paths are never replaced.
 
 `--runtime` selects a verified consuming-runtime skills directory: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,

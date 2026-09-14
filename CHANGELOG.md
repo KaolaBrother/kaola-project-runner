@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Generated main orchestrator Skill `kaola-project-runner` (display name Project Runner, issue #41).
+  It is a control-plane Skill rendered from `templates/orchestrator/` through the existing
+  `--write`/`--check` byte inventory, not an eighth platform: no platform manifest or transport
+  adapter. The installer puts it on every `--runtime` / `--skills-dir` destination; `--platform`
+  still filters workers only; `--no-orchestrator` skips the main Skill. Worker Skills remain
+  transport-only, with an optional pointer to the main Skill name. `templates/grok-golden/` is
+  unchanged.
+
 - ACP `permit`/`cancel` (and the `key escape`→cancel alias) accept an optional
   `--expected-holder-instance-id` binding (issue #39). Each holder process mints an opaque
   random `holder_instance_id` at construction — immutable for that process, never restored

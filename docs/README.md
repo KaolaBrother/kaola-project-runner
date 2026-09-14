@@ -1,6 +1,6 @@
 # Documentation Index
 
-- [Architecture](architecture.md): golden contract, generated Skills, boundaries, and ownership
+- [Architecture](architecture.md): golden contract, worker vs main Skill, generated Skills, boundaries, and ownership
 - [API](api.md): renderer, installer, tmux core, status, and adapter contracts
 - [Conventions](conventions.md): change boundary, source-of-truth, safety, and validation
 - [Runner v2 dual-transport design](runner-v2-dual-transport-design.md) (v0.3, implementation

@@ -19,6 +19,8 @@ PLATFORMS = ROOT / "platforms"
 TEMPLATES = ROOT / "templates"
 SKILLS = ROOT / "skills"
 MARKER = ".generated-by-kaola-project-runner"
+ORCHESTRATOR_NAME = "kaola-project-runner"
+ORCHESTRATOR_DISPLAY = "Project Runner"
 TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 REQUIRED = {
     "id", "runtime_name", "skill_name", "display_name", "short_description",
@@ -79,9 +81,7 @@ def variables(manifest: dict[str, str]) -> dict[str, str]:
     return {key.upper(): value for key, value in manifest.items()}
 
 
-def render(template: str, manifest: dict[str, str], source: Path) -> str:
-    values = variables(manifest)
-
+def render_text(template: str, values: dict[str, str], source: Path) -> str:
     def replace(match: re.Match[str]) -> str:
         key = match.group(1)
         if key not in values:
@@ -93,6 +93,86 @@ def render(template: str, manifest: dict[str, str], source: Path) -> str:
     if leftovers:
         raise ValueError(f"{source}: unresolved tokens {leftovers}")
     return output
+
+
+def render(template: str, manifest: dict[str, str], source: Path) -> str:
+    return render_text(template, variables(manifest), source)
+
+
+def supported_worker_summary(manifests: list[dict[str, str]]) -> str:
+    rows = [
+        "| Platform id | Skill directory | Display name | Default transport |",
+        "|---|---|---|---|",
+    ]
+    for manifest in manifests:
+        rows.append(
+            f"| {manifest['id']} | `{manifest['skill_name']}` | "
+            f"{manifest['display_name']} | {manifest['default_transport']} |"
+        )
+    return "\n".join(rows)
+
+
+def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
+    return {
+        "SKILL_NAME": ORCHESTRATOR_NAME,
+        "DISPLAY_NAME": ORCHESTRATOR_DISPLAY,
+        "DESCRIPTION": (
+            "Use when the controlling Agent should supervise explicitly authorized "
+            "CLI workers through the seven platform Runner Skills: recover live "
+            "authorization, dispatch and review work, accept deliveries before "
+            "finalize, and stop idle sessions without dropping close-out duties."
+        ),
+        "SHORT_DESCRIPTION": (
+            "Supervise authorized CLI workers through the seven platform Runner Skills"
+        ),
+        "DEFAULT_PROMPT": (
+            f"Use ${ORCHESTRATOR_NAME} to recover authorization, supervise named "
+            "CLI workers, review evidence, and finalize only after acceptance."
+        ),
+        "SUPPORTED_WORKERS": supported_worker_summary(manifests),
+        "IDLE_BEFORE_STOP": (
+            "Give an idle worker suitable work before considering stop"
+        ),
+        "ACCEPTANCE_BEFORE_FINALIZE": (
+            "Mission-frontier done triggers review, not automatic finalize"
+        ),
+        "HEARTBEAT_DEFAULT": "30 minutes unless specified",
+    }
+
+
+def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
+    orch = TEMPLATES / "orchestrator"
+    skill_template = orch / "SKILL.md.tmpl"
+    if not skill_template.is_file():
+        raise ValueError(f"missing orchestrator template: {skill_template}")
+    values = orchestrator_values(manifests)
+    result: dict[str, bytes] = {}
+    result[MARKER] = (ORCHESTRATOR_NAME + "\n").encode()
+    for source in sorted(orch.rglob("*")):
+        if not source.is_file():
+            continue
+        relative = source.relative_to(orch)
+        if source.suffix == ".tmpl":
+            dest = relative.with_suffix("").as_posix()
+            result[dest] = render_text(
+                source.read_text(encoding="utf-8"), values, source
+            ).encode()
+        elif source.name == "heartbeat-skeleton.txt" and relative.parts[0] == "references":
+            skeleton = source.read_text(encoding="utf-8")
+            intro = (
+                "# Heartbeat skeleton\n\n"
+                "Starting point for a project-specific heartbeat. Not a second copy "
+                "of this Skill's policy. Render from current authorization and "
+                "project instructions; replace the same heartbeat when those change. "
+                "Do not hard-code host tool names.\n\n"
+                "```text\n"
+            )
+            result["references/heartbeat-skeleton.md"] = (
+                intro + skeleton.rstrip() + "\n```\n"
+            ).encode()
+        else:
+            result[relative.as_posix()] = source.read_bytes()
+    return result
 
 
 def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
@@ -215,7 +295,7 @@ def main() -> int:
         raise ValueError("platform inventory must be exactly claude-code,codex,cursor-cli,devin,grok,kimi-cli,opencode")
 
     findings: list[str] = []
-    expected_names = {m["skill_name"] for m in manifests}
+    expected_names = {m["skill_name"] for m in manifests} | {ORCHESTRATOR_NAME}
     if SKILLS.is_dir():
         for path in SKILLS.iterdir():
             if path.is_dir() and path.name not in expected_names:
@@ -229,11 +309,21 @@ def main() -> int:
         else:
             findings.extend(check_one(target, expected))
 
+    orch_target = SKILLS / ORCHESTRATOR_NAME
+    orch_expected = expected_orchestrator_files(manifests)
+    if args.write:
+        write_one(orch_target, orch_expected)
+    else:
+        findings.extend(check_one(orch_target, orch_expected))
+
     if findings:
         for finding in findings:
             print(finding, file=sys.stderr)
         return 1
-    print(f"render-skills: {'WROTE' if args.write else 'PASS'} ({len(manifests)} Skills)")
+    print(
+        f"render-skills: {'WROTE' if args.write else 'PASS'} "
+        f"({len(manifests)} workers + {ORCHESTRATOR_NAME})"
+    )
     return 0
 
 

@@ -7,7 +7,9 @@ description: Use when the controlling Agent should communicate with a Claude Cod
 
 This Skill is a communication driver for Claude Code. It gives the controlling Agent a
 measured tmux channel; it does not choose commands, Workflow modes, cadence, state, approvals,
-retries, or completion policy.
+retries, or completion policy. The separate Skill `kaola-project-runner` (display name Project
+Runner) is the main orchestrator when a host Agent is supervising workers; this Skill stays
+transport-only.
 
 ## Transport facts
 

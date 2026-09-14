@@ -3,12 +3,15 @@
 ## Change boundary
 
 The existing Grok Workflow contract is golden and live-proven historical evidence. Do not rewrite its
-bytes. It is not the active Runner authority: all seven active Skills use the shared communication-only
+bytes. It is not the active Runner authority: all seven worker Skills use the shared communication-only
 template and do not impose task modes, prompts, PR handoff, heartbeat, scheduler, or closing policy.
+Project-level heartbeat and acceptance live in the generated main Skill `kaola-project-runner`.
 
 ## Source of truth
 
-- Active seven-platform Skill: `templates/SKILL.md.tmpl`.
+- Active seven-platform worker Skill: `templates/SKILL.md.tmpl`.
+- Main orchestrator Skill: `templates/orchestrator/` (English `SKILL.md.tmpl`; not a platform
+  manifest or adapter).
 - Frozen historical Workflow lifecycle and prompts: `templates/grok-golden/`.
 - Shared evidence-first transport guidance: `templates/references/transport.md.tmpl` plus exact reversible
   renderer overlays; never broad-replace golden prose.
