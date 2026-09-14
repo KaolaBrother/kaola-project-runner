@@ -44,13 +44,15 @@ capabilities vary by platform. Claude's ACP wrapper remains experimental; PTY is
 `kaola-project-runner` (display name Project Runner) is a control-plane Skill for a host Agent
 that already has explicit CLI authorization. It recovers live work, dispatches through the seven
 worker Skills, reviews evidence before finalize, and keeps close-out ownership after a session
-stops. Completion stops leftover idle owned sessions, including ACP; idle is not keep-alive.
-Ending a run defaults to finishing in-hand issues and a clean workspace. A stated stop
-boundary blocks new tasks and new issues without dropping in-hand work. Only an explicit
-"stop here, continue later" pauses that cleanup and preserves recovery. It does not add a
-platform manifest, transport adapter, scheduler, or backlog mirror. Heartbeat and completion
-policy live here; worker Skills stay transport-only. `templates/grok-golden/` remains frozen
-historical evidence, not this Skill's contract.
+stops. Whenever open PRs exist, it favors advancing them through review, validation, accepted
+finalize/merge, and cleanup, while other authorized work may continue in parallel. A blocked PR
+keeps an owner and next action without becoming a global barrier. Completion stops leftover idle
+owned sessions, including ACP; idle is not keep-alive. Ending a run defaults to finishing in-hand
+issues and a clean workspace. A stated stop boundary blocks new tasks and new issues without
+dropping in-hand work. Only an explicit "stop here, continue later" pauses that cleanup and
+preserves recovery. It does not add a platform manifest, transport adapter, scheduler, PR queue, or
+backlog mirror. Heartbeat and completion policy live here; worker Skills stay transport-only.
+`templates/grok-golden/` remains frozen historical evidence, not this Skill's contract.
 
 ### Agents that load the Skills
 
