@@ -1,269 +1,228 @@
 # Kaola Project Runner
 
-Kaola Project Runner 是一组运行时中立的 Agent Skills：任何具备 Skill/文件加载与 shell 执行
-能力、且运行环境里装有目标 CLI 的控制 Agent，都可以使用同一组七个 Skill。Codex 仍是完整
-支持的消费运行时之一；本仓库不新增目标 CLI，也不承诺在缺少必要工具的纯聊天/沙箱宿主中
-执行。每个 Skill 只负责在所有权可验证的 tmux 主会话中启动指定 CLI、读取输出、传递控制
-Agent 选择的提示词或原生按键、读取真实回复，以及结束这个精确会话。
+**Let one agent work through another agent's CLI.**
 
-术语：**消费运行时（consuming runtime）**指加载并使用 Skill 的 Agent 宿主；**目标平台
-（target platform）**指被 Skill 驱动的 CLI。安装时的 `--runtime` 选择消费运行时的技能
-目录，`--platform` 选择七个目标 CLI Skill 中的哪一个，二者是独立维度。
+Kaola Project Runner provides seven self-contained Agent Skills for **Claude Code, Codex CLI,
+Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, and OpenCode**. A controlling agent can start a session
+in a Git repository, send instructions, read replies and runtime evidence, and stop that exact
+owned session. Communication uses structured ACP (Agent Client Protocol) or a tmux terminal.
 
-`templates/grok-golden/` 保留已经实跑验证的历史 Grok Workflow 提示词与协议字节，作为兼容和
-回归证据；它们不再是 active Skill 强制执行的编排规则。七个平台的 active Skill 都从同一份
-通信模板生成。是否发送 `workflow-next`、选择什么命令、是否创建 heartbeat、如何编排、重试和
-收口，全部由读过现场证据的控制 Agent 决定。
+Use it to delegate implementation, request a second review, or continue work in another runtime.
+Pair it with [Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow) to give that work a
+recoverable path from issue to verified delivery.
 
-每个新会话由一个受管 nested-PTY relay 承载：relay 是 tmux pane leader，目标 CLI 是其 nested-PTY
-子进程。Runner 采集 raw frame、tmux/process/relay、输入输出、仓库与 Workflow 事实；控制 agent
-解释这些证据并决定何时输入、如何读取回复以及如何处理运行中的问题。Skill 只发现、传递和回读，
-不定义状态也不阻止 agent 选择的动作。坐标、固定文案、snapshot 变化、`activity`、editor/approval
-标签、worker 计数、Git 和 Workflow 解释都不是写操作的 hardgate。
+## Agent runtime support
 
-## 支持的平台
+There are two independent choices: **which agent loads the Skill**, and **which CLI it drives**.
+For example, Claude Code can load the Codex Runner Skill to work through Codex CLI.
 
-| Platform | Skill | CLI | Runner 默认主模型 (`--tier default`) | Runner 升级主模型 (`--tier upgrade`) | runtime-native recurring |
-|---|---|---|---|---|---|
-| Grok CLI | `$grok-kaola-project-runner` | `grok` | Grok 4.6 Extra High | 同默认 | supported，需显式请求 |
-| Claude Code | `$claude-code-kaola-project-runner` | `claude` | Opus High | Fable High | unsupported |
-| OpenCode | `$opencode-kaola-project-runner` | `opencode` | CLI 原生开场模型（不覆盖） | 同默认 | unsupported |
-| Kimi CLI | `$kimi-cli-kaola-project-runner` | `kimi` | Kimi 2.8 Max | Kimi K3 Max | unsupported |
-| Cursor CLI | `$cursor-cli-kaola-project-runner` | `cursor-agent` | Grok 4.6 Extra High | Claude Fable 5.1 High | unsupported |
-| Devin CLI | `$devin-kaola-project-runner` | `devin` | SWE-2 Max | Fusion High | unsupported |
-| Codex CLI | `$codex-kaola-project-runner` | `codex` | GPT-5.6 Sol High | GPT-6 Astra High | unsupported |
+### Target CLIs
 
-裸调用统一表示：使用当前目录所在的 canonical Git repository，启动或恢复该平台的精确
-tmux session 并返回可读证据。它不会隐式发送 `workflow-next`、materialize 项目文件、创建
-15 分钟 heartbeat、选择任务模式或启动循环。
+Each target has its own generated Skill, platform manifest, and launch adapter.
 
-## 本地安装
+| Target runtime | Skill | CLI executable | Default transport |
+|---|---|---|---|
+| Claude Code | `claude-code-kaola-project-runner` | `claude` | PTY |
+| Codex CLI | `codex-kaola-project-runner` | `codex` | ACP |
+| Cursor CLI | `cursor-cli-kaola-project-runner` | `cursor-agent` | ACP |
+| Devin CLI | `devin-kaola-project-runner` | `devin` | ACP |
+| Grok CLI | `grok-kaola-project-runner` | `grok` | ACP |
+| Kimi CLI | `kimi-cli-kaola-project-runner` | `kimi` | ACP |
+| OpenCode | `opencode-kaola-project-runner` | `opencode` | ACP |
+
+ACP returns structured replies and events. PTY preserves the native terminal UI, including
+terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
+capabilities vary by platform. Claude's ACP wrapper remains experimental; PTY is its default.
+
+### Agents that load the Skills
+
+The installer provides native skill-directory destinations for **Codex, Claude Code, Cursor,
+and Devin**. Other hosts can use `--skills-dir /absolute/path` if they can load `SKILL.md` and
+execute shell commands in an environment with the required tools.
+
+These are portable Agent Skills, with no dependency on a Codex installation. This does not mean
+every host/target combination has been tested. Recorded end-to-end host coverage includes Codex
+and Devin; see [validation and evidence](#validation-and-evidence) for the limits.
+
+## What Runner does
+
+- Start, inspect, and stop an exact session associated with a repository and target CLI.
+- Send agent-selected prompts; transfer native keys through PTY where supported.
+- Return replies, tool events, terminal output, process facts, and transport receipts.
+- Apply per-run model and effort choices, with platform presets and explicit overrides.
+- Resume native conversations where supported, or let the agent choose a fresh session.
+- Expose ACP sessions for human inspection through `list`, `view`, and `follow`.
+
+The controlling agent chooses the task, interprets the output, and decides what to do next.
+Runner reports runtime and model observations as evidence. A successful send or a finished reply
+alone does not establish that the task is complete. Runner does not automatically retry prompts,
+switch transports, upgrade models, or schedule recurring work.
+
+## Collaborative delivery with Kaola Workflow
+
+[**Kaola Workflow**](https://github.com/KaolaBrother/Kaola-Workflow) provides the engineering
+workflow: issue claims, a recoverable Mission List, validation, finalization, and delivery records.
+Runner provides the communication channel through which an agent asks another runtime to do that
+work. Both can be used independently.
+
+```text
+Controlling agent
+  └─ Runner Skill → ACP or PTY → Target CLI
+                                  └─ Kaola Workflow
+                                      Issue → Claim → Mission List → Work & validation
+                                            → Finalize → Archive & sink
+```
+
+A typical collaboration works like this:
+
+1. Install Runner for the controlling agent and
+   [install Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow/blob/main/docs/installation.md)
+   for the target runtime. Workflow must be available to the CLI doing the work.
+2. The controlling agent selects a target CLI and opens an owned session in the project repository.
+3. It sends the task and asks the CLI to start or resume with `workflow-next`, following that
+   runtime's installed Workflow instructions.
+4. The CLI claims the issue, records the Mission List, performs the work, and validates the result.
+   The controlling agent reads replies and work evidence, then sends follow-up instructions as needed.
+5. The agent supervises `kaola-workflow-finalize` and verifies the selected PR or merge/sync outcome,
+   archive, and sink. It stops the owned Runner session when further interaction is no longer needed.
+
+This combination gives you:
+
+- **Cross-runtime collaboration:** choose an appropriate CLI while keeping the task's engineering
+  process consistent. Each CLI retains its own tools, model options, and native behavior.
+- **Recoverable work:** Workflow's claim, Mission List, and results let an agent reconcile progress
+  after an interruption. Runner can reconnect to a supported native conversation or start another
+  session that reads those records; recovery remains an agent decision.
+- **Verifiable handoffs:** replies show what the CLI says; repository changes, validation evidence,
+  and forge state establish what it delivered. A delivered PR is distinct from a merged change.
+
+All seven Runner Skills include this optional Workflow guidance. Starting Runner alone does not
+install Workflow, claim an issue, send `workflow-next`, or create a heartbeat. Runtime coverage is
+also independent: Workflow's support for a runtime does not imply a Runner adapter exists for it.
+
+Example instruction to an agent with the Claude Code Runner Skill loaded:
+
+> Use Claude Code to work on issue #42 in this repository. If Kaola Workflow is available there,
+> follow its workflow-next instructions, inspect the implementation and validation evidence, and
+> supervise workflow finalization through PR delivery. Stop the owned session when finished.
+
+## Install
+
+Requirements: Bash, Python 3, tmux, Git, and the selected target CLI with working authentication.
+ACP wrappers may also require Node.js/npx; exact commands are in the [platform manifests](platforms/).
+Runner does not install the target CLIs or provide model access.
 
 ```bash
-./scripts/render-skills.py --write
+git clone https://github.com/KaolaBrother/kaola-project-runner.git
+cd kaola-project-runner
 ./scripts/render-skills.py --check
 ./scripts/install-local.sh
 ```
 
-默认安装全部七个平台，也可以选择一个或多个：
+The default installs all seven Skills into `${CODEX_HOME:-$HOME/.codex}/skills` as symlinks to this
+checkout. Select another host, a target subset, or a standalone copy:
 
 ```bash
-./scripts/install-local.sh --platform grok,opencode
-./scripts/install-local.sh --platform claude-code
-./scripts/install-local.sh --uninstall
+# Install all Runner Skills for Claude Code, Cursor, or Devin.
+./scripts/install-local.sh --runtime claude-code
+./scripts/install-local.sh --runtime cursor
+./scripts/install-local.sh --runtime devin
+
+# Let Claude Code drive only Codex CLI and OpenCode.
+./scripts/install-local.sh --runtime claude-code --platform codex,opencode
+
+# Install standalone Skills into an explicit host or project directory.
+./scripts/install-local.sh --skills-dir "$PWD/.agent/skills" --method copy
 ```
 
-### 安装目标：`--runtime` 与 `--skills-dir`
+`--runtime` selects the host's skill directory; `--platform` selects the target CLI Skills.
+`--runtime` and `--skills-dir` are mutually exclusive. Copies work without this checkout;
+symlinks require it to remain in place. The installer preserves foreign files and modified copies.
 
-不带目标参数时保持向后兼容：安装到 Codex 运行时目录
-`${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>`。`--runtime NAME` 选择已核实的消费运行时
-技能目录，`--skills-dir ABS_PATH` 选择任意绝对路径（包括项目内目录），两者互斥：
+Use the host's Skill discovery mechanism, or have the agent read the installed `SKILL.md` directly.
+In Codex, a Skill can be invoked as `$claude-code-kaola-project-runner`, for example.
+
+To uninstall, repeat the same destination and platform selection with `--uninstall`.
+Optional `kaola-acp` helper links in `~/.local/bin` are installed by default only for the Codex
+destination. Use `--bin-links` elsewhere; removing those links requires `--uninstall --bin-links`.
+See the [installer reference](docs/api.md#installer) for all options.
+
+## Direct command example
+
+From this checkout, the shared entry point accepts a platform, operation, repository, and session:
 
 ```bash
-./scripts/install-local.sh --runtime codex          # ${CODEX_HOME:-$HOME/.codex}/skills
-./scripts/install-local.sh --runtime claude-code    # ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
-./scripts/install-local.sh --runtime cursor         # $HOME/.cursor/skills
-./scripts/install-local.sh --runtime devin          # ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
-./scripts/install-local.sh --skills-dir "$PWD/.agent/skills"   # 任意绝对路径，含空格亦可
+REPO="/absolute/path/to/your/git-repository"
+SESSION="opencode-example"
+
+./scripts/kaola-tmux.sh opencode preflight --repo "$REPO" --session "$SESSION"
+./scripts/kaola-tmux.sh opencode start --repo "$REPO" --session "$SESSION"
+./scripts/kaola-tmux.sh opencode send --repo "$REPO" --session "$SESSION" \
+  --text 'Explain this repository and summarize its test commands.'
+./scripts/kaola-tmux.sh opencode observe --repo "$REPO" --session "$SESSION"
+./scripts/kaola-tmux.sh opencode capture --repo "$REPO" --session "$SESSION"
+
+# Read the reply and decide whether more interaction is needed before stopping.
+./scripts/kaola-tmux.sh opencode stop --repo "$REPO" --session "$SESSION"
+./scripts/kaola-tmux.sh opencode status --repo "$REPO" --session "$SESSION"
 ```
 
-其他消费运行时的原生技能目录一旦核实即可加入别名表；未列名的运行时始终可用
-`--skills-dir`。--platform 选择要安装的七个目标平台 Skill 子集，与 --runtime 独立。
+Installed Skills use their own `scripts/runtime-tmux.sh` with the same operations and no platform
+argument. Invoke it by absolute path; `--repo` identifies the project being worked on.
 
-### 安装方式：`--method link|copy`
+Model selection uses `--tier default|upgrade` or an explicit `--model ID` with optional
+`--effort LEVEL`. Presets live in the [platform manifests](platforms/); Fast is off unless requested.
+Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the runtime supports it.
 
-`--method link`（默认）把每个 Skill 目录符号链接到本仓库，便于开发；`--method copy` 复制
-完整自包含内容，便于脱离 checkout 分发。两种方式安装的内容相同。copy 模式在每个目标下
-`<skills-dir>/.kaola-install-receipts/<skill>.json` 记录属主/内容回执（不在生成载荷内）：
-内容不变的属主安装是 no-op；只有未修改过的属主安装才会被替换或卸载，用户改动与外来文件
-一律保留并拒绝覆盖。单独的 `.generated` 标记不会被视为删除目录的授权。替换在目标文件系统
-上先暂存再落位，不会留下半个 Skill；路径（含空格）均按字面传递。
+**Permission defaults matter:** launches generally request the platform's broad automatic-approval
+mode. OpenCode's default ACP path has no skip-permission launch flag. Use `--permission-mode` where
+supported and check the native semantics: Codex ACP's `read-only` mode can write workspace files;
+strict Codex read-only execution requires `--transport pty --permission-mode read-only`.
+Authentication and workspace trust remain native CLI concerns.
 
-### Helper 链接：`--bin-links`
+For ACP session watching, use `kaola-acp list`, `kaola-acp PLATFORM view`, or
+`kaola-acp PLATFORM follow` with the relevant repository and session arguments. Full transport,
+permission, key, recovery, and receipt details are in the [command reference](docs/api.md) and
+[ACP watch guide](docs/acp-watch/README.md).
 
-`--bin-links` 控制是否写入属主拥有的 `$HOME/.local/bin/kaola-acp` 与 `kaola-acp-holder`
-符号链接（指向本仓库 `scripts/`）。仅在 Codex 运行时目标（默认或 `--runtime codex`）下默认
-开启；`--skills-dir` 与其他命名运行时默认不创建。普通卸载**不**移除这些可能与其他安装共享
-的链接，除非显式传 `--uninstall --bin-links`，且只移除精确属主链接。旧版
-`grok-kaola-project-runner -> <repository-root>` 只有在 canonical target 精确等于当前仓库根
-时才会迁移。外源文件、目录、symlink 与 dangling link 均拒绝覆盖；卸载也只移除精确属主的
-symlink 或带未修改回执的 copy 安装。
-
-## 快速使用
-
-七个 Skill 名称：
-
-```text
-grok-kaola-project-runner
-claude-code-kaola-project-runner
-opencode-kaola-project-runner
-kimi-cli-kaola-project-runner
-cursor-cli-kaola-project-runner
-devin-kaola-project-runner
-codex-kaola-project-runner
-```
-
-各消费运行时按自身机制发现并加载 Skill：Codex 用 `$<skill-name>` 调用安装在其技能目录中的
-Skill；Claude Code、Cursor、Devin 等运行时自动发现其原生技能目录中的 Skill，也可由 Agent
-直接读取 `SKILL.md` 显式加载。Skill 内部示例统一先解析安装目录绝对路径（如
-`"$SKILL_DIR/scripts/runtime-tmux.sh"`），用户项目只通过 `--repo` 传递；复制安装可脱离本
-checkout、在含空格路径下、且无全局 `kaola-acp` 链接时独立工作。
-
-控制 Agent 负责理解输出并选择下一条输入；目标 CLI 负责执行收到的输入；当 Agent 选择使用
-Kaola Workflow 时，Workflow 才负责 claim、mission list、finalize、Issue/PR、archive 和 sink。
-Runner 本身不设默认 heartbeat，也不解释 `HUMAN_DECISION_REQUIRED`；它只提供读写通道。
-
-七个平台的 Skill 都提供一项轻量建议：当目标 CLI 已可使用 Kaola Workflow、且适合当前任务时，
-Agent 可以向用户说明其可用性和是否采用，再让 CLI 按自身已安装的 Workflow 指引通过
-`workflow-next` 开始或恢复工作。采用后，建议监督 `kaola-workflow-finalize`，核实所选的合并同步
-或 PR 交付，以及本次任务的工作区、worktree 和分支清理情况；PR 交付不等于已合并，应保留
-未合并 PR 或其他活动工作仍需的资源。这只是供 Agent 判断的建议，不增加自动执行或通信门槛。
-
-## 控制接口
+## Validation and evidence
 
 ```bash
-scripts/kaola-tmux.sh grok preflight \
-  --repo /absolute/path/to/repo --session grok-kaola-example
-
-scripts/kaola-tmux.sh opencode start \
-  --repo /absolute/path/to/repo --session opencode-kaola-example
-
-scripts/kaola-tmux.sh opencode start \
-  --repo /absolute/path/to/repo --session opencode-user-model \
-  --model zhipuai-coding-plan/glm-5.3 --effort max
-
-scripts/kaola-tmux.sh cursor-cli status \
-  --repo /absolute/path/to/repo --session cursor-cli-kaola-example
-
-scripts/kaola-tmux.sh opencode send \
-  --repo /absolute/path/to/repo --session opencode-kaola-example \
-  --text 'continue'
-
-scripts/kaola-tmux.sh kimi-cli key \
-  --repo /absolute/path/to/repo --session kimi-cli-kaola-example \
-  --key up
-```
-
-命令为 `preflight`、`start`、`observe`、`status`、`capture`、`send`、`key`、`answer`、`stop`。ACP 人类旁观走 `kaola-acp`，不经 `kaola-tmux.sh`：`kaola-acp list [--platform P] [--repo ROOT]` 列出本机活 holder（stdout `kaola-acp-list/1`）；`kaola-acp <platform> view --repo … --session … [--since CURSOR]` 返回当前压实投影（stdout `kaola-acp-view/1`）；`kaola-acp <platform> follow --repo … --session … [--since CURSOR] [--format json|text]` 保持 Unix 长连接并写 NDJSON `{kind:snapshot|delta|heartbeat|eof|error}`（snapshot/delta 复用 `kaola-acp-view/1`；`--format text` 拼接消息/工具标题）。`kaola-tmux.sh … view` 给出 `view-unsupported`，`kaola-tmux.sh … follow` 给出 `follow-unsupported`，都不回退到 PTY。`observe`
-返回 schema-v2 `raw_current_frame`、`hard_evidence`、进程/approval/decision 提示、relay byte revisions
-和 opaque snapshot。它们只供 agent 参考，不定义平台状态，也不授权或阻断普通 `send`/`stop`。
-snapshot 是可选的证据关联：若传入，紧凑回执只在 `based_on_snapshot` 原样返回，不把它变成
-freshness gate。prompt 通过 relay
-literal/bracketed-paste transport 传输，不经过 shell 求值。
-每次 `start` 都先解析主模型：当前请求显式传入的 `--model` 最优先，否则 `--tier default|upgrade`
-选择上表对应预设，默认 `--tier default`。显式 `--effort` 只作用于同一次选择中的模型；单独的
-`--model` 不会继承预设 effort。预设按各自原生机制应用（`--model` + `--effort`、`-c
-model_reasoning_effort`、环境变量或 ACP configId），不重写 CLI 全局配置。`--fast on` 是每次运行的
-显式 opt-in（默认 off）：Codex 走 ACP `fast-mode` configId 或 PTY `-c service_tier`，Cursor 走
-参数化 ACP `fast` 选项（`true`/`"false"` 字符串）或 PTY `-fast` 类模型变体，Claude 走
-进程级 `--settings '{"fastMode": ...}'`（按请求原样传递 on/off；模型是否支持由原生 CLI
-判定，无原生证据时 effective 记 unknown，选定模型永不改动），Devin 走 `-fast` 类模型变体
-（当前预设无已公布 Fast 变体则报告 unsupported），其余平台如实报告 unsupported。`--resume/--continue` 不带 tier/model/effort 时保留原生已保存选择；带上则重新应用。
-Runner 从不按复杂度、失败或耗时自动升级模型；模型不可读或不匹配只作为 Agent 的事实输入，不会
-封锁已有会话的普通通信；Runner 也从不自动发送 `workflow-next`。
-默认 `start`（未传 `--permission-mode`）打开各平台已测到的 skip-all 权限模式，避免 ACP
-`session/request_permission` 或 PTY 工具审批 TUI 卡住后续 `send --wait`。OpenCode 的默认 ACP
-通道没有 skip argv（`--auto` 只作用于 PTY，通过 `--transport pty` 选择）。Codex 默认 ACP 通道是
-pinned `npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0 codex-acp`，
-`--transport pty` 使用 `codex --cd <repo> --no-alt-screen`；两种通道默认权限模式都是
-`agent-full-access`（PTY 映射为 `--sandbox danger-full-access --ask-for-approval never`）。
-Codex 的 `--permission-mode` 取值在两条通道上是同一组字面 ID，但语义不同：ACP 通道把 ID
-原样传给上游 adapter 的 `mode` 选项——`read-only` 是上游显示名 “Ask for approval”
-（workspace-write 沙箱 + on-request 审批，**允许写入工作区文件**），`agent` 是 “Approve for
-me”（auto_review），`agent-full-access` 是 “Full access”；PTY 通道映射为严格的
-`--sandbox read-only|workspace-write|danger-full-access` + `--ask-for-approval on-request|never`。
-需要 OS 级只读沙箱时用 `--transport pty --permission-mode read-only`；ACP `read-only`
-不承诺等价强制的。
-`permit` 仍可用于仍然发出权限请求的会话；同一 `request_id` 至多一次 JSON-RPC 应答，第二位结算者是 `unknown-request`。工作区
-trust/login 不是这个开关。
-CR、ESC、DEL 与其他终端 C0/C1 控制字会在任何子 PTY 写入前被拒绝；LF/TAB 只有在 CLI 已明确
-启用 bracketed paste 时才允许。跨出原 child PGID 的后代会在只读 observation 中按启动指纹
-登记，供 force-stop 终态证明使用；它们不会因此暂停或阻断普通发送。send 回执记录实际传输的
-payload fingerprint；语义是否合适、如何处理
-retained draft、approval、login/trust 或 active output，都由读过完整 frame 的 agent 判断，Skill
-不把任何一种观察转成阻止动作的规则。
-
-`key --key <name>` 传递 Agent 明确选择的 `up/down/left/right/enter/escape/tab/backtab/space`，
-不附加 Enter、不解释选项语义，并回报 exact byte fingerprint。这取代了 Kimi 实跑历史里为通过
-trust UI 而不得不使用的 raw `tmux send-keys Up Enter` 旁路。
-
-发送后必须再次 `observe`/`capture` 读取真实回复，不能把 Enter 回执当成功。Workflow 启动要从
-`workflow-state.md`、`mission-list.md`、branch/worktree 与 forge claim 验证；收口还要验证 sink、
-Issue/PR、claim cleanup、archive 和零 Runner residue。普通通信不建立 lease、恢复事务或
-later-output barrier；无法确认是否发生部分写入时，回执把 `mutation_performed` 报告为 `null`。
-
-`answer --replace-editor` 是经过实测的 whole-editor transport capability；目前只有 Claude Code
-adapter 支持，其余平台会如实报告 `answer-unsupported`，由 agent 选择其他路线。decision ID、
-snapshot 与已有 later-output barrier 都是关联证据，不是后续动作 hardgate。旧 relay session
-仍可读取；发送时会精确报告 `relay-upgrade-required`，由 agent 在安全边界决定是否只重启该精确
-会话，Runner 不会自动迁移或终止它。
-
-收尾与恢复遵循同一原则：单轮回复结束（`end_turn`、终端空闲、send 成功回执）不代表任务完成；
-本次委派交付完成且预计不再立即交互时，默认建议 `stop` 精确拥有的运行资源——PTY 释放
-child/relay/tmux，ACP 按能力 `session/close` 后退出 holder/agent——并以 `status` 的实际结果为证。
-`stop` 不删除 CLI 历史或工作记录；预计立即继续或用户明确要求持续运行时可以保留。原生会话 ID
-是 CLI 自己的会话标识，区别于 Runner 的 tmux 会话名；缺失标识不阻止 stop。后续恢复由 Agent
-选择：`--resume <native-id>` 优先（ACP 按能力 `session/resume`/`session/load`，PTY 走平台原生
-flag），`--continue` 选平台最近会话，能力不支持时新建会话并读取既有工作记录。Runner 不自动
-fallback、不重发旧 prompt、不自动继续 Workflow，也不把缺少记录当作拒绝 stop/send 的理由。
-
-`scripts/grok-tmux.sh` 是 frozen Grok surface 的兼容包装器，等价于
-`scripts/kaola-tmux.sh grok ...`，并保留旧 marker 与 `grok_tui` 状态字段。
-
-Cursor CLI 的 `preflight` 与 `start` 都不物化或改写项目文件。已安装的 Workflow commands、
-authority receipt 和项目级 commands 只作为证据报告；需要 materialize 时由控制 Agent 显式选择
-相应工具，而不是 Runner 启动 CLI 的前置 hardgate。
-
-## 仓库结构
-
-- `templates/SKILL.md.tmpl`：七个平台共用的 active 通信驱动合同；
-- `templates/grok-golden/`：已实跑验证、字节冻结的历史 Grok Workflow 协议和提示词证据；
-- `platforms/*.yaml`：七个平台的固定事实与能力声明；
-- `templates/agents/`、`templates/references/`：UI metadata、adapter facts、transport 与 ACP 模板；
-- `scripts/adapters/`：binary、preflight、启动、TUI/editor/approval 事实和退出差异；
-- `scripts/kaola-tmux.sh`：平台中立、安全默认关闭的会话与 guarded-action 核心；
-- `scripts/kaola-pane-relay.py`、`kaola-relay-client.py`：nested PTY、直接输入 transport 和旧协议兼容；
-- `scripts/kaola-observation.py`：schema-v2 canonical facts、revision、snapshot 与 receipt；
-- `scripts/kaola-model-policy.py`：只读 catalog 解析、per-run 主模型选择与实际模型证据比较；
-- `skills/`：确定性生成并提交的七个自包含 Skill；
-- `tests/contract/`：golden compatibility、renderer、安装迁移和控制面验收。
-
-golden bytes 保持冻结；active Skill、manifest、adapter 或 renderer 修改后运行 `--write` 并提交
-生成产物，`--check` 会拒绝任何 drift。
-
-## 验证
-
-```bash
+./scripts/render-skills.py --check
 ./scripts/validate.sh
 ```
 
-默认离线验证只检查渲染一致性、Skill 格式、shell 语法、冻结 Grok bytes 和最小通信合同；不再
-运行耗时的 fake-runtime 历史矩阵。Skill 格式由仓库自带的运行时中立校验器
-`scripts/validate-skill.py` 检查，不再依赖外部 Codex 安装；整个套件在不含 `.codex` 的临时
-`HOME`、且 `CODEX_HOME` 未设置的环境中运行，不读写真实用户配置。真实验收按七个平台分别证明
-start/read/send/read-back/stop；原生选择界面还要证明 Agent-selected `key`。已实测的组合为：
-认证过的 Codex/Devin 控制端分别驱动相应目标 CLI；其余运行时按同一 Agent Skills 标准格式
-加载，属标准格式兼容而非逐组合实跑。Claude Code 当前无有效账号，只把提示词传输与登录
-错误回读作为通过证据，不声称认证后的模型执行成功。
+The offline suite checks generated Skills, installer behavior, shell syntax, transport contracts,
+and regression cases in an isolated temporary home directory. Live validation separately exercises
+start, read, send, read-back, and exact-session stop with the actual CLI and account.
 
-详细边界见 [架构](docs/architecture.md)、[命令契约](docs/api.md) 和
-[开发约定](docs/conventions.md)。五个平台的真实 tmux 验收、Claude 认证边界和零会话残留见
-[2026-08-29 live smoke](docs/live-smoke-2026-08-29.md)。
-Issue #7 的无 hardgate 交互验收和五平台权限边界见
-[2026-08-30 evidence-first live smoke](docs/live-smoke-evidence-first-2026-08-30.md)。
-Issue #8 的逐 runtime 模型选择、`workflow-next` 通信和精确会话关闭证据见
-[2026-08-30 model-policy live smoke](docs/live-smoke-model-policy-2026-08-30.md)。
-Issue #9 的最小五平台通信实跑见
-[2026-08-31 minimal live smoke](docs/live-smoke-issue-9-2026-08-31.md)。
-Issue #15 的 Runner v2 ACP 通道 PoC（Grok + Kimi 实跑、离线合同、token 实测）见
-[2026-09-11 ACP PoC report](docs/poc-acp-transport-2026-09-11.md)；据此锁定的实施基线见
-[Runner v2 双通道设计 v0.3](docs/runner-v2-dual-transport-design.md)。Issue #7 / #8 的设计决定见
-[docs/decisions/](docs/decisions/)。
+Published evidence includes [PTY communication tests](docs/live-smoke-issue-9-2026-08-31.md),
+[Grok and Kimi ACP experiments](docs/poc-acp-transport-2026-09-11.md), and
+[Cursor, Devin, and OpenCode ACP verification](docs/acp-live-verification-2026-09-11.md).
+These are dated results, not a guarantee for every CLI version, model, or account. The recorded
+Claude tests establish prompt transport and login-error read-back, not authenticated model
+execution; its ACP wrapper failed initialization in the published September 11 run.
 
-## 授权与使用
+## Development
 
-本项目源码公开（source-available），但**不采用 OSI 认可的开源许可证**。你可以为个人学习、研究、评估和其他非商业目的查看、运行和修改本项目。
+Edit the shared [Skill template](templates/SKILL.md.tmpl), [platform manifests](platforms/), or
+[adapters](scripts/adapters/), then run `./scripts/render-skills.py --write` and validate. Commit the
+generated `skills/` output; do not edit it by hand. `templates/grok-golden/` is frozen historical
+compatibility evidence.
 
-未经著作权人事先书面授权，不得将本项目或其衍生作品用于商业目的，包括销售、收费服务、SaaS、商业产品集成，或以本项目为核心提供有偿产品或服务。商业授权请联系仓库所有者。
+See [architecture](docs/architecture.md), [development conventions](docs/conventions.md), and
+[the changelog](CHANGELOG.md).
 
-除上述有限许可外，著作权人保留全部权利。本项目按“现状”提供，不作任何明示或默示保证。
+## License and use
+
+This project is **source-available**, not licensed under an OSI-approved open-source license.
+You may view, run, and modify it for personal learning, research, evaluation, and other
+non-commercial purposes.
+
+Commercial use of this project or derivative works requires prior written permission from the
+copyright holder. This includes sales, paid services, SaaS, commercial product integration, and
+paid products or services built around the project. Contact the repository owner for commercial
+licensing.
+
+All rights outside this limited permission are reserved. The project is provided "as is", without
+express or implied warranties.
