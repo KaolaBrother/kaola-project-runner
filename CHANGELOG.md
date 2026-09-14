@@ -2,12 +2,10 @@
 
 ## Unreleased
 
-- Main orchestrator Skill `kaola-project-runner` (issue #47): whenever open PRs exist, favor
-  advancing them through review, independent validation, necessary repairs, and accepted
-  finalize/merge, then synchronization and cleanup. Other authorized work continues safely in
-  parallel. Contested suitable worker or validation capacity prefers open-PR progress. A blocked
-  PR keeps an owner and next action without becoming a global barrier. PR creation is a handoff,
-  not completion. Acceptance, write ownership, safe rebase, and user stop-intake stay in force.
+- Main orchestrator Skill `kaola-project-runner` (issue #47): prefer the selected authorized
+  Workflow sync/merge when a PR is not required. If PRs exist, advance actionable ones first on
+  contested suitable capacity; other authorized work continues in parallel across permitted CLIs.
+  A blocked PR keeps an owner and next action without a global hold.
 
 ## 0.2.1 — 2026-09-14
 

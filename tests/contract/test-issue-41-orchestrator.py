@@ -88,13 +88,11 @@ WORKER_NO_IDLE_STOP_ON_COMPLETE_POLICY = (
     "leave no leftover branch tails",
     "do not park unfinished branches",
 )
-# Issue #47: ongoing open-PR priority must stay on the orchestrator, not
-# leak into worker transport Skills. Scan worker surfaces only.
+# Issue #47: delivery/merge preference must stay on the orchestrator.
 WORKER_NO_OPEN_PR_PRIORITY_POLICY = (
-    "Whenever open PRs exist",
-    "An open PR is a priority, not a global barrier",
-    "PR creation is a handoff, not completion",
-    "favor open-PR progress",
+    "Prefer the selected, authorized Workflow sync/merge",
+    "without a global hold",
+    "advance actionable ones first",
 )
 
 
@@ -889,8 +887,8 @@ class Issue44IdleStopOnCompleteMeaning(unittest.TestCase):
         )
 
 
-class Issue47OpenPrPriorityMeaning(unittest.TestCase):
-    """Issue #47: ongoing open-PR priority with safe parallel work."""
+class Issue47DeliveryPathMeaning(unittest.TestCase):
+    """Issue #47: Workflow merge preference and conditional open-PR priority."""
 
     def orchestrator_text(self) -> str:
         text = require_orchestrator_markdown(PROJECT)
@@ -898,56 +896,53 @@ class Issue47OpenPrPriorityMeaning(unittest.TestCase):
         return text
 
     def heartbeat_text(self) -> str:
-        generated = (
-            orchestrator_package(PROJECT) / "references" / "heartbeat-skeleton.md"
+        return (
+            PROJECT
+            / "templates"
+            / "orchestrator"
+            / "references"
+            / "heartbeat-skeleton.txt"
         ).read_text(encoding="utf-8")
-        source = (
-            PROJECT / "templates" / "orchestrator" / "references" / "heartbeat-skeleton.txt"
-        ).read_text(encoding="utf-8")
-        return generated + "\n" + source
 
-    def test_open_pr_priority_applies_whenever_prs_exist_not_only_at_end_of_run(
-        self,
-    ) -> None:
+    def test_prefers_selected_workflow_merge_when_pr_not_required(self) -> None:
         text = self.orchestrator_text()
         self.assertIsNotNone(
             clause_present(
                 text,
                 (
-                    r"whenever open PRs exist",
-                    r"open PRs exist.{0,80}(?:actively )?prioritize",
-                    r"whenever.{0,40}open PRs.{0,80}(?:review|validation|finalize)",
+                    r"prefer the selected, authorized Workflow sync/merge when a PR is not required",
+                    r"selected, authorized Workflow sync/merge.{0,40}PR is not required",
+                    r"when a PR is not required.{0,80}Workflow sync/merge",
                 ),
             ),
-            "orchestrator must prioritize advancing open PRs whenever they exist, "
-            "not only as end-of-run cleanup",
+            "orchestrator must prefer the selected authorized Workflow sync/merge "
+            "when a PR is not required",
         )
         heartbeat = self.heartbeat_text()
         self.assertIsNotNone(
             clause_present(
                 heartbeat,
                 (
-                    r"开放 PR",
-                    r"open PRs exist",
-                    r"whenever open PRs",
+                    r"已选授权的 Workflow 同步/合并",
+                    r"PR 非必需时走.{0,40}Workflow",
                 ),
             ),
-            "heartbeat skeleton must reflect open-PR priority, not only the Skill body",
+            "heartbeat must recall the default Workflow merge path",
         )
         wrong = authorizes_wrong_move(
             text,
             (
-                r"only.{0,40}(?:prioritize|advance).{0,40}open PRs.{0,40}(?:when|while|during).{0,40}(?:ending|close-out|cleanup)",
-                r"wait until.{0,40}(?:ending a run|close-out|end of (?:a )?run).{0,40}(?:to )?(?:advance|prioritize).{0,40}(?:open )?PRs",
-                r"open PRs.{0,40}(?:are|matter) only.{0,40}(?:at )?(?:end-of-run|close-out)",
+                r"open a PR as a routine handoff",
+                r"require a PR when.{0,40}Workflow sync/merge",
+                r"always open a PR.{0,40}handoff",
             ),
         )
         self.assertIsNone(
             wrong,
-            f"open-PR priority is confined to end-of-run cleanup: {wrong!r}",
+            f"delivery path treats a PR as a routine handoff: {wrong!r}",
         )
 
-    def test_contested_capacity_favors_open_prs_while_parallel_work_continues(
+    def test_actionable_open_prs_take_contested_capacity_without_global_hold(
         self,
     ) -> None:
         text = self.orchestrator_text()
@@ -955,145 +950,48 @@ class Issue47OpenPrPriorityMeaning(unittest.TestCase):
             clause_present(
                 text,
                 (
-                    r"contested.{0,80}favor.{0,40}open-?PR",
-                    r"suitable worker or constrained validation.{0,80}favor.{0,40}open-?PR",
-                    r"when.{0,80}(?:worker|validation).{0,80}contested.{0,80}favor.{0,40}open-?PR",
-                    r"favor open-PR progress",
+                    r"if PRs exist, advance actionable ones first on contested suitable capacity",
+                    r"advance actionable ones first.{0,40}contested suitable capacity",
+                    r"other authorized work continues in parallel across permitted CLIs",
                 ),
             ),
-            "orchestrator must favor open-PR progress when suitable worker or "
-            "validation capacity is contested",
+            "orchestrator must give actionable open PRs first use of contested "
+            "capacity while other authorized work continues on permitted CLIs",
         )
         self.assertIsNotNone(
             clause_present(
                 text,
                 (
-                    r"continue other authorized work safely in parallel",
-                    r"other authorized work.{0,80}safely in parallel",
-                    r"continue.{0,40}authorized work.{0,40}parallel.{0,80}(?:capacity|dependencies|write ownership)",
+                    r"blocked PR keeps an owner and next action without a global hold",
+                    r"without a global hold",
                 ),
             ),
-            "orchestrator must allow non-conflicting authorized work to continue "
-            "in parallel with open-PR progress",
+            "orchestrator must keep owner/next action for a blocked PR without "
+            "a global hold",
+        )
+        heartbeat = self.heartbeat_text()
+        self.assertIsNotNone(
+            clause_present(
+                heartbeat,
+                (
+                    r"有开放 PR 时争用容量优先推进可执行项",
+                    r"仅在已许可 CLI 上安全并行",
+                    r"不作全局等待",
+                ),
+            ),
+            "heartbeat must recall conditional open-PR priority and permitted-CLI parallel work",
         )
         wrong = authorizes_wrong_move(
             text,
             (
-                r"serialize unrelated work.{0,40}whenever.{0,40}open PRs",
                 r"require all PRs to close before.{0,40}other work",
-                r"pause.{0,40}(?:all )?unrelated.{0,40}(?:authorized )?work.{0,40}whenever.{0,40}(?:any |an )?open PR",
-                r"other (?:authorized )?work must wait.{0,40}until.{0,40}(?:all )?PRs? (?:close|merge)",
-            ),
-        )
-        self.assertIsNone(
-            wrong,
-            f"open-PR priority serializes unrelated work: {wrong!r}",
-        )
-
-    def test_blocked_pr_keeps_owner_and_is_not_a_global_barrier(self) -> None:
-        text = self.orchestrator_text()
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"blocked PR keeps an owner and next action",
-                    r"blocked.{0,40}PR.{0,80}(?:keeps|retain).{0,40}(?:an )?owner.{0,40}next action",
-                    r"if it is blocked.{0,80}owner.{0,40}next action",
-                ),
-            ),
-            "orchestrator must keep an owner and next action for a blocked PR",
-        )
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"open PR is a priority, not a global barrier",
-                    r"not a global barrier",
-                    r"does not serialize unrelated work or reserve capacity that cannot help",
-                ),
-            ),
-            "orchestrator must treat a blocked open PR as a priority with an "
-            "owner, not a global scheduling barrier",
-        )
-        wrong = authorizes_wrong_move(
-            text,
-            (
-                r"abandon.{0,40}blocked PR",
-                r"clear the PR list before.{0,40}(?:other|continuing) work",
-                r"blocked PR.{0,40}(?:is|becomes).{0,40}(?:a )?global.{0,40}(?:barrier|hold)",
                 r"stop all other work until.{0,40}blocked PR",
+                r"parallelism.{0,40}expand.{0,40}CLI authorization",
             ),
         )
         self.assertIsNone(
             wrong,
-            f"blocked-PR policy becomes a global barrier or drops ownership: {wrong!r}",
-        )
-
-    def test_pr_creation_is_handoff_preserving_acceptance_and_stop_intake(
-        self,
-    ) -> None:
-        text = self.orchestrator_text()
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"PR creation is a handoff, not completion",
-                    r"PR creation is.{0,40}handoff, not completion",
-                    r"creating (?:a )?PR is not completion",
-                ),
-            ),
-            "orchestrator must treat PR creation as a handoff, not completion",
-        )
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"do not merge unverified work or close unfinished PRs merely to reduce the count",
-                    r"never merge unverified.{0,40}close unfinished PRs merely",
-                    r"preserve acceptance.{0,40}write ownership.{0,40}safe rebase",
-                ),
-            ),
-            "orchestrator must preserve acceptance and must not merge unverified "
-            "work or close unfinished PRs merely to reduce the count",
-        )
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"parallel work does not authorize new tasks after a user stop-intake",
-                    r"does not authorize new tasks after.{0,40}stop-intake",
-                    r"permission to work in parallel does not authorize new tasks after",
-                ),
-            ),
-            "orchestrator must not treat parallel-work permission as new intake "
-            "after a user stop-intake boundary",
-        )
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"do not add a PR quota, queue, dashboard, or state machine",
-                    r"no PR quota, queue, dashboard, or state machine",
-                    r"do not.{0,40}(?:add|invent).{0,40}PR (?:quota|queue).{0,40}(?:dashboard|state machine)",
-                ),
-            ),
-            "orchestrator must keep open-PR priority as concise guidance, not a "
-            "quota, queue, dashboard, or state machine",
-        )
-        wrong = authorizes_wrong_move(
-            text,
-            (
-                r"merge unverified.{0,40}(?:to|in order to) reduce.{0,40}count",
-                r"close unfinished PRs.{0,40}merely to reduce",
-                r"PR creation.{0,40}(?:means|is) completion",
-                r"implement (?:a |an )?(?:PR )?queue engine",
-                r"add a (?:fixed )?PR quota",
-                r"after.{0,40}stop-intake.{0,40}(?:still )?(?:accept|dispatch) new tasks because.{0,40}parallel",
-            ),
-        )
-        self.assertIsNone(
-            wrong,
-            f"PR-priority policy weakens acceptance, stop-intake, or adds an engine: {wrong!r}",
+            f"open-PR priority becomes a global hold or extra authorization: {wrong!r}",
         )
 
 

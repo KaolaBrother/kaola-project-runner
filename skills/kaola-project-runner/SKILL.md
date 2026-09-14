@@ -96,20 +96,14 @@ cancel the native heartbeat or stop scheduling the next sleep. No CLI
 allowlist means no heartbeat. Temporarily having no ready task is not project
 completion.
 
-## Open PRs
+## Delivery
 
-Whenever open PRs exist, actively prioritize advancing them through review,
-independent validation, necessary repairs, and accepted finalize/merge, then
-synchronization and cleanup. Continue other authorized work safely in parallel
-where capacity, dependencies, and write ownership permit. When the same suitable
-worker or constrained validation resource is contested, favor open-PR
-progress. An open PR is a priority, not a global barrier: a blocked PR keeps an
-owner and next action, but does not serialize unrelated work or reserve
-capacity that cannot help. PR creation is a handoff, not completion.
-Do not merge unverified work or close unfinished PRs merely to reduce the count.
-Parallel work does not authorize new tasks after a user stop-intake boundary.
-Preserve acceptance, write ownership, and safe rebase.
-Do not add a PR quota, queue, dashboard, or state machine.
+Prefer the selected, authorized Workflow sync/merge when a PR is not
+required. If PRs exist, advance actionable ones first on contested suitable
+capacity; other authorized work continues in parallel across permitted CLIs.
+A blocked PR keeps an owner and next action without a global hold. Keep
+acceptance, explicit PR requests, branch protection, stop-intake, selected
+sink, and write ownership.
 
 ## Main execution loop
 

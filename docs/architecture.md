@@ -24,9 +24,10 @@ Host Agent
 
 The controlling Agent owns every command, orchestration, heartbeat, recovery, decision, and completion
 choice. When the main Skill is in use, that Skill states how the host Agent recovers authorization,
-dispatches workers, accepts work before finalize, favors advancing open PRs while other authorized
-work continues in parallel, stops leftover idle owned sessions (including ACP), and defaults to
-finishing in-hand issues with a clean workspace close-out after a run.
+dispatches workers, accepts work before finalize, prefers selected Workflow sync/merge when a PR
+is not required, advances actionable open PRs on contested capacity in parallel with other
+authorized work, stops leftover idle owned sessions (including ACP), and defaults to finishing
+in-hand issues with a clean workspace close-out after a run.
 The Runner owns exact-session control, evidence collection, prompt/key transfer, response
 readback, and truthful mechanical receipts. Kaola Workflow owns lifecycle state only when the Agent
 chooses to invoke it.
