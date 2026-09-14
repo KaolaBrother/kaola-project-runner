@@ -10,6 +10,8 @@ Does not simulate a live Agent.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
+import json
 import re
 import shutil
 import subprocess
@@ -226,6 +228,37 @@ class Issue41RendererContract(unittest.TestCase):
             )
             detail = f"{missing.stderr}\n{missing.stdout}"
             self.assertIn(ORCHESTRATOR_ID, detail)
+
+    def test_orchestrator_description_json_quotes_colon_space_for_yaml(self) -> None:
+        """Unquoted 'Skills: recover' is invalid YAML; renderer must JSON-quote it."""
+        spec = importlib.util.spec_from_file_location("render_skills", RENDERER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        quoted = module.orchestrator_values([])["DESCRIPTION"]
+        self.assertTrue(quoted.startswith('"') and quoted.endswith('"'), quoted)
+        description = json.loads(quoted)
+        self.assertIn("Skills: recover", description)
+        self.assertIn(": ", description)
+
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-41-yaml-desc-") as temporary:
+            copy = copy_repo(temporary)
+            written = run_renderer(copy, "--write")
+            self.assertEqual(written.returncode, 0, written.stderr or written.stdout)
+            text = (orchestrator_package(copy) / "SKILL.md").read_text(encoding="utf-8")
+        match = re.match(r"\A---\n(.*?)\n---\n", text, flags=re.DOTALL)
+        self.assertIsNotNone(match)
+        frontmatter = match.group(1)
+        line = next(raw for raw in frontmatter.splitlines() if raw.startswith("description:"))
+        scalar = line.split(":", 1)[1].lstrip()
+        self.assertEqual(json.loads(scalar), description)
+        try:
+            import yaml
+        except ImportError:
+            yaml = None
+        if yaml is not None:
+            loaded = yaml.safe_load(frontmatter)
+            self.assertEqual(loaded["name"], ORCHESTRATOR_ID)
+            self.assertEqual(loaded["description"], description)
 
     def test_supported_worker_summary_is_derived_from_manifests(self) -> None:
         unique_skill = "grok-probe-worker-zx41"

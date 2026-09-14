@@ -1,6 +1,6 @@
 ---
 name: kaola-project-runner
-description: Use when the controlling Agent should supervise explicitly authorized CLI workers through the seven platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, and stop idle sessions without dropping close-out duties.
+description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the seven platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, and stop idle sessions without dropping close-out duties."
 ---
 
 # Project Runner

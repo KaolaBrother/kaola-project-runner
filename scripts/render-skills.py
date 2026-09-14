@@ -116,7 +116,9 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
     return {
         "SKILL_NAME": ORCHESTRATOR_NAME,
         "DISPLAY_NAME": ORCHESTRATOR_DISPLAY,
-        "DESCRIPTION": (
+        # JSON strings are YAML-compatible quoted scalars; colon-space in this
+        # description is otherwise a ScannerError under yaml.safe_load.
+        "DESCRIPTION": json.dumps(
             "Use when the controlling Agent should supervise explicitly authorized "
             "CLI workers through the seven platform Runner Skills: recover live "
             "authorization, dispatch and review work, accept deliveries before "

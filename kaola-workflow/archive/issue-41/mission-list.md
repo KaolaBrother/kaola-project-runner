@@ -19,3 +19,9 @@ control plane, not an eighth platform: no platform manifest or transport adapter
    status: done
    dispatched: [Issue 41 review candidate](https://cursor.com/agents/bc-56b913f6-0f13-55c6-bb72-f6290f2ee8f2) — frozen SHA `a19f528`; findings land at `/cursor/stores/bc-2883d4d5-8215-4f45-b452-c583deb344b5/internal/issue-41-review.md`
    result: orchestrator PASS — no admitted findings at `a19f528`; test custody `git diff --exit-code fda090e a19f528 -- tests/ scripts/validate.sh`. Review `/cursor/stores/bc-2883d4d5-8215-4f45-b452-c583deb344b5/internal/issue-41-review.md`
+
+## PR #42 review continuation (2026-09-14)
+
+- item: Repair PR review findings and establish merge readiness for Issue 41.
+  status: in-flight
+  dispatched: Cursor CLI session cursor-cli-kaola-pr42-review in /Users/ylpromax5/Workspace/kaola-project-runner-pr42 on codex/pr-42-review; fixes and review evidence land in this worktree and archive/issue-41/.cache/pr-42-review.md. Main Codex owns acceptance and sink.
