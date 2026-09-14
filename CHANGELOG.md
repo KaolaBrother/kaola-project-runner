@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1 — 2026-09-14
+
 - Default local install is now an owned standalone copy (issue #46). `--method link` remains
   the explicit maintainer/development choice. Owned source links migrate to copies; foreign paths
   and modified copies stay protected. The main Skill tells consumer-project agents to keep
