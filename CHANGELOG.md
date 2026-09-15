@@ -2,11 +2,14 @@
 
 ## Unreleased
 
-- First-class **Grok Bot** host (`--runtime grok-bot`): generated Cursor-plugin bundle
-  `hosts/grok-bot/` packages the Project Runner control-plane Skill and the seven CLI worker
-  Skills from the same render inventory. Grok Bot is not an eighth platform; `--platform grok`
-  remains the Grok CLI worker. Live Grok Bot UI enablement is UAT, not claimed by the installer
-  copy. See [Grok Bot host](docs/grok-bot-host.md).
+- **Grok Bot** host as **one Private Skill**: `hosts/grok-bot/kaola-project-runner/` is the
+  Project Runner root Skill with the seven CLI workers embedded under `workers/<id>/` (contract
+  `WORKER.md`), rendered from the same templates. Individual plans add it under Settings →
+  Plugins → Yours (`scripts/kaola-grok-bot-package.py` builds a deterministic zip); Team
+  Marketplace is only an optional Teams/Enterprise path. `--runtime grok-bot` keeps a local
+  execution copy under `~/.kaola/grok-bot/skills` and touches no other Skill. Grok Bot is not an
+  eighth platform; `--platform grok` remains the Grok CLI worker. Live Grok Bot UI enablement is
+  UAT. See [Grok Bot host](docs/grok-bot-host.md).
 
 ## 0.2.3 — 2026-09-15
 

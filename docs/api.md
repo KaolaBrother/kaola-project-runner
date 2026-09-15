@@ -9,8 +9,10 @@ scripts/render-skills.py --check
 
 `--write` deterministically rebuilds seven managed worker Skill directories plus
 `skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eighth
-platform) and the Grok Bot host plugin at `hosts/grok-bot/`. `--check` returns nonzero for
-any missing, stale, or unexpected file, Skill directory, or host bundle. Manifest values are JSON strings in a
+platform) and the Grok Bot Private Skill payload at `hosts/grok-bot/kaola-project-runner/` (the
+orchestrator root with the seven workers embedded under `workers/<id>/`, contract file
+`WORKER.md`). `--check` returns nonzero for any missing, stale, or unexpected file, Skill
+directory, or host payload. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
@@ -46,8 +48,10 @@ preflighted before mutation; foreign paths are never replaced.
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
 `cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`,
-`grok-bot` → `$HOME/.cursor/plugins/local/kaola-project-runner` (Cursor-plugin host bundle of the
-orchestrator plus selected workers). `--runtime grok` is not a host alias; `--platform grok` is the
+`grok-bot` → `${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills` (local execution copy of the
+single Private Skill payload; `--platform` and `--no-orchestrator` are refused; Grok Bot discovers
+nothing on this disk — the payload enters through Settings → Plugins → Yours, packaged by
+`scripts/kaola-grok-bot-package.py`). `--runtime grok` is not a host alias; `--platform grok` is the
 Grok CLI worker. Grok Bot UI enablement is UAT; see [Grok Bot host](grok-bot-host.md).
 `--skills-dir` is a mutually exclusive explicit absolute destination (project-local paths included).
 With neither flag the legacy Codex destination is used. `--method copy` (default) stages an

@@ -23,10 +23,11 @@ MARKER = ".generated-by-kaola-project-runner"
 ORCHESTRATOR_NAME = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
 GROK_BOT_HOST = "grok-bot"
-PLUGIN_VERSION = "0.2.3"
-PLUGIN_DESCRIPTION = (
-    "Kaola Project Runner control plane plus seven CLI worker Skills for Grok Bot."
-)
+# The Grok Bot payload is one Private Skill: the orchestrator root plus the seven
+# workers embedded as supporting resources. A worker's contract is renamed so the
+# payload exposes exactly one discoverable SKILL.md.
+WORKER_CONTRACT = "WORKER.md"
+EMBEDDED_WORKER_DROP = frozenset({MARKER, "agents/openai.yaml"})
 TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 REQUIRED = {
     "id", "runtime_name", "skill_name", "display_name", "short_description",
@@ -118,8 +119,42 @@ def supported_worker_summary(manifests: list[dict[str, str]]) -> str:
     return "\n".join(rows)
 
 
-def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
+def embedded_worker_routing(manifests: list[dict[str, str]]) -> str:
+    rows = [
+        "#### Embedded workers (Grok Bot Private Skill payload)",
+        "",
+        "In this payload the seven workers are supporting resources of this one Skill,",
+        f"under `workers/<platform id>/`; their contract file is `{WORKER_CONTRACT}`, not a",
+        "discoverable `SKILL.md`. Load a worker contract on demand from this Skill's own",
+        "directory; nothing else has to be discovered or enabled. A worker's `SKILL_DIR` is",
+        "`<local execution copy of this Skill>/workers/<platform id>` and its Runner entry is",
+        "`SKILL_DIR/scripts/runtime-tmux.sh`.",
+        "",
+        "| Platform id | Worker contract | Runner entry | Default transport |",
+        "|---|---|---|---|",
+    ]
+    for manifest in manifests:
+        rows.append(
+            f"| {manifest['id']} | `workers/{manifest['id']}/{WORKER_CONTRACT}` | "
+            f"`workers/{manifest['id']}/scripts/runtime-tmux.sh` | {manifest['default_transport']} |"
+        )
+    return "\n".join(rows)
+
+
+def orchestrator_values(
+    manifests: list[dict[str, str]], host: str | None = None
+) -> dict[str, str]:
+    if host == GROK_BOT_HOST:
+        host_workers = embedded_worker_routing(manifests)
+    elif host is None:
+        host_workers = (
+            "In a native skill-directory install the seven workers are sibling Skill "
+            "directories next to this one; call each by its installed directory."
+        )
+    else:
+        raise ValueError(f"unknown host {host!r}")
     return {
+        "HOST_WORKERS": host_workers,
         "SKILL_NAME": ORCHESTRATOR_NAME,
         "DISPLAY_NAME": ORCHESTRATOR_DISPLAY,
         # JSON strings are YAML-compatible quoted scalars; colon-space in this
@@ -150,12 +185,14 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
     }
 
 
-def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
+def expected_orchestrator_files(
+    manifests: list[dict[str, str]], host: str | None = None
+) -> dict[str, bytes]:
     orch = TEMPLATES / "orchestrator"
     skill_template = orch / "SKILL.md.tmpl"
     if not skill_template.is_file():
         raise ValueError(f"missing orchestrator template: {skill_template}")
-    values = orchestrator_values(manifests)
+    values = orchestrator_values(manifests, host)
     result: dict[str, bytes] = {}
     result[MARKER] = (ORCHESTRATOR_NAME + "\n").encode()
     for source in sorted(orch.rglob("*")):
@@ -297,33 +334,28 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
     write_bundle(SKILLS, target, expected, "Skill")
 
 
-def grok_bot_plugin_values() -> dict[str, str]:
-    return {
-        "SKILL_NAME": ORCHESTRATOR_NAME,
-        "DISPLAY_NAME": ORCHESTRATOR_DISPLAY,
-        "PLUGIN_VERSION": PLUGIN_VERSION,
-        "PLUGIN_DESCRIPTION": PLUGIN_DESCRIPTION,
-    }
+def embedded_worker_files(manifest: dict[str, str]) -> dict[str, bytes]:
+    """One worker as a supporting resource: same bytes as its Skill, minus Skill identity."""
+    result: dict[str, bytes] = {}
+    for relative, data in expected_files(manifest).items():
+        if relative in EMBEDDED_WORKER_DROP:
+            continue
+        if relative == "SKILL.md":
+            relative = WORKER_CONTRACT
+        result[relative] = data
+    return result
 
 
 def expected_grok_bot_host_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     result[MARKER] = (GROK_BOT_HOST + "\n").encode()
-    plugin_template = TEMPLATES / "hosts" / GROK_BOT_HOST / "plugin.json.tmpl"
-    if not plugin_template.is_file():
-        raise ValueError(f"missing Grok Bot plugin template: {plugin_template}")
-    result[".cursor-plugin/plugin.json"] = render_text(
-        plugin_template.read_text(encoding="utf-8"),
-        grok_bot_plugin_values(),
-        plugin_template,
-    ).encode()
+    prefix = f"{ORCHESTRATOR_NAME}/"
+    for relative, data in expected_orchestrator_files(manifests, GROK_BOT_HOST).items():
+        result[prefix + relative] = data
     for manifest in manifests:
-        prefix = f"skills/{manifest['skill_name']}/"
-        for relative, data in expected_files(manifest).items():
-            result[prefix + relative] = data
-    orch_prefix = f"skills/{ORCHESTRATOR_NAME}/"
-    for relative, data in expected_orchestrator_files(manifests).items():
-        result[orch_prefix + relative] = data
+        worker_prefix = f"{prefix}workers/{manifest['id']}/"
+        for relative, data in embedded_worker_files(manifest).items():
+            result[worker_prefix + relative] = data
     return result
 
 
@@ -377,7 +409,7 @@ def main() -> int:
         return 1
     print(
         f"render-skills: {'WROTE' if args.write else 'PASS'} "
-        f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {GROK_BOT_HOST} host)"
+        f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {GROK_BOT_HOST} private skill)"
     )
     return 0
 

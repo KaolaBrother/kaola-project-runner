@@ -1,6 +1,0 @@
-interface:
-  display_name: "Grok Kaola Project Runner"
-  short_description: "Communicate with Grok CLI through exact tmux"
-  default_prompt: "Use $grok-kaola-project-runner to start an exact Grok CLI tmux session, read its output, and send only the input I choose."
-policy:
-  allow_implicit_invocation: true

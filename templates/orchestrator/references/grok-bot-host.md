@@ -1,20 +1,36 @@
 # Grok Bot host
 
-Grok Bot is a first-class host for this Skill, at the same rank as Codex, Claude
-Code, Cursor, and Devin. It is not a worker and not an eighth CLI platform.
-`--runtime grok-bot` installs the generated Cursor-plugin bundle. `--platform grok`
-installs the Grok CLI worker Skill. `--platform grok-bot` is invalid.
+Grok Bot is a host for this Skill, at the same rank as Codex, Claude Code,
+Cursor, and Devin. It is not a worker and not an eighth CLI platform.
+`--platform grok` installs the Grok CLI worker Skill. `--platform grok-bot` is
+invalid. `--runtime grok` is not a host alias.
 
-Live enablement in the Grok Bot 0.51.x UI is a human UAT step. An installer copy
-or plugin payload on disk is not live adoption.
+## Delivery shape: one Private Skill
 
-## Load
+Grok Bot discovers **one** Skill: this root `SKILL.md`. The seven platform
+workers are embedded under `workers/<platform id>/` as supporting resources
+(contract file `WORKER.md`, plus that worker's `references/` and `scripts/`).
+No sibling Skill has to be discovered or enabled, and no worker is a separate
+Skill in this payload.
 
-Workers are sibling Skills under this plugin's `skills/` directory. Resolve each
-worker Skill directory and call its `scripts/runtime-tmux.sh` the same way as on
-any other host. Prefer **Execution on Local Computer** when the seven CLI
-sessions live on this machine. The Grok Bot cloud computer is a different
-machine; do not treat `/workspace` on that computer as the Mac tmux/ACP holders.
+Individual plans (for example Ultra) have no Team Marketplace. The documented
+entry point is **Settings → Plugins → Yours**: add the payload as a private
+skill and enable it for the Bot. Team Marketplace / admin-provided plugins are
+an optional path only on Teams or Enterprise plans. Never publish this payload
+to a public Marketplace.
+
+Live enablement in the Grok Bot UI is a human UAT step. A payload on disk or
+an archive is not live adoption.
+
+## Local execution copy
+
+The Bot's cloud computer is a different machine from this Mac. When the CLI
+sessions live here, keep an identical copy of this Skill on this machine
+(`./scripts/install-local.sh --runtime grok-bot`, default
+`$HOME/.kaola/grok-bot/skills/kaola-project-runner`) and use **Execution on
+Local Computer**. A worker's `SKILL_DIR` is that copy's `workers/<platform
+id>`; its Runner entry is `SKILL_DIR/scripts/runtime-tmux.sh`. Do not treat
+`/workspace` on the cloud computer as the Mac tmux/ACP holders.
 
 ## Heartbeat
 
@@ -32,7 +48,7 @@ When Grok Bot takes over from another host, cancel only that host's recurring
 wake. Do not stop in-flight exact owned worker sessions. Do not Reset Agent
 Computer. Do not use the Bot "Stop now" control as Runner `stop`.
 
-Idle exact-session stop remains the matching platform Runner Skill `stop`, ACP
+Idle exact-session stop remains the matching platform Runner `stop`, ACP
 and PTY alike.
 
 Restoring the previous host means pausing or deleting this Routine and
@@ -52,5 +68,5 @@ Recover existing explicit authorization and live work before asking intake
 questions. A completed mission frontier still requires review and acceptance
 before finalize. A Routine success, idle worker, or green CI is not acceptance.
 
-Do not call unofficial Sand gateways or GrokBot RPCs. Official Skill, Plugin,
-Routine, Local Computer, and notification surfaces are the host contract.
+Do not call unofficial Sand gateways or GrokBot RPCs. Official Skill, private
+skill, Routine, Local Computer, and notification surfaces are the host contract.

@@ -57,11 +57,14 @@ historical evidence, not this Skill's contract.
 
 ### Agents that load the Skills
 
-The installer provides native destinations for **Codex, Claude Code, Cursor,
-Devin, and Grok Bot**. Grok Bot (`--runtime grok-bot`) is a host: it installs the
-generated Cursor-plugin bundle that exposes the main Skill **and** the seven
-worker Skills. `--platform grok` remains the Grok CLI worker; it is not a host
-install. Grok Bot UI enablement is a named live UAT boundary — see
+The installer provides native skill-directory destinations for **Codex, Claude Code,
+Cursor, and Devin**. **Grok Bot** is a host that receives **one Private Skill**: the
+generated `hosts/grok-bot/kaola-project-runner/` payload is the main Skill with the
+seven workers embedded under `workers/<id>/` as supporting resources (one discoverable
+Skill, still seven platforms). On an individual plan it enters through Settings →
+Plugins → Yours; `--runtime grok-bot` only keeps the local execution copy for Local
+Computer runs. `--platform grok` remains the Grok CLI worker; it is not a host install.
+Grok Bot UI enablement is a named live UAT boundary — see
 [Grok Bot host](docs/grok-bot-host.md). Other hosts can use `--skills-dir /absolute/path`
 if they can load `SKILL.md` and execute shell commands in an environment with the
 required tools.
@@ -155,11 +158,14 @@ Skills to this checkout for Project Runner development. Select another host, a w
 subset, or skip the orchestrator:
 
 ```bash
-# Install all worker Skills plus the orchestrator for Claude Code, Cursor, Devin, or Grok Bot.
+# Install all worker Skills plus the orchestrator for Claude Code, Cursor, or Devin.
 ./scripts/install-local.sh --runtime claude-code
 ./scripts/install-local.sh --runtime cursor
 ./scripts/install-local.sh --runtime devin
-./scripts/install-local.sh --runtime grok-bot
+
+# Grok Bot: one Private Skill payload (root SKILL.md + seven embedded workers).
+./scripts/install-local.sh --runtime grok-bot      # local execution copy under ~/.kaola/grok-bot/skills
+./scripts/kaola-grok-bot-package.py                # deterministic zip for Settings > Plugins > Yours
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode

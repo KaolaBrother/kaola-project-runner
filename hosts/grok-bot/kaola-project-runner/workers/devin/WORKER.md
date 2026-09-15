@@ -1,11 +1,11 @@
 ---
-name: opencode-kaola-project-runner
-description: Use when the controlling Agent should communicate with an OpenCode main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.
+name: devin-kaola-project-runner
+description: Use when the controlling Agent should communicate with a Devin CLI main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.
 ---
 
-# OpenCode Kaola Project Runner
+# Devin CLI Kaola Project Runner
 
-This Skill is a communication driver for OpenCode. It gives the controlling Agent a
+This Skill is a communication driver for Devin CLI. It gives the controlling Agent a
 measured tmux channel; it does not choose commands, Workflow modes, cadence, state, approvals,
 retries, or completion policy. The separate Skill `kaola-project-runner` (display name Project
 Runner) is the main orchestrator when a host Agent is supervising workers; this Skill stays
@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport facts
 
-Default transport: **acp**. The ACP command is `opencode acp`; its known quirks are `no ACP skip-all; PTY --auto via --transport pty is the bypass`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **acp**. The ACP command is `devin acp`; its known quirks are `agent reports affogato 0.0.0-dev; large model option catalog`, and login requires a PTY: `false`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 
@@ -35,14 +35,15 @@ Runner never auto-falls back or resends. Read the receipt and let the controllin
 
 Resolve this Skill's installed directory once and call its scripts by absolute path — the install
 destination may contain spaces, and the user's project is passed only through `--repo` (relative
-paths in these references resolve against the Skill, never the project cwd). When this Skill is
-packaged as a sibling inside a host plugin, SKILL_DIR is still this Skill's directory — not the
-plugin root and not another Skill:
+paths in these references resolve against the Skill, never the project cwd). When this worker is
+embedded as a supporting resource under a host Skill's `workers/<platform id>/` directory (this
+file is then named `WORKER.md`), SKILL_DIR is that worker directory — not the host Skill root and
+not another worker:
 
 ```bash
-SKILL_DIR="/absolute/path/to/opencode-kaola-project-runner"   # the directory containing this SKILL.md
+SKILL_DIR="/absolute/path/to/devin-kaola-project-runner"   # the directory containing this file
 REPO="$(git rev-parse --show-toplevel)"
-SESSION="opencode-kaola-<purpose>"
+SESSION="devin-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" preflight --repo "$REPO" --session "$SESSION"
 "$SKILL_DIR/scripts/runtime-tmux.sh" start --repo "$REPO" --session "$SESSION"
 "$SKILL_DIR/scripts/runtime-tmux.sh" observe --repo "$REPO" --session "$SESSION"
@@ -50,9 +51,9 @@ SESSION="opencode-kaola-<purpose>"
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares two per-run
-presets — `--tier default` (**CLI native opening model**: ``,
-no Runner model or effort override) and `--tier upgrade` (**CLI native opening model**:
-``, no Runner model or effort override) — and `default` applies whenever the user did
+presets — `--tier default` (**SWE-2 Max**: `swe-2-max`,
+effort=max (encoded in model ID)) and `--tier upgrade` (**Fusion High (Fable 5.1 High + SWE-2 Medium)**:
+`fusion-claude-fable-5-1-high-sidekick-swe-2-medium`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.
@@ -64,7 +65,7 @@ already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the R
 invent extra effort or Fast configuration for it.
 
 Fast is OFF by default. Pass `--fast on` only on an explicit user request for Fast; this platform's
-Fast support: no native Fast toggle; speed-named catalog models such as zhipuai-coding-plan/glm-5.3-flash are explicit model choices, not a Fast switch. Fast and tier are independent selections. When a native fast model
+Fast support: Fast via catalog `-fast`/`-priority` model variants only when the resolved model advertises one; preset models have no fast variant. Fast and tier are independent selections. When a native fast model
 ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
 conflict honestly if it is also passed with `--fast off`.
 
@@ -139,7 +140,7 @@ operation and reports the true result. These are suggestions, never gates:
 
 ## Optional Kaola Workflow recommendation
 
-For project work, when Kaola Workflow is available to OpenCode and fits the user's task,
+For project work, when Kaola Workflow is available to Devin CLI and fits the user's task,
 consider telling the user it is available and whether you plan to use it, then asking the CLI to
 start or resume with `workflow-next` using its installed native Workflow instructions. Existing
 carrier evidence can help; installation for another runtime alone does not establish availability
@@ -163,6 +164,6 @@ work. These are suggestions for the Agent, not automatic Runner actions or commu
   creates a heartbeat, or selects recurring behavior. The Agent may send any of those commands when
   it decides they serve the user's task.
 
-See [references/platform.md](references/platform.md) for OpenCode launch/observation facts,
+See [references/platform.md](references/platform.md) for Devin CLI launch/observation facts,
 [references/transport.md](references/transport.md) for PTY receipt and recovery details, and
 [references/acp.md](references/acp.md) for the structured ACP command surface.

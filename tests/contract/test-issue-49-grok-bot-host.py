@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
-"""Issue #49 acceptance: Grok Bot is a first-class host, not an eighth worker.
+"""Issue #49 acceptance: Grok Bot is a host that receives ONE Private Skill.
 
-Covers generated Cursor-plugin packaging of the orchestrator plus seven
-workers, installer host-id vs ``--platform grok``, control-plane Routine
-semantics, worker isolation, unofficial Sand API ban, and honest UAT
-boundary. Does not claim live Grok Bot UI adoption.
+The payload ``hosts/grok-bot/kaola-project-runner`` is the Project Runner root
+Skill with the seven platform workers embedded as supporting resources
+(``workers/<id>/WORKER.md``). Grok Bot discovers one Skill; the seven platforms
+stay seven platforms, not an eighth platform and not seven sibling Skills. The
+individual-plan entry point is Settings → Plugins → Yours (private skill);
+Team Marketplace is only an optional Teams/Enterprise path; never a public
+Marketplace. Nothing here claims live Grok Bot UI adoption.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
+import importlib.util
+import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 
@@ -24,27 +29,13 @@ PROJECT = Path(__file__).resolve().parents[2]
 RENDERER = PROJECT / "scripts" / "render-skills.py"
 INSTALLER = PROJECT / "scripts" / "install-local.sh"
 VERIFIER = PROJECT / "scripts" / "kaola-grok-bot-verify.py"
+PACKAGER = PROJECT / "scripts" / "kaola-grok-bot-package.py"
 ORCHESTRATOR_ID = "kaola-project-runner"
 HOST_ID = "grok-bot"
 HOST_BUNDLE = PROJECT / "hosts" / HOST_ID
-WORKER_IDS = (
-    "claude-code",
-    "codex",
-    "cursor-cli",
-    "devin",
-    "grok",
-    "kimi-cli",
-    "opencode",
-)
-WORKER_SKILL_IDS = (
-    "claude-code-kaola-project-runner",
-    "codex-kaola-project-runner",
-    "cursor-cli-kaola-project-runner",
-    "devin-kaola-project-runner",
-    "grok-kaola-project-runner",
-    "kimi-cli-kaola-project-runner",
-    "opencode-kaola-project-runner",
-)
+PAYLOAD = HOST_BUNDLE / ORCHESTRATOR_ID
+WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode")
+WORKER_SKILL_IDS = tuple(f"{wid}-kaola-project-runner" for wid in WORKER_IDS)
 UNOFFICIAL_API = (
     "GrokBotService",
     "EnsureSandBox",
@@ -54,7 +45,8 @@ UNOFFICIAL_API = (
     "aiserver.v1",
     "/local-exec/",
 )
-COPY_IGNORE = shutil.ignore_patterns(".git", ".kw", "__pycache__", "node_modules")
+FALSIFIED_DESTINATION = ".cursor/plugins/local"
+COPY_IGNORE = shutil.ignore_patterns(".git", ".kw", "__pycache__", "node_modules", "build")
 
 
 def normalize(text: str) -> str:
@@ -62,27 +54,37 @@ def normalize(text: str) -> str:
 
 
 def markdown_tree(root: Path) -> str:
-    if not root.is_dir():
-        return ""
-    parts: list[str] = []
-    for path in sorted(root.rglob("*.md")):
-        parts.append(path.read_text(encoding="utf-8"))
-    return "\n".join(parts)
+    return "\n".join(p.read_text(encoding="utf-8") for p in sorted(root.rglob("*.md")))
 
 
-def run_renderer(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(root / "scripts" / "render-skills.py"), *args],
-        cwd=root,
-        text=True,
-        capture_output=True,
-    )
+def run(argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(argv, cwd=cwd, text=True, capture_output=True, env=env)
+
+
+def sandbox_env(home: Path) -> dict[str, str]:
+    env = dict(os.environ)
+    env.update({
+        "HOME": str(home),
+        "CODEX_HOME": str(home / ".codex"),
+        "CLAUDE_CONFIG_DIR": str(home / ".claude"),
+        "DEVIN_CONFIG_DIR": str(home / ".config" / "devin"),
+    })
+    env.pop("KAOLA_GROK_BOT_HOME", None)
+    return env
 
 
 def copy_repo(temporary: str) -> Path:
     destination = Path(temporary) / "repo"
     shutil.copytree(PROJECT, destination, ignore=COPY_IGNORE)
     return destination
+
+
+def load_verifier():
+    spec = importlib.util.spec_from_file_location("verify", VERIFIER)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    return module
 
 
 def clause_present(text: str, patterns: tuple[str, ...]) -> re.Match[str] | None:
@@ -99,17 +101,7 @@ def authorizes_wrong_move(text: str, patterns: tuple[str, ...]) -> str | None:
         sentence = normalize(raw)
         if not sentence:
             continue
-        if re.match(
-            r"(do not|don't|never|must not|cannot|without|rather than|instead of|not automatic)\b",
-            sentence,
-            flags=re.IGNORECASE,
-        ):
-            continue
-        if re.search(
-            r"\b(do not|don't|never|must not|cannot|not automatic)\b",
-            sentence,
-            flags=re.IGNORECASE,
-        ):
+        if re.search(r"\b(do not|don't|never|must not|cannot|not automatic|is not|only)\b", sentence, flags=re.IGNORECASE):
             continue
         for pattern in patterns:
             if re.search(pattern, sentence, flags=re.IGNORECASE):
@@ -126,13 +118,10 @@ def worker_policy_surfaces() -> list[tuple[str, str]]:
         relative = path.relative_to(templates)
         if "grok-golden" in relative.parts or "orchestrator" in relative.parts:
             continue
-        if "hosts" in relative.parts:
-            continue
         if path.suffix.lower() in {".tmpl", ".md"}:
             surfaces.append((relative.as_posix(), path.read_text(encoding="utf-8")))
     for skill_id in WORKER_SKILL_IDS:
-        body = (PROJECT / "skills" / skill_id / "SKILL.md").read_text(encoding="utf-8")
-        surfaces.append((f"skills/{skill_id}/SKILL.md", body))
+        surfaces.append((f"skills/{skill_id}/SKILL.md", (PROJECT / "skills" / skill_id / "SKILL.md").read_text(encoding="utf-8")))
     return surfaces
 
 
@@ -142,370 +131,271 @@ class Issue49NotAnEighthPlatform(unittest.TestCase):
         self.assertEqual(platforms, list(WORKER_IDS))
         self.assertFalse((PROJECT / "platforms" / "grok-bot.yaml").exists())
         self.assertFalse((PROJECT / "scripts" / "adapters" / "grok-bot.sh").exists())
-        renderer = RENDERER.read_text(encoding="utf-8")
-        self.assertNotIn("platforms/grok-bot.yaml", renderer)
+        self.assertNotIn("platforms/grok-bot.yaml", RENDERER.read_text(encoding="utf-8"))
         installer = INSTALLER.read_text(encoding="utf-8")
-        skill_name_for = installer.split("skill_name_for()", 1)[1].split(
-            "runtime_skills_dir()", 1
-        )[0]
-        self.assertIsNone(
-            re.search(r"(?m)^\s*grok-bot\)", skill_name_for),
-            "skill_name_for must not treat grok-bot as a --platform id",
-        )
+        skill_name_for = installer.split("skill_name_for()", 1)[1].split("runtime_skills_dir()", 1)[0]
+        self.assertIsNone(re.search(r"(?m)^\s*grok-bot\)", skill_name_for))
 
     def test_platform_grok_bot_is_unknown(self) -> None:
-        result = subprocess.run(
-            [
-                "bash",
-                str(INSTALLER),
-                "--platform",
-                "grok-bot",
-                "--skills-dir",
-                "/tmp/kaola-issue-49-unused",
-            ],
-            cwd=PROJECT,
-            text=True,
-            capture_output=True,
-        )
+        result = run(["bash", str(INSTALLER), "--platform", "grok-bot", "--skills-dir", "/tmp/kaola-issue-49-unused"], PROJECT)
         self.assertNotEqual(result.returncode, 0)
-        combined = f"{result.stderr}\n{result.stdout}"
-        self.assertIn("unknown platform", combined)
+        self.assertIn("unknown platform", result.stderr + result.stdout)
 
     def test_runtime_grok_is_not_the_grok_bot_host(self) -> None:
-        result = subprocess.run(
-            ["bash", str(INSTALLER), "--runtime", "grok", "--platform", "codex"],
-            cwd=PROJECT,
-            text=True,
-            capture_output=True,
-        )
+        result = run(["bash", str(INSTALLER), "--runtime", "grok", "--platform", "codex"], PROJECT)
         self.assertNotEqual(result.returncode, 0)
-        combined = f"{result.stderr}\n{result.stdout}"
+        combined = result.stderr + result.stdout
         self.assertRegex(combined, r"unknown runtime:\s*grok")
         self.assertIn("--runtime grok-bot", combined)
         self.assertIn("--platform grok", combined)
 
 
-class Issue49HostBundle(unittest.TestCase):
-    def test_renderer_emits_and_checks_host_bundle(self) -> None:
-        self.assertTrue(
-            HOST_BUNDLE.is_dir(),
-            "render --write must emit hosts/grok-bot/",
+class Issue49PrivateSkillPayload(unittest.TestCase):
+    def test_exactly_one_discoverable_skill_with_seven_embedded_workers(self) -> None:
+        self.assertTrue(PAYLOAD.is_dir(), "render --write must emit hosts/grok-bot/kaola-project-runner")
+        self.assertEqual(
+            sorted(p.name for p in HOST_BUNDLE.iterdir()),
+            sorted([".generated-by-kaola-project-runner", ORCHESTRATOR_ID]),
         )
-        marker = HOST_BUNDLE / ".generated-by-kaola-project-runner"
-        self.assertTrue(marker.is_file())
-        self.assertEqual(marker.read_text(encoding="utf-8"), "grok-bot\n")
-        plugin = HOST_BUNDLE / ".cursor-plugin" / "plugin.json"
-        self.assertTrue(plugin.is_file(), "Cursor plugin manifest is required")
-        manifest = json.loads(plugin.read_text(encoding="utf-8"))
-        self.assertEqual(manifest.get("name"), ORCHESTRATOR_ID)
-        self.assertEqual(manifest.get("skills"), "./skills/")
-        skills_root = HOST_BUNDLE / "skills"
-        bundled = sorted(path.name for path in skills_root.iterdir() if path.is_dir())
-        expected = sorted(WORKER_SKILL_IDS + (ORCHESTRATOR_ID,))
-        self.assertEqual(bundled, expected)
+        discoverable = sorted(p.relative_to(HOST_BUNDLE).as_posix() for p in HOST_BUNDLE.rglob("SKILL.md"))
+        self.assertEqual(discoverable, [f"{ORCHESTRATOR_ID}/SKILL.md"])
+        self.assertEqual(sorted(p.name for p in (PAYLOAD / "workers").iterdir()), sorted(WORKER_IDS))
+        for wid in WORKER_IDS:
+            worker = PAYLOAD / "workers" / wid
+            self.assertTrue((worker / "WORKER.md").is_file(), wid)
+            self.assertTrue((worker / "scripts" / "runtime-tmux.sh").is_file(), wid)
+            self.assertTrue((worker / "scripts" / "adapters" / f"{wid}.sh").is_file(), wid)
+            self.assertTrue((worker / "scripts" / "platform.yaml").is_file(), wid)
+            self.assertFalse((worker / "SKILL.md").exists(), wid)
+            self.assertFalse((worker / "agents").exists(), wid)
+        for path in HOST_BUNDLE.rglob("*"):
+            self.assertNotIn(path.name, {".cursor-plugin", ".grok-plugin", ".claude-plugin", "plugin.json"}, path)
 
-    def test_host_skill_trees_match_generated_skills(self) -> None:
-        for skill_id in WORKER_SKILL_IDS + (ORCHESTRATOR_ID,):
+    def test_embedded_workers_are_byte_identical_to_generated_skills(self) -> None:
+        for wid, skill_id in zip(WORKER_IDS, WORKER_SKILL_IDS):
             source = PROJECT / "skills" / skill_id
-            bundled = HOST_BUNDLE / "skills" / skill_id
-            self.assertTrue(source.is_dir(), source)
-            self.assertTrue(bundled.is_dir(), bundled)
-            src_files = {
-                path.relative_to(source).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                for path in source.rglob("*")
-                if path.is_file()
+            worker = PAYLOAD / "workers" / wid
+            expected = {}
+            for path in source.rglob("*"):
+                if not path.is_file():
+                    continue
+                rel = path.relative_to(source).as_posix()
+                if rel in {".generated-by-kaola-project-runner", "agents/openai.yaml"}:
+                    continue
+                expected["WORKER.md" if rel == "SKILL.md" else rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+            actual = {
+                p.relative_to(worker).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in worker.rglob("*") if p.is_file()
             }
-            dst_files = {
-                path.relative_to(bundled).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                for path in bundled.rglob("*")
-                if path.is_file()
-            }
-            self.assertEqual(src_files, dst_files, skill_id)
+            self.assertEqual(expected, actual, wid)
+            self.assertEqual(
+                os.access(worker / "scripts" / "runtime-tmux.sh", os.X_OK),
+                os.access(source / "scripts" / "runtime-tmux.sh", os.X_OK),
+            )
 
-    def test_write_and_check_include_host_bundle(self) -> None:
+    def test_root_skill_routes_to_embedded_workers_without_sibling_dependency(self) -> None:
+        text = (PAYLOAD / "SKILL.md").read_text(encoding="utf-8")
+        self.assertRegex(text, rf"(?m)^name:\s*{ORCHESTRATOR_ID}\s*$")
+        for wid in WORKER_IDS:
+            self.assertIn(f"workers/{wid}/WORKER.md", text)
+            self.assertIn(f"workers/{wid}/scripts/runtime-tmux.sh", text)
+        self.assertNotIn("../", text)
+        for skill_id in WORKER_SKILL_IDS:
+            self.assertNotRegex(text, rf"skills/{skill_id}")
+        self.assertRegex(normalize(text), r"one discoverable Skill")
+
+    def test_offline_verifier_accepts_payload_and_rejects_a_second_discoverable_skill(self) -> None:
+        verifier = load_verifier()
+        self.assertEqual(verifier.validate(HOST_BUNDLE, PROJECT), [])
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-verify-") as temporary:
+            bundle = Path(temporary) / HOST_ID
+            shutil.copytree(HOST_BUNDLE, bundle)
+            worker = bundle / ORCHESTRATOR_ID / "workers" / "grok"
+            shutil.copy2(worker / "WORKER.md", worker / "SKILL.md")
+            findings = verifier.validate(bundle, PROJECT)
+            self.assertTrue(any("exactly one discoverable SKILL.md" in f for f in findings), findings)
+            (worker / "SKILL.md").unlink()
+            (bundle / ORCHESTRATOR_ID / ".cursor-plugin").mkdir()
+            (bundle / ORCHESTRATOR_ID / ".cursor-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
+            findings = verifier.validate(bundle, PROJECT)
+            self.assertTrue(any("plugin manifest" in f for f in findings), findings)
+
+    def test_write_and_check_include_payload(self) -> None:
         with tempfile.TemporaryDirectory(prefix="kaola-issue-49-render-") as temporary:
             copy = copy_repo(temporary)
-            written = run_renderer(copy, "--write")
+            renderer = copy / "scripts" / "render-skills.py"
+            written = run([sys.executable, str(renderer), "--write"], copy)
             self.assertEqual(written.returncode, 0, written.stderr or written.stdout)
-            bundle = copy / "hosts" / HOST_ID
-            self.assertTrue((bundle / ".cursor-plugin" / "plugin.json").is_file())
-            checked = run_renderer(copy, "--check")
+            self.assertTrue((copy / "hosts" / HOST_ID / ORCHESTRATOR_ID / "SKILL.md").is_file())
+            checked = run([sys.executable, str(renderer), "--check"], copy)
             self.assertEqual(checked.returncode, 0, checked.stderr or checked.stdout)
-            shutil.rmtree(bundle)
-            missing = run_renderer(copy, "--check")
+            shutil.rmtree(copy / "hosts" / HOST_ID)
+            missing = run([sys.executable, str(renderer), "--check"], copy)
             self.assertNotEqual(missing.returncode, 0)
-            detail = f"{missing.stderr}\n{missing.stdout}"
-            self.assertIn(HOST_ID, detail)
+            self.assertIn(HOST_ID, missing.stderr + missing.stdout)
 
-    def test_offline_verifier_accepts_generated_bundle(self) -> None:
-        self.assertTrue(VERIFIER.is_file(), "offline verifier script is required")
-        result = subprocess.run(
-            [sys.executable, str(VERIFIER), str(HOST_BUNDLE), "--repo", str(PROJECT)],
-            cwd=PROJECT,
-            text=True,
-            capture_output=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+    def test_packager_is_deterministic_and_refuses_invalid_payload(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-package-") as temporary:
+            out = Path(temporary)
+            first = run([sys.executable, str(PACKAGER), "--output", str(out / "a")], PROJECT)
+            second = run([sys.executable, str(PACKAGER), "--output", str(out / "b")], PROJECT)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            archive_a = out / "a" / f"{ORCHESTRATOR_ID}-grok-bot-skill.zip"
+            archive_b = out / "b" / f"{ORCHESTRATOR_ID}-grok-bot-skill.zip"
+            self.assertEqual(archive_a.read_bytes(), archive_b.read_bytes())
+            digest = hashlib.sha256(archive_a.read_bytes()).hexdigest()
+            self.assertIn(digest, (out / "a" / f"{ORCHESTRATOR_ID}-grok-bot-skill.zip.sha256").read_text())
+            with zipfile.ZipFile(archive_a) as zf:
+                names = zf.namelist()
+            self.assertEqual([n for n in names if n.endswith("/SKILL.md")], [f"{ORCHESTRATOR_ID}/SKILL.md"])
+            self.assertEqual(len([n for n in names if n.endswith("/WORKER.md")]), len(WORKER_IDS))
+            self.assertTrue(all(n.startswith(f"{ORCHESTRATOR_ID}/") for n in names))
+            broken = out / "broken" / HOST_ID
+            shutil.copytree(HOST_BUNDLE, broken)
+            shutil.rmtree(broken / ORCHESTRATOR_ID / "workers" / "codex")
+            refused = run([sys.executable, str(PACKAGER), "--payload", str(broken), "--output", str(out / "c")], PROJECT)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertFalse((out / "c").exists())
 
-    def test_unofficial_sand_api_absent_from_host_and_orchestrator_packaging(self) -> None:
+
+class Issue49InstallerHost(unittest.TestCase):
+    def test_runtime_grok_bot_installs_only_the_private_skill_payload(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-install-") as temporary:
+            home = Path(temporary) / "home"
+            foreign = home / ".claude" / "skills" / "someone-else"
+            foreign.mkdir(parents=True)
+            (foreign / "SKILL.md").write_text("# foreign\n", encoding="utf-8")
+            before = sorted(p.relative_to(home).as_posix() for p in home.rglob("*"))
+            result = run(["bash", str(INSTALLER), "--runtime", "grok-bot", "--method", "copy"], PROJECT, sandbox_env(home))
+            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+            dest = home / ".kaola" / HOST_ID / "skills" / ORCHESTRATOR_ID
+            self.assertTrue((dest / "SKILL.md").is_file())
+            for wid in WORKER_IDS:
+                self.assertTrue((dest / "workers" / wid / "WORKER.md").is_file(), wid)
+            after = sorted(
+                p.relative_to(home).as_posix() for p in home.rglob("*")
+                if p.relative_to(home).parts[0] != ".kaola"
+            )
+            self.assertEqual(after, before)
+            self.assertFalse((home / ".cursor").exists())
+            self.assertFalse((home / ".codex").exists())
+            self.assertFalse((home / ".local" / "bin" / "kaola-acp").exists())
+            self.assertNotIn(FALSIFIED_DESTINATION, result.stdout + result.stderr)
+            removed = run(["bash", str(INSTALLER), "--runtime", "grok-bot", "--uninstall"], PROJECT, sandbox_env(home))
+            self.assertEqual(removed.returncode, 0, removed.stderr or removed.stdout)
+            self.assertFalse(dest.exists())
+            self.assertTrue((foreign / "SKILL.md").is_file())
+
+    def test_runtime_grok_bot_refuses_subsets_and_honours_home_override(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-subset-") as temporary:
+            home = Path(temporary) / "home"
+            for extra in (["--platform", "grok"], ["--no-orchestrator"]):
+                result = run(["bash", str(INSTALLER), "--runtime", "grok-bot", *extra], PROJECT, sandbox_env(home))
+                self.assertNotEqual(result.returncode, 0, extra)
+                self.assertIn("--runtime grok-bot", result.stderr)
+                self.assertFalse((home / ".kaola").exists(), extra)
+            env = sandbox_env(home)
+            env["KAOLA_GROK_BOT_HOME"] = str(home / "custom-grok-bot")
+            result = run(["bash", str(INSTALLER), "--runtime", "grok-bot"], PROJECT, env)
+            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+            self.assertTrue((home / "custom-grok-bot" / "skills" / ORCHESTRATOR_ID / "SKILL.md").is_file())
+            self.assertFalse((home / ".kaola").exists())
+
+
+class Issue49OrchestratorSemantics(unittest.TestCase):
+    def orchestrator_text(self) -> str:
+        text = markdown_tree(PROJECT / "skills" / ORCHESTRATOR_ID)
+        self.assertTrue(text.strip())
+        return text
+
+    def payload_text(self) -> str:
+        return (PAYLOAD / "SKILL.md").read_text(encoding="utf-8") + "\n" + markdown_tree(PAYLOAD / "references")
+
+    def test_private_skill_entry_and_marketplace_boundary(self) -> None:
+        combined = self.orchestrator_text() + "\n" + self.payload_text() + "\n" + (PROJECT / "docs" / "grok-bot-host.md").read_text(encoding="utf-8")
+        self.assertIsNotNone(clause_present(combined, (r"Settings → Plugins → Yours", r"Settings > Plugins > Yours")))
+        self.assertIsNotNone(clause_present(combined, (r"private skill",)))
+        self.assertIsNotNone(clause_present(combined, (r"Team Marketplace.{0,80}(?:only|optional).{0,60}(?:Teams|Enterprise)",)))
+        self.assertIsNotNone(clause_present(combined, (r"never.{0,30}public Marketplace",)))
+        wrong = authorizes_wrong_move(combined, (r"publish.{0,40}public Marketplace", r"submit.{0,40}Marketplace"))
+        self.assertIsNone(wrong, wrong)
+
+    def test_falsified_cursor_plugin_destination_is_gone(self) -> None:
         surfaces = [
-            HOST_BUNDLE / ".cursor-plugin" / "plugin.json",
-            PROJECT / "skills" / ORCHESTRATOR_ID / "SKILL.md",
-            PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl",
-            PROJECT / "templates" / "orchestrator" / "references" / "grok-bot-host.md",
-            PROJECT / "docs" / "grok-bot-host.md",
-            INSTALLER,
-            RENDERER,
+            PROJECT / "README.md", PROJECT / "AGENTS.md", PROJECT / "CHANGELOG.md", INSTALLER, RENDERER, VERIFIER, PACKAGER,
+            *sorted((PROJECT / "docs").glob("*.md")),
+            *sorted((PROJECT / "templates" / "orchestrator").rglob("*")),
+            *sorted((PROJECT / "skills" / ORCHESTRATOR_ID).rglob("*.md")),
+            PAYLOAD / "SKILL.md",
         ]
         for path in surfaces:
-            self.assertTrue(path.is_file(), path)
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            self.assertNotIn(FALSIFIED_DESTINATION, text, path)
+            if path != VERIFIER:  # the verifier names the manifest only to forbid it
+                self.assertNotIn(".cursor-plugin", text, path)
+        self.assertFalse((PROJECT / "scripts" / "kaola-grok-bot-assemble.py").exists())
+        self.assertFalse((PROJECT / "templates" / "hosts").exists())
+
+    def test_names_grok_bot_as_host_with_one_skill_seven_platforms(self) -> None:
+        text = self.orchestrator_text()
+        self.assertIsNotNone(clause_present(text, (r"Grok Bot is a host", r"Grok Bot.{0,60}host, not a worker")))
+        self.assertIsNotNone(clause_present(text, (r"not an eighth platform",)))
+        self.assertIsNotNone(clause_present(text, (r"--platform grok.{0,40}Grok CLI worker",)))
+        self.assertIsNotNone(clause_present(text, (r"one Private Skill payload", r"one discoverable Skill")))
+        payload = self.payload_text()
+        self.assertIsNotNone(clause_present(payload, (r"embedded under `workers/<platform id>/`",)))
+        self.assertIsNotNone(clause_present(payload, (r"Execution on Local Computer",)))
+
+    def test_grok_bot_routine_is_the_only_heartbeat_on_that_host(self) -> None:
+        text = self.orchestrator_text()
+        self.assertIsNotNone(clause_present(text, (r"one Grok Bot Routine.{0,80}only heartbeat", r"Routine.{0,60}only heartbeat carrier")))
+        heartbeat = (PROJECT / "skills" / ORCHESTRATOR_ID / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
+        self.assertRegex(heartbeat, r"Grok Bot")
+        self.assertRegex(heartbeat, r"Routine")
+        wrong = authorizes_wrong_move(text + "\n" + heartbeat, (r"stack (?:a )?Grok Bot Routine with (?:a )?Codex heartbeat", r"use both a Routine and (?:blocking )?sleep"))
+        self.assertIsNone(wrong, wrong)
+
+    def test_human_decision_takeover_acceptance_and_stop(self) -> None:
+        text = self.orchestrator_text()
+        self.assertIsNotNone(clause_present(text, (r"HUMAN_DECISION_REQUIRED.{0,120}this Bot conversation", r"Needs attention")))
+        self.assertIsNotNone(clause_present(text, (r"takeover.{0,80}cancel.{0,60}heartbeat.{0,80}without.{0,40}stop", r"do not stop in-flight.{0,40}worker")))
+        self.assertIsNotNone(clause_present(text, (r"not automatic finalize",)))
+        self.assertIsNotNone(clause_present(text, (r"exact owned session `stop` via the matching platform Runner Skill", r"ACP and PTY/tmux are the same stop action")))
+        self.assertIsNotNone(clause_present(text, (r"recover existing explicit authorization and live work",)))
+        wrong = authorizes_wrong_move(text, (r"use Agent Computer takeover for HUMAN_DECISION_REQUIRED", r"use Stop now to end worker sessions", r"Reset Agent Computer.{0,40}takeover"))
+        self.assertIsNone(wrong, wrong)
+
+    def test_live_ui_is_an_explicit_uat_boundary_not_claimed_adoption(self) -> None:
+        combined = self.orchestrator_text() + "\n" + (PROJECT / "docs" / "grok-bot-host.md").read_text(encoding="utf-8")
+        self.assertIsNotNone(clause_present(combined, (r"live.{0,40}UAT", r"not live adoption", r"human UAT")))
+        wrong = authorizes_wrong_move(combined, (r"(?:payload|installer copy|archive) (?:means|proves) live Grok Bot adoption", r"Grok Bot 0\.51.{0,40}(?:is proven to|automatically) load"))
+        self.assertIsNone(wrong, wrong)
+
+    def test_no_unofficial_sand_api_in_host_surfaces(self) -> None:
+        surfaces = [PAYLOAD / "SKILL.md", PROJECT / "skills" / ORCHESTRATOR_ID / "SKILL.md", PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl",
+                    PROJECT / "templates" / "orchestrator" / "references" / "grok-bot-host.md", PROJECT / "docs" / "grok-bot-host.md", INSTALLER, RENDERER, PACKAGER]
+        for path in surfaces:
             text = path.read_text(encoding="utf-8")
             for token in UNOFFICIAL_API:
                 self.assertNotIn(token, text, f"{path}: {token}")
 
 
-class Issue49InstallerHost(unittest.TestCase):
-    def test_runtime_grok_bot_installs_plugin_bundle(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-install-") as temporary:
-            home = Path(temporary) / "home"
-            dest = home / ".cursor" / "plugins" / "local" / ORCHESTRATOR_ID
-            result = subprocess.run(
-                ["bash", str(INSTALLER), "--runtime", "grok-bot", "--method", "copy"],
-                cwd=PROJECT,
-                text=True,
-                capture_output=True,
-                env={
-                    **dict(__import__("os").environ),
-                    "HOME": str(home),
-                    "CODEX_HOME": str(home / "codex-unused"),
-                    "CLAUDE_CONFIG_DIR": str(home / "claude-unused"),
-                    "DEVIN_CONFIG_DIR": str(home / "devin-unused"),
-                },
-            )
-            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
-            self.assertTrue((dest / ".cursor-plugin" / "plugin.json").is_file())
-            self.assertTrue((dest / "skills" / ORCHESTRATOR_ID / "SKILL.md").is_file())
-            for skill_id in WORKER_SKILL_IDS:
-                self.assertTrue((dest / "skills" / skill_id / "SKILL.md").is_file(), skill_id)
-            self.assertFalse((home / ".codex").exists() or (home / "codex-unused" / "skills").exists())
-            self.assertFalse((home / ".local" / "bin" / "kaola-acp").exists())
-
-    def test_runtime_grok_bot_platform_grok_keeps_only_grok_worker_plus_orchestrator(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-subset-") as temporary:
-            home = Path(temporary) / "home"
-            dest = home / ".cursor" / "plugins" / "local" / ORCHESTRATOR_ID
-            result = subprocess.run(
-                [
-                    "bash",
-                    str(INSTALLER),
-                    "--runtime",
-                    "grok-bot",
-                    "--platform",
-                    "grok",
-                    "--method",
-                    "copy",
-                ],
-                cwd=PROJECT,
-                text=True,
-                capture_output=True,
-                env={
-                    **dict(__import__("os").environ),
-                    "HOME": str(home),
-                },
-            )
-            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
-            bundled = sorted(path.name for path in (dest / "skills").iterdir() if path.is_dir())
-            self.assertEqual(bundled, ["grok-kaola-project-runner", ORCHESTRATOR_ID])
-
-
-class Issue49OrchestratorSemantics(unittest.TestCase):
-    def orchestrator_text(self) -> str:
-        package = PROJECT / "skills" / ORCHESTRATOR_ID
-        text = markdown_tree(package)
-        self.assertTrue(text.strip(), "generated orchestrator markdown is empty")
-        return text
-
-    def test_names_grok_bot_as_a_first_class_host_not_a_worker(self) -> None:
-        text = self.orchestrator_text()
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"Grok Bot.{0,80}(?:is )?(?:a )?(?:first-class |optional )?host",
-                    r"--runtime grok-bot",
-                    r"Grok Bot is (?:a host|not a worker|not an eighth)",
-                ),
-            ),
-            "orchestrator must name Grok Bot as a host",
-        )
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"--platform grok.{0,80}Grok CLI worker",
-                    r"Grok CLI worker.{0,40}--platform grok",
-                    r"not an eighth (?:CLI |platform )?worker",
-                    r"not an eighth platform",
-                ),
-            ),
-            "orchestrator must distinguish --platform grok from the Grok Bot host",
-        )
-
-    def test_grok_bot_routine_is_the_only_heartbeat_on_that_host(self) -> None:
-        text = self.orchestrator_text()
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"Grok Bot.{0,80}Routine.{0,80}(?:only|unique|single|one).{0,40}heartbeat",
-                    r"one Grok Bot Routine.{0,80}heartbeat",
-                    r"Routine.{0,40}(?:is|as) the (?:only|unique) heartbeat",
-                ),
-            ),
-            "Grok Bot host must use one Routine as the only heartbeat carrier",
-        )
-        heartbeat = (
-            PROJECT / "skills" / ORCHESTRATOR_ID / "references" / "heartbeat-skeleton.md"
-        ).read_text(encoding="utf-8")
-        self.assertRegex(heartbeat, r"Grok Bot")
-        self.assertRegex(heartbeat, r"Routine")
-        wrong = authorizes_wrong_move(
-            text + "\n" + heartbeat,
-            (
-                r"stack (?:a )?Grok Bot Routine with (?:a )?Codex heartbeat",
-                r"use both a Routine and (?:blocking )?sleep",
-                r"keep the Codex heartbeat (?:running )?after.{0,40}Grok Bot Routine",
-            ),
-        )
-        self.assertIsNone(wrong, f"heartbeat policy stacks carriers: {wrong!r}")
-
-    def test_human_decision_returns_to_this_bot_conversation(self) -> None:
-        text = self.orchestrator_text()
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"HUMAN_DECISION_REQUIRED.{0,120}(?:this Bot|Grok Bot).{0,40}(?:conversation|session)",
-                    r"Needs attention",
-                    r"HUMAN_DECISION_REQUIRED.{0,80}Notifications",
-                ),
-            ),
-            "HUMAN_DECISION_REQUIRED must return to the Grok Bot main session",
-        )
-        wrong = authorizes_wrong_move(
-            text,
-            (
-                r"use Agent Computer takeover for HUMAN_DECISION_REQUIRED",
-                r"treat computer takeover as exact-session stop",
-                r"open a new Bot.{0,40}HUMAN_DECISION_REQUIRED",
-            ),
-        )
-        self.assertIsNone(wrong, f"decision policy misroutes HUMAN_DECISION_REQUIRED: {wrong!r}")
-
-    def test_takeover_cancels_prior_host_heartbeat_without_stopping_workers(self) -> None:
-        text = self.orchestrator_text()
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"cancel.{0,40}(?:previous|prior|old) host heartbeat.{0,80}(?:do not|without|must not).{0,40}stop",
-                    r"takeover.{0,80}cancel.{0,60}heartbeat.{0,80}(?:not|without).{0,40}stop.{0,40}worker",
-                    r"do not stop in-flight.{0,40}(?:exact owned )?worker",
-                ),
-            ),
-            "Grok Bot takeover must cancel only the previous host heartbeat",
-        )
-        wrong = authorizes_wrong_move(
-            text,
-            (
-                r"stop (?:all )?(?:in-flight )?workers when (?:taking over|cancelling the heartbeat)",
-                r"Reset Agent Computer.{0,40}takeover",
-                r"use Stop now to end worker sessions",
-            ),
-        )
-        self.assertIsNone(wrong, f"takeover policy stops workers: {wrong!r}")
-
-    def test_acceptance_before_finalize_and_exact_session_stop_remain(self) -> None:
-        text = self.orchestrator_text()
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"mission-frontier done triggers review, not automatic finalize",
-                    r"not automatic finalize",
-                ),
-            )
-        )
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"exact owned session `stop` via the matching platform Runner Skill",
-                    r"ACP and PTY/tmux are the same stop action",
-                ),
-            )
-        )
-        self.assertIsNotNone(
-            clause_present(
-                text,
-                (
-                    r"must not restart intake, workers, claims or assignments already established",
-                    r"recover existing explicit authorization and live work",
-                ),
-            )
-        )
-
-    def test_live_ui_is_an_explicit_uat_boundary_not_claimed_adoption(self) -> None:
-        text = self.orchestrator_text()
-        docs = (PROJECT / "docs" / "grok-bot-host.md").read_text(encoding="utf-8")
-        combined = text + "\n" + docs
-        self.assertIsNotNone(
-            clause_present(
-                combined,
-                (
-                    r"live.{0,40}UAT",
-                    r"not.{0,40}(?:claim|claimed|prove).{0,40}live adoption",
-                    r"Grok Bot UI.{0,80}(?:human|UAT|unproven)",
-                ),
-            ),
-            "must mark live Grok Bot UI enablement as UAT, not claimed adoption",
-        )
-        wrong = authorizes_wrong_move(
-            combined,
-            (
-                r"installer copy (?:means|proves|is) live Grok Bot adoption",
-                r"Grok Bot 0\.51.{0,40}(?:is proven to|automatically) load",
-            ),
-        )
-        self.assertIsNone(wrong, f"docs claim live adoption: {wrong!r}")
-
-
 class Issue49WorkerIsolation(unittest.TestCase):
     def test_workers_do_not_absorb_grok_bot_host_policy(self) -> None:
-        forbidden = (
-            "Grok Bot Routine",
-            "--runtime grok-bot",
-            "Needs attention",
-            "PROJECT_RUNNER_HEARTBEAT",
-            "Mission-frontier done triggers review, not automatic finalize",
-        )
+        forbidden = ("Grok Bot", "grok-bot", "--runtime grok-bot", "Needs attention", "Private Skill", "Settings → Plugins",
+                     "PROJECT_RUNNER_HEARTBEAT", "Mission-frontier done triggers review, not automatic finalize")
         for label, raw in worker_policy_surfaces():
             body = normalize(raw)
             for marker in forbidden:
-                self.assertNotIn(
-                    normalize(marker),
-                    body,
-                    f"{label} gained Grok Bot host/orchestrator policy: {marker!r}",
-                )
+                self.assertNotIn(normalize(marker), body, f"{label} gained host/orchestrator policy: {marker!r}")
 
-    def test_worker_template_keeps_skill_dir_inside_plugin_packaging(self) -> None:
-        template = (PROJECT / "templates" / "SKILL.md.tmpl").read_text(encoding="utf-8")
-        self.assertRegex(
-            normalize(template),
-            r"host plugin.{0,80}SKILL_DIR is still this Skill",
-        )
-        self.assertNotIn("Grok Bot", template)
-        self.assertNotIn("grok-bot", template)
+    def test_worker_template_keeps_skill_dir_for_embedded_form(self) -> None:
+        template = normalize((PROJECT / "templates" / "SKILL.md.tmpl").read_text(encoding="utf-8"))
+        self.assertRegex(template, r"embedded as a supporting resource under a host Skill's `workers/<platform id>/` directory")
+        self.assertRegex(template, r"named `WORKER\.md`.{0,40}SKILL_DIR is that worker directory")
 
 
 if __name__ == "__main__":

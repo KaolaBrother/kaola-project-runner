@@ -68,17 +68,21 @@ core, relay/client/protocol/observation helpers, and one matching adapter into s
 worker directories under `skills/`, and renders the fixed orchestrator directory
 `skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
 derived from the seven manifests (no orchestrator platform manifest or adapter). It also emits
-`hosts/grok-bot/` as a Cursor-plugin packaging of those same eight Skill trees. Every managed
+`hosts/grok-bot/kaola-project-runner/`, one Private Skill that embeds the seven workers. Every managed
 directory has a `.generated-by-kaola-project-runner` marker. A published Skill never follows a path
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
 byte inventories, including the orchestrator package and `hosts/grok-bot/`.
 
-`render-skills.py` also emits `hosts/grok-bot/`, a Cursor-plugin bundle whose `skills/` trees are
-byte-identical to the eight generated Skill directories. Grok Bot is a first-class **host**, not an
-eighth platform: there is no `platforms/grok-bot.yaml`. `--runtime grok-bot` installs that plugin
-payload to `$HOME/.cursor/plugins/local/kaola-project-runner`. `--platform grok` still selects the
-Grok CLI worker. Live Grok Bot UI enablement is UAT, not claimed by the installer copy. See
-[Grok Bot host](grok-bot-host.md).
+The Grok Bot payload is **one discoverable Skill**: the orchestrator root `SKILL.md` (same template,
+with an embedded-worker routing table) plus `workers/<platform id>/` trees that are byte-identical
+to the generated worker Skills except that `SKILL.md` is renamed `WORKER.md` and Skill identity
+files are dropped. Grok Bot is a **host**, not an eighth platform: there is no
+`platforms/grok-bot.yaml`, and no worker becomes a separately discoverable Skill. On an individual
+plan the payload enters through Settings → Plugins → Yours (deterministic archive from
+`scripts/kaola-grok-bot-package.py`); `--runtime grok-bot` keeps only a local execution copy under
+`${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills` for Local Computer runs. `--platform grok`
+still selects the Grok CLI worker. Live Grok Bot UI enablement is UAT, not claimed by the payload.
+See [Grok Bot host](grok-bot-host.md).
 
 `install-local.sh` delivers those directories to a consuming runtime: a verified named alias via
 `--runtime` (`codex`, `claude-code`, `cursor`, `devin`, `grok-bot`), or any absolute `--skills-dir` (the two are

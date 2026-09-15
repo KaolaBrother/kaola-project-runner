@@ -9,6 +9,7 @@ runtime_alias=""
 skills_dir=""
 bin_links_request=""
 selection=()
+platform_given=false
 install_orchestrator=true
 orchestrator_skill_name="kaola-project-runner"
 installer_python="${PYTHON_BIN:-python3}"
@@ -30,8 +31,13 @@ Consuming runtimes (verified native skill directories):
   claude-code  ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
   cursor       $HOME/.cursor/skills
   devin        ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
-  grok-bot     $HOME/.cursor/plugins/local/kaola-project-runner
-               (Cursor-plugin host bundle; Grok Bot UI enablement is UAT)
+  grok-bot     ${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills
+               (local execution copy of the single Grok Bot Private Skill
+               payload hosts/grok-bot/kaola-project-runner: one root SKILL.md
+               with the seven workers embedded under workers/<id>/. Grok Bot
+               itself discovers nothing on this disk; add the payload under
+               Settings > Plugins > Yours. --platform/--no-orchestrator are
+               refused for this runtime; no other Skill directory is touched.)
 Grok CLI worker uses --platform grok, not --runtime grok.
 
 --skills-dir installs into any explicit destination parent (including
@@ -72,7 +78,7 @@ runtime_skills_dir() {
     claude-code) printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" ;;
     cursor) printf '%s\n' "$HOME/.cursor/skills" ;;
     devin) printf '%s\n' "${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills" ;;
-    grok-bot) printf '%s\n' "$HOME/.cursor/plugins/local" ;;
+    grok-bot) printf '%s\n' "${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills" ;;
     *) return 1 ;;
   esac
 }
@@ -94,6 +100,7 @@ while [[ $# -gt 0 ]]; do
     --platform)
       [[ $# -ge 2 ]] || { printf '%s\n' '--platform needs a value' >&2; exit 2; }
       append_selection "$2"
+      platform_given=true
       shift 2
       ;;
     --runtime)
@@ -306,30 +313,10 @@ if os.path.lexists(backup):
 PY
 }
 
-grok_bot_selection_is_full() {
-  [[ "$install_orchestrator" == true ]] || return 1
-  [[ ${#selection[@]} -eq 7 ]] || return 1
-  local item seen found
-  for item in grok claude-code opencode kimi-cli cursor-cli devin codex; do
-    found=false
-    for seen in "${selection[@]}"; do
-      [[ "$seen" == "$item" ]] && found=true
-    done
-    [[ "$found" == true ]] || return 1
-  done
-  return 0
-}
-
-assemble_grok_bot_plugin() {
-  local dest="$1"
-  "$installer_python" "$script_dir/kaola-grok-bot-assemble.py" \
-    "$repo_root" "$dest" "$install_orchestrator" "${selection[@]}"
-}
-
 # Plan every action before any write; a refusal anywhere aborts the whole run.
 # $1 is the generated Skill directory name. $2 is the worker platform id, or
 # empty for the main orchestrator Skill (not a platform id). $3 optional source
-# directory override (Grok Bot host plugin bundle).
+# directory override (the Grok Bot Private Skill payload).
 plan_skill() {
   local name="$1"
   local platform="${2-}"
@@ -340,14 +327,10 @@ plan_skill() {
   fi
 
   if [[ "$mode" == install ]]; then
-    [[ -f "$source/.generated-by-kaola-project-runner" ]] || {
+    [[ -f "$source/SKILL.md" && -f "$source/.generated-by-kaola-project-runner" ]] || {
       printf 'generated Skill is missing; run ./scripts/render-skills.py --write: %s\n' "$source" >&2
       exit 1
     }
-    if [[ ! -f "$source/SKILL.md" && ! -f "$source/.cursor-plugin/plugin.json" ]]; then
-      printf 'generated Skill is missing; run ./scripts/render-skills.py --write: %s\n' "$source" >&2
-      exit 1
-    fi
     if [[ "$method" == link ]]; then
       if [[ -L "$target" ]]; then
         current="$(canonical_existing_target "$target" || true)"
@@ -439,27 +422,19 @@ plan_skill() {
 }
 
 actions=()
-grok_bot_assemble=""
 if [[ "$resolved_runtime" == grok-bot ]]; then
-  if [[ "$mode" == install && "$method" == link ]] && ! grok_bot_selection_is_full; then
-    printf 'Grok Bot host subset requires --method copy (link only the full generated hosts/grok-bot bundle)\n' >&2
+  # The Grok Bot payload is one Private Skill (root SKILL.md plus seven embedded
+  # workers). It is delivered whole: no worker subset, no orchestrator opt-out,
+  # and no other Skill directory is planned or touched.
+  if [[ "$platform_given" == true ]]; then
+    printf 'Grok Bot Private Skill embeds all seven workers; --platform is not accepted with --runtime grok-bot\n' >&2
     exit 2
   fi
-  if [[ "$mode" == install && "$method" == link ]]; then
-    plan_skill "$orchestrator_skill_name" "" "$repo_root/hosts/grok-bot"
-  elif [[ "$mode" == install ]]; then
-    grok_bot_assemble="$(mktemp -d "${TMPDIR:-/tmp}/kaola-grok-bot-plugin.XXXXXX")"
-    trap 'rm -rf "$grok_bot_assemble"' EXIT
-    assemble_grok_bot_plugin "$grok_bot_assemble" || {
-      printf 'failed to assemble Grok Bot host plugin\n' >&2
-      exit 1
-    }
-    plan_skill "$orchestrator_skill_name" "" "$grok_bot_assemble"
-  elif [[ -L "$target_parent/$orchestrator_skill_name" ]]; then
-    plan_skill "$orchestrator_skill_name" "" "$repo_root/hosts/grok-bot"
-  else
-    plan_skill "$orchestrator_skill_name" "" "$target_parent/$orchestrator_skill_name"
+  if [[ "$install_orchestrator" != true ]]; then
+    printf 'Grok Bot Private Skill is the orchestrator root; --no-orchestrator is not accepted with --runtime grok-bot\n' >&2
+    exit 2
   fi
+  plan_skill "$orchestrator_skill_name" "" "$repo_root/hosts/grok-bot/$orchestrator_skill_name"
 else
   for platform in "${selection[@]}"; do
     plan_skill "$(skill_name_for "$platform")" "$platform"

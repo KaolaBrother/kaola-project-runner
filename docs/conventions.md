@@ -12,8 +12,9 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
 - Active seven-platform worker Skill: `templates/SKILL.md.tmpl`.
 - Main orchestrator Skill: `templates/orchestrator/` (English `SKILL.md.tmpl`; not a platform
   manifest or adapter).
-- Grok Bot host plugin: `templates/hosts/grok-bot/` rendered to `hosts/grok-bot/` (not a
-  `platforms/*.yaml` worker). `--runtime grok-bot` vs `--platform grok` are different ids.
+- Grok Bot host payload: `hosts/grok-bot/kaola-project-runner/` rendered from the orchestrator and
+  worker templates (one Private Skill, seven embedded workers; not a `platforms/*.yaml` worker).
+  `--runtime grok-bot` vs `--platform grok` are different ids.
 - Frozen historical Workflow lifecycle and prompts: `templates/grok-golden/`.
 - Shared evidence-first transport guidance: `templates/references/transport.md.tmpl` plus exact reversible
   renderer overlays; never broad-replace golden prose.

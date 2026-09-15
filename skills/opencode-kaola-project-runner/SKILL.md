@@ -35,12 +35,13 @@ Runner never auto-falls back or resends. Read the receipt and let the controllin
 
 Resolve this Skill's installed directory once and call its scripts by absolute path — the install
 destination may contain spaces, and the user's project is passed only through `--repo` (relative
-paths in these references resolve against the Skill, never the project cwd). When this Skill is
-packaged as a sibling inside a host plugin, SKILL_DIR is still this Skill's directory — not the
-plugin root and not another Skill:
+paths in these references resolve against the Skill, never the project cwd). When this worker is
+embedded as a supporting resource under a host Skill's `workers/<platform id>/` directory (this
+file is then named `WORKER.md`), SKILL_DIR is that worker directory — not the host Skill root and
+not another worker:
 
 ```bash
-SKILL_DIR="/absolute/path/to/opencode-kaola-project-runner"   # the directory containing this SKILL.md
+SKILL_DIR="/absolute/path/to/opencode-kaola-project-runner"   # the directory containing this file
 REPO="$(git rev-parse --show-toplevel)"
 SESSION="opencode-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" preflight --repo "$REPO" --session "$SESSION"

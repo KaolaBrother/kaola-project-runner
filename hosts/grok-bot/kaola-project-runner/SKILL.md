@@ -64,20 +64,43 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 
 ### Hosts
 
-This Skill is host-neutral. Verified installer destinations: Codex, Claude Code,
-Cursor, Devin, and Grok Bot (`--runtime grok-bot`). Grok Bot is a first-class
-host, not a worker and not an eighth platform. `--platform grok` is the Grok CLI
-worker. `--platform grok-bot` is invalid.
+This Skill is host-neutral. Native skill-directory installs exist for Codex,
+Claude Code, Cursor, and Devin. For Grok Bot on an individual plan this Skill
+ships as **one Private Skill payload**: this root Skill plus the seven platform
+workers embedded under `workers/<platform id>/` as supporting resources. That
+is one discoverable Skill and still seven platforms; Grok Bot is a host, not a
+worker and not an eighth platform. `--platform grok` is the Grok CLI worker.
+`--platform grok-bot` is invalid.
 
-On Grok Bot, workers are sibling Skills under the same plugin `skills/`
-directory. Call each by its installed directory. Prefer Local Computer when those
-CLI sessions live on this machine; the shared cloud computer is a different
+#### Embedded workers (Grok Bot Private Skill payload)
+
+In this payload the seven workers are supporting resources of this one Skill,
+under `workers/<platform id>/`; their contract file is `WORKER.md`, not a
+discoverable `SKILL.md`. Load a worker contract on demand from this Skill's own
+directory; nothing else has to be discovered or enabled. A worker's `SKILL_DIR` is
+`<local execution copy of this Skill>/workers/<platform id>` and its Runner entry is
+`SKILL_DIR/scripts/runtime-tmux.sh`.
+
+| Platform id | Worker contract | Runner entry | Default transport |
+|---|---|---|---|
+| claude-code | `workers/claude-code/WORKER.md` | `workers/claude-code/scripts/runtime-tmux.sh` | pty |
+| codex | `workers/codex/WORKER.md` | `workers/codex/scripts/runtime-tmux.sh` | acp |
+| cursor-cli | `workers/cursor-cli/WORKER.md` | `workers/cursor-cli/scripts/runtime-tmux.sh` | acp |
+| devin | `workers/devin/WORKER.md` | `workers/devin/scripts/runtime-tmux.sh` | acp |
+| grok | `workers/grok/WORKER.md` | `workers/grok/scripts/runtime-tmux.sh` | acp |
+| kimi-cli | `workers/kimi-cli/WORKER.md` | `workers/kimi-cli/scripts/runtime-tmux.sh` | acp |
+| opencode | `workers/opencode/WORKER.md` | `workers/opencode/scripts/runtime-tmux.sh` | acp |
+
+On Grok Bot the payload enters through **Settings → Plugins → Yours** as a
+private skill (Team Marketplace is only an optional Teams/Enterprise path;
+never a public Marketplace). Prefer Execution on Local Computer when the CLI
+sessions live on this machine; the cloud Agent Computer is a different
 machine. One Grok Bot Routine on this Bot conversation is the only heartbeat
 carrier: never stack it with a Codex heartbeat or blocking sleep. Takeover
 cancels the previous host heartbeat without stopping in-flight workers.
 `HUMAN_DECISION_REQUIRED` stays in this Bot conversation (Needs attention / this
 Bot's Notifications). Agent Computer takeover is not CLI decision and not
-exact-session stop. An installer copy is not live Grok Bot UI adoption.
+exact-session stop. A payload on disk is not live Grok Bot UI adoption.
 
 See [references/grok-bot-host.md](references/grok-bot-host.md).
 
