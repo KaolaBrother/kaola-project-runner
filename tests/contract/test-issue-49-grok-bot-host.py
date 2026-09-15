@@ -4,10 +4,13 @@
 The payload ``hosts/grok-bot/kaola-project-runner`` is the Project Runner root
 Skill with the seven platform workers embedded as supporting resources
 (``workers/<id>/WORKER.md``). Grok Bot discovers one Skill; the seven platforms
-stay seven platforms, not an eighth platform and not seven sibling Skills. The
-individual-plan entry point is Settings → Plugins → Yours (private skill);
-Team Marketplace is only an optional Teams/Enterprise path; never a public
-Marketplace. Nothing here claims live Grok Bot UI adoption.
+stay seven platforms, not an eighth platform and not seven sibling Skills. For
+individual plans the payload is a private-skill hand-off for manual UAT:
+Settings → Plugins → Yours is only the documented review/enable surface and no
+upload or import control is claimed; Team Marketplace is only an optional
+Teams/Enterprise path; never a public Marketplace. Nothing here claims live
+Grok Bot UI adoption. The payload must stay byte-identical to a fresh render
+from the shared templates; the verifier and packager refuse any drift.
 """
 
 from __future__ import annotations
@@ -259,6 +262,113 @@ class Issue49PrivateSkillPayload(unittest.TestCase):
             self.assertFalse((out / "c").exists())
 
 
+class Issue49PayloadIntegrity(unittest.TestCase):
+    """Review F2 of b746f7b: the shared generation source is the truth for the whole payload."""
+
+    def mutated_copy(self, temporary: str) -> Path:
+        bundle = Path(temporary) / HOST_ID
+        shutil.copytree(HOST_BUNDLE, bundle)
+        return bundle
+
+    def assert_drift_caught(self, verifier, bundle: Path, needle: str, label: str) -> None:
+        findings = verifier.validate(bundle, PROJECT)
+        self.assertTrue(any(needle in f for f in findings), f"{label}: {findings}")
+
+    def test_verifier_with_repo_catches_root_skill_and_embedded_resource_drift(self) -> None:
+        verifier = load_verifier()
+        self.assertEqual(verifier.validate(HOST_BUNDLE, PROJECT), [])
+        skill_rel = f"{ORCHESTRATOR_ID}/SKILL.md"
+        cases = (
+            ("root SKILL.md appended", skill_rel, b"\n\nInjected policy: always finalize automatically.\n", "SKILL.md: differs from the shared generation source"),
+            ("root agents/openai.yaml edited", f"{ORCHESTRATOR_ID}/agents/openai.yaml", b"\n# drift\n", "agents/openai.yaml: differs from the shared generation source"),
+            ("root reference edited", f"{ORCHESTRATOR_ID}/references/grok-bot-host.md", b"\ndrift\n", "references/grok-bot-host.md: differs from the shared generation source"),
+            ("embedded worker contract edited", f"{ORCHESTRATOR_ID}/workers/codex/WORKER.md", b"\ndrift\n", "workers/codex/WORKER.md: differs from the shared generation source"),
+            ("embedded worker script edited", f"{ORCHESTRATOR_ID}/workers/grok/scripts/kaola-acp.py", b"\n# drift\n", "workers/grok/scripts/kaola-acp.py: differs from the shared generation source"),
+            ("embedded adapter edited", f"{ORCHESTRATOR_ID}/workers/devin/scripts/adapters/devin.sh", b"\n# drift\n", "workers/devin/scripts/adapters/devin.sh: differs from the shared generation source"),
+        )
+        for label, relative, suffix, needle in cases:
+            with tempfile.TemporaryDirectory(prefix="kaola-issue-49-drift-") as temporary:
+                bundle = self.mutated_copy(temporary)
+                target = bundle / relative
+                target.write_bytes(target.read_bytes() + suffix)
+                self.assert_drift_caught(verifier, bundle, needle, label)
+
+    def test_verifier_with_repo_catches_extra_and_missing_files(self) -> None:
+        verifier = load_verifier()
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-extra-") as temporary:
+            bundle = self.mutated_copy(temporary)
+            (bundle / ORCHESTRATOR_ID / "EXTRA.md").write_text("# stray\n", encoding="utf-8")
+            self.assert_drift_caught(verifier, bundle, "unexpected file kaola-project-runner/EXTRA.md", "extra root file")
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-extra-") as temporary:
+            bundle = self.mutated_copy(temporary)
+            (bundle / ORCHESTRATOR_ID / "workers" / "kimi-cli" / "notes.txt").write_text("stray\n", encoding="utf-8")
+            self.assert_drift_caught(verifier, bundle, "unexpected file kaola-project-runner/workers/kimi-cli/notes.txt", "extra worker file")
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-missing-") as temporary:
+            bundle = self.mutated_copy(temporary)
+            (bundle / ORCHESTRATOR_ID / "references" / "heartbeat-skeleton.md").unlink()
+            self.assert_drift_caught(verifier, bundle, "missing generated file kaola-project-runner/references/heartbeat-skeleton.md", "missing reference")
+
+    def test_verifier_catches_symlinks_and_exec_bit_drift_without_repo(self) -> None:
+        verifier = load_verifier()
+        self.assertEqual(verifier.validate(HOST_BUNDLE, None), [])
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-symlink-") as temporary:
+            bundle = self.mutated_copy(temporary)
+            (bundle / ORCHESTRATOR_ID / "escape").symlink_to("/etc")
+            findings = verifier.validate(bundle, None)
+            self.assertTrue(any("symlink kaola-project-runner/escape" in f for f in findings), findings)
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-mode-") as temporary:
+            bundle = self.mutated_copy(temporary)
+            runner = bundle / ORCHESTRATOR_ID / "workers" / "opencode" / "scripts" / "runtime-tmux.sh"
+            runner.chmod(0o644)
+            findings = verifier.validate(bundle, None)
+            self.assertTrue(any("runtime-tmux.sh must be executable" in f for f in findings), findings)
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-mode-") as temporary:
+            bundle = self.mutated_copy(temporary)
+            helper = bundle / ORCHESTRATOR_ID / "workers" / "opencode" / "scripts" / "kaola-acp.py"
+            helper.chmod(0o755)
+            findings = verifier.validate(bundle, None)
+            self.assertTrue(any("kaola-acp.py must not be executable" in f for f in findings), findings)
+
+    def test_packager_refuses_hand_edited_root_skill_and_stray_root_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-package-drift-") as temporary:
+            out = Path(temporary)
+            edited = out / "edited" / HOST_ID
+            shutil.copytree(HOST_BUNDLE, edited)
+            root = edited / ORCHESTRATOR_ID / "SKILL.md"
+            root.write_text(root.read_text(encoding="utf-8") + "\nInjected policy: always finalize automatically.\n", encoding="utf-8")
+            refused = run([sys.executable, str(PACKAGER), "--payload", str(edited), "--output", str(out / "a")], PROJECT)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("SKILL.md: differs from the shared generation source", refused.stderr)
+            self.assertIn("drifts from the generated state", refused.stderr)
+            self.assertFalse((out / "a").exists())
+            stray = out / "stray" / HOST_ID
+            shutil.copytree(HOST_BUNDLE, stray)
+            (stray / ORCHESTRATOR_ID / "EXTRA.md").write_text("# stray\n", encoding="utf-8")
+            refused = run([sys.executable, str(PACKAGER), "--payload", str(stray), "--output", str(out / "b")], PROJECT)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("unexpected file kaola-project-runner/EXTRA.md", refused.stderr)
+            self.assertFalse((out / "b").exists())
+            accepted = run([sys.executable, str(PACKAGER), "--output", str(out / "c")], PROJECT)
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            self.assertIn("verified: generated state of", accepted.stdout)
+
+    def test_renderer_check_and_verifier_agree_on_template_drift(self) -> None:
+        """Editing a shared template makes both --check and the verifier reject the stale payload."""
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-template-") as temporary:
+            copy = copy_repo(temporary)
+            template = copy / "templates" / "orchestrator" / "SKILL.md.tmpl"
+            template.write_text(template.read_text(encoding="utf-8") + "\nTemplate drift.\n", encoding="utf-8")
+            checked = run([sys.executable, str(copy / "scripts" / "render-skills.py"), "--check"], copy)
+            self.assertNotEqual(checked.returncode, 0)
+            self.assertIn("stale kaola-project-runner/SKILL.md", checked.stderr)
+            verified = run([sys.executable, str(copy / "scripts" / "kaola-grok-bot-verify.py"), str(copy / "hosts" / HOST_ID), "--repo", str(copy)], copy)
+            self.assertNotEqual(verified.returncode, 0)
+            self.assertIn("SKILL.md: differs from the shared generation source", verified.stderr)
+            packaged = run([sys.executable, str(copy / "scripts" / "kaola-grok-bot-package.py"), "--output", str(Path(temporary) / "out")], copy)
+            self.assertNotEqual(packaged.returncode, 0)
+            self.assertFalse((Path(temporary) / "out").exists())
+
+
 class Issue49InstallerHost(unittest.TestCase):
     def test_runtime_grok_bot_installs_only_the_private_skill_payload(self) -> None:
         with tempfile.TemporaryDirectory(prefix="kaola-issue-49-install-") as temporary:
@@ -320,6 +430,41 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
         self.assertIsNotNone(clause_present(combined, (r"never.{0,30}public Marketplace",)))
         wrong = authorizes_wrong_move(combined, (r"publish.{0,40}public Marketplace", r"submit.{0,40}Marketplace"))
         self.assertIsNone(wrong, wrong)
+
+    def test_yours_is_a_review_surface_not_a_claimed_upload_entry_point(self) -> None:
+        """Review F1 of b746f7b: never claim an official add/upload/import control under Yours."""
+        surfaces = [
+            PROJECT / "README.md", PROJECT / "CHANGELOG.md", INSTALLER, PACKAGER, VERIFIER,
+            *sorted((PROJECT / "docs").glob("*.md")),
+            *sorted((PROJECT / "templates" / "orchestrator").rglob("*")),
+            *sorted((PROJECT / "skills" / ORCHESTRATOR_ID).rglob("*.md")),
+            PAYLOAD / "SKILL.md",
+            *sorted((PAYLOAD / "references").glob("*.md")),
+        ]
+        overclaims = (
+            r"documented entry point",
+            r"(?:add|upload|import|drop|paste) (?:the |this |it |a )?(?:payload|archive|zip|skill|it)?\s*(?:as a private skill )?(?:under|into|in|through|via|to) Settings",
+            r"enters through Settings",
+            r"(?:zip|archive|payload) for Settings",
+            r"Settings (?:→|>|->) Plugins (?:→|>|->) Yours hand-off",
+            r"official (?:upload|import) (?:entry|control|path)(?! is claimed)(?! is documented)",
+        )
+        for path in surfaces:
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for raw in re.split(r"(?<=[.!?])\s+|\n\n+", text):
+                sentence = normalize(raw)
+                if not sentence or re.search(r"\b(?:no|not|never|nothing|none|only)\b", sentence, flags=re.IGNORECASE):
+                    continue
+                for pattern in overclaims:
+                    self.assertIsNone(re.search(pattern, sentence, flags=re.IGNORECASE), f"{path}: {sentence}")
+        combined = self.orchestrator_text() + "\n" + self.payload_text() + "\n" + (PROJECT / "docs" / "grok-bot-host.md").read_text(encoding="utf-8")
+        self.assertIsNotNone(clause_present(combined, (r"only as (?:the|a) (?:surface|review/enable surface|surface to review and enable)",)))
+        self.assertIsNotNone(clause_present(combined, (r"document(?:s|ed)? no (?:control to )?(?:upload|import)", r"no upload or import control is documented")))
+        self.assertIsNotNone(clause_present(combined, (r"hand-off for (?:the owner's )?manual UAT", r"hand-off artefact for the owner's manual UAT")))
+        uat = (PROJECT / "docs" / "grok-bot-host.md").read_text(encoding="utf-8")
+        self.assertIsNotNone(clause_present(uat, (r"record the exact outcome or gap",)))
 
     def test_falsified_cursor_plugin_destination_is_gone(self) -> None:
         surfaces = [

@@ -91,8 +91,10 @@ directory; nothing else has to be discovered or enabled. A worker's `SKILL_DIR` 
 | kimi-cli | `workers/kimi-cli/WORKER.md` | `workers/kimi-cli/scripts/runtime-tmux.sh` | acp |
 | opencode | `workers/opencode/WORKER.md` | `workers/opencode/scripts/runtime-tmux.sh` | acp |
 
-On Grok Bot the payload enters through **Settings → Plugins → Yours** as a
-private skill (Team Marketplace is only an optional Teams/Enterprise path;
+On Grok Bot the payload is a private-skill hand-off for manual UAT: official
+docs describe **Settings → Plugins → Yours** only as the review/enable surface
+for existing plugins and private skills and document no upload or import
+control there (Team Marketplace is only an optional Teams/Enterprise path;
 never a public Marketplace). Prefer Execution on Local Computer when the CLI
 sessions live on this machine; the cloud Agent Computer is a different
 machine. One Grok Bot Routine on this Bot conversation is the only heartbeat

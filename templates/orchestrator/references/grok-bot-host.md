@@ -13,14 +13,17 @@ workers are embedded under `workers/<platform id>/` as supporting resources
 No sibling Skill has to be discovered or enabled, and no worker is a separate
 Skill in this payload.
 
-Individual plans (for example Ultra) have no Team Marketplace. The documented
-entry point is **Settings → Plugins → Yours**: add the payload as a private
-skill and enable it for the Bot. Team Marketplace / admin-provided plugins are
-an optional path only on Teams or Enterprise plans. Never publish this payload
-to a public Marketplace.
+Individual plans (for example Ultra) have no Team Marketplace. The official
+Grok Bot docs describe **Settings → Plugins → Yours** only as the surface to
+review and enable plugins and private skills that already exist on the
+account; they document no control to upload or import a local directory or
+archive there. This payload is a private-skill hand-off for manual UAT, not a
+claimed official ingestion entry point. Team Marketplace / admin-provided
+plugins are an optional path only on Teams or Enterprise plans. Never publish
+this payload to a public Marketplace.
 
 Live enablement in the Grok Bot UI is a human UAT step. A payload on disk or
-an archive is not live adoption.
+an archive is not live adoption; record the exact outcome or gap.
 
 ## Local execution copy
 

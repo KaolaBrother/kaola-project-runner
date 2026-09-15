@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Package the Grok Bot Private Skill payload as a deterministic zip archive.
 
-Input is the generated ``hosts/grok-bot/kaola-project-runner`` tree (verified
-first with ``kaola-grok-bot-verify.py``). Output is
+Input is the generated ``hosts/grok-bot/kaola-project-runner`` tree. Before
+anything is zipped, ``kaola-grok-bot-verify.py`` runs in its ``--repo`` form:
+the payload is re-rendered from the shared templates and every file (root
+``SKILL.md``, ``agents/openai.yaml``, ``references/``, every embedded worker
+resource) must be byte-identical, with no extra files, no symlinks, and
+executable bits only on ``.sh`` scripts. Any drift refuses the package, so a
+hand-edited payload is never signed. Output is
 ``<output>/kaola-project-runner-grok-bot-skill.zip`` plus a ``.sha256`` sidecar.
 Entries are sorted, timestamps fixed, and executable bits preserved, so the
-same payload bytes always produce the same archive digest. Nothing outside
-``<output>`` is read or written; no installed Skill directory is touched.
+same payload bytes always produce the same archive digest. The archive is a
+private-skill hand-off for manual Grok Bot UAT; no official upload entry point
+is claimed. Nothing outside ``<output>`` is written; no installed Skill
+directory is touched.
 """
 
 from __future__ import annotations
@@ -61,14 +68,25 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=REPO / "build" / "grok-bot")
     args = parser.parse_args()
     verifier = load_verifier()
-    findings = verifier.validate(args.payload.resolve(), args.repo.resolve())
+    payload = args.payload.resolve()
+    repo = args.repo.resolve()
+    # Generated-state proof is mandatory here: the archive is signed, so it
+    # must be exactly what the shared templates render, never hand-edited bytes.
+    findings = verifier.validate(payload, repo)
     if findings:
         for finding in findings:
             print(finding, file=sys.stderr)
-        print("kaola-grok-bot-package: refusing to package an invalid payload", file=sys.stderr)
+        print(
+            "kaola-grok-bot-package: refusing to package a payload that is invalid or "
+            f"drifts from the generated state of {repo}",
+            file=sys.stderr,
+        )
         return 1
-    archive, digest = build(args.payload.resolve(), args.output.resolve())
-    print(f"kaola-grok-bot-package: {archive}\nsha256: {digest}")
+    archive, digest = build(payload, args.output.resolve())
+    print(
+        f"kaola-grok-bot-package: {archive}\nsha256: {digest}\n"
+        f"verified: generated state of {repo} (render-skills.py templates)"
+    )
     return 0
 
 

@@ -35,11 +35,42 @@ depends on a sibling Skill directory. `--check` and
 embedded workers, no plugin manifest, no sibling dependency, and no unofficial
 Sand API identifiers.
 
-## Individual plans (Ultra): Settings → Plugins → Yours
+## Payload integrity: the shared generation source is the truth
 
-Individual plans have no Team Marketplace. The documented entry point is the
-Bot's **Settings → Plugins → Yours**: add the payload as a **private skill**
-and enable it for the Bot. Package the payload for hand-off with
+`hosts/grok-bot/` is generated output and is never hand-edited. Two checks
+enforce that, and both re-render from the shared templates instead of trusting
+the bytes on disk:
+
+- `./scripts/render-skills.py --check` compares the whole `hosts/grok-bot/`
+  tree against a fresh render and fails on any missing, unexpected, or stale
+  file.
+- `./scripts/kaola-grok-bot-verify.py hosts/grok-bot --repo .` re-renders the
+  payload from `templates/`, `platforms/`, and `scripts/` and requires every
+  file in the payload (root `SKILL.md`, `agents/openai.yaml`, `references/`,
+  and every embedded worker resource) to be byte-identical, with no extra
+  files, no symlinks, and executable bits only on `.sh` scripts. Without
+  `--repo` the verifier proves shape only, not generated state.
+
+`scripts/kaola-grok-bot-package.py` always runs the `--repo` form before
+zipping and refuses to package a payload that drifts from the generated state,
+so a hand-edited root `SKILL.md` or a stray file at the payload root can never
+be signed into the archive.
+
+## Individual plans (Ultra): private-skill hand-off, not a claimed upload path
+
+Individual plans have no Team Marketplace. The official Grok Bot docs
+(skills-routines-and-automations, settings-and-notifications; read 2026-09-15)
+describe **Settings → Plugins → Yours** only as the surface to review and
+enable plugins and **private skills** that already exist on the account. They
+describe private skills as saved from a Bot conversation or taught as a task,
+and packaged skills as installed from the Marketplace. They document no
+control to upload or import a local directory or archive there, and nothing
+about a private skill carrying a file tree with scripts. This project
+therefore claims no official ingestion entry point.
+
+The payload and its archive are a hand-off artefact for the owner's manual
+UAT: the owner attempts to establish it as a private skill on the Bot and
+records the exact outcome or gap (see Live UAT). Build it with
 
 ```bash
 ./scripts/render-skills.py --write
@@ -87,8 +118,10 @@ See `skills/kaola-project-runner/references/grok-bot-host.md`.
 
 ## Live UAT (human; not claimed by this change)
 
-1. Settings → Plugins → Yours shows Project Runner as a private skill and it can
-   be enabled for the Bot (or record the exact gap).
+1. Attempt to establish the payload as a private skill on the Bot. Settings →
+   Plugins → Yours is the documented review/enable surface; no upload or
+   import control is documented there. Record the exact outcome or gap,
+   including whether Project Runner appears under Yours and can be enabled.
 2. `/` in that Bot offers Project Runner; no separate worker Skill is needed.
 3. A Routine fires in the same Bot conversation.
 4. Local Computer runs `…/workers/<id>/scripts/runtime-tmux.sh` / `kaola-acp`
@@ -104,9 +137,10 @@ See `skills/kaola-project-runner/references/grok-bot-host.md`.
 ./scripts/install-local.sh --runtime grok-bot --uninstall   # removes only the owned payload copy
 ```
 
-Disable or delete the private skill under Settings → Plugins → Yours. Pause or
-delete the Routine; restore the previous host wake if needed. Do not Reset
-Agent Computer. Do not stop unrelated workers.
+If a private skill was established on the Bot, disable or delete it under
+Settings → Plugins → Yours. Pause or delete the Routine; restore the previous
+host wake if needed. Do not Reset Agent Computer. Do not stop unrelated
+workers.
 
 ## Out of scope
 

@@ -78,8 +78,11 @@ with an embedded-worker routing table) plus `workers/<platform id>/` trees that 
 to the generated worker Skills except that `SKILL.md` is renamed `WORKER.md` and Skill identity
 files are dropped. Grok Bot is a **host**, not an eighth platform: there is no
 `platforms/grok-bot.yaml`, and no worker becomes a separately discoverable Skill. On an individual
-plan the payload enters through Settings → Plugins → Yours (deterministic archive from
-`scripts/kaola-grok-bot-package.py`); `--runtime grok-bot` keeps only a local execution copy under
+plan the payload is a private-skill hand-off for manual UAT (deterministic archive from
+`scripts/kaola-grok-bot-package.py`; Settings → Plugins → Yours is only the documented review/enable
+surface, with no documented upload control). `scripts/kaola-grok-bot-verify.py --repo` and the
+packager re-render the payload from the shared templates and refuse any drift from that generated
+state; `--runtime grok-bot` keeps only a local execution copy under
 `${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills` for Local Computer runs. `--platform grok`
 still selects the Grok CLI worker. Live Grok Bot UI enablement is UAT, not claimed by the payload.
 See [Grok Bot host](grok-bot-host.md).

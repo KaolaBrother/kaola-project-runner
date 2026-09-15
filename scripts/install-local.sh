@@ -35,9 +35,11 @@ Consuming runtimes (verified native skill directories):
                (local execution copy of the single Grok Bot Private Skill
                payload hosts/grok-bot/kaola-project-runner: one root SKILL.md
                with the seven workers embedded under workers/<id>/. Grok Bot
-               itself discovers nothing on this disk; add the payload under
-               Settings > Plugins > Yours. --platform/--no-orchestrator are
-               refused for this runtime; no other Skill directory is touched.)
+               itself discovers nothing on this disk; the payload is a
+               private-skill hand-off for manual UAT (Settings > Plugins > Yours
+               only reviews/enables existing skills; no upload control is
+               documented). --platform/--no-orchestrator are refused for this
+               runtime; no other Skill directory is touched.)
 Grok CLI worker uses --platform grok, not --runtime grok.
 
 --skills-dir installs into any explicit destination parent (including

@@ -50,9 +50,10 @@ preflighted before mutation; foreign paths are never replaced.
 `cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`,
 `grok-bot` → `${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills` (local execution copy of the
 single Private Skill payload; `--platform` and `--no-orchestrator` are refused; Grok Bot discovers
-nothing on this disk — the payload enters through Settings → Plugins → Yours, packaged by
-`scripts/kaola-grok-bot-package.py`). `--runtime grok` is not a host alias; `--platform grok` is the
-Grok CLI worker. Grok Bot UI enablement is UAT; see [Grok Bot host](grok-bot-host.md).
+nothing on this disk — the payload is a private-skill hand-off for manual UAT, packaged by
+`scripts/kaola-grok-bot-package.py`; Settings → Plugins → Yours is only the documented
+review/enable surface, with no documented upload control). `--runtime grok` is not a host alias;
+`--platform grok` is the Grok CLI worker. Grok Bot UI enablement is UAT; see [Grok Bot host](grok-bot-host.md).
 `--skills-dir` is a mutually exclusive explicit absolute destination (project-local paths included).
 With neither flag the legacy Codex destination is used. `--method copy` (default) stages an
 identical standalone copy on the destination filesystem and records a per-Skill receipt at

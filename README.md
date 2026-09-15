@@ -61,9 +61,11 @@ The installer provides native skill-directory destinations for **Codex, Claude C
 Cursor, and Devin**. **Grok Bot** is a host that receives **one Private Skill**: the
 generated `hosts/grok-bot/kaola-project-runner/` payload is the main Skill with the
 seven workers embedded under `workers/<id>/` as supporting resources (one discoverable
-Skill, still seven platforms). On an individual plan it enters through Settings →
-Plugins → Yours; `--runtime grok-bot` only keeps the local execution copy for Local
-Computer runs. `--platform grok` remains the Grok CLI worker; it is not a host install.
+Skill, still seven platforms). On an individual plan the payload is a private-skill
+hand-off for manual UAT: official Grok Bot docs describe Settings → Plugins → Yours only
+as a review/enable surface and document no upload or import control, so no ingestion
+entry point is claimed. `--runtime grok-bot` only keeps the local execution copy for
+Local Computer runs. `--platform grok` remains the Grok CLI worker; it is not a host install.
 Grok Bot UI enablement is a named live UAT boundary — see
 [Grok Bot host](docs/grok-bot-host.md). Other hosts can use `--skills-dir /absolute/path`
 if they can load `SKILL.md` and execute shell commands in an environment with the
@@ -165,7 +167,7 @@ subset, or skip the orchestrator:
 
 # Grok Bot: one Private Skill payload (root SKILL.md + seven embedded workers).
 ./scripts/install-local.sh --runtime grok-bot      # local execution copy under ~/.kaola/grok-bot/skills
-./scripts/kaola-grok-bot-package.py                # deterministic zip for Settings > Plugins > Yours
+./scripts/kaola-grok-bot-package.py                # deterministic zip hand-off; refuses drift from generated state
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode

@@ -4,9 +4,14 @@
 
 - **Grok Bot** host as **one Private Skill**: `hosts/grok-bot/kaola-project-runner/` is the
   Project Runner root Skill with the seven CLI workers embedded under `workers/<id>/` (contract
-  `WORKER.md`), rendered from the same templates. Individual plans add it under Settings →
-  Plugins → Yours (`scripts/kaola-grok-bot-package.py` builds a deterministic zip); Team
-  Marketplace is only an optional Teams/Enterprise path. `--runtime grok-bot` keeps a local
+  `WORKER.md`), rendered from the same templates. For individual plans the payload is a
+  private-skill hand-off for manual UAT (`scripts/kaola-grok-bot-package.py` builds a
+  deterministic zip): official Grok Bot docs describe Settings → Plugins → Yours only as a
+  review/enable surface and document no upload or import control, so no ingestion entry point
+  is claimed; Team Marketplace is only an optional Teams/Enterprise path.
+  `scripts/kaola-grok-bot-verify.py --repo` and the packager re-render the payload from the
+  shared templates and refuse any drift (root `SKILL.md`, embedded resources, extra files,
+  symlinks, executable bits). `--runtime grok-bot` keeps a local
   execution copy under `~/.kaola/grok-bot/skills` and touches no other Skill. Grok Bot is not an
   eighth platform; `--platform grok` remains the Grok CLI worker. Live Grok Bot UI enablement is
   UAT. See [Grok Bot host](docs/grok-bot-host.md).

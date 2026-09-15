@@ -5,16 +5,27 @@ Proves the delivery shape for an individual Grok Bot plan: exactly one
 discoverable root ``SKILL.md`` (Project Runner), the seven platform workers
 embedded under ``workers/<platform id>/`` as supporting resources (contract
 file ``WORKER.md``), no sibling-Skill dependency, no plugin manifest, no
-unofficial Sand API identifiers anywhere in the payload, and (with ``--repo``)
-byte identity with the generated ``skills/`` trees. It does not contact Grok
-Bot and does not claim live UI adoption.
+symlinks, executable bits only on ``.sh`` scripts, and no unofficial Sand API
+identifiers in any payload text file.
+
+With ``--repo`` it also proves **generated state**: the payload is re-rendered
+from that checkout's shared templates (``scripts/render-skills.py``) and every
+file in the payload -- the root ``SKILL.md``, ``agents/openai.yaml``,
+``references/``, and every embedded worker resource -- must be byte-identical
+to the fresh render, with no missing and no extra files. The shared generation
+source is the truth; bytes on disk are never trusted on their own. Without
+``--repo`` only the shape is proven.
+
+It does not contact Grok Bot and does not claim live UI adoption.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import re
+import stat
 import sys
 from pathlib import Path
 
@@ -55,10 +66,65 @@ UNOFFICIAL = (
     "/local-exec/",
 )
 TEXT_SUFFIXES = {".md", ".yaml", ".yml", ".json", ".sh", ".py", ".txt"}
+RENDERER = Path("scripts") / "render-skills.py"
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def expected_generated_map(repo: Path) -> dict[str, str]:
+    """Re-render the payload from the checkout's shared templates (the truth)."""
+    renderer_path = repo / RENDERER
+    if not renderer_path.is_file():
+        raise ValueError(f"{repo}: missing {RENDERER}; cannot prove generated state")
+    spec = importlib.util.spec_from_file_location("kaola_render_skills", renderer_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    manifests = [module.parse_manifest(path) for path in sorted(module.PLATFORMS.glob("*.yaml"))]
+    return {
+        name: hashlib.sha256(data).hexdigest()
+        for name, data in module.expected_grok_bot_host_files(manifests).items()
+    }
+
+
+def generated_state_findings(bundle: Path, repo: Path) -> list[str]:
+    try:
+        expected = expected_generated_map(repo)
+    except (OSError, ValueError) as exc:
+        return [f"{bundle}: cannot re-render from {repo}: {exc}"]
+    actual = file_map(bundle)
+    findings: list[str] = []
+    for name in sorted(expected.keys() | actual.keys()):
+        if name not in actual:
+            findings.append(f"{bundle}: missing generated file {name}")
+        elif name not in expected:
+            findings.append(f"{bundle}: unexpected file {name} (not produced by render-skills.py)")
+        elif actual[name] != expected[name]:
+            findings.append(
+                f"{bundle}/{name}: differs from the shared generation source "
+                f"(expected={expected[name][:12]} actual={actual[name][:12]}; hand-edited?)"
+            )
+    return findings
+
+
+def tree_integrity_findings(bundle: Path) -> list[str]:
+    """Shape facts that need no repo: no symlinks, exec bits only on shell scripts."""
+    findings: list[str] = []
+    for path in sorted(bundle.rglob("*")):
+        relative = path.relative_to(bundle).as_posix()
+        if path.is_symlink():
+            findings.append(f"{bundle}: symlink {relative} is not part of a generated payload")
+            continue
+        if not path.is_file():
+            continue
+        executable = bool(path.stat().st_mode & stat.S_IXUSR)
+        if path.suffix == ".sh" and not executable:
+            findings.append(f"{bundle}: {relative} must be executable")
+        elif path.suffix != ".sh" and executable:
+            findings.append(f"{bundle}: {relative} must not be executable")
+    return findings
 
 
 def file_map(root: Path) -> dict[str, str]:
@@ -99,6 +165,7 @@ def validate(bundle: Path, repo: Path | None) -> list[str]:
         )
         return findings
     skill = bundle / ROOT_SKILL
+    findings.extend(tree_integrity_findings(bundle))
 
     # Exactly one discoverable Skill in the whole payload.
     discoverable = sorted(path.relative_to(bundle).as_posix() for path in bundle.rglob("SKILL.md"))
@@ -174,6 +241,9 @@ def validate(bundle: Path, repo: Path | None) -> list[str]:
         canonical_refs = repo / "skills" / ROOT_SKILL / "references"
         if canonical_refs.is_dir() and file_map(canonical_refs) != file_map(skill / "references"):
             findings.append(f"{skill}/references: bytes differ from skills/{ROOT_SKILL}/references")
+        # Whole-payload generated state: root SKILL.md, agents/, references/,
+        # every embedded resource, no extras. The templates are the truth.
+        findings.extend(generated_state_findings(bundle, repo))
 
     for path in sorted(bundle.rglob("*")):
         if path.is_file() and path.suffix in TEXT_SUFFIXES:
@@ -194,7 +264,11 @@ def main() -> int:
         for finding in findings:
             print(finding, file=sys.stderr)
         return 1
-    print(f"kaola-grok-bot-verify: PASS {args.bundle} (1 root skill, {len(WORKER_IDS)} embedded workers)")
+    proof = "generated state" if args.repo else "shape only; pass --repo to prove generated state"
+    print(
+        f"kaola-grok-bot-verify: PASS {args.bundle} "
+        f"(1 root skill, {len(WORKER_IDS)} embedded workers; {proof})"
+    )
     return 0
 
 
