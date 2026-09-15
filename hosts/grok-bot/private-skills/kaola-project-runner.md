@@ -77,7 +77,25 @@ from the generated runtime copy (`./scripts/install-local.sh --runtime
 grok-bot`), one directory with the seven workers embedded under
 `workers/<platform id>/`.
 
-In a native skill-directory install the seven workers are sibling Skill directories next to this one; call each by its installed directory.
+#### Worker Private Skills (Grok Bot account)
+
+On a Grok Bot account each of the seven workers is its own account-private Skill,
+saved from one single-Markdown document exactly like this one. Select a worker by
+the stable Skill name below and load that Skill (ask for it by name when it is not
+already loaded) for every transport operation: preflight, start, observe, send,
+capture, key, and stop. This Skill carries no transport contract, no scripts, and
+none of the worker text; each worker Skill states its own Local Computer script
+location.
+
+| Platform id | Worker Private Skill (stable name) | Display name | Default transport |
+|---|---|---|---|
+| claude-code | `claude-code-kaola-project-runner` | Claude Code Kaola Project Runner | pty |
+| codex | `codex-kaola-project-runner` | Codex CLI Kaola Project Runner | acp |
+| cursor-cli | `cursor-cli-kaola-project-runner` | Cursor CLI Kaola Project Runner | acp |
+| devin | `devin-kaola-project-runner` | Devin CLI Kaola Project Runner | acp |
+| grok | `grok-kaola-project-runner` | Grok Kaola Project Runner | acp |
+| kimi-cli | `kimi-cli-kaola-project-runner` | Kimi CLI Kaola Project Runner | acp |
+| opencode | `opencode-kaola-project-runner` | OpenCode Kaola Project Runner | acp |
 
 On Grok Bot the account Skills are a private-skill hand-off for manual UAT:
 official docs describe **Settings → Plugins → Yours** only as the review/enable
@@ -248,3 +266,135 @@ model mismatches, blockers, and next action. Mention newly stopped sessions
 once; do not keep stale stopped rows in every report. Do not require separate
 acceptance, finalize, rebase, or close-out dashboards. Keep duties traceable
 in existing records without a new state machine or ledger.
+
+## Grok Bot account-private form
+
+This document is the account-private Skill `kaola-project-runner` (Project Runner)
+for the Grok Bot host: one single Markdown (frontmatter `name` and `description` plus
+this body) saved on its own by the Bot's skill write. The seven workers are seven other
+account-private Skills with the stable names in the routing table above; this Skill
+carries no transport contract, no scripts, and none of their text. The two reference
+documents linked above are bundled verbatim at the end of this document. Grok Bot
+installs and updates all eight from this repository by following `INSTALL.md` next
+to the `private-skills/` documents.
+
+## Bundled reference: references/grok-bot-host.md
+
+# Grok Bot host
+
+Grok Bot is a host for this Skill, at the same rank as Codex, Claude Code,
+Cursor, and Devin. It is not a worker and not an eighth CLI platform.
+`--platform grok` installs the Grok CLI worker Skill. `--platform grok-bot` is
+invalid. `--runtime grok` is not a host alias.
+
+## Delivery shape: eight account-private Skills plus one runtime copy
+
+On a Grok Bot account a private skill is one single Markdown: `name`,
+`description`, `body`. Owner UAT (2026-09-16) found no way to import a ZIP or
+a multi-file tree. So the account receives **eight** Skills, each its own
+document rendered from the shared templates under
+`hosts/grok-bot/private-skills/`: `kaola-project-runner` (this Skill: authorization
+recovery, heartbeat, dispatch, acceptance-before-finalize, close-out) and one
+`<platform id>-kaola-project-runner` per worker (its full transport contract
+and its Local Computer script location). This Skill routes to a worker by that
+stable Skill name; it never inlines worker text and never loads a file tree.
+No Skill on the account depends on a sibling file or on another Skill being
+saved. Grok Bot installs and updates all eight itself from the repository by
+following `hosts/grok-bot/INSTALL.md` (one skill write per file, idempotent by
+name). Still seven platforms; no worker is an eighth platform.
+
+Individual plans (for example Ultra) have no Team Marketplace. The official
+Grok Bot docs describe **Settings → Plugins → Yours** only as the surface to
+review and enable plugins and private skills that already exist on the
+account; they document no control to upload or import a local directory or
+archive there. The eight documents are a private-skill hand-off for manual
+UAT, not a claimed official ingestion entry point. Team Marketplace /
+admin-provided plugins are an optional path only on Teams or Enterprise plans.
+Never publish these Skills to a public Marketplace.
+
+Live enablement in the Grok Bot UI is a human UAT step. A document or a
+runtime copy on disk is not live adoption; record the exact outcome or gap.
+
+## Local execution copy
+
+The Bot's cloud computer is a different machine from this Mac. When the CLI
+sessions live here, keep the generated runtime copy on this machine
+(`./scripts/install-local.sh --runtime grok-bot`, default
+`$HOME/.kaola/grok-bot/skills/kaola-project-runner`, root overridable with
+`KAOLA_GROK_BOT_HOME`) and use **Execution on Local Computer**. That copy is
+one directory with the seven workers' scripts and references embedded under
+`workers/<platform id>/`; each worker Skill states its own `SKILL_DIR`
+(`<copy>/workers/<platform id>`) and Runner entry
+(`SKILL_DIR/scripts/runtime-tmux.sh`). Do not treat `/workspace` on the cloud
+computer as the Mac tmux/ACP holders.
+
+## Heartbeat
+
+On Grok Bot, one Routine bound to **this Bot conversation** is the only
+heartbeat carrier. Do not stack it with a Codex heartbeat, a Grok CLI `/loop`,
+or same-session blocking sleep. After close-out, pause or delete that Routine
+rather than leaving it firing.
+
+Record the Routine identity in the consuming project's run records, not in this
+Skill.
+
+## Takeover and rollback
+
+When Grok Bot takes over from another host, cancel only that host's recurring
+wake. Do not stop in-flight exact owned worker sessions. Do not Reset Agent
+Computer. Do not use the Bot "Stop now" control as Runner `stop`.
+
+Idle exact-session stop remains the matching platform Runner `stop`, ACP
+and PTY alike.
+
+Restoring the previous host means pausing or deleting this Routine and
+re-creating that host's single wake. Workers may keep running across the switch.
+
+## Decisions
+
+`HUMAN_DECISION_REQUIRED` is considered here first and, when it must reach the
+human, stays in **this Bot conversation** (Needs attention / this Bot's
+Notifications). Agent Computer takeover is for passwords, passkeys, 2FA,
+CAPTCHAs, and similar blocked site steps. It is not a CLI decision channel and
+not exact-session stop.
+
+## Authorization and acceptance
+
+Recover existing explicit authorization and live work before asking intake
+questions. A completed mission frontier still requires review and acceptance
+before finalize. A Routine success, idle worker, or green CI is not acceptance.
+
+Do not call unofficial Sand gateways or GrokBot RPCs. Official Skill, private
+skill, Routine, Local Computer, and notification surfaces are the host contract.
+
+## Bundled reference: references/heartbeat-skeleton.md
+
+# Heartbeat skeleton
+
+Starting point for a project-specific heartbeat. Not a second copy of this Skill's policy. Render from current authorization and project instructions; replace the same heartbeat when those change. Do not hard-code host tool names.
+
+```text
+PROJECT_RUNNER_HEARTBEAT_V2
+你是本项目的主编排者。遵循主 Skill 的授权、职责和执行顺序；平台 Runner 只负责运输，工人执行仓库工作。
+
+仓库与已授权目标：{repo, goal}
+CLI、模型、并发及能力限制：{已恢复的明确授权；缺失才询问}
+Workflow、自执行、心跳间隔：{用户选择或默认值}
+现场入口：{已有会话定位、Workflow记录、Issue/PR；不是新的backlog镜像}
+项目约束与停止条件：{项目规则、用户要求、尚未完成的交付义务}
+
+每拍基于新鲜证据：
+1. 恢复授权和现场，核对已派动作，避免重复启动、认领或发送。
+2. 处理工人问题；每拍核对已授权的空闲线程和可安全并行的工作，派出所有合适匹配；无合适工作则保持空闲，不创造任务或扩大授权。
+3. 核对交付和项目验收；缺口派补证或修复，证据充分再指挥finalize/merge。
+4. 合并后协调其他工人安全同步，审查冲突并重验受影响部分。
+5. 没有合适工作的闲置会话才关闭（ACP holder 与 PTY/tmux 同一精确 stop；闲置不是保活）；保留待收尾事项的责任人，清理已完成工作区。
+6. 按用户格式汇报当前工作、关键证据、未完成收尾和下一步；继续同一心跳。
+PR 非必需且授权合并出口合适时走已选 Workflow 同步/合并，不为交接单独开 PR；有开放 PR 时争用容量优先推进可执行项，其他已授权工作仅在已许可 CLI 上安全并行。阻塞 PR 保留责任人与下一步，不作全局等待。
+
+首次缺CLI授权：只问缺失项，不启动worker或心跳。已有运行先恢复授权，不能当作空白intake。
+到点/到条件（run until 5pm/done/CONDITION）之后不接新任务、不认领新 issue；默认真收口手头已认领/在飞 issue，合并 worktree/分支、不留分支尾巴。到点不是丢掉手头工作。只有人明确说「这里停、稍后再续」才跳过该清理并保留可恢复未完成分支。
+用户叫停时遵照其范围执行；否则在授权目标完成、无未完成交付/同步/清理、剩余闲置owned会话已停止时取消心跳。之后有新授权工作才 start/--resume/--continue。
+暂时没有就绪任务不等于项目完成。原生心跳与sleep不得叠用。
+宿主若为 Grok Bot：只用本 Bot 主会话上的一条 Routine 作为唯一心跳；接管时只取消旧宿主心跳（Codex heartbeat / 其他 loop / sleep），不得 stop 在飞 worker。HUMAN_DECISION_REQUIRED 留在本会话（Needs attention）。不要把 Routine 与 sleep 叠用。
+```

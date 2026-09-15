@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Package the Grok Bot Private Skill payload as a deterministic zip archive.
+"""Package the Grok Bot Local Computer runtime copy as a deterministic zip archive.
 
-Input is the generated ``hosts/grok-bot/kaola-project-runner`` tree. Before
-anything is zipped, ``kaola-grok-bot-verify.py`` runs in its ``--repo`` form:
-the payload is re-rendered from the shared templates and every file (root
-``SKILL.md``, ``agents/openai.yaml``, ``references/``, every embedded worker
-resource) must be byte-identical, with no extra files, no symlinks, and
-executable bits only on ``.sh`` scripts. Any drift refuses the package, so a
-hand-edited payload is never signed. Output is
+Input is the generated ``hosts/grok-bot/kaola-project-runner`` tree (the
+runtime copy: root ``SKILL.md`` plus the seven embedded workers). Before
+anything is zipped, ``kaola-grok-bot-verify.py`` runs in its ``--repo`` form on
+the whole ``hosts/grok-bot`` bundle: the eight single-Markdown account Skills,
+the install guide, and the runtime copy are re-rendered from the shared
+templates and every file must be byte-identical, with no extra files, no
+symlinks, and executable bits only on ``.sh`` scripts. Any drift refuses the
+package, so a hand-edited tree is never signed. Output is
 ``<output>/kaola-project-runner-grok-bot-skill.zip`` plus a ``.sha256`` sidecar.
 Entries are sorted, timestamps fixed, and executable bits preserved, so the
-same payload bytes always produce the same archive digest. The archive is a
-private-skill hand-off for manual Grok Bot UAT; no official upload entry point
-is claimed. Nothing outside ``<output>`` is written; no installed Skill
-directory is touched.
+same bytes always produce the same archive digest. The archive moves the
+runtime copy between machines for manual Grok Bot UAT; it is not an account
+import (a Grok Bot private skill is one single Markdown, saved by the Bot from
+``hosts/grok-bot/private-skills/`` per ``INSTALL.md``), and no official upload
+entry point is claimed. Nothing outside ``<output>`` is written; no installed
+Skill directory is touched.
 """
 
 from __future__ import annotations

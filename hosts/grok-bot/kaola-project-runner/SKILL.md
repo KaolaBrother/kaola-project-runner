@@ -65,17 +65,23 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 ### Hosts
 
 This Skill is host-neutral. Native skill-directory installs exist for Codex,
-Claude Code, Cursor, and Devin. For Grok Bot on an individual plan this Skill
-ships as **one Private Skill payload**: this root Skill plus the seven platform
-workers embedded under `workers/<platform id>/` as supporting resources. That
-is one discoverable Skill and still seven platforms; Grok Bot is a host, not a
-worker and not an eighth platform. `--platform grok` is the Grok CLI worker.
-`--platform grok-bot` is invalid.
+Claude Code, Cursor, and Devin. Grok Bot is a host, not a worker and not an
+eighth platform: `--platform grok` is the Grok CLI worker; `--platform grok-bot`
+is invalid. On a Grok Bot account a private skill is one single Markdown
+(name, description, body; owner UAT 2026-09-16 found no ZIP or file-tree
+import), so there this Skill and the seven platform workers are **eight
+account-private Skills**, each rendered from the shared templates as its own
+document under `hosts/grok-bot/private-skills/` and saved on its own by Grok
+Bot following `hosts/grok-bot/INSTALL.md`. The scripts run on Local Computer
+from the generated runtime copy (`./scripts/install-local.sh --runtime
+grok-bot`), one directory with the seven workers embedded under
+`workers/<platform id>/`.
 
-#### Embedded workers (Grok Bot Private Skill payload)
+#### Embedded workers (Grok Bot Local Computer runtime copy)
 
-In this payload the seven workers are supporting resources of this one Skill,
-under `workers/<platform id>/`; their contract file is `WORKER.md`, not a
+In this runtime copy the seven workers are supporting resources of this one Skill
+directory (one discoverable Skill, seven embedded workers), under
+`workers/<platform id>/`; their contract file is `WORKER.md`, not a
 discoverable `SKILL.md`. Load a worker contract on demand from this Skill's own
 directory; nothing else has to be discovered or enabled. A worker's `SKILL_DIR` is
 `<local execution copy of this Skill>/workers/<platform id>` and its Runner entry is
@@ -91,18 +97,19 @@ directory; nothing else has to be discovered or enabled. A worker's `SKILL_DIR` 
 | kimi-cli | `workers/kimi-cli/WORKER.md` | `workers/kimi-cli/scripts/runtime-tmux.sh` | acp |
 | opencode | `workers/opencode/WORKER.md` | `workers/opencode/scripts/runtime-tmux.sh` | acp |
 
-On Grok Bot the payload is a private-skill hand-off for manual UAT: official
-docs describe **Settings → Plugins → Yours** only as the review/enable surface
-for existing plugins and private skills and document no upload or import
-control there (Team Marketplace is only an optional Teams/Enterprise path;
-never a public Marketplace). Prefer Execution on Local Computer when the CLI
-sessions live on this machine; the cloud Agent Computer is a different
+On Grok Bot the account Skills are a private-skill hand-off for manual UAT:
+official docs describe **Settings → Plugins → Yours** only as the review/enable
+surface for existing plugins and private skills and document no upload or
+import control there (Team Marketplace is only an optional Teams/Enterprise
+path; never a public Marketplace). Prefer Execution on Local Computer when the
+CLI sessions live on this machine; the cloud Agent Computer is a different
 machine. One Grok Bot Routine on this Bot conversation is the only heartbeat
 carrier: never stack it with a Codex heartbeat or blocking sleep. Takeover
 cancels the previous host heartbeat without stopping in-flight workers.
 `HUMAN_DECISION_REQUIRED` stays in this Bot conversation (Needs attention / this
 Bot's Notifications). Agent Computer takeover is not CLI decision and not
-exact-session stop. A payload on disk is not live Grok Bot UI adoption.
+exact-session stop. A document or runtime copy on disk is not live Grok Bot UI
+adoption.
 
 See [references/grok-bot-host.md](references/grok-bot-host.md).
 

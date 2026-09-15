@@ -68,24 +68,55 @@ core, relay/client/protocol/observation helpers, and one matching adapter into s
 worker directories under `skills/`, and renders the fixed orchestrator directory
 `skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
 derived from the seven manifests (no orchestrator platform manifest or adapter). It also emits
-`hosts/grok-bot/kaola-project-runner/`, one Private Skill that embeds the seven workers. Every managed
+the Grok Bot host bundle `hosts/grok-bot/`: eight single-Markdown account-private Skills under
+`private-skills/`, the install guide `INSTALL.md`, and the Local Computer runtime copy
+`kaola-project-runner/` that embeds the seven workers. Every managed
 directory has a `.generated-by-kaola-project-runner` marker. A published Skill never follows a path
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
 byte inventories, including the orchestrator package and `hosts/grok-bot/`.
 
-The Grok Bot payload is **one discoverable Skill**: the orchestrator root `SKILL.md` (same template,
-with an embedded-worker routing table) plus `workers/<platform id>/` trees that are byte-identical
-to the generated worker Skills except that `SKILL.md` is renamed `WORKER.md` and Skill identity
-files are dropped. Grok Bot is a **host**, not an eighth platform: there is no
-`platforms/grok-bot.yaml`, and no worker becomes a separately discoverable Skill. On an individual
-plan the payload is a private-skill hand-off for manual UAT (deterministic archive from
-`scripts/kaola-grok-bot-package.py`; Settings → Plugins → Yours is only the documented review/enable
-surface, with no documented upload control). `scripts/kaola-grok-bot-verify.py --repo` and the
-packager re-render the payload from the shared templates and refuse any drift from that generated
-state; `--runtime grok-bot` keeps only a local execution copy under
+A Grok Bot private skill is one single Markdown (name, description, body; owner UAT 2026-09-16
+found no ZIP or file-tree import), so the account receives **eight Skills**, each its own
+document in `hosts/grok-bot/private-skills/`: `kaola-project-runner` is the orchestrator template
+rendered with a routing table that names the seven worker Skills by their stable names (no
+transport contract, no inlined worker text, its two references bundled verbatim), and each
+`<id>-kaola-project-runner` is that worker's canonical `SKILL.md` verbatim plus its Local
+Computer script location and its three references bundled verbatim (no orchestrator policy).
+No document depends on a sibling file. `hosts/grok-bot/INSTALL.md` is the repo-based guide Grok
+Bot itself follows to create or update the eight (one write per file, idempotent by name); it is
+not a ninth Skill. `hosts/grok-bot/kaola-project-runner/` is the Local Computer runtime copy: the
+orchestrator root `SKILL.md` (embedded-worker routing) plus `workers/<platform id>/` trees that are
+byte-identical to the generated worker Skills except that `SKILL.md` is renamed `WORKER.md` and
+Skill identity files are dropped. Grok Bot is a **host**, not an eighth platform: there is no
+`platforms/grok-bot.yaml`. The documents are a private-skill hand-off for manual UAT (Settings →
+Plugins → Yours is only the documented review/enable surface, with no documented upload
+control). `scripts/kaola-grok-bot-verify.py` proves the eight-document shape and, with `--repo`,
+byte identity of the whole bundle with a fresh render; `scripts/kaola-grok-bot-package.py` zips
+the runtime copy only after that proof. `--runtime grok-bot` keeps only the runtime copy under
 `${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills` for Local Computer runs. `--platform grok`
-still selects the Grok CLI worker. Live Grok Bot UI enablement is UAT, not claimed by the payload.
+still selects the Grok CLI worker. Live Grok Bot enablement is UAT, not claimed by the bundle.
 See [Grok Bot host](grok-bot-host.md).
+
+### Host adapters: one canonical Skill system
+
+There is exactly one canonical Skill system: `templates/orchestrator/` (the main Skill and its
+references), `templates/SKILL.md.tmpl` with `templates/agents/` and `templates/references/` (the
+worker contract), the seven `platforms/*.yaml` manifests, and the shared `scripts/`. A **host
+adapter** re-packages that system for one host inside `render-skills.py`; it never authors a
+second body. Grok Bot is such a packaging adapter (the delimited "Host adapter: grok-bot" section
+of the renderer), not a CLI transport platform: there is no `platforms/grok-bot.yaml` and no
+`scripts/adapters/grok-bot.sh`. The adapter's inputs are exactly `GROK_BOT_ADAPTER_INPUTS` (the
+canonical sources above plus `templates/grok-bot/`, which holds only the install-guide prose);
+its outputs are the eight standalone Markdown documents, the `private-skills.json` fingerprint
+manifest (name, description, body and file sha256 per document), the runtime copy, and
+`INSTALL.md`. Host differences live only in the adapter layer: reference expansion into one
+document, Local Computer path hints, the single-Markdown account form, and the Bot's install
+steps. Scheduling, safety, and transport semantics come from the canonical sources and propagate
+automatically: `--write` owns every product, `--check` rejects any product that drifts from a
+fresh render, and `scripts/kaola-grok-bot-verify.py --repo` proves the same from outside the
+renderer. Tests (`Issue49HostAdapterBoundary`) prove propagation of a canonical edit into every
+account product, rejection of hand-edited products, and that each account document is its
+canonical contract plus verbatim references plus a short adapter section.
 
 `install-local.sh` delivers those directories to a consuming runtime: a verified named alias via
 `--runtime` (`codex`, `claude-code`, `cursor`, `devin`, `grok-bot`), or any absolute `--skills-dir` (the two are

@@ -32,12 +32,14 @@ Consuming runtimes (verified native skill directories):
   cursor       $HOME/.cursor/skills
   devin        ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
   grok-bot     ${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills
-               (local execution copy of the single Grok Bot Private Skill
-               payload hosts/grok-bot/kaola-project-runner: one root SKILL.md
-               with the seven workers embedded under workers/<id>/. Grok Bot
-               itself discovers nothing on this disk; the payload is a
-               private-skill hand-off for manual UAT (Settings > Plugins > Yours
-               only reviews/enables existing skills; no upload control is
+               (Local Computer runtime copy hosts/grok-bot/kaola-project-runner:
+               one root SKILL.md with the seven workers embedded under
+               workers/<id>/. The eight account Skills in
+               hosts/grok-bot/private-skills/ are not installed here: Grok Bot
+               saves them itself per hosts/grok-bot/INSTALL.md. Grok Bot
+               discovers nothing on this disk; the documents are a private-skill
+               hand-off for manual UAT (Settings > Plugins > Yours only
+               reviews/enables existing skills; no upload control is
                documented). --platform/--no-orchestrator are refused for this
                runtime; no other Skill directory is touched.)
 Grok CLI worker uses --platform grok, not --runtime grok.

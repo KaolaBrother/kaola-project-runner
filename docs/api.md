@@ -9,10 +9,16 @@ scripts/render-skills.py --check
 
 `--write` deterministically rebuilds seven managed worker Skill directories plus
 `skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eighth
-platform) and the Grok Bot Private Skill payload at `hosts/grok-bot/kaola-project-runner/` (the
-orchestrator root with the seven workers embedded under `workers/<id>/`, contract file
-`WORKER.md`). `--check` returns nonzero for any missing, stale, or unexpected file, Skill
-directory, or host payload. Manifest values are JSON strings in a
+platform) and the Grok Bot host bundle `hosts/grok-bot/`: `private-skills/` (exactly eight
+single-Markdown account-private Skills — `kaola-project-runner` rendered with a worker routing
+table by stable Skill name, and `<id>-kaola-project-runner` for each worker as its canonical
+`SKILL.md` verbatim plus its Local Computer script location and its references bundled
+verbatim), `private-skills.json` (fingerprint manifest with name, description, and body/file
+sha256 per document), `INSTALL.md` (the repo-based guide Grok Bot itself follows, from
+`templates/grok-bot/INSTALL.md.tmpl`), and the Local Computer runtime copy
+`kaola-project-runner/` (the orchestrator root with the seven workers embedded under
+`workers/<id>/`, contract file `WORKER.md`). `--check` returns nonzero for any missing, stale,
+or unexpected file, Skill directory, or host bundle file. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
@@ -48,11 +54,12 @@ preflighted before mutation; foreign paths are never replaced.
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
 `cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`,
-`grok-bot` → `${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills` (local execution copy of the
-single Private Skill payload; `--platform` and `--no-orchestrator` are refused; Grok Bot discovers
-nothing on this disk — the payload is a private-skill hand-off for manual UAT, packaged by
-`scripts/kaola-grok-bot-package.py`; Settings → Plugins → Yours is only the documented
-review/enable surface, with no documented upload control). `--runtime grok` is not a host alias;
+`grok-bot` → `${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills` (the Local Computer runtime
+copy `hosts/grok-bot/kaola-project-runner/` only; `--platform` and `--no-orchestrator` are refused;
+the eight account Skills in `hosts/grok-bot/private-skills/` are not installed here — Grok Bot
+saves them itself per `hosts/grok-bot/INSTALL.md`; Grok Bot discovers nothing on this disk.
+The documents are a private-skill hand-off for manual UAT; Settings → Plugins → Yours is only
+the documented review/enable surface, with no documented upload control). `--runtime grok` is not a host alias;
 `--platform grok` is the Grok CLI worker. Grok Bot UI enablement is UAT; see [Grok Bot host](grok-bot-host.md).
 `--skills-dir` is a mutually exclusive explicit absolute destination (project-local paths included).
 With neither flag the legacy Codex destination is used. `--method copy` (default) stages an

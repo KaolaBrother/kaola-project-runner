@@ -58,15 +58,21 @@ historical evidence, not this Skill's contract.
 ### Agents that load the Skills
 
 The installer provides native skill-directory destinations for **Codex, Claude Code,
-Cursor, and Devin**. **Grok Bot** is a host that receives **one Private Skill**: the
-generated `hosts/grok-bot/kaola-project-runner/` payload is the main Skill with the
-seven workers embedded under `workers/<id>/` as supporting resources (one discoverable
-Skill, still seven platforms). On an individual plan the payload is a private-skill
-hand-off for manual UAT: official Grok Bot docs describe Settings → Plugins → Yours only
-as a review/enable surface and document no upload or import control, so no ingestion
-entry point is claimed. `--runtime grok-bot` only keeps the local execution copy for
-Local Computer runs. `--platform grok` remains the Grok CLI worker; it is not a host install.
-Grok Bot UI enablement is a named live UAT boundary — see
+Cursor, and Devin**. **Grok Bot** is a host that receives **eight single-Markdown
+Private Skills**: a Grok Bot private skill holds only name, description, and body
+(owner UAT 2026-09-16: no ZIP or file-tree import), so `hosts/grok-bot/private-skills/`
+carries one generated document per Skill — `kaola-project-runner` (Project Runner) and
+the seven `<id>-kaola-project-runner` workers — and Grok Bot itself creates or updates
+them from this repository by following `hosts/grok-bot/INSTALL.md` (one skill write per
+file, idempotent by name; `private-skills.json` lists their fingerprints). Grok Bot is a
+packaging adapter inside the renderer, not a transport platform: one canonical Skill system,
+host differences only in the adapter layer. The generated `hosts/grok-bot/kaola-project-runner/` runtime
+copy (seven workers embedded under `workers/<id>/`) is what `--runtime grok-bot` keeps on
+this Mac for Local Computer script runs. Still seven platforms; `--platform grok` remains
+the Grok CLI worker, not a host install. The documents are a private-skill hand-off for
+manual UAT: official Grok Bot docs describe Settings → Plugins → Yours only as a
+review/enable surface and document no upload or import control, so no ingestion entry
+point is claimed and Grok Bot UI enablement is a named live UAT boundary — see
 [Grok Bot host](docs/grok-bot-host.md). Other hosts can use `--skills-dir /absolute/path`
 if they can load `SKILL.md` and execute shell commands in an environment with the
 required tools.
@@ -165,9 +171,10 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime cursor
 ./scripts/install-local.sh --runtime devin
 
-# Grok Bot: one Private Skill payload (root SKILL.md + seven embedded workers).
-./scripts/install-local.sh --runtime grok-bot      # local execution copy under ~/.kaola/grok-bot/skills
-./scripts/kaola-grok-bot-package.py                # deterministic zip hand-off; refuses drift from generated state
+# Grok Bot: eight single-Markdown Private Skills (hosts/grok-bot/private-skills/, saved by
+# Grok Bot itself per hosts/grok-bot/INSTALL.md) plus the Local Computer runtime copy.
+./scripts/install-local.sh --runtime grok-bot      # runtime copy under ~/.kaola/grok-bot/skills (scripts only)
+./scripts/kaola-grok-bot-package.py                # deterministic zip of the runtime copy; refuses drift from generated state
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode

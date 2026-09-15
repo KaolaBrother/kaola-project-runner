@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Issue #49 acceptance: Grok Bot is a host that receives ONE Private Skill.
+"""Issue #49 acceptance: Grok Bot is a host that receives EIGHT single-Markdown Private Skills.
 
-The payload ``hosts/grok-bot/kaola-project-runner`` is the Project Runner root
-Skill with the seven platform workers embedded as supporting resources
-(``workers/<id>/WORKER.md``). Grok Bot discovers one Skill; the seven platforms
-stay seven platforms, not an eighth platform and not seven sibling Skills. For
-individual plans the payload is a private-skill hand-off for manual UAT:
-Settings → Plugins → Yours is only the documented review/enable surface and no
-upload or import control is claimed; Team Marketplace is only an optional
-Teams/Enterprise path; never a public Marketplace. Nothing here claims live
-Grok Bot UI adoption. The payload must stay byte-identical to a fresh render
-from the shared templates; the verifier and packager refuse any drift.
+Owner UAT (2026-09-16) found that a Grok Bot private skill is one single
+Markdown (name, description, body): no ZIP or file-tree import. So
+``hosts/grok-bot/private-skills/`` carries exactly eight standalone account
+Skill documents rendered from the shared templates -- ``kaola-project-runner``
+(Project Runner: authorization, heartbeat, dispatch, acceptance, close-out;
+routes to workers by stable Skill name) plus one ``<id>-kaola-project-runner``
+per platform worker (full transport contract, bundled references, Local
+Computer script location) -- and ``hosts/grok-bot/INSTALL.md``, a repo-based
+guide that Grok Bot itself follows to create or update the eight Skills (not a
+ninth Skill). ``hosts/grok-bot/kaola-project-runner/`` stays the Local Computer
+runtime copy: one root ``SKILL.md`` with the seven workers embedded
+(``workers/<id>/WORKER.md``). Seven platforms, not an eighth. Settings →
+Plugins → Yours is only the documented review/enable surface and no upload or
+import control is claimed; never a public Marketplace. Nothing here claims live
+Grok Bot UI adoption. Everything under ``hosts/grok-bot/`` must stay
+byte-identical to a fresh render; the verifier and packager refuse any drift.
 """
 
 from __future__ import annotations
@@ -48,6 +54,17 @@ UNOFFICIAL_API = (
     "aiserver.v1",
     "/local-exec/",
 )
+PRIVATE_SKILLS = HOST_BUNDLE / "private-skills"
+PRIVATE_SKILLS_MANIFEST = HOST_BUNDLE / "private-skills.json"
+INSTALL_GUIDE = HOST_BUNDLE / "INSTALL.md"
+GUIDE_TEMPLATE = PROJECT / "templates" / "grok-bot" / "INSTALL.md.tmpl"
+ACCOUNT_SKILL_NAMES = (ORCHESTRATOR_ID, *WORKER_SKILL_IDS)
+LOCAL_RUNTIME_COPY = "${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills/kaola-project-runner"
+WORKER_OPERATIONS = ("preflight", "start", "observe", "send", "capture", "key", "stop")
+TRANSPORT_MARKERS = ("## Transport facts", "## Communication loop", 'runtime-tmux.sh" send', 'runtime-tmux.sh" observe',
+                     'runtime-tmux.sh" capture', 'runtime-tmux.sh" key', "mutation_status", "raw_current_frame", "--transport acp|pty")
+ORCHESTRATOR_MARKERS = ("PROJECT_RUNNER_HEARTBEAT", "## Heartbeat", "## Main execution loop", "Allowed CLIs", "Needs attention",
+                        "Routine", "Mission-frontier", "Accept the delivery", "## Authorization", "## Ending a run")
 FALSIFIED_DESTINATION = ".cursor/plugins/local"
 COPY_IGNORE = shutil.ignore_patterns(".git", ".kw", "__pycache__", "node_modules", "build")
 
@@ -112,6 +129,21 @@ def authorizes_wrong_move(text: str, patterns: tuple[str, ...]) -> str | None:
     return None
 
 
+def frontmatter(text: str) -> tuple[dict[str, str], str]:
+    lines = text.split("\n")
+    assert lines[0] == "---", "single-Markdown Skill must start with frontmatter"
+    end = lines.index("---", 1)
+    meta = {}
+    for line in lines[1:end]:
+        key, _, value = line.partition(":")
+        meta[key.strip()] = value.strip()
+    return meta, "\n".join(lines[end + 1:])
+
+
+def account_docs() -> dict[str, str]:
+    return {path.stem: path.read_text(encoding="utf-8") for path in sorted(PRIVATE_SKILLS.glob("*.md"))}
+
+
 def worker_policy_surfaces() -> list[tuple[str, str]]:
     surfaces: list[tuple[str, str]] = []
     templates = PROJECT / "templates"
@@ -119,7 +151,8 @@ def worker_policy_surfaces() -> list[tuple[str, str]]:
         if not path.is_file():
             continue
         relative = path.relative_to(templates)
-        if "grok-golden" in relative.parts or "orchestrator" in relative.parts:
+        # grok-bot/ holds the host install guide for Grok Bot itself, not a worker surface.
+        if relative.parts[0] in {"grok-golden", "orchestrator", "grok-bot"}:
             continue
         if path.suffix.lower() in {".tmpl", ".md"}:
             surfaces.append((relative.as_posix(), path.read_text(encoding="utf-8")))
@@ -158,7 +191,7 @@ class Issue49PrivateSkillPayload(unittest.TestCase):
         self.assertTrue(PAYLOAD.is_dir(), "render --write must emit hosts/grok-bot/kaola-project-runner")
         self.assertEqual(
             sorted(p.name for p in HOST_BUNDLE.iterdir()),
-            sorted([".generated-by-kaola-project-runner", ORCHESTRATOR_ID]),
+            sorted([".generated-by-kaola-project-runner", ORCHESTRATOR_ID, "INSTALL.md", "private-skills", "private-skills.json"]),
         )
         discoverable = sorted(p.relative_to(HOST_BUNDLE).as_posix() for p in HOST_BUNDLE.rglob("SKILL.md"))
         self.assertEqual(discoverable, [f"{ORCHESTRATOR_ID}/SKILL.md"])
@@ -230,8 +263,18 @@ class Issue49PrivateSkillPayload(unittest.TestCase):
             written = run([sys.executable, str(renderer), "--write"], copy)
             self.assertEqual(written.returncode, 0, written.stderr or written.stdout)
             self.assertTrue((copy / "hosts" / HOST_ID / ORCHESTRATOR_ID / "SKILL.md").is_file())
+            self.assertTrue((copy / "hosts" / HOST_ID / "INSTALL.md").is_file())
+            self.assertEqual(
+                sorted(p.stem for p in (copy / "hosts" / HOST_ID / "private-skills").glob("*.md")),
+                sorted(ACCOUNT_SKILL_NAMES),
+            )
             checked = run([sys.executable, str(renderer), "--check"], copy)
             self.assertEqual(checked.returncode, 0, checked.stderr or checked.stdout)
+            doc = copy / "hosts" / HOST_ID / "private-skills" / "codex-kaola-project-runner.md"
+            doc.write_text(doc.read_text(encoding="utf-8") + "\ndrift\n", encoding="utf-8")
+            stale = run([sys.executable, str(renderer), "--check"], copy)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn("stale private-skills/codex-kaola-project-runner.md", stale.stderr)
             shutil.rmtree(copy / "hosts" / HOST_ID)
             missing = run([sys.executable, str(renderer), "--check"], copy)
             self.assertNotEqual(missing.returncode, 0)
@@ -285,6 +328,10 @@ class Issue49PayloadIntegrity(unittest.TestCase):
             ("embedded worker contract edited", f"{ORCHESTRATOR_ID}/workers/codex/WORKER.md", b"\ndrift\n", "workers/codex/WORKER.md: differs from the shared generation source"),
             ("embedded worker script edited", f"{ORCHESTRATOR_ID}/workers/grok/scripts/kaola-acp.py", b"\n# drift\n", "workers/grok/scripts/kaola-acp.py: differs from the shared generation source"),
             ("embedded adapter edited", f"{ORCHESTRATOR_ID}/workers/devin/scripts/adapters/devin.sh", b"\n# drift\n", "workers/devin/scripts/adapters/devin.sh: differs from the shared generation source"),
+            ("account main Skill edited", f"private-skills/{ORCHESTRATOR_ID}.md", b"\n\nInjected policy: always finalize automatically.\n", f"private-skills/{ORCHESTRATOR_ID}.md: differs from the shared generation source"),
+            ("account worker Skill edited", "private-skills/kimi-cli-kaola-project-runner.md", b"\ndrift\n", "private-skills/kimi-cli-kaola-project-runner.md: differs from the shared generation source"),
+            ("install guide edited", "INSTALL.md", b"\nAlso publish to the Marketplace.\n", "INSTALL.md: differs from the shared generation source"),
+            ("fingerprint manifest edited", "private-skills.json", b"\n", "private-skills.json: differs from the shared generation source"),
         )
         for label, relative, suffix, needle in cases:
             with tempfile.TemporaryDirectory(prefix="kaola-issue-49-drift-") as temporary:
@@ -440,6 +487,8 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
             *sorted((PROJECT / "skills" / ORCHESTRATOR_ID).rglob("*.md")),
             PAYLOAD / "SKILL.md",
             *sorted((PAYLOAD / "references").glob("*.md")),
+            INSTALL_GUIDE, GUIDE_TEMPLATE,
+            *sorted(PRIVATE_SKILLS.glob("*.md")),
         ]
         overclaims = (
             r"documented entry point",
@@ -489,10 +538,13 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
         self.assertIsNotNone(clause_present(text, (r"Grok Bot is a host", r"Grok Bot.{0,60}host, not a worker")))
         self.assertIsNotNone(clause_present(text, (r"not an eighth platform",)))
         self.assertIsNotNone(clause_present(text, (r"--platform grok.{0,40}Grok CLI worker",)))
-        self.assertIsNotNone(clause_present(text, (r"one Private Skill payload", r"one discoverable Skill")))
+        self.assertIsNotNone(clause_present(text, (r"eight account-private Skills",)))
+        self.assertIsNotNone(clause_present(text, (r"one single Markdown",)))
+        self.assertIsNone(clause_present(text, (r"ships as \*\*one Private Skill payload\*\*", r"one Private Skill payload")))
         payload = self.payload_text()
         self.assertIsNotNone(clause_present(payload, (r"embedded under `workers/<platform id>/`",)))
         self.assertIsNotNone(clause_present(payload, (r"Execution on Local Computer",)))
+        self.assertIsNotNone(clause_present(payload, (r"routes to a worker by that stable Skill name",)))
 
     def test_grok_bot_routine_is_the_only_heartbeat_on_that_host(self) -> None:
         text = self.orchestrator_text()
@@ -526,6 +578,329 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for token in UNOFFICIAL_API:
                 self.assertNotIn(token, text, f"{path}: {token}")
+
+
+class Issue49AccountPrivateSkills(unittest.TestCase):
+    """Owner correction 2026-09-16: eight single-Markdown Skills the Bot saves one by one."""
+
+    def test_exactly_eight_standalone_documents_one_main_seven_workers(self) -> None:
+        entries = sorted(PRIVATE_SKILLS.iterdir())
+        self.assertTrue(all(p.is_file() and p.suffix == ".md" for p in entries), entries)
+        docs = account_docs()
+        self.assertEqual(sorted(docs), sorted(ACCOUNT_SKILL_NAMES))
+        self.assertEqual(len(docs), 8)
+        names = []
+        for stem, text in docs.items():
+            meta, body = frontmatter(text)
+            self.assertEqual(meta["name"], stem)
+            self.assertTrue(meta["description"], stem)
+            self.assertTrue(body.strip(), stem)
+            names.append(meta["name"])
+        self.assertEqual(len(set(names)), 8)
+        self.assertEqual(sorted(n for n in names if n != ORCHESTRATOR_ID), sorted(WORKER_SKILL_IDS))
+        self.assertFalse((PRIVATE_SKILLS / "grok-bot-kaola-project-runner.md").exists())
+        self.assertFalse(any("grok-bot" in n for n in names), "Grok Bot is a host, not an eighth worker")
+
+    def test_worker_documents_carry_canonical_contract_references_and_local_computer_location(self) -> None:
+        docs = account_docs()
+        for wid, skill_id in zip(WORKER_IDS, WORKER_SKILL_IDS):
+            text = docs[skill_id]
+            canonical = (PROJECT / "skills" / skill_id / "SKILL.md").read_text(encoding="utf-8")
+            self.assertTrue(text.startswith(canonical), f"{skill_id}: does not begin with skills/{skill_id}/SKILL.md")
+            self.assertIn(f'SKILL_DIR="{LOCAL_RUNTIME_COPY}/workers/{wid}"', text)
+            self.assertIn("`KAOLA_GROK_BOT_HOME` overrides the root `$HOME/.kaola/grok-bot`", text)
+            self.assertIn("install-local.sh --runtime grok-bot", text)
+            for operation in WORKER_OPERATIONS:
+                self.assertIn(f'"$SKILL_DIR/scripts/runtime-tmux.sh" {operation} ', text, f"{skill_id}: {operation}")
+            for ref in ("platform.md", "transport.md", "acp.md"):
+                self.assertIn(f"## Bundled reference: references/{ref}", text, skill_id)
+                self.assertIn((PROJECT / "skills" / skill_id / "references" / ref).read_text(encoding="utf-8").rstrip(), text, f"{skill_id}: {ref}")
+            self.assertIsNotNone(clause_present(text, (r"never on the cloud Agent Computer",)))
+
+    def test_main_document_routes_by_stable_name_without_transport_or_inlined_workers(self) -> None:
+        text = account_docs()[ORCHESTRATOR_ID]
+        for skill_id in WORKER_SKILL_IDS:
+            self.assertIn(f"`{skill_id}`", text)
+        for marker in TRANSPORT_MARKERS:
+            self.assertNotIn(marker, text, marker)
+        self.assertNotIn("WORKER.md", text)
+        self.assertNotIn("This Skill is a communication driver for", text)
+        for skill_id in WORKER_SKILL_IDS:
+            _, body = frontmatter((PROJECT / "skills" / skill_id / "SKILL.md").read_text(encoding="utf-8"))
+            self.assertNotIn(body.strip()[:200], text, f"{skill_id} text inlined into the main Skill")
+        self.assertIsNotNone(clause_present(text, (r"select a worker by the stable Skill name",)))
+        self.assertIsNotNone(clause_present(text, (r"carries no transport contract, no scripts, and none of the worker text",)))
+        for ref in ("grok-bot-host.md", "heartbeat-skeleton.md"):
+            self.assertIn(f"## Bundled reference: references/{ref}", text)
+            self.assertIn((PROJECT / "skills" / ORCHESTRATOR_ID / "references" / ref).read_text(encoding="utf-8").rstrip(), text, ref)
+        for clause in (r"recover existing explicit authorization and live work", r"only heartbeat carrier", r"not automatic finalize",
+                       r"HUMAN_DECISION_REQUIRED.{0,120}this Bot conversation", r"## Ending a run"):
+            self.assertIsNotNone(clause_present(text, (clause,)), clause)
+
+    def test_worker_documents_do_not_absorb_orchestrator_policy(self) -> None:
+        docs = account_docs()
+        for skill_id in WORKER_SKILL_IDS:
+            for marker in ORCHESTRATOR_MARKERS:
+                self.assertNotIn(marker, docs[skill_id], f"{skill_id} absorbed {marker!r}")
+            self.assertIsNotNone(clause_present(docs[skill_id], (r"stays transport-only and carries no orchestrator policy",)))
+
+    def test_every_document_is_standalone_without_sibling_tree_dependency(self) -> None:
+        for stem, text in account_docs().items():
+            self.assertNotIn("../", text, stem)
+            for other in ACCOUNT_SKILL_NAMES:
+                self.assertNotRegex(text, rf"(?<![\w/-])(?:\.\./|skills/){re.escape(other)}\b", f"{stem} depends on {other}")
+            for link in set(re.findall(r"\]\((references/[^)#]+)\)", text)):
+                self.assertIn(f"## Bundled reference: {link}", text, f"{stem} links {link} without bundling it")
+            self.assertNotRegex(text, r"\]\((?:\./)?(?:workers|scripts|agents)/[^)]*\)", stem)
+            meta, body = frontmatter(text)
+            self.assertEqual(f"---\nname: {meta['name']}\ndescription: {meta['description']}\n---\n{body}", text,
+                             f"{stem}: name/description/body must reassemble the file exactly")
+
+    def test_verifier_rejects_ninth_doc_missing_worker_duplicate_name_and_broken_routing(self) -> None:
+        verifier = load_verifier()
+        self.assertEqual(verifier.validate(HOST_BUNDLE, PROJECT), [])
+
+        def mutated(temporary: str) -> Path:
+            bundle = Path(temporary) / HOST_ID
+            shutil.copytree(HOST_BUNDLE, bundle)
+            return bundle
+
+        def findings_with(label: str, mutate, needle: str, repo: Path | None = None) -> None:
+            with tempfile.TemporaryDirectory(prefix="kaola-issue-49-account-") as temporary:
+                bundle = mutated(temporary)
+                mutate(bundle / "private-skills")
+                findings = verifier.validate(bundle, repo)
+                self.assertTrue(any(needle in f for f in findings), f"{label}: {findings}")
+
+        def ninth(d: Path) -> None:
+            (d / "grok-bot-kaola-project-runner.md").write_text("---\nname: grok-bot-kaola-project-runner\ndescription: x\n---\nbody\n", encoding="utf-8")
+
+        def missing(d: Path) -> None:
+            (d / "devin-kaola-project-runner.md").unlink()
+
+        def duplicate(d: Path) -> None:
+            p = d / "codex-kaola-project-runner.md"
+            p.write_text(p.read_text(encoding="utf-8").replace("name: codex-kaola-project-runner", "name: claude-code-kaola-project-runner", 1), encoding="utf-8")
+
+        def broken_routing(d: Path) -> None:
+            p = d / f"{ORCHESTRATOR_ID}.md"
+            p.write_text(p.read_text(encoding="utf-8").replace("`opencode-kaola-project-runner`", "`opencode`"), encoding="utf-8")
+
+        def main_absorbs_transport(d: Path) -> None:
+            p = d / f"{ORCHESTRATOR_ID}.md"
+            p.write_text(p.read_text(encoding="utf-8") + "\n## Communication loop\n", encoding="utf-8")
+
+        def worker_absorbs_policy(d: Path) -> None:
+            p = d / "grok-kaola-project-runner.md"
+            p.write_text(p.read_text(encoding="utf-8") + "\n## Heartbeat\n", encoding="utf-8")
+
+        def unbundled_reference(d: Path) -> None:
+            p = d / "kimi-cli-kaola-project-runner.md"
+            p.write_text(p.read_text(encoding="utf-8").replace("## Bundled reference: references/acp.md", "## acp"), encoding="utf-8")
+
+        def lost_location(d: Path) -> None:
+            p = d / "cursor-cli-kaola-project-runner.md"
+            p.write_text(p.read_text(encoding="utf-8").replace(f'SKILL_DIR="{LOCAL_RUNTIME_COPY}/workers/cursor-cli"', 'SKILL_DIR="/workspace/cursor-cli"'), encoding="utf-8")
+
+        def no_frontmatter(d: Path) -> None:
+            p = d / "claude-code-kaola-project-runner.md"
+            p.write_text("# no frontmatter\n" + p.read_text(encoding="utf-8"), encoding="utf-8")
+
+        findings_with("ninth document", ninth, "expected exactly 8 account-private Skill documents")
+        findings_with("missing worker", missing, "expected exactly 8 account-private Skill documents")
+        findings_with("duplicate name", duplicate, "duplicate Skill name 'claude-code-kaola-project-runner'")
+        findings_with("broken routing", broken_routing, "does not route to worker Skill opencode-kaola-project-runner")
+        findings_with("main absorbs transport", main_absorbs_transport, "main Skill absorbs worker transport")
+        findings_with("worker absorbs policy", worker_absorbs_policy, "worker Skill absorbs orchestrator policy")
+        findings_with("unbundled reference", unbundled_reference, "links references/acp.md without bundling it")
+        findings_with("lost location", lost_location, "missing Local Computer script location for cursor-cli")
+        findings_with("no frontmatter", no_frontmatter, "must start with a `---` frontmatter block")
+        findings_with("worker drift with repo", lambda d: (d / "devin-kaola-project-runner.md").write_bytes(b"---\nname: devin-kaola-project-runner\ndescription: x\n---\n" + (d / "devin-kaola-project-runner.md").read_bytes()),
+                      "does not begin with the canonical contract skills/devin-kaola-project-runner/SKILL.md", PROJECT)
+
+    def test_install_guide_is_repo_based_idempotent_bounded_and_not_a_ninth_skill(self) -> None:
+        text = INSTALL_GUIDE.read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("# "), "guide is prose for Grok Bot, not a Skill document")
+        self.assertNotIn(INSTALL_GUIDE.name, [p.name for p in PRIVATE_SKILLS.iterdir()])
+        self.assertTrue(GUIDE_TEMPLATE.is_file())
+        sources = re.findall(r"hosts/grok-bot/private-skills/([a-z0-9-]+)\.md", text)
+        self.assertEqual(sorted(set(sources)), sorted(ACCOUNT_SKILL_NAMES))
+        self.assertEqual(len(sources), 8, "one source row per Skill, eight rows")
+        for name in ACCOUNT_SKILL_NAMES:
+            self.assertIn(f"`{name}`", text)
+        for clause in (
+            r"for \*\*Grok Bot itself\*\*", r"not a ninth Skill", r"git rev-parse HEAD", r"render-skills\.py --check",
+            r"kaola-grok-bot-verify\.py hosts/grok-bot --repo \.", r"one write per file", r"8 calls, one per source file",
+            r"`name` and `description` from its frontmatter", r"everything after the closing `---`", r"update it in place",
+            r"Never create a second Skill with the same name", r"idempotent", r"no other Skill on the account is touched",
+            r"`created`, `updated`, `FAILED \(reason\)`, or `not attempted`", r"repeat step 2 for the failed rows only",
+            r"Partial completion is reported as partial", r"Settings > Plugins > Yours lists exactly these 8",
+            r"`/` in this Bot offers all 8", r"select that worker by the stable Skill name",
+            re.escape(f"{LOCAL_RUNTIME_COPY}/workers/claude-code/scripts/runtime-tmux.sh"), r"install-local\.sh --runtime grok-bot",
+            r"never a script on the cloud Agent Computer", r"Never publish or submit any of these Skills to a public Marketplace",
+            r"or account credentials", r"Record the exact outcome or gap",
+        ):
+            self.assertIsNotNone(clause_present(text, (clause,)), clause)
+        wrong = authorizes_wrong_move(text, (r"import (?:the |a )?(?:zip|archive)", r"upload (?:the |a )?(?:zip|archive|tree)",
+                                             r"publish.{0,40}Marketplace", r"submit.{0,40}Marketplace", r"copy (?:each |every |the )?body by hand"))
+        self.assertIsNone(wrong, wrong)
+        for token in UNOFFICIAL_API:
+            self.assertNotIn(token, text)
+        self.assertNotIn("curl ", text)
+        self.assertNotIn("token", text.lower())
+
+    def test_local_install_isolation_is_unchanged_by_the_account_documents(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-account-install-") as temporary:
+            home = Path(temporary) / "home"
+            result = run(["bash", str(INSTALLER), "--runtime", "grok-bot"], PROJECT, sandbox_env(home))
+            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+            dest = home / ".kaola" / HOST_ID / "skills" / ORCHESTRATOR_ID
+            self.assertTrue((dest / "SKILL.md").is_file())
+            self.assertTrue((dest / "workers" / "codex" / "scripts" / "runtime-tmux.sh").is_file())
+            self.assertFalse((dest / "private-skills").exists())
+            self.assertFalse((dest / "INSTALL.md").exists())
+            self.assertFalse((home / ".kaola" / HOST_ID / "private-skills").exists())
+            self.assertEqual(sorted(p.name for p in home.iterdir()), [".kaola"])
+
+
+class Issue49HostAdapterBoundary(unittest.TestCase):
+    """Owner requirement 2026-09-16: one canonical Skill system; Grok Bot is a packaging adapter in the renderer."""
+
+    def load_renderer(self):
+        spec = importlib.util.spec_from_file_location("render_skills", RENDERER)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader
+        spec.loader.exec_module(module)
+        return module
+
+    def test_grok_bot_is_a_packaging_adapter_not_a_transport_platform(self) -> None:
+        renderer = self.load_renderer()
+        self.assertFalse((PROJECT / "platforms" / "grok-bot.yaml").exists())
+        self.assertFalse((PROJECT / "scripts" / "adapters" / "grok-bot.sh").exists())
+        self.assertEqual(sorted(p.name for p in (PROJECT / "templates" / "grok-bot").iterdir()), ["INSTALL.md.tmpl"],
+                         "the adapter template dir holds only install prose: no second Skill body")
+        inputs = set(renderer.GROK_BOT_ADAPTER_INPUTS)
+        self.assertEqual(inputs, {"templates/orchestrator", "templates/SKILL.md.tmpl", "templates/agents", "templates/references",
+                                  "platforms", "scripts", "templates/grok-bot"})
+        for root in inputs:
+            self.assertTrue((PROJECT / root).exists(), root)
+        source = RENDERER.read_text(encoding="utf-8")
+        adapter_section = source.split("# Host adapter: grok-bot", 1)[1].split("def main()", 1)[0]
+        for canonical_only in ("def expected_files(", "def expected_orchestrator_files(", "def parse_manifest("):
+            self.assertNotIn(canonical_only, adapter_section, f"{canonical_only} belongs to the canonical system, not the adapter")
+        for product in ("def private_skill_documents(", "def private_skill_manifest(", "def install_guide(", "def expected_grok_bot_host_files("):
+            self.assertIn(product, adapter_section, product)
+
+    def test_account_documents_carry_no_second_handwritten_body(self) -> None:
+        import difflib
+        docs = account_docs()
+        canonical_root = PROJECT / "skills"
+        for name in ACCOUNT_SKILL_NAMES:
+            skill_dir = canonical_root / name
+            residue = docs[name]
+            canonical = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+            if name == ORCHESTRATOR_ID:
+                # The main document is the same orchestrator template; the only allowed
+                # difference from skills/kaola-project-runner/SKILL.md is the host routing
+                # block (sibling-directory sentence -> worker Private Skill table).
+                head, marker, _ = residue.partition("\n## Grok Bot account-private form")
+                self.assertTrue(marker, name)
+                a = canonical.rstrip("\n").splitlines()
+                b = head.rstrip("\n").splitlines()
+                changes = [(tag, a[i1:i2], b[j1:j2]) for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b).get_opcodes() if tag != "equal"]
+                self.assertEqual(len(changes), 1, f"{name}: more than the routing block differs: {changes}")
+                tag, removed, added = changes[0]
+                self.assertEqual(tag, "replace")
+                self.assertIn("In a native skill-directory install the seven workers are sibling Skill", "\n".join(removed))
+                self.assertEqual(added[0], "#### Worker Private Skills (Grok Bot account)")
+                for skill_id in WORKER_SKILL_IDS:
+                    self.assertTrue(any(f"`{skill_id}`" in line and line.startswith("|") for line in added), skill_id)
+                residue = marker + residue[len(head) + len(marker):]
+            else:
+                self.assertTrue(residue.startswith(canonical), name)
+                residue = residue[len(canonical):]
+            for ref in sorted((skill_dir / "references").glob("*.md")):
+                text = ref.read_text(encoding="utf-8").rstrip()
+                self.assertIn(text, residue, f"{name}: {ref.name} not bundled verbatim")
+                residue = residue.replace(f"## Bundled reference: references/{ref.name}\n\n{text}\n", "", 1)
+            residue_lines = [line for line in residue.strip().splitlines() if line.strip()]
+            self.assertTrue(residue_lines and residue_lines[0] == "## Grok Bot account-private form", f"{name}: {residue_lines[:3]}")
+            self.assertLess(len(residue_lines), 25, f"{name}: adapter section grew beyond a path hint and framing:\n{residue}")
+            self.assertEqual([l for l in residue_lines if l.startswith("## ")], ["## Grok Bot account-private form"], name)
+            for forbidden in ("mutation_status", "raw_current_frame", "PROJECT_RUNNER_HEARTBEAT", "Allowed CLIs", "--transport"):
+                self.assertNotIn(forbidden, residue, f"{name}: adapter section authors canonical semantics ({forbidden})")
+
+    def test_fingerprint_manifest_matches_the_documents(self) -> None:
+        import json
+        data = json.loads(PRIVATE_SKILLS_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(data["host"], HOST_ID)
+        self.assertEqual(data["install_guide"], "INSTALL.md")
+        self.assertEqual(data["skill_count"], 8)
+        self.assertEqual([entry["name"] for entry in data["skills"]], list(ACCOUNT_SKILL_NAMES))
+        docs = account_docs()
+        for entry in data["skills"]:
+            raw = (PRIVATE_SKILLS / f"{entry['name']}.md").read_bytes()
+            meta, body = frontmatter(raw.decode("utf-8"))
+            self.assertEqual(entry["source"], f"private-skills/{entry['name']}.md")
+            self.assertEqual(entry["file_sha256"], hashlib.sha256(raw).hexdigest())
+            self.assertEqual(entry["body_sha256"], hashlib.sha256(body.encode("utf-8")).hexdigest())
+            self.assertEqual(entry["role"], "orchestrator" if entry["name"] == ORCHESTRATOR_ID else "worker")
+            self.assertEqual(entry["platform_id"], None if entry["name"] == ORCHESTRATOR_ID else entry["name"].removesuffix("-kaola-project-runner"))
+            description = meta["description"]
+            if description.startswith('"'):
+                description = json.loads(description)
+            self.assertEqual(entry["description"], description)
+        verifier = load_verifier()
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-manifest-") as temporary:
+            bundle = Path(temporary) / HOST_ID
+            shutil.copytree(HOST_BUNDLE, bundle)
+            manifest = bundle / "private-skills.json"
+            edited = json.loads(manifest.read_text(encoding="utf-8"))
+            edited["skills"][2]["file_sha256"] = "0" * 64
+            manifest.write_text(json.dumps(edited, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            findings = verifier.validate(bundle, None)
+            self.assertTrue(any("file_sha256 does not match" in f for f in findings), findings)
+            del edited["skills"][2]
+            edited["skill_count"] = 7
+            manifest.write_text(json.dumps(edited, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            findings = verifier.validate(bundle, None)
+            self.assertTrue(any("must fingerprint exactly" in f for f in findings), findings)
+
+    def test_canonical_source_changes_propagate_to_every_account_product(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-propagate-") as temporary:
+            copy = copy_repo(temporary)
+            renderer = copy / "scripts" / "render-skills.py"
+            edits = {
+                copy / "templates" / "SKILL.md.tmpl": "\nCanonical worker sentence 7f3a.\n",
+                copy / "templates" / "references" / "acp.md.tmpl": "\nCanonical acp sentence 9c1d.\n",
+                copy / "templates" / "orchestrator" / "SKILL.md.tmpl": "\nCanonical orchestrator sentence 4e2b.\n",
+                copy / "templates" / "orchestrator" / "references" / "grok-bot-host.md": "\nCanonical host reference sentence 5d6f.\n",
+            }
+            for path, suffix in edits.items():
+                path.write_text(path.read_text(encoding="utf-8") + suffix, encoding="utf-8")
+            manifest_path = copy / "platforms" / "codex.yaml"
+            manifest_path.write_text(re.sub(
+                r'(?m)^description: "', 'description: "Canonical codex description 8a9b. ',
+                manifest_path.read_text(encoding="utf-8"), count=1), encoding="utf-8")
+            stale = run([sys.executable, str(renderer), "--check"], copy)
+            self.assertNotEqual(stale.returncode, 0)
+            for product in ("private-skills/kaola-project-runner.md", "private-skills/codex-kaola-project-runner.md",
+                            "private-skills/grok-kaola-project-runner.md", "private-skills.json", f"{ORCHESTRATOR_ID}/SKILL.md"):
+                self.assertIn(f"stale {product}", stale.stderr, product)
+            written = run([sys.executable, str(renderer), "--write"], copy)
+            self.assertEqual(written.returncode, 0, written.stderr)
+            docs = {p.stem: p.read_text(encoding="utf-8") for p in (copy / "hosts" / HOST_ID / "private-skills").glob("*.md")}
+            for skill_id in WORKER_SKILL_IDS:
+                self.assertIn("Canonical worker sentence 7f3a.", docs[skill_id], skill_id)
+                self.assertIn("Canonical acp sentence 9c1d.", docs[skill_id], skill_id)
+            self.assertIn("Canonical codex description 8a9b.", docs["codex-kaola-project-runner"].split("---", 2)[1])
+            self.assertIn("Canonical codex description 8a9b.", (copy / "hosts" / HOST_ID / "private-skills.json").read_text(encoding="utf-8"))
+            self.assertIn("Canonical orchestrator sentence 4e2b.", docs[ORCHESTRATOR_ID])
+            self.assertIn("Canonical host reference sentence 5d6f.", docs[ORCHESTRATOR_ID])
+            self.assertNotIn("Canonical orchestrator sentence 4e2b.", docs["codex-kaola-project-runner"])
+            self.assertNotIn("Canonical worker sentence 7f3a.", docs[ORCHESTRATOR_ID])
+            verified = run([sys.executable, str(copy / "scripts" / "kaola-grok-bot-verify.py"), str(copy / "hosts" / HOST_ID), "--repo", str(copy)], copy)
+            self.assertEqual(verified.returncode, 0, verified.stderr)
 
 
 class Issue49WorkerIsolation(unittest.TestCase):

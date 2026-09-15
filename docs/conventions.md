@@ -12,9 +12,20 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
 - Active seven-platform worker Skill: `templates/SKILL.md.tmpl`.
 - Main orchestrator Skill: `templates/orchestrator/` (English `SKILL.md.tmpl`; not a platform
   manifest or adapter).
-- Grok Bot host payload: `hosts/grok-bot/kaola-project-runner/` rendered from the orchestrator and
-  worker templates (one Private Skill, seven embedded workers; not a `platforms/*.yaml` worker).
-  `--runtime grok-bot` vs `--platform grok` are different ids.
+- One canonical Skill system, host adapters for packaging: every host output is derived by
+  `render-skills.py` from the orchestrator template, the worker template, the platform manifests,
+  and their canonical references. A host adapter (the delimited "Host adapter" section of the
+  renderer) may add only host-specific packaging — reference expansion, path hints, account form,
+  fingerprints, install steps — never a second hand-written body and never scheduling, safety, or
+  transport semantics. Products are owned by `--write`, rejected on drift by `--check` and the
+  host verifier, and updated automatically when a canonical source changes.
+- Grok Bot host bundle: `hosts/grok-bot/` rendered by the `grok-bot` host adapter (inputs:
+  `GROK_BOT_ADAPTER_INPUTS`) — `private-skills/` (eight single-Markdown account Skills: 1 main +
+  7 workers), `private-skills.json` (fingerprint manifest), `INSTALL.md` (from
+  `templates/grok-bot/INSTALL.md.tmpl`, for Grok Bot itself), and the Local Computer runtime copy
+  `kaola-project-runner/` (seven embedded workers). Grok Bot is a packaging adapter, not a
+  `platforms/*.yaml` worker; there is no `platforms/grok-bot.yaml` and no
+  `scripts/adapters/grok-bot.sh`. `--runtime grok-bot` vs `--platform grok` are different ids.
 - Frozen historical Workflow lifecycle and prompts: `templates/grok-golden/`.
 - Shared evidence-first transport guidance: `templates/references/transport.md.tmpl` plus exact reversible
   renderer overlays; never broad-replace golden prose.

@@ -1,0 +1,80 @@
+{
+  "adapter": "grok-bot-account",
+  "host": "grok-bot",
+  "install_guide": "INSTALL.md",
+  "skill_count": 8,
+  "skills": [
+    {
+      "body_sha256": "697d4be6146756f67f6acbbb7f74a164d27dcd4b1e3f84a58e8d9ba350c2604a",
+      "description": "Use when the controlling Agent should supervise explicitly authorized CLI workers through the seven platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, and stop idle sessions without dropping close-out duties.",
+      "file_sha256": "4658e1685c7a55707f4d2ae998bc4ebd905770fc3c997a3f7a93762c46536e15",
+      "name": "kaola-project-runner",
+      "platform_id": null,
+      "role": "orchestrator",
+      "source": "private-skills/kaola-project-runner.md"
+    },
+    {
+      "body_sha256": "c4c227fb08d1713250d61b05742760a604970e173c8f90d9cb20f928f64a3093",
+      "description": "Use when the controlling Agent should communicate with a Claude Code main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.",
+      "file_sha256": "18234c8ee20f73b1efee0bbdf41faea099fd246c9e8ffd9d04e6e2965722d8d1",
+      "name": "claude-code-kaola-project-runner",
+      "platform_id": "claude-code",
+      "role": "worker",
+      "source": "private-skills/claude-code-kaola-project-runner.md"
+    },
+    {
+      "body_sha256": "34061085bdbe8b572f3cdc3f7fa1156e89f5c7b25caf1b80b1f7921453fb0590",
+      "description": "Use when the controlling Agent should communicate with a Codex CLI main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.",
+      "file_sha256": "fe9bfb8a4316948f622fb5d16b3e3076639dc4ba18f02ebe84f7abb255a927e9",
+      "name": "codex-kaola-project-runner",
+      "platform_id": "codex",
+      "role": "worker",
+      "source": "private-skills/codex-kaola-project-runner.md"
+    },
+    {
+      "body_sha256": "08cab6c429c9fe0367c347532259e57f599d674f44e80385e20498d5c962631d",
+      "description": "Use when the controlling Agent should communicate with a Cursor Agent CLI main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.",
+      "file_sha256": "4d2f7aaf22f4ea0a23e007a677cf55167985719f5506eae8b2407fa85e39cc3c",
+      "name": "cursor-cli-kaola-project-runner",
+      "platform_id": "cursor-cli",
+      "role": "worker",
+      "source": "private-skills/cursor-cli-kaola-project-runner.md"
+    },
+    {
+      "body_sha256": "30606a5e0539233a9dafad6321dd9e2e12e009b18ad4f2ebb2d1706c2bf8ed91",
+      "description": "Use when the controlling Agent should communicate with a Devin CLI main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.",
+      "file_sha256": "c6eb8314e046c826319e105a78a40909118730d4715a6f242ec8b19330a6e689",
+      "name": "devin-kaola-project-runner",
+      "platform_id": "devin",
+      "role": "worker",
+      "source": "private-skills/devin-kaola-project-runner.md"
+    },
+    {
+      "body_sha256": "dac8bd3f5b5638a3008c1fc649923e403aaf998b5dad8e0507fd4db4577395d2",
+      "description": "Use when the controlling Agent should communicate with a Grok CLI main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.",
+      "file_sha256": "4a15e4c8e0596f9c32e9d8acbccde927095f56fa63506fd8facf1ab0ce836ee8",
+      "name": "grok-kaola-project-runner",
+      "platform_id": "grok",
+      "role": "worker",
+      "source": "private-skills/grok-kaola-project-runner.md"
+    },
+    {
+      "body_sha256": "4d31acc33c876efca2ae4188bd55549ff9500e9e52421cd4ae0e6309f42ca65c",
+      "description": "Use when the controlling Agent should communicate with a Kimi Code CLI main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.",
+      "file_sha256": "794a689d4b7ac9072da82e20a482d794dc85cbf421a874e0cbfd86558f5f6283",
+      "name": "kimi-cli-kaola-project-runner",
+      "platform_id": "kimi-cli",
+      "role": "worker",
+      "source": "private-skills/kimi-cli-kaola-project-runner.md"
+    },
+    {
+      "body_sha256": "f4ea87f7bd0e91c76ce77a9fd14dbe4fef19f71da29754751e49658ed8d98656",
+      "description": "Use when the controlling Agent should communicate with an OpenCode main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.",
+      "file_sha256": "5b597453ac19938b8f2b56e827fbf194b1a26bcf7bb5be7f73e211b7bc222d63",
+      "name": "opencode-kaola-project-runner",
+      "platform_id": "opencode",
+      "role": "worker",
+      "source": "private-skills/opencode-kaola-project-runner.md"
+    }
+  ]
+}

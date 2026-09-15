@@ -22,12 +22,7 @@ HOSTS = ROOT / "hosts"
 MARKER = ".generated-by-kaola-project-runner"
 ORCHESTRATOR_NAME = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
-GROK_BOT_HOST = "grok-bot"
-# The Grok Bot payload is one Private Skill: the orchestrator root plus the seven
-# workers embedded as supporting resources. A worker's contract is renamed so the
-# payload exposes exactly one discoverable SKILL.md.
-WORKER_CONTRACT = "WORKER.md"
-EMBEDDED_WORKER_DROP = frozenset({MARKER, "agents/openai.yaml"})
+GROK_BOT_HOST = "grok-bot"  # a host packaging adapter (see below), never a platform
 TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 REQUIRED = {
     "id", "runtime_name", "skill_name", "display_name", "short_description",
@@ -119,26 +114,6 @@ def supported_worker_summary(manifests: list[dict[str, str]]) -> str:
     return "\n".join(rows)
 
 
-def embedded_worker_routing(manifests: list[dict[str, str]]) -> str:
-    rows = [
-        "#### Embedded workers (Grok Bot Private Skill payload)",
-        "",
-        "In this payload the seven workers are supporting resources of this one Skill,",
-        f"under `workers/<platform id>/`; their contract file is `{WORKER_CONTRACT}`, not a",
-        "discoverable `SKILL.md`. Load a worker contract on demand from this Skill's own",
-        "directory; nothing else has to be discovered or enabled. A worker's `SKILL_DIR` is",
-        "`<local execution copy of this Skill>/workers/<platform id>` and its Runner entry is",
-        "`SKILL_DIR/scripts/runtime-tmux.sh`.",
-        "",
-        "| Platform id | Worker contract | Runner entry | Default transport |",
-        "|---|---|---|---|",
-    ]
-    for manifest in manifests:
-        rows.append(
-            f"| {manifest['id']} | `workers/{manifest['id']}/{WORKER_CONTRACT}` | "
-            f"`workers/{manifest['id']}/scripts/runtime-tmux.sh` | {manifest['default_transport']} |"
-        )
-    return "\n".join(rows)
 
 
 def orchestrator_values(
@@ -146,6 +121,8 @@ def orchestrator_values(
 ) -> dict[str, str]:
     if host == GROK_BOT_HOST:
         host_workers = embedded_worker_routing(manifests)
+    elif host == GROK_BOT_ACCOUNT:
+        host_workers = private_skill_routing(manifests)
     elif host is None:
         host_workers = (
             "In a native skill-directory install the seven workers are sibling Skill "
@@ -334,6 +311,119 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
     write_bundle(SKILLS, target, expected, "Skill")
 
 
+
+
+
+
+
+
+# ---------------------------------------------------------------------------
+# Host adapter: grok-bot (packaging adapter, not a CLI transport platform)
+#
+# One canonical Skill system exists: the orchestrator template, the worker
+# template, the seven platform manifests, and their canonical references.
+# A host adapter only re-packages that system for one host. This adapter's
+# inputs are exactly GROK_BOT_ADAPTER_INPUTS; its outputs are the files of
+# expected_grok_bot_host_files(). Host differences live only here: reference
+# expansion, Local Computer path hints, the single-Markdown account form, the
+# fingerprint manifest, and the install steps. Scheduling, safety, and
+# transport semantics come from the canonical sources and are never authored
+# in this section. This host has no platform manifest and no transport adapter.
+# --write owns every product below; --check and kaola-grok-bot-verify.py
+# reject any product that drifts from a fresh render.
+# ---------------------------------------------------------------------------
+GROK_BOT_ADAPTER_INPUTS = (
+    "templates/orchestrator",      # canonical orchestrator Skill + references
+    "templates/SKILL.md.tmpl",     # canonical worker contract
+    "templates/agents",            # canonical Skill metadata
+    "templates/references",        # canonical worker references
+    "platforms",                   # the seven platform manifests
+    "scripts",                     # shared runtime scripts and adapters
+    "templates/grok-bot",          # adapter-only prose: the install guide
+)
+# Local Computer runtime copy: one directory, the orchestrator root plus the seven
+# workers embedded as supporting resources (contract renamed so exactly one
+# discoverable SKILL.md exists).
+WORKER_CONTRACT = "WORKER.md"
+EMBEDDED_WORKER_DROP = frozenset({MARKER, "agents/openai.yaml"})
+# Account form: a Grok Bot private skill is one single Markdown (name, description,
+# body), so the account receives eight standalone documents -- the orchestrator plus
+# one per worker -- each derived from the canonical sources above. The fingerprint
+# manifest lists them; the install guide is executed by Grok Bot itself (not a Skill).
+GROK_BOT_ACCOUNT = "grok-bot-account"
+PRIVATE_SKILLS_DIR = "private-skills"
+PRIVATE_SKILLS_MANIFEST = "private-skills.json"
+INSTALL_GUIDE = "INSTALL.md"
+ACCOUNT_SECTION = "## Grok Bot account-private form"
+BUNDLED_REFERENCE = "## Bundled reference: "
+GROK_BOT_HOME = "${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}"
+LOCAL_RUNTIME_COPY = f"{GROK_BOT_HOME}/skills/{ORCHESTRATOR_NAME}"
+WORKER_REFERENCES = ("platform.md", "transport.md", "acp.md")
+ORCHESTRATOR_REFERENCES = ("grok-bot-host.md", "heartbeat-skeleton.md")
+
+
+def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
+    """Split a single-Markdown Skill into its frontmatter map and body."""
+    lines = text.split("\n")
+    if not lines or lines[0] != "---":
+        raise ValueError("single-Markdown Skill must start with frontmatter")
+    end = lines.index("---", 1)
+    meta: dict[str, str] = {}
+    for line in lines[1:end]:
+        key, _, value = line.partition(":")
+        value = value.strip()
+        if value.startswith('"') and value.endswith('"'):
+            value = json.loads(value)
+        meta[key.strip()] = value
+    return meta, "\n".join(lines[end + 1:])
+
+
+def embedded_worker_routing(manifests: list[dict[str, str]]) -> str:
+    rows = [
+        "#### Embedded workers (Grok Bot Local Computer runtime copy)",
+        "",
+        "In this runtime copy the seven workers are supporting resources of this one Skill",
+        "directory (one discoverable Skill, seven embedded workers), under",
+        f"`workers/<platform id>/`; their contract file is `{WORKER_CONTRACT}`, not a",
+        "discoverable `SKILL.md`. Load a worker contract on demand from this Skill's own",
+        "directory; nothing else has to be discovered or enabled. A worker's `SKILL_DIR` is",
+        "`<local execution copy of this Skill>/workers/<platform id>` and its Runner entry is",
+        "`SKILL_DIR/scripts/runtime-tmux.sh`.",
+        "",
+        "| Platform id | Worker contract | Runner entry | Default transport |",
+        "|---|---|---|---|",
+    ]
+    for manifest in manifests:
+        rows.append(
+            f"| {manifest['id']} | `workers/{manifest['id']}/{WORKER_CONTRACT}` | "
+            f"`workers/{manifest['id']}/scripts/runtime-tmux.sh` | {manifest['default_transport']} |"
+        )
+    return "\n".join(rows)
+
+
+def private_skill_routing(manifests: list[dict[str, str]]) -> str:
+    rows = [
+        "#### Worker Private Skills (Grok Bot account)",
+        "",
+        "On a Grok Bot account each of the seven workers is its own account-private Skill,",
+        "saved from one single-Markdown document exactly like this one. Select a worker by",
+        "the stable Skill name below and load that Skill (ask for it by name when it is not",
+        "already loaded) for every transport operation: preflight, start, observe, send,",
+        "capture, key, and stop. This Skill carries no transport contract, no scripts, and",
+        "none of the worker text; each worker Skill states its own Local Computer script",
+        "location.",
+        "",
+        "| Platform id | Worker Private Skill (stable name) | Display name | Default transport |",
+        "|---|---|---|---|",
+    ]
+    for manifest in manifests:
+        rows.append(
+            f"| {manifest['id']} | `{manifest['skill_name']}` | "
+            f"{manifest['display_name']} | {manifest['default_transport']} |"
+        )
+    return "\n".join(rows)
+
+
 def embedded_worker_files(manifest: dict[str, str]) -> dict[str, bytes]:
     """One worker as a supporting resource: same bytes as its Skill, minus Skill identity."""
     result: dict[str, bytes] = {}
@@ -346,9 +436,137 @@ def embedded_worker_files(manifest: dict[str, str]) -> dict[str, bytes]:
     return result
 
 
+def bundled_references(names: tuple[str, ...], files: dict[str, bytes]) -> str:
+    """Append reference documents verbatim so a single-Markdown Skill needs no file tree."""
+    parts: list[str] = []
+    for name in names:
+        text = files[f"references/{name}"].decode("utf-8")
+        parts.append(f"\n{BUNDLED_REFERENCE}references/{name}\n\n{text.rstrip()}\n")
+    return "".join(parts)
+
+
+def worker_private_skill(manifest: dict[str, str]) -> bytes:
+    """One worker as an account-private Skill: its canonical SKILL.md verbatim, then the
+    Local Computer script location and its three references bundled verbatim."""
+    files = expected_files(manifest)
+    wid = manifest["id"]
+    account = (
+        f"\n{ACCOUNT_SECTION}\n\n"
+        f"This document is the account-private Skill `{manifest['skill_name']}` for the Grok Bot\n"
+        "host: one single Markdown (frontmatter `name` and `description` plus this body) saved on\n"
+        "its own by the Bot's skill write. It depends on no other saved Skill and on no file tree\n"
+        "in the account; the three reference documents linked above are bundled verbatim at the\n"
+        "end of this document. The scripts run on **Local Computer** (never on the cloud Agent\n"
+        "Computer) from the generated runtime copy installed on this machine by\n"
+        "`./scripts/install-local.sh --runtime grok-bot`:\n\n"
+        "```bash\n"
+        f'SKILL_DIR="{LOCAL_RUNTIME_COPY}/workers/{wid}"\n'
+        '"$SKILL_DIR/scripts/runtime-tmux.sh" preflight --repo "$REPO" --session "$SESSION"\n'
+        "```\n\n"
+        "`KAOLA_GROK_BOT_HOME` overrides the root `$HOME/.kaola/grok-bot`. In that copy this\n"
+        f"contract is the file `workers/{wid}/{WORKER_CONTRACT}` and `$SKILL_DIR/references/` holds the\n"
+        f"same three documents. The main Skill `{ORCHESTRATOR_NAME}` ({ORCHESTRATOR_DISPLAY}) selects\n"
+        "this worker by its Skill name; this Skill stays transport-only and carries no\n"
+        "orchestrator policy.\n"
+    )
+    text = files["SKILL.md"].decode("utf-8").rstrip() + "\n" + account
+    return (text + bundled_references(WORKER_REFERENCES, files)).encode()
+
+
+def orchestrator_private_skill(manifests: list[dict[str, str]]) -> bytes:
+    """The orchestrator as an account-private Skill: the shared template rendered with the
+    worker Private Skill routing table, then its two references bundled verbatim."""
+    files = expected_orchestrator_files(manifests, GROK_BOT_ACCOUNT)
+    account = (
+        f"\n{ACCOUNT_SECTION}\n\n"
+        f"This document is the account-private Skill `{ORCHESTRATOR_NAME}` ({ORCHESTRATOR_DISPLAY})\n"
+        "for the Grok Bot host: one single Markdown (frontmatter `name` and `description` plus\n"
+        "this body) saved on its own by the Bot's skill write. The seven workers are seven other\n"
+        "account-private Skills with the stable names in the routing table above; this Skill\n"
+        "carries no transport contract, no scripts, and none of their text. The two reference\n"
+        "documents linked above are bundled verbatim at the end of this document. Grok Bot\n"
+        f"installs and updates all eight from this repository by following `{INSTALL_GUIDE}` next\n"
+        f"to the `{PRIVATE_SKILLS_DIR}/` documents.\n"
+    )
+    text = files["SKILL.md"].decode("utf-8").rstrip() + "\n" + account
+    return (text + bundled_references(ORCHESTRATOR_REFERENCES, files)).encode()
+
+
+def private_skill_documents(manifests: list[dict[str, str]]) -> dict[str, bytes]:
+    """Exactly eight single-Markdown account-private Skills: 1 orchestrator + 7 workers."""
+    result = {f"{ORCHESTRATOR_NAME}.md": orchestrator_private_skill(manifests)}
+    for manifest in manifests:
+        result[f"{manifest['skill_name']}.md"] = worker_private_skill(manifest)
+    return result
+
+
+def private_skill_manifest(manifests: list[dict[str, str]], documents: dict[str, bytes]) -> bytes:
+    """Fingerprints of the eight account documents: name, description, body/file sha256."""
+    roles = [(ORCHESTRATOR_NAME, "orchestrator", None)] + [
+        (m["skill_name"], "worker", m["id"]) for m in manifests
+    ]
+    skills = []
+    for name, role, platform_id in roles:
+        data = documents[f"{name}.md"]
+        meta, body = split_frontmatter(data.decode("utf-8"))
+        if meta.get("name") != name:
+            raise ValueError(f"{name}.md: frontmatter name must be {name!r}")
+        skills.append({
+            "name": name,
+            "description": meta["description"],
+            "role": role,
+            "platform_id": platform_id,
+            "source": f"{PRIVATE_SKILLS_DIR}/{name}.md",
+            "file_sha256": hash_bytes(data),
+            "body_sha256": hash_bytes(body.encode("utf-8")),
+        })
+    payload = {
+        "host": GROK_BOT_HOST,
+        "adapter": GROK_BOT_ACCOUNT,
+        "install_guide": INSTALL_GUIDE,
+        "skill_count": len(skills),
+        "skills": skills,
+    }
+    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+
+
+def install_guide(manifests: list[dict[str, str]]) -> bytes:
+    template = TEMPLATES / "grok-bot" / (INSTALL_GUIDE + ".tmpl")
+    if not template.is_file():
+        raise ValueError(f"missing install guide template: {template}")
+    rows = [
+        "| # | Stable Skill name | Source file (read on Local Computer) | Role |",
+        "|---|---|---|---|",
+        f"| 1 | `{ORCHESTRATOR_NAME}` | `hosts/{GROK_BOT_HOST}/{PRIVATE_SKILLS_DIR}/{ORCHESTRATOR_NAME}.md` | main Skill ({ORCHESTRATOR_DISPLAY}) |",
+    ]
+    for number, manifest in enumerate(manifests, 2):
+        rows.append(
+            f"| {number} | `{manifest['skill_name']}` | "
+            f"`hosts/{GROK_BOT_HOST}/{PRIVATE_SKILLS_DIR}/{manifest['skill_name']}.md` | "
+            f"{manifest['runtime_name']} worker (transport-only) |"
+        )
+    names = [ORCHESTRATOR_NAME] + [m["skill_name"] for m in manifests]
+    values = {
+        "PRIVATE_SKILL_TABLE": "\n".join(rows),
+        "PRIVATE_SKILL_NAMES": ", ".join(f"`{name}`" for name in names),
+        "SKILL_COUNT": str(len(names)),
+        "WORKER_COUNT": str(len(manifests)),
+        "LOCAL_RUNTIME_COPY": LOCAL_RUNTIME_COPY,
+        "FIRST_WORKER_ID": manifests[0]["id"],
+        "FIRST_WORKER_SKILL": manifests[0]["skill_name"],
+        "FIRST_WORKER_RUNTIME": manifests[0]["runtime_name"],
+    }
+    return render_text(template.read_text(encoding="utf-8"), values, template).encode()
+
+
 def expected_grok_bot_host_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     result[MARKER] = (GROK_BOT_HOST + "\n").encode()
+    result[INSTALL_GUIDE] = install_guide(manifests)
+    documents = private_skill_documents(manifests)
+    for name, data in documents.items():
+        result[f"{PRIVATE_SKILLS_DIR}/{name}"] = data
+    result[PRIVATE_SKILLS_MANIFEST] = private_skill_manifest(manifests, documents)
     prefix = f"{ORCHESTRATOR_NAME}/"
     for relative, data in expected_orchestrator_files(manifests, GROK_BOT_HOST).items():
         result[prefix + relative] = data
@@ -409,7 +627,8 @@ def main() -> int:
         return 1
     print(
         f"render-skills: {'WROTE' if args.write else 'PASS'} "
-        f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {GROK_BOT_HOST} private skill)"
+        f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {GROK_BOT_HOST} host: "
+        f"{len(manifests) + 1} private skills + runtime copy)"
     )
     return 0
 
