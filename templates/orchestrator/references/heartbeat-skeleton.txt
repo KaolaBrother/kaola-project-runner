@@ -20,3 +20,4 @@ PR 非必需且授权合并出口合适时走已选 Workflow 同步/合并，不
 到点/到条件（run until 5pm/done/CONDITION）之后不接新任务、不认领新 issue；默认真收口手头已认领/在飞 issue，合并 worktree/分支、不留分支尾巴。到点不是丢掉手头工作。只有人明确说「这里停、稍后再续」才跳过该清理并保留可恢复未完成分支。
 用户叫停时遵照其范围执行；否则在授权目标完成、无未完成交付/同步/清理、剩余闲置owned会话已停止时取消心跳。之后有新授权工作才 start/--resume/--continue。
 暂时没有就绪任务不等于项目完成。原生心跳与sleep不得叠用。
+宿主若为 Grok Bot：只用本 Bot 主会话上的一条 Routine 作为唯一心跳；接管时只取消旧宿主心跳（Codex heartbeat / 其他 loop / sleep），不得 stop 在飞 worker。HUMAN_DECISION_REQUIRED 留在本会话（Needs attention）。不要把 Routine 与 sleep 叠用。

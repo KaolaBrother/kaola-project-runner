@@ -35,7 +35,9 @@ Runner never auto-falls back or resends. Read the receipt and let the controllin
 
 Resolve this Skill's installed directory once and call its scripts by absolute path — the install
 destination may contain spaces, and the user's project is passed only through `--repo` (relative
-paths in these references resolve against the Skill, never the project cwd):
+paths in these references resolve against the Skill, never the project cwd). When this Skill is
+packaged as a sibling inside a host plugin, SKILL_DIR is still this Skill's directory — not the
+plugin root and not another Skill:
 
 ```bash
 SKILL_DIR="/absolute/path/to/{{SKILL_NAME}}"   # the directory containing this SKILL.md

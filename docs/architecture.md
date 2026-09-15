@@ -67,13 +67,21 @@ outer Codex carrier.
 core, relay/client/protocol/observation helpers, and one matching adapter into seven self-contained
 worker directories under `skills/`, and renders the fixed orchestrator directory
 `skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
-derived from the seven manifests (no orchestrator platform manifest or adapter). Every managed
+derived from the seven manifests (no orchestrator platform manifest or adapter). It also emits
+`hosts/grok-bot/` as a Cursor-plugin packaging of those same eight Skill trees. Every managed
 directory has a `.generated-by-kaola-project-runner` marker. A published Skill never follows a path
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
-byte inventories, including the orchestrator package.
+byte inventories, including the orchestrator package and `hosts/grok-bot/`.
+
+`render-skills.py` also emits `hosts/grok-bot/`, a Cursor-plugin bundle whose `skills/` trees are
+byte-identical to the eight generated Skill directories. Grok Bot is a first-class **host**, not an
+eighth platform: there is no `platforms/grok-bot.yaml`. `--runtime grok-bot` installs that plugin
+payload to `$HOME/.cursor/plugins/local/kaola-project-runner`. `--platform grok` still selects the
+Grok CLI worker. Live Grok Bot UI enablement is UAT, not claimed by the installer copy. See
+[Grok Bot host](grok-bot-host.md).
 
 `install-local.sh` delivers those directories to a consuming runtime: a verified named alias via
-`--runtime` (`codex`, `claude-code`, `cursor`, `devin`), or any absolute `--skills-dir` (the two are
+`--runtime` (`codex`, `claude-code`, `cursor`, `devin`, `grok-bot`), or any absolute `--skills-dir` (the two are
 mutually exclusive; the flag-free default remains the Codex skills directory). `--method copy`
 (the default) installs the identical payload as a standalone directory plus a per-Skill
 ownership/content receipt kept outside the generated payload under

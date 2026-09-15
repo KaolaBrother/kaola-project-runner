@@ -18,9 +18,15 @@ ROOT = Path(__file__).resolve().parents[1]
 PLATFORMS = ROOT / "platforms"
 TEMPLATES = ROOT / "templates"
 SKILLS = ROOT / "skills"
+HOSTS = ROOT / "hosts"
 MARKER = ".generated-by-kaola-project-runner"
 ORCHESTRATOR_NAME = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
+GROK_BOT_HOST = "grok-bot"
+PLUGIN_VERSION = "0.2.3"
+PLUGIN_DESCRIPTION = (
+    "Kaola Project Runner control plane plus seven CLI worker Skills for Grok Bot."
+)
 TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 REQUIRED = {
     "id", "runtime_name", "skill_name", "display_name", "short_description",
@@ -265,13 +271,13 @@ def check_one(target: Path, expected: dict[str, bytes]) -> list[str]:
     return findings
 
 
-def write_one(target: Path, expected: dict[str, bytes]) -> None:
-    SKILLS.mkdir(parents=True, exist_ok=True)
+def write_bundle(parent: Path, target: Path, expected: dict[str, bytes], kind: str) -> None:
+    parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         marker = target / MARKER
         if not marker.is_file() or marker.read_bytes() != expected[MARKER]:
-            raise ValueError(f"refusing to replace unmanaged Skill directory: {target}")
-    temp = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=SKILLS))
+            raise ValueError(f"refusing to replace unmanaged {kind} directory: {target}")
+    temp = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=parent))
     try:
         for name, data in expected.items():
             destination = temp / name
@@ -285,6 +291,40 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
     finally:
         if temp.exists():
             shutil.rmtree(temp)
+
+
+def write_one(target: Path, expected: dict[str, bytes]) -> None:
+    write_bundle(SKILLS, target, expected, "Skill")
+
+
+def grok_bot_plugin_values() -> dict[str, str]:
+    return {
+        "SKILL_NAME": ORCHESTRATOR_NAME,
+        "DISPLAY_NAME": ORCHESTRATOR_DISPLAY,
+        "PLUGIN_VERSION": PLUGIN_VERSION,
+        "PLUGIN_DESCRIPTION": PLUGIN_DESCRIPTION,
+    }
+
+
+def expected_grok_bot_host_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
+    result: dict[str, bytes] = {}
+    result[MARKER] = (GROK_BOT_HOST + "\n").encode()
+    plugin_template = TEMPLATES / "hosts" / GROK_BOT_HOST / "plugin.json.tmpl"
+    if not plugin_template.is_file():
+        raise ValueError(f"missing Grok Bot plugin template: {plugin_template}")
+    result[".cursor-plugin/plugin.json"] = render_text(
+        plugin_template.read_text(encoding="utf-8"),
+        grok_bot_plugin_values(),
+        plugin_template,
+    ).encode()
+    for manifest in manifests:
+        prefix = f"skills/{manifest['skill_name']}/"
+        for relative, data in expected_files(manifest).items():
+            result[prefix + relative] = data
+    orch_prefix = f"skills/{ORCHESTRATOR_NAME}/"
+    for relative, data in expected_orchestrator_files(manifests).items():
+        result[orch_prefix + relative] = data
+    return result
 
 
 def main() -> int:
@@ -304,6 +344,10 @@ def main() -> int:
         for path in SKILLS.iterdir():
             if path.is_dir() and path.name not in expected_names:
                 findings.append(f"unexpected Skill directory: {path.name}")
+    if HOSTS.is_dir():
+        for path in HOSTS.iterdir():
+            if path.is_dir() and path.name != GROK_BOT_HOST:
+                findings.append(f"unexpected host directory: {path.name}")
 
     for manifest in manifests:
         target = SKILLS / manifest["skill_name"]
@@ -320,13 +364,20 @@ def main() -> int:
     else:
         findings.extend(check_one(orch_target, orch_expected))
 
+    host_target = HOSTS / GROK_BOT_HOST
+    host_expected = expected_grok_bot_host_files(manifests)
+    if args.write:
+        write_bundle(HOSTS, host_target, host_expected, "host")
+    else:
+        findings.extend(check_one(host_target, host_expected))
+
     if findings:
         for finding in findings:
             print(finding, file=sys.stderr)
         return 1
     print(
         f"render-skills: {'WROTE' if args.write else 'PASS'} "
-        f"({len(manifests)} workers + {ORCHESTRATOR_NAME})"
+        f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {GROK_BOT_HOST} host)"
     )
     return 0
 

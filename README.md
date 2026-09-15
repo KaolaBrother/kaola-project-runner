@@ -57,9 +57,14 @@ historical evidence, not this Skill's contract.
 
 ### Agents that load the Skills
 
-The installer provides native skill-directory destinations for **Codex, Claude Code, Cursor,
-and Devin**. Other hosts can use `--skills-dir /absolute/path` if they can load `SKILL.md` and
-execute shell commands in an environment with the required tools.
+The installer provides native destinations for **Codex, Claude Code, Cursor,
+Devin, and Grok Bot**. Grok Bot (`--runtime grok-bot`) is a host: it installs the
+generated Cursor-plugin bundle that exposes the main Skill **and** the seven
+worker Skills. `--platform grok` remains the Grok CLI worker; it is not a host
+install. Grok Bot UI enablement is a named live UAT boundary — see
+[Grok Bot host](docs/grok-bot-host.md). Other hosts can use `--skills-dir /absolute/path`
+if they can load `SKILL.md` and execute shell commands in an environment with the
+required tools.
 
 These are portable Agent Skills, with no dependency on a Codex installation. This does not mean
 every host/target combination has been tested. Recorded end-to-end host coverage includes Codex
@@ -150,10 +155,11 @@ Skills to this checkout for Project Runner development. Select another host, a w
 subset, or skip the orchestrator:
 
 ```bash
-# Install all worker Skills plus the orchestrator for Claude Code, Cursor, or Devin.
+# Install all worker Skills plus the orchestrator for Claude Code, Cursor, Devin, or Grok Bot.
 ./scripts/install-local.sh --runtime claude-code
 ./scripts/install-local.sh --runtime cursor
 ./scripts/install-local.sh --runtime devin
+./scripts/install-local.sh --runtime grok-bot
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode

@@ -54,6 +54,25 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 
 {{SUPPORTED_WORKERS}}
 
+### Hosts
+
+This Skill is host-neutral. Verified installer destinations: Codex, Claude Code,
+Cursor, Devin, and Grok Bot (`--runtime grok-bot`). Grok Bot is a first-class
+host, not a worker and not an eighth platform. `--platform grok` is the Grok CLI
+worker. `--platform grok-bot` is invalid.
+
+On Grok Bot, workers are sibling Skills under the same plugin `skills/`
+directory. Call each by its installed directory. Prefer Local Computer when those
+CLI sessions live on this machine; the shared cloud computer is a different
+machine. One Grok Bot Routine on this Bot conversation is the only heartbeat
+carrier: never stack it with a Codex heartbeat or blocking sleep. Takeover
+cancels the previous host heartbeat without stopping in-flight workers.
+`HUMAN_DECISION_REQUIRED` stays in this Bot conversation (Needs attention / this
+Bot's Notifications). Agent Computer takeover is not CLI decision and not
+exact-session stop. An installer copy is not live Grok Bot UI adoption.
+
+See [references/grok-bot-host.md](references/grok-bot-host.md).
+
 ### Defaults
 
 | Item | Default / rule |
@@ -86,7 +105,8 @@ report-only request disables execution actions.
 Native recurring wake and blocking sleep must not be stacked. After close-out,
 cancel the native heartbeat or stop scheduling the next sleep. No CLI
 allowlist means no heartbeat. Temporarily having no ready task is not project
-completion.
+completion. On Grok Bot the native recurring carrier is one Routine on this Bot;
+do not hard-code other hosts' scheduler APIs.
 
 ## Delivery
 

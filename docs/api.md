@@ -9,8 +9,8 @@ scripts/render-skills.py --check
 
 `--write` deterministically rebuilds seven managed worker Skill directories plus
 `skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eighth
-platform). `--check` returns nonzero for
-any missing, stale, or unexpected file or Skill directory. Manifest values are JSON strings in a
+platform) and the Grok Bot host plugin at `hosts/grok-bot/`. `--check` returns nonzero for
+any missing, stale, or unexpected file, Skill directory, or host bundle. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
@@ -43,9 +43,12 @@ Omit `--platform` for all seven workers. `--platform` never selects the main Ski
 and `--skills-dir` destination unless `--no-orchestrator` is passed. Every selected destination is
 preflighted before mutation; foreign paths are never replaced.
 
-`--runtime` selects a verified consuming-runtime skills directory: `codex` →
+`--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
-`cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`.
+`cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`,
+`grok-bot` → `$HOME/.cursor/plugins/local/kaola-project-runner` (Cursor-plugin host bundle of the
+orchestrator plus selected workers). `--runtime grok` is not a host alias; `--platform grok` is the
+Grok CLI worker. Grok Bot UI enablement is UAT; see [Grok Bot host](grok-bot-host.md).
 `--skills-dir` is a mutually exclusive explicit absolute destination (project-local paths included).
 With neither flag the legacy Codex destination is used. `--method copy` (default) stages an
 identical standalone copy on the destination filesystem and records a per-Skill receipt at
