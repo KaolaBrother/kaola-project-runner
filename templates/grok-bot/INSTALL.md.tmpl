@@ -27,7 +27,11 @@ in doubt compare a file's `shasum -a 256` with its `file_sha256` before saving i
 For each row: read the file on Local Computer; take `name` and `description` from its
 frontmatter (the block between the first two `---` lines); take the **body** as everything after
 the closing `---`; then save it with the Bot's private-skill write (observed in owner UAT as the
-`update_state` Skill write) using **exactly** that name, description, and body. That is
+`update_state` Skill write) using **exactly** that name, description, and body. The
+`description` value is the text **without YAML quotes**: when the frontmatter line reads
+`description: "..."` (the main Skill's does), save the text between the quotes, never the quotes
+themselves; the `description` field of the same row in `hosts/grok-bot/private-skills.json` is
+that already-resolved value and is the exact string to save. That is
 {{SKILL_COUNT}} calls, one per source file. If a private Skill with the same name already exists,
 update it in place. Never create a second Skill with the same name, never rename one, and never
 merge two files into one Skill.

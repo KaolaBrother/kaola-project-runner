@@ -732,6 +732,8 @@ class Issue49AccountPrivateSkills(unittest.TestCase):
             r"for \*\*Grok Bot itself\*\*", r"not a ninth Skill", r"git rev-parse HEAD", r"render-skills\.py --check",
             r"kaola-grok-bot-verify\.py hosts/grok-bot --repo \.", r"one write per file", r"8 calls, one per source file",
             r"`name` and `description` from its frontmatter", r"everything after the closing `---`", r"update it in place",
+            r"`description` value is the text \*\*without YAML quotes\*\*", r"never the quotes themselves",
+            r"`hosts/grok-bot/private-skills\.json` is that already-resolved value and is the exact string to save",
             r"Never create a second Skill with the same name", r"idempotent", r"no other Skill on the account is touched",
             r"`created`, `updated`, `FAILED \(reason\)`, or `not attempted`", r"repeat step 2 for the failed rows only",
             r"Partial completion is reported as partial", r"Settings > Plugins > Yours lists exactly these 8",
@@ -829,6 +831,41 @@ class Issue49HostAdapterBoundary(unittest.TestCase):
             self.assertEqual([l for l in residue_lines if l.startswith("## ")], ["## Grok Bot account-private form"], name)
             for forbidden in ("mutation_status", "raw_current_frame", "PROJECT_RUNNER_HEARTBEAT", "Allowed CLIs", "--transport"):
                 self.assertNotIn(forbidden, residue, f"{name}: adapter section authors canonical semantics ({forbidden})")
+
+    def test_quoted_main_description_is_never_saved_with_its_quotes(self) -> None:
+        """Review F3 of 4133601: the main document's frontmatter description is a YAML/JSON-quoted
+        scalar (colon-space inside) while the seven workers are bare. Grok Bot saves the resolved
+        value: the manifest carries it unquoted, the guide says so, and the verifier refuses a
+        manifest that carries the raw quotes."""
+        import json
+        data = json.loads(PRIVATE_SKILLS_MANIFEST.read_text(encoding="utf-8"))
+        manifest_description = {entry["name"]: entry["description"] for entry in data["skills"]}
+        docs = account_docs()
+        raw_main = frontmatter(docs[ORCHESTRATOR_ID])[0]["description"]
+        self.assertTrue(raw_main.startswith('"') and raw_main.endswith('"'), "main frontmatter description is a quoted scalar (F3 premise)")
+        for name, text in docs.items():
+            raw = frontmatter(text)[0]["description"]
+            resolved = json.loads(raw) if raw.startswith('"') else raw
+            self.assertFalse(resolved.startswith('"') or resolved.endswith('"'), f"{name}: resolved description keeps YAML quotes")
+            self.assertNotIn('\\"', resolved, f"{name}: resolved description keeps JSON escapes")
+            self.assertEqual(manifest_description[name], resolved, f"{name}: manifest must carry the resolved description")
+        self.assertEqual(manifest_description[ORCHESTRATOR_ID], json.loads(raw_main))
+        self.assertNotEqual(manifest_description[ORCHESTRATOR_ID], raw_main, "manifest must not carry the quoted scalar verbatim")
+        guide = normalize(INSTALL_GUIDE.read_text(encoding="utf-8"))
+        self.assertIn("`description` value is the text **without YAML quotes**", guide)
+        self.assertIn("`hosts/grok-bot/private-skills.json` is that already-resolved value and is the exact string to save", guide)
+        self.assertIsNone(authorizes_wrong_move(INSTALL_GUIDE.read_text(encoding="utf-8"), (r"including (?:the |its )?quotes", r"with (?:the |its )?(?:surrounding |yaml )?quotes")))
+        verifier = load_verifier()
+        with tempfile.TemporaryDirectory(prefix="kaola-issue-49-quoted-") as temporary:
+            bundle = Path(temporary) / HOST_ID
+            shutil.copytree(HOST_BUNDLE, bundle)
+            manifest = bundle / "private-skills.json"
+            edited = json.loads(manifest.read_text(encoding="utf-8"))
+            main = next(entry for entry in edited["skills"] if entry["name"] == ORCHESTRATOR_ID)
+            main["description"] = raw_main
+            manifest.write_text(json.dumps(edited, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            findings = verifier.validate(bundle, None)
+            self.assertTrue(any(f"{ORCHESTRATOR_ID}: description does not match the document frontmatter" in f for f in findings), findings)
 
     def test_fingerprint_manifest_matches_the_documents(self) -> None:
         import json
