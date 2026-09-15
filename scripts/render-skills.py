@@ -133,7 +133,9 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         ),
         "SUPPORTED_WORKERS": supported_worker_summary(manifests),
         "IDLE_BEFORE_STOP": (
-            "Give an idle worker suitable work before considering stop"
+            "At every heartbeat, match authorized idle workers to safe parallel work and "
+            "dispatch every suitable match. Leave capacity idle rather than invent work or "
+            "expand authorization"
         ),
         "ACCEPTANCE_BEFORE_FINALIZE": (
             "Mission-frontier done triggers review, not automatic finalize"

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.3 — 2026-09-15
+
+- Every Project Runner heartbeat now matches authorized idle workers to executable work that can
+  safely run in parallel. Suitable work is dispatched without creating busywork or expanding
+  authorization merely to fill capacity.
+
 ## 0.2.2 — 2026-09-15
 
 - Main orchestrator Skill `kaola-project-runner` (issue #47): prefer the selected authorized

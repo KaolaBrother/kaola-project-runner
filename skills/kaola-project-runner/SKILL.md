@@ -119,7 +119,7 @@ sink, and write ownership.
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
    first. Examine authorized remaining work and real parallel opportunities.
-   Give an idle worker suitable work before considering stop. State the task, working location, write ownership, and
+   At every heartbeat, match authorized idle workers to safe parallel work and dispatch every suitable match. Leave capacity idle rather than invent work or expand authorization. State the task, working location, write ownership, and
    delivery requirements in its prompt; merely seeing a worktree or Mission
    List is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not

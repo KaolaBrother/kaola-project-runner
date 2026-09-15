@@ -63,7 +63,7 @@ WORKER_RECEIPT_NOT_COMPLETION = (
     "An `end_turn` event, an idle terminal, or a successful `send` receipt never establishes completion",
 )
 WORKER_NO_PROJECT_POLICY = (
-    "Give an idle worker suitable work before considering stop",
+    "At every heartbeat, match authorized idle workers",
     "Mission-frontier done triggers review, not automatic finalize",
     "PROJECT_RUNNER_HEARTBEAT",
     "30 minutes unless specified",
@@ -436,20 +436,20 @@ class Issue41ScenarioMeaning(unittest.TestCase):
         )
         self.assertIsNone(wrong, f"recovery policy authorizes a duplicate start: {wrong!r}")
 
-    def test_idle_worker_gets_suitable_work_before_stop(self) -> None:
+    def test_each_heartbeat_matches_idle_workers_to_safe_parallel_work(self) -> None:
         text = self.orchestrator_text()
         self.assertIsNotNone(
             clause_present(
                 text,
                 (
-                    r"give an idle worker suitable work before considering stop",
-                    r"idle worker.{0,100}suitable work.{0,80}before.{0,40}stop",
-                    r"stop an idle exact session only when no suitable authorized work",
-                    r"suitable authorized work.{0,80}before.{0,40}stop",
+                    r"at every heartbeat.{0,80}authorized idle workers.{0,80}safe parallel work",
+                    r"dispatch every suitable match.{0,80}leave capacity idle.{0,80}invent work or expand authorization",
                 ),
             ),
-            "orchestrator must dispatch suitable authorized work to an idle worker before stop",
+            "every heartbeat must match authorized idle workers to safe executable parallel work without inventing work or authorization",
         )
+        heartbeat = (orchestrator_package(PROJECT) / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
+        self.assertIn("每拍核对已授权的空闲线程和可安全并行的工作，派出所有合适匹配", heartbeat)
         wrong = authorizes_wrong_move(
             text,
             (
