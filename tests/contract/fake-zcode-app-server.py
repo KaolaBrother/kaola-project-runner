@@ -111,6 +111,14 @@ class FakeAppServer:
                 "thoughtLevel": "high",
                 "subscribed": False,
             }
+            # CLI 0.16.5 asks the client for runtime preferences during create.
+            pref_id = self.next_request_id
+            self.next_request_id += 1
+            emit({
+                "id": pref_id,
+                "method": "session/requestRuntimePreferences",
+                "params": {"sessionId": session_id, "scope": "runtime-materialization"},
+            })
             self.result(rid, {"session": {
                 "sessionId": session_id, "title": "", "traceId": f"trace_{self.counter}",
             }})

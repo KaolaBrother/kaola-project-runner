@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **ZCode ACP live protocol repair** (Issue #51, Mission 4). CLI 0.16.5 asks
+  `session/requestRuntimePreferences` during `session/create`; the adapter now
+  answers protocol defaults and never reads Settings or forwards auth headers.
+  Default transport stays PTY: headless `app-server` still requires an explicit
+  model provider in `~/.zcode/cli/config.json` and must not be filled from v2
+  desktop login.
 - **ZCode as the eighth CLI worker platform** (Issue #51, Mission 3). Adds
   `platforms/zcode.yaml` and `scripts/adapters/zcode.sh`, generates
   `zcode-kaola-project-runner` from the shared worker template, and reuses the

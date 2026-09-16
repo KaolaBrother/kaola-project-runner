@@ -636,10 +636,30 @@ class ZCodeAcpAgent:
         backend = self.backend
         if backend is None:
             return
+        # CLI 0.16.5 asks this during session/create, before the backend id
+        # is registered. Answer with protocol defaults; never read Settings.
+        if method == "session/requestRuntimePreferences":
+            backend.respond(rid, {
+                "nativeSearchEnhancementsEnabled": True,
+                "memoryEnabled": False,
+                "askUserQuestionAutoResolutionEnabled": True,
+                "modelContextBudgetStrategy": "preflight-v1",
+            })
+            return
+        # Never supply credential/header values. Native login owns auth.
+        if method in (
+            "interaction/requestOfficialMcpAuthHeaders",
+            "interaction/requestProviderRuntimeHeaders",
+        ):
+            backend.respond(rid, {})
+            return
         with self.lock:
             session = self.by_backend.get(params.get("sessionId"))
         if session is None:
-            backend.respond(rid, {"optionId": "deny"})
+            if method == "interaction/requestPermission":
+                backend.respond(rid, {"optionId": "deny"})
+            else:
+                backend.respond(rid, {})
             return
 
         if method == "interaction/requestPermission":
