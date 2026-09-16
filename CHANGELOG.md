@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.1 — 2026-09-16
+
 - **Managed Skill install drift is advisory and repairable** (Issue #54).
   Runtime-generated Python bytecode no longer makes a receipt-owned installed
   copy look modified. A normal reinstall detects real payload drift, restores
