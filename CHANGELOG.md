@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.3 — 2026-09-17
+
 - **Droid CLI worker platform (Issue #58).** Droid is now the ninth worker platform, using the
   native `droid exec --output-format acp` agent by default and the native tmux TUI as an explicit
   PTY fallback. Both transports default to Auto Model and bypass permissions: ACP applies
