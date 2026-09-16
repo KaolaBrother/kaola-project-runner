@@ -1,21 +1,21 @@
 {
-  "accepted_commit": null,
+  "accepted_commit": "6f246bc6a69c215f0e88452449a71bcb511576f1",
   "adapter": "grok-bot-bridge",
   "host": "grok-bot",
   "install_guide": "INSTALL.md",
-  "label": null,
+  "label": "pre-release Issue 57 bridge refresh; not a release",
   "locator": "kaola-project-runner-locate",
   "release": null,
   "repository": "github.com/KaolaBrother/kaola-project-runner",
-  "saveable": false,
+  "saveable": true,
   "skill": {
-    "body_sha256": "61704ee5a2213ffb9e4b4004e02b1aedea11c0b0baf9a152e241094a57f8536a",
-    "bytes": 2526,
+    "body_sha256": "bc0ba97901764422d0ca03554a1c298d09f696c0d30681a95030f5ca70db0081",
+    "bytes": 2485,
     "description": "Use when the controlling Agent should supervise explicitly authorized CLI workers through Project Runner on a bound execution target: locate that target's verified kaola-project-runner checkout, then load the main Skill and one selected platform worker from it.",
-    "file_sha256": "6834a464788f493d769dff5cf663c7211ca8dd84c91c23d0df43db363a201832",
+    "file_sha256": "b708d90a389aae17b7302c60c5e429d46cf92eaa79689b7353f5e692a25ef829",
     "name": "kaola-project-runner",
     "source": "kaola-project-runner.md"
   },
   "skill_count": 1,
-  "stage": "content"
+  "stage": "pinned"
 }

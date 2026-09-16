@@ -8,7 +8,7 @@ description: "Use when the controlling Agent should supervise explicitly authori
 Project Runner is the Git repository `KaolaBrother/kaola-project-runner`. This Skill holds no policy, transport,
 path, or credential: everything is loaded from a verified checkout on the execution target you
 bind.
-Accepted revision: none yet. This is the unpinned content-stage render; do not save it to any account. The pin commit that follows names the content commit.
+Accepted revision: `6f246bc6a69c215f0e88452449a71bcb511576f1` (pre-release Issue 57 bridge refresh; not a release).
 
 1. **Bind the execution target first**: Local Computer when the project, CLI, and tmux sessions
    live on that machine, otherwise the cloud Agent Computer. Nothing on one target is reachable
