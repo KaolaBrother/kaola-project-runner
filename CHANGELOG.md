@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **ZCode default transport is ACP; PTY is unsupported by the bundled runtime** (Issue #51,
+  Mission 4, owner correction 2, 2026-09-16). The shipped ZCode runtime cannot open a
+  terminal UI (`Cannot find package '@zcode/tui'`) and headless `--prompt` requires
+  `~/.zcode/cli/config.json`, so PTY is a product limitation, not a Runner defect, and the
+  PTY live fallback is no longer an acceptance gate. `platforms/zcode.yaml` now has
+  `default_transport: acp` and `acp_login_requires_pty: false`; login happens in the ZCode
+  desktop App. Explicit `--transport pty` stays dispatchable only as a known-unsupported
+  diagnostic entry; documentation and tests no longer promise it as a login or fallback
+  channel. The flip was accepted only after a real Coding Plan ACP start/send/capture/stop
+  on the default transport with no secret in any output, zero residual processes, and a
+  clean repository (recorded in the bundle-51 UAT record).
+  Same change, orchestrator review finding on `1d08a71`: only `respond(error)` and `log()`
+  were redacted, while `session/update` notifications built from backend events
+  (`model.streaming` text, `tool.updated` output, `turn.failed` messages) reached ACP stdout
+  unredacted; a backend that echoes the inline credential inside an event payload could leak
+  it into receipts and event logs. Redaction now happens once at the single outbound boundary
+  (`send()`), covering results, errors, notifications and client requests without altering
+  ordinary text; fake scenario `echo_events` reproduces the leak and is red on `1d08a71`.
+  Cancel reporting is unchanged and honest: the stop is acknowledged at once, the native
+  runtime finishes the in-flight response, and the Runner reports `cancel-unconfirmed` until
+  the turn actually reports cancelled.
 - **ZCode ACP bridges the desktop Coding Plan provider in memory** (Issue #51, Mission 4
   owner correction, 2026-09-16). Headless CLI 0.16.5 `app-server` fails `session/create`
   with `Model config is missing` because it resolves providers from `~/.zcode/cli/config.json`

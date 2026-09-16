@@ -34,7 +34,7 @@ The main orchestrator Skill is generated separately and is not a ninth platform.
 | Grok CLI | `grok-kaola-project-runner` | `grok` | ACP |
 | Kimi CLI | `kimi-cli-kaola-project-runner` | `kimi` | ACP |
 | OpenCode | `opencode-kaola-project-runner` | `opencode` | ACP |
-| ZCode | `zcode-kaola-project-runner` | explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` | PTY |
+| ZCode | `zcode-kaola-project-runner` | explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` | ACP (PTY unsupported) |
 
 ACP returns structured replies and events. PTY preserves the native terminal UI, including
 terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
@@ -63,9 +63,11 @@ login, the adapter reads the App's provider registry (`~/.zcode/v2/config.json`)
 selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go providers are
 refused, never fallen back to) and hands it to the app-server in memory as the protocol's
 `runtimeModel` overlay, the same mechanism the desktop App uses; nothing is written under
-`~/.zcode`, and the credential never reaches receipts or logs. Default transport stays PTY
-until the live subscription gate of Issue #51 passes; `--transport acp` is already available,
-and login itself always stays a PTY act.
+`~/.zcode`, and the credential never reaches receipts or logs. Default transport is ACP (the
+live Coding Plan gate passed on 2026-09-16). ZCode does not support a PTY transport: the bundled
+runtime ships no terminal UI (`Cannot find package '@zcode/tui'`) and headless `--prompt` needs
+`~/.zcode/cli/config.json`, so `--transport pty` remains selectable only as a known-unsupported
+diagnostic entry, and login happens in the ZCode desktop App.
 
 ### Main orchestrator Skill
 

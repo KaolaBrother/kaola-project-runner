@@ -923,6 +923,28 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertIn("<redacted-credential>", blob)
         self.assert_registry_read_only_and_secret_contained(driver)
 
+    def test_event_payloads_echoing_the_credential_are_redacted(self) -> None:
+        """Outbound boundary: streaming text, tool cards and failure messages
+        are backend-controlled and must be redacted like error objects."""
+        driver = self.start("echo_events")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "hello"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        assert done is not None
+        self.assertEqual((done.get("result") or {}).get("stopReason"), "refusal")
+        blob = json.dumps(driver.messages)
+        self.assertNotIn(FIXTURE_SECRET, blob)
+        self.assertGreaterEqual(blob.count("<redacted-credential>"), 3)
+        texts = [((u.get("content") or {}).get("text") or "") for u in driver.updates(session_id)
+                 if u.get("sessionUpdate") == "agent_message_chunk"]
+        self.assertIn("hello key=<redacted-credential> world", texts, "ordinary text is kept intact")
+        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") in ("tool_call", "tool_call_update")]
+        self.assertTrue(tools)
+        self.assertNotIn(FIXTURE_SECRET, json.dumps(tools))
+        self.assert_registry_read_only_and_secret_contained(driver)
+
     def test_failed_load_leaves_no_half_registered_session(self) -> None:
         driver = self.start("resume_missing")
         self.handshake(driver)

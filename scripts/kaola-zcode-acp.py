@@ -625,7 +625,12 @@ class ZCodeAcpAgent:
     # -- ACP wire ---------------------------------------------------------
 
     def send(self, msg: dict[str, Any]) -> None:
-        data = json.dumps(msg).encode("utf-8") + b"\n"
+        # Single outbound boundary: results, errors, session/update
+        # notifications and client requests all pass here. Backend event
+        # payloads (model.streaming text, tool output, turn.failed messages)
+        # are untrusted and may echo the inline credential, so the whole
+        # message is redacted before it reaches the ACP channel.
+        data = json.dumps(redact(msg)).encode("utf-8") + b"\n"
         with STDOUT_LOCK:
             sys.stdout.buffer.write(data)
             sys.stdout.buffer.flush()
@@ -633,9 +638,7 @@ class ZCodeAcpAgent:
     def respond(self, rid: Any, result: Any = None, error: Any = None) -> None:
         msg: dict[str, Any] = {"jsonrpc": "2.0", "id": rid}
         if error is not None:
-            # Backend error objects may echo request input; never let the
-            # inline credential ride out on the ACP channel.
-            msg["error"] = redact(error)
+            msg["error"] = error  # redacted with the whole message in send()
         else:
             msg["result"] = result
         self.send(msg)
@@ -1239,6 +1242,9 @@ class ZCodeAcpAgent:
                 # A request (with id) bypasses the app-server's processing
                 # queue (CLI 0.16.5 fast-paths session/stop only when it has
                 # an id); a bare notification waits behind the running turn.
+                # The acknowledgement is immediate, but the native runtime
+                # aborts at the turn boundary: an in-flight model response
+                # streams to completion before the turn reports cancelled.
                 self.ensure_backend().call(
                     "session/stop", {"sessionId": session.backend_id}, timeout=15.0
                 )

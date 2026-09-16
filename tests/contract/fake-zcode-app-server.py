@@ -28,6 +28,7 @@ Scenarios (argv ``--scenario``):
   strict_model kept for compatibility; every scenario now rejects a model
                that the registered overlay did not list (no silent fallback)
   echo_error   session/create fails and echoes the request params in error.data
+  echo_events  streaming text, tool input/output and turn.failed echo the credential
   resume_missing      session/resume fails 1404 (session unknown)
   resume_needs_overlay session/resume fails without a runtimeModel overlay
   read_fails   session/read fails after a successful resume
@@ -194,6 +195,7 @@ class FakeAppServer:
         self.stop_flags: dict[str, threading.Event] = {}
         # Workspace catalog registered through overlays (backend `q8` parity).
         self.catalog: dict[str, list[str]] = {}
+        self.last_secret: str | None = None
 
     def register_overlay(self, rid: Any, params: dict[str, Any], method: str) -> dict[str, Any] | None:
         overlay = params.get("runtimeModel")
@@ -208,6 +210,9 @@ class FakeAppServer:
             return None
         provider = overlay["provider"]
         self.catalog[provider["providerId"]] = [m["modelId"] for m in provider["models"]]
+        api_key = provider.get("apiKey") or {}
+        if api_key.get("source") == "inline":
+            self.last_secret = api_key.get("value")
         record_overlay(overlay, method)
         return overlay
 
@@ -467,6 +472,23 @@ class FakeAppServer:
                     ],
                 }],
             }})
+            return
+
+        if scenario == "echo_events":
+            # A backend that echoes the inline credential inside event payloads.
+            secret = self.last_secret or "no-secret-seen"
+            self.event(session_id, "model.streaming",
+                       {"kind": "text_delta", "delta": f"hello key={secret} world"})
+            self.event(session_id, "model.streaming", {
+                "kind": "tool_call", "toolCallId": "call_e1",
+                "toolName": "Bash", "input": {"command": f"echo {secret}"},
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "result", "toolCallId": "call_e1", "toolName": "Bash",
+                "output": f"printed {secret}",
+            })
+            self.event(session_id, "turn.failed",
+                       {"error": {"code": 1401, "message": f"auth rejected for {secret}"}})
             return
 
         if scenario == "batch":

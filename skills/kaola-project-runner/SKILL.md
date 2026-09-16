@@ -61,7 +61,7 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 | grok | `grok-kaola-project-runner` | Grok Kaola Project Runner | acp |
 | kimi-cli | `kimi-cli-kaola-project-runner` | Kimi CLI Kaola Project Runner | acp |
 | opencode | `opencode-kaola-project-runner` | OpenCode Kaola Project Runner | acp |
-| zcode | `zcode-kaola-project-runner` | ZCode Kaola Project Runner | pty |
+| zcode | `zcode-kaola-project-runner` | ZCode Kaola Project Runner | acp |
 
 ### Hosts
 

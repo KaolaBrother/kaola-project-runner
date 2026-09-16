@@ -12,7 +12,7 @@
 
 ## Preflight
 
-Verify the explicit ZCode runtime path and report login/native-TUI evidence without PATH discovery.
+Verify the explicit ZCode runtime path and report app-server readiness and Coding Plan provider facts without PATH discovery; the bundled runtime ships no terminal UI.
 
 Preflight is read-only. Optional Kaola/Workflow surfaces and runtime health are reported as evidence;
 their absence does not block starting the CLI. The Runner never installs, upgrades, adopts, or
@@ -30,7 +30,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only, selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused), and hands it to the app-server in memory as the protocol's runtimeModel overlay; it never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login itself stays inside the ZCode App.
+Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP (the default) runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Explicit --transport pty is a known-unsupported diagnostic entry, not a login or fallback channel: the bundled runtime cannot open a terminal UI (Cannot find package @zcode/tui) and headless --prompt needs ~/.zcode/cli/config.json. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only, selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused), and hands it to the app-server in memory as the protocol's runtimeModel overlay; it never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login happens in the ZCode desktop App, never through the Runner.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

@@ -305,7 +305,7 @@ def test_manifest_renderer_and_inventory() -> None:
     manifest = parse_manifest(MANIFEST)
     check(manifest["id"] == "zcode", "manifest id is zcode")
     check(manifest["skill_name"] == "zcode-kaola-project-runner", "skill_name is zcode-kaola-project-runner")
-    check(manifest["default_transport"] == "pty", "default_transport is pty for this mission")
+    check(manifest["default_transport"] == "acp", "default_transport is acp (owner correction 2: ZCode is ACP-only)")
     command = manifest["acp_command"]
     check(ACP_TOKEN in command, "acp_command is Skill-relative to kaola-zcode-acp.py")
     lowered = command.lower()
@@ -313,7 +313,7 @@ def test_manifest_renderer_and_inventory() -> None:
         all(token not in lowered for token in ("npx", "npm", "registry", "latest")),
         "acp_command names neither registry nor npm/npx/latest",
     )
-    check(manifest["acp_login_requires_pty"] == "true", "login stays a PTY act")
+    check(manifest["acp_login_requires_pty"] == "false", "login is a desktop-App act; PTY is unsupported")
     allow = manifest["acp_env_allowlist"]
     check(allow in ("", "[]") or allow.split(",") == [""], "acp_env_allowlist is empty")
     check(manifest["acp_model_config_id"] == "model", "acp_model_config_id is model")
@@ -561,7 +561,9 @@ def test_start_send_cancel_stop_schema_v3() -> None:
         hanging.cleanup()
 
 
-def test_transport_dispatch_pty_default_acp_override() -> None:
+def test_transport_dispatch_acp_default_pty_diagnostic() -> None:
+    """ACP is the manifest default; explicit --transport pty stays dispatchable only
+    as a known-unsupported diagnostic entry (the bundled runtime has no TUI)."""
     sandbox = Sandbox("dispatch")
     try:
         session = sandbox.session()
@@ -570,8 +572,8 @@ def test_transport_dispatch_pty_default_acp_override() -> None:
         )
         check("unknown platform" not in stderr, "kaola-tmux.sh accepts platform zcode")
         if isinstance(payload, dict) and payload.get("transport"):
-            check(payload["transport"].get("selected") == "pty", "--transport pty selects the PTY channel")
-            check(payload["transport"].get("default") == "pty", "manifest default_transport is pty")
+            check(payload["transport"].get("selected") == "pty", "--transport pty is still dispatchable as a diagnostic entry")
+            check(payload["transport"].get("default") == "acp", "manifest default_transport is acp")
         code, payload, stderr = sandbox.tmux(
             "status", "--repo", str(sandbox.repo), "--session", session, "--transport", "acp"
         )
@@ -583,9 +585,9 @@ def test_transport_dispatch_pty_default_acp_override() -> None:
         )
         if isinstance(payload, dict) and payload.get("transport"):
             check(
-                payload["transport"].get("selected") == "pty"
+                payload["transport"].get("selected") == "acp"
                 and payload["transport"].get("reason") == "manifest-default",
-                "no override follows the pty manifest default",
+                "no override follows the acp manifest default",
             )
         check(PTY_ADAPTER.is_file(), "PTY adapter scripts/adapters/zcode.sh exists")
         identity = PTY_ADAPTER.read_text(encoding="utf-8")
@@ -600,7 +602,7 @@ def test_transport_dispatch_pty_default_acp_override() -> None:
 def test_skip_all_mode_is_yolo_on_acp_and_pty() -> None:
     """CLI 0.16.5 --help: --mode is Permission mode, values build|edit|plan|yolo,
     default yolo for --prompt. Packaged PermissionService: 'Yolo mode bypasses
-    permission prompts'. PTY must pass --mode yolo; ACP skip-all is yolo."""
+    permission prompts'. The (diagnostic-only) PTY adapter must pass --mode yolo; ACP skip-all is yolo."""
     acp = load_module(CHECKOUT_CLI, "kaola_acp_i51_mode")
     check(acp.ACP_SKIP_MODE.get("zcode") == "yolo", "ACP_SKIP_MODE zcode is yolo")
     tmux = TMUX.read_text(encoding="utf-8")

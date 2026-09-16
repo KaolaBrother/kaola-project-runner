@@ -70,7 +70,10 @@ provider to the app-server in memory as the protocol's `runtimeModel` overlay, r
 `~/.zcode/v2/config.json` read-only; Start Plan and pay-as-you-go providers are refused,
 `~/.zcode/cli/config.json` is never written, and the credential never reaches receipts). The
 `start`/`preflight` receipt's `agent_info._meta.zcode` carries the secret-free provider facts
-(`providerId`, `baseURL`, `planCacheStatus`, `modelIds`, `rejectedProviders`). The
+(`providerId`, `baseURL`, `planCacheStatus`, `modelIds`, `rejectedProviders`). ZCode's default
+transport is `acp`; `--transport pty` is dispatchable only as a known-unsupported diagnostic
+entry, because the bundled runtime has no terminal UI and headless `--prompt` requires
+`~/.zcode/cli/config.json`. Login happens in the ZCode desktop App. The
 renderer copies `dist/index.js`, `dist/DERIVATION.json`,
 `LICENSE`, and `UPSTREAM.md` from `vendor/claude-code-acp/` into the Claude Code worker only,
 and copies `scripts/kaola-zcode-acp.py` into the ZCode worker only;
