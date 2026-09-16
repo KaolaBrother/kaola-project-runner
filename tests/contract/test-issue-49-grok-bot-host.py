@@ -1201,5 +1201,82 @@ class Issue49WorkerIsolation(unittest.TestCase):
             self.assertNotIn(text, main)
 
 
+class Issue56NoInvalidUiGates(unittest.TestCase):
+    """Issue #56: the account Skill list and `/` discovery are not installation or acceptance gates.
+
+    The owner established that Grok Bot's Plugins/Yours list cannot expose this account-private
+    Skill and that a 1:1 Bot chat has no slash discovery, and accepted ``SKILL_EXPOSURE: PASS`` at
+    ``bc8592d323864c30010b48ae724f329f8df6753e``. The only checkable question left is whether the
+    agent can load and use the installed bridge on the bound execution target, so no surface may
+    require those UI observations, claim success from them, or ask for them again.
+    """
+
+    # Every gate phrasing the corrected surfaces removed. Listing them here is the regression proof.
+    STALE_UI_GATES = ("Yours lists exactly one", "Yours shows exactly one", "Plugins > Yours lists",
+                      "Plugins → Yours shows", "`/` offers it", "and `/` offers", "enabled, and `/`",
+                      "delete the Skill under Settings")
+    SURFACES = ("hosts/grok-bot/INSTALL.md", "templates/grok-bot/INSTALL.md.tmpl",
+                "templates/grok-bot/bridge.md.tmpl", f"hosts/grok-bot/{ORCHESTRATOR_ID}.md",
+                "docs/grok-bot-host.md", "templates/orchestrator/references/grok-bot-host.md",
+                f"skills/{ORCHESTRATOR_ID}/references/grok-bot-host.md")
+
+    def read(self, relative: str) -> str:
+        return (PROJECT / relative).read_text(encoding="utf-8")
+
+    def test_no_surface_carries_a_plugin_list_or_slash_discovery_gate(self) -> None:
+        offenders: list[str] = []
+        for relative in self.SURFACES:
+            text = self.read(relative)
+            for stale in self.STALE_UI_GATES:
+                if stale in text:
+                    offenders.append(f"{relative}: {stale!r}")
+            wrong = authorizes_wrong_move(text, (r"verify: settings", r"(?:verify|check) that .{0,40}skill list",
+                                                 r"`/` (?:offers|lists|shows|exposes) it",
+                                                 r"re-?(?:run|report|confirm) .{0,40}SKILL_EXPOSURE"))
+            if wrong:
+                offenders.append(f"{relative}: {wrong}")
+        self.assertEqual(offenders, [])
+
+    def test_install_guide_states_the_load_and_use_evidence_instead(self) -> None:
+        text = self.read("hosts/grok-bot/INSTALL.md")
+        # The operational checklist names no account UI surface at all: there is nothing to look at there.
+        for token in ("Plugins", "Yours"):
+            self.assertNotIn(token, text, f"the guide reintroduced the {token} surface as a step")
+        lowered = normalize(text).lower()
+        for clause in ("neither the account skill list nor `/` completion is a check",
+                       "does not expose an account-private skill", "a 1:1 chat has no `/` discovery",
+                       "step 3 is the evidence"):
+            self.assertIn(clause, lowered, clause)
+        # Still exactly one account write and no new burden: the same six steps, no second Skill, no Marketplace.
+        self.assertEqual(len(re.findall(r"(?m)^## \d+\. ", text)), 6)
+        self.assertIn("never create a second one", text)
+        self.assertIn("never publish this skill to a public or team marketplace", lowered)
+
+    def test_docs_and_shared_reference_refute_the_gates_and_keep_exposure_settled(self) -> None:
+        for relative in ("docs/grok-bot-host.md", f"skills/{ORCHESTRATOR_ID}/references/grok-bot-host.md"):
+            lowered = normalize(self.read(relative)).lower()
+            self.assertIn("does not expose an account-private skill", lowered, relative)
+            self.assertIn("slash discovery", lowered, relative)
+            self.assertIsNotNone(clause_present(lowered, (r"neither is an install(?:ation)? or acceptance gate",)), relative)
+            self.assertIsNotNone(clause_present(lowered, (r"load and use the installed bridge on the bound",)), relative)
+        # Accepted exposure and the live-use boundary are recorded in the canonical doc, which carries
+        # no token budget; the agent-facing reference keeps only the rule it must act on.
+        docs = normalize(self.read("docs/grok-bot-host.md")).lower()
+        self.assertIn("skill_exposure: pass", docs)
+        self.assertIn("separately authorized scoped smoke", docs)
+        self.assertIn("never part of installation", docs)
+
+    def test_the_minimal_installation_shape_is_unchanged(self) -> None:
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["skill_count"], 1)
+        guide, docs = self.read("hosts/grok-bot/INSTALL.md"), self.read("docs/grok-bot-host.md")
+        for clause in ("--target local", "--target cloud", LOCATOR_COMMAND, "read-only preflight"):
+            self.assertIn(clause.lower(), normalize(guide).lower(), clause)
+        wrong = authorizes_wrong_move(guide, (r"publish.{0,40}marketplace", r"import.{0,20}ZIP", r"second account Skill",
+                                              r"per-worker account Skills", r"runtime copy"))
+        self.assertIsNone(wrong, wrong)
+        self.assertIn("one thin account Skill", docs)
+
+
 if __name__ == "__main__":
     unittest.main()

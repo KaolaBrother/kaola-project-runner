@@ -121,12 +121,15 @@ Recover existing explicit authorization and live work before asking intake
 questions. A completed mission frontier still requires review and acceptance
 before finalize. A Routine success, idle worker, or green CI is not acceptance.
 
-Official Grok Bot docs describe Settings → Plugins → Yours only as the surface to
-review and enable existing private skills; research found no supported automated
-way to create one, so the single native skill write of the bridge is the only
-account operation and a saved bridge is not live adoption. The owner's read-only
-Local Computer UAT (locate the existing Mac checkout in a named workspace,
-register the locator, attest, run one worker `preflight` against an existing
-project and session; nothing started, sent, stopped, cloned, or installed) is the
-boundary. Do not call unofficial Sand gateways or GrokBot RPCs; never publish to a
-Marketplace.
+No supported automated way to create an account Skill exists
+(`NO_SUPPORTED_PATH`), so the single native skill write of the bridge is the only
+account operation and a saved bridge is not live adoption. Neither the account
+Skill list nor `/` completion can confirm that write, so neither is an install
+or acceptance gate and neither is retried: the list does not expose an
+account-private Skill and a 1:1 chat has no slash discovery. What counts is
+whether the agent can load and use the installed bridge on the bound target. The
+read-only Local Computer UAT (locate the existing Mac checkout in a named
+workspace, register the locator, attest, run one worker `preflight` against an
+existing project and session; nothing started, sent, stopped, cloned, or
+installed) is the boundary. Do not call unofficial Sand gateways or GrokBot
+RPCs; never publish to a Marketplace.

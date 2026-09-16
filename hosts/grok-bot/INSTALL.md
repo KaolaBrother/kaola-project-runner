@@ -30,9 +30,9 @@ Save `hosts/grok-bot/kaola-project-runner.md` as the account-private Skill `kaol
 `description` from its frontmatter (`hosts/grok-bot/bridge.json` holds the already-resolved
 values and `"saveable": true`; never save YAML quotes), `body` = everything after the closing
 `---`. If a Skill with the same name exists, update it in place; never create a second one and
-never touch any other Skill. Verify: Settings > Plugins > Yours lists exactly one Skill
-`kaola-project-runner`, enabled, and `/` offers it. A later pin changes only the accepted-revision
-line; repeat this one write then.
+never touch any other Skill. Neither the account Skill list nor `/` completion is a check: the
+list does not expose an account-private Skill, and a 1:1 chat has no `/` discovery. Step 3 is
+the evidence. A later pin changes only the accepted-revision line; repeat this one write then.
 
 ## 2. First configuration on Local Computer (Mac): read-only, never from the cloud
 
@@ -101,9 +101,9 @@ A new pin (content R′, then pin P′) is one more account write and, on each t
 followed by `register` again (the receipt records the accepted revision; a stale registration
 is refused). Cloud: `git -C ROOT fetch origin <commit> && git -C ROOT checkout --detach
 <commit>`, then `register`. Rollback is a new pin commit naming an older R, applied the same
-way. Removal: delete the Skill under Settings > Plugins > Yours and remove the link and its
-receipt (`rm "$BIN/kaola-project-runner-locate" "$BIN/.kaola-project-runner-locate.json"`, or `./scripts/install-local.sh
---uninstall --bin-links` for the installer-managed link).
+way. Removal: delete the account Skill the same native way it was saved, and the link and its
+receipt (`rm "$BIN/kaola-project-runner-locate" "$BIN/.kaola-project-runner-locate.json"`, or
+`./scripts/install-local.sh --uninstall --bin-links` for the installer-managed link).
 
 ## Boundaries
 
