@@ -2,7 +2,7 @@
 
 - [Architecture](architecture.md): golden contract, worker vs main Skill, generated Skills, boundaries, and ownership
 - [API](api.md): renderer, installer, tmux core, status, and adapter contracts
-- [Grok Bot host](grok-bot-host.md): eight single-Markdown Private Skills (1 main + 7 workers) installed by Grok Bot itself from the repo, Local Computer runtime copy, generated-state integrity, private-skill hand-off (manual UAT), Routine heartbeat, live UAT boundary
+- [Grok Bot host](grok-bot-host.md): one thin bridge Skill, execution-target binding (Local Computer vs cloud), device-local locator and fail-closed attestation, one-write install, read-only Mac UAT boundary, Routine heartbeat, token-cost comparison
 - [Conventions](conventions.md): change boundary, source-of-truth, safety, and validation
 - [Runner v2 dual-transport design](runner-v2-dual-transport-design.md) (v0.3, implementation
   baseline): ACP transport alongside the existing pty transport, channel defaults, low-token

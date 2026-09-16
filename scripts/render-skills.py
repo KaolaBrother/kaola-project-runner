@@ -116,24 +116,11 @@ def supported_worker_summary(manifests: list[dict[str, str]]) -> str:
 
 
 
-def orchestrator_values(
-    manifests: list[dict[str, str]], host: str | None = None
-) -> dict[str, str]:
-    if host == GROK_BOT_HOST:
-        host_workers = embedded_worker_routing(manifests)
-    elif host == GROK_BOT_ACCOUNT:
-        host_workers = private_skill_routing(manifests)
-    elif host is None:
-        host_workers = (
-            "In a native skill-directory install the seven workers are sibling Skill "
-            "directories next to this one; call each by its installed directory."
-        )
-    else:
-        raise ValueError(f"unknown host {host!r}")
+def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
     return {
-        "HOST_WORKERS": host_workers,
         "SKILL_NAME": ORCHESTRATOR_NAME,
         "DISPLAY_NAME": ORCHESTRATOR_DISPLAY,
+        "LOCATOR": LOCATOR_COMMAND,
         # JSON strings are YAML-compatible quoted scalars; colon-space in this
         # description is otherwise a ScannerError under yaml.safe_load.
         "DESCRIPTION": json.dumps(
@@ -162,14 +149,12 @@ def orchestrator_values(
     }
 
 
-def expected_orchestrator_files(
-    manifests: list[dict[str, str]], host: str | None = None
-) -> dict[str, bytes]:
+def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
     orch = TEMPLATES / "orchestrator"
     skill_template = orch / "SKILL.md.tmpl"
     if not skill_template.is_file():
         raise ValueError(f"missing orchestrator template: {skill_template}")
-    values = orchestrator_values(manifests, host)
+    values = orchestrator_values(manifests)
     result: dict[str, bytes] = {}
     result[MARKER] = (ORCHESTRATOR_NAME + "\n").encode()
     for source in sorted(orch.rglob("*")):
@@ -321,45 +306,39 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
 # Host adapter: grok-bot (packaging adapter, not a CLI transport platform)
 #
 # One canonical Skill system exists: the orchestrator template, the worker
-# template, the seven platform manifests, and their canonical references.
-# A host adapter only re-packages that system for one host. This adapter's
-# inputs are exactly GROK_BOT_ADAPTER_INPUTS; its outputs are the files of
-# expected_grok_bot_host_files(). Host differences live only here: reference
-# expansion, Local Computer path hints, the single-Markdown account form, the
-# fingerprint manifest, and the install steps. Scheduling, safety, and
-# transport semantics come from the canonical sources and are never authored
-# in this section. This host has no platform manifest and no transport adapter.
-# --write owns every product below; --check and kaola-grok-bot-verify.py
-# reject any product that drifts from a fresh render.
+# template, the seven platform manifests, and their canonical references. A
+# host adapter only re-packages that system for one host. Grok Bot receives
+# exactly ONE thin account/cloud Skill -- the bridge -- rendered from
+# templates/grok-bot/ alone: it names the repository, the accepted pinned
+# revision, the device-local locator command, and the two canonical entry paths
+# (ROOT/skills/kaola-project-runner and ROOT/skills/<platform>-kaola-project-
+# runner). It copies NO canonical body, reference, worker text, transport, or
+# path: every policy stays in the repository and is loaded on demand from a
+# verified checkout on the bound execution target (progressive disclosure).
+# Products: the bridge, its fingerprint manifest, and the one-write bootstrap
+# guide. No platform manifest, no transport adapter, no runtime copy, no
+# per-worker account Skills. --write owns every product; --check and
+# kaola-grok-bot-verify.py reject any product that drifts from a fresh render.
 # ---------------------------------------------------------------------------
 GROK_BOT_ADAPTER_INPUTS = (
-    "templates/orchestrator",      # canonical orchestrator Skill + references
-    "templates/SKILL.md.tmpl",     # canonical worker contract
-    "templates/agents",            # canonical Skill metadata
-    "templates/references",        # canonical worker references
-    "platforms",                   # the seven platform manifests
-    "scripts",                     # shared runtime scripts and adapters
-    "templates/grok-bot",          # adapter-only prose: the install guide
+    "templates/grok-bot",          # adapter-only prose: bridge, guide, accepted revision
 )
-# Local Computer runtime copy: one directory, the orchestrator root plus the seven
-# workers embedded as supporting resources (contract renamed so exactly one
-# discoverable SKILL.md exists).
-WORKER_CONTRACT = "WORKER.md"
-EMBEDDED_WORKER_DROP = frozenset({MARKER, "agents/openai.yaml"})
-# Account form: a Grok Bot private skill is one single Markdown (name, description,
-# body), so the account receives eight standalone documents -- the orchestrator plus
-# one per worker -- each derived from the canonical sources above. The fingerprint
-# manifest lists them; the install guide is executed by Grok Bot itself (not a Skill).
-GROK_BOT_ACCOUNT = "grok-bot-account"
-PRIVATE_SKILLS_DIR = "private-skills"
-PRIVATE_SKILLS_MANIFEST = "private-skills.json"
+GROK_BOT_TEMPLATES = TEMPLATES / "grok-bot"
+BRIDGE_FILE = f"{ORCHESTRATOR_NAME}.md"
+BRIDGE_MANIFEST = "bridge.json"
 INSTALL_GUIDE = "INSTALL.md"
-ACCOUNT_SECTION = "## Grok Bot account-private form"
-BUNDLED_REFERENCE = "## Bundled reference: "
-GROK_BOT_HOME = "${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}"
-LOCAL_RUNTIME_COPY = f"{GROK_BOT_HOME}/skills/{ORCHESTRATOR_NAME}"
-WORKER_REFERENCES = ("platform.md", "transport.md", "acp.md")
-ORCHESTRATOR_REFERENCES = ("grok-bot-host.md", "heartbeat-skeleton.md")
+ACCEPTED_REVISION_FILE = "accepted-revision.json"
+LOCATOR_COMMAND = "kaola-project-runner-locate"
+REPO_SLUG = "KaolaBrother/kaola-project-runner"
+EXPECTED_ORIGIN = f"github.com/{REPO_SLUG}"
+REVISION = re.compile(r"^[0-9a-f]{40}$")
+RELEASE = re.compile(r"^v\d+\.\d+\.\d+$")
+BRIDGE_DESCRIPTION = (
+    "Use when the controlling Agent should supervise explicitly authorized CLI workers "
+    "through Project Runner on a bound execution target: locate that target's verified "
+    "kaola-project-runner checkout, then load the main Skill and one selected platform "
+    "worker from it."
+)
 
 
 def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
@@ -378,203 +357,152 @@ def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return meta, "\n".join(lines[end + 1:])
 
 
-def embedded_worker_routing(manifests: list[dict[str, str]]) -> str:
-    rows = [
-        "#### Embedded workers (Grok Bot Local Computer runtime copy)",
-        "",
-        "In this runtime copy the seven workers are supporting resources of this one Skill",
-        "directory (one discoverable Skill, seven embedded workers), under",
-        f"`workers/<platform id>/`; their contract file is `{WORKER_CONTRACT}`, not a",
-        "discoverable `SKILL.md`. Load a worker contract on demand from this Skill's own",
-        "directory; nothing else has to be discovered or enabled. A worker's `SKILL_DIR` is",
-        "`<local execution copy of this Skill>/workers/<platform id>` and its Runner entry is",
-        "`SKILL_DIR/scripts/runtime-tmux.sh`.",
-        "",
-        "| Platform id | Worker contract | Runner entry | Default transport |",
-        "|---|---|---|---|",
-    ]
-    for manifest in manifests:
-        rows.append(
-            f"| {manifest['id']} | `workers/{manifest['id']}/{WORKER_CONTRACT}` | "
-            f"`workers/{manifest['id']}/scripts/runtime-tmux.sh` | {manifest['default_transport']} |"
-        )
-    return "\n".join(rows)
+def accepted_revision() -> dict[str, str]:
+    path = GROK_BOT_TEMPLATES / ACCEPTED_REVISION_FILE
+    if not path.is_file():
+        raise ValueError(f"missing accepted revision file: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    commit = str(data.get("commit", ""))
+    release = str(data.get("release", "") or "")
+    if not REVISION.match(commit):
+        raise ValueError(f"{path}: commit must be a 40-hex accepted revision, got {commit!r}")
+    if release and not RELEASE.match(release):
+        raise ValueError(f"{path}: release must look like vX.Y.Z, got {release!r}")
+    return {"commit": commit, "release": release or "unreleased"}
 
 
-def private_skill_routing(manifests: list[dict[str, str]]) -> str:
-    rows = [
-        "#### Worker Private Skills (Grok Bot account)",
-        "",
-        "On a Grok Bot account each of the seven workers is its own account-private Skill,",
-        "saved from one single-Markdown document exactly like this one. Select a worker by",
-        "the stable Skill name below and load that Skill (ask for it by name when it is not",
-        "already loaded) for every transport operation: preflight, start, observe, send,",
-        "capture, key, and stop. This Skill carries no transport contract, no scripts, and",
-        "none of the worker text; each worker Skill states its own Local Computer script",
-        "location.",
-        "",
-        "| Platform id | Worker Private Skill (stable name) | Display name | Default transport |",
-        "|---|---|---|---|",
-    ]
-    for manifest in manifests:
-        rows.append(
-            f"| {manifest['id']} | `{manifest['skill_name']}` | "
-            f"{manifest['display_name']} | {manifest['default_transport']} |"
-        )
-    return "\n".join(rows)
-
-
-def embedded_worker_files(manifest: dict[str, str]) -> dict[str, bytes]:
-    """One worker as a supporting resource: same bytes as its Skill, minus Skill identity."""
-    result: dict[str, bytes] = {}
-    for relative, data in expected_files(manifest).items():
-        if relative in EMBEDDED_WORKER_DROP:
-            continue
-        if relative == "SKILL.md":
-            relative = WORKER_CONTRACT
-        result[relative] = data
-    return result
-
-
-def bundled_references(names: tuple[str, ...], files: dict[str, bytes]) -> str:
-    """Append reference documents verbatim so a single-Markdown Skill needs no file tree."""
-    parts: list[str] = []
-    for name in names:
-        text = files[f"references/{name}"].decode("utf-8")
-        parts.append(f"\n{BUNDLED_REFERENCE}references/{name}\n\n{text.rstrip()}\n")
-    return "".join(parts)
-
-
-def worker_private_skill(manifest: dict[str, str]) -> bytes:
-    """One worker as an account-private Skill: its canonical SKILL.md verbatim, then the
-    Local Computer script location and its three references bundled verbatim."""
-    files = expected_files(manifest)
-    wid = manifest["id"]
-    account = (
-        f"\n{ACCOUNT_SECTION}\n\n"
-        f"This document is the account-private Skill `{manifest['skill_name']}` for the Grok Bot\n"
-        "host: one single Markdown (frontmatter `name` and `description` plus this body) saved on\n"
-        "its own by the Bot's skill write. It depends on no other saved Skill and on no file tree\n"
-        "in the account; the three reference documents linked above are bundled verbatim at the\n"
-        "end of this document. The scripts run on **Local Computer** (never on the cloud Agent\n"
-        "Computer) from the generated runtime copy installed on this machine by\n"
-        "`./scripts/install-local.sh --runtime grok-bot`:\n\n"
-        "```bash\n"
-        f'SKILL_DIR="{LOCAL_RUNTIME_COPY}/workers/{wid}"\n'
-        '"$SKILL_DIR/scripts/runtime-tmux.sh" preflight --repo "$REPO" --session "$SESSION"\n'
-        "```\n\n"
-        "`KAOLA_GROK_BOT_HOME` overrides the root `$HOME/.kaola/grok-bot`. In that copy this\n"
-        f"contract is the file `workers/{wid}/{WORKER_CONTRACT}` and `$SKILL_DIR/references/` holds the\n"
-        f"same three documents. The main Skill `{ORCHESTRATOR_NAME}` ({ORCHESTRATOR_DISPLAY}) selects\n"
-        "this worker by its Skill name; this Skill stays transport-only and carries no\n"
-        "orchestrator policy.\n"
-    )
-    text = files["SKILL.md"].decode("utf-8").rstrip() + "\n" + account
-    return (text + bundled_references(WORKER_REFERENCES, files)).encode()
-
-
-def orchestrator_private_skill(manifests: list[dict[str, str]]) -> bytes:
-    """The orchestrator as an account-private Skill: the shared template rendered with the
-    worker Private Skill routing table, then its two references bundled verbatim."""
-    files = expected_orchestrator_files(manifests, GROK_BOT_ACCOUNT)
-    account = (
-        f"\n{ACCOUNT_SECTION}\n\n"
-        f"This document is the account-private Skill `{ORCHESTRATOR_NAME}` ({ORCHESTRATOR_DISPLAY})\n"
-        "for the Grok Bot host: one single Markdown (frontmatter `name` and `description` plus\n"
-        "this body) saved on its own by the Bot's skill write. The seven workers are seven other\n"
-        "account-private Skills with the stable names in the routing table above; this Skill\n"
-        "carries no transport contract, no scripts, and none of their text. The two reference\n"
-        "documents linked above are bundled verbatim at the end of this document. Grok Bot\n"
-        f"installs and updates all eight from this repository by following `{INSTALL_GUIDE}` next\n"
-        f"to the `{PRIVATE_SKILLS_DIR}/` documents.\n"
-    )
-    text = files["SKILL.md"].decode("utf-8").rstrip() + "\n" + account
-    return (text + bundled_references(ORCHESTRATOR_REFERENCES, files)).encode()
-
-
-def private_skill_documents(manifests: list[dict[str, str]]) -> dict[str, bytes]:
-    """Exactly eight single-Markdown account-private Skills: 1 orchestrator + 7 workers."""
-    result = {f"{ORCHESTRATOR_NAME}.md": orchestrator_private_skill(manifests)}
-    for manifest in manifests:
-        result[f"{manifest['skill_name']}.md"] = worker_private_skill(manifest)
-    return result
-
-
-def private_skill_manifest(manifests: list[dict[str, str]], documents: dict[str, bytes]) -> bytes:
-    """Fingerprints of the eight account documents: name, description, body/file sha256."""
-    roles = [(ORCHESTRATOR_NAME, "orchestrator", None)] + [
-        (m["skill_name"], "worker", m["id"]) for m in manifests
-    ]
-    skills = []
-    for name, role, platform_id in roles:
-        data = documents[f"{name}.md"]
-        meta, body = split_frontmatter(data.decode("utf-8"))
-        if meta.get("name") != name:
-            raise ValueError(f"{name}.md: frontmatter name must be {name!r}")
-        skills.append({
-            "name": name,
-            "description": meta["description"],
-            "role": role,
-            "platform_id": platform_id,
-            "source": f"{PRIVATE_SKILLS_DIR}/{name}.md",
-            "file_sha256": hash_bytes(data),
-            "body_sha256": hash_bytes(body.encode("utf-8")),
-        })
-    payload = {
-        "host": GROK_BOT_HOST,
-        "adapter": GROK_BOT_ACCOUNT,
-        "install_guide": INSTALL_GUIDE,
-        "skill_count": len(skills),
-        "skills": skills,
-    }
-    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
-
-
-def install_guide(manifests: list[dict[str, str]]) -> bytes:
-    template = TEMPLATES / "grok-bot" / (INSTALL_GUIDE + ".tmpl")
-    if not template.is_file():
-        raise ValueError(f"missing install guide template: {template}")
-    rows = [
-        "| # | Stable Skill name | Source file (read on Local Computer) | Role |",
-        "|---|---|---|---|",
-        f"| 1 | `{ORCHESTRATOR_NAME}` | `hosts/{GROK_BOT_HOST}/{PRIVATE_SKILLS_DIR}/{ORCHESTRATOR_NAME}.md` | main Skill ({ORCHESTRATOR_DISPLAY}) |",
-    ]
-    for number, manifest in enumerate(manifests, 2):
-        rows.append(
-            f"| {number} | `{manifest['skill_name']}` | "
-            f"`hosts/{GROK_BOT_HOST}/{PRIVATE_SKILLS_DIR}/{manifest['skill_name']}.md` | "
-            f"{manifest['runtime_name']} worker (transport-only) |"
-        )
-    names = [ORCHESTRATOR_NAME] + [m["skill_name"] for m in manifests]
-    values = {
-        "PRIVATE_SKILL_TABLE": "\n".join(rows),
-        "PRIVATE_SKILL_NAMES": ", ".join(f"`{name}`" for name in names),
-        "SKILL_COUNT": str(len(names)),
-        "WORKER_COUNT": str(len(manifests)),
-        "LOCAL_RUNTIME_COPY": LOCAL_RUNTIME_COPY,
+def bridge_values(manifests: list[dict[str, str]]) -> dict[str, str]:
+    revision = accepted_revision()
+    return {
+        "SKILL_NAME": ORCHESTRATOR_NAME,
+        "DISPLAY_NAME": ORCHESTRATOR_DISPLAY,
+        "DESCRIPTION": json.dumps(BRIDGE_DESCRIPTION),
+        "REPO_SLUG": REPO_SLUG,
+        "EXPECTED_ORIGIN": EXPECTED_ORIGIN,
+        "LOCATOR": LOCATOR_COMMAND,
+        "ACCEPTED_COMMIT": revision["commit"],
+        "RELEASE": revision["release"],
+        "BRIDGE_FILE": BRIDGE_FILE,
+        "MANIFEST": BRIDGE_MANIFEST,
         "FIRST_WORKER_ID": manifests[0]["id"],
         "FIRST_WORKER_SKILL": manifests[0]["skill_name"],
         "FIRST_WORKER_RUNTIME": manifests[0]["runtime_name"],
     }
+
+
+def bridge_document(values: dict[str, str]) -> bytes:
+    template = GROK_BOT_TEMPLATES / "bridge.md.tmpl"
+    if not template.is_file():
+        raise ValueError(f"missing bridge template: {template}")
+    return render_text(template.read_text(encoding="utf-8"), values, template).encode()
+
+
+def bridge_manifest(bridge: bytes, values: dict[str, str]) -> bytes:
+    meta, body = split_frontmatter(bridge.decode("utf-8"))
+    if meta.get("name") != ORCHESTRATOR_NAME:
+        raise ValueError(f"{BRIDGE_FILE}: frontmatter name must be {ORCHESTRATOR_NAME!r}")
+    payload = {
+        "host": GROK_BOT_HOST,
+        "adapter": "grok-bot-bridge",
+        "repository": EXPECTED_ORIGIN,
+        "accepted_commit": values["ACCEPTED_COMMIT"],
+        "release": values["RELEASE"],
+        "locator": LOCATOR_COMMAND,
+        "install_guide": INSTALL_GUIDE,
+        "skill_count": 1,
+        "skill": {
+            "name": ORCHESTRATOR_NAME,
+            "description": meta["description"],
+            "source": BRIDGE_FILE,
+            "bytes": len(bridge),
+            "file_sha256": hash_bytes(bridge),
+            "body_sha256": hash_bytes(body.encode("utf-8")),
+        },
+    }
+    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+
+
+def install_guide(values: dict[str, str]) -> bytes:
+    template = GROK_BOT_TEMPLATES / (INSTALL_GUIDE + ".tmpl")
+    if not template.is_file():
+        raise ValueError(f"missing install guide template: {template}")
     return render_text(template.read_text(encoding="utf-8"), values, template).encode()
 
 
 def expected_grok_bot_host_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
-    result: dict[str, bytes] = {}
-    result[MARKER] = (GROK_BOT_HOST + "\n").encode()
-    result[INSTALL_GUIDE] = install_guide(manifests)
-    documents = private_skill_documents(manifests)
-    for name, data in documents.items():
-        result[f"{PRIVATE_SKILLS_DIR}/{name}"] = data
-    result[PRIVATE_SKILLS_MANIFEST] = private_skill_manifest(manifests, documents)
-    prefix = f"{ORCHESTRATOR_NAME}/"
-    for relative, data in expected_orchestrator_files(manifests, GROK_BOT_HOST).items():
-        result[prefix + relative] = data
-    for manifest in manifests:
-        worker_prefix = f"{prefix}workers/{manifest['id']}/"
-        for relative, data in embedded_worker_files(manifest).items():
-            result[worker_prefix + relative] = data
+    values = bridge_values(manifests)
+    bridge = bridge_document(values)
+    guide_values = dict(values, BRIDGE_BYTES=str(len(bridge)))
+    return {
+        MARKER: (GROK_BOT_HOST + "\n").encode(),
+        BRIDGE_FILE: bridge,
+        BRIDGE_MANIFEST: bridge_manifest(bridge, values),
+        INSTALL_GUIDE: install_guide(guide_values),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Progressive-disclosure budgets (templates/budgets.json): every product is
+# measured against its budget before it is written, so an over-budget Skill,
+# reference, description, bridge, or guide never reaches disk.
+# ---------------------------------------------------------------------------
+BUDGETS_FILE = TEMPLATES / "budgets.json"
+
+
+def budgets() -> dict[str, int]:
+    if not BUDGETS_FILE.is_file():
+        raise ValueError(f"missing budgets file: {BUDGETS_FILE}")
+    data = json.loads(BUDGETS_FILE.read_text(encoding="utf-8"))
+    result = {key: value for key, value in data.items() if not key.startswith("_")}
+    for key, value in result.items():
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{BUDGETS_FILE}: {key} must be a positive integer")
     return result
+
+
+def budget_findings(
+    label: str, files: dict[str, bytes], skill_key: str, limits: dict[str, int]
+) -> list[str]:
+    findings: list[str] = []
+
+    def over(surface: str, size: int, key: str) -> None:
+        if size > limits[key]:
+            findings.append(f"budget: {label}/{surface} is {size} B > {limits[key]} B ({key})")
+
+    for name, data in files.items():
+        if name == "SKILL.md":
+            over(name, len(data), skill_key)
+            meta, _ = split_frontmatter(data.decode("utf-8"))
+            description = meta.get("description", "")
+            if len(description) > limits["description_chars"]:
+                findings.append(
+                    f"budget: {label}/SKILL.md description is {len(description)} chars > "
+                    f"{limits['description_chars']} chars (description_chars)"
+                )
+        elif name.startswith("references/") and name.endswith(".md"):
+            over(name, len(data), "reference_bytes")
+    return findings
+
+
+def host_budget_findings(files: dict[str, bytes], limits: dict[str, int]) -> list[str]:
+    findings: list[str] = []
+    bridge = files[BRIDGE_FILE]
+    if len(bridge) > limits["bridge_bytes"]:
+        findings.append(
+            f"budget: {GROK_BOT_HOST}/{BRIDGE_FILE} is {len(bridge)} B > {limits['bridge_bytes']} B (bridge_bytes)"
+        )
+    meta, _ = split_frontmatter(bridge.decode("utf-8"))
+    if len(meta.get("description", "")) > limits["description_chars"]:
+        findings.append(
+            f"budget: {GROK_BOT_HOST}/{BRIDGE_FILE} description is {len(meta['description'])} chars > "
+            f"{limits['description_chars']} chars (description_chars)"
+        )
+    guide = files[INSTALL_GUIDE]
+    if len(guide) > limits["bridge_guide_bytes"]:
+        findings.append(
+            f"budget: {GROK_BOT_HOST}/{INSTALL_GUIDE} is {len(guide)} B > {limits['bridge_guide_bytes']} B (bridge_guide_bytes)"
+        )
+    return findings
 
 
 def main() -> int:
@@ -599,23 +527,35 @@ def main() -> int:
             if path.is_dir() and path.name != GROK_BOT_HOST:
                 findings.append(f"unexpected host directory: {path.name}")
 
+    limits = budgets()
+    worker_expected = {m["skill_name"]: expected_files(m) for m in manifests}
+    orch_expected = expected_orchestrator_files(manifests)
+    host_expected = expected_grok_bot_host_files(manifests)
+    for name, expected in worker_expected.items():
+        findings.extend(budget_findings(name, expected, "worker_skill_bytes", limits))
+    findings.extend(budget_findings(ORCHESTRATOR_NAME, orch_expected, "main_skill_bytes", limits))
+    findings.extend(host_budget_findings(host_expected, limits))
+    if findings:
+        # An over-budget or unmanaged inventory is never written.
+        for finding in findings:
+            print(finding, file=sys.stderr)
+        return 1
+
     for manifest in manifests:
         target = SKILLS / manifest["skill_name"]
-        expected = expected_files(manifest)
+        expected = worker_expected[manifest["skill_name"]]
         if args.write:
             write_one(target, expected)
         else:
             findings.extend(check_one(target, expected))
 
     orch_target = SKILLS / ORCHESTRATOR_NAME
-    orch_expected = expected_orchestrator_files(manifests)
     if args.write:
         write_one(orch_target, orch_expected)
     else:
         findings.extend(check_one(orch_target, orch_expected))
 
     host_target = HOSTS / GROK_BOT_HOST
-    host_expected = expected_grok_bot_host_files(manifests)
     if args.write:
         write_bundle(HOSTS, host_target, host_expected, "host")
     else:
@@ -628,7 +568,8 @@ def main() -> int:
     print(
         f"render-skills: {'WROTE' if args.write else 'PASS'} "
         f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {GROK_BOT_HOST} host: "
-        f"{len(manifests) + 1} private skills + runtime copy)"
+        f"1 bridge skill, {len(host_expected[BRIDGE_FILE])} B, accepted "
+        f"{accepted_revision()['commit'][:12]}; budgets OK)"
     )
     return 0
 

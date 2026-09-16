@@ -52,6 +52,7 @@ make_fixture() {
   chmod +x "$root/scripts/install-local.sh"
   cp "$project_root/scripts/kaola-acp.py" "$root/scripts/kaola-acp.py"
   cp "$project_root/scripts/kaola-acp-holder.py" "$root/scripts/kaola-acp-holder.py"
+  cp "$project_root/scripts/kaola-locate.py" "$root/scripts/kaola-locate.py"
   mkdir -p "$root/skills/kaola-project-runner"
   printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
@@ -118,7 +119,7 @@ rc=$?
 set -e
 [[ "$rc" -ne 0 ]] || fail "test_runtime_grok_is_not_host" "unexpected success"
 [[ "$output" == *"unknown runtime: grok"* ]] || fail "test_runtime_grok_is_not_host" "expected grok host/worker distinction, got: $output"
-[[ "$output" == *"--runtime grok-bot"* ]] || fail "test_runtime_grok_is_not_host" "expected grok-bot hint, got: $output"
+[[ "$output" == *"bridge host"* ]] || fail "test_runtime_grok_is_not_host" "expected bridge-host hint, got: $output"
 [[ "$output" == *"--platform grok"* ]] || fail "test_runtime_grok_is_not_host" "expected platform grok hint, got: $output"
 set +e
 output="$(run_installer "$repo" "$home" --platform grok-bot 2>&1)"
@@ -611,56 +612,35 @@ for case in missing badname mismatch unknownfield nodescription; do
   [[ "$rc" -ne 0 ]] || fail "test_validator_rejects_$case" "invalid skill accepted"
 done
 
-# --- Grok Bot Private Skill payload (--runtime grok-bot) -----------------------
-make_grok_bot_payload_fixture() {
-  local root="$1" payload="$1/hosts/grok-bot/kaola-project-runner"
-  mkdir -p "$payload/workers/grok/scripts" "$payload/references"
-  printf '%s\n' 'grok-bot' >"$root/hosts/grok-bot/.generated-by-kaola-project-runner"
-  printf '%s\n' 'kaola-project-runner' >"$payload/.generated-by-kaola-project-runner"
-  printf '%s\n' '# fixture private skill' >"$payload/SKILL.md"
-  printf '%s\n' '# fixture embedded worker' >"$payload/workers/grok/WORKER.md"
-}
-
+# --- Grok Bot is a bridge host, never an installer destination ---------------
 repo="$tmp_root/repo-grok-bot"
 make_fixture "$repo"
-make_grok_bot_payload_fixture "$repo"
 home="$tmp_root/home-grok-bot"
 mkdir -p "$home/.claude/skills/foreign-skill"
 printf '%s\n' '# foreign' >"$home/.claude/skills/foreign-skill/SKILL.md"
-output="$(run_installer "$repo" "$home" --runtime grok-bot --method copy 2>&1)" \
-  || fail "test_runtime_grok_bot_install" "install failed: $output"
-payload="$home/.kaola/grok-bot/skills/kaola-project-runner"
-assert_dir "test_runtime_grok_bot_install" "$payload"
-assert_file "test_runtime_grok_bot_root_skill" "$payload/SKILL.md"
-assert_file "test_runtime_grok_bot_embedded_worker" "$payload/workers/grok/WORKER.md"
-assert_absent "test_runtime_grok_bot_no_worker_skill_md" "$payload/workers/grok/SKILL.md"
-assert_absent "test_runtime_grok_bot_no_cursor_plugin_dir" "$home/.cursor"
-assert_absent "test_runtime_grok_bot_no_codex_dir" "$home/.codex"
+for alias in grok-bot grokbot; do
+  set +e
+  output="$(run_installer "$repo" "$home" --runtime "$alias" 2>&1)"
+  rc=$?
+  set -e
+  [[ "$rc" -ne 0 ]] || fail "test_runtime_grok_bot_refused_$alias" "unexpected success"
+  [[ "$output" == *"unknown runtime: $alias"* ]] || fail "test_runtime_grok_bot_refused_$alias" "expected unknown runtime, got: $output"
+  [[ "$output" == *"bridge host"* && "$output" == *"hosts/grok-bot/kaola-project-runner.md"* && "$output" == *"kaola-locate.py register"* ]] \
+    || fail "test_runtime_grok_bot_refused_${alias}_hint" "expected bridge/locator hint, got: $output"
+done
+assert_absent "test_runtime_grok_bot_writes_nothing" "$home/.kaola"
 assert_absent "test_runtime_grok_bot_no_bin_links" "$home/.local/bin/kaola-acp"
-assert_file "test_runtime_grok_bot_receipt" "$home/.kaola/grok-bot/skills/.kaola-install-receipts/kaola-project-runner.json"
 assert_file "test_runtime_grok_bot_foreign_untouched" "$home/.claude/skills/foreign-skill/SKILL.md"
-[[ "$output" != *".cursor/plugins/local"* ]] || fail "test_runtime_grok_bot_no_falsified_destination" "installer still names the Cursor plugin path: $output"
+[[ ! -e "$repo/hosts/grok-bot/kaola-project-runner" ]] || fail "test_no_runtime_copy_fixture" "fixture must not carry a runtime copy"
 
-set +e
-output="$(run_installer "$repo" "$home" --runtime grok-bot --platform grok --method copy 2>&1)"
-rc=$?
-set -e
-[[ "$rc" -ne 0 ]] || fail "test_runtime_grok_bot_subset_refused" "unexpected success"
-[[ "$output" == *"--runtime grok-bot"* ]] || fail "test_runtime_grok_bot_subset_refused" "expected refusal hint, got: $output"
-set +e
-output="$(run_installer "$repo" "$home" --runtime grok-bot --no-orchestrator 2>&1)"
-rc=$?
-set -e
-[[ "$rc" -ne 0 ]] || fail "test_runtime_grok_bot_no_orchestrator_refused" "unexpected success"
-
-output="$(run_installer "$repo" "$home" --runtime grok-bot --method link 2>&1)" \
-  || fail "test_runtime_grok_bot_link" "link install failed: $output"
-assert_link "test_runtime_grok_bot_link" "$payload" "$(cd "$repo/hosts/grok-bot/kaola-project-runner" && pwd -P)"
-
-output="$(run_installer "$repo" "$home" --runtime grok-bot --uninstall 2>&1)" \
-  || fail "test_runtime_grok_bot_uninstall" "uninstall failed: $output"
-assert_absent "test_runtime_grok_bot_uninstall_payload" "$payload"
-assert_file "test_runtime_grok_bot_uninstall_foreign_untouched" "$home/.claude/skills/foreign-skill/SKILL.md"
+# --- locator bin link follows the existing --bin-links convention -------------
+home="$tmp_root/home-locator"
+output="$(run_installer "$repo" "$home" --runtime codex --platform grok --method link 2>&1)" \
+  || fail "test_locator_bin_link_install" "install failed: $output"
+assert_link "test_locator_bin_link_install" "$home/.local/bin/kaola-project-runner-locate" "$repo/scripts/kaola-locate.py"
+output="$(run_installer "$repo" "$home" --runtime codex --platform grok --uninstall --bin-links 2>&1)" \
+  || fail "test_locator_bin_link_uninstall" "uninstall failed: $output"
+assert_absent "test_locator_bin_link_uninstall" "$home/.local/bin/kaola-project-runner-locate"
 
 # --- generated payload stays valid under the neutral validator ----------------
 for skill_dir in "$project_root"/skills/*kaola-project-runner; do

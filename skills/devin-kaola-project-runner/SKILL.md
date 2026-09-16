@@ -35,10 +35,11 @@ Runner never auto-falls back or resends. Read the receipt and let the controllin
 
 Resolve this Skill's installed directory once and call its scripts by absolute path — the install
 destination may contain spaces, and the user's project is passed only through `--repo` (relative
-paths in these references resolve against the Skill, never the project cwd). When this worker is
-embedded as a supporting resource under a host Skill's `workers/<platform id>/` directory (this
-file is then named `WORKER.md`), SKILL_DIR is that worker directory — not the host Skill root and
-not another worker:
+paths in these references resolve against the Skill, never the project cwd). Progressive
+disclosure: load this Skill only when this platform is selected, open a reference only when the
+current operation needs it, run the scripts and never read their source, and prefer bounded
+receipts (`observe`, `status`, `capture --lines`) over whole-history dumps — `capture --full` is an
+explicit, unbounded request:
 
 ```bash
 SKILL_DIR="/absolute/path/to/devin-kaola-project-runner"   # the directory containing this file

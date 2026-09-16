@@ -24,7 +24,7 @@ Usage:
   kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|upgrade] [--model ID --effort LEVEL] [--fast on|off]
   kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
-  kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N]
+  kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N] [--full]
   kaola-tmux.sh PLATFORM send      --repo ABS_PATH --session NAME [--if-snapshot ID] [--text TEXT]
   kaola-tmux.sh PLATFORM key       --repo ABS_PATH --session NAME [--if-snapshot ID] --key NAME
   kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME [--decision-id ID] [--if-snapshot ID] --replace-editor [--text TEXT]
@@ -519,7 +519,10 @@ PY
     ;;
   observe) observe_managed ;;
   status) load_session_identity; if [[ "$STATE_PRESENT" == true ]]; then emit_status present; else emit_status absent; fi ;;
-  capture) [[ "$lines" =~ ^[1-9][0-9]*$ && "$lines" -le 5000 ]] || die "--lines must be 1..5000"; load_session_identity; [[ "$STATE_PRESENT" == true && "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && "$STATE_PANE_COUNT" -eq 1 && -n "$STATE_PANE_ID" ]] || { emit_refusal identity-mismatch capture; exit 1; }; "$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S "-$lines" ;;
+  capture) [[ "$lines" =~ ^[1-9][0-9]*$ && "$lines" -le 5000 ]] || die "--lines must be 1..5000"; load_session_identity; [[ "$STATE_PRESENT" == true && "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && "$STATE_PANE_COUNT" -eq 1 && -n "$STATE_PANE_ID" ]] || { emit_refusal identity-mismatch capture; exit 1; }
+    # Ordinary capture is a bounded receipt (newest bytes + truncation marker with the
+    # sha256 of the whole stream); --full is the explicit, unbounded request.
+    if [[ "$capture_full" == true ]]; then "$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S "-$lines"; else "$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S "-$lines" | "$PYTHON_BIN" "$OBSERVATION_HELPER" bound-text; fi ;;
   start)
     [[ -z "$resume_id" || "$continue_mode" == false ]] || die "--resume and --continue are mutually exclusive"
     adapter_preflight

@@ -20,12 +20,15 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
   transport semantics. Products are owned by `--write`, rejected on drift by `--check` and the
   host verifier, and updated automatically when a canonical source changes.
 - Grok Bot host bundle: `hosts/grok-bot/` rendered by the `grok-bot` host adapter (inputs:
-  `GROK_BOT_ADAPTER_INPUTS`) — `private-skills/` (eight single-Markdown account Skills: 1 main +
-  7 workers), `private-skills.json` (fingerprint manifest), `INSTALL.md` (from
-  `templates/grok-bot/INSTALL.md.tmpl`, for Grok Bot itself), and the Local Computer runtime copy
-  `kaola-project-runner/` (seven embedded workers). Grok Bot is a packaging adapter, not a
-  `platforms/*.yaml` worker; there is no `platforms/grok-bot.yaml` and no
-  `scripts/adapters/grok-bot.sh`. `--runtime grok-bot` vs `--platform grok` are different ids.
+  `GROK_BOT_ADAPTER_INPUTS` = `templates/grok-bot/` only) — one thin bridge Skill
+  `kaola-project-runner.md`, `bridge.json`, and `INSTALL.md`. The bridge carries the accepted
+  revision (`templates/grok-bot/accepted-revision.json`, rewritten on release) and no canonical
+  content. Grok Bot is a bridge host, not a `platforms/*.yaml` worker and not an installer
+  destination; there is no `platforms/grok-bot.yaml`, no `scripts/adapters/grok-bot.sh`, and
+  no `--runtime grok-bot`. `scripts/kaola-locate.py` is the device-local locator and
+  host-target attestation.
+- Progressive-disclosure budgets: `templates/budgets.json`, enforced by `render-skills.py
+  --check`, the host verifier, and `tests/contract/test-progressive-disclosure.py`.
 - Frozen historical Workflow lifecycle and prompts: `templates/grok-golden/`.
 - Shared evidence-first transport guidance: `templates/references/transport.md.tmpl` plus exact reversible
   renderer overlays; never broad-replace golden prose.
@@ -40,6 +43,21 @@ After an allowed source change:
 ./scripts/render-skills.py --write
 ./scripts/validate.sh
 ```
+
+## Progressive disclosure
+
+**Progressive disclosure.** Discovery exposes only a stable name and a short description.
+Activating Project Runner loads its body only, never a worker body. Selecting one worker loads
+that worker only. References load only when the current operation needs them. Scripts execute
+mechanically; the model never reads their source. Observe, capture, and verifier outputs are
+bounded receipts: hashes, counts, and relevant excerpts, never whole files or unbounded terminal
+history (`capture --full` is the explicit, requested exception). Host adapters may not flatten,
+concatenate, eagerly preload, or duplicate canonical Skill bodies for packaging convenience.
+Every platform adapter and host declares measurable byte budgets for discovery, activation,
+selected-worker increment, references, and tool outputs in `templates/budgets.json`;
+`render-skills.py --check` and the contract tests fail when a budget or a loading boundary
+regresses. A bridge host (Grok Bot) binds its execution target first and loads the canonical
+Skills from a verified checkout on that target; nothing is copied into the account.
 
 ## Shell safety
 

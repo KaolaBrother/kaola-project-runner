@@ -57,35 +57,39 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 ### Hosts
 
 This Skill is host-neutral. Native skill-directory installs exist for Codex,
-Claude Code, Cursor, and Devin. Grok Bot is a host, not a worker and not an
-eighth platform: `--platform grok` is the Grok CLI worker; `--platform grok-bot`
-is invalid. On a Grok Bot account a private skill is one single Markdown
-(name, description, body; owner UAT 2026-09-16 found no ZIP or file-tree
-import), so there this Skill and the seven platform workers are **eight
-account-private Skills**, each rendered from the shared templates as its own
-document under `hosts/grok-bot/private-skills/` and saved on its own by Grok
-Bot following `hosts/grok-bot/INSTALL.md`. The scripts run on Local Computer
-from the generated runtime copy (`./scripts/install-local.sh --runtime
-grok-bot`), one directory with the seven workers embedded under
-`workers/<platform id>/`.
+Claude Code, Cursor, and Devin; there the seven workers are sibling Skill
+directories next to this one, called by their installed directory. A **bridge
+host** (Grok Bot today) reaches this checkout through one thin account Skill
+instead: it binds an execution target first (Local Computer, or the cloud Agent
+Computer), asks that target's device-local locator `{{LOCATOR}}` for the verified
+repo root ROOT, and loads only `ROOT/skills/{{SKILL_NAME}}` and, per dispatch,
+one selected `ROOT/skills/<platform id>-{{SKILL_NAME}}`. On a bridge host, before
+each worker dispatch run the locator attestation on the bound target
+(`{{LOCATOR}} --target local|cloud --expect-revision <accepted> --project <root>
+--worker <platform id> --session <name>`) and refuse any `refused` receipt: the
+consumer project, the selected worker script under the same ROOT, and the exact
+owned session must all be on that one target. Local Computer and the cloud Agent
+Computer never reach each other's files, CLIs, tmux, or sessions, and nothing
+clones, installs, or updates Local Computer from the cloud. Grok Bot is a host,
+not a worker and not an eighth platform: `--platform grok` is the Grok CLI
+worker; `--platform grok-bot` is invalid.
 
-{{HOST_WORKERS}}
-
-On Grok Bot the account Skills are a private-skill hand-off for manual UAT:
-official docs describe **Settings → Plugins → Yours** only as the review/enable
-surface for existing plugins and private skills and document no upload or
-import control there (Team Marketplace is only an optional Teams/Enterprise
-path; never a public Marketplace). Prefer Execution on Local Computer when the
-CLI sessions live on this machine; the cloud Agent Computer is a different
-machine. One Grok Bot Routine on this Bot conversation is the only heartbeat
-carrier: never stack it with a Codex heartbeat or blocking sleep. Takeover
-cancels the previous host heartbeat without stopping in-flight workers.
+On Grok Bot one Routine on this Bot conversation is the only heartbeat carrier:
+never stack it with a Codex heartbeat or blocking sleep. Takeover cancels the
+previous host heartbeat without stopping in-flight workers.
 `HUMAN_DECISION_REQUIRED` stays in this Bot conversation (Needs attention / this
 Bot's Notifications). Agent Computer takeover is not CLI decision and not
-exact-session stop. A document or runtime copy on disk is not live Grok Bot UI
-adoption.
+exact-session stop. A saved bridge is not live adoption; the owner's read-only
+Local Computer UAT is the boundary. See
+[references/grok-bot-host.md](references/grok-bot-host.md).
 
-See [references/grok-bot-host.md](references/grok-bot-host.md).
+### Progressive disclosure
+
+This Skill loads on its own. Load one selected worker Skill only at dispatch, a
+reference only when the current step needs it, and never read script source or
+whole files into context: receipts, hashes, counts, and bounded excerpts are the
+evidence. Ordinary `observe`, `status`, and `capture --lines` receipts are
+bounded; `capture --full` is an explicit, unbounded request.
 
 ### Defaults
 

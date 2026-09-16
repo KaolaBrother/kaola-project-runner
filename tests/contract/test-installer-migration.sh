@@ -38,6 +38,7 @@ make_fixture() {
   chmod +x "$root/scripts/install-local.sh"
   cp "$project_root/scripts/kaola-acp.py" "$root/scripts/kaola-acp.py"
   cp "$project_root/scripts/kaola-acp-holder.py" "$root/scripts/kaola-acp-holder.py"
+  cp "$project_root/scripts/kaola-locate.py" "$root/scripts/kaola-locate.py"
   mkdir -p "$root/skills/kaola-project-runner"
   printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"

@@ -58,22 +58,21 @@ historical evidence, not this Skill's contract.
 ### Agents that load the Skills
 
 The installer provides native skill-directory destinations for **Codex, Claude Code,
-Cursor, and Devin**. **Grok Bot** is a host that receives **eight single-Markdown
-Private Skills**: a Grok Bot private skill holds only name, description, and body
-(owner UAT 2026-09-16: no ZIP or file-tree import), so `hosts/grok-bot/private-skills/`
-carries one generated document per Skill — `kaola-project-runner` (Project Runner) and
-the seven `<id>-kaola-project-runner` workers — and Grok Bot itself creates or updates
-them from this repository by following `hosts/grok-bot/INSTALL.md` (one skill write per
-file, idempotent by name; `private-skills.json` lists their fingerprints). Grok Bot is a
-packaging adapter inside the renderer, not a transport platform: one canonical Skill system,
-host differences only in the adapter layer. The generated `hosts/grok-bot/kaola-project-runner/` runtime
-copy (seven workers embedded under `workers/<id>/`) is what `--runtime grok-bot` keeps on
-this Mac for Local Computer script runs. Still seven platforms; `--platform grok` remains
-the Grok CLI worker, not a host install. The documents are a private-skill hand-off for
-manual UAT: official Grok Bot docs describe Settings → Plugins → Yours only as a
-review/enable surface and document no upload or import control, so no ingestion entry
-point is claimed and Grok Bot UI enablement is a named live UAT boundary — see
-[Grok Bot host](docs/grok-bot-host.md). Other hosts can use `--skills-dir /absolute/path`
+Cursor, and Devin**. **Grok Bot** is a **bridge host**: the account holds exactly one very
+small generated Skill, `hosts/grok-bot/kaola-project-runner.md` (≈ 2 KB), that binds an
+execution target first (Local Computer, or the cloud Agent Computer), asks that target's
+device-local locator `kaola-project-runner-locate` for the verified `kaola-project-runner`
+checkout (expected origin, accepted pinned revision, clean tree), and loads only the main
+Skill and, at dispatch, one selected `<platform>-kaola-project-runner` worker from that
+checkout. The bridge carries no policy, transport, reference, path, runtime copy, or
+credential; a release changes only its accepted-revision line. Nothing on one target reaches
+the other, and the cloud never installs or updates the Mac. Grok Bot is a packaging adapter
+inside the renderer, not a transport platform; still seven platforms, and `--platform grok`
+remains the Grok CLI worker. Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
+automated account-Skill creation, so one native skill write is the only account operation and
+the owner's read-only Local Computer UAT is the live boundary — see
+[Grok Bot host](docs/grok-bot-host.md). Progressive disclosure is a locked invariant on every
+host (see [conventions](docs/conventions.md#progressive-disclosure)). Other hosts can use `--skills-dir /absolute/path`
 if they can load `SKILL.md` and execute shell commands in an environment with the
 required tools.
 
@@ -171,10 +170,10 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime cursor
 ./scripts/install-local.sh --runtime devin
 
-# Grok Bot: eight single-Markdown Private Skills (hosts/grok-bot/private-skills/, saved by
-# Grok Bot itself per hosts/grok-bot/INSTALL.md) plus the Local Computer runtime copy.
-./scripts/install-local.sh --runtime grok-bot      # runtime copy under ~/.kaola/grok-bot/skills (scripts only)
-./scripts/kaola-grok-bot-package.py                # deterministic zip of the runtime copy; refuses drift from generated state
+# Grok Bot: no installer destination. Save hosts/grok-bot/kaola-project-runner.md (the bridge) on
+# the account once, then register the device-local locator on each execution target:
+python3 scripts/kaola-locate.py register          # links kaola-project-runner-locate (same bin dir as --bin-links)
+kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode

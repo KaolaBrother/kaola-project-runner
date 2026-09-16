@@ -8,7 +8,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Project Snapshot
 
-- Purpose: runtime-neutral Agent Skills CLI communication driver for seven AI CLI platforms via tmux, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner); Codex remains a supported consuming runtime; Grok Bot is a host that receives eight single-Markdown Private Skills (`hosts/grok-bot/private-skills/`: 1 main + 7 workers, installed by Grok Bot itself per `hosts/grok-bot/INSTALL.md`) plus a Local Computer runtime copy (`hosts/grok-bot/kaola-project-runner/`, seven workers embedded), not an eighth worker.
+- Purpose: runtime-neutral Agent Skills CLI communication driver for seven AI CLI platforms via tmux, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner); Codex remains a supported consuming runtime; Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/kaola-project-runner.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads the main Skill plus one selected worker from it; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not an eighth worker and has no installer destination.
 - Stack: Bash (macOS-compatible), Python 3, tmux.
 - Architecture: shared worker template renders seven self-contained platform Skills from YAML manifests and shell adapters; a separate orchestrator template renders the control-plane Skill (not an eighth platform); relay manages nested PTY.
 

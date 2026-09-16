@@ -1,75 +1,74 @@
-# Grok Bot: install or update the {{SKILL_COUNT}} Project Runner Private Skills from this repository
+# Grok Bot: one bridge Skill, one device-local locator per execution target
 
-These instructions are for **Grok Bot itself**; paste them into the Bot conversation. They are
-not a ninth Skill. Grok Bot reads this checkout on **Local Computer** and saves each of the
-{{SKILL_COUNT}} generated documents as one account-private Skill through its own single-Markdown
-skill write (`name`, `description`, `body`). Nothing here uses a shell or API bypass, an
-unofficial Sand API, an account credential, a ZIP import, or a Marketplace. The owner does not
-copy any body by hand.
+These steps are for the owner and for Grok Bot itself. They are not a Skill. The account
+receives **exactly one** small private Skill, `{{SKILL_NAME}}` ({{DISPLAY_NAME}} bridge,
+`hosts/grok-bot/{{BRIDGE_FILE}}`, {{BRIDGE_BYTES}} bytes). Every policy, worker, reference, and
+script stays in the repository and is loaded on demand from a verified checkout on the bound
+execution target. Research on Grok Bot 0.51.0 found no supported automated way to create an
+account Skill (`NO_SUPPORTED_PATH`), so the one native skill write below is the only account
+operation; there is no Marketplace, credential, ZIP import, unofficial Sand or RPC path, and no
+state hack.
 
-## 1. Verify the checkout and the candidate
+## 1. One write on the account
 
-Run on Local Computer, inside the checkout the owner named:
+Save `hosts/grok-bot/{{BRIDGE_FILE}}` as the account-private Skill `{{SKILL_NAME}}`: `name` and
+`description` from its frontmatter (`hosts/grok-bot/{{MANIFEST}}` holds the already-resolved
+values; never save YAML quotes), `body` = everything after the closing `---`. If a Skill with
+the same name exists, update it in place; never create a second one and never touch any other
+Skill. Verify: Settings > Plugins > Yours lists exactly one Skill `{{SKILL_NAME}}`, enabled, and
+`/` offers it. A release changes only the accepted-revision line (`{{ACCEPTED_COMMIT}}`,
+release {{RELEASE}}); repeat this one write then.
+
+## 2. First configuration on Local Computer (Mac): read-only, never from the cloud
+
+The Mac already holds the `{{REPO_SLUG}}` checkout and its local Skill installation. The cloud
+Agent Computer never clones, installs, updates, or manages anything on the Mac. In the Bot with
+**Execution on Local Computer**, inside the local workspace the owner names:
 
 ```bash
-git rev-parse HEAD                                                 # must equal the candidate commit the owner named
-python3 scripts/render-skills.py --check                           # render-skills: PASS (...)
-python3 scripts/kaola-grok-bot-verify.py hosts/grok-bot --repo .   # kaola-grok-bot-verify: PASS ... (generated state)
+ROOT="$(git rev-parse --show-toplevel)"                       # the existing checkout, not a clone
+python3 "$ROOT/scripts/kaola-locate.py" register              # links {{LOCATOR}} into the installer's bin directory (--bin-dir DIR for another directory on PATH)
+{{LOCATOR}} --target local --expect-revision {{ACCEPTED_COMMIT}}   # result must be "ok"
 ```
 
-If any line differs, stop and report it; do not save Skills from a checkout that fails these
-checks or from a commit the owner did not name. `hosts/grok-bot/private-skills.json` is the
-generated fingerprint list (name, description, `file_sha256`, `body_sha256` per document); when
-in doubt compare a file's `shasum -a 256` with its `file_sha256` before saving it.
+The locator receipt carries only: target kind, host kernel and hashed fingerprint, ROOT,
+normalised origin (`{{EXPECTED_ORIGIN}}`), HEAD, clean state. The Mac path lives only in that
+device-local link; it never enters the account Skill. Moving the checkout means running
+`register` again; the bridge is unchanged.
 
-## 2. Save the {{SKILL_COUNT}} Skills: one write per file, in this order
+## 3. Read-only preflight UAT against an existing local project and session
 
-For each row: read the file on Local Computer; take `name` and `description` from its
-frontmatter (the block between the first two `---` lines); take the **body** as everything after
-the closing `---`; then save it with the Bot's private-skill write (observed in owner UAT as the
-`update_state` Skill write) using **exactly** that name, description, and body. The
-`description` value is the text **without YAML quotes**: when the frontmatter line reads
-`description: "..."` (the main Skill's does), save the text between the quotes, never the quotes
-themselves; the `description` field of the same row in `hosts/grok-bot/private-skills.json` is
-that already-resolved value and is the exact string to save. That is
-{{SKILL_COUNT}} calls, one per source file. If a private Skill with the same name already exists,
-update it in place. Never create a second Skill with the same name, never rename one, and never
-merge two files into one Skill.
+```bash
+{{LOCATOR}} --target local --expect-revision {{ACCEPTED_COMMIT}} \
+  --project /path/of/the/existing/local/project --worker {{FIRST_WORKER_ID}} --session <existing-session-name>
+"$ROOT/skills/{{FIRST_WORKER_SKILL}}/scripts/runtime-tmux.sh" preflight --repo /path/of/the/existing/local/project --session <existing-session-name>
+```
 
-{{PRIVATE_SKILL_TABLE}}
+Expected: the attestation is `ok` (project on this host, script under the same ROOT, session
+present), the {{FIRST_WORKER_RUNTIME}} preflight returns its evidence, and nothing was started,
+sent, stopped, cloned, fetched, checked out, or installed. Record that the Bot read only
+`ROOT/skills/{{SKILL_NAME}}/SKILL.md` and `ROOT/skills/{{FIRST_WORKER_SKILL}}/SKILL.md`, read no
+script source, and that the cloud Agent Computer executed nothing and accessed no Mac file.
 
-Re-running these steps is idempotent: the same {{SKILL_COUNT}} names are updated to the current
-files, nothing else is created, and no other Skill on the account is touched. All {{WORKER_COUNT}}
-worker rows are needed; the main Skill selects a worker by the stable name in its own routing
-table.
+## 4. Cloud Agent Computer (optional, independent)
 
-## 3. Keep a checklist; retry only the failed rows
+For a project that lives on the cloud computer, that computer chooses its own persistent
+directory, clones or updates its own checkout with its own existing Git or GitHub CLI
+authentication (`git clone https://github.com/{{REPO_SLUG}}.git` or
+`gh repo clone {{REPO_SLUG}}`, then `git checkout --detach {{ACCEPTED_COMMIT}}`), registers its
+own locator with `python3 ROOT/scripts/kaola-locate.py register`, and passes
+`--target cloud`. That checkout never operates on Mac paths, CLIs, tmux, or sessions.
 
-Report one table `# | name | source file | outcome` where outcome is `created`, `updated`,
-`FAILED (reason)`, or `not attempted`. A failure on one file does not undo the others: report
-the cause, then repeat step 2 for the failed rows only. Partial completion is reported as
-partial; do not report the install as complete until every row shows `created` or `updated`.
+## 5. Update and rollback
 
-## 4. Verify the {{SKILL_COUNT}} identities, then dispatch through Project Runner
-
-1. Settings > Plugins > Yours lists exactly these {{SKILL_COUNT}} private Skills, enabled:
-   {{PRIVATE_SKILL_NAMES}}. Record any name that is missing, duplicated, or disabled.
-2. `/` in this Bot offers all {{SKILL_COUNT}}.
-3. Ask Project Runner (`kaola-project-runner`) to supervise one explicitly authorized worker, for
-   example a {{FIRST_WORKER_RUNTIME}} session. It must select that worker by the stable Skill name
-   (`{{FIRST_WORKER_SKILL}}`), load that Skill, and run the Local Computer script
-   `{{LOCAL_RUNTIME_COPY}}/workers/{{FIRST_WORKER_ID}}/scripts/runtime-tmux.sh`
-   (the runtime copy installed on this Mac by `./scripts/install-local.sh --runtime grok-bot`),
-   never a script on the cloud Agent Computer.
-4. Record the exact outcome or gap of every step for the owner.
+Local: the owner updates the Mac checkout on the Mac; the locator re-verifies. Cloud:
+`git -C ROOT fetch origin <commit> && git -C ROOT checkout --detach <commit>`. Rollback is the
+previous accepted revision. Removal: delete the Skill under Settings > Plugins > Yours and
+remove the locator link (`./scripts/install-local.sh --uninstall --bin-links` or `rm` the link).
 
 ## Boundaries
 
-- Never publish or submit any of these Skills to a public Marketplace, and do not use a Team
-  Marketplace for them.
-- Never use unofficial Sand gateways, hidden Bot RPCs, or account credentials; only the Bot's own
-  skill write and Local Computer file reads.
-- Do not edit the generated files; the repository regenerates them with
-  `python3 scripts/render-skills.py --write`.
-- Rollback: delete or disable the {{SKILL_COUNT}} Skills under Settings > Plugins > Yours;
-  `./scripts/install-local.sh --runtime grok-bot --uninstall` removes only the local runtime copy.
+- Never publish this Skill to a public or Team Marketplace; never use unofficial Sand gateways,
+  hidden Bot RPCs, or account credentials; never enter, print, or pass a token.
+- Never edit generated files; `python3 scripts/render-skills.py --write` regenerates them.
+- No runtime copy, no per-worker account Skills, no scheduler, no daemon.

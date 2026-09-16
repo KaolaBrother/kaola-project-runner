@@ -2,32 +2,39 @@
 
 ## Unreleased
 
-- **Grok Bot** host as **eight single-Markdown Private Skills**. Owner UAT (2026-09-16) showed a
-  Grok Bot private skill holds only name, description, and body, with no ZIP or file-tree
-  import, so `render-skills.py` now emits `hosts/grok-bot/private-skills/`: one standalone
-  document per Skill — `kaola-project-runner` (Project Runner: authorization recovery,
-  heartbeat, dispatch, acceptance-before-finalize, close-out; routes to workers by stable Skill
-  name, no transport, no inlined worker text) and the seven `<id>-kaola-project-runner` workers
-  (canonical contract verbatim, references bundled, Local Computer script location under
-  `${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills/kaola-project-runner/workers/<id>`) —
-  plus `hosts/grok-bot/private-skills.json` (fingerprint manifest) and `hosts/grok-bot/INSTALL.md`, a repo-based guide Grok Bot itself follows to create or
-  update the eight Skills (one write per file, idempotent by name, failure checklist, no public
-  Marketplace, no credentials; not a ninth Skill). `hosts/grok-bot/kaola-project-runner/`
-  remains the Local Computer runtime copy (root `SKILL.md`, seven workers embedded under
-  `workers/<id>/`, contract `WORKER.md`); `--runtime grok-bot` keeps only that copy under
-  `~/.kaola/grok-bot/skills` and touches no other Skill. `scripts/kaola-grok-bot-verify.py`
-  proves exactly eight documents (1 main + 7 workers, unique names, standalone, main routes to
-  all seven, no absorbed transport or orchestrator policy), the guide's eight sources, and,
-  with `--repo`, byte identity of the whole bundle with a fresh render; the packager zips the
-  runtime copy only after that proof. Grok Bot is a host **packaging adapter** inside
-  `render-skills.py` (delimited section, inputs `GROK_BOT_ADAPTER_INPUTS`), never a transport
-  platform: one canonical Skill system, host differences only in the adapter layer, canonical
-  edits propagate to every product, hand-edited products are rejected. Settings → Plugins → Yours stays only a review/enable
-  surface with no documented upload or import control; no ingestion entry point is claimed;
-  Team Marketplace is only an optional Teams/Enterprise path. Grok Bot is not an eighth
-  platform; `--platform grok` remains the Grok CLI worker. Live Grok Bot enablement (the Bot
-  saving the eight Skills, Yours/`/` showing eight, main dispatch) is UAT. See
-  [Grok Bot host](docs/grok-bot-host.md).
+- **Progressive disclosure** is now a locked, platform-neutral invariant with measured byte
+  budgets (`templates/budgets.json`: discovery descriptions ≤ 320 chars, main Skill ≤ 16 KB,
+  each worker ≤ 12 KB, each reference ≤ 8 KB, Grok Bot bridge ≤ 2.5 KB, guide ≤ 8 KB, locator
+  receipt ≤ 4 KB, ordinary capture receipt ≤ 64 KB). `render-skills.py --check`/`--write`
+  refuse any over-budget product and name the surface and size; `tests/contract/
+  test-progressive-disclosure.py` proves the activation boundaries structurally (main embeds
+  no worker, each worker is separate, references are linked and never inlined, scripts are
+  executed and never read, no product is a substring of another). Ordinary PTY `capture` is a
+  bounded receipt (newest bytes plus a truncation marker carrying the sha256 of the whole
+  stream, via `kaola-observation.py bound-text`); an explicit `capture --full` stays unbounded.
+- **Grok Bot** host reduced to **one thin bridge Skill** (Issue #49 owner corrections,
+  2026-09-16; research `NO_SUPPORTED_PATH` for automated account-Skill creation). The eight
+  single-Markdown account Skills, `private-skills.json`, the Local Computer runtime copy,
+  `--runtime grok-bot`, `KAOLA_GROK_BOT_HOME`, and `scripts/kaola-grok-bot-package.py` are
+  **removed**. `render-skills.py` now emits only `hosts/grok-bot/kaola-project-runner.md` (the
+  bridge, from `templates/grok-bot/bridge.md.tmpl` + `accepted-revision.json`),
+  `bridge.json` (fingerprints, accepted commit/release), and `INSTALL.md` (one account write,
+  first configuration, read-only Mac UAT). The bridge names the repository, expected origin,
+  accepted 40-hex revision, the locator command, and the two canonical entry paths; it binds
+  the execution target first (Local Computer or cloud Agent Computer), never assumes one
+  target can reach the other, never installs or updates the Mac from the cloud, and loads only
+  the main Skill and one selected worker from the verified checkout on that target. New
+  `scripts/kaola-locate.py` is the device-local locator and fail-closed host-target
+  attestation (`kaola-project-runner-locate`, a re-registerable bin link following the
+  installer's `--bin-links` convention): bounded receipt with target kind, host fingerprint,
+  ROOT identity (normalised origin, HEAD, clean), consumer project identity, worker script
+  under the same ROOT, exact session; refuses cross-host paths, origin/revision mismatch,
+  dirty trees, and never handles credentials. `kaola-grok-bot-verify.py` proves the bridge
+  shape, budgets, absence of canonical/path/credential content, manifest identity, and (with
+  `--repo`) generated state. Docs, orchestrator Hosts section, and
+  `references/grok-bot-host.md` describe the bridge flow, target binding, attestation, and the
+  read-only Local Computer UAT boundary. Still seven platforms; `templates/grok-golden/`
+  frozen. See [Grok Bot host](docs/grok-bot-host.md).
 
 ## 0.2.3 — 2026-09-15
 

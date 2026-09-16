@@ -629,11 +629,38 @@ def status_view(observation: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+# Ordinary capture receipts are bounded (progressive disclosure); this limit
+# equals ``capture_receipt_bytes`` in templates/budgets.json. ``capture --full``
+# bypasses it by explicit request.
+CAPTURE_RECEIPT_BYTES = 65536
+TRUNCATION_MARKER = "[kaola capture truncated: kept last {kept} of {total} bytes; sha256 of the full capture {digest}; pass --full for the whole capture]\n"
+
+
+def bound_text(data: bytes, limit: int = CAPTURE_RECEIPT_BYTES) -> bytes:
+    """Keep the newest ``limit`` bytes of a capture (whole lines) plus one marker line.
+
+    The marker names the total size and the sha256 of the untruncated stream so the
+    truncated receipt stays verifiable; the result never exceeds ``limit`` bytes.
+    """
+    if len(data) <= limit:
+        return data
+    digest = hashlib.sha256(data).hexdigest()
+    marker = TRUNCATION_MARKER.format(kept=0, total=len(data), digest=digest).encode("utf-8")
+    keep = max(limit - len(marker) - 8, 0)
+    tail = data[-keep:] if keep else b""
+    newline = tail.find(b"\n")
+    if 0 <= newline < len(tail) - 1:
+        tail = tail[newline + 1:]
+    marker = TRUNCATION_MARKER.format(kept=len(tail), total=len(data), digest=digest).encode("utf-8")
+    return tail + marker
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command",
         choices=(
+            "bound-text",
             "build",
             "process-tree",
             "receipt",
@@ -661,6 +688,10 @@ def main() -> int:
             raise ValueError("process-tree requires a root pid")
         rows = parse_process_table(sys.stdin.read())
         print(json.dumps(descendants(int(args.value), rows), separators=(",", ":")))
+    elif args.command == "bound-text":
+        limit = int(args.value) if args.value else CAPTURE_RECEIPT_BYTES
+        sys.stdout.buffer.write(bound_text(sys.stdin.buffer.read(), limit))
+        sys.stdout.buffer.flush()
     elif args.command == "build":
         print(json.dumps(build_from_environment(), ensure_ascii=False, sort_keys=True))
     elif args.command == "receipt":

@@ -1,0 +1,11 @@
+{
+  "_comment": "Progressive-disclosure byte budgets, enforced by scripts/render-skills.py --check, scripts/kaola-grok-bot-verify.py, and tests/contract/test-progressive-disclosure.py. Bytes on disk (UTF-8); descriptions in characters. Ordinary receipts are bounded; an explicit `capture --full` is exempt by design.",
+  "description_chars": 320,
+  "main_skill_bytes": 16384,
+  "worker_skill_bytes": 12288,
+  "reference_bytes": 8192,
+  "bridge_bytes": 2560,
+  "bridge_guide_bytes": 8192,
+  "locator_receipt_bytes": 4096,
+  "capture_receipt_bytes": 65536
+}

@@ -1,0 +1,5 @@
+{
+  "_comment": "Accepted pinned revision carried by the Grok Bot bridge. A release rewrites this file (40-hex commit + release tag); render-skills.py --write then changes exactly one line of the bridge. Nothing else about the bridge depends on the repository state.",
+  "commit": "ba3d14f0c4f35bfc96004435d1ef053713d323ec",
+  "release": "v0.2.3"
+}

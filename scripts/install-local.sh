@@ -31,17 +31,11 @@ Consuming runtimes (verified native skill directories):
   claude-code  ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
   cursor       $HOME/.cursor/skills
   devin        ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
-  grok-bot     ${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills
-               (Local Computer runtime copy hosts/grok-bot/kaola-project-runner:
-               one root SKILL.md with the seven workers embedded under
-               workers/<id>/. The eight account Skills in
-               hosts/grok-bot/private-skills/ are not installed here: Grok Bot
-               saves them itself per hosts/grok-bot/INSTALL.md. Grok Bot
-               discovers nothing on this disk; the documents are a private-skill
-               hand-off for manual UAT (Settings > Plugins > Yours only
-               reviews/enables existing skills; no upload control is
-               documented). --platform/--no-orchestrator are refused for this
-               runtime; no other Skill directory is touched.)
+Grok Bot is a bridge host, not an installer destination: the account holds one
+thin generated Skill (hosts/grok-bot/kaola-project-runner.md) that loads the
+main and one selected worker Skill from this checkout on the bound execution
+target through the device-local locator kaola-project-runner-locate
+(scripts/kaola-locate.py register, or --bin-links). See docs/grok-bot-host.md.
 Grok CLI worker uses --platform grok, not --runtime grok.
 
 --skills-dir installs into any explicit destination parent (including
@@ -57,8 +51,9 @@ Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex
 With no --platform, installs all seven worker Skills plus the orchestrator
 (unless skipped). With no destination flags the legacy Codex destination is
 used. Existing foreign paths are never replaced.
---bin-links also manages $HOME/.local/bin/kaola-acp* helper links; it is on by
-default only for the Codex runtime destination. Uninstall never removes bin
+--bin-links also manages the $HOME/.local/bin/kaola-acp* helper links and the
+kaola-project-runner-locate locator link; it is on by default only for the
+Codex runtime destination. Uninstall never removes bin
 links unless --bin-links is passed explicitly.
 EOF
 }
@@ -82,7 +77,6 @@ runtime_skills_dir() {
     claude-code) printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" ;;
     cursor) printf '%s\n' "$HOME/.cursor/skills" ;;
     devin) printf '%s\n' "${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills" ;;
-    grok-bot) printf '%s\n' "${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills" ;;
     *) return 1 ;;
   esac
 }
@@ -110,11 +104,11 @@ while [[ $# -gt 0 ]]; do
     --runtime)
       [[ $# -ge 2 ]] || { printf '%s\n' '--runtime needs a value' >&2; exit 2; }
       if [[ "$2" == grok ]]; then
-        printf 'unknown runtime: grok\nGrok CLI is worker platform id grok (--platform grok). Grok Bot host id is --runtime grok-bot.\n' >&2
+        printf 'unknown runtime: grok\nGrok CLI is worker platform id grok (--platform grok). Grok Bot is a bridge host with no installer destination (see docs/grok-bot-host.md).\n' >&2
         exit 2
       fi
-      if [[ "$2" == grokbot ]]; then
-        printf 'unknown runtime: grokbot\nUse --runtime grok-bot for the Grok Bot host. --platform grok is the Grok CLI worker.\n' >&2
+      if [[ "$2" == grok-bot || "$2" == grokbot ]]; then
+        printf 'unknown runtime: %s\nGrok Bot is a bridge host, not an installer destination: save hosts/grok-bot/kaola-project-runner.md on the account and register the locator with scripts/kaola-locate.py register on the execution target (see docs/grok-bot-host.md). --platform grok is the Grok CLI worker.\n' "$2" >&2
         exit 2
       fi
       runtime_skills_dir "$2" >/dev/null || { printf 'unknown runtime: %s\n' "$2" >&2; exit 2; }
@@ -319,16 +313,12 @@ PY
 
 # Plan every action before any write; a refusal anywhere aborts the whole run.
 # $1 is the generated Skill directory name. $2 is the worker platform id, or
-# empty for the main orchestrator Skill (not a platform id). $3 optional source
-# directory override (the Grok Bot Private Skill payload).
+# empty for the main orchestrator Skill (not a platform id).
 plan_skill() {
   local name="$1"
   local platform="${2-}"
   local source="$repo_root/skills/$name"
   local target="$target_parent/$name"
-  if [[ $# -ge 3 ]]; then
-    source="$3"
-  fi
 
   if [[ "$mode" == install ]]; then
     [[ -f "$source/SKILL.md" && -f "$source/.generated-by-kaola-project-runner" ]] || {
@@ -426,32 +416,18 @@ plan_skill() {
 }
 
 actions=()
-if [[ "$resolved_runtime" == grok-bot ]]; then
-  # The Grok Bot payload is one Private Skill (root SKILL.md plus seven embedded
-  # workers). It is delivered whole: no worker subset, no orchestrator opt-out,
-  # and no other Skill directory is planned or touched.
-  if [[ "$platform_given" == true ]]; then
-    printf 'Grok Bot Private Skill embeds all seven workers; --platform is not accepted with --runtime grok-bot\n' >&2
-    exit 2
-  fi
-  if [[ "$install_orchestrator" != true ]]; then
-    printf 'Grok Bot Private Skill is the orchestrator root; --no-orchestrator is not accepted with --runtime grok-bot\n' >&2
-    exit 2
-  fi
-  plan_skill "$orchestrator_skill_name" "" "$repo_root/hosts/grok-bot/$orchestrator_skill_name"
-else
-  for platform in "${selection[@]}"; do
-    plan_skill "$(skill_name_for "$platform")" "$platform"
-  done
-  if [[ "$install_orchestrator" == true ]]; then
-    plan_skill "$orchestrator_skill_name"
-  fi
+for platform in "${selection[@]}"; do
+  plan_skill "$(skill_name_for "$platform")" "$platform"
+done
+if [[ "$install_orchestrator" == true ]]; then
+  plan_skill "$orchestrator_skill_name"
 fi
 
 bin_dir="$HOME/.local/bin"
 bin_specs=(
   "kaola-acp|$script_dir/kaola-acp.py"
   "kaola-acp-holder|$script_dir/kaola-acp-holder.py"
+  "kaola-project-runner-locate|$script_dir/kaola-locate.py"
 )
 bin_actions=()
 if [[ "$want_bin_links" == true ]]; then

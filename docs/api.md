@@ -9,15 +9,14 @@ scripts/render-skills.py --check
 
 `--write` deterministically rebuilds seven managed worker Skill directories plus
 `skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eighth
-platform) and the Grok Bot host bundle `hosts/grok-bot/`: `private-skills/` (exactly eight
-single-Markdown account-private Skills — `kaola-project-runner` rendered with a worker routing
-table by stable Skill name, and `<id>-kaola-project-runner` for each worker as its canonical
-`SKILL.md` verbatim plus its Local Computer script location and its references bundled
-verbatim), `private-skills.json` (fingerprint manifest with name, description, and body/file
-sha256 per document), `INSTALL.md` (the repo-based guide Grok Bot itself follows, from
-`templates/grok-bot/INSTALL.md.tmpl`), and the Local Computer runtime copy
-`kaola-project-runner/` (the orchestrator root with the seven workers embedded under
-`workers/<id>/`, contract file `WORKER.md`). `--check` returns nonzero for any missing, stale,
+platform) and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-project-runner.md` (the one
+thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revision.json`; it
+carries the accepted 40-hex commit and release, the locator command, and the two canonical
+entry paths, and no canonical content), `bridge.json` (fingerprint manifest: name, resolved
+description, accepted commit, release, bytes, file/body sha256), and `INSTALL.md` (from
+`templates/grok-bot/INSTALL.md.tmpl`). Every product is measured against
+`templates/budgets.json` first; an over-budget Skill, reference, description, bridge, or guide
+is reported as `budget: <surface> is N B > M B (<key>)` and nothing is written. `--check` returns nonzero for any missing, stale,
 or unexpected file, Skill directory, or host bundle file. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
@@ -54,13 +53,9 @@ preflighted before mutation; foreign paths are never replaced.
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
 `cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`,
-`grok-bot` → `${KAOLA_GROK_BOT_HOME:-$HOME/.kaola/grok-bot}/skills` (the Local Computer runtime
-copy `hosts/grok-bot/kaola-project-runner/` only; `--platform` and `--no-orchestrator` are refused;
-the eight account Skills in `hosts/grok-bot/private-skills/` are not installed here — Grok Bot
-saves them itself per `hosts/grok-bot/INSTALL.md`; Grok Bot discovers nothing on this disk.
-The documents are a private-skill hand-off for manual UAT; Settings → Plugins → Yours is only
-the documented review/enable surface, with no documented upload control). `--runtime grok` is not a host alias;
-`--platform grok` is the Grok CLI worker. Grok Bot UI enablement is UAT; see [Grok Bot host](grok-bot-host.md).
+`--runtime grok-bot` (and `grokbot`) is refused: Grok Bot is a bridge host with no installer
+destination (see [Grok Bot host](grok-bot-host.md)). `--runtime grok` is not a host alias;
+`--platform grok` is the Grok CLI worker.
 `--skills-dir` is a mutually exclusive explicit absolute destination (project-local paths included).
 With neither flag the legacy Codex destination is used. `--method copy` (default) stages an
 identical standalone copy on the destination filesystem and records a per-Skill receipt at
@@ -75,6 +70,28 @@ selected destination and selected owned Skills.
 to this repository's scripts. It defaults on only for the Codex runtime destination; uninstall
 leaves shared links alone unless `--bin-links` is passed explicitly, and removes only exact-owned
 links.
+
+## Locator and host-target attestation
+
+```text
+scripts/kaola-locate.py register [--bin-dir DIR]
+scripts/kaola-locate.py [receipt] [--target local|cloud] [--expect-revision SHA]
+                        [--project ABS_PATH] [--worker ID] [--session NAME]
+kaola-project-runner-locate ...          # the registered bin link, same arguments
+```
+
+`register` links `kaola-project-runner-locate` in the installer's bin directory (default
+`$HOME/.local/bin`, the same convention as `--bin-links`) to this checkout's
+`scripts/kaola-locate.py`; a link that already points at some `scripts/kaola-locate.py` is
+replaced (re-registration after moving a checkout), anything else is refused
+(`foreign-locator-link`, `locator-path-occupied`). The receipt form prints one bounded JSON
+line (`kaola-project-runner-locator/1`, ≤ 4 KB): `target`, `host` (kernel + hashed
+fingerprint), `root` (path, normalised origin without userinfo, HEAD, `clean`,
+`revision_match`), and, when given, `project` (path, top level, origin), `worker` (id, script
+path under the same root, `under_root`, `executable`), `session` (name, `present`).
+`result` is `ok` (exit 0) or `refused` (exit 1) with `reasons`; `--target` is required when
+any of `--project`, `--worker`, `--session` is given. Git runs with `GIT_TERMINAL_PROMPT=0`;
+no credential is read, printed, hashed, or forwarded.
 
 ## tmux core
 
@@ -110,7 +127,7 @@ Codex `--permission-mode` values are the same literal IDs on both transports but
 
 ACP `observe`/`status` report `session_meta.configOptions` as the latest native-attested option list, not the launch snapshot. The `session/new`/`session/resume`/`session/load` result is the baseline (also surfaced as `initial_config_options`); a successful `session/set_config_option` result replaces the list wholesale, and `config_option_update` notifications for the same session refresh it. `configured_options[*].current_value` carries the adapter's native `currentValue` when returned — proof is the native response, never the requested value. Failed or timed-out updates and responses without usable config facts leave the last proven configuration untouched.
 
-Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` is the only command without a required platform positional or `--repo`; stdout is one `kaola-acp-list/1` object of live holders. `kaola-acp <platform> view --repo ROOT --session NAME [--since CURSOR]` stdout is one `kaola-acp-view/1` object. `kaola-acp <platform> follow --repo ROOT --session NAME [--since CURSOR] [--format text]` keeps the Unix socket open and writes NDJSON `{kind:snapshot|delta|heartbeat|eof|error}` lines; snapshot/delta payloads reuse `kaola-acp-view/1`. After the first `follow` op that FD is read-only (`prompt`/`permit`/`cancel`/`stop` reply `kind=error` and must use another short connection). A slow follower whose queue exceeds 256 lines gets `follow-dropped` and disconnects; other followers, `view`, and agent stdio continue. Killing the follow CLI does not stop holder/agent. Agent exit emits `kind=eof`, after which the holder closes that connection and the CLI exits; a dead holder emits `kind=error` `holder-lost`. View caps are enforced, not only flagged: thinking keeps an 8 KiB tail, one tool's content is clipped to 32 KiB, the timeline keeps the newest 200 messages, and a view over 256 KiB drops its oldest tools then oldest messages (`truncated=true`). Chunks without `messageId` join the previous same-role message until a tool call, new prompt, or turn end. `--format text` joins message/tool titles into tty text (not a TUI). Runtime facts use `error.code` in `holder-lost` / `holder-unreachable` / `no-session`. `kaola-tmux.sh PLATFORM view` prints `{"schema":"kaola-acp-view/1","error":{"code":"view-unsupported","message":"view is not a pty/tmux command; use kaola-acp"}}` and does not fall back to PTY; `follow` is likewise `follow-unsupported`. `install-local.sh --bin-links` (default on for the Codex runtime destination) also installs owned `$HOME/.local/bin/kaola-acp` and `kaola-acp-holder` symlinks.
+Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` is the only command without a required platform positional or `--repo`; stdout is one `kaola-acp-list/1` object of live holders. `kaola-acp <platform> view --repo ROOT --session NAME [--since CURSOR]` stdout is one `kaola-acp-view/1` object. `kaola-acp <platform> follow --repo ROOT --session NAME [--since CURSOR] [--format text]` keeps the Unix socket open and writes NDJSON `{kind:snapshot|delta|heartbeat|eof|error}` lines; snapshot/delta payloads reuse `kaola-acp-view/1`. After the first `follow` op that FD is read-only (`prompt`/`permit`/`cancel`/`stop` reply `kind=error` and must use another short connection). A slow follower whose queue exceeds 256 lines gets `follow-dropped` and disconnects; other followers, `view`, and agent stdio continue. Killing the follow CLI does not stop holder/agent. Agent exit emits `kind=eof`, after which the holder closes that connection and the CLI exits; a dead holder emits `kind=error` `holder-lost`. View caps are enforced, not only flagged: thinking keeps an 8 KiB tail, one tool's content is clipped to 32 KiB, the timeline keeps the newest 200 messages, and a view over 256 KiB drops its oldest tools then oldest messages (`truncated=true`). Chunks without `messageId` join the previous same-role message until a tool call, new prompt, or turn end. `--format text` joins message/tool titles into tty text (not a TUI). Runtime facts use `error.code` in `holder-lost` / `holder-unreachable` / `no-session`. `kaola-tmux.sh PLATFORM view` prints `{"schema":"kaola-acp-view/1","error":{"code":"view-unsupported","message":"view is not a pty/tmux command; use kaola-acp"}}` and does not fall back to PTY; `follow` is likewise `follow-unsupported`. `install-local.sh --bin-links` (default on for the Codex runtime destination) also installs owned `$HOME/.local/bin/kaola-acp`, `kaola-acp-holder`, and `kaola-project-runner-locate` symlinks.
 
 ## Observation schema
 
