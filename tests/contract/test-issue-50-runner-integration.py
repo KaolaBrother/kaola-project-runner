@@ -271,7 +271,8 @@ def test_fail_closed_without_exact_binary_or_bridge() -> None:
               "start without the vendored dist refuses before spawning anything")
         check(not any(sandbox.record_root.glob(f"claude-code/{refused}/*/record.json")),
               "no holder record was created for the refused start")
-        for escape in ("$SKILL_DIR/scripts/../kaola-acp.py", "$SKILL_DIR/scripts//etc/hosts"):
+        # Both shapes name files that exist, so only the refusal itself can satisfy the check.
+        for escape in ("$SKILL_DIR/scripts/../scripts/kaola-acp.py", "$SKILL_DIR/scripts//etc/hosts"):
             receipt = sandbox.cli(CHECKOUT_CLI, "preflight", "--command", f"node {escape}")
             check(receipt["error"]["code"] == "acp-bridge-missing" and receipt["bridge"]["present"] is False,
                   f"a Skill-relative token never escapes the Skill: {escape}")

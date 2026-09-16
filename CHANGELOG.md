@@ -3,8 +3,11 @@
 ## Unreleased
 
 - **Claude Code ACP through a vendored, pinned bridge; ACP is now Claude Code's default
-  transport** (Issue #50, Missions 1–3; the live subscription gate passed on the recording Mac on
-  2026-09-16 and `--transport pty` stays the explicit fallback and login channel). A live finding
+  transport** (Issue #50, Missions 1–4; the live subscription gate passed on the recording Mac on
+  2026-09-16 and `--transport pty` stays the explicit fallback and login channel; the round-1
+  review fixes exempt the rendered bundle copy from whitespace checks via a root `.gitattributes`,
+  add `git diff --check` to `validate.sh`, refuse path escapes in the Skill-relative token, write
+  the bridge session store atomically, and document `~/.claude-code-acp/sessions.json`). A live finding
   fixed in the fork: the CLI exits 143 on SIGTERM, which upstream's resume fallback treated as an
   expired session — a cancelled `--resume` turn was re-run as a fresh conversation and the
   persisted session id was cleared; the fork now reports `cancelled` and keeps the id, and a
