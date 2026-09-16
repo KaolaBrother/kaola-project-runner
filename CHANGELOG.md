@@ -29,7 +29,16 @@
   CLI 0.16.5 finishes the in-flight model response before reporting the turn (native latency,
   measured without the Runner); the bundled runtime cannot open its TUI (`Cannot find package
   '@zcode/tui'`) and headless `--prompt` needs `~/.zcode/cli/config.json`, so the PTY fallback
-  gate cannot pass on that Mac and `default_transport` stays `pty`.
+  gate cannot pass on that Mac and `default_transport` stays `pty`. Independent review
+  round 1 (five should-fix, no blocker) closed in the same change: backend error objects and
+  stderr diagnostics are redacted of the plan credential (a backend that echoes request
+  input can no longer leak it onto the ACP channel); a failed `session/load` unregisters
+  the session instead of letting a later prompt silently create a new one; a resumed
+  session whose persisted model cannot be read fails closed instead of taking the provider
+  default; a registry with two enabled Coding Plans fails closed (`HUMAN_DECISION_REQUIRED`)
+  instead of picking dict order; the overlay builder never substitutes a model; the
+  resume-with-overlay fallback is now covered by a fake scenario; and the tier preset names
+  no longer embed a device-specific model. Contract suite 23/23.
 - **ZCode skip-all permission mode is yolo on ACP and PTY** (Issue #51, Mission 4
   owner correction). Installed CLI 0.16.5 `--help` lists `--mode` as Permission
   mode (`build|edit|plan|yolo`, default yolo for `--prompt`); the packaged

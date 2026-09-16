@@ -728,6 +728,15 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertNotIn(START_PLAN_SECRET, stdout_blob)
         self.assertNotIn(FIXTURE_SECRET, bytes(driver.stderr_bytes).decode("utf-8", "replace"))
         self.assertEqual(driver.cli_config.read_text(encoding="utf-8"), '{"hooks":{}}\n')
+        # Registry and plan cache are byte-identical after the run.
+        self.assertEqual(
+            (driver.home / ".zcode" / "v2" / "config.json").read_text(encoding="utf-8"),
+            DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            (driver.home / ".zcode" / "v2" / "coding-plan-cache.json").read_text(encoding="utf-8"),
+            PLAN_CACHE_FIXTURE.read_text(encoding="utf-8"),
+        )
 
     def test_create_carries_coding_plan_overlay_in_memory(self) -> None:
         driver = self.start("basic")
@@ -828,6 +837,14 @@ class ZcodeAcpContractTests(unittest.TestCase):
                 CODING_PLAN_ID: {**DESKTOP_CONFIG["provider"][CODING_PLAN_ID],
                                  "options": {"apiKey": "", "baseURL": "https://open.bigmodel.cn/api/anthropic"}},
             }},
+            "two-coding-plans-enabled": {"provider": {
+                CODING_PLAN_ID: DESKTOP_CONFIG["provider"][CODING_PLAN_ID],
+                "builtin:zai-coding-plan": {
+                    **DESKTOP_CONFIG["provider"]["builtin:zai-coding-plan"], "enabled": True,
+                    "options": {"apiKey": "second-plan-key-must-not-be-used",
+                                "baseURL": "https://api.z.ai/api/anthropic"},
+                },
+            }},
             "registry-absent": "ABSENT",
             "registry-malformed": "{not json",
         }
@@ -891,6 +908,72 @@ class ZcodeAcpContractTests(unittest.TestCase):
             self.assertRegex(item.get("updatedAt") or "", r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
         self.assertEqual(sessions[0]["updatedAt"], "2026-09-16T09:48:26.400Z")
         self.assert_registry_read_only_and_secret_contained(driver)
+
+    def test_backend_error_echoing_the_overlay_is_redacted(self) -> None:
+        driver = self.start("echo_error")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "hello"}],
+        })
+        failed = driver.wait_result(3, timeout=8)
+        assert failed is not None
+        self.assertIn("error", failed)
+        blob = json.dumps(failed)
+        self.assertNotIn(FIXTURE_SECRET, blob)
+        self.assertIn("<redacted-credential>", blob)
+        self.assert_registry_read_only_and_secret_contained(driver)
+
+    def test_failed_load_leaves_no_half_registered_session(self) -> None:
+        driver = self.start("resume_missing")
+        self.handshake(driver)
+        driver.request(20, "session/load", {"sessionId": "sess_gone", "cwd": str(driver.cwd)})
+        first = driver.wait_result(20, timeout=8)
+        assert first is not None
+        self.assertIn("error", first)
+        driver.request(21, "session/load", {"sessionId": "sess_gone", "cwd": str(driver.cwd)})
+        second = driver.wait_result(21, timeout=8)
+        assert second is not None
+        self.assertIn("error", second, "a retried load must not succeed silently")
+        driver.request(22, "session/prompt", {
+            "sessionId": "sess_gone", "prompt": [{"type": "text", "text": "hello"}],
+        })
+        prompt = driver.wait_result(22, timeout=8)
+        assert prompt is not None
+        self.assertIn("error", prompt)
+        self.assertEqual(driver.rpc_calls("session/create"), [], "no silent new session")
+
+    def test_resume_falls_back_to_overlay_when_backend_requires_it(self) -> None:
+        driver = self.start("resume_needs_overlay")
+        self.handshake(driver)
+        driver.request(20, "session/load", {"sessionId": "sess_persisted2", "cwd": str(driver.cwd)})
+        loaded = driver.wait_result(20, timeout=8)
+        assert loaded is not None
+        self.assertNotIn("error", loaded)
+        resumes = driver.rpc_calls("session/resume")
+        self.assertEqual(len(resumes), 2)
+        self.assertNotIn("runtimeModel", resumes[0].get("params") or {})
+        overlay = (resumes[1].get("params") or {}).get("runtimeModel") or {}
+        self.assertEqual(overlay.get("provider", {}).get("providerId"), CODING_PLAN_ID)
+        driver.request(21, "session/prompt", {
+            "sessionId": "sess_persisted2", "prompt": [{"type": "text", "text": "again"}],
+        })
+        done = driver.wait_result(21, timeout=8)
+        assert done is not None
+        self.assertEqual((done.get("result") or {}).get("stopReason"), "end_turn")
+        self.assert_registry_read_only_and_secret_contained(driver)
+
+    def test_resume_with_unknown_persisted_model_fails_closed(self) -> None:
+        driver = self.start("read_fails")
+        self.handshake(driver)
+        driver.request(20, "session/load", {"sessionId": "sess_persisted3", "cwd": str(driver.cwd)})
+        loaded = driver.wait_result(20, timeout=8)
+        assert loaded is not None
+        self.assertIn("refusing to substitute", (loaded.get("error") or {}).get("message", ""))
+        self.assertEqual(driver.rpc_calls("session/setModel"), [], "no default model substituted")
+        driver.request(21, "session/load", {"sessionId": "sess_persisted3", "cwd": str(driver.cwd)})
+        again = driver.wait_result(21, timeout=8)
+        assert again is not None
+        self.assertIn("error", again)
 
     def test_cancel_sends_stop_as_a_request(self) -> None:
         driver = self.start("slow")

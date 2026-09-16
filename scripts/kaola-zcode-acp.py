@@ -129,10 +129,35 @@ THOUGHT_CHOICES = (
 
 STDOUT_LOCK = threading.Lock()
 
+# Credential values that must never leave the process except inside the
+# backend overlay. Registered by select_coding_plan_provider; every string that
+# reaches stderr or an ACP error message passes through redact().
+_SECRET_VALUES: set[str] = set()
+
+
+def register_secret(value: str) -> None:
+    if isinstance(value, str) and len(value) >= 8:
+        _SECRET_VALUES.add(value)
+
+
+def redact(text: Any) -> Any:
+    """Replace any registered credential value inside a string (or nested
+    dict/list of strings) with a fixed marker."""
+    if isinstance(text, str):
+        for secret in _SECRET_VALUES:
+            if secret in text:
+                text = text.replace(secret, "<redacted-credential>")
+        return text
+    if isinstance(text, dict):
+        return {k: redact(v) for k, v in text.items()}
+    if isinstance(text, list):
+        return [redact(v) for v in text]
+    return text
+
 
 def log(message: str) -> None:
     """Diagnostics go to stderr only; stdout is the ACP channel."""
-    sys.stderr.write(f"[{ADAPTER_NAME}] {message}\n")
+    sys.stderr.write(f"[{ADAPTER_NAME}] {redact(message)}\n")
     sys.stderr.flush()
 
 
@@ -289,9 +314,15 @@ def select_coding_plan_provider(home: str | None = None) -> dict[str, Any]:
             rejected[provider_id] = "no baseURL"
             continue
         if chosen is not None:
-            rejected[provider_id] = f"eligible but {chosen['provider_id']} was listed first"
-            continue
+            # Two enabled Coding Plans contradict the owner's one-plan premise;
+            # dict order is not a decision. Fail closed instead of guessing.
+            raise RuntimeError_(
+                "more than one enabled GLM Coding Plan provider in the desktop registry "
+                f"({chosen['provider_id']}, {provider_id}); HUMAN_DECISION_REQUIRED: enable "
+                "exactly one Coding Plan in the ZCode App"
+            )
         model_ids = [m for m in models if isinstance(m, str) and m]
+        register_secret(key)
         source = raw.get("source") if raw.get("source") in PROVIDER_SOURCES else "custom"
         chosen = {
             "provider_id": provider_id,
@@ -602,7 +633,9 @@ class ZCodeAcpAgent:
     def respond(self, rid: Any, result: Any = None, error: Any = None) -> None:
         msg: dict[str, Any] = {"jsonrpc": "2.0", "id": rid}
         if error is not None:
-            msg["error"] = error
+            # Backend error objects may echo request input; never let the
+            # inline credential ride out on the ACP channel.
+            msg["error"] = redact(error)
         else:
             msg["result"] = result
         self.send(msg)
@@ -654,8 +687,8 @@ class ZCodeAcpAgent:
     def overlay_for(self, session: Session, model_id: str | None = None) -> dict[str, Any]:
         choice = self.resolve_provider()
         wanted = model_id or session.model_id or choice["default_model_id"]
-        if wanted not in choice["model_ids"]:
-            wanted = choice["default_model_id"]
+        # build_runtime_model fails closed on a model the provider does not
+        # offer; nothing is substituted here.
         return build_runtime_model(choice, wanted)
 
     def materialize(self, session: Session) -> str:
@@ -701,8 +734,13 @@ class ZCodeAcpAgent:
         if self.backend is None or session.backend_id is None:
             return
         choice = self.resolve_provider()
-        provider_id = session.provider_id or choice["provider_id"]
-        model_id = session.model_id or choice["default_model_id"]
+        if not session.model_id or not session.provider_id:
+            raise RuntimeError_(
+                "resumed session reports no persisted model (session/read failed); "
+                "refusing to substitute the provider default"
+            )
+        provider_id = session.provider_id
+        model_id = session.model_id
         if provider_id != choice["provider_id"] or model_id not in choice["model_ids"]:
             raise RuntimeError_(
                 f"persisted session model {provider_id}\\{model_id} is not offered by the "
@@ -1090,35 +1128,49 @@ class ZCodeAcpAgent:
             session = self.sessions.get(acp_id)
         if session is None:
             session = Session(acp_id, cwd, self.default_mode)
+            if acp_id.startswith("sess_"):
+                try:
+                    self._resume_backend_session(session)
+                except RuntimeError_:
+                    # A failed load must not leave a half-registered session
+                    # that a later prompt would silently re-create.
+                    with self.lock:
+                        self.sessions.pop(acp_id, None)
+                        self.by_backend.pop(acp_id, None)
+                    raise
             with self.lock:
                 self.sessions[acp_id] = session
-            if acp_id.startswith("sess_"):
-                # Fail closed before spawning when no Coding Plan is eligible.
-                overlay = self.overlay_for(session)
-                backend = self.ensure_backend()
-                workspace = {"workspacePath": cwd, "workspaceKey": cwd}
-                try:
-                    # Faithful resume keeps the session's own persisted model.
-                    backend.call("session/resume", {"sessionId": acp_id, "workspace": workspace})
-                except RuntimeError_:
-                    # A fresh app-server has no workspace catalog yet; the
-                    # overlay supplies the same Coding Plan provider in memory.
-                    backend.call("session/resume", {
-                        "sessionId": acp_id, "workspace": workspace, "runtimeModel": overlay,
-                    })
-                session.backend_id = acp_id
-                with self.lock:
-                    self.by_backend[acp_id] = session
-                backend.call("session/subscribe", {
-                    "sessionId": acp_id,
-                    "deliveryKind": "desktop-continuous",
-                    "includeSnapshot": False,
-                    "afterSeq": 0,
-                })
-                session.subscribed = True
-                self.hydrate_settings(session)
-                self.reregister_provider(session)
         self.respond(rid, {})
+
+    def _resume_backend_session(self, session: Session) -> None:
+        acp_id = session.acp_id
+        cwd = session.cwd
+        # Fail closed before spawning when no Coding Plan is eligible.
+        overlay = self.overlay_for(session)
+        backend = self.ensure_backend()
+        workspace = {"workspacePath": cwd, "workspaceKey": cwd}
+        try:
+            # Faithful resume keeps the session's own persisted model.
+            backend.call("session/resume", {"sessionId": acp_id, "workspace": workspace})
+        except RuntimeError_:
+            # The overlay supplies the same Coding Plan provider in memory for
+            # a backend that refuses to resume without a provider catalog.
+            backend.call("session/resume", {
+                "sessionId": acp_id, "workspace": workspace, "runtimeModel": overlay,
+            })
+        session.backend_id = acp_id
+        with self.lock:
+            self.sessions[acp_id] = session
+            self.by_backend[acp_id] = session
+        backend.call("session/subscribe", {
+            "sessionId": acp_id,
+            "deliveryKind": "desktop-continuous",
+            "includeSnapshot": False,
+            "afterSeq": 0,
+        })
+        session.subscribed = True
+        self.hydrate_settings(session)
+        self.reregister_provider(session)
 
     def on_session_list(self, rid: Any, params: dict[str, Any]) -> None:
         backend = self.ensure_backend()

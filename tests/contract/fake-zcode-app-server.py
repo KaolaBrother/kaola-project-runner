@@ -27,6 +27,10 @@ Scenarios (argv ``--scenario``):
   batch        a tool.updated batch payload
   strict_model kept for compatibility; every scenario now rejects a model
                that the registered overlay did not list (no silent fallback)
+  echo_error   session/create fails and echoes the request params in error.data
+  resume_missing      session/resume fails 1404 (session unknown)
+  resume_needs_overlay session/resume fails without a runtimeModel overlay
+  read_fails   session/read fails after a successful resume
 """
 
 from __future__ import annotations
@@ -235,6 +239,11 @@ class FakeAppServer:
         params = msg.get("params") or {}
 
         if method == "session/create":
+            if self.scenario == "echo_error":
+                # A backend that echoes the offending request in its error.
+                emit({"id": rid, "error": {"code": -32602, "message": "invalid params",
+                                           "data": {"received": params}}})
+                return
             overlay = self.register_overlay(rid, params, method)
             if overlay is None:
                 return
@@ -278,6 +287,12 @@ class FakeAppServer:
             return
 
         if method == "session/resume":
+            if self.scenario == "resume_missing":
+                self.error(rid, 1404, f"session not found: {params.get('sessionId')}")
+                return
+            if self.scenario == "resume_needs_overlay" and params.get("runtimeModel") is None:
+                self.error(rid, -32000, MODEL_CONFIG_MISSING)
+                return
             # CLI 0.16.5 parity: a faithful resume (no overlay) succeeds even in
             # a fresh app-server; the persisted model is simply unavailable
             # until a provider overlay registers it (see session/send).
@@ -303,6 +318,9 @@ class FakeAppServer:
             session = self.sessions.get(session_id)
             if session is None:
                 self.error(rid, 1404, "session not found")
+                return
+            if self.scenario == "read_fails":
+                self.error(rid, -32000, "session/read failed (scenario)")
                 return
             self.result(rid, {
                 "projection": {"status": "idle"},

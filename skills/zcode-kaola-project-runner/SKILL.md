@@ -52,8 +52,8 @@ SESSION="zcode-kaola-<purpose>"
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares two per-run
-presets — `--tier default` (**Coding Plan first listed model (GLM-5.3 on the recording Mac)**: ``,
-) and `--tier upgrade` (**Coding Plan first listed model (GLM-5.3 on the recording Mac)**:
+presets — `--tier default` (**enabled Coding Plan, first listed model**: ``,
+) and `--tier upgrade` (**enabled Coding Plan, first listed model**:
 ``, ) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
