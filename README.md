@@ -149,13 +149,37 @@ A typical collaboration works like this:
 1. Install Runner for the controlling agent and
    [install Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow/blob/main/docs/installation.md)
    for the target runtime. Workflow must be available to the CLI doing the work.
-2. The controlling agent selects a target CLI and opens an owned session in the project repository.
-3. It sends the task and asks the CLI to start or resume with `workflow-next`, following that
-   runtime's installed Workflow instructions.
-4. The CLI claims the issue, records the Mission List, performs the work, and validates the result.
-   The controlling agent reads replies and work evidence, then sends follow-up instructions as needed.
-5. The agent supervises `kaola-workflow-finalize` and verifies the selected PR or merge/sync outcome,
-   archive, and sink. It stops the owned Runner session when further interaction is no longer needed.
+2. Inspect current Git and Workflow evidence, then start an owned session with `--repo` bound to
+   the consuming project's **canonical project root** (the main checkout, not a Workflow child
+   worktree).
+3. Send the task and ask that CLI's main conversation to start or resume with `workflow-next`,
+   following that runtime's installed Workflow instructions. The worker's Workflow then creates,
+   resumes, or recovers its own bundle, branch, Mission List, and child worktree.
+4. The CLI performs the work and validates the result. The controlling agent reads replies and
+   work evidence, then sends follow-up instructions as needed. Keep `kaola-workflow-finalize` in
+   the worker conversation; the outer agent verifies evidence before directing it.
+5. After acceptance, the agent supervises `kaola-workflow-finalize` and verifies the selected PR
+   or merge/sync outcome, archive, and sink. It stops the owned Runner session when further
+   interaction is no longer needed.
+
+Several exact Runner sessions may share one canonical project root while their Workflows own
+distinct child worktrees. Linked-worktree starts, outer-created bundles, and existing-run recovery
+are Agent decisions, not transport gates; PTY and ACP have the same authority.
+
+### Normal path
+
+Start Claude Code with `--repo /path/to/project` at the canonical project root. Ask that
+conversation to invoke `workflow-next` for issue #52. Workflow claims the issue and creates or
+resumes its chosen child worktree. The Runner session remains the root-started exact session.
+
+### Evidence-backed exception
+
+If live bundles already exist and an earlier session was started inside a child worktree, the
+controlling Agent may stop it and restart at the canonical project root, or continue there for
+review or recovery. Report the chosen Git root. The transport did not refuse the linked worktree.
+
+A session already running in a child worktree is advisory: preserve work, inspect state, then
+continue, stop/restart at root, or use another Workflow recovery path.
 
 This combination gives you:
 
@@ -175,9 +199,11 @@ exists for it.
 
 Example instruction to an agent with the Claude Code Runner Skill loaded:
 
-> Use Claude Code to work on issue #42 in this repository. If Kaola Workflow is available there,
-> follow its workflow-next instructions, inspect the implementation and validation evidence, and
-> supervise workflow finalization through PR delivery. Stop the owned session when finished.
+> Use Claude Code to work on issue #42 in this repository. Start the owned session at the
+> canonical project root. If Kaola Workflow is available there, follow its workflow-next
+> instructions so that runtime owns the child worktree, inspect the implementation and
+> validation evidence, and supervise workflow finalization through PR delivery. Stop the
+> owned session when finished.
 
 ## Install
 

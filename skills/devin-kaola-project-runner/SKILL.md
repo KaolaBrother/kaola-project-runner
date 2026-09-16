@@ -143,10 +143,17 @@ operation and reports the true result. These are suggestions, never gates:
 
 For project work, when Kaola Workflow is available to Devin CLI and fits the user's task,
 consider telling the user it is available and whether you plan to use it, then asking the CLI to
-start or resume with `workflow-next` using its installed native Workflow instructions. Existing
-carrier evidence can help; installation for another runtime alone does not establish availability
-here. The controlling Agent decides whether to adopt this recommendation, including for diagnosis
-or ordinary CLI tasks.
+start or resume with `workflow-next` using its installed native Workflow instructions. Ordinary
+Workflow-backed work: prefer `--repo` bound to the consuming project's canonical Git root, then ask
+this CLI to invoke its installed `workflow-next` so that runtime's Workflow creates or recovers the
+child worktree. This Skill only transports the exact session. Linked-worktree starts, outer-prepared
+bundles, and existing-run recovery are Agent decisions, not transport gates; PTY and ACP share that
+authority. Inspect Git and Workflow evidence first, report the chosen Git root, and allow several
+exact sessions at one canonical root with separate Workflow worktrees. A session already in a child
+worktree is advisory: preserve work, then continue, stop/restart at root, or use another Workflow
+recovery path. Existing carrier evidence can help; installation for another runtime alone does not
+establish availability here. The controlling Agent decides whether to adopt this recommendation,
+including for diagnosis or ordinary CLI tasks.
 
 If adopted, consider supervising `kaola-workflow-finalize` through the selected merge/sync or PR
 delivery, verifying the actual result and cleanup of this task's workspace, worktrees, and branches.

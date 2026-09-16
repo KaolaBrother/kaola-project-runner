@@ -82,7 +82,9 @@ After every transfer, observe and capture again:
 
 The Agent reads the real response and decides what happened. Enter or a successful transfer receipt is
 not semantic success. If the Agent chose Workflow work, inspect the applicable durable Workflow, Git,
-forge, validation, and cleanup evidence separately.
+forge, validation, and cleanup evidence separately. `--repo` is whichever Git top-level the Agent
+selected: ordinarily the consuming project's canonical Git root. A linked worktree is a valid Git
+top-level on both PTY and ACP and is not a transport refusal.
 
 ## Stop and capability-specific actions
 

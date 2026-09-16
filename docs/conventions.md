@@ -92,6 +92,15 @@ Normal observe/send/answer/key/stop paths must not stop the child, disable pane 
 or run the tokenized DECRQM compatibility fence. Legacy relays are reporting-only for mutation until
 the Agent explicitly chooses an exact-session restart.
 
+## Canonical project root and Workflow child worktrees
+
+Ordinary Workflow-backed work starts the worker at the consuming project's canonical project root
+and asks that runtime to invoke `workflow-next` in-session. The worker's Workflow owns the child
+worktree. Linked-worktree starts and existing-run recovery are Agent decisions, not transport
+gates; PTY and ACP share that authority. Do not add a `.kw/worktrees` refusal to adapters or
+runtime scripts. Change this guidance through `templates/orchestrator/` and `templates/SKILL.md.tmpl`,
+then `./scripts/render-skills.py --write`.
+
 ## Tests and live evidence
 
 Behavioral changes require baseline-failing acceptance. Offline tests use temporary repositories,
