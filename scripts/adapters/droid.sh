@@ -96,9 +96,14 @@ adapter_detect_tui() {
 adapter_activity_hint() {
   local capture="$1" tail_sample
   tail_sample="$(printf '%s\n' "$capture" | tail -n 16)"
-  if printf '%s\n' "$tail_sample" | grep -Eqi 'Waiting for response|Press Esc to interrupt|Working|Thinking|Thinking…|Responding|running tool|esc to interrupt'; then printf '%s\n' busy
+  # Live droid 0.220.0 TUI (verified 2026-09-17): every generation spinner row
+  # carries "(Press ESC to stop)" regardless of its verb, and the ready input
+  # row is the boxed composer "│ >" prompt; bare "❯/›/>" rows are selection
+  # dialogs, not the composer. Busy wins first, so the always-present composer
+  # row reports idle only once the spinner row is gone.
+  if printf '%s\n' "$tail_sample" | grep -Eqi 'Waiting for response|Press Esc to interrupt|esc to stop|Working|Thinking|Thinking…|Responding|running tool|esc to interrupt'; then printf '%s\n' busy
   elif printf '%s\n' "$tail_sample" | grep -Eq '^HUMAN_DECISION_REQUIRED[[:space:]]*$'; then printf '%s\n' waiting-human
-  elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|>)'; then printf '%s\n' idle
+  elif printf '%s\n' "$tail_sample" | grep -Eq '^[[:space:]]*(❯|›|>)|^│[[:space:]]*>'; then printf '%s\n' idle
   else printf '%s\n' unknown
   fi
 }
