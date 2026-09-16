@@ -37,3 +37,8 @@ python3 "$repo_root/tests/contract/test-issue-49-grok-bot-host.py"
 python3 "$repo_root/tests/contract/test-progressive-disclosure.py"
 python3 "$repo_root/tests/contract/test-issue-50-claude-acp-bridge.py"
 python3 "$repo_root/tests/contract/test-issue-50-runner-integration.py"
+# Acceptance line "git diff --check clean": tracked changes must carry no whitespace errors.
+if git -C "$repo_root" rev-parse --git-dir >/dev/null 2>&1; then
+  git -C "$repo_root" diff --check
+  git -C "$repo_root" diff --check --cached
+fi

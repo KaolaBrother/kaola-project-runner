@@ -15293,7 +15293,7 @@ var RequestError = class _RequestError extends Error {
 };
 
 // src/session-store.ts
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "fs";
 import { join as join2 } from "path";
 
 // src/config.ts
@@ -15564,7 +15564,9 @@ var SessionStore = class {
       if (!existsSync(this.storeDir)) {
         mkdirSync(this.storeDir, { recursive: true });
       }
-      writeFileSync(this.storeFile, JSON.stringify(data, null, 2));
+      const temp = `${this.storeFile}.${process.pid}.${Date.now()}.tmp`;
+      writeFileSync(temp, JSON.stringify(data, null, 2));
+      renameSync(temp, this.storeFile);
     } catch (err) {
       logger.error(
         `Failed to write persisted sessions: ${err instanceof Error ? err.message : String(err)}`

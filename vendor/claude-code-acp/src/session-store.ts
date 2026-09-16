@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import type { McpServerConfig } from "./claude-runner.js";
 import { loadConfig } from "./config.js";
@@ -288,7 +288,11 @@ export class SessionStore {
       if (!existsSync(this.storeDir)) {
         mkdirSync(this.storeDir, { recursive: true });
       }
-      writeFileSync(this.storeFile, JSON.stringify(data, null, 2));
+      // Kaola fork: write to a sibling temp file and rename so a concurrent
+      // bridge (one per Runner session) never reads a torn record.
+      const temp = `${this.storeFile}.${process.pid}.${Date.now()}.tmp`;
+      writeFileSync(temp, JSON.stringify(data, null, 2));
+      renameSync(temp, this.storeFile);
     } catch (err) {
       logger.error(
         `Failed to write persisted sessions: ${err instanceof Error ? err.message : String(err)}`

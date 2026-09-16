@@ -1,0 +1,3 @@
+# The rendered copy of the vendored Claude Code ACP bridge bundle is committed byte-for-byte
+# as built (see vendor/claude-code-acp/.gitattributes); whitespace checks do not apply to it.
+skills/*/scripts/vendor/claude-code-acp/dist/index.js -whitespace

@@ -75,6 +75,11 @@ def resolve_agent_command(command: str) -> tuple[str, list[dict[str, Any]]]:
         relative = word[len(SKILL_SCRIPTS_TOKEN):]
         fact: dict[str, Any] = {"token": SKILL_SCRIPTS_TOKEN, "relative": relative,
                                 "path": None, "layout": None, "present": False}
+        parts = Path(relative).parts
+        if not relative or Path(relative).is_absolute() or ".." in parts:
+            # The token names a file inside the Skill; it never escapes it.
+            facts.append(fact)
+            continue
         for layout, base in (("skill", SCRIPT_DIR), ("checkout", SCRIPT_DIR.parent)):
             candidate = base / relative
             if candidate.is_file():

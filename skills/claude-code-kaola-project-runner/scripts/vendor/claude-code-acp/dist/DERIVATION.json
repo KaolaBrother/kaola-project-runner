@@ -9,15 +9,15 @@
     "src/config.ts": "18ccfb00af87f9302d53eea9840b0c97f72aba6b648157452c128b384e031654",
     "src/index.ts": "98d0f733537066b74e7cb265a54f35d45644a43941879fe4e5adbb7956baf654",
     "src/logger.ts": "3347c28e1066988a5c9aac0deac2bf0d7cbaa49e0eb807b0bdc3b34c2601e726",
-    "src/session-store.ts": "3f3c81805f4d911361c953c57b70d0a3949bbb13c743a6c165b29182e36f7628",
+    "src/session-store.ts": "e6a9a242a2369dd4b89bcd2901fd773f21ff753d0a384b92ab912432cf8c2155",
     "src/validation.ts": "ebdeac56090f38a71a600601ee34dab9c16ecedb05e63a2fba159d9fd078fe0e",
     "tsconfig.json": "b6e707efcf77a4a999b6250bf06d88cbfe80caecafdfda01bf83339a6d619766",
     "tsup.config.ts": "0d1a39464cbc93b5e87fb48b3c6bad2c39e7eee06896d8cebc0dff890e80327a"
   },
   "output": {
     "dist/index.js": {
-      "bytes": 618494,
-      "sha256": "bd33259eb34bf54b8b5ca4528d846e406a40e3d3d379dbb66e2147263e59b070"
+      "bytes": 618609,
+      "sha256": "0603ec5f10d6e5bc4b2fa4647cc8d5437609ab874eb08ca164c9dd9d36441675"
     }
   },
   "toolchain": {

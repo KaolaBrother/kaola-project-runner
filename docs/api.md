@@ -63,7 +63,12 @@ PTY does (`CLAUDE_BIN`, else the first PATH match) and passes it to the bridge a
 bridge fail closed (`session/new`, `session/resume`, and `session/prompt` return JSON-RPC
 `-32603`) rather than search PATH. The renderer copies `dist/index.js`, `dist/DERIVATION.json`,
 `LICENSE`, and `UPSTREAM.md` from `vendor/claude-code-acp/` into the Claude Code worker only;
-no other worker, the orchestrator, or a host bundle receives them.
+no other worker, the orchestrator, or a host bundle receives them. The bridge persists its ACP
+session → native Claude session id map (ids, cwd, timestamps; no prompts, no credentials) in
+`~/.claude-code-acp/sessions.json`, or under `CLAUDE_ACP_STATE_DIR` when set; the Runner
+inherits the operator's value and sets none itself, so `start --continue` sees every Runner
+session on the machine. Per-turn temp files go under `CLAUDE_ACP_RUNTIME_DIR` (default the
+system temp dir) and are removed per turn and on stop.
 
 ## Installer
 
