@@ -30,7 +30,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-Launch Claude from the canonical repository root with --permission-mode bypassPermissions (default). ACP start sets mode=bypassPermissions after a working initialize; the pinned wrapper remains probe-eof.
+Launch Claude from the canonical repository root with --permission-mode bypassPermissions (default). ACP runs the vendored claude-code-acp bridge (node, Skill-relative dist) that drives the exact claude binary as one subscription subprocess per turn; ACP start sets mode=bypassPermissions after a working initialize.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

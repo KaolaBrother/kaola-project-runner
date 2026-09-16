@@ -16,7 +16,7 @@ PLATFORMS = {
     "cursor-cli": ("acp", "cursor-agent --yolo acp"),
     "devin": ("acp", "devin acp"),
     "opencode": ("acp", "opencode acp"),
-    "claude-code": ("pty", "npx --yes @agentclientprotocol/claude-agent-acp@"),
+    "claude-code": ("pty", "node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js"),
     "codex": (
         "acp",
         "npx --yes --package @openai/codex@0.153.4 "

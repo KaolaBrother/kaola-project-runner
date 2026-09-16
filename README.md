@@ -37,7 +37,17 @@ The main orchestrator Skill is generated separately and is not an eighth platfor
 
 ACP returns structured replies and events. PTY preserves the native terminal UI, including
 terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
-capabilities vary by platform. Claude's ACP wrapper remains experimental; PTY is its default.
+capabilities vary by platform. Claude Code's ACP agent is a vendored, pinned fork of
+[harukitosa/claude-code-acp](https://github.com/harukitosa/claude-code-acp) (MIT,
+`vendor/claude-code-acp/`, upstream commit `6c20f2802e390c80b0542247c6b9738e11efdc11`) shipped
+inside the Claude Code worker Skill and run from there with the local `node`: it drives the exact
+`claude` binary (`CLAUDE_BIN`, else the first PATH match, resolved by the Runner and passed as an
+absolute path) as one `claude -p` subprocess per turn under the user's claude.ai subscription and
+native Settings. The Runner never references the npm registry package of the same name, never
+runs `npx`, and never reads, copies, or logs Settings, proxy values, or credentials; the bridge
+drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` from the child environment. PTY remains Claude
+Code's default and the explicit fallback (`--transport pty`) until the live subscription gate in
+Issue #50 passes; login itself always stays a PTY act.
 
 ### Main orchestrator Skill
 

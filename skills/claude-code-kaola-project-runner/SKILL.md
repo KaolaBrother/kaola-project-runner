@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport facts
 
-Default transport: **pty**. The ACP command is `npx --yes @agentclientprotocol/claude-agent-acp@0.18.0`; its known quirks are `pinned wrapper fetched but exited before initialize (probe-eof); PTY login requirement remains`, and login requires a PTY: `true`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **pty**. The ACP command is `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`; its known quirks are `vendored pinned fork of harukitosa/claude-code-acp (MIT), never the npm registry package or npx; one claude -p subprocess per turn, later turns pass --resume; the bridge drops ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN so the subscription login and native Settings resolve inside claude; login itself stays a PTY act`, and login requires a PTY: `true`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 

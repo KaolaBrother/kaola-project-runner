@@ -537,7 +537,15 @@ macOS：不依赖 `/proc`；进程枚举用 `ps -o pid,pgid`（现有 `PS_BIN` �
 
 ### v0.3 决定（PoC 后，用户确认 2026-09-11）
 
-1. **默认通道**：原生 ACP 五平台（Grok / Kimi / Cursor / Devin / OpenCode）`default_transport: acp`；Claude Code `pty`。依据：12× token 实测；五家 ACP 入口均为 CLI 原生子命令，Claude 依赖第三方 npx wrapper 且无账号可验。
+1. **默认通道**：原生 ACP 五平台（Grok / Kimi / Cursor / Devin / OpenCode）`default_transport: acp`；Claude Code `pty`。依据：12× token 实测；五家 ACP 入口均为 CLI 原生子命令，Claude 依赖第三方 npx wrapper 且无账号可验。（v0.4 更新：§12.5 与本条的 Claude Code 依据已被 Issue #50 取代，见下。）
+
+### v0.4 决定（Issue #50，2026-09-16）
+
+1. **Claude Code ACP agent**：不再使用 `@agentclientprotocol/claude-agent-acp` npx wrapper（§12.5 作废）。改为 vendored、pinned 的 `harukitosa/claude-code-acp` fork（MIT，`vendor/claude-code-acp/`，上游 commit `6c20f2802e390c80b0542247c6b9738e11efdc11`），由渲染器仅复制进 Claude Code worker Skill（`scripts/vendor/claude-code-acp/`），manifest `acp_command` 为 Skill 相对路径 `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`，由 `kaola-acp.py` 解析为绝对路径后再 spawn。
+2. **供应链规则**：npm registry 上同名的 `claude-code-acp` 是另一个旧项目；manifest、文档与脚本永不引用该 registry 名或 `npx … latest`；运行时只需本机 `node` 与本机 `claude`，无安装期下载。
+3. **订阅与 Settings 边界**：bridge 以每轮一个 `claude -p … --output-format stream-json` 子进程驱动精确的 `claude` 二进制（Runner 解析 `CLAUDE_BIN`/PATH 后以 `CLAUDE_ACP_CLAUDE_BIN` 传入绝对路径，bridge 不做 PATH 回退），剥离 `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`，其余环境原样继承，使 `~/.claude/settings.json`（含仅在 Settings 中配置的代理）、项目 Settings、CLAUDE.md、MCP 与登录态在 `claude` 内部原生解析；Runner 与 bridge 均不读取、复制、写入或记录 Settings 与凭据。
+4. **模型/effort/mode/Fast**：bridge 提供 per-session 配置项 `model`/`effort`/`mode`/`fast`，映射为每个子进程的 `--model`/`--effort`/`--permission-mode`/`--settings '{"fastMode": …}'`（首轮与每个 `--resume` 轮相同）；Runner 的 `start` 仍按 model → effort → Fast → mode 顺序应用。`--continue`/`--resume <claude session id>` 走 `session/list`/`session/resume`；`cancel` 终止子进程组。
+5. **默认通道切换**：`platforms/claude-code.yaml` 仅在 Issue #50 的本机订阅 live UAT 通过后由 `pty` 切为 `acp`；`--transport pty` 保留为显式回退与登录通道。
 2. **`--continue`**：不再依赖 `session/list`；读取同一身份记录的上一个 `acp_session_id` 走 `session/load`（或 `session/resume`）。
 3. **permission**：`permit` / `pending_permissions` 机制按 v0.2 保留，生产验收改为条件项（§10.3）；不为"未触发"引入新 gate。
 4. **socket 路径**：短路径真身 + 记录目录 symlink（§3.2）。

@@ -48,6 +48,23 @@ is sent literally and a rejection is reported as a limitation. Model-selection f
 `fast_support`/`fast_summary`. They render as `DEFAULT_TRANSPORT`,
 `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY` template variables.
 
+An `acp_command` word may start with `$SKILL_DIR/scripts/` to name a file shipped inside the
+Skill (Claude Code: `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`).
+`kaola-acp.py` resolves that prefix to an absolute path before anything is spawned — against its
+own `scripts/` directory in an installed Skill, else against the checkout layout whose `vendor/`
+sits one level up — and reports the result as `bridge` (`relative`, `path`, `layout`
+`skill|checkout`, `present`, `sha256`, `upstream_pin` from `acp_wrapper_pin`,
+`verified_versions`) on `preflight` and `start`. A token that resolves to no file is
+`error.code` `acp-bridge-missing` and nothing is spawned; there is no PATH lookup and no
+download. For the Claude Code platform the Runner also resolves the exact runtime binary the way
+PTY does (`CLAUDE_BIN`, else the first PATH match) and passes it to the bridge as
+`CLAUDE_ACP_CLAUDE_BIN`, reporting it as `runtime_binary` (`env`, `path`, `absolute`, `present`,
+`passed_as`, and on `preflight` the `--version` line); a non-absolute or missing value makes the
+bridge fail closed (`session/new`, `session/resume`, and `session/prompt` return JSON-RPC
+`-32603`) rather than search PATH. The renderer copies `dist/index.js`, `dist/DERIVATION.json`,
+`LICENSE`, and `UPSTREAM.md` from `vendor/claude-code-acp/` into the Claude Code worker only;
+no other worker, the orchestrator, or a host bundle receives them.
+
 ## Installer
 
 ```text

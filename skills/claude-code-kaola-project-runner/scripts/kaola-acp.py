@@ -15,6 +15,7 @@ import json
 import os
 import re
 import secrets
+import shlex
 import shutil
 import signal
 import socket
@@ -43,6 +44,103 @@ ACP_SKIP_MODE = {
     "devin": "bypass",
     "kimi-cli": "yolo",
 }
+
+# A manifest ``acp_command`` may name files shipped inside the Skill with this
+# prefix (Issue #50: the vendored Claude Code bridge). It resolves to an
+# absolute path before anything is spawned: ``scripts/`` of the installed Skill
+# (``SCRIPT_DIR``) first, then the checkout layout whose ``vendor/`` sits one
+# level up -- the same two-layout probe ``load_manifest`` uses. A token that
+# resolves nowhere is an error, never a PATH lookup.
+SKILL_SCRIPTS_TOKEN = "$SKILL_DIR/scripts/"
+# Platforms whose ACP agent is a vendored bridge spawning the exact runtime
+# binary: the Runner-resolved path of ``binary_env``/``binary_name`` travels to
+# the bridge in this variable, so the bridge never looks the binary up itself.
+BRIDGE_BINARY_ENV = {
+    "claude-code": "CLAUDE_ACP_CLAUDE_BIN",
+}
+
+
+def resolve_agent_command(command: str) -> tuple[str, list[dict[str, Any]]]:
+    """Expand ``$SKILL_DIR/scripts/<rel>`` argv words to absolute paths.
+
+    Returns the resolved command plus one fact per token: ``relative``, the
+    absolute ``path`` (or ``None``), ``layout`` (``skill`` / ``checkout``),
+    ``present``, and ``sha256`` of the resolved file.
+    """
+    facts: list[dict[str, Any]] = []
+    words = shlex.split(command)
+    for index, word in enumerate(words):
+        if not word.startswith(SKILL_SCRIPTS_TOKEN):
+            continue
+        relative = word[len(SKILL_SCRIPTS_TOKEN):]
+        fact: dict[str, Any] = {"token": SKILL_SCRIPTS_TOKEN, "relative": relative,
+                                "path": None, "layout": None, "present": False}
+        for layout, base in (("skill", SCRIPT_DIR), ("checkout", SCRIPT_DIR.parent)):
+            candidate = base / relative
+            if candidate.is_file():
+                fact.update({"path": str(candidate), "layout": layout, "present": True,
+                             "sha256": hashlib.sha256(candidate.read_bytes()).hexdigest()})
+                words[index] = str(candidate)
+                break
+        facts.append(fact)
+    # A command without the token is passed through untouched.
+    return (shlex.join(words) if facts else command), facts
+
+
+def runtime_binary(manifest: dict[str, str]) -> str:
+    """The exact runtime binary the Runner would launch: ``binary_env`` wins,
+    else the first PATH match, else the bare name (a fact, not a launch)."""
+    return (
+        os.environ.get(manifest.get("binary_env") or "")
+        or shutil.which(manifest.get("binary_name") or "")
+        or manifest.get("binary_name")
+        or ""
+    )
+
+
+def agent_environment(args: argparse.Namespace) -> dict[str, str]:
+    """Environment for the holder and its agent process: inherited whole, plus
+    the exact binary path for a vendored bridge. A non-absolute value is passed
+    as-is so the bridge refuses it (fail closed) instead of searching PATH."""
+    env = dict(os.environ)
+    bridge_env = BRIDGE_BINARY_ENV.get(args.platform)
+    if bridge_env:
+        env[bridge_env] = runtime_binary(args.manifest)
+    return env
+
+
+def bridge_facts(args: argparse.Namespace, with_version: bool = False) -> dict[str, Any]:
+    """Transport facts for a vendored bridge platform: the resolved bridge file
+    and the exact runtime binary. Never a gate; never an environment value."""
+    facts: dict[str, Any] = {}
+    tokens = getattr(args, "agent_command_facts", None) or []
+    if tokens:
+        bridge = dict(tokens[0])
+        bridge.pop("token", None)
+        bridge["upstream_pin"] = args.manifest.get("acp_wrapper_pin") or None
+        bridge["verified_versions"] = args.manifest.get("acp_verified_versions") or None
+        facts["bridge"] = bridge
+    bridge_env = BRIDGE_BINARY_ENV.get(args.platform)
+    if bridge_env:
+        path = runtime_binary(args.manifest)
+        binary: dict[str, Any] = {
+            "env": args.manifest.get("binary_env") or None,
+            "path": path or None,
+            "absolute": bool(path) and os.path.isabs(path),
+            "present": bool(path) and os.path.isabs(path) and os.path.isfile(path)
+            and os.access(path, os.X_OK),
+            "passed_as": bridge_env,
+        }
+        if with_version and binary["present"]:
+            try:
+                out = subprocess.run([path, "--version"], capture_output=True, text=True,
+                                     timeout=15)
+                binary["version"] = (out.stdout or out.stderr).strip().splitlines()[0] \
+                    if (out.stdout or out.stderr).strip() else None
+            except (OSError, subprocess.TimeoutExpired):
+                binary["version"] = None
+        facts["runtime_binary"] = binary
+    return facts
 
 
 def die(message: str, code: int = 2) -> None:
@@ -726,12 +824,7 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         requested = manifest.get(f"{prefix}_model_name") or ""
         candidate = manifest.get(f"{prefix}_model_id") or ""
         effort = args.effort or manifest.get(f"{prefix}_model_effort") or ""
-    runtime_bin = (
-        os.environ.get(manifest.get("binary_env") or "")
-        or shutil.which(manifest.get("binary_name") or "")
-        or manifest.get("binary_name")
-        or ""
-    )
+    runtime_bin = runtime_binary(manifest)
     fast_support = manifest.get("fast_support") or ""
     mechanism = (
         "model-suffix" if "model-variant" in fast_support
@@ -901,6 +994,11 @@ def fast_report(args: argparse.Namespace, policy: dict[str, Any],
 
 def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt = base_receipt(args, repo)
+    receipt.update(bridge_facts(args, with_version=True))
+    if any(not fact["present"] for fact in getattr(args, "agent_command_facts", [])):
+        receipt["error"] = {"code": "acp-bridge-missing",
+                            "message": "the Skill-relative ACP command did not resolve to a file"}
+        return receipt
     probe_argv = [
         sys.executable, str(HOLDER), "--probe", "--repo", repo,
         "--platform", args.platform, "--command", args.agent_command,
@@ -910,7 +1008,7 @@ def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         probe_argv += ["--init-meta", json.dumps(init_meta)]
     result = subprocess.run(
         probe_argv,
-        capture_output=True, text=True, timeout=60,
+        capture_output=True, text=True, timeout=60, env=agent_environment(args),
     )
     try:
         probe = json.loads(result.stdout)
@@ -938,6 +1036,13 @@ def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
 
 def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt = base_receipt(args, repo)
+    receipt.update(bridge_facts(args))
+    if any(not fact["present"] for fact in getattr(args, "agent_command_facts", [])):
+        receipt["error"] = {"code": "acp-bridge-missing",
+                            "message": "the Skill-relative ACP command did not resolve to a file"}
+        receipt["mutation_status"] = "not_started"
+        receipt["mutation_performed"] = False
+        return receipt
     directory = record_dir(args, repo)
     tmux = subprocess.run(
         ["tmux", "has-session", "-t", f"={args.session}"], capture_output=True
@@ -981,7 +1086,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     with open(log_path, "ab") as log:
         proc = subprocess.Popen(
             holder_argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-            start_new_session=True,
+            start_new_session=True, env=agent_environment(args),
         )
     sock = sock_path(args, repo)
     deadline = time.monotonic() + START_WAIT
@@ -1243,6 +1348,7 @@ def main() -> int:
     )
     if not args.agent_command:
         die(f"no ACP command for platform {args.platform} (use --command)")
+    args.agent_command, args.agent_command_facts = resolve_agent_command(args.agent_command)
 
     directory = record_dir(args, repo) if args.session else None
 

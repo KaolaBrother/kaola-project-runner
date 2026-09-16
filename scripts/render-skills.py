@@ -20,7 +20,12 @@ PLATFORMS = ROOT / "platforms"
 TEMPLATES = ROOT / "templates"
 SKILLS = ROOT / "skills"
 HOSTS = ROOT / "hosts"
+VENDOR = ROOT / "vendor"
 MARKER = ".generated-by-kaola-project-runner"
+# The one vendored ACP bridge (Issue #50): shipped only inside this platform's worker Skill.
+VENDORED_BRIDGE_PLATFORM = "claude-code"
+VENDORED_BRIDGE = "claude-code-acp"
+VENDORED_BRIDGE_FILES = ("dist/index.js", "dist/DERIVATION.json", "LICENSE", "UPSTREAM.md")
 ORCHESTRATOR_NAME = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
 GROK_BOT_HOST = "grok-bot"  # a host packaging adapter (see below), never a platform
@@ -239,6 +244,18 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     result["scripts/runtime-tmux.sh"] = wrapper.encode()
     if manifest["id"] == "grok":
         result["scripts/grok-tmux.sh"] = wrapper.encode()
+    if manifest["id"] == VENDORED_BRIDGE_PLATFORM:
+        # Issue #50: the Claude Code worker alone carries the vendored, pinned
+        # claude-code-acp bridge as its ACP agent -- the committed single-file
+        # bundle, its derivation record, and the upstream attribution. The
+        # manifest's Skill-relative acp_command resolves to it inside the
+        # installed Skill; no other worker, the orchestrator, or a host bundle
+        # receives these bytes.
+        for name in VENDORED_BRIDGE_FILES:
+            source = VENDOR / VENDORED_BRIDGE / name
+            if not source.is_file():
+                raise ValueError(f"required vendored bridge file missing: {source}")
+            result[f"scripts/vendor/{VENDORED_BRIDGE}/{name}"] = source.read_bytes()
     return result
 
 

@@ -39,6 +39,19 @@ def emit(obj):
 
 def main():
     argv = sys.argv[1:]
+    # Read-only probes the Runner issues before any turn (preflight version
+    # fact, model-policy alias catalog): answer like the CLI and record nothing.
+    if argv == ["--version"]:
+        print("9.9.9 (fake Claude Code)")
+        return 0
+    if "--help" in argv:
+        print("Usage: claude [options] [command] [prompt]\n\nOptions:\n"
+              "  --model <model>  Model alias ('opus', 'sonnet', 'fable') or full name\n"
+              "  --effort <effort>  low, medium, high, xhigh, or max\n"
+              "  --permission-mode <mode>\n  --settings <file-or-json>\n"
+              "  -r, --resume [sessionId]\n  -c, --continue\n  -p, --print\n"
+              "  --output-format <format>\n  --verbose")
+        return 0
     prompt = option(argv, "-p") or ""
     mode = os.environ.get("FAKE_CLAUDE_MODE", "echo")
     for candidate in MODES:

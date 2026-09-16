@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **Claude Code ACP through a vendored, pinned bridge** (Issue #50, Missions 1–2; default
+  transport unchanged at `pty` until the live subscription gate passes). `vendor/claude-code-acp/`
+  vendors `harukitosa/claude-code-acp` at commit `6c20f2802e390c80b0542247c6b9738e11efdc11`
+  (MIT, `LICENSE` verbatim, `UPSTREAM.md` with the complete modification list and a hashed
+  upstream inventory) with a committed single-file `dist/index.js` bundle whose derivation
+  `kaola-dist.py --check` re-verifies offline. Fork changes: an exact absolute Claude binary
+  (`CLAUDE_ACP_CLAUDE_BIN`/`CLAUDE_BIN`, never PATH), per-session `mode`/`model`/`effort`/`fast`
+  options mapped onto every `claude -p` subprocess, native `session/list`/`session/resume`,
+  process-group cancel and shutdown, credential stripping with everything else inherited, masked
+  logs, and per-turn temp cleanup. The Claude Code manifest now runs
+  `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`: `kaola-acp.py` resolves the
+  `$SKILL_DIR/scripts/` prefix to an absolute path (installed Skill, else checkout layout;
+  `acp-bridge-missing` when neither exists), passes the Runner-resolved exact `claude` path to the
+  bridge, and reports `bridge`/`runtime_binary` facts on `preflight`/`start`; the renderer ships
+  the bundle, its derivation record, `LICENSE`, and `UPSTREAM.md` inside the Claude Code worker
+  only. Two offline harnesses (`tests/contract/test-issue-50-claude-acp-bridge.py`,
+  `tests/contract/test-issue-50-runner-integration.py`) drive the bridge and the real Runner
+  entry points against `tests/contract/fake-claude.py` with no network and no account. The npm
+  registry package of the same name and `npx` are never referenced; PTY stays the explicit
+  fallback and the login channel.
 - **Pre-UAT bounding correction** (Issue #49 final delta review of R2/P2; Mission 10; fresh
   content commit R3 and pin commit P3). PTY `kaola-observation.py bound_observation` is now
   idempotent and monotone: the status/start path bounds twice (`build`, then `status-view`), and

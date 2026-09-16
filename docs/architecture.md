@@ -15,6 +15,8 @@ Host Agent
         -> communication-only worker Agent Skill
             -> manifest-selected transport
                 -> ACP holder + structured protocol agent
+                   (Claude Code: the vendored claude-code-acp bridge shipped in the Skill,
+                    one exact `claude -p` subprocess per turn under the user's subscription)
                 OR
                 -> fixed platform adapter
                     -> exact owned tmux pane leader: managed relay

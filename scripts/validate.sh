@@ -36,3 +36,4 @@ python3 "$repo_root/scripts/kaola-grok-bot-verify.py" "$repo_root/hosts/grok-bot
 python3 "$repo_root/tests/contract/test-issue-49-grok-bot-host.py"
 python3 "$repo_root/tests/contract/test-progressive-disclosure.py"
 python3 "$repo_root/tests/contract/test-issue-50-claude-acp-bridge.py"
+python3 "$repo_root/tests/contract/test-issue-50-runner-integration.py"

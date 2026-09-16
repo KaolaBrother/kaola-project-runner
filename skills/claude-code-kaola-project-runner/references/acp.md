@@ -1,6 +1,6 @@
 # Claude Code ACP transport
 
-Command: `npx --yes @agentclientprotocol/claude-agent-acp@0.18.0`. Login requires a PTY: `true`. Platform quirks: pinned wrapper fetched but exited before initialize (probe-eof); PTY login requirement remains.
+Command: `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`. Login requires a PTY: `true`. Platform quirks: vendored pinned fork of harukitosa/claude-code-acp (MIT), never the npm registry package or npx; one claude -p subprocess per turn, later turns pass --resume; the bridge drops ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN so the subscription login and native Settings resolve inside claude; login itself stays a PTY act.
 
 ## Command surface
 
@@ -18,7 +18,7 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 
 `start` resolves the same tier/model/effort/Fast selection as PTY and applies it through the
 agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
-``/``/`` when non-empty.
+`model`/`effort`/`fast` when non-empty.
 A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
 during `initialize`): agents that negotiate a parameterized model picker advertise separate
 `model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead
