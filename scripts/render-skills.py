@@ -26,6 +26,9 @@ MARKER = ".generated-by-kaola-project-runner"
 VENDORED_BRIDGE_PLATFORM = "claude-code"
 VENDORED_BRIDGE = "claude-code-acp"
 VENDORED_BRIDGE_FILES = ("dist/index.js", "dist/DERIVATION.json", "LICENSE", "UPSTREAM.md")
+# Issue #51: Runner-owned ZCode ACP translator, shipped only inside the ZCode worker.
+ZCODE_PLATFORM = "zcode"
+ZCODE_ADAPTER = "kaola-zcode-acp.py"
 ORCHESTRATOR_NAME = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
 GROK_BOT_HOST = "grok-bot"  # a host packaging adapter (see below), never a platform
@@ -256,6 +259,11 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
             if not source.is_file():
                 raise ValueError(f"required vendored bridge file missing: {source}")
             result[f"scripts/vendor/{VENDORED_BRIDGE}/{name}"] = source.read_bytes()
+    if manifest["id"] == ZCODE_PLATFORM:
+        source = shared_root / ZCODE_ADAPTER
+        if not source.is_file():
+            raise ValueError(f"required ZCode ACP adapter missing: {source}")
+        result[f"scripts/{ZCODE_ADAPTER}"] = source.read_bytes()
     return result
 
 
@@ -300,7 +308,7 @@ def write_bundle(parent: Path, target: Path, expected: dict[str, bytes], kind: s
             destination = temp / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
-            if destination.suffix == ".sh" or destination.name == "kaola-tmux.sh":
+            if destination.suffix == ".sh" or destination.name in {"kaola-tmux.sh", ZCODE_ADAPTER}:
                 destination.chmod(0o755)
         if target.exists():
             shutil.rmtree(target)
@@ -324,7 +332,7 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
 # Host adapter: grok-bot (packaging adapter, not a CLI transport platform)
 #
 # One canonical Skill system exists: the orchestrator template, the worker
-# template, the seven platform manifests, and their canonical references. A
+# template, the eight platform manifests, and their canonical references. A
 # host adapter only re-packages that system for one host. Grok Bot receives
 # exactly ONE thin account/cloud Skill -- the bridge -- rendered from
 # templates/grok-bot/ alone: it names the repository, the accepted pinned
@@ -688,8 +696,13 @@ def main() -> int:
     args = parser.parse_args()
 
     manifests = [parse_manifest(path) for path in sorted(PLATFORMS.glob("*.yaml"))]
-    if [m["id"] for m in manifests] != ["claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode"]:
-        raise ValueError("platform inventory must be exactly claude-code,codex,cursor-cli,devin,grok,kimi-cli,opencode")
+    expected_ids = [
+        "claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode", "zcode",
+    ]
+    if [m["id"] for m in manifests] != expected_ids:
+        raise ValueError(
+            "platform inventory must be exactly claude-code,codex,cursor-cli,devin,grok,kimi-cli,opencode,zcode"
+        )
 
     findings: list[str] = []
     expected_names = {m["skill_name"] for m in manifests} | {ORCHESTRATOR_NAME}

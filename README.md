@@ -2,8 +2,8 @@
 
 **Let one agent work through another agent's CLI.**
 
-Kaola Project Runner provides seven self-contained **worker** Agent Skills for **Claude Code,
-Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, and OpenCode**, plus one generated **main
+Kaola Project Runner provides eight self-contained **worker** Agent Skills for **Claude Code,
+Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, and ZCode**, plus one generated **main
 orchestrator** Skill (`kaola-project-runner`, display name **Project Runner**). A controlling
 agent can start a session in a Git repository, send instructions, read replies and runtime
 evidence, and stop that exact owned session. Communication uses structured ACP (Agent Client
@@ -11,7 +11,7 @@ Protocol) or a tmux terminal.
 
 Use a worker Skill to delegate implementation, request a second review, or continue work in
 another runtime. Use the main Skill when the host Agent should supervise explicitly authorized
-CLI workers through those seven transport Skills. Pair either with
+CLI workers through those eight transport Skills. Pair either with
 [Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow) to give that work a recoverable
 path from issue to verified delivery.
 
@@ -23,7 +23,7 @@ For example, Claude Code can load the Codex Runner Skill to work through Codex C
 ### Target CLIs
 
 Each target has its own generated **worker** Skill, platform manifest, and launch adapter.
-The main orchestrator Skill is generated separately and is not an eighth platform.
+The main orchestrator Skill is generated separately and is not a ninth platform.
 
 | Target runtime | Skill | CLI executable | Default transport |
 |---|---|---|---|
@@ -34,6 +34,7 @@ The main orchestrator Skill is generated separately and is not an eighth platfor
 | Grok CLI | `grok-kaola-project-runner` | `grok` | ACP |
 | Kimi CLI | `kimi-cli-kaola-project-runner` | `kimi` | ACP |
 | OpenCode | `opencode-kaola-project-runner` | `opencode` | ACP |
+| ZCode | `zcode-kaola-project-runner` | explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` | PTY |
 
 ACP returns structured replies and events. PTY preserves the native terminal UI, including
 terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
@@ -52,12 +53,19 @@ resume, zero residue, Settings untouched); `--transport pty` remains the explici
 login itself always stays a PTY act. The bridge keeps its own map of ACP sessions to native
 Claude session ids in `~/.claude-code-acp/sessions.json` (override with `CLAUDE_ACP_STATE_DIR`);
 that file is what `start --continue` reads, it holds ids and cwd paths only, and rollback may
-delete it.
+delete it. ZCode's ACP agent is the Runner-owned translator `scripts/kaola-zcode-acp.py`,
+shipped only inside the ZCode worker Skill and resolved from `$SKILL_DIR/scripts/`. It talks
+ACP to the Runner and the installed ZCode `app-server --stdio` protocol to an explicit
+absolute `KAOLA_ZCODE_ENTRY` plus `KAOLA_ZCODE_NODE` (never PATH, never npm). Native Coding
+Plan login stays inside ZCode; the adapter's child environment is an allowlist, so
+`ANTHROPIC_API_KEY` and other billing levers are not forwarded. Default transport stays PTY
+until the live subscription gate of Issue #51 passes; `--transport acp` is already available,
+and login itself always stays a PTY act.
 
 ### Main orchestrator Skill
 
 `kaola-project-runner` (display name Project Runner) is a control-plane Skill for a host Agent
-that already has explicit CLI authorization. It recovers live work, dispatches through the seven
+that already has explicit CLI authorization. It recovers live work, dispatches through the eight
 worker Skills, reviews evidence before finalize, and keeps close-out ownership after a session
 stops. Prefer the selected authorized Workflow sync/merge when a PR is not required; a PR
 is not opened merely for handoff when that sink is suitable. If PRs exist, advance actionable
@@ -83,7 +91,7 @@ checkout. The bridge carries no policy, transport, reference, path, runtime copy
 credential; a release changes only its accepted-revision line, and an accepted content/pin
 pair is never rebased or squashed. Nothing on one target reaches
 the other, and the cloud never installs or updates the Mac. Grok Bot is a packaging adapter
-inside the renderer, not a transport platform; still seven platforms, and `--platform grok`
+inside the renderer, not a transport platform; still eight worker platforms, and `--platform grok`
 remains the Grok CLI worker. Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
 automated account-Skill creation, so one native skill write is the only account operation and
 the owner's read-only Local Computer UAT is the live boundary — see
@@ -152,7 +160,7 @@ This combination gives you:
 - **Verifiable handoffs:** replies show what the CLI says; repository changes, validation evidence,
   and forge state establish what it delivered. A delivered PR is distinct from a merged change.
 
-All seven worker Skills include this optional Workflow guidance. Starting a worker Skill alone does
+All eight worker Skills include this optional Workflow guidance. Starting a worker Skill alone does
 not install Workflow, claim an issue, send `workflow-next`, or create a heartbeat. The main
 orchestrator Skill may register a host heartbeat after an authorized CLI allowlist exists. Runtime
 coverage is also independent: Workflow's support for a runtime does not imply a Runner adapter
@@ -177,7 +185,7 @@ cd kaola-project-runner
 ./scripts/install-local.sh
 ```
 
-The default installs all seven worker Skills plus the main orchestrator Skill into
+The default installs all eight worker Skills plus the main orchestrator Skill into
 `${CODEX_HOME:-$HOME/.codex}/skills` as standalone copies. Use `--method link` to symlink
 Skills to this checkout for Project Runner development. Select another host, a worker
 subset, or skip the orchestrator:

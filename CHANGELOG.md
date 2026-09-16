@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **ZCode as the eighth CLI worker platform** (Issue #51, Mission 3). Adds
+  `platforms/zcode.yaml` and `scripts/adapters/zcode.sh`, generates
+  `zcode-kaola-project-runner` from the shared worker template, and reuses the
+  existing ACP holder with schema-v3 receipts. ACP command is Skill-relative
+  `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py` (the Runner-owned translator
+  from Mission 2; `william0wang/zcode-acp` remains a protocol reference only).
+  The renderer ships that adapter only inside the ZCode worker. Runtime paths
+  are explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` and fail closed; there is
+  no PATH search for `zcode`. Default transport stays PTY; `--transport acp` is
+  available; login remains a PTY act. `acp_env_allowlist` is empty. Offline
+  harness: `tests/contract/test-issue-51-runner-integration.py`.
 - **Claude Code ACP through a vendored, pinned bridge; ACP is now Claude Code's default
   transport** (Issue #50, Missions 1–4; the live subscription gate passed on the recording Mac on
   2026-09-16 and `--transport pty` stays the explicit fallback and login channel; the round-1

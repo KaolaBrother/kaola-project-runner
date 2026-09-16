@@ -22,6 +22,7 @@ PLATFORMS = {
         "npx --yes --package @openai/codex@0.153.4 "
         "--package @agentclientprotocol/codex-acp@1.11.0 codex-acp",
     ),
+    "zcode": ("pty", "$SKILL_DIR/scripts/kaola-zcode-acp.py"),
 }
 
 spec = importlib.util.spec_from_file_location("renderer", RENDERER)

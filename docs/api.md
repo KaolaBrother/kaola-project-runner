@@ -7,7 +7,7 @@ scripts/render-skills.py --write
 scripts/render-skills.py --check
 ```
 
-`--write` deterministically rebuilds seven managed worker Skill directories plus
+`--write` deterministically rebuilds eight managed worker Skill directories plus
 `skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eighth
 platform) and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-project-runner.md` (the one
 thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revision.json`; at
@@ -49,7 +49,8 @@ is sent literally and a rejection is reported as a limitation. Model-selection f
 `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY` template variables.
 
 An `acp_command` word may start with `$SKILL_DIR/scripts/` to name a file shipped inside the
-Skill (Claude Code: `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`).
+Skill (Claude Code: `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`;
+ZCode: `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`).
 `kaola-acp.py` resolves that prefix to an absolute path before anything is spawned — against its
 own `scripts/` directory in an installed Skill, else against the checkout layout whose `vendor/`
 sits one level up — and reports the result as `bridge` (`relative`, `path`, `layout`
@@ -61,8 +62,13 @@ PTY does (`CLAUDE_BIN`, else the first PATH match) and passes it to the bridge a
 `CLAUDE_ACP_CLAUDE_BIN`, reporting it as `runtime_binary` (`env`, `path`, `absolute`, `present`,
 `passed_as`, and on `preflight` the `--version` line); a non-absolute or missing value makes the
 bridge fail closed (`session/new`, `session/resume`, and `session/prompt` return JSON-RPC
-`-32603`) rather than search PATH. The renderer copies `dist/index.js`, `dist/DERIVATION.json`,
-`LICENSE`, and `UPSTREAM.md` from `vendor/claude-code-acp/` into the Claude Code worker only;
+`-32603`) rather than search PATH. For ZCode the Runner never searches PATH: `preflight` and
+`start` fail closed unless `KAOLA_ZCODE_ENTRY` and `KAOLA_ZCODE_NODE` are both explicit
+absolute files (the adapter then launches `app-server --stdio` with `ELECTRON_RUN_AS_NODE=1`
+and an allowlisted child environment so native Coding Plan login stays inside ZCode). The
+renderer copies `dist/index.js`, `dist/DERIVATION.json`,
+`LICENSE`, and `UPSTREAM.md` from `vendor/claude-code-acp/` into the Claude Code worker only,
+and copies `scripts/kaola-zcode-acp.py` into the ZCode worker only;
 no other worker, the orchestrator, or a host bundle receives them. The bridge persists its ACP
 session → native Claude session id map (ids, cwd, timestamps; no prompts, no credentials) in
 `~/.claude-code-acp/sessions.json`, or under `CLAUDE_ACP_STATE_DIR` when set; the Runner
@@ -79,8 +85,8 @@ scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
                          [--bin-links | --no-bin-links] [--uninstall]
 ```
 
-Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, and `codex`.
-Omit `--platform` for all seven workers. `--platform` never selects the main Skill;
+Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, and `zcode`.
+Omit `--platform` for all eight workers. `--platform` never selects the main Skill;
 `kaola-project-runner` is not a platform ID. The orchestrator is installed for every `--runtime`
 and `--skills-dir` destination unless `--no-orchestrator` is passed. Every selected destination is
 preflighted before mutation; foreign paths are never replaced.

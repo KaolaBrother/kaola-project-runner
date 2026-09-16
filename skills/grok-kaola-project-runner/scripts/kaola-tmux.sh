@@ -52,7 +52,7 @@ PY
 }
 
 platform="${1:-}"; [[ -n "$platform" ]] || { usage; exit 2; }; shift
-case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex) ;; *) die "unknown platform: $platform" ;; esac
+case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode) ;; *) die "unknown platform: $platform" ;; esac
 adapter_file="$script_dir/adapters/$platform.sh"; [[ -f "$adapter_file" ]] || die "adapter not installed"
 [[ -f "$OBSERVATION_HELPER" && -f "$RELAY" && -f "$RELAY_CLIENT" && -f "$MODEL_POLICY_HELPER" ]] || die "relay control plane is incomplete"
 # shellcheck source=/dev/null
@@ -158,6 +158,7 @@ if [[ "$transport" == acp ]]; then
       devin) acp_args+=(--mode bypass) ;;
       claude-code) acp_args+=(--mode bypassPermissions) ;;
       codex) acp_args+=(--mode agent-full-access) ;;
+      zcode) acp_args+=(--mode yolo) ;;
     esac
   fi
   [[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")

@@ -31,7 +31,7 @@ HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
 MODEL_POLICY_HELPER = SCRIPT_DIR / "kaola-model-policy.py"
 FAST_VARIANT_SUFFIXES = ("-fast", "-priority")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
-PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode")
+PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode", "zcode")
 START_WAIT = 20.0
 SESSION_PREFIX = "kaola"
 # Issue #22: default start sets session/set_config_option configId=mode to each
@@ -43,6 +43,7 @@ ACP_SKIP_MODE = {
     "codex": "agent-full-access",
     "devin": "bypass",
     "kimi-cli": "yolo",
+    "zcode": "yolo",
 }
 
 # A manifest ``acp_command`` may name files shipped inside the Skill with this
@@ -58,6 +59,30 @@ SKILL_SCRIPTS_TOKEN = "$SKILL_DIR/scripts/"
 BRIDGE_BINARY_ENV = {
     "claude-code": "CLAUDE_ACP_CLAUDE_BIN",
 }
+ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
+ZCODE_NODE_ENV = "KAOLA_ZCODE_NODE"
+
+
+def zcode_runtime_error() -> str | None:
+    """Fail closed unless both ZCode paths are explicit, absolute, and present.
+
+    Never searches PATH and never probes a well-known application bundle.
+    """
+    entry = os.environ.get(ZCODE_ENTRY_ENV) or ""
+    node = os.environ.get(ZCODE_NODE_ENV) or ""
+    if not entry:
+        return "no explicit ZCode entry: set KAOLA_ZCODE_ENTRY to an absolute path"
+    if not node:
+        return "no explicit ZCode node runtime: set KAOLA_ZCODE_NODE to an absolute path"
+    if not os.path.isabs(entry) or not os.path.isabs(node):
+        return "ZCode entry and node runtime must be absolute paths"
+    if not os.path.isfile(entry):
+        return f"ZCode entry is not a file: {entry}"
+    if not os.path.isfile(node):
+        return f"ZCode node runtime is not a file: {node}"
+    if not os.access(node, os.X_OK):
+        return f"ZCode node runtime is not executable: {node}"
+    return None
 
 
 def resolve_agent_command(command: str) -> tuple[str, list[dict[str, Any]]]:
@@ -94,7 +119,13 @@ def resolve_agent_command(command: str) -> tuple[str, list[dict[str, Any]]]:
 
 def runtime_binary(manifest: dict[str, str]) -> str:
     """The exact runtime binary the Runner would launch: ``binary_env`` wins,
-    else the first PATH match, else the bare name (a fact, not a launch)."""
+    else the first PATH match, else the bare name (a fact, not a launch).
+
+    ZCode never searches PATH: only an explicit absolute ``KAOLA_ZCODE_NODE``.
+    """
+    if manifest.get("id") == "zcode":
+        node = os.environ.get(ZCODE_NODE_ENV) or ""
+        return node if os.path.isabs(node) else ""
     return (
         os.environ.get(manifest.get("binary_env") or "")
         or shutil.which(manifest.get("binary_name") or "")
@@ -1004,6 +1035,11 @@ def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         receipt["error"] = {"code": "acp-bridge-missing",
                             "message": "the Skill-relative ACP command did not resolve to a file"}
         return receipt
+    if args.platform == "zcode":
+        missing = zcode_runtime_error()
+        if missing:
+            receipt["error"] = {"code": "acp-runtime-missing", "message": missing}
+            return receipt
     probe_argv = [
         sys.executable, str(HOLDER), "--probe", "--repo", repo,
         "--platform", args.platform, "--command", args.agent_command,
@@ -1048,6 +1084,13 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         receipt["mutation_status"] = "not_started"
         receipt["mutation_performed"] = False
         return receipt
+    if args.platform == "zcode":
+        missing = zcode_runtime_error()
+        if missing:
+            receipt["error"] = {"code": "acp-runtime-missing", "message": missing}
+            receipt["mutation_status"] = "not_started"
+            receipt["mutation_performed"] = False
+            return receipt
     directory = record_dir(args, repo)
     tmux = subprocess.run(
         ["tmux", "has-session", "-t", f"={args.session}"], capture_output=True

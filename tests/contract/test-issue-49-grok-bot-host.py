@@ -20,7 +20,7 @@ value recorded at registration, and root/project/script co-location on the
 executing host. Mission 8 (review FAIL of ``fb65c51``): the bridge follows an
 honest two-commit content/pin model (content commit R at stage ``content``,
 pin commit P naming R at stage ``pinned``) whose pin is proven by ``--check``,
-the verifier, and ``Issue49PinModel``. Seven platforms, not an eighth;
+the verifier, and ``Issue49PinModel``. Grok Bot is a host, not a worker;
 ``templates/grok-golden/`` frozen; nothing here claims live Grok Bot adoption --
 the owner's read-only Local Computer UAT is the boundary.
 """
@@ -55,7 +55,7 @@ INSTALL_GUIDE = HOST_BUNDLE / "INSTALL.md"
 GROK_BOT_TEMPLATES = PROJECT / "templates" / HOST_ID
 ACCEPTED_REVISION = GROK_BOT_TEMPLATES / "accepted-revision.json"
 BUDGETS = json.loads((PROJECT / "templates" / "budgets.json").read_text(encoding="utf-8"))
-WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode")
+WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode", "zcode")
 WORKER_SKILL_IDS = tuple(f"{wid}-kaola-project-runner" for wid in WORKER_IDS)
 LOCATOR_COMMAND = "kaola-project-runner-locate"
 EXPECTED_ORIGIN = "github.com/KaolaBrother/kaola-project-runner"

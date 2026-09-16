@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Independent acceptance checks for the generated Skill distribution.
 
-Seven platform worker packages remain transport-only. Issue #41 adds one
+Eight platform worker packages remain transport-only. Issue #41 adds one
 control-plane package, ``kaola-project-runner``, which is generated through
-the same byte inventory/write/check path and is not an eighth platform.
+the same byte inventory/write/check path and is not a ninth platform.
 """
 
 from __future__ import annotations
@@ -66,6 +66,12 @@ PLATFORMS = {
         # appears in every package's description, so only Codex-specific facts
         # are leakage tokens.
         "tokens": ("codex-kaola-project-runner", "gpt-5.6-sol", "gpt-6-astra", "codex-acp"),
+    },
+    "zcode-kaola-project-runner": {
+        "display": "ZCode Kaola Project Runner",
+        "short": "Communicate with ZCode through exact tmux",
+        "prompt": "Use $zcode-kaola-project-runner to start an exact ZCode tmux session, read its output, and send only the input I choose.",
+        "tokens": ("zcode", "zcode-kaola-project-runner"),
     },
 }
 
@@ -520,7 +526,7 @@ def check_generated_tree(assertions: Assertions, root: Path, require_check: bool
     } if generated.is_dir() else set()
     expected_ids = set(PLATFORMS) | {ORCHESTRATOR_ID}
     assertions.check(
-        "test_generated_skill_inventory_is_seven_workers_and_orchestrator",
+        "test_generated_skill_inventory_is_eight_workers_and_orchestrator",
         actual_ids == expected_ids,
         f"generated Skill directories are {sorted(actual_ids)!r}, expected {sorted(expected_ids)!r}",
     )

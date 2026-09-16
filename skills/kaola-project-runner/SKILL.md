@@ -6,7 +6,7 @@ description: "Use when the controlling Agent should supervise explicitly authori
 # Project Runner
 
 This Skill is the main control-plane Skill. It is not a platform Runner and has
-no transport adapter. The seven platform Runner Skills are workers: they only
+no transport adapter. The eight platform Runner Skills are workers: they only
 identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, Mission List,
 worktree, finalize, archive, and sink.
@@ -36,7 +36,7 @@ conflicting information.
 
 Allowed CLIs: none without human authorization. On a fresh invocation with no
 allowlist, ask which CLIs; do not start workers or register a heartbeat. All
-seven supported platforms, including Codex, are eligible when named.
+eight supported platforms, including Codex, are eligible when named.
 
 Record the human's CLI, model/effort, count, and capability restrictions in the
 consuming project's run records, not in this Skill. A named CLI without a count
@@ -61,11 +61,12 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 | grok | `grok-kaola-project-runner` | Grok Kaola Project Runner | acp |
 | kimi-cli | `kimi-cli-kaola-project-runner` | Kimi CLI Kaola Project Runner | acp |
 | opencode | `opencode-kaola-project-runner` | OpenCode Kaola Project Runner | acp |
+| zcode | `zcode-kaola-project-runner` | ZCode Kaola Project Runner | pty |
 
 ### Hosts
 
 This Skill is host-neutral. Native skill-directory installs exist for Codex,
-Claude Code, Cursor, and Devin; there the seven workers are sibling Skill
+Claude Code, Cursor, and Devin; there the eight workers are sibling Skill
 directories next to this one, called by their installed directory. A **bridge
 host** (Grok Bot today) reaches this checkout through one thin account Skill
 instead: it binds an execution target first (Local Computer, or the cloud Agent

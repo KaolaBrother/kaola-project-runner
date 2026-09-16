@@ -56,7 +56,7 @@ make_fixture() {
   mkdir -p "$root/skills/kaola-project-runner"
   printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
-  for id in grok claude-code opencode kimi-cli cursor-cli devin codex; do
+  for id in grok claude-code opencode kimi-cli cursor-cli devin codex zcode; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;
       claude-code) name=claude-code-kaola-project-runner ;;
@@ -65,6 +65,7 @@ make_fixture() {
       cursor-cli) name=cursor-cli-kaola-project-runner ;;
       devin) name=devin-kaola-project-runner ;;
       codex) name=codex-kaola-project-runner ;;
+      zcode) name=zcode-kaola-project-runner ;;
     esac
     mkdir -p "$root/skills/$name/scripts"
     printf '%s\n' "$name" >"$root/skills/$name/.generated-by-kaola-project-runner"
@@ -412,6 +413,8 @@ output="$(run_installer "$repo" "$home" --runtime claude-code --method link 2>&1
 assert_orchestrator_link "test_orchestrator_runtime_claude_code" "$home/.claude/skills"
 assert_link "test_orchestrator_runtime_claude_code_still_installs_workers" \
   "$home/.claude/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
+assert_link "test_default_install_includes_zcode" \
+  "$home/.claude/skills/zcode-kaola-project-runner" "$(source_for "$repo" zcode-kaola-project-runner)"
 
 output="$(run_installer "$repo" "$home" --runtime cursor --platform grok --method link 2>&1)" \
   || fail "test_orchestrator_runtime_cursor_with_platform" "install failed: $output"

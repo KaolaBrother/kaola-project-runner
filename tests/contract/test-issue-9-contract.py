@@ -25,6 +25,7 @@ PLATFORMS = (
     "cursor-cli-kaola-project-runner",
     "devin-kaola-project-runner",
     "codex-kaola-project-runner",
+    "zcode-kaola-project-runner",
 )
 
 GOLDEN_SHA256 = {

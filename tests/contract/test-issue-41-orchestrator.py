@@ -33,6 +33,7 @@ WORKER_IDS = (
     "grok",
     "kimi-cli",
     "opencode",
+    "zcode",
 )
 GOLDEN_SHA256 = {
     "SKILL.md": "ae74d354ef1059a60edbde8cb4a99dad09d2d25cc47e0fc637e2c9164cc70dbe",

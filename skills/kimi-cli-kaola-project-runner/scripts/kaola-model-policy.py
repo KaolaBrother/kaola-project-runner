@@ -138,6 +138,7 @@ def probes_for(platform: str) -> list[list[str]]:
         # `codex debug models` is a read-only catalog dump; it carries slugs,
         # supported reasoning levels, and per-model fast service tiers.
         "codex": [["debug", "models"], ["--help"]],
+        "zcode": [["--help"]],
     }[platform]
 
 

@@ -4,7 +4,7 @@
 
 Kaola Project Runner is a runtime-neutral Agent Skills CLI communication driver: any agent that
 can load a skill directory and run shell commands in an environment containing the target CLI can
-use the same seven worker Skills, and Codex remains a fully supported consuming runtime. A separate
+use the same eight worker Skills, and Codex remains a fully supported consuming runtime. A separate
 generated control-plane Skill, `kaola-project-runner` (display name Project Runner), supervises
 explicitly authorized workers through those transport Skills. Worker Skills do not orchestrate
 Kaola Workflow, implement Workflow, or own a runtime's configuration.
@@ -16,7 +16,8 @@ Host Agent
             -> manifest-selected transport
                 -> ACP holder + structured protocol agent
                    (Claude Code: the vendored claude-code-acp bridge shipped in the Skill,
-                    one exact `claude -p` subprocess per turn under the user's subscription)
+                    one exact `claude -p` subprocess per turn under the user's subscription;
+                    ZCode: Skill-relative kaola-zcode-acp.py over explicit app-server --stdio)
                 OR
                 -> fixed platform adapter
                     -> exact owned tmux pane leader: managed relay
@@ -55,7 +56,7 @@ use the communication channel.
 prompt, PR handoff, heartbeat, foreground scheduler, and closing references. Project prompt, task-mode,
 scheduling, handoff, and lifecycle bytes. Those bytes remain frozen as reference evidence; active
 generated worker Skills do not impose them, and they are not the contract for `kaola-project-runner`.
-`templates/SKILL.md.tmpl` is the authoritative seven-platform communication-only contract.
+`templates/SKILL.md.tmpl` is the authoritative eight-platform communication-only contract.
 `templates/orchestrator/` is the authoritative main-Skill contract.
 
 Only platform facts may vary: executable, runtime carrier preflight, launch/continue/resume syntax,
@@ -66,10 +67,10 @@ outer Codex carrier.
 ## Generated Skills
 
 `render-skills.py` combines the active communication template, frozen optional references, fixed manifests, metadata templates, shared tmux
-core, relay/client/protocol/observation helpers, and one matching adapter into seven self-contained
+core, relay/client/protocol/observation helpers, and one matching adapter into eight self-contained
 worker directories under `skills/`, and renders the fixed orchestrator directory
 `skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
-derived from the seven manifests (no orchestrator platform manifest or adapter). It also emits
+derived from the eight manifests (no orchestrator platform manifest or adapter). It also emits
 the Grok Bot host bundle `hosts/grok-bot/`: one thin bridge Skill
 `kaola-project-runner.md`, its fingerprint manifest `bridge.json`, and the install guide
 `INSTALL.md`. Every managed
@@ -129,7 +130,7 @@ budget or a loading boundary regresses.
 
 There is exactly one canonical Skill system: `templates/orchestrator/` (the main Skill and its
 references), `templates/SKILL.md.tmpl` with `templates/agents/` and `templates/references/` (the
-worker contract), the seven `platforms/*.yaml` manifests, and the shared `scripts/`. A **host
+worker contract), the eight `platforms/*.yaml` manifests, and the shared `scripts/`. A **host
 adapter** re-packages that system for one host inside `render-skills.py`; it never authors a
 second body. Grok Bot is such a packaging adapter (the delimited "Host adapter: grok-bot" section
 of the renderer), not a CLI transport platform: there is no `platforms/grok-bot.yaml` and no
