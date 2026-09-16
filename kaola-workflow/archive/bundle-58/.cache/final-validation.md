@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/validate.sh
+validated_candidate_hash: ad24e261fbacafcc46da92e4bad5aa4f7f42c266c0a0bac55c69302678ba2d0a
