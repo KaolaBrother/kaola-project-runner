@@ -15582,6 +15582,7 @@ var SessionStore = class {
 // src/claude-runner.ts
 import { spawn } from "child_process";
 import {
+  appendFileSync,
   writeFileSync as writeFileSync2,
   mkdtempSync,
   rmSync as rmSync2,
@@ -15640,6 +15641,20 @@ function resolveClaudeBinary(config2) {
     throw new ClaudeBinaryError(`CLAUDE_BIN is not executable: ${configured}`);
   }
   return configured;
+}
+function recordChildSpawn(proc, binary) {
+  const path = process.env.KAOLA_ACP_CHILD_RECORD;
+  if (!path || !proc.pid) return;
+  try {
+    appendFileSync(
+      path,
+      JSON.stringify({ pid: proc.pid, pgid: proc.pid, spawned_at: Date.now(), binary }) + "\n"
+    );
+  } catch (err) {
+    logger.warn(
+      `Failed to record child spawn: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
 }
 function killGroup(proc, signal) {
   if (!proc.pid) return;
@@ -15830,12 +15845,14 @@ var ClaudeRunner = class {
   }
   spawnClaude(args, cwd) {
     const binary = resolveClaudeBinary(this.config);
-    return spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd,
       env: this.sanitizeEnv(),
       stdio: ["ignore", "pipe", "pipe"],
       detached: true
     });
+    recordChildSpawn(proc, binary);
+    return proc;
   }
   runJson(args, cwd, tempDir) {
     return new Promise((resolve2, reject) => {

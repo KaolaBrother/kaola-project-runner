@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readdirSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
@@ -107,6 +107,39 @@ describe("per-session launch options", () => {
     expect(secondArgs).toEqual(expect.arrayContaining(["--resume", "s1"]));
     expect((mockSpawn.mock.calls[1][2] as any).cwd).toBe("/tmp");
     expect((mockSpawn.mock.calls[0][2] as any).detached).toBe(true);
+  });
+
+  it("records the child's identity at spawn when KAOLA_ACP_CHILD_RECORD names a file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kaola-child-record-"));
+    const record = join(dir, "children.jsonl");
+    process.env.KAOLA_ACP_CHILD_RECORD = record;
+    try {
+      const runner = new ClaudeRunner(config());
+      mockSpawn.mockReturnValue(streamProcess([JSON.stringify({ type: "result", result: "ok", session_id: "s1" })]));
+      const before = Date.now();
+      await runner.startSessionStreaming("/tmp", "one", () => {}, "t1");
+      const lines = readFileSync(record, "utf-8").trim().split("\n").map((line) => JSON.parse(line));
+      expect(lines).toHaveLength(1);
+      expect(lines[0].pid).toBe(4242);
+      expect(lines[0].pgid).toBe(4242);
+      expect(lines[0].spawned_at).toBeGreaterThanOrEqual(before);
+      expect(lines[0].spawned_at).toBeLessThanOrEqual(Date.now());
+      expect(lines[0].binary).toBe("claude");
+      mockSpawn.mockReturnValue(streamProcess([]));
+      await runner.continueSessionStreaming("s1", "two", () => {}, "t1", undefined, "/tmp");
+      expect(readFileSync(record, "utf-8").trim().split("\n")).toHaveLength(2);
+    } finally {
+      delete process.env.KAOLA_ACP_CHILD_RECORD;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("spawns without a record file when KAOLA_ACP_CHILD_RECORD is unset", async () => {
+    delete process.env.KAOLA_ACP_CHILD_RECORD;
+    const runner = new ClaudeRunner(config());
+    mockSpawn.mockReturnValue(streamProcess([]));
+    await runner.startSessionStreaming("/tmp", "x", () => {});
+    expect(existsSync(join(tmpdir(), "children.jsonl"))).toBe(false);
   });
 
   it("keeps --dangerously-skip-permissions only without a permission mode", async () => {

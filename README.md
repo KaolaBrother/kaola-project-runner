@@ -54,9 +54,10 @@ login itself always stays a PTY act. Under this bridge `permit` settles only the
 `tool_call` status: the `claude -p` child has no stdin and no `--permission-prompt-tool`, so a
 permission answer cannot gate or resume the child, and on 2.1.272 a Bash tool call emitted no
 `permission_request` in `bypassPermissions` or `manual` mode. Because each `claude -p` runs
-detached in its own process group, the holder notes those groups (with member pids and start
-times) while the bridge is alive and `stop` sweeps whichever is still alive under that identity
-(`swept_child_pgids`), including after the bridge died first. The bridge keeps its own map of ACP sessions to native
+detached in its own process group, the bridge appends each child's pid, group, and spawn time to
+the holder-named `children.jsonl` at spawn and the holder also notes those groups from the process
+tree while the bridge is alive; `stop` sweeps whichever is still alive under that identity
+(`swept_child_pgids`), including after the bridge died before forwarding a single line. The bridge keeps its own map of ACP sessions to native
 Claude session ids in `~/.claude-code-acp/sessions.json` (override with `CLAUDE_ACP_STATE_DIR`);
 that file is what `start --continue` reads, it holds ids and cwd paths only, and rollback may
 delete it. ZCode's ACP agent is the Runner-owned translator `scripts/kaola-zcode-acp.py`,

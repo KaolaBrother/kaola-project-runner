@@ -11,7 +11,9 @@ API credential variables were present. Then it emits a minimal
 (default) answers and exits; ``permission`` first emits a
 ``permission_request`` line; ``hang`` starts a ``sleep`` grandchild and
 blocks until killed; ``fail`` announces its session id and exits 1 like a
-CLI that could not serve the turn.
+CLI that could not serve the turn; ``silent`` starts the ``sleep`` grandchild
+and blocks without writing a single line, so the bridge never forwards a
+``session/update`` for the turn.
 """
 
 import json
@@ -23,7 +25,7 @@ import time
 import uuid
 
 RECORD = os.environ.get("FAKE_CLAUDE_RECORD")
-MODES = ("echo", "permission", "hang", "fail")
+MODES = ("echo", "permission", "hang", "fail", "silent")
 
 
 def option(argv, flag):
@@ -79,7 +81,7 @@ def main():
         "mcp_config_exists": bool(mcp_config) and os.path.isfile(mcp_config),
     }
     grandchild = None
-    if mode == "hang":
+    if mode in ("hang", "silent"):
         # The real CLI handles SIGTERM and exits with status 143 (128 + 15)
         # instead of dying by signal; a bridge must treat that as a cancel,
         # never as an expired session to resume afresh.
@@ -89,6 +91,9 @@ def main():
     if RECORD:
         with open(RECORD, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    if mode == "silent":
+        time.sleep(300)
+        return 0
     emit({"type": "system", "subtype": "init", "session_id": session_id, "model": "fake-model"})
     if mode == "fail":
         sys.stderr.write("fake claude: cannot serve this turn\n")

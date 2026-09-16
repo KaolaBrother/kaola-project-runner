@@ -79,7 +79,8 @@ def process_table() -> list[tuple[int, int, int, str]]:
     return rows
 
 
-def child_groups(root_pid: int, root_pgid: int) -> dict[int, dict[int, str]]:
+def child_groups(root_pid: int, root_pgid: int,
+                 table: list[tuple[int, int, int, str]] | None = None) -> dict[int, dict[int, str]]:
     """Process groups that descendants of ``root_pid`` run in, other than
     ``root_pgid`` itself, as ``pgid -> {member pid: start time}``. An ACP
     agent that spawns its CLI detached (own process group) leaves it outside
@@ -87,7 +88,7 @@ def child_groups(root_pid: int, root_pgid: int) -> dict[int, dict[int, str]]:
     see it. The member identities let a later sweep tell the group from an
     unrelated one that reused the same id."""
     children: dict[int, list[tuple[int, int, str]]] = {}
-    for pid, ppid, pgid, started in process_table():
+    for pid, ppid, pgid, started in (table if table is not None else process_table()):
         children.setdefault(ppid, []).append((pid, pgid, started))
     found: dict[int, dict[int, str]] = {}
     seen: set[int] = set()
@@ -101,6 +102,50 @@ def child_groups(root_pid: int, root_pgid: int) -> dict[int, dict[int, str]]:
             stack.append(pid)
             if pgid != root_pgid:
                 found.setdefault(pgid, {})[pid] = started
+    return found
+
+
+CHILD_RECORD_NAME = "children.jsonl"
+SPAWN_RECORD_TOLERANCE = 5.0
+
+
+def start_epoch(started: str) -> float | None:
+    """``ps lstart`` text (ctime layout, second granularity) as epoch seconds."""
+    try:
+        return time.mktime(time.strptime(started, "%a %b %d %H:%M:%S %Y"))
+    except ValueError:
+        return None
+
+
+def spawn_recorded_groups(path: Path, table: list[tuple[int, int, int, str]] | None = None
+                          ) -> dict[int, dict[int, str]]:
+    """Child groups the agent itself recorded at spawn (`KAOLA_ACP_CHILD_RECORD`,
+    one JSON line per child: pid, pgid, spawned_at ms). An entry counts only
+    while that pid is alive in that group with a start time within
+    SPAWN_RECORD_TOLERANCE of the recorded spawn, so a reused pid is ignored.
+    This is what still identifies a child whose agent died before forwarding
+    any output about it."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    by_pid = {pid: (pgid, started) for pid, _, pgid, started in (table or process_table())}
+    found: dict[int, dict[int, str]] = {}
+    for line in lines:
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        pid, pgid, spawned = entry.get("pid"), entry.get("pgid"), entry.get("spawned_at")
+        if not (isinstance(pid, int) and isinstance(pgid, int) and isinstance(spawned, (int, float))):
+            continue
+        live = by_pid.get(pid)
+        if live is None or live[0] != pgid:
+            continue
+        started = start_epoch(live[1])
+        if started is None or abs(started - spawned / 1000.0) > SPAWN_RECORD_TOLERANCE:
+            continue
+        found.setdefault(pgid, {})[pid] = live[1]
     return found
 
 
@@ -357,6 +402,10 @@ class AgentConnection:
 
     def spawn(self, command: str, cwd: str, env: dict[str, str] | None = None) -> None:
         argv = shlex.split(command)
+        env = dict(os.environ if env is None else env)
+        # Lets an agent that spawns detached children record their identity
+        # at spawn so stop can find them even if the agent dies first.
+        env["KAOLA_ACP_CHILD_RECORD"] = str(self.holder.record_dir / CHILD_RECORD_NAME)
         self.proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,
@@ -1859,17 +1908,23 @@ class Holder:
         return result
 
     def note_agent_children(self) -> None:
-        """Record the agent's out-of-group descendants while it is still alive
-        to be their parent; once the agent dies they are reparented and the
-        link is gone."""
+        """Record the agent's out-of-group child groups: from the process tree
+        while the agent is still alive to be their parent, and from the
+        agent's own spawn record (written before any child output could be
+        forwarded), which still identifies a child after the agent died."""
         proc = self.agent.proc
-        if proc is None or self.agent.exited.is_set():
+        if proc is None:
             return
-        try:
-            pgid = os.getpgid(proc.pid)
-        except OSError:
-            pgid = proc.pid
-        noted = child_groups(proc.pid, pgid)
+        table = process_table()
+        noted: dict[int, dict[int, str]] = {}
+        if not self.agent.exited.is_set():
+            try:
+                pgid = os.getpgid(proc.pid)
+            except OSError:
+                pgid = proc.pid
+            noted = child_groups(proc.pid, pgid, table)
+        for child, members in spawn_recorded_groups(self.record_dir / CHILD_RECORD_NAME, table).items():
+            noted.setdefault(child, {}).update(members)
         if not noted:
             return
         # Copy-on-write: the reader thread notes here while op threads iterate

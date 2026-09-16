@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import {
+  appendFileSync,
   writeFileSync,
   mkdtempSync,
   rmSync,
@@ -114,6 +115,29 @@ export function resolveClaudeBinary(config: AgentConfig): string {
     throw new ClaudeBinaryError(`CLAUDE_BIN is not executable: ${configured}`);
   }
   return configured;
+}
+
+/**
+ * Kaola fork: the child runs detached in its own process group, invisible to
+ * a supervisor that only knows this bridge's group. When the supervisor
+ * names a record file (`KAOLA_ACP_CHILD_RECORD`), append the child's identity
+ * synchronously at spawn, before any of its output can be forwarded, so the
+ * supervisor can still find and stop the child if this process dies first.
+ * Never fails the turn.
+ */
+function recordChildSpawn(proc: ChildProcess, binary: string): void {
+  const path = process.env.KAOLA_ACP_CHILD_RECORD;
+  if (!path || !proc.pid) return;
+  try {
+    appendFileSync(
+      path,
+      JSON.stringify({ pid: proc.pid, pgid: proc.pid, spawned_at: Date.now(), binary }) + "\n"
+    );
+  } catch (err) {
+    logger.warn(
+      `Failed to record child spawn: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
 }
 
 function killGroup(proc: ChildProcess, signal: NodeJS.Signals): void {
@@ -363,12 +387,14 @@ export class ClaudeRunner {
 
   private spawnClaude(args: string[], cwd: string | undefined): ChildProcess {
     const binary = resolveClaudeBinary(this.config);
-    return spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd,
       env: this.sanitizeEnv(),
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     });
+    recordChildSpawn(proc, binary);
+    return proc;
   }
 
   private runJson(

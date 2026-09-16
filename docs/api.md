@@ -314,14 +314,21 @@ child/group and every exact fingerprint-tracked escaped descendant are absent.
 Stop releases only the exactly-owned runtime: the PTY child/relay/tmux session, or — on ACP — a
 `session/close` when the adapter advertises that capability followed by holder/agent exit, with
 residual processes reported. The holder also notes process groups the agent spawned outside its
-own group (for example the Claude bridge's detached `claude -p` children) when a turn is first
-accepted and again when stop begins, records them as `agent_child_pgids` with the member pids and
-start times seen (`agent_child_groups`), and after the agent group sweeps every recorded group in
-which a recorded member is still alive under its recorded start time (SIGTERM, grace, SIGKILL), so
-a reused group id is never signalled; the stop receipt lists the signalled groups as
-`swept_child_pgids` and `residual_pids` covers them. A holder-lost `stop --force` SIGKILLs the live
-members of the recorded agent group plus the identity-confirmed child groups at once and reports
-those groups as `swept_pgids`; a recorded normal stop reads as `stopped` only when none of them is
+own group (for example the Claude bridge's detached `claude -p` children) from two sources: the
+process tree when a turn is first accepted and again when stop begins (while the agent is alive to
+be their parent), and the agent's own spawn record. The holder hands every agent
+`KAOLA_ACP_CHILD_RECORD=<record dir>/children.jsonl`; the Claude bridge appends
+`{pid, pgid, spawned_at, binary}` there synchronously at each spawn, before any child output can
+be forwarded, so a child whose bridge died before its first `session/update` is still identified.
+Noted groups are recorded as `agent_child_pgids` with the member pids and start times seen
+(`agent_child_groups`); after the agent group the holder sweeps every recorded group in which a
+recorded member is still alive under its recorded start time, or under a start time within five
+seconds of its recorded spawn (SIGTERM, grace, SIGKILL), so a reused pid or group id is never
+signalled; the stop receipt lists the signalled groups as `swept_child_pgids` and `residual_pids`
+covers them. A holder-lost `stop --force` applies the same identity checks to `record.json` and
+`children.jsonl`, SIGKILLs the live members of the recorded agent group plus the confirmed child
+groups at once, and reports those groups as `swept_pgids`; a recorded normal stop reads as
+`stopped` only when none of them is
 alive. Stopping never deletes CLI history, session records, or work artifacts,
 and no completion signal (`end_turn`, idle frame, successful receipt) triggers or gates it. Resume is
 a separate Agent choice: `--resume <native-session-id>` (ACP `session/resume`/`session/load` per

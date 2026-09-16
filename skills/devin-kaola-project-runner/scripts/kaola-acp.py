@@ -725,7 +725,7 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
         members = subprocess.run(
             ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
         )
-        groups = recorded_groups(record)
+        groups = recorded_groups(record, record_dir(args, repo))
         residual = []
         for line in members.stdout.splitlines():
             fields = line.split()
@@ -782,32 +782,64 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
     return receipt
 
 
-def recorded_groups(record: dict[str, Any]) -> list[int]:
+SPAWN_RECORD_TOLERANCE = 5.0
+
+
+def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> list[int]:
     """The agent's own process group plus the out-of-group child groups the
-    holder noted while the agent was alive (detached CLI children). A child
-    group counts only while a recorded member pid is still alive with its
-    recorded start time, so a reused group id is never touched."""
+    holder noted while the agent was alive (detached CLI children), plus the
+    children the agent itself recorded at spawn in ``children.jsonl`` under
+    the record directory. A child group counts only while a recorded member
+    pid is still alive in that group with its recorded start time (holder
+    note) or a start time within SPAWN_RECORD_TOLERANCE of the recorded spawn
+    (spawn record), so a reused pid or group id is never touched."""
     groups: list[int] = []
     pgid = record.get("agent_pgid")
     if isinstance(pgid, int) and pgid > 0:
         groups.append(pgid)
     children = record.get("agent_child_groups") or {}
-    if children:
-        table = subprocess.run(
-            ["ps", "-axo", "pid=,pgid=,state=,lstart="], capture_output=True, text=True
-        )
-        by_pid: dict[int, tuple[int, str]] = {}
-        for line in table.stdout.splitlines():
-            fields = line.split(None, 3)
-            if (len(fields) == 4 and fields[0].isdigit() and fields[1].isdigit()
-                    and not fields[2].upper().startswith("Z")):
-                by_pid[int(fields[0])] = (int(fields[1]), fields[3].strip())
-        for child, members in children.items():
-            if not str(child).isdigit() or int(child) in groups:
-                continue
-            if any(str(pid).isdigit() and by_pid.get(int(pid)) == (int(child), started)
-                   for pid, started in (members or {}).items()):
-                groups.append(int(child))
+    spawned: list[dict[str, Any]] = []
+    if directory is not None:
+        try:
+            for line in (directory / "children.jsonl").read_text(encoding="utf-8").splitlines():
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(entry, dict):
+                    spawned.append(entry)
+        except OSError:
+            pass
+    if not children and not spawned:
+        return groups
+    table = subprocess.run(
+        ["ps", "-axo", "pid=,pgid=,state=,lstart="], capture_output=True, text=True
+    )
+    by_pid: dict[int, tuple[int, str]] = {}
+    for line in table.stdout.splitlines():
+        fields = line.split(None, 3)
+        if (len(fields) == 4 and fields[0].isdigit() and fields[1].isdigit()
+                and not fields[2].upper().startswith("Z")):
+            by_pid[int(fields[0])] = (int(fields[1]), fields[3].strip())
+    for child, members in children.items():
+        if not str(child).isdigit() or int(child) in groups:
+            continue
+        if any(str(pid).isdigit() and by_pid.get(int(pid)) == (int(child), started)
+               for pid, started in (members or {}).items()):
+            groups.append(int(child))
+    for entry in spawned:
+        pid, child, spawned_at = entry.get("pid"), entry.get("pgid"), entry.get("spawned_at")
+        if not (isinstance(pid, int) and isinstance(child, int) and isinstance(spawned_at, (int, float))):
+            continue
+        live = by_pid.get(pid)
+        if live is None or live[0] != child or child in groups:
+            continue
+        try:
+            started = time.mktime(time.strptime(live[1], "%a %b %d %H:%M:%S %Y"))
+        except ValueError:
+            continue
+        if abs(started - spawned_at / 1000.0) <= SPAWN_RECORD_TOLERANCE:
+            groups.append(child)
     return groups
 
 
@@ -827,7 +859,7 @@ def live_group_members(groups: list[int]) -> list[int]:
 def force_kill_from_record(args: argparse.Namespace, repo: str,
                            record: dict[str, Any]) -> dict[str, Any]:
     """stop --force path when the holder is already gone."""
-    groups = recorded_groups(record)
+    groups = recorded_groups(record, record_dir(args, repo))
     receipt = base_receipt(args, repo)
     killed: list[int] = []
     for pid in live_group_members(groups):
