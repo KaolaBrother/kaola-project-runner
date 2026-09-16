@@ -27,6 +27,7 @@ WORKER_IDS = (
     "codex",
     "cursor-cli",
     "devin",
+    "droid",
     "grok",
     "kimi-cli",
     "opencode",

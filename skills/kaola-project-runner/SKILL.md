@@ -1,12 +1,12 @@
 ---
 name: kaola-project-runner
-description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the seven platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, and stop idle sessions without dropping close-out duties."
+description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the nine platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, and stop idle sessions without dropping close-out duties."
 ---
 
 # Project Runner
 
 This Skill is the main control-plane Skill. It is not a platform Runner and has
-no transport adapter. The eight platform Runner Skills are workers: they only
+no transport adapter. The nine platform Runner Skills are workers: they only
 identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, Mission List,
 child worktree, finalize, archive, and sink.
@@ -36,7 +36,7 @@ conflicting information.
 
 Allowed CLIs: none without human authorization. On a fresh invocation with no
 allowlist, ask which CLIs; do not start workers or register a heartbeat. All
-eight supported platforms, including Codex, are eligible when named.
+nine supported platforms, including Codex, are eligible when named.
 
 Record the human's CLI, model/effort, count, and capability restrictions in the
 consuming project's run records, not in this Skill. A named CLI without a count
@@ -67,7 +67,7 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 ### Hosts
 
 This Skill is host-neutral. Native skill-directory installs exist for Codex,
-Claude Code, Cursor, and Devin; there the eight workers are sibling Skill
+Claude Code, Cursor, and Devin; there the nine workers are sibling Skill
 directories next to this one, called by their installed directory. A **bridge
 host** (Grok Bot today) reaches this checkout through one thin account Skill
 instead: it binds an execution target first (Local Computer, or the cloud Agent
@@ -83,7 +83,7 @@ the locator compares it and the running host fingerprint with the registration
 receipt kept beside its link and refuses on mismatch; session ownership is the
 worker preflight's proof). Local Computer and the cloud Agent Computer never reach each other's
 files, CLIs, tmux, or sessions, and nothing clones, installs, or updates Local
-Computer from the cloud. Grok Bot is a host, not a worker and not an eighth
+Computer from the cloud. Grok Bot is a host, not a worker and not a tenth
 platform: `--platform grok` is the Grok CLI worker; `--platform grok-bot` is
 invalid.
 

@@ -1072,7 +1072,7 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
     def test_main_skill_names_bridge_hosts_target_binding_and_attestation(self) -> None:
         text = self.orchestrator_text()
         self.assertIsNotNone(clause_present(text, (r"Grok Bot is a host", r"Grok Bot.{0,60}host, not a worker")))
-        self.assertIsNotNone(clause_present(text, (r"not an eighth platform",)))
+        self.assertIsNotNone(clause_present(text, (r"not a tenth platform",)))
         self.assertIsNotNone(clause_present(text, (r"--platform grok.{0,40}Grok CLI worker",)))
         self.assertIsNotNone(clause_present(text, (r"binds an execution target first",)))
         self.assertIsNotNone(clause_present(text, (rf"`{LOCATOR_COMMAND}`",)))

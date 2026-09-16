@@ -24,6 +24,7 @@ PLATFORMS = (
     "kimi-cli-kaola-project-runner",
     "cursor-cli-kaola-project-runner",
     "devin-kaola-project-runner",
+    "droid-kaola-project-runner",
     "codex-kaola-project-runner",
     "zcode-kaola-project-runner",
 )

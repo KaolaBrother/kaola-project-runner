@@ -134,12 +134,12 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         # description is otherwise a ScannerError under yaml.safe_load.
         "DESCRIPTION": json.dumps(
             "Use when the controlling Agent should supervise explicitly authorized "
-            "CLI workers through the seven platform Runner Skills: recover live "
+            "CLI workers through the nine platform Runner Skills: recover live "
             "authorization, dispatch and review work, accept deliveries before "
             "finalize, and stop idle sessions without dropping close-out duties."
         ),
         "SHORT_DESCRIPTION": (
-            "Supervise authorized CLI workers through the seven platform Runner Skills"
+            "Supervise authorized CLI workers through the nine platform Runner Skills"
         ),
         "DEFAULT_PROMPT": (
             f"Use ${ORCHESTRATOR_NAME} to recover authorization, supervise named "
@@ -332,7 +332,7 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
 # Host adapter: grok-bot (packaging adapter, not a CLI transport platform)
 #
 # One canonical Skill system exists: the orchestrator template, the worker
-# template, the eight platform manifests, and their canonical references. A
+# template, the nine platform manifests, and their canonical references. A
 # host adapter only re-packages that system for one host. Grok Bot receives
 # exactly ONE thin account/cloud Skill -- the bridge -- rendered from
 # templates/grok-bot/ alone: it names the repository, the accepted pinned

@@ -1,7 +1,7 @@
 # Grok Bot host (bridge host)
 
 Grok Bot is a host for this Skill, at the same rank as Codex, Claude Code,
-Cursor, and Devin. It is not a worker and not an eighth CLI platform.
+Cursor, and Devin. It is not a worker and not a tenth CLI platform.
 `--platform grok` installs the Grok CLI worker Skill. `--platform grok-bot` is
 invalid. `--runtime grok` is not a host alias, and there is no `--runtime
 grok-bot`: nothing is installed for Grok Bot by the installer.
