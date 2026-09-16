@@ -549,19 +549,29 @@ class AcpFollowContractTests(unittest.TestCase):
             "grok", "send", "--text", "Fix the login redirect loop.", "--no-wait",
             session=session, repo=repo, scenario="watch_projection",
         )
-        self.assertTrue(left.wait_tool("call_7", 8), left.snapshot()[1])
-        self.assertTrue(right.wait_tool("call_7", 8), right.snapshot()[1])
-        for collector in (left, right):
-            _, events = collector.snapshot()
+        # The scenario emits call_7, then plan/usage/mode updates, then leaves a
+        # permission request pending; each step fans out its own delta. Sample
+        # the settled view (call_7 present and the permission pending) rather
+        # than the first delta that shows call_7, which under load can be
+        # observed before the later deltas arrive.
+        def settled_view(collector: LineCollector) -> dict | None:
             payload = None
-            for event in events:
+            for event in collector.snapshot()[1]:
                 if event.get("kind") not in {"snapshot", "delta"}:
                     continue
                 view = follow_view_payload(event)
                 tools = view.get("tools") or []
                 if any(tool.get("toolCallId") == "call_7" for tool in tools if isinstance(tool, dict)):
                     payload = view
-            self.assertIsNotNone(payload, events)
+            if payload is not None and payload.get("pending_permissions"):
+                return payload
+            return None
+
+        self.assertTrue(left.wait_tool("call_7", 8), left.snapshot()[1])
+        self.assertTrue(right.wait_tool("call_7", 8), right.snapshot()[1])
+        for collector in (left, right):
+            payload = wait_for(lambda: settled_view(collector), 8)
+            self.assertIsNotNone(payload, collector.snapshot()[1])
             assert payload is not None
             self.assertEqual(payload.get("schema"), "kaola-acp-view/1", payload)
             assert_shape(self, self.sample, payload, "follow.view")
