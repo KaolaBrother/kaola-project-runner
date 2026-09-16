@@ -209,6 +209,61 @@ def view_error(code: str, message: str) -> dict[str, Any]:
     return {"schema": VIEW_SCHEMA, "error": {"code": code, "message": message}}
 
 
+# Ordinary capture receipts are bounded (progressive disclosure); this limit equals
+# ``capture_receipt_bytes`` in templates/budgets.json and the PTY bound in
+# kaola-observation.py. ``capture --full`` is the explicit, unbounded request and
+# never passes through bound_capture_receipt.
+CAPTURE_RECEIPT_BYTES = 65536
+BOUNDED_LISTS = ("events", "tool_calls")
+
+
+def event_stream_bytes(items: list[Any]) -> bytes:
+    """The canonical byte form of a captured list: one sorted-key JSON line per item."""
+    return "".join(
+        json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n" for item in items
+    ).encode("utf-8")
+
+
+def bound_capture_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_BYTES) -> dict[str, Any]:
+    """Keep an ordinary capture receipt within ``limit`` bytes, verifiably.
+
+    When the JSON line would exceed the limit, the oldest entries of its list
+    (``events`` for L2, ``tool_calls`` for L1) are dropped and ``truncated`` records
+    the list name, kept/dropped/total counts, the byte size and sha256 of the
+    untruncated stream (``event_stream_bytes`` of the full list), and the hint to
+    pass ``--full``. The newest entries are always the ones kept.
+    """
+    key = next((name for name in BOUNDED_LISTS if isinstance(receipt.get(name), list)), None)
+    line = json.dumps(receipt, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    if key is None or len(line) <= limit:
+        return receipt
+    items = list(receipt[key])
+    stream = event_stream_bytes(items)
+    bounded = dict(receipt)
+    sizes = [len(json.dumps(item, ensure_ascii=False, sort_keys=True).encode("utf-8")) + 2 for item in items]
+    start = 0
+    while True:
+        kept = items[start:]
+        bounded[key] = kept
+        bounded["truncated"] = {
+            "list": key,
+            "kept": len(kept),
+            "dropped": start,
+            "total": len(items),
+            "stream_bytes": len(stream),
+            "stream_sha256": hashlib.sha256(stream).hexdigest(),
+            "hint": "newest entries kept; pass --full for the whole record",
+        }
+        line = json.dumps(bounded, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        if len(line) <= limit or not kept:
+            return bounded
+        excess = len(line) - limit
+        dropped = 0
+        while start < len(items) and (dropped < excess or dropped == 0):
+            dropped += sizes[start]
+            start += 1
+
+
 def command_view(args: argparse.Namespace, repo: str, directory: Path) -> dict[str, Any]:
     sock = sock_path(args, repo)
     record = read_record(directory)
@@ -1186,6 +1241,8 @@ def main() -> int:
              "lines": args.lines, "inline": args.inline},
             15.0,
         )
+        if not args.full:
+            receipt = bound_capture_receipt(receipt)
     elif args.command == "permit":
         params: dict[str, Any] = {"request_id": args.request_id, "option": args.option}
         if args.expected_holder_instance_id is not None:

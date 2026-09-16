@@ -14,9 +14,17 @@ thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revisi
 carries the accepted 40-hex commit and release, the locator command, and the two canonical
 entry paths, and no canonical content), `bridge.json` (fingerprint manifest: name, resolved
 description, accepted commit, release, bytes, file/body sha256), and `INSTALL.md` (from
-`templates/grok-bot/INSTALL.md.tmpl`). Every product is measured against
+`templates/grok-bot/INSTALL.md.tmpl`). `accepted-revision.json` declares a stage: `content`
+(the content commit R; the bridge carries an explicit "none yet" line and `bridge.json` says
+`saveable: false`) or `pinned` (the pin commit P; `commit` = R plus exactly one of `release`
+`vX.Y.Z` or `label`). At the pinned stage the renderer runs the pin gate against the Git
+checkout (`pin: …` findings: commit missing, not an ancestor of HEAD, not a content-stage
+commit, lacks `scripts/kaola-locate.py` or an entry path, release tag not at R) and
+`--require-pinned` fails on a content-stage file; the same gate runs from
+`kaola-grok-bot-verify.py --repo [--require-pinned]`. Every product is measured against
 `templates/budgets.json` first; an over-budget Skill, reference, description, bridge, or guide
-is reported as `budget: <surface> is N B > M B (<key>)` and nothing is written. `--check` returns nonzero for any missing, stale,
+is reported as `budget: <surface> is N B > M B (<key>)` and nothing is written (an unverifiable
+pin is likewise never written). `--check` returns nonzero for any missing, stale,
 or unexpected file, Skill directory, or host bundle file. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
 `acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
@@ -74,24 +82,30 @@ links.
 ## Locator and host-target attestation
 
 ```text
-scripts/kaola-locate.py register [--bin-dir DIR]
+scripts/kaola-locate.py register [--bin-dir DIR] [--expect-revision SHA]
 scripts/kaola-locate.py [receipt] [--target local|cloud] [--expect-revision SHA]
                         [--project ABS_PATH] [--worker ID] [--session NAME]
 kaola-project-runner-locate ...          # the registered bin link, same arguments
 ```
 
-`register` links `kaola-project-runner-locate` in the installer's bin directory (default
-`$HOME/.local/bin`, the same convention as `--bin-links`) to this checkout's
-`scripts/kaola-locate.py`; a link that already points at some `scripts/kaola-locate.py` is
-replaced (re-registration after moving a checkout), anything else is refused
-(`foreign-locator-link`, `locator-path-occupied`). The receipt form prints one bounded JSON
-line (`kaola-project-runner-locator/1`, ≤ 4 KB): `target`, `host` (kernel + hashed
-fingerprint), `root` (path, normalised origin without userinfo, HEAD, `clean`,
-`revision_match`), and, when given, `project` (path, top level, origin), `worker` (id, script
-path under the same root, `under_root`, `executable`), `session` (name, `present`).
-`result` is `ok` (exit 0) or `refused` (exit 1) with `reasons`; `--target` is required when
-any of `--project`, `--worker`, `--session` is given. Git runs with `GIT_TERMINAL_PROMPT=0`;
-no credential is read, printed, hashed, or forwarded.
+`register` validates first and links second: origin, the optional expected revision, the
+clean state, and the link path are all checked before anything is touched, and a refusal
+(`origin-mismatch`, `revision-mismatch`, `dirty`, `expect-revision-not-40-hex`,
+`foreign-locator-link`, `locator-path-occupied`) leaves an existing locator link unchanged
+(`locator.changed: false`). Only a clean, matching checkout links
+`kaola-project-runner-locate` in the installer's bin directory (default `$HOME/.local/bin`,
+the same convention as `--bin-links`) to this checkout's `scripts/kaola-locate.py`, replacing a
+link that already points at some `scripts/kaola-locate.py` (re-registration after moving a
+checkout; `locator.replaced: true`). The receipt form prints one bounded JSON line
+(`kaola-project-runner-locator/1`, ≤ 4 KB): `target` (the kind as declared by the caller,
+echoed and never inferred), `host` (kernel + hashed hostname fingerprint; compare it with the
+value recorded at registration), `root` (real local path, normalised origin without userinfo,
+HEAD, `clean`, `revision_match`), and, when given, `project` (real local path, top level,
+origin), `worker` (id, script path under the same root, `under_root`, `executable`), `session`
+(name, `present`: tmux presence only, not ownership). `result` is `ok` (exit 0) or `refused`
+(exit 1) with `reasons`; `--target` is required when any of `--project`, `--worker`,
+`--session` is given. Git runs with `GIT_TERMINAL_PROMPT=0`; no credential is read, printed,
+hashed, or forwarded; paths in the receipt are local evidence and never enter an account Skill.
 
 ## tmux core
 
@@ -121,7 +135,7 @@ Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
 
 ## Transport selection
 
-Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin. Each holder process mints an opaque random `holder_instance_id` at construction — immutable for that process, never restored from `record.json` or the native session id, never derived from the PID — and exposes it on `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). `permit`, `cancel`, and the `key escape`→cancel alias accept optional `--expected-holder-instance-id VALUE`; when supplied — including an explicit empty value — the holder compares it against its own id under the settlement lock before any permission settlement, pending-permission cancellation, turn mutation, or outbound cancel, even when no permission/turn is active. A mismatch returns `error.code` `holder-instance-mismatch` with `expected_holder_instance_id` and the actual `holder_instance_id` inside the error object plus top-level `mutation_status` `not_started` and `mutation_performed` `false`; nothing is written to the agent. Omitting the flag keeps legacy unbound behavior. The binding is Runner envelope only and is never forwarded into native ACP method params.
+Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; an ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded to `capture_receipt_bytes` by dropping its oldest `events`/`tool_calls` and adding `truncated` (`list`, `kept`, `dropped`, `total`, `stream_bytes`, `stream_sha256` of the untruncated one-JSON-line-per-entry stream, `hint`), while `capture --full` is the explicit unbounded request; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin. Each holder process mints an opaque random `holder_instance_id` at construction — immutable for that process, never restored from `record.json` or the native session id, never derived from the PID — and exposes it on `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). `permit`, `cancel`, and the `key escape`→cancel alias accept optional `--expected-holder-instance-id VALUE`; when supplied — including an explicit empty value — the holder compares it against its own id under the settlement lock before any permission settlement, pending-permission cancellation, turn mutation, or outbound cancel, even when no permission/turn is active. A mismatch returns `error.code` `holder-instance-mismatch` with `expected_holder_instance_id` and the actual `holder_instance_id` inside the error object plus top-level `mutation_status` `not_started` and `mutation_performed` `false`; nothing is written to the agent. Omitting the flag keeps legacy unbound behavior. The binding is Runner envelope only and is never forwarded into native ACP method params.
 
 Codex `--permission-mode` values are the same literal IDs on both transports but not the same semantics. ACP passes the ID through to the upstream adapter's `mode` option: `read-only` is upstream display name "Ask for approval" (workspace-write sandbox + on-request approval — workspace file writes are permitted without a permission request), `agent` is "Approve for me" (auto_review reviewer), `agent-full-access` is "Full access". PTY maps the same IDs to strict `--sandbox read-only|workspace-write|danger-full-access` plus `--ask-for-approval on-request|never`; OS-level read-only exists only via `--transport pty`. ACP does not claim equivalent enforcement. Start receipts surface the adapter's own display names/descriptions as factual evidence in `configured_options[*].option_name` / `option_description` / `value_name` / `value_description` when the adapter returns them.
 

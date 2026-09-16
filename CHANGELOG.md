@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- **Grok Bot bridge: honest two-commit content/pin model** (Issue #49 review of `fb65c51`,
+  Mission 8). `templates/grok-bot/accepted-revision.json` now declares a `stage`: `content`
+  (the content commit R; the bridge carries an explicit "none yet" line, `bridge.json` says
+  `saveable: false`) or `pinned` (the pin commit P that follows R; `commit` = R plus exactly one
+  of `release` or a plain-text `label`). At the pinned stage `render-skills.py --check`/`--write`
+  and `kaola-grok-bot-verify.py --repo` run a pin gate against the Git checkout (R exists, is an
+  ancestor of HEAD, is a content-stage commit, holds `scripts/kaola-locate.py`,
+  `skills/kaola-project-runner/SKILL.md`, and every worker `SKILL.md` + `runtime-tmux.sh`; a
+  named release is a tag at R); `--require-pinned` is the gate for P. The bridge is saved from P
+  and every execution target is checked out clean and detached at R; the Mac `main` checkout may
+  hold untracked Workflow records, so UAT uses an owner-selected clean checkout or worktree.
+- **Locator hardening and honest attestation wording.** `kaola-locate.py register` validates
+  origin, optional `--expect-revision`, clean state, and the link path before it touches
+  anything; a refused registration leaves an existing locator unchanged. `--target` is documented
+  as the Agent's declaration (echoed, never inferred; compare `host.fingerprint` with the value
+  recorded at registration), `session.present` as tmux presence only (ownership is the worker
+  preflight's proof), and `root.path`/`project.path` as real local paths that never enter the
+  account Skill.
+- **Bounded ordinary ACP capture.** `kaola-acp.py capture` without `--full` now applies the
+  shared `capture_receipt_bytes` budget: the oldest `events`/`tool_calls` are dropped and a
+  `truncated` block records kept/dropped/total counts, the untruncated stream's byte size and
+  sha256, and the `--full` hint (behavioural test against the mock ACP agent).
+- **Adapter and test tightening.** The `grok-bot` adapter's product functions take no platform
+  manifest (the guide uses `<platform id>` instead of the first worker); drift tests assert the
+  baseline render succeeds before mutating; the script-source and wrong-move heuristics exempt a
+  sentence only where a negation precedes the matched phrase. Budgets unchanged.
 - **Progressive disclosure** is now a locked, platform-neutral invariant with measured byte
   budgets (`templates/budgets.json`: discovery descriptions ≤ 320 chars, main Skill ≤ 16 KB,
   each worker ≤ 12 KB, each reference ≤ 8 KB, Grok Bot bridge ≤ 2.5 KB, guide ≤ 8 KB, locator

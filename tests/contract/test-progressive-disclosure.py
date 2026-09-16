@@ -5,7 +5,9 @@ Discovery exposes only a stable name and a short description. Activating Project
 Runner loads its body only, never a worker body. Selecting one worker loads that
 worker only. References load only when the current operation needs them. Scripts
 execute mechanically; the model never reads their source. Ordinary tool outputs are
-bounded receipts (``capture --full`` is the explicit exception). Host adapters may not
+bounded receipts on both transports -- PTY ``capture`` through ``bound-text``, ACP
+``capture`` through ``bound_capture_receipt`` (``capture --full`` is the explicit
+exception on both) -- proven behaviourally here against the mock ACP agent. Host adapters may not
 flatten, concatenate, eagerly preload, or duplicate canonical Skill bodies. Budgets
 live in ``templates/budgets.json``; ``render-skills.py --check`` and this suite fail
 when a budget or a loading boundary regresses.
@@ -15,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -28,6 +31,8 @@ PROJECT = Path(__file__).resolve().parents[2]
 RENDERER = PROJECT / "scripts" / "render-skills.py"
 OBSERVATION = PROJECT / "scripts" / "kaola-observation.py"
 TMUX_CORE = PROJECT / "scripts" / "kaola-tmux.sh"
+ACP_CLI = PROJECT / "scripts" / "kaola-acp.py"
+MOCK_ACP_AGENT = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 BUDGETS = json.loads((PROJECT / "templates" / "budgets.json").read_text(encoding="utf-8"))
 ORCHESTRATOR_ID = "kaola-project-runner"
 WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode")
@@ -35,6 +40,9 @@ WORKER_SKILL_IDS = tuple(f"{wid}-{ORCHESTRATOR_ID}" for wid in WORKER_IDS)
 WORKER_BODY_MARKERS = ("## Communication loop", 'runtime-tmux.sh" send', 'runtime-tmux.sh" capture', "mutation_status", "raw_current_frame", "SKILL_DIR=")
 ORCHESTRATOR_MARKERS = ("## Heartbeat", "## Main execution loop", "Mission-frontier", "Allowed CLIs", "PROJECT_RUNNER_HEARTBEAT", "Accept the delivery")
 READ_SOURCE_PATTERNS = (r"\bcat scripts/", r"\bcat \"?\$SKILL_DIR/scripts", r"read the script", r"open (?:the )?scripts?/", r"read (?:its|their|the) source", r"inspect (?:the )?script source")
+# A sentence is exempt only where a negation stands right before the matched phrase in the
+# same clause ("never read script source"); a negation elsewhere in the sentence is not enough.
+NEGATION_BEFORE = re.compile(r"\b(never|not|no|nor|without)\b[^.;:]{0,40}$", re.IGNORECASE)
 COPY_IGNORE = shutil.ignore_patterns(".git", ".kw", "__pycache__", "node_modules", "build")
 
 
@@ -79,6 +87,8 @@ class BudgetsDeclared(unittest.TestCase):
         self.assertIn(f"CAPTURE_RECEIPT_BYTES = {BUDGETS['capture_receipt_bytes']}", observation)
         locator = (PROJECT / "scripts" / "kaola-locate.py").read_text(encoding="utf-8")
         self.assertIn(f"RECEIPT_LIMIT = {BUDGETS['locator_receipt_bytes']}", locator)
+        acp = ACP_CLI.read_text(encoding="utf-8")
+        self.assertIn(f"CAPTURE_RECEIPT_BYTES = {BUDGETS['capture_receipt_bytes']}", acp)
 
 
 class DiscoveryIsNameAndShortDescription(unittest.TestCase):
@@ -143,10 +153,11 @@ class ActivationBoundaries(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for raw in re.split(r"(?<=[.!?:])\s+|\n\n+", text):
                 sentence = re.sub(r"\s+", " ", raw).strip()
-                if re.search(r"\b(never|not|no)\b", sentence, flags=re.IGNORECASE):
-                    continue  # a prohibition is not an instruction to read source
                 for pattern in READ_SOURCE_PATTERNS:
-                    self.assertIsNone(re.search(pattern, sentence, flags=re.IGNORECASE), f"{path.relative_to(PROJECT)}: {pattern}: {sentence[:80]}")
+                    for match in re.finditer(pattern, sentence, flags=re.IGNORECASE):
+                        # A prohibition ("never read script source") is not an instruction to read source.
+                        self.assertIsNotNone(NEGATION_BEFORE.search(sentence[:match.start()]),
+                                             f"{path.relative_to(PROJECT)}: {pattern}: {sentence[:100]}")
 
     def test_no_host_product_exceeds_its_canonical_source(self) -> None:
         bridge = PROJECT / "hosts" / "grok-bot" / f"{ORCHESTRATOR_ID}.md"
@@ -160,6 +171,9 @@ class RendererEnforcesBudgets(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "repo"
             shutil.copytree(PROJECT, root, ignore=COPY_IGNORE)
+            # No .git in the copy, so no pin can be verified there: budgets are tested at the content stage.
+            (root / "templates" / "grok-bot" / "accepted-revision.json").write_text('{"stage": "content"}\n', encoding="utf-8")
+            self.assertEqual(render(root, "--write").returncode, 0)
             self.assertEqual(render(root, "--check").returncode, 0)
             cases = {
                 "templates/orchestrator/SKILL.md.tmpl": (r"budget: kaola-project-runner/SKILL\.md is \d+ B > \d+ B \(main_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
@@ -230,10 +244,14 @@ class BoundedOrdinaryOutputs(unittest.TestCase):
         self.assertIn('"$OBSERVATION_HELPER" bound-text', capture)
         self.assertRegex(capture, r'capture_full" == true \]\]; then "\$TMUX_BIN" capture-pane -p -t "\$STATE_PANE_ID" -S "-\$lines"; else')
         self.assertIn("[--lines N] [--full]", core)
+        acp = ACP_CLI.read_text(encoding="utf-8")
+        capture_branch = acp.split('elif args.command == "capture":', 1)[1].split("elif args.command ==", 1)[0]
+        self.assertIn("if not args.full:\n            receipt = bound_capture_receipt(receipt)", capture_branch)
         for skill_id in WORKER_SKILL_IDS:
             shipped = PROJECT / "skills" / skill_id / "scripts" / "kaola-tmux.sh"
             self.assertEqual(shipped.read_bytes(), TMUX_CORE.read_bytes(), skill_id)
             self.assertEqual((PROJECT / "skills" / skill_id / "scripts" / "kaola-observation.py").read_bytes(), OBSERVATION.read_bytes(), skill_id)
+            self.assertEqual((PROJECT / "skills" / skill_id / "scripts" / "kaola-acp.py").read_bytes(), ACP_CLI.read_bytes(), skill_id)
 
     def test_locator_receipt_is_bounded(self) -> None:
         completed = subprocess.run([sys.executable, str(PROJECT / "scripts" / "kaola-locate.py")], text=True, capture_output=True, cwd=PROJECT)
@@ -242,6 +260,73 @@ class BoundedOrdinaryOutputs(unittest.TestCase):
         self.assertEqual(receipt["schema"], "kaola-project-runner-locator/1")
         self.assertLessEqual(len(completed.stdout.encode("utf-8")), BUDGETS["locator_receipt_bytes"])
         self.assertEqual(len(completed.stdout.strip().splitlines()), 1)
+
+
+class BoundedAcpCapture(unittest.TestCase):
+    """Ordinary ACP capture is bounded the same way as PTY capture, proven against the mock agent."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory(prefix="kaola-pd-acp-")
+        cls.root = Path(cls._tmp.name)
+        cls.repo = cls.root / "repo"
+        cls.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
+        cls.session = f"pdacp-{os.getpid()}"
+        cls.started = False
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if cls.started:
+            cls.cli("stop", "--force", check=False)
+        cls._tmp.cleanup()
+
+    @classmethod
+    def cli(cls, command: str, *args: str, check: bool = True) -> dict:
+        env = dict(os.environ, KAOLA_ACP_RECORD_ROOT=str(cls.root / "records"), MOCK_ACP_LOG=str(cls.root / "mock.jsonl"))
+        argv = [sys.executable, str(ACP_CLI), "grok", command, "--repo", str(cls.repo), "--session", cls.session,
+                "--command", f"{sys.executable} {MOCK_ACP_AGENT} --scenario follow_flood", *args]
+        completed = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120)
+        if check and completed.returncode != 0:
+            raise AssertionError(f"{command} failed: {completed.stderr}\n{completed.stdout}")
+        return json.loads(completed.stdout) if completed.stdout.strip() else {}
+
+    @staticmethod
+    def stream_sha256(events: list) -> str:
+        return hashlib.sha256("".join(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n" for e in events).encode("utf-8")).hexdigest()
+
+    def test_ordinary_capture_is_bounded_verifiable_and_full_is_exempt(self) -> None:
+        type(self).started = True
+        self.cli("start")
+        for _ in range(2):  # follow_flood emits 280 session updates per turn
+            self.cli("send", "--text", "flood please")
+        full = self.cli("capture", "--full", "--inline")
+        events = full["events"]
+        self.assertGreater(len(json.dumps(full).encode("utf-8")), BUDGETS["capture_receipt_bytes"], "--full is the explicit, unbounded request")
+        self.assertNotIn("truncated", full)
+        self.assertGreater(len(events), 500)
+        lines = 1000
+        bounded = self.cli("capture", "--lines", str(lines))
+        line = json.dumps(bounded, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        self.assertLessEqual(len(line), BUDGETS["capture_receipt_bytes"])
+        truncated = bounded["truncated"]
+        selected = events[-lines:]
+        self.assertEqual(truncated["list"], "events")
+        self.assertEqual(truncated["total"], len(selected))
+        self.assertEqual(truncated["kept"], len(bounded["events"]))
+        self.assertEqual(truncated["dropped"] + truncated["kept"], truncated["total"])
+        self.assertGreater(truncated["dropped"], 0)
+        self.assertEqual(truncated["stream_sha256"], self.stream_sha256(selected), "the marker names the untruncated stream")
+        self.assertEqual(truncated["stream_bytes"], len("".join(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n" for e in selected).encode("utf-8")))
+        self.assertEqual(bounded["events"], selected[-truncated["kept"]:], "the newest events are the ones kept")
+        self.assertEqual(bounded["events"][-1]["cursor"], events[-1]["cursor"])
+        self.assertIn("--full", truncated["hint"])
+        since = self.cli("capture", "--since", "0")
+        self.assertLessEqual(len(json.dumps(since, ensure_ascii=False, sort_keys=True).encode("utf-8")), BUDGETS["capture_receipt_bytes"])
+        self.assertIn("truncated", since)
+        small = self.cli("capture", "--lines", "5")
+        self.assertNotIn("truncated", small, "a receipt within budget passes through unchanged")
+        self.assertEqual(len(small["events"]), 5)
 
 
 class InvariantIsDocumented(unittest.TestCase):

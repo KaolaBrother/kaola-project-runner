@@ -9,10 +9,12 @@ verifier proves that shape structurally:
 
 * the bundle is exactly the marker, the bridge, ``bridge.json``, and ``INSTALL.md``;
 * the bridge stays inside its byte budget (``templates/budgets.json``), names the
-  repository, the expected origin, exactly one 40-hex accepted revision, the
-  device-local locator command, and the two canonical entry paths
-  (``ROOT/skills/kaola-project-runner`` and ``ROOT/skills/<platform>-kaola-project-runner``),
-  binds the execution target before anything else, and names no individual worker;
+  repository, the expected origin, the device-local locator command, and the two
+  canonical entry paths (``ROOT/skills/kaola-project-runner`` and
+  ``ROOT/skills/<platform>-kaola-project-runner``), binds the execution target before
+  anything else, and names no individual worker; at stage ``pinned`` it carries exactly
+  one 40-hex accepted revision, at stage ``content`` (the content commit of the
+  two-commit content/pin model) it carries none and says it must not be saved;
 * the bridge carries **no** canonical body, reference, transport, or orchestrator
   content, no fixed or default path, HOME convention, username, environment
   variable, symlink convention, runtime copy, and no credential handling pattern;
@@ -21,9 +23,12 @@ verifier proves that shape structurally:
   install plus the read-only Local Computer UAT (no cloud-to-Mac install).
 
 With ``--repo`` it additionally proves **generated state** (every file byte-identical
-to a fresh render from that checkout's ``scripts/render-skills.py``) and that no
-sentence of any canonical ``skills/**/SKILL.md`` or reference appears in the bridge.
-It does not contact Grok Bot and does not claim live adoption.
+to a fresh render from that checkout's ``scripts/render-skills.py``), that no
+sentence of any canonical ``skills/**/SKILL.md`` or reference appears in the bridge,
+and, at stage ``pinned``, the renderer's pin gate (the accepted commit exists in that
+checkout, is an ancestor of HEAD, is not a self-pin, and holds the locator and every
+entry path). ``--require-pinned`` fails on a content-stage bundle. It does not
+contact Grok Bot and does not claim live adoption.
 """
 
 from __future__ import annotations
@@ -50,6 +55,8 @@ EXPECTED_ORIGIN = f"github.com/{REPO_SLUG}"
 MAIN_ENTRY = f"ROOT/skills/{ROOT_SKILL}/SKILL.md"
 WORKER_ENTRY = f"ROOT/skills/<platform>-{ROOT_SKILL}/SKILL.md"
 REVISION = re.compile(r"\b[0-9a-f]{40}\b")
+STAGES = ("content", "pinned")
+CONTENT_CLAUSE = "do not save it to any account"
 RENDERER = Path("scripts") / "render-skills.py"
 BUDGETS = Path("templates") / "budgets.json"
 DEFAULT_BUDGETS = {"bridge_bytes": 2560, "description_chars": 320, "bridge_guide_bytes": 8192}
@@ -120,7 +127,17 @@ def canonical_sentences(repo: Path) -> set[str]:
     return sentences
 
 
-def bridge_findings(bundle: Path, repo: Path | None, budgets: dict[str, int]) -> list[str]:
+def bundle_stage(bundle: Path) -> str | None:
+    """The stage the fingerprint manifest declares, or None when it is unreadable."""
+    try:
+        data = json.loads((bundle / BRIDGE_MANIFEST).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    stage = data.get("stage")
+    return stage if stage in STAGES else None
+
+
+def bridge_findings(bundle: Path, repo: Path | None, budgets: dict[str, int], stage: str | None) -> list[str]:
     bridge = bundle / BRIDGE_FILE
     if not bridge.is_file():
         return [f"{bundle}: missing {BRIDGE_FILE}"]
@@ -143,10 +160,20 @@ def bridge_findings(bundle: Path, repo: Path | None, budgets: dict[str, int]) ->
     if not body.strip():
         findings.append(f"{bridge}: body must not be empty")
     revisions = sorted(set(REVISION.findall(text)))
-    if len(revisions) != 1:
-        findings.append(f"{bridge}: must carry exactly one 40-hex accepted revision, found {revisions}")
-    elif text.count(revisions[0]) != 1:
-        findings.append(f"{bridge}: the accepted revision must appear on exactly one line")
+    if stage == "content":
+        if revisions:
+            findings.append(f"{bridge}: a content-stage bridge carries no accepted revision, found {revisions}")
+        if CONTENT_CLAUSE not in text:
+            findings.append(f"{bridge}: a content-stage bridge must say {CONTENT_CLAUSE!r}")
+    else:
+        if len(revisions) != 1:
+            findings.append(f"{bridge}: must carry exactly one 40-hex accepted revision, found {revisions}")
+        elif text.count(revisions[0]) != 1:
+            findings.append(f"{bridge}: the accepted revision must appear on exactly one line")
+        if CONTENT_CLAUSE in text:
+            findings.append(f"{bridge}: a pinned bridge must not carry the content-stage placeholder")
+    if "`--target` only echoes your declaration" not in text or "host fingerprint" not in text:
+        findings.append(f"{bridge}: must say --target is the Agent's declaration and require the host-fingerprint comparison")
     for needle in (REPO_SLUG, EXPECTED_ORIGIN, f"`{LOCATOR_COMMAND}`", f"`{MAIN_ENTRY}`", f"`{WORKER_ENTRY}`"):
         if needle not in text:
             findings.append(f"{bridge}: missing {needle!r}")
@@ -197,9 +224,20 @@ def manifest_findings(bundle: Path) -> list[str]:
         findings.append(f"{manifest}: host/install_guide/skill_count must be grok-bot/{INSTALL_GUIDE}/1")
     if data.get("locator") != LOCATOR_COMMAND or data.get("repository") != EXPECTED_ORIGIN:
         findings.append(f"{manifest}: locator/repository must be {LOCATOR_COMMAND}/{EXPECTED_ORIGIN}")
-    commit = str(data.get("accepted_commit", ""))
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        findings.append(f"{manifest}: accepted_commit must be 40-hex")
+    stage = data.get("stage")
+    commit = data.get("accepted_commit")
+    if stage not in STAGES:
+        findings.append(f"{manifest}: stage must be one of {list(STAGES)}, got {stage!r}")
+    elif stage == "content":
+        if commit is not None or data.get("release") is not None or data.get("label") is not None or data.get("saveable") is not False:
+            findings.append(f"{manifest}: content stage must carry accepted_commit/release/label = null and saveable = false")
+        commit = ""
+    else:
+        commit = str(commit or "")
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            findings.append(f"{manifest}: accepted_commit must be 40-hex at the pinned stage")
+        if bool(data.get("release")) == bool(data.get("label")) or data.get("saveable") is not True:
+            findings.append(f"{manifest}: pinned stage names exactly one of release/label and saveable = true")
     skill = data.get("skill") or {}
     bridge = bundle / BRIDGE_FILE
     if skill.get("name") != ROOT_SKILL or skill.get("source") != BRIDGE_FILE or not bridge.is_file():
@@ -247,21 +285,27 @@ def guide_findings(bundle: Path, budgets: dict[str, int]) -> list[str]:
     return findings
 
 
-def generated_state_findings(bundle: Path, repo: Path) -> list[str]:
+def generated_state_findings(bundle: Path, repo: Path, require_pinned: bool) -> list[str]:
     renderer_path = repo / RENDERER
     if not renderer_path.is_file():
         return [f"{repo}: missing {RENDERER}; cannot prove generated state"]
     spec = importlib.util.spec_from_file_location("kaola_render_skills", renderer_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader
+    findings: list[str] = []
     try:
         spec.loader.exec_module(module)
         manifests = [module.parse_manifest(path) for path in sorted(module.PLATFORMS.glob("*.yaml"))]
-        expected = {name: hashlib.sha256(data).hexdigest() for name, data in module.expected_grok_bot_host_files(manifests).items()}
+        expected = {name: hashlib.sha256(data).hexdigest() for name, data in module.expected_grok_bot_host_files().items()}
+        revision = module.accepted_revision()
+        # The renderer's pin gate, run from outside the renderer: exists, ancestor, no self-pin,
+        # every entry path present, release tag (if any) at the pinned commit.
+        findings.extend(f"{bundle}: {finding}" for finding in module.pin_findings(revision, manifests))
+        if require_pinned and revision["stage"] != "pinned":
+            findings.append(f"{bundle}: stage is content; --require-pinned demands a pinned, verified bridge")
     except (OSError, ValueError) as exc:
         return [f"{bundle}: cannot re-render from {repo}: {exc}"]
     actual = {p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(bundle.rglob("*")) if p.is_file()}
-    findings: list[str] = []
     for name in sorted(expected.keys() | actual.keys()):
         if name not in actual:
             findings.append(f"{bundle}: missing generated file {name}")
@@ -272,11 +316,14 @@ def generated_state_findings(bundle: Path, repo: Path) -> list[str]:
     return findings
 
 
-def validate(bundle: Path, repo: Path | None) -> list[str]:
+def validate(bundle: Path, repo: Path | None, require_pinned: bool = False) -> list[str]:
     if not bundle.is_dir():
         return [f"{bundle}: missing bundle directory"]
     budgets = load_budgets(repo)
     findings: list[str] = []
+    stage = bundle_stage(bundle)
+    if require_pinned and stage != "pinned":
+        findings.append(f"{bundle}: stage is {stage!r}; --require-pinned demands a pinned bridge")
     marker = bundle / MARKER
     if not marker.is_file():
         findings.append(f"{bundle}: missing {MARKER}")
@@ -291,7 +338,7 @@ def validate(bundle: Path, repo: Path | None) -> list[str]:
             findings.append(f"{bundle}: symlink {path.name} is not part of a generated bundle")
         elif path.is_file() and path.stat().st_mode & 0o111:
             findings.append(f"{bundle}: {path.name} must not be executable")
-    findings.extend(bridge_findings(bundle, repo, budgets))
+    findings.extend(bridge_findings(bundle, repo, budgets, stage))
     findings.extend(manifest_findings(bundle))
     findings.extend(guide_findings(bundle, budgets))
     for path in sorted(bundle.rglob("*")):
@@ -301,7 +348,7 @@ def validate(bundle: Path, repo: Path | None) -> list[str]:
                 if token in text:
                     findings.append(f"{path}: unofficial API token {token!r}")
     if repo is not None:
-        findings.extend(generated_state_findings(bundle, repo))
+        findings.extend(generated_state_findings(bundle, repo, require_pinned))
     return findings
 
 
@@ -309,15 +356,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("bundle", type=Path)
     parser.add_argument("--repo", type=Path, default=None)
+    parser.add_argument("--require-pinned", action="store_true", help="fail unless the bundle is at the pinned stage")
     args = parser.parse_args()
-    findings = validate(args.bundle.resolve(), args.repo.resolve() if args.repo else None)
+    findings = validate(args.bundle.resolve(), args.repo.resolve() if args.repo else None, args.require_pinned)
     if findings:
         for finding in findings:
             print(finding, file=sys.stderr)
         return 1
     size = (args.bundle / BRIDGE_FILE).stat().st_size
-    proof = "generated state" if args.repo else "shape only; pass --repo to prove generated state"
-    print(f"kaola-grok-bot-verify: PASS {args.bundle} (1 bridge skill, {size} B, manifest, guide; no canonical content; {proof})")
+    stage = bundle_stage(args.bundle)
+    proof = "generated state" + (", pin verified" if stage == "pinned" else "") if args.repo else "shape only; pass --repo to prove generated state"
+    print(f"kaola-grok-bot-verify: PASS {args.bundle} (1 bridge skill, {size} B, stage {stage}, manifest, guide; no canonical content; {proof})")
     return 0
 
 

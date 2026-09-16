@@ -67,12 +67,15 @@ one selected `ROOT/skills/<platform id>-{{SKILL_NAME}}`. On a bridge host, befor
 each worker dispatch run the locator attestation on the bound target
 (`{{LOCATOR}} --target local|cloud --expect-revision <accepted> --project <root>
 --worker <platform id> --session <name>`) and refuse any `refused` receipt: the
-consumer project, the selected worker script under the same ROOT, and the exact
-owned session must all be on that one target. Local Computer and the cloud Agent
-Computer never reach each other's files, CLIs, tmux, or sessions, and nothing
-clones, installs, or updates Local Computer from the cloud. Grok Bot is a host,
-not a worker and not an eighth platform: `--platform grok` is the Grok CLI
-worker; `--platform grok-bot` is invalid.
+consumer project, the selected worker script under the same ROOT, and a session of
+the exact name must all be on that one target (`--target` is your declaration;
+compare the receipt's `host.fingerprint` with the value recorded when that
+target's locator was registered; session ownership is the worker preflight's
+proof). Local Computer and the cloud Agent Computer never reach each other's
+files, CLIs, tmux, or sessions, and nothing clones, installs, or updates Local
+Computer from the cloud. Grok Bot is a host, not a worker and not an eighth
+platform: `--platform grok` is the Grok CLI worker; `--platform grok-bot` is
+invalid.
 
 On Grok Bot one Routine on this Bot conversation is the only heartbeat carrier:
 never stack it with a Codex heartbeat or blocking sleep. Takeover cancels the
@@ -89,7 +92,8 @@ This Skill loads on its own. Load one selected worker Skill only at dispatch, a
 reference only when the current step needs it, and never read script source or
 whole files into context: receipts, hashes, counts, and bounded excerpts are the
 evidence. Ordinary `observe`, `status`, and `capture --lines` receipts are
-bounded; `capture --full` is an explicit, unbounded request.
+bounded on both transports (a truncation marker names the dropped part and the
+sha256 of the whole stream); `capture --full` is an explicit, unbounded request.
 
 ### Defaults
 

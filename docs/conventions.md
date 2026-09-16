@@ -22,8 +22,10 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
 - Grok Bot host bundle: `hosts/grok-bot/` rendered by the `grok-bot` host adapter (inputs:
   `GROK_BOT_ADAPTER_INPUTS` = `templates/grok-bot/` only) — one thin bridge Skill
   `kaola-project-runner.md`, `bridge.json`, and `INSTALL.md`. The bridge carries the accepted
-  revision (`templates/grok-bot/accepted-revision.json`, rewritten on release) and no canonical
-  content. Grok Bot is a bridge host, not a `platforms/*.yaml` worker and not an installer
+  revision from `templates/grok-bot/accepted-revision.json` under a two-commit content/pin model
+  (stage `content` for the content commit R, whose bridge is not saveable; stage `pinned` for
+  the pin commit P that names R with an honest label or release tag; `--check --require-pinned`
+  is the gate for P) and no canonical content. Grok Bot is a bridge host, not a `platforms/*.yaml` worker and not an installer
   destination; there is no `platforms/grok-bot.yaml`, no `scripts/adapters/grok-bot.sh`, and
   no `--runtime grok-bot`. `scripts/kaola-locate.py` is the device-local locator and
   host-target attestation.
@@ -51,7 +53,7 @@ Activating Project Runner loads its body only, never a worker body. Selecting on
 that worker only. References load only when the current operation needs them. Scripts execute
 mechanically; the model never reads their source. Observe, capture, and verifier outputs are
 bounded receipts: hashes, counts, and relevant excerpts, never whole files or unbounded terminal
-history (`capture --full` is the explicit, requested exception). Host adapters may not flatten,
+history, on PTY and ACP alike (`capture --full` is the explicit, requested exception). Host adapters may not flatten,
 concatenate, eagerly preload, or duplicate canonical Skill bodies for packaging convenience.
 Every platform adapter and host declares measurable byte budgets for discovery, activation,
 selected-worker increment, references, and tool outputs in `templates/budgets.json`;

@@ -13,9 +13,16 @@ Skill and, at dispatch, one selected worker from the verified checkout on that
 target. It carries no canonical body, reference, transport, path convention,
 runtime copy, per-worker account Skills, or credential handling. The locator
 (``scripts/kaola-locate.py``, registered as a bin link the way ``--bin-links``
-already does) produces the fail-closed host-target attestation. Seven
-platforms, not an eighth; ``templates/grok-golden/`` frozen; nothing here claims
-live Grok Bot adoption -- the owner's read-only Local Computer UAT is the boundary.
+already does) produces the fail-closed host-target attestation; ``--target`` is
+the Agent's declaration (the script cannot prove physical host kind), so the
+real safety is device-local execution, the host fingerprint compared with the
+value recorded at registration, and root/project/script co-location on the
+executing host. Mission 8 (review FAIL of ``fb65c51``): the bridge follows an
+honest two-commit content/pin model (content commit R at stage ``content``,
+pin commit P naming R at stage ``pinned``) whose pin is proven by ``--check``,
+the verifier, and ``Issue49PinModel``. Seven platforms, not an eighth;
+``templates/grok-golden/`` frozen; nothing here claims live Grok Bot adoption --
+the owner's read-only Local Computer UAT is the boundary.
 """
 
 from __future__ import annotations
@@ -85,8 +92,10 @@ def git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
 
 
 def copy_repo(temporary: str) -> Path:
+    """A plain copy (no .git): a pin cannot be verified here, so the copy starts at the content stage."""
     destination = Path(temporary) / "repo"
     shutil.copytree(PROJECT, destination, ignore=COPY_IGNORE)
+    (destination / "templates" / HOST_ID / "accepted-revision.json").write_text('{"stage": "content"}\n', encoding="utf-8")
     return destination
 
 
@@ -121,17 +130,50 @@ def clause_present(text: str, patterns: tuple[str, ...]) -> re.Match[str] | None
     return None
 
 
+NEGATION_BEFORE = re.compile(r"\b(do not|don't|never|must not|cannot|not|no|refuse[sd]?|without)\b[^.;:]{0,60}$", re.IGNORECASE)
+
+
 def authorizes_wrong_move(text: str, patterns: tuple[str, ...]) -> str | None:
+    """The first sentence that states a forbidden move without a negation right before it.
+
+    A sentence is exempt only where a negation precedes the matched phrase within the
+    same clause (``never clone ... on Local Computer``); a negation elsewhere in the
+    sentence, or a word such as ``only``, does not exempt it.
+    """
     for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
         sentence = normalize(raw)
         if not sentence:
             continue
-        if re.search(r"\b(do not|don't|never|must not|cannot|not automatic|is not|only)\b", sentence, flags=re.IGNORECASE):
-            continue
         for pattern in patterns:
-            if re.search(pattern, sentence, flags=re.IGNORECASE):
-                return sentence
+            for match in re.finditer(pattern, sentence, flags=re.IGNORECASE):
+                if not NEGATION_BEFORE.search(sentence[:match.start()]):
+                    return sentence
     return None
+
+
+def git_repo(temporary: str) -> tuple[Path, str]:
+    """A copy of the project as a real Git checkout (one content-stage commit), for pin tests."""
+    root = copy_repo(temporary)
+    git(root, "init", "-q")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "content")
+    return root, git(root, "rev-parse", "HEAD")
+
+
+def set_stage(root: Path, stage: str, commit: str | None = None, label: str | None = None, release: str | None = None) -> None:
+    data: dict[str, object] = {"stage": stage}
+    if commit is not None:
+        data["commit"] = commit
+    if label is not None:
+        data["label"] = label
+    if release is not None:
+        data["release"] = release
+    (root / "templates" / HOST_ID / "accepted-revision.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def host_products(root: Path) -> dict[str, bytes]:
+    bundle = root / "hosts" / HOST_ID
+    return {name: (bundle / name).read_bytes() for name in (f"{ORCHESTRATOR_ID}.md", "bridge.json", "INSTALL.md")}
 
 
 def markdown_tree(root: Path) -> str:
@@ -248,10 +290,22 @@ class Issue49SingleBridge(unittest.TestCase):
         self.assertLessEqual(len(self.meta["description"]), BUDGETS["description_chars"])
         self.assertLessEqual(len(self.text.encode("utf-8")), BUDGETS["bridge_bytes"])
         revisions = re.findall(r"\b[0-9a-f]{40}\b", self.text)
-        self.assertEqual(len(revisions), 1)
         accepted = json.loads(ACCEPTED_REVISION.read_text(encoding="utf-8"))
-        self.assertEqual(revisions[0], accepted["commit"])
-        self.assertIn(f"release {accepted['release']}", self.text)
+        self.assertIn(accepted["stage"], ("content", "pinned"))
+        if accepted["stage"] == "content":
+            # Content commit R: no pin yet, and the bridge says so instead of pretending.
+            self.assertEqual(revisions, [])
+            self.assertIn("Accepted revision: none yet", self.text)
+            self.assertIn("do not save it to any account", self.text)
+            self.assertNotIn("commit", accepted)
+        else:
+            self.assertEqual(len(revisions), 1)
+            self.assertEqual(revisions[0], accepted["commit"])
+            tag = f"release {accepted['release']}" if accepted.get("release") else accepted["label"]
+            self.assertIn(f"Accepted revision: `{accepted['commit']}` ({tag}).", self.text)
+            self.assertNotIn("do not save it to any account", self.text)
+        self.assertIn("`--target` only echoes your declaration", self.text)
+        self.assertIn("host fingerprint", self.text)
         self.assertIn("KaolaBrother/kaola-project-runner", self.text)
         self.assertIn(EXPECTED_ORIGIN, self.text)
         self.assertIn(f"`{LOCATOR_COMMAND}`", self.text)
@@ -296,7 +350,12 @@ class Issue49SingleBridge(unittest.TestCase):
         self.assertEqual(data["host"], HOST_ID)
         self.assertEqual(data["locator"], LOCATOR_COMMAND)
         self.assertEqual(data["repository"], EXPECTED_ORIGIN)
-        self.assertEqual(data["accepted_commit"], json.loads(ACCEPTED_REVISION.read_text(encoding="utf-8"))["commit"])
+        accepted = json.loads(ACCEPTED_REVISION.read_text(encoding="utf-8"))
+        self.assertEqual(data["stage"], accepted["stage"])
+        self.assertEqual(data["accepted_commit"], accepted.get("commit"))
+        self.assertEqual(data["release"], accepted.get("release"))
+        self.assertEqual(data["label"], accepted.get("label"))
+        self.assertEqual(data["saveable"], accepted["stage"] == "pinned")
         skill = data["skill"]
         self.assertEqual(skill["name"], ORCHESTRATOR_ID)
         self.assertEqual(skill["description"], self.meta["description"])
@@ -312,13 +371,29 @@ class Issue49SingleBridge(unittest.TestCase):
         self.assertEqual(set(re.findall(r"hosts/grok-bot/([a-z0-9-]+)\.md", text)), {ORCHESTRATOR_ID})
         lowered = normalize(text).lower()
         for clause in ("exactly one", "one write", "update it in place", "no_supported_path", "execution on local computer",
-                       "never clones, installs, updates, or manages anything on the mac", "kaola-locate.py\" register",
+                       "never clones, installs, updates, or manages anything on the mac", "kaola-locate.py\" register --expect-revision",
                        f"{LOCATOR_COMMAND} --target local --expect-revision", "--target cloud", "read-only preflight",
                        "nothing was started, sent, stopped, cloned, fetched, checked out, or installed",
-                       "cloud agent computer executed nothing", "never publish this skill to a public or team marketplace"):
+                       "cloud agent computer executed nothing", "never publish this skill to a public or team marketplace",
+                       # Two-commit model and the honest UAT checkout (Mission 8).
+                       "two commits", "content commit r", "pin commit p", "--check --require-pinned", "save the bridge **from p**",
+                       "untracked workflow records", "git worktree add --detach <owner-chosen path>", "do not assume any fixed path",
+                       "must not be saved",
+                       # Target kind, fingerprint, session presence, path evidence (security cut).
+                       "`--target` is the agent's declaration", "host.fingerprint", "ownership is proven by the worker preflight",
+                       "may include the user's home", "none of it enters the account skill", "refused registration leaves an existing locator unchanged"):
             self.assertIn(clause, lowered, clause)
         for stale in REMOVED_SURFACES:
             self.assertNotIn(stale, text, stale)
+        # The guide is rendered from adapter prose only: no worker id, Skill name, or runtime name may leak in.
+        for wid in WORKER_IDS:
+            self.assertNotIn(f"{wid}-{ORCHESTRATOR_ID}", text, f"guide names worker Skill {wid}; use the <platform id> placeholder")
+            self.assertIsNone(re.search(rf"--worker {re.escape(wid)}\b", text), wid)
+            if wid != "grok":  # "grok" is a substring of the host name grok-bot
+                self.assertNotIn(wid, text, wid)
+        for runtime in ("Claude Code", "Codex", "Cursor", "Devin", "Kimi", "OpenCode", "Grok CLI"):
+            self.assertNotIn(runtime, text, runtime)
+        self.assertIn("<platform id>", text)
         for pattern in CREDENTIAL_PATTERNS:
             self.assertIsNone(re.search(pattern, text, flags=re.IGNORECASE), pattern)
         wrong = authorizes_wrong_move(text, (r"cloud .{0,30}(?:clone|install|update).{0,40}(?:mac|local computer)", r"publish.{0,40}marketplace"))
@@ -341,67 +416,202 @@ class Issue49SingleBridge(unittest.TestCase):
                 "runtime-copy": lambda: ((bundle / ORCHESTRATOR_ID).mkdir(), (bundle / ORCHESTRATOR_ID / "SKILL.md").write_text("x", encoding="utf-8")),
                 "manifest-stale": lambda: (bundle / "bridge.json").write_text((bundle / "bridge.json").read_text(encoding="utf-8").replace('"bytes": ', '"bytes": 1'), encoding="utf-8"),
             }
+            cases["content-stage-revision"] = lambda: bridge.write_text(
+                bridge.read_text(encoding="utf-8").replace("Accepted revision: none yet.", "Accepted revision: `" + "a" * 40 + "` (v0.0.0)."), encoding="utf-8")
             original = bridge.read_bytes()
             for label, mutate in cases.items():
                 bridge.write_bytes(original)
                 shutil.rmtree(bundle / ORCHESTRATOR_ID, ignore_errors=True)
                 (bundle / "claude-code-kaola-project-runner.md").unlink(missing_ok=True)
-                render(root, "--write")
+                written = render(root, "--write")
+                self.assertEqual(written.returncode, 0, f"{label}: baseline write must succeed: {written.stderr}")
+                self.assertEqual(verify(root, "--repo", ".").returncode, 0, f"{label}: baseline must verify")
                 mutate()
                 self.assertNotEqual(verify(root, "--repo", ".").returncode, 0, label)
                 self.assertNotEqual(render(root, "--check").returncode, 0, label)
 
 
 class Issue49BridgeInvariance(unittest.TestCase):
-    def test_accepted_revision_changes_exactly_one_line_and_canonical_edits_change_nothing(self) -> None:
+    def test_pin_changes_exactly_one_line_and_canonical_or_manifest_edits_change_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = copy_repo(temporary)
+            root, content = git_repo(temporary)
+            set_stage(root, "content")
             bridge = root / "hosts" / HOST_ID / f"{ORCHESTRATOR_ID}.md"
             self.assertEqual(render(root, "--write").returncode, 0)
+            before_products = host_products(root)
             before = bridge.read_text(encoding="utf-8").splitlines()
-            # Canonical edits: orchestrator body, worker template, a worker reference, a manifest.
+            # Canonical edits: orchestrator body, worker template, a worker reference, a host reference,
+            # and a platform manifest (the adapter reads no manifest: all three products stay identical).
             for relative, marker in (("templates/orchestrator/SKILL.md.tmpl", "\n\nCanonical policy sentence added for the invariance test.\n"),
                                      ("templates/SKILL.md.tmpl", "\n\nCanonical transport sentence added for the invariance test.\n"),
                                      ("templates/references/transport.md.tmpl", "\n\nReference sentence added for the invariance test.\n"),
                                      ("templates/orchestrator/references/grok-bot-host.md", "\n\nHost reference sentence added for the invariance test.\n")):
                 path = root / relative
                 path.write_text(path.read_text(encoding="utf-8") + marker, encoding="utf-8")
+            manifest = root / "platforms" / "claude-code.yaml"
+            manifest.write_text(re.sub(r'(?m)^runtime_name: ".*"$', 'runtime_name: "Renamed Runtime"', manifest.read_text(encoding="utf-8")), encoding="utf-8")
             self.assertEqual(render(root, "--write").returncode, 0)
-            self.assertEqual(bridge.read_text(encoding="utf-8").splitlines(), before, "canonical edits must not touch the bridge")
+            self.assertEqual(host_products(root), before_products, "canonical and manifest edits must not touch any host product")
             self.assertIn("Canonical policy sentence", (root / "skills" / ORCHESTRATOR_ID / "SKILL.md").read_text(encoding="utf-8"))
-            # Accepted revision: exactly one line of the bridge changes.
-            accepted = root / "templates" / HOST_ID / "accepted-revision.json"
-            data = json.loads(accepted.read_text(encoding="utf-8"))
-            data["commit"] = "f" * 40
-            data["release"] = "v9.9.9"
-            accepted.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-            self.assertEqual(render(root, "--write").returncode, 0)
+            self.assertIn("Renamed Runtime", (root / "skills" / "claude-code-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8"))
+            git(root, "checkout", "-q", "--", "platforms/claude-code.yaml")
+            # Pin commit P: pinning the content commit changes exactly one line of the bridge.
+            set_stage(root, "pinned", commit=content, label="pre-release UAT candidate; not a release")
+            written = render(root, "--write")
+            self.assertEqual(written.returncode, 0, written.stderr)
             after = bridge.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(before), len(after))
             changed = [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
             self.assertEqual(len(changed), 1, f"expected exactly one changed line, got {changed}")
-            self.assertIn("f" * 40, after[changed[0]])
-            self.assertIn("v9.9.9", after[changed[0]])
-            self.assertEqual(verify(root, "--repo", ".").returncode, 0)
+            self.assertIn(content, after[changed[0]])
+            self.assertIn("pre-release UAT candidate; not a release", after[changed[0]])
+            self.assertIn("none yet", before[changed[0]])
+            self.assertEqual(verify(root, "--repo", ".", "--require-pinned").returncode, 0)
+            self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
+            manifest_data = json.loads((root / "hosts" / HOST_ID / "bridge.json").read_text(encoding="utf-8"))
+            self.assertEqual((manifest_data["stage"], manifest_data["accepted_commit"], manifest_data["saveable"]), ("pinned", content, True))
+            # Re-pinning to another content commit again changes exactly one line.
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "pin")
+            set_stage(root, "content")
+            (root / "docs" / "README.md").write_text((root / "docs" / "README.md").read_text(encoding="utf-8") + "\nSecond content commit.\n", encoding="utf-8")
+            self.assertEqual(render(root, "--write").returncode, 0)
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "content 2")
+            second = git(root, "rev-parse", "HEAD")
+            set_stage(root, "pinned", commit=second, label="second candidate")
+            self.assertEqual(render(root, "--write").returncode, 0)
+            again = bridge.read_text(encoding="utf-8").splitlines()
+            changed = [i for i, (a, b) in enumerate(zip(after, again)) if a != b]
+            self.assertEqual(len(changed), 1)
+            self.assertIn(second, again[changed[0]])
 
     def test_renderer_refuses_a_non_40_hex_revision_or_over_budget_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = copy_repo(temporary)
             accepted = root / "templates" / HOST_ID / "accepted-revision.json"
-            data = json.loads(accepted.read_text(encoding="utf-8"))
             for bad in ("main", "v0.2.3", "ba3d14f", "G" * 40):
-                data["commit"] = bad
-                accepted.write_text(json.dumps(data) + "\n", encoding="utf-8")
+                set_stage(root, "pinned", commit=bad, label="candidate")
                 result = render(root, "--check")
                 self.assertNotEqual(result.returncode, 0, bad)
                 self.assertIn("40-hex", result.stderr)
-            data["commit"] = "a" * 40
-            accepted.write_text(json.dumps(data) + "\n", encoding="utf-8")
+            set_stage(root, "pinned", commit="a" * 40)
+            self.assertIn("exactly one of release", render(root, "--check").stderr)
+            set_stage(root, "pinned", commit="a" * 40, label="x", release="v1.0.0")
+            self.assertIn("exactly one of release", render(root, "--check").stderr)
+            set_stage(root, "content", commit="a" * 40)
+            self.assertIn("content stage carries no commit", render(root, "--check").stderr)
+            accepted.write_text(json.dumps({"stage": "released"}) + "\n", encoding="utf-8")
+            self.assertIn("stage must be one of", render(root, "--check").stderr)
+            set_stage(root, "content")
             template = root / "templates" / HOST_ID / "bridge.md.tmpl"
             template.write_text(template.read_text(encoding="utf-8") + "\n" + ("padding " * 400) + "\n", encoding="utf-8")
             result = render(root, "--write")
             self.assertNotEqual(result.returncode, 0)
             self.assertRegex(result.stderr, r"budget: grok-bot/kaola-project-runner\.md is \d+ B > \d+ B \(bridge_bytes\)")
+
+
+class Issue49PinModel(unittest.TestCase):
+    """The pinned stage is proven against the Git checkout, by the renderer, the verifier, and here."""
+
+    def check_findings(self, root: Path) -> str:
+        result = render(root, "--check")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotEqual(verify(root, "--repo", ".").returncode, 0, "the verifier runs the same pin gate")
+        return result.stderr
+
+    def test_content_stage_is_not_saveable_and_require_pinned_refuses_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _ = git_repo(temporary)
+            set_stage(root, "content")
+            self.assertEqual(render(root, "--write").returncode, 0)
+            check = render(root, "--check")
+            self.assertEqual(check.returncode, 0, check.stderr)
+            self.assertIn("content stage, unpinned (not saveable)", check.stdout)
+            self.assertEqual(verify(root, "--repo", ".").returncode, 0)
+            gated = render(root, "--check", "--require-pinned")
+            self.assertNotEqual(gated.returncode, 0)
+            self.assertIn("--require-pinned demands a pinned", gated.stderr)
+            self.assertNotEqual(verify(root, "--repo", ".", "--require-pinned").returncode, 0)
+            self.assertNotEqual(verify(root, "--require-pinned").returncode, 0, "shape-only mode also refuses a content-stage bundle")
+
+    def test_pin_gate_requires_existing_ancestor_complete_content_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, content = git_repo(temporary)
+            # Not in this checkout.
+            set_stage(root, "pinned", commit="f" * 40, label="candidate")
+            self.assertIn("does not exist in this checkout", self.check_findings(root))
+            # Present but missing the locator and a worker entry path.
+            git(root, "rm", "-q", "scripts/kaola-locate.py", "skills/claude-code-kaola-project-runner/SKILL.md")
+            set_stage(root, "content")
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "incomplete")
+            incomplete = git(root, "rev-parse", "HEAD")
+            git(root, "checkout", "-q", content, "--", "scripts/kaola-locate.py", "skills/claude-code-kaola-project-runner/SKILL.md")
+            set_stage(root, "pinned", commit=incomplete, label="candidate")
+            stderr = self.check_findings(root)
+            self.assertIn("lacks scripts/kaola-locate.py", stderr)
+            self.assertIn("lacks skills/claude-code-kaola-project-runner/SKILL.md", stderr)
+            # Not an ancestor of HEAD: a commit on an abandoned branch.
+            git(root, "checkout", "-q", "-b", "side")
+            set_stage(root, "content")
+            (root / "docs" / "README.md").write_text("side\n", encoding="utf-8")
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "side")
+            side = git(root, "rev-parse", "HEAD")
+            git(root, "checkout", "-q", "-")
+            git(root, "checkout", "-q", content, "--", "scripts/kaola-locate.py", "skills/claude-code-kaola-project-runner/SKILL.md")
+            set_stage(root, "pinned", commit=side, label="candidate")
+            self.assertIn("is not an ancestor of HEAD", self.check_findings(root))
+            # The original content commit is an ancestor and complete: the gate passes and P can be committed.
+            set_stage(root, "pinned", commit=content, label="pre-release UAT candidate")
+            written = render(root, "--write")
+            self.assertEqual(written.returncode, 0, written.stderr)
+            self.assertIn(f"pinned at {content[:12]}, pin verified", written.stdout)
+            self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
+            self.assertEqual(verify(root, "--repo", ".", "--require-pinned").returncode, 0)
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "pin")
+            pin = git(root, "rev-parse", "HEAD")
+            self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0, "the pin still verifies from P itself")
+            # A pin commit is not an honest target: pinning P (or any non-content-stage commit) is refused.
+            set_stage(root, "pinned", commit=pin, label="candidate")
+            self.assertIn("is not a content-stage commit", self.check_findings(root))
+            # A named release must be a tag at the pinned commit.
+            set_stage(root, "pinned", commit=content, release="v9.9.9")
+            self.assertIn("release v9.9.9 is not a tag at", self.check_findings(root))
+            git(root, "tag", "v9.9.9", pin)
+            self.assertIn("release v9.9.9 is not a tag at", self.check_findings(root))
+            git(root, "tag", "-d", "v9.9.9")
+            git(root, "tag", "v9.9.9", content)
+            self.assertEqual(render(root, "--write").returncode, 0)
+            self.assertIn(f"(release v9.9.9).", (root / "hosts" / HOST_ID / f"{ORCHESTRATOR_ID}.md").read_text(encoding="utf-8"))
+            self.assertEqual(verify(root, "--repo", ".", "--require-pinned").returncode, 0)
+
+    def test_pinned_stage_cannot_be_verified_outside_a_git_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = copy_repo(temporary)
+            set_stage(root, "pinned", commit="a" * 40, label="candidate")
+            result = render(root, "--check")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("cannot be verified", result.stderr)
+            self.assertNotEqual(render(root, "--write").returncode, 0, "an unverifiable pin is never written")
+
+    def test_project_stage_is_consistent_with_its_own_checkout(self) -> None:
+        accepted = json.loads(ACCEPTED_REVISION.read_text(encoding="utf-8"))
+        check = render(PROJECT, "--check")
+        self.assertEqual(check.returncode, 0, check.stderr)
+        if accepted["stage"] == "pinned":
+            self.assertEqual(render(PROJECT, "--check", "--require-pinned").returncode, 0)
+            self.assertEqual(git(PROJECT, "merge-base", "--is-ancestor", accepted["commit"], "HEAD"), "")
+            tree = git(PROJECT, "ls-tree", "-r", "--name-only", accepted["commit"]).splitlines()
+            for path in ("scripts/kaola-locate.py", f"skills/{ORCHESTRATOR_ID}/SKILL.md", *(f"skills/{sid}/SKILL.md" for sid in WORKER_SKILL_IDS),
+                         *(f"skills/{sid}/scripts/runtime-tmux.sh" for sid in WORKER_SKILL_IDS)):
+                self.assertIn(path, tree, path)
+            pinned = json.loads(git(PROJECT, "show", f"{accepted['commit']}:templates/grok-bot/accepted-revision.json"))
+            self.assertEqual(pinned["stage"], "content", "the pinned commit is a content commit, never a self-pin")
+        else:
+            self.assertIn("content stage, unpinned", check.stdout)
 
 
 class Issue49LocatorAttestation(unittest.TestCase):
@@ -451,20 +661,21 @@ class Issue49LocatorAttestation(unittest.TestCase):
             self.assertIn("origin-mismatch", receipt["reasons"])
             self.assertNotIn("someone-else/kaola-project-runner.git", json.dumps(receipt).replace(receipt["root"]["origin"], ""))
 
-    def test_rejects_cross_host_paths_in_both_directions(self) -> None:
+    def test_paths_absent_on_the_executing_host_are_refused_whatever_target_is_declared(self) -> None:
+        """--target is echoed, never inferred: the refusal comes from the path not existing here."""
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary)
-            # A cloud Agent Computer path handed to a Local Computer dispatch is not on this host.
-            rc, receipt = fx.locate("--target", "local", "--expect-revision", fx.revision, "--project", "/workspace/consumer-project",
-                                    "--worker", "claude-code", "--session", "s")
-            self.assertEqual(receipt["result"], "refused")
-            self.assertIn("project-not-on-this-host", receipt["reasons"])
-            self.assertFalse(receipt["project"]["on_this_host"])
-            # A Mac path handed to a cloud dispatch is likewise not on that host.
-            rc, receipt = fx.locate("--target", "cloud", "--expect-revision", fx.revision, "--project", "/Users/owner/projects/consumer",
-                                    "--worker", "claude-code", "--session", "s")
-            self.assertEqual(receipt["result"], "refused")
-            self.assertIn("project-not-on-this-host", receipt["reasons"])
+            for declared, absent in (("local", "/workspace/consumer-project"), ("cloud", "/Users/owner/projects/consumer")):
+                rc, receipt = fx.locate("--target", declared, "--expect-revision", fx.revision, "--project", absent,
+                                        "--worker", "claude-code", "--session", "s")
+                self.assertEqual(receipt["result"], "refused")
+                self.assertEqual(receipt["target"], declared, "the declaration is echoed as given")
+                self.assertIn("project-not-on-this-host", receipt["reasons"])
+                self.assertFalse(receipt["project"]["on_this_host"])
+            # The same real path is accepted under either declaration: the script cannot tell a Mac from a cloud computer.
+            for declared in ("local", "cloud"):
+                rc, receipt = fx.locate("--target", declared, "--expect-revision", fx.revision, "--project", str(fx.project))
+                self.assertEqual(receipt["result"], "ok", receipt)
             # A relative path is never accepted as a project identity.
             rc, receipt = fx.locate("--target", "local", "--project", "consumer project")
             self.assertIn("project-not-on-this-host", receipt["reasons"])
@@ -525,6 +736,64 @@ class Issue49LocatorAttestation(unittest.TestCase):
             self.assertIn("foreign-locator-link", completed.stdout)
             self.assertEqual(Path(os.readlink(link)), fx.base / "foreign")
 
+    def test_register_validates_every_fact_before_touching_an_existing_locator(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fx = LocatorFixture(temporary)
+            bin_dir = fx.base / "bin"
+            rc, receipt = fx.locate("register", "--bin-dir", str(bin_dir), "--expect-revision", fx.revision)
+            self.assertEqual(rc, 0, receipt)
+            self.assertTrue(receipt["locator"]["changed"])
+            link = bin_dir / LOCATOR_COMMAND
+            good = os.readlink(link)
+            # A second checkout of the same origin must not take the link over while it is dirty,
+            # at the wrong revision, or at a foreign origin; the good link stays exactly as it was.
+            other = fx.base / "other checkout"
+            git(fx.base, "clone", "-q", str(fx.bare), str(other))
+            git(other, "checkout", "-q", "--detach", fx.revision)
+            git(other, "remote", "set-url", "origin", "https://github.com/KaolaBrother/kaola-project-runner.git")
+            def register_from(checkout: Path, *args: str) -> dict:
+                completed = subprocess.run([sys.executable, str(checkout / "scripts" / "kaola-locate.py"), "register", "--bin-dir", str(bin_dir), *args],
+                                           text=True, capture_output=True, env=dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1"))
+                self.assertNotEqual(completed.returncode, 0, completed.stdout)
+                self.assertTrue(completed.stdout.strip(), completed.stderr)
+                data = json.loads(completed.stdout)
+                self.assertEqual(data["result"], "refused")
+                self.assertFalse(data["locator"]["changed"])
+                self.assertEqual(os.readlink(link), good, "a refused registration must leave the existing locator unchanged")
+                return data
+            (other / "scratch.txt").write_text("dirty\n", encoding="utf-8")
+            self.assertIn("dirty", register_from(other)["reasons"])
+            (other / "scratch.txt").unlink()
+            self.assertIn("revision-mismatch", register_from(other, "--expect-revision", "0" * 40)["reasons"])
+            self.assertIn("expect-revision-not-40-hex", register_from(other, "--expect-revision", "abc")["reasons"])
+            git(other, "remote", "set-url", "origin", "https://github.com/someone-else/kaola-project-runner.git")
+            self.assertIn("origin-mismatch", register_from(other)["reasons"])
+            # A clean, matching checkout may take over (re-registration), and only then does the link change.
+            git(other, "remote", "set-url", "origin", "https://github.com/KaolaBrother/kaola-project-runner.git")
+            completed = subprocess.run([sys.executable, str(other / "scripts" / "kaola-locate.py"), "register", "--bin-dir", str(bin_dir), "--expect-revision", fx.revision],
+                                       text=True, capture_output=True, env=dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1"))
+            data = json.loads(completed.stdout)
+            self.assertEqual(data["result"], "ok", data)
+            self.assertTrue(data["locator"]["changed"] and data["locator"]["replaced"])
+            self.assertEqual(Path(os.readlink(link)), (other / "scripts" / "kaola-locate.py").resolve())
+            # A dirty tree also blocks a first registration: nothing is linked at all.
+            empty_bin = fx.base / "empty bin"
+            (fx.checkout / "scratch.txt").write_text("dirty\n", encoding="utf-8")
+            rc, receipt = fx.locate("register", "--bin-dir", str(empty_bin))
+            self.assertEqual(receipt["result"], "refused")
+            self.assertFalse((empty_bin / LOCATOR_COMMAND).exists() or (empty_bin / LOCATOR_COMMAND).is_symlink())
+
+    def test_session_field_reports_presence_only_and_docstring_says_so(self) -> None:
+        docstring = normalize(LOCATOR.read_text(encoding="utf-8").split('"""', 2)[1])
+        self.assertIn("presence only; ownership is proven by the worker preflight", docstring)
+        self.assertIn("as declared by the caller", docstring)
+        self.assertIn("may include the user's home directory", docstring)
+        self.assertNotIn("exact owned session", docstring)
+        with tempfile.TemporaryDirectory() as temporary:
+            fx = LocatorFixture(temporary)
+            rc, receipt = fx.locate("--target", "local", "--session", "kaola-issue-49-no-such-session")
+            self.assertEqual(set(receipt["session"]), {"name", "present"}, "no ownership claim in the receipt")
+
     def test_locator_has_no_credential_handling_or_filesystem_scan(self) -> None:
         text = LOCATOR.read_text(encoding="utf-8")
         code = text.split('"""', 2)[2]  # module docstring describes what the locator is not
@@ -555,7 +824,14 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
         self.assertIsNotNone(clause_present(text, (rf"one selected `ROOT/skills/<platform id>-{ORCHESTRATOR_ID}`",)))
         reference = (PROJECT / "skills" / ORCHESTRATOR_ID / "references" / "grok-bot-host.md").read_text(encoding="utf-8")
         self.assertIsNotNone(clause_present(reference, (r"project-not-on-this-host",)))
-        self.assertIsNotNone(clause_present(reference, (r"A cloud path on a Local Computer dispatch, or a Mac path on a cloud dispatch",)))
+        self.assertIsNotNone(clause_present(reference, (r"`--target` is the Agent's declaration",)))
+        self.assertIsNotNone(clause_present(reference, (r"host\.fingerprint.{0,80}recorded (?:at|when).{0,40}regist",)))
+        self.assertIsNotNone(clause_present(reference, (r"presence only",)))
+        self.assertIsNotNone(clause_present(reference, (r"may include the user's home",)))
+        self.assertIsNotNone(clause_present(reference, (r"content commit R\*?\*?.{0,240}pin commit P",)))
+        for overclaim in (r"rejects? cloud paths for a Local Computer dispatch", r"proves? (?:the )?physical host", r"no hostname, no user",
+                          r"exact owned session(?: name)?[^.]{0,40}(?:proven|proves|attests)"):
+            self.assertIsNone(re.search(overclaim, text + "\n" + reference, flags=re.IGNORECASE), overclaim)
         for stale in REMOVED_SURFACES + ("eight account-private Skills", "one single Markdown"):
             self.assertNotIn(stale, text, stale)
 
@@ -603,6 +879,14 @@ class Issue49HostAdapterBoundary(unittest.TestCase):
         declared = re.findall(r'"([^"]+)"', inputs.group(1))
         self.assertEqual(declared, ["templates/grok-bot"], "the bridge is rendered from adapter prose only; no canonical source is copied")
         self.assertEqual(sorted(p.name for p in GROK_BOT_TEMPLATES.iterdir()), ["INSTALL.md.tmpl", "accepted-revision.json", "bridge.md.tmpl"])
+        # The adapter's product functions take no manifest at all, so the declared input is the real one.
+        self.assertRegex(renderer, r"(?m)^def bridge_values\(\) -> ")
+        self.assertRegex(renderer, r"(?m)^def expected_grok_bot_host_files\(\) -> ")
+        self.assertRegex(renderer, r"(?m)^def install_guide\(values: dict\[str, str\]\) -> ")
+        adapter = renderer.split("# Host adapter: grok-bot", 1)[1].split("# Progressive-disclosure budgets", 1)[0]
+        for leak in ("manifests[0]", "FIRST_WORKER", "runtime_name", "manifest[\"id\"]", "manifest['id']"):
+            self.assertNotIn(leak, adapter, leak)
+        self.assertNotIn("FIRST_WORKER", (GROK_BOT_TEMPLATES / "INSTALL.md.tmpl").read_text(encoding="utf-8"))
         self.assertFalse((PROJECT / "platforms" / "grok-bot.yaml").exists())
         self.assertFalse((PROJECT / "scripts" / "adapters" / "grok-bot.sh").exists())
         for name in ("embedded_worker_files", "private_skill_documents", "worker_private_skill", "bundled_references", "GROK_BOT_HOME", "LOCAL_RUNTIME_COPY"):

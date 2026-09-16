@@ -86,8 +86,13 @@ sessions, and the cloud never installs or updates the Mac), asks that target's l
 verified ROOT, accepts the consumer project root separately on the same target, and loads
 only the main Skill and, at dispatch, one selected worker from that checkout. `scripts/
 kaola-locate.py` is the locator and the fail-closed host-target attestation (bounded receipt:
-target kind, host fingerprint, ROOT identity, project identity, worker script under the same
-ROOT, exact session; no credentials). Grok Bot is a **host**, not an eighth platform: there is
+target kind as declared, host fingerprint to compare with the registered one, ROOT identity,
+project identity, worker script under the same ROOT, session presence; real local paths, no
+credentials; it does not classify physical host kind). `register` validates before it links.
+The bridge follows a two-commit content/pin model (`accepted-revision.json` stage `content`
+for the content commit R, stage `pinned` for the pin commit P that names R; the pin gate in the
+renderer and verifier proves R exists, is an ancestor, is a content-stage commit, and holds the
+locator and every entry path). Grok Bot is a **host**, not an eighth platform: there is
 no `platforms/grok-bot.yaml`, no transport adapter, no runtime copy, no per-worker account
 Skills, and no installer destination. `scripts/kaola-grok-bot-verify.py` proves the bridge
 shape and budgets and, with `--repo`, byte identity with a fresh render. `--platform grok`
@@ -101,7 +106,10 @@ loads its body only, never a worker body. Selecting one worker loads that worker
 References load only when the current operation needs them. Scripts execute mechanically;
 the model never reads their source. Observe, capture, and verifier outputs are bounded
 receipts (hashes, counts, relevant excerpts), never whole files or unbounded terminal
-history; `capture --full` is the explicit exception. Host adapters may not flatten,
+history, on both transports: PTY `capture` through `kaola-observation.py bound-text`, ACP
+`capture` through `bound_capture_receipt` in `kaola-acp.py` (oldest entries dropped, a
+`truncated` block with counts, stream bytes, and sha256); `capture --full` is the explicit
+exception. Host adapters may not flatten,
 concatenate, eagerly preload, or duplicate canonical Skill bodies for packaging convenience.
 `templates/budgets.json` declares the measurable byte budgets (descriptions, main Skill, each
 worker, each reference, bridge, guide, locator receipt, ordinary capture receipt);
@@ -117,15 +125,17 @@ adapter** re-packages that system for one host inside `render-skills.py`; it nev
 second body. Grok Bot is such a packaging adapter (the delimited "Host adapter: grok-bot" section
 of the renderer), not a CLI transport platform: there is no `platforms/grok-bot.yaml` and no
 `scripts/adapters/grok-bot.sh`. The adapter's inputs are exactly `GROK_BOT_ADAPTER_INPUTS` = `templates/grok-bot/` (bridge
-template, install-guide template, accepted revision): it reads no canonical source and copies
-nothing. Its outputs are the bridge, `bridge.json`, and `INSTALL.md`. Host differences live
+template, install-guide template, accepted revision): its product functions take no platform
+manifest, read no canonical source, and copy nothing (the guide uses a `<platform id>`
+placeholder). Its outputs are the bridge, `bridge.json`, and `INSTALL.md`. Host differences live
 only in that adapter layer (target binding, locator, one-write install steps); scheduling,
 safety, and transport semantics stay in the canonical sources and are loaded on demand from
 the verified checkout. `--write` owns every product, `--check` rejects any product that drifts
 from a fresh render or exceeds its budget, and `scripts/kaola-grok-bot-verify.py --repo` proves
-the same from outside the renderer. Tests (`Issue49BridgeInvariance`) prove that a canonical
-edit leaves the bridge byte-identical and that a new accepted revision changes exactly one
-line.
+the same from outside the renderer. Tests (`Issue49BridgeInvariance`, `Issue49PinModel`) prove
+that a canonical or manifest edit leaves all three products byte-identical, that a new pin
+changes exactly one line, and that the pin gate refuses a missing, non-ancestor, incomplete,
+self-pinned, or wrongly tagged commit.
 
 `install-local.sh` delivers those directories to a consuming runtime: a verified named alias via
 `--runtime` (`codex`, `claude-code`, `cursor`, `devin`), or any absolute `--skills-dir` (the two are

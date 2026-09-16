@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -319,9 +320,31 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
 # guide. No platform manifest, no transport adapter, no runtime copy, no
 # per-worker account Skills. --write owns every product; --check and
 # kaola-grok-bot-verify.py reject any product that drifts from a fresh render.
+# The adapter functions take no manifest: a platform-manifest edit leaves all
+# three products byte-identical (Issue49BridgeInvariance proves it).
+#
+# Two-commit content/pin model. A commit cannot honestly pin itself, so the
+# accepted revision file declares a stage:
+#   stage "content" -- the content commit R (runtime, docs, tests). The bridge
+#                      renders an explicit unpinned placeholder line and must
+#                      not be saved to any account.
+#   stage "pinned"  -- the pin commit P that follows R: commit = R plus exactly
+#                      one of release (a vX.Y.Z tag at R) or label (honest
+#                      pre-release text). The bridge saved from P names R; the
+#                      UAT checkout is clean and detached at R.
+# At the pinned stage --check/--write prove (pin_findings) that R exists here,
+# is an ancestor of HEAD, is not a self-pin, carries every path the bridge
+# tells the Agent to load or run, and that a named release tag points at R.
+# --require-pinned is the final gate for P.
 # ---------------------------------------------------------------------------
 GROK_BOT_ADAPTER_INPUTS = (
     "templates/grok-bot",          # adapter-only prose: bridge, guide, accepted revision
+)
+STAGES = ("content", "pinned")
+LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,;:#().+-]{2,79}$")
+CONTENT_STAGE_LINE = (
+    "Accepted revision: none yet. This is the unpinned content-stage render; do not save it to any "
+    "account. The pin commit that follows names the content commit."
 )
 GROK_BOT_TEMPLATES = TEMPLATES / "grok-bot"
 BRIDGE_FILE = f"{ORCHESTRATOR_NAME}.md"
@@ -357,21 +380,101 @@ def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return meta, "\n".join(lines[end + 1:])
 
 
-def accepted_revision() -> dict[str, str]:
+def accepted_revision() -> dict[str, str | None]:
     path = GROK_BOT_TEMPLATES / ACCEPTED_REVISION_FILE
     if not path.is_file():
         raise ValueError(f"missing accepted revision file: {path}")
     data = json.loads(path.read_text(encoding="utf-8"))
-    commit = str(data.get("commit", ""))
-    release = str(data.get("release", "") or "")
+    stage = str(data.get("stage") or "")
+    if stage not in STAGES:
+        raise ValueError(f"{path}: stage must be one of {list(STAGES)}, got {stage!r}")
+    commit = str(data.get("commit") or "")
+    release = str(data.get("release") or "")
+    label = str(data.get("label") or "")
+    if stage == "content":
+        if commit or release or label:
+            raise ValueError(f"{path}: the content stage carries no commit, release, or label")
+        return {"stage": stage, "commit": None, "release": None, "label": None}
     if not REVISION.match(commit):
         raise ValueError(f"{path}: commit must be a 40-hex accepted revision, got {commit!r}")
+    if bool(release) == bool(label):
+        raise ValueError(f"{path}: the pinned stage names exactly one of release (vX.Y.Z tag) or label")
     if release and not RELEASE.match(release):
         raise ValueError(f"{path}: release must look like vX.Y.Z, got {release!r}")
-    return {"commit": commit, "release": release or "unreleased"}
+    if label and not LABEL.match(label):
+        raise ValueError(f"{path}: label must be 3-80 plain characters, got {label!r}")
+    return {"stage": stage, "commit": commit, "release": release or None, "label": label or None}
 
 
-def bridge_values(manifests: list[dict[str, str]]) -> dict[str, str]:
+def accepted_line(revision: dict[str, str | None]) -> str:
+    if revision["stage"] == "content":
+        return CONTENT_STAGE_LINE
+    tag = f"release {revision['release']}" if revision["release"] else str(revision["label"])
+    return f"Accepted revision: `{revision['commit']}` ({tag})."
+
+
+def git_out(*args: str) -> str | None:
+    """stdout of `git -C ROOT ...`, or None on any non-zero exit; never prompts."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", LC_ALL="C")
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(ROOT), *args], capture_output=True, text=True, env=env,
+            timeout=60, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return completed.stdout.strip() if completed.returncode == 0 else None
+
+
+def required_pin_paths(manifests: list[dict[str, str]]) -> list[str]:
+    """Every path the bridge tells the Agent to load or run from the pinned checkout."""
+    paths = ["scripts/kaola-locate.py", f"skills/{ORCHESTRATOR_NAME}/SKILL.md"]
+    for manifest in manifests:
+        paths.append(f"skills/{manifest['skill_name']}/SKILL.md")
+        paths.append(f"skills/{manifest['skill_name']}/scripts/runtime-tmux.sh")
+    return paths
+
+
+def pin_findings(revision: dict[str, str | None], manifests: list[dict[str, str]]) -> list[str]:
+    """The pinned stage must name a real, reachable, complete, non-self content commit."""
+    if revision["stage"] != "pinned":
+        return []
+    commit = str(revision["commit"])
+    short = commit[:12]
+    if git_out("rev-parse", "--is-inside-work-tree") != "true":
+        return [f"pin: {short} cannot be verified: {ROOT} is not a Git checkout"]
+    if git_out("cat-file", "-e", f"{commit}^{{commit}}") is None:
+        return [f"pin: accepted commit {short} does not exist in this checkout"]
+    findings: list[str] = []
+    if git_out("merge-base", "--is-ancestor", commit, "HEAD") is None:
+        findings.append(f"pin: accepted commit {short} is not an ancestor of HEAD")
+    tree = set((git_out("ls-tree", "-r", "--name-only", commit) or "").splitlines())
+    for path in required_pin_paths(manifests):
+        if path not in tree:
+            findings.append(f"pin: accepted commit {short} lacks {path}")
+    pinned_file = git_out("show", f"{commit}:templates/grok-bot/{ACCEPTED_REVISION_FILE}")
+    if pinned_file is None:
+        findings.append(f"pin: accepted commit {short} lacks templates/grok-bot/{ACCEPTED_REVISION_FILE}")
+    else:
+        try:
+            pinned_data = json.loads(pinned_file)
+        except ValueError:
+            pinned_data = None
+        if not isinstance(pinned_data, dict):
+            findings.append(f"pin: accepted commit {short} carries an unreadable {ACCEPTED_REVISION_FILE}")
+        elif pinned_data.get("commit") == commit:
+            findings.append(f"pin: accepted commit {short} pins itself (a commit cannot contain its own hash)")
+        elif pinned_data.get("stage") != "content":
+            # Only a content commit is an honest target: a pin commit names another commit.
+            findings.append(f"pin: accepted commit {short} is not a content-stage commit (stage {pinned_data.get('stage')!r})")
+    if revision["release"]:
+        tag_commit = git_out("rev-parse", f"{revision['release']}^{{commit}}")
+        if tag_commit != commit:
+            findings.append(f"pin: release {revision['release']} is not a tag at {short}")
+    return findings
+
+
+def bridge_values() -> dict[str, str]:
     revision = accepted_revision()
     return {
         "SKILL_NAME": ORCHESTRATOR_NAME,
@@ -380,13 +483,11 @@ def bridge_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         "REPO_SLUG": REPO_SLUG,
         "EXPECTED_ORIGIN": EXPECTED_ORIGIN,
         "LOCATOR": LOCATOR_COMMAND,
-        "ACCEPTED_COMMIT": revision["commit"],
-        "RELEASE": revision["release"],
+        "ACCEPTED_LINE": accepted_line(revision),
+        "ACCEPTED_COMMIT": revision["commit"] or "<accepted commit>",
+        "STAGE": str(revision["stage"]),
         "BRIDGE_FILE": BRIDGE_FILE,
         "MANIFEST": BRIDGE_MANIFEST,
-        "FIRST_WORKER_ID": manifests[0]["id"],
-        "FIRST_WORKER_SKILL": manifests[0]["skill_name"],
-        "FIRST_WORKER_RUNTIME": manifests[0]["runtime_name"],
     }
 
 
@@ -397,7 +498,7 @@ def bridge_document(values: dict[str, str]) -> bytes:
     return render_text(template.read_text(encoding="utf-8"), values, template).encode()
 
 
-def bridge_manifest(bridge: bytes, values: dict[str, str]) -> bytes:
+def bridge_manifest(bridge: bytes, revision: dict[str, str | None]) -> bytes:
     meta, body = split_frontmatter(bridge.decode("utf-8"))
     if meta.get("name") != ORCHESTRATOR_NAME:
         raise ValueError(f"{BRIDGE_FILE}: frontmatter name must be {ORCHESTRATOR_NAME!r}")
@@ -405,8 +506,11 @@ def bridge_manifest(bridge: bytes, values: dict[str, str]) -> bytes:
         "host": GROK_BOT_HOST,
         "adapter": "grok-bot-bridge",
         "repository": EXPECTED_ORIGIN,
-        "accepted_commit": values["ACCEPTED_COMMIT"],
-        "release": values["RELEASE"],
+        "stage": revision["stage"],
+        "saveable": revision["stage"] == "pinned",
+        "accepted_commit": revision["commit"],
+        "release": revision["release"],
+        "label": revision["label"],
         "locator": LOCATOR_COMMAND,
         "install_guide": INSTALL_GUIDE,
         "skill_count": 1,
@@ -429,14 +533,14 @@ def install_guide(values: dict[str, str]) -> bytes:
     return render_text(template.read_text(encoding="utf-8"), values, template).encode()
 
 
-def expected_grok_bot_host_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
-    values = bridge_values(manifests)
+def expected_grok_bot_host_files() -> dict[str, bytes]:
+    values = bridge_values()
     bridge = bridge_document(values)
     guide_values = dict(values, BRIDGE_BYTES=str(len(bridge)))
     return {
         MARKER: (GROK_BOT_HOST + "\n").encode(),
         BRIDGE_FILE: bridge,
-        BRIDGE_MANIFEST: bridge_manifest(bridge, values),
+        BRIDGE_MANIFEST: bridge_manifest(bridge, accepted_revision()),
         INSTALL_GUIDE: install_guide(guide_values),
     }
 
@@ -510,6 +614,11 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--require-pinned", action="store_true",
+        help="fail unless templates/grok-bot/accepted-revision.json is at the pinned stage "
+             "and the pin is verified (the gate for the pin commit)",
+    )
     args = parser.parse_args()
 
     manifests = [parse_manifest(path) for path in sorted(PLATFORMS.glob("*.yaml"))]
@@ -528,15 +637,19 @@ def main() -> int:
                 findings.append(f"unexpected host directory: {path.name}")
 
     limits = budgets()
+    revision = accepted_revision()
     worker_expected = {m["skill_name"]: expected_files(m) for m in manifests}
     orch_expected = expected_orchestrator_files(manifests)
-    host_expected = expected_grok_bot_host_files(manifests)
+    host_expected = expected_grok_bot_host_files()
     for name, expected in worker_expected.items():
         findings.extend(budget_findings(name, expected, "worker_skill_bytes", limits))
     findings.extend(budget_findings(ORCHESTRATOR_NAME, orch_expected, "main_skill_bytes", limits))
     findings.extend(host_budget_findings(host_expected, limits))
+    findings.extend(pin_findings(revision, manifests))
+    if args.require_pinned and revision["stage"] != "pinned":
+        findings.append("pin: stage is content; --require-pinned demands a pinned, verified bridge")
     if findings:
-        # An over-budget or unmanaged inventory is never written.
+        # An over-budget, unverifiable-pin, or unmanaged inventory is never written.
         for finding in findings:
             print(finding, file=sys.stderr)
         return 1
@@ -565,11 +678,14 @@ def main() -> int:
         for finding in findings:
             print(finding, file=sys.stderr)
         return 1
+    stage = (
+        f"pinned at {str(revision['commit'])[:12]}, pin verified" if revision["stage"] == "pinned"
+        else "content stage, unpinned (not saveable)"
+    )
     print(
         f"render-skills: {'WROTE' if args.write else 'PASS'} "
         f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {GROK_BOT_HOST} host: "
-        f"1 bridge skill, {len(host_expected[BRIDGE_FILE])} B, accepted "
-        f"{accepted_revision()['commit'][:12]}; budgets OK)"
+        f"1 bridge skill, {len(host_expected[BRIDGE_FILE])} B, {stage}; budgets OK)"
     )
     return 0
 

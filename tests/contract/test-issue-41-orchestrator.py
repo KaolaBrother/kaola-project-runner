@@ -155,6 +155,8 @@ def worker_template_text() -> str:
 def copy_repo(temporary: str) -> Path:
     destination = Path(temporary) / "repo"
     shutil.copytree(PROJECT, destination, ignore=COPY_IGNORE)
+    # No .git in the copy: a pinned Grok Bot bridge cannot be verified there, so the copy starts at the content stage.
+    (destination / "templates" / "grok-bot" / "accepted-revision.json").write_text('{"stage": "content"}\n', encoding="utf-8")
     return destination
 
 

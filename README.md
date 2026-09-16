@@ -71,7 +71,9 @@ inside the renderer, not a transport platform; still seven platforms, and `--pla
 remains the Grok CLI worker. Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
 automated account-Skill creation, so one native skill write is the only account operation and
 the owner's read-only Local Computer UAT is the live boundary — see
-[Grok Bot host](docs/grok-bot-host.md). Progressive disclosure is a locked invariant on every
+[Grok Bot host](docs/grok-bot-host.md). The bridge is delivered as two commits (content commit R,
+then pin commit P that names R; the bridge is saved from P and every target is checked out clean
+and detached at R). Progressive disclosure is a locked invariant on every
 host (see [conventions](docs/conventions.md#progressive-disclosure)). Other hosts can use `--skills-dir /absolute/path`
 if they can load `SKILL.md` and execute shell commands in an environment with the
 required tools.
@@ -172,8 +174,8 @@ subset, or skip the orchestrator:
 
 # Grok Bot: no installer destination. Save hosts/grok-bot/kaola-project-runner.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:
-python3 scripts/kaola-locate.py register          # links kaola-project-runner-locate (same bin dir as --bin-links)
-kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt
+python3 scripts/kaola-locate.py register --expect-revision <accepted commit>   # validates origin/revision/clean, then links kaola-project-runner-locate (same bin dir as --bin-links)
+kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt (target as declared; compare host.fingerprint)
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode

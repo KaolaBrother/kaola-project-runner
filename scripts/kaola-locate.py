@@ -10,13 +10,21 @@ written into any Skill: moving the checkout means running ``register`` again fro
 location. There is no service, daemon, registry, or filesystem scan; the link is the whole
 locator.
 
-Every receipt is one bounded JSON line: target kind, host kernel and a hashed host
-fingerprint, the resolved repo root, the normalised origin (never the raw URL, never
-userinfo), HEAD, clean state, and -- when attesting a dispatch -- the consumer project
-identity, the selected worker's script path under the same root, and the exact owned
-session name. ``result`` is ``ok`` or ``refused`` with reasons; nothing here reads, prints,
-hashes, or forwards a credential, and Git runs with ``GIT_TERMINAL_PROMPT=0`` so a missing
-credential can only fail, never prompt.
+Every receipt is one bounded JSON line: the target kind **as declared by the caller**
+(``--target`` is echoed, never inferred: this script cannot prove whether it runs on a Mac or
+a cloud computer; what ties a receipt to the bound target is that the locator link is
+device-local and that its host fingerprint matches the one recorded at registration), host
+kernel and a hashed hostname fingerprint, the resolved repo root, the normalised origin (never
+the raw URL, never userinfo), HEAD, clean state, and -- when attesting a dispatch -- the
+consumer project identity, the selected worker's script path under the same root, and whether
+tmux reports a session of the exact requested name (presence only; ownership is proven by the
+worker preflight, not here). ``root.path`` and ``project.path`` are real local paths and may
+include the user's home directory: bounded local evidence for the bound target, never to be
+stored in any account Skill. ``result`` is ``ok`` or ``refused`` with reasons; nothing here
+reads, prints, hashes, or forwards a credential, and Git runs with ``GIT_TERMINAL_PROMPT=0``
+so a missing credential can only fail, never prompt. ``register`` validates origin, optional
+expected revision, clean state, and the link path before it touches anything; a refused
+registration leaves an existing locator link unchanged.
 """
 
 from __future__ import annotations
@@ -215,11 +223,23 @@ def receipt_command(args: argparse.Namespace) -> int:
 
 
 def register_command(args: argparse.Namespace) -> int:
+    """Link the locator to this checkout -- only after every fact has been validated.
+
+    Origin, the optional expected revision, the clean state, and the link path are all
+    checked first; any refusal returns before the filesystem is touched, so a foreign,
+    dirty, or mismatched checkout can never replace an existing, good locator.
+    """
     root, reasons = this_checkout()
     receipt: dict[str, object] = {"schema": SCHEMA, "host": host_facts(), "action": "register"}
     if root is None:
         receipt.update(result="refused", reasons=reasons)
         return emit(receipt)
+    if args.expect_revision is not None and not REVISION.match(args.expect_revision):
+        reasons.append("expect-revision-not-40-hex")
+        args.expect_revision = None
+    facts, more = root_facts(root, args.expect_revision)
+    reasons.extend(more)
+    receipt["root"] = facts
     bin_dir = Path(args.bin_dir).expanduser() if args.bin_dir else Path.home() / ".local" / "bin"
     link = bin_dir / LOCATOR_COMMAND
     source = (root / "scripts" / "kaola-locate.py").resolve()
@@ -227,10 +247,13 @@ def register_command(args: argparse.Namespace) -> int:
     if link.is_symlink():
         previous = os.readlink(link)
         if not previous.endswith("/scripts/kaola-locate.py"):
-            receipt.update(result="refused", reasons=["foreign-locator-link"], locator={"path": str(link)})
-            return emit(receipt)
+            reasons.append("foreign-locator-link")
     elif link.exists():
-        receipt.update(result="refused", reasons=["locator-path-occupied"], locator={"path": str(link)})
+        reasons.append("locator-path-occupied")
+    locator: dict[str, object] = {"path": str(link), "command": LOCATOR_COMMAND, "changed": False,
+                                  "replaced": False}
+    if reasons:
+        receipt.update(result="refused", reasons=reasons, locator=locator)
         return emit(receipt)
     bin_dir.mkdir(parents=True, exist_ok=True)
     temp = bin_dir / f".{LOCATOR_COMMAND}.tmp.{os.getpid()}"
@@ -238,14 +261,8 @@ def register_command(args: argparse.Namespace) -> int:
         temp.unlink()
     os.symlink(str(source), temp)
     os.replace(temp, link)
-    facts, more = root_facts(root, None)
-    receipt.update(
-        result="ok" if not more else "refused",
-        root=facts,
-        locator={"path": str(link), "command": LOCATOR_COMMAND, "replaced": previous is not None},
-    )
-    if more:
-        receipt["reasons"] = more
+    locator.update(changed=True, replaced=previous is not None)
+    receipt.update(result="ok", locator=locator)
     return emit(receipt)
 
 
@@ -258,8 +275,9 @@ def main() -> int:
     receipt.add_argument("--project")
     receipt.add_argument("--worker")
     receipt.add_argument("--session")
-    register = sub.add_parser("register", help=f"link {LOCATOR_COMMAND} to this checkout")
+    register = sub.add_parser("register", help=f"link {LOCATOR_COMMAND} to this checkout (after validating it)")
     register.add_argument("--bin-dir")
+    register.add_argument("--expect-revision")
     argv = sys.argv[1:]
     if not argv or argv[0].startswith("-"):
         argv = ["receipt", *argv]

@@ -596,6 +596,9 @@ def check_deterministic_renderer(assertions: Assertions) -> None:
     with tempfile.TemporaryDirectory(prefix="kaola-render-issue-1-") as temporary:
         copy = Path(temporary) / "repo"
         shutil.copytree(PROJECT, copy, ignore=ignored)
+        # The copy has no .git, so a pinned Grok Bot bridge could not be verified there;
+        # determinism is measured at the content stage.
+        (copy / "templates" / "grok-bot" / "accepted-revision.json").write_text('{"stage": "content"}\n', encoding="utf-8")
         first = assertions.run("test_renderer_write_first_run", [sys.executable, "scripts/render-skills.py", "--write"], copy)
         if first is None or first.returncode != 0:
             return

@@ -13,10 +13,19 @@ The account holds exactly one small private Skill, `kaola-project-runner`
 accepted pinned revision, the device-local locator command, and the two entry
 paths `ROOT/skills/kaola-project-runner` and
 `ROOT/skills/<platform id>-kaola-project-runner`. It carries no policy,
-transport, reference, worker text, path, or credential; a release changes only
-its accepted-revision line. Progressive disclosure holds on every host: this
-Skill loads alone, one worker loads at dispatch, references load on demand,
-scripts execute and are never read.
+transport, reference, worker text, path, or credential; a pin changes only its
+accepted-revision line. Progressive disclosure holds on every host: this Skill
+loads alone, one worker loads at dispatch, references load on demand, scripts
+execute and are never read.
+
+A delivery is two commits, because a commit cannot contain its own hash: the
+**content commit R** (runtime, docs, tests; `accepted-revision.json` at stage
+`content`, whose bridge says "none yet" and must not be saved) and the **pin
+commit P** that follows it (stage `pinned`, commit R, an honest pre-release
+label or a release tag at R). The bridge is saved from P; every execution target
+is checked out clean and detached at R. `render-skills.py --check
+--require-pinned` at P proves R exists, is an ancestor, is a content-stage
+commit, and holds the locator and every entry path.
 
 ## Execution targets: bind first, never cross
 
@@ -29,10 +38,15 @@ origin `github.com/KaolaBrother/kaola-project-runner`, HEAD = accepted revision,
 and a clean tree, then accepts the consumer project root as a separate path on
 the same target.
 
-- Local Computer already holds the checkout and its local Skill installation.
-  The cloud computer never clones, installs, updates, or manages anything on
-  the Mac; the Mac path lives only in the Mac's locator link, never in the
-  account Skill. Moving the checkout means re-registering the locator.
+- Local Computer already holds the repository. Its `main` working tree may carry
+  untracked Workflow records, which the locator correctly reports as `dirty`;
+  the owner therefore selects a clean checkout or worktree detached at R (no
+  fixed path is assumed and the clean check is never weakened). The cloud
+  computer never clones, installs, updates, or manages anything on the Mac; the
+  Mac path lives only in the Mac's locator link, never in the account Skill.
+  Moving the checkout means re-registering the locator, and `register`
+  validates origin, expected revision, and clean state before it touches an
+  existing link.
 - The cloud target may keep its own independently cloned checkout and locator
   (its own existing Git or GitHub CLI authentication; never a token in any
   Skill, receipt, or prompt). That checkout never touches Mac paths or sessions.
@@ -46,14 +60,21 @@ kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
   --project <consumer project root> --worker <platform id> --session <exact session>
 ```
 
-The receipt is one bounded JSON line: target kind, host kernel and hashed
-fingerprint, ROOT identity (normalised origin, HEAD, clean, revision match),
-project identity (path on this host, Git top level, normalised origin), the
-worker script path under the same ROOT, and whether the exact session exists.
-`result: refused` with reasons (`origin-mismatch`, `revision-mismatch`, `dirty`,
-`project-not-on-this-host`, `script-outside-root`, `target-required`, ...) means
-do not load or dispatch. A cloud path on a Local Computer dispatch, or a Mac
-path on a cloud dispatch, is `project-not-on-this-host`. Then run
+The receipt is one bounded JSON line: the target kind as you declared it, host
+kernel and hashed hostname fingerprint, ROOT identity (normalised origin, HEAD,
+clean, revision match), project identity (path on this host, Git top level,
+normalised origin), the worker script path under the same ROOT, and whether tmux
+reports a session of that exact name (presence only; ownership is the worker
+preflight's proof). `--target` is the Agent's declaration: the script cannot
+tell a Mac from a cloud computer. What ties the receipt to the bound target is
+that the locator link is device-local and that `host.fingerprint` equals the
+value recorded when that target's locator was registered; compare it every
+time. `root.path` and `project.path` are real local paths (they may include the
+user's home): bounded evidence for this target that never enters any account
+Skill. `result: refused` with reasons (`origin-mismatch`, `revision-mismatch`,
+`dirty`, `project-not-on-this-host`, `script-outside-root`, `target-required`,
+...) means do not load or dispatch; a path that does not exist on the executing
+host is `project-not-on-this-host` whatever target was declared. Then run
 `ROOT/skills/<platform id>-kaola-project-runner/scripts/runtime-tmux.sh` on that
 same target with the project root as `--repo`.
 
