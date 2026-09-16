@@ -311,6 +311,8 @@ def test_start_send_cancel_stop_through_generated_skill() -> None:
         check(first["argv0"] == str(FAKE.resolve()), "the exact CLAUDE_BIN was spawned")
         check(not first["has_api_key"] and not first["has_auth_token"], "ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are absent from claude's env")
         check(first["canary"] == sandbox.canary and "HOME" in first["env_keys"], "unrelated inherited variables reach claude")
+        check("KAOLA_ACP_CHILD_RECORD" not in first["env_keys"],
+              "the holder's child record path is not handed to claude (nor to the tools it spawns)")
         check(not sandbox.trap_hit.exists(), "PATH claude never ran")
 
         receipt = sandbox.cli(SKILL_CLI, "send", "--text", "again", session=session)
@@ -442,6 +444,25 @@ def test_force_stop_sweeps_detached_claude_groups() -> None:
         check(receipt.get("holder_lost") is True and receipt.get("residual_pids") == [], "silent-holder-lost: record-based force stop reports no residual pids")
         check(rec["pgid"] in receipt.get("swept_pgids", []), "silent-holder-lost: the never-announced claude group was swept")
         expect_gone(rec, "silent-holder-lost")
+
+        # F: a later start of the same session compacts the spawn record so only
+        # entries whose identity still holds survive (the swept child's is gone).
+        def spawn_record_lines() -> list[dict]:
+            files = list((sandbox.record_root / "claude-code" / session).glob("*/children.jsonl"))
+            check(len(files) == 1, "restart: the session has exactly one spawn record file")
+            return [json.loads(line) for line in files[0].read_text().splitlines() if line.strip()]
+
+        check(len(spawn_record_lines()) == 1, "restart: the swept silent child is still recorded before the restart")
+        receipt = sandbox.cli(SKILL_CLI, "start", session=session)
+        check(receipt.get("error") is None and receipt["state"] == "ready", "restart: the same session starts again")
+        check(spawn_record_lines() == [], "restart: the stale spawn entry was dropped at agent start")
+        receipt = sandbox.cli(SKILL_CLI, "send", "--text", "after-restart", session=session)
+        check(receipt["final_text"] == "echo:after-restart", "restart: a turn completes")
+        lines = spawn_record_lines()
+        check([entry["pid"] for entry in lines] == [sandbox.records()[5]["pid"]],
+              "restart: the spawn record holds exactly this instance's child")
+        receipt = sandbox.cli(SKILL_CLI, "stop", session=session)
+        check(receipt.get("error") is None and receipt.get("residual_pids") == [], "restart: stop reports no residual pids")
     finally:
         sandbox.cleanup()
 

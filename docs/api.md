@@ -319,7 +319,10 @@ process tree when a turn is first accepted and again when stop begins (while the
 be their parent), and the agent's own spawn record. The holder hands every agent
 `KAOLA_ACP_CHILD_RECORD=<record dir>/children.jsonl`; the Claude bridge appends
 `{pid, pgid, spawned_at, binary}` there synchronously at each spawn, before any child output can
-be forwarded, so a child whose bridge died before its first `session/update` is still identified.
+be forwarded, so a child whose bridge died before its first `session/update` is still identified;
+the variable is stripped from the child's own environment, so the CLI and the tools it runs never
+see the path. The file is trusted exactly like `record.json` (same-user writable, under the record
+root); the holder rewrites it at each agent start keeping only entries whose identity still holds.
 Noted groups are recorded as `agent_child_pgids` with the member pids and start times seen
 (`agent_child_groups`); after the agent group the holder sweeps every recorded group in which a
 recorded member is still alive under its recorded start time, or under a start time within five

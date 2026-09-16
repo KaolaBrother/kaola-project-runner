@@ -125,6 +125,9 @@ describe("per-session launch options", () => {
       expect(lines[0].spawned_at).toBeGreaterThanOrEqual(before);
       expect(lines[0].spawned_at).toBeLessThanOrEqual(Date.now());
       expect(lines[0].binary).toBe("claude");
+      // The record is a holder-bridge contract: the child (and every tool it
+      // spawns) must neither learn the path nor be able to append to it.
+      expect((mockSpawn.mock.calls[0][2] as any).env.KAOLA_ACP_CHILD_RECORD).toBeUndefined();
       mockSpawn.mockReturnValue(streamProcess([]));
       await runner.continueSessionStreaming("s1", "two", () => {}, "t1", undefined, "/tmp");
       expect(readFileSync(record, "utf-8").trim().split("\n")).toHaveLength(2);

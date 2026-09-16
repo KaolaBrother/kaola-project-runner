@@ -345,6 +345,10 @@ export class ClaudeRunner {
     const env = { ...process.env };
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
+    // Kaola fork: the spawn record is a contract between the supervising
+    // holder and this bridge only; the child and every tool it spawns must
+    // neither learn the record path nor be able to append to it.
+    delete env.KAOLA_ACP_CHILD_RECORD;
     return env;
   }
 

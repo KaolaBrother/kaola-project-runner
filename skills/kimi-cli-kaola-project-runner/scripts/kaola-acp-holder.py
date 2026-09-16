@@ -106,6 +106,12 @@ def child_groups(root_pid: int, root_pgid: int,
 
 
 CHILD_RECORD_NAME = "children.jsonl"
+# ``ps lstart`` is truncated to the second and the agent records ``Date.now()``
+# only after ``spawn`` returned, so a genuine child sits a fraction of a second
+# to a few seconds after its recorded time. The window is a reuse guard, not a
+# clock: matching a different process would need this pid to be freed and
+# handed to a new process-group leader inside it, which sequential pid
+# allocation cannot do in seconds.
 SPAWN_RECORD_TOLERANCE = 5.0
 
 
@@ -117,24 +123,26 @@ def start_epoch(started: str) -> float | None:
         return None
 
 
-def spawn_recorded_groups(path: Path, table: list[tuple[int, int, int, str]] | None = None
-                          ) -> dict[int, dict[int, str]]:
-    """Child groups the agent itself recorded at spawn (`KAOLA_ACP_CHILD_RECORD`,
-    one JSON line per child: pid, pgid, spawned_at ms). An entry counts only
-    while that pid is alive in that group with a start time within
+def live_spawn_entries(path: Path, table: list[tuple[int, int, int, str]] | None = None
+                       ) -> list[tuple[dict[str, Any], str]]:
+    """Entries of the agent's spawn record (`KAOLA_ACP_CHILD_RECORD`, one JSON
+    line per child: pid, pgid, spawned_at ms) whose identity still holds:
+    that pid is alive in that group with a start time within
     SPAWN_RECORD_TOLERANCE of the recorded spawn, so a reused pid is ignored.
-    This is what still identifies a child whose agent died before forwarding
-    any output about it."""
+    Each is returned with the live start time. This is what still identifies
+    a child whose agent died before forwarding any output about it."""
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return {}
+        return []
     by_pid = {pid: (pgid, started) for pid, _, pgid, started in (table or process_table())}
-    found: dict[int, dict[int, str]] = {}
+    live_entries: list[tuple[dict[str, Any], str]] = []
     for line in lines:
         try:
             entry = json.loads(line)
         except ValueError:
+            continue
+        if not isinstance(entry, dict):
             continue
         pid, pgid, spawned = entry.get("pid"), entry.get("pgid"), entry.get("spawned_at")
         if not (isinstance(pid, int) and isinstance(pgid, int) and isinstance(spawned, (int, float))):
@@ -145,8 +153,33 @@ def spawn_recorded_groups(path: Path, table: list[tuple[int, int, int, str]] | N
         started = start_epoch(live[1])
         if started is None or abs(started - spawned / 1000.0) > SPAWN_RECORD_TOLERANCE:
             continue
-        found.setdefault(pgid, {})[pid] = live[1]
+        live_entries.append((entry, live[1]))
+    return live_entries
+
+
+def spawn_recorded_groups(path: Path, table: list[tuple[int, int, int, str]] | None = None
+                          ) -> dict[int, dict[int, str]]:
+    """Child groups from the spawn record whose identity still holds, as
+    ``pgid -> {member pid: start time}`` (see ``live_spawn_entries``)."""
+    found: dict[int, dict[int, str]] = {}
+    for entry, started in live_spawn_entries(path, table):
+        found.setdefault(entry["pgid"], {})[entry["pid"]] = started
     return found
+
+
+def compact_spawn_record(path: Path) -> None:
+    """Rewrite the spawn record with only the entries whose identity still
+    holds. Run before a new agent is spawned into this record directory: the
+    file is append-only across agent instances, so this bounds it and leaves a
+    still-live child of an earlier instance identifiable while dropping every
+    entry that could only ever match a reused pid."""
+    if not path.exists():
+        return
+    kept = [json.dumps(entry) for entry, _ in live_spawn_entries(path)]
+    try:
+        path.write_text("".join(line + "\n" for line in kept), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def live_child_groups(groups: dict[int, dict[int, str]]) -> dict[int, list[int]]:
@@ -404,8 +437,12 @@ class AgentConnection:
         argv = shlex.split(command)
         env = dict(os.environ if env is None else env)
         # Lets an agent that spawns detached children record their identity
-        # at spawn so stop can find them even if the agent dies first.
-        env["KAOLA_ACP_CHILD_RECORD"] = str(self.holder.record_dir / CHILD_RECORD_NAME)
+        # at spawn so stop can find them even if the agent dies first. The
+        # record survives agent instances; keep only entries still identifying
+        # a live child before this instance starts appending to it.
+        spawn_record = self.holder.record_dir / CHILD_RECORD_NAME
+        compact_spawn_record(spawn_record)
+        env["KAOLA_ACP_CHILD_RECORD"] = str(spawn_record)
         self.proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,

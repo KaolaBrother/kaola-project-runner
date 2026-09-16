@@ -15807,6 +15807,7 @@ var ClaudeRunner = class {
     const env = { ...process.env };
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
+    delete env.KAOLA_ACP_CHILD_RECORD;
     return env;
   }
   cancel(trackingId) {

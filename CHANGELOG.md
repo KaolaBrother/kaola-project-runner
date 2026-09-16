@@ -13,7 +13,8 @@
   the recorded groups too (`swept_pgids`). The bridge additionally appends each child's pid,
   group, and spawn time to the holder-named `KAOLA_ACP_CHILD_RECORD` file synchronously at spawn,
   so a child whose bridge died before forwarding its first line is still found (identity checked
-  against the live start time). `stop --force` is exercised offline for a healthy bridge, a bridge
+  against the live start time); the variable never reaches the `claude` child or its tools, and the
+  holder compacts the record to still-live entries at each agent start. `stop --force` is exercised offline for a healthy bridge, a bridge
   killed before its own shutdown, holder plus bridge gone, and both of those before the child's
   first output. Documented that
   `permit` under this bridge settles only the reported `tool_call` status because the `claude -p`
