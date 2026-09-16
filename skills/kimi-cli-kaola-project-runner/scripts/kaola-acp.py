@@ -230,7 +230,7 @@ def resolve_repo(raw: str) -> str:
 
 
 def record_root(args: argparse.Namespace) -> Path:
-    if args.record_root:
+    if getattr(args, "record_root", None):
         return Path(args.record_root)
     env = os.environ.get("KAOLA_ACP_RECORD_ROOT")
     if env:
@@ -242,6 +242,15 @@ def record_root(args: argparse.Namespace) -> Path:
 def record_dir(args: argparse.Namespace, repo: str) -> Path:
     digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
     return record_root(args) / args.platform / args.session / digest
+
+
+def spawn_record_dir(args: argparse.Namespace, repo: str) -> Path | None:
+    """Record directory whose ``children.jsonl`` a record-based receipt may
+    consult, or None when the invocation names no platform/session (a receipt
+    built from a bare record has no spawn record to read)."""
+    if not all(getattr(args, name, None) for name in ("platform", "session")):
+        return None
+    return record_dir(args, repo)
 
 
 def sock_path_for_directory(directory: Path) -> Path:
@@ -725,7 +734,7 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
         members = subprocess.run(
             ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
         )
-        groups = recorded_groups(record, record_dir(args, repo))
+        groups = recorded_groups(record, spawn_record_dir(args, repo))
         residual = []
         for line in members.stdout.splitlines():
             fields = line.split()
@@ -859,7 +868,7 @@ def live_group_members(groups: list[int]) -> list[int]:
 def force_kill_from_record(args: argparse.Namespace, repo: str,
                            record: dict[str, Any]) -> dict[str, Any]:
     """stop --force path when the holder is already gone."""
-    groups = recorded_groups(record, record_dir(args, repo))
+    groups = recorded_groups(record, spawn_record_dir(args, repo))
     receipt = base_receipt(args, repo)
     killed: list[int] = []
     for pid in live_group_members(groups):

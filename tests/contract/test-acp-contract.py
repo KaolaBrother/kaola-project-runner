@@ -1309,6 +1309,57 @@ class StoppedStatusTests(unittest.TestCase):
             args.command = "send"
             self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"], "holder_lost")
 
+    def test_stopped_reads_the_spawn_record_only_for_a_session(self):
+        """Issue #53: a stopped-record receipt consults the agent's spawn record
+        (``children.jsonl`` under the session's record directory) with the
+        same identity check as the holder: an entry whose pid is alive in its
+        recorded group at its recorded time is residue, a stale one is not. A
+        receipt built without a platform/session (no record directory) has no
+        spawn record and must not fail."""
+        import argparse
+        import importlib.util
+        from unittest.mock import patch
+        spec = importlib.util.spec_from_file_location("acp_spawn_record_test", CLI)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        record = {"state": "stopped", "holder_pid": 101, "agent_pid": 102,
+                  "agent_pgid": 102, "last_prompt": {"written_at": 1,
+                  "stop_reason": "end_turn", "mutation_status": "completed"}}
+        with tempfile.TemporaryDirectory() as root:
+            args = argparse.Namespace(command="status", platform="claude-code",
+                                      session="spawn-record", record_root=root)
+            directory = module.record_dir(args, "/unused")
+            directory.mkdir(parents=True)
+            spawn_record = directory / "children.jsonl"
+            child = subprocess.Popen(["sleep", "60"], start_new_session=True)
+            try:
+                spawned_at = int(time.time() * 1000)
+                with patch.object(module, "base_receipt", return_value={}), \
+                     patch.object(module, "pid_alive", return_value=False):
+                    self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"],
+                                     "stopped", "no spawn record: a clean stop reads as stopped")
+                    spawn_record.write_text(json.dumps({"pid": child.pid, "pgid": child.pid,
+                                                        "spawned_at": spawned_at,
+                                                        "binary": "sleep"}) + "\n")
+                    result = module.holder_lost_receipt(args, "/unused", record)
+                    self.assertEqual(result["outcome"], "holder_lost",
+                                     "a live spawn-recorded child is residue of the stopped session")
+                    self.assertIn(child.pid, module.recorded_groups(record, directory))
+                    stale = dict(pid=child.pid, pgid=child.pid, binary="sleep",
+                                 spawned_at=spawned_at - 60_000)
+                    spawn_record.write_text(json.dumps(stale) + "\n")
+                    self.assertNotIn(child.pid, module.recorded_groups(record, directory),
+                                     "an entry whose spawn time does not match the live process is ignored")
+                    self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"], "stopped")
+                    spawn_record.write_text("not json\n" + json.dumps({"pid": "x"}) + "\n")
+                    self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"], "stopped")
+                    bare = argparse.Namespace(command="status")
+                    self.assertIsNone(module.spawn_record_dir(bare, "/unused"))
+                    self.assertEqual(module.holder_lost_receipt(bare, "/unused", record)["outcome"], "stopped")
+            finally:
+                child.kill()
+                child.wait()
+
 
 if __name__ == "__main__":
     unittest.main()
