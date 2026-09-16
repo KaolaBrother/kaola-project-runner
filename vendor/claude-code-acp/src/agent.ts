@@ -604,6 +604,11 @@ export function createClaudeCodeAgent(
             );
           } catch (resumeErr) {
             if (isBinaryError(resumeErr)) throw resumeErr;
+            // Kaola fork: a cancelled resume turn is not an expired session.
+            // The CLI exits 143 on SIGTERM; re-running the prompt as a fresh
+            // conversation would duplicate the work and drop the persisted
+            // session id. Let the outer handler report the cancellation.
+            if (cancelledSessions.has(sessionId)) throw resumeErr;
             // Resume failed (expired session, etc.) — fall back to new session
             logger.warn(
               `Resume failed for <claude-session-id>, starting fresh: ${resumeErr instanceof Error ? resumeErr.message : String(resumeErr)}`
@@ -667,6 +672,12 @@ export function createClaudeCodeAgent(
         // Check if cancelled
         if (cancelledSessions.has(sessionId)) {
           cancelledSessions.delete(sessionId);
+          // Kaola fork: a cancelled first turn still created the native
+          // conversation; keep the id the CLI announced so the next turn resumes it.
+          const announced = (err as { claudeSessionId?: unknown } | null)?.claudeSessionId;
+          if (!claudeSessionId && typeof announced === "string" && announced) {
+            store.setClaudeSessionId(sessionId, announced);
+          }
           logger.info(`Prompt cancelled for session ${sessionId}`);
           return { stopReason: "cancelled" };
         }

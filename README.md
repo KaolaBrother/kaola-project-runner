@@ -27,7 +27,7 @@ The main orchestrator Skill is generated separately and is not an eighth platfor
 
 | Target runtime | Skill | CLI executable | Default transport |
 |---|---|---|---|
-| Claude Code | `claude-code-kaola-project-runner` | `claude` | PTY |
+| Claude Code | `claude-code-kaola-project-runner` | `claude` | ACP |
 | Codex CLI | `codex-kaola-project-runner` | `codex` | ACP |
 | Cursor CLI | `cursor-cli-kaola-project-runner` | `cursor-agent` | ACP |
 | Devin CLI | `devin-kaola-project-runner` | `devin` | ACP |
@@ -45,9 +45,11 @@ inside the Claude Code worker Skill and run from there with the local `node`: it
 absolute path) as one `claude -p` subprocess per turn under the user's claude.ai subscription and
 native Settings. The Runner never references the npm registry package of the same name, never
 runs `npx`, and never reads, copies, or logs Settings, proxy values, or credentials; the bridge
-drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` from the child environment. PTY remains Claude
-Code's default and the explicit fallback (`--transport pty`) until the live subscription gate in
-Issue #50 passes; login itself always stays a PTY act.
+drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` from the child environment. ACP became Claude
+Code's default after the live subscription gate of Issue #50 passed on this Mac (2026-09-16:
+Fable High sentinel, native transcript model `claude-fable-5-1`, tool call, cancel, continue,
+resume, zero residue, Settings untouched); `--transport pty` remains the explicit fallback, and
+login itself always stays a PTY act.
 
 ### Main orchestrator Skill
 

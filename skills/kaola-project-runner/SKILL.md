@@ -54,7 +54,7 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 
 | Platform id | Skill directory | Display name | Default transport |
 |---|---|---|---|
-| claude-code | `claude-code-kaola-project-runner` | Claude Code Kaola Project Runner | pty |
+| claude-code | `claude-code-kaola-project-runner` | Claude Code Kaola Project Runner | acp |
 | codex | `codex-kaola-project-runner` | Codex CLI Kaola Project Runner | acp |
 | cursor-cli | `cursor-cli-kaola-project-runner` | Cursor CLI Kaola Project Runner | acp |
 | devin | `devin-kaola-project-runner` | Devin CLI Kaola Project Runner | acp |

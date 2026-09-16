@@ -2,8 +2,13 @@
 
 ## Unreleased
 
-- **Claude Code ACP through a vendored, pinned bridge** (Issue #50, Missions 1–2; default
-  transport unchanged at `pty` until the live subscription gate passes). `vendor/claude-code-acp/`
+- **Claude Code ACP through a vendored, pinned bridge; ACP is now Claude Code's default
+  transport** (Issue #50, Missions 1–3; the live subscription gate passed on the recording Mac on
+  2026-09-16 and `--transport pty` stays the explicit fallback and login channel). A live finding
+  fixed in the fork: the CLI exits 143 on SIGTERM, which upstream's resume fallback treated as an
+  expired session — a cancelled `--resume` turn was re-run as a fresh conversation and the
+  persisted session id was cleared; the fork now reports `cancelled` and keeps the id, and a
+  cancelled first turn persists the id the CLI announced. `vendor/claude-code-acp/`
   vendors `harukitosa/claude-code-acp` at commit `6c20f2802e390c80b0542247c6b9738e11efdc11`
   (MIT, `LICENSE` verbatim, `UPSTREAM.md` with the complete modification list and a hashed
   upstream inventory) with a committed single-file `dist/index.js` bundle whose derivation

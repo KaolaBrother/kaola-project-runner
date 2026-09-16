@@ -447,6 +447,22 @@ def test_cancel_kills_process_group() -> None:
         follow = bridge.prompt(sid, "after cancel")
         check(follow["stopReason"] == "end_turn", "session stays usable after cancel")
         check(argv_value(sandbox.records()[1]["argv"], "--resume") == rec["session_id"], "turn after cancel resumes the same Claude session")
+        # Cancel on a --resume turn: the CLI exits 143, which must read as the
+        # cancellation it is -- no fresh re-run of the prompt, no cleared session.
+        request_id = bridge.request_async("session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": "[hang] second long task"}]})
+        wait_until(lambda: len(sandbox.records()) >= 3 and "grandchild_pid" in sandbox.records()[2], 10.0, "hanging resume turn recorded")
+        resumed = sandbox.records()[2]
+        check(argv_value(resumed["argv"], "--resume") == rec["session_id"], "the hanging turn is a --resume turn")
+        bridge.notify("session/cancel", {"sessionId": sid})
+        response = bridge.wait(request_id, 15.0)
+        check(response.get("result", {}).get("stopReason") == "cancelled", "cancelled resume turn reports stopReason=cancelled")
+        wait_until(lambda: not pid_alive(resumed["pid"]) and not pid_alive(resumed["grandchild_pid"]), 6.0, "resume turn's process group dead after cancel")
+        time.sleep(1.0)
+        check(len(sandbox.records()) == 3, "the cancelled resume turn was not re-run as a fresh conversation")
+        check("Resume failed" not in bridge.stderr(), "no resume-failure fallback was logged for the cancel")
+        after = bridge.prompt(sid, "after resume cancel")
+        check(after["stopReason"] == "end_turn" and argv_value(sandbox.records()[3]["argv"], "--resume") == rec["session_id"],
+              "the session still resumes the same Claude session after a cancelled resume turn")
         bridge.stop()
     finally:
         sandbox.cleanup()

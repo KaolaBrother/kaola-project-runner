@@ -15,6 +15,7 @@ blocks until killed.
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -78,6 +79,10 @@ def main():
     }
     grandchild = None
     if mode == "hang":
+        # The real CLI handles SIGTERM and exits with status 143 (128 + 15)
+        # instead of dying by signal; a bridge must treat that as a cancel,
+        # never as an expired session to resume afresh.
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
         grandchild = subprocess.Popen(["sleep", "300"])
         entry["grandchild_pid"] = grandchild.pid
     if RECORD:

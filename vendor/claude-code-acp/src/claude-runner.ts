@@ -495,7 +495,11 @@ export class ClaudeRunner {
         }
 
         if (code !== 0 && code !== null) {
-          reject(new Error(`claude exited with code ${code}`));
+          // Kaola fork: carry the session id the CLI already announced so a
+          // cancelled turn (exit 143 on SIGTERM) keeps its conversation.
+          const err = new Error(`claude exited with code ${code}`) as Error & { claudeSessionId?: string };
+          if (sessionId) err.claudeSessionId = sessionId;
+          reject(err);
           return;
         }
 

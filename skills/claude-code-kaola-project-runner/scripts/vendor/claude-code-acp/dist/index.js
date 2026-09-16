@@ -15928,7 +15928,9 @@ var ClaudeRunner = class {
           }
         }
         if (code !== 0 && code !== null) {
-          reject(new Error(`claude exited with code ${code}`));
+          const err = new Error(`claude exited with code ${code}`);
+          if (sessionId) err.claudeSessionId = sessionId;
+          reject(err);
           return;
         }
         resolve2({ text: resultText, sessionId });
@@ -16517,6 +16519,7 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
             );
           } catch (resumeErr) {
             if (isBinaryError(resumeErr)) throw resumeErr;
+            if (cancelledSessions.has(sessionId)) throw resumeErr;
             logger.warn(
               `Resume failed for <claude-session-id>, starting fresh: ${resumeErr instanceof Error ? resumeErr.message : String(resumeErr)}`
             );
@@ -16571,6 +16574,10 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
       } catch (err) {
         if (cancelledSessions.has(sessionId)) {
           cancelledSessions.delete(sessionId);
+          const announced = err?.claudeSessionId;
+          if (!claudeSessionId && typeof announced === "string" && announced) {
+            store.setClaudeSessionId(sessionId, announced);
+          }
           logger.info(`Prompt cancelled for session ${sessionId}`);
           return { stopReason: "cancelled" };
         }
