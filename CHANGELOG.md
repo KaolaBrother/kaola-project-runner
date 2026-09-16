@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-09-16
+
 - **ZCode default transport is ACP; PTY is unsupported by the bundled runtime** (Issue #51,
   Mission 4, owner correction 2, 2026-09-16). The shipped ZCode runtime cannot open a
   terminal UI (`Cannot find package '@zcode/tui'`) and headless `--prompt` requires
@@ -50,7 +52,8 @@
   CLI 0.16.5 finishes the in-flight model response before reporting the turn (native latency,
   measured without the Runner); the bundled runtime cannot open its TUI (`Cannot find package
   '@zcode/tui'`) and headless `--prompt` needs `~/.zcode/cli/config.json`, so the PTY fallback
-  gate cannot pass on that Mac and `default_transport` stays `pty`. Independent review
+  gate could not pass on that Mac, so this intermediate candidate kept
+  `default_transport: pty`; the later owner correction above moved it to ACP. Independent review
   round 1 (five should-fix, no blocker) closed in the same change: backend error objects and
   stderr diagnostics are redacted of the plan credential (a backend that echoes request
   input can no longer leak it onto the ACP channel); a failed `session/load` unregisters
@@ -65,7 +68,8 @@
   mode (`build|edit|plan|yolo`, default yolo for `--prompt`); the packaged
   engine states "Yolo mode bypasses permission prompts" and maps
   `bypassPermissions`/`dontAsk` to `yolo`. PTY no-flag start now passes
-  `--mode yolo`; ACP skip-all remains `yolo`. Default transport stays PTY.
+  `--mode yolo`; ACP skip-all remains `yolo`. This intermediate candidate
+  still defaulted to PTY; the later owner correction above moved it to ACP.
 - **ZCode ACP live protocol repair** (Issue #51, Mission 4). CLI 0.16.5 asks
   `session/requestRuntimePreferences` during `session/create`; the adapter now
   answers protocol defaults and never reads Settings or forwards auth headers.
