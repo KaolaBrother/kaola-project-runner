@@ -87,16 +87,16 @@ links.
 ## Locator and host-target attestation
 
 ```text
-scripts/kaola-locate.py register --target local|cloud [--bin-dir DIR] [--expect-revision SHA]
+scripts/kaola-locate.py register --target local|cloud --expect-revision SHA [--bin-dir DIR]
 scripts/kaola-locate.py [receipt] [--target local|cloud] [--expect-revision SHA] [--bin-dir DIR]
                         [--project ABS_PATH] [--worker ID] [--session NAME]
 kaola-project-runner-locate ...          # the registered bin link, same arguments
 ```
 
-`register` validates first and links second: origin, the optional expected revision, the
+`register` validates first and links second: origin, the required expected revision, the
 clean state, the link path, and the receipt path are all checked before anything is touched,
 and a refusal (`origin-mismatch`, `origin-form-unsupported`, `revision-mismatch`, `dirty`,
-`expect-revision-not-40-hex`, `foreign-locator-link`, `locator-path-occupied`,
+`expect-revision-required`, `expect-revision-not-40-hex`, `foreign-locator-link`, `locator-path-occupied`,
 `registration-path-occupied`) leaves an existing link and registration receipt unchanged
 (`locator.changed: false`, `registration.changed: false`). Only a clean, matching checkout
 links `kaola-project-runner-locate` in the owner-chosen `--bin-dir` (default: the link's own
@@ -106,11 +106,13 @@ that already points at some `scripts/kaola-locate.py` (re-registration after mov
 checkout; `locator.replaced: true`), and then atomically writes the registration receipt
 `.kaola-project-runner-locate.json` beside the link
 (`kaola-project-runner-locator-registration/1`: resolved `root`, declared `target`, `host`
-kernel + hashed fingerprint, `accepted_revision` or `null`; no hostname, username field, or
-credential; device-local, never in any Skill). The origin is accepted only in an explicit
+kernel + hashed fingerprint, `accepted_revision` (always a 40-hex commit, so a moved HEAD is
+`registration-stale`; a receipt without one is `locator-registration-unreadable`); no
+hostname, username field, or credential; device-local, never in any Skill). The origin is accepted only in an explicit
 `https://`, `ssh://`, or scp `host:path` form and normalised to `github.com/Owner/repo`
 without userinfo or port; a bare `github.com/Owner/repo`, `http://`, or local-path origin is
-`origin-form-unsupported`. The receipt form prints one bounded JSON line
+`origin-form-unsupported`, and so is a malformed value with a second `@` in its host or a
+`?` query or `#` fragment (`origin: null`; no fragment of the value is echoed). The receipt form prints one bounded JSON line
 (`kaola-project-runner-locator/1`, ≤ 4 KB): `target` (the kind as declared by the caller,
 echoed and never inferred), `host` (kernel + hashed hostname fingerprint), `root` (real local
 path, normalised origin, HEAD, `clean`, `revision_match`), `registration` (receipt path,
@@ -173,7 +175,10 @@ are bounded by `capture_receipt_bytes` (`kaola-observation.py bound_observation`
 `raw_current_frame` keeps its newest whole lines, then `child_processes` its first entries, and
 `truncated.fields` records each bounded field's kept/total size or counts and the sha256 of
 the full value; `snapshot_id` and `pane_revision` are computed from the full frame before
-bounding. ACP `observe`/`status` receipts are bounded the same way by `bound_state_receipt`
+bounding. The budget is measured on the emitted line (newline included) and applied last:
+`status`/`start` add `result` (and `legacy_ownership` for grok) inside `status-view` before
+its bound, and a receipt bounded twice (build, then status-view) merges its `truncated`
+block, keeping every original total, count, and digest and lowering only the kept figures. ACP `observe`/`status` receipts are bounded the same way by `bound_state_receipt`
 in `kaola-acp.py` (`record`, `initial_config_options`, `session_meta`, `capabilities`,
 `agent_info` summarised by size and sha256; `pending_permissions` keeps its newest entries).
 Only `capture --full` is unbounded. Schema version 3 includes `snapshot_id`,

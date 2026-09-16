@@ -23,7 +23,8 @@ decides what the evidence means and which action to take. Ordinary `observe` and
 are bounded like `capture`: over the shared budget, `raw_current_frame` keeps its newest whole lines
 and `child_processes` its first entries, and `truncated.fields` names each bounded field with its kept
 and total size and the sha256 of the full value (`snapshot_id` and `pane_revision` are computed from
-the full frame); only `capture --full` is unbounded.
+the full frame); the bound is applied last, after `status`/`start` add `result`, and a receipt bounded
+twice keeps its original totals and digests; only `capture --full` is unbounded.
 
 An observation may contain `snapshot_id` and `pane_revision` so later receipts can correlate an action
 with what the agent previously saw. They are evidence identifiers, not freshness gates. A normal redraw,

@@ -83,7 +83,7 @@ that never enters any account Skill. `result: refused` with reasons
 (`origin-mismatch`, `origin-form-unsupported`, `revision-mismatch`, `dirty`,
 `locator-not-registered`, `host-fingerprint-mismatch`, `target-mismatch`,
 `registration-stale`, `project-not-on-this-host`, `script-outside-root`,
-`target-required`, ...) means do not load or dispatch; a path that does not
+`target-required`, `expect-revision-required`, ...) means do not load or dispatch; a path that does not
 exist on the executing host is `project-not-on-this-host` whatever target was
 declared. Revision and clean facts are what that host's Git reports; index
 tricks or a tampered `.git` on a trusted host are outside this boundary. Then run

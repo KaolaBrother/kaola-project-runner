@@ -822,7 +822,7 @@ class Issue49LocatorAttestation(unittest.TestCase):
             outside = fx.base / "elsewhere.sh"
             outside.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
             outside.chmod(0o755)
-            self.assertEqual(fx.register()[0], 0)
+            self.assertEqual(fx.register("--expect-revision", fx.revision)[0], 0)
             script.unlink()
             script.symlink_to(outside)
             rc, receipt = fx.via_link("--target", "local", "--worker", "claude-code")
@@ -835,7 +835,7 @@ class Issue49LocatorAttestation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary)
             bin_dir = fx.bin
-            rc, receipt = fx.register()
+            rc, receipt = fx.register("--expect-revision", fx.revision)
             self.assertEqual(rc, 0, receipt)
             link = bin_dir / LOCATOR_COMMAND
             self.assertTrue(link.is_symlink())
@@ -852,7 +852,7 @@ class Issue49LocatorAttestation(unittest.TestCase):
             shutil.move(str(fx.checkout), str(moved))
             stale = subprocess.run([sys.executable, str(link)], text=True, capture_output=True)
             self.assertNotEqual(stale.returncode, 0)
-            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir)],
+            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir), "--expect-revision", fx.revision],
                                        text=True, capture_output=True, env=dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null"))
             receipt = json.loads(completed.stdout)
             self.assertEqual(receipt["result"], "ok", receipt)
@@ -863,7 +863,7 @@ class Issue49LocatorAttestation(unittest.TestCase):
             recorded = fx.registration.read_bytes()
             link.unlink()
             link.symlink_to(fx.base / "foreign")
-            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir)],
+            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir), "--expect-revision", fx.revision],
                                        text=True, capture_output=True)
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("foreign-locator-link", completed.stdout)
@@ -902,15 +902,17 @@ class Issue49LocatorAttestation(unittest.TestCase):
                 self.assertEqual(os.readlink(link), good, "a refused registration must leave the existing locator unchanged")
                 self.assertEqual(fx.registration.read_bytes(), good_receipt, "a refused registration must leave the receipt unchanged")
                 return data
+            # The accepted revision is required at registration, so a registration can always go stale.
+            self.assertEqual(register_from(other)["reasons"], ["expect-revision-required"])
             (other / "scratch.txt").write_text("dirty\n", encoding="utf-8")
-            self.assertIn("dirty", register_from(other)["reasons"])
+            self.assertIn("dirty", register_from(other, "--expect-revision", fx.revision)["reasons"])
             (other / "scratch.txt").unlink()
             self.assertIn("revision-mismatch", register_from(other, "--expect-revision", "0" * 40)["reasons"])
             self.assertIn("expect-revision-not-40-hex", register_from(other, "--expect-revision", "abc")["reasons"])
             git(other, "remote", "set-url", "origin", "https://github.com/someone-else/kaola-project-runner.git")
-            self.assertIn("origin-mismatch", register_from(other)["reasons"])
+            self.assertIn("origin-mismatch", register_from(other, "--expect-revision", fx.revision)["reasons"])
             git(other, "remote", "set-url", "origin", "github.com/KaolaBrother/kaola-project-runner")
-            self.assertEqual(register_from(other)["reasons"], ["origin-form-unsupported"])
+            self.assertEqual(register_from(other, "--expect-revision", fx.revision)["reasons"], ["origin-form-unsupported"])
             # A clean, matching checkout may take over (re-registration), and only then do link and receipt change.
             git(other, "remote", "set-url", "origin", "https://github.com/KaolaBrother/kaola-project-runner.git")
             completed = subprocess.run([sys.executable, str(other / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir), "--expect-revision", fx.revision],
@@ -923,8 +925,9 @@ class Issue49LocatorAttestation(unittest.TestCase):
             # A dirty tree also blocks a first registration: nothing is linked or recorded at all.
             empty_bin = fx.base / "empty bin"
             (fx.checkout / "scratch.txt").write_text("dirty\n", encoding="utf-8")
-            rc, receipt = fx.locate("register", "--target", "local", "--bin-dir", str(empty_bin))
+            rc, receipt = fx.locate("register", "--target", "local", "--bin-dir", str(empty_bin), "--expect-revision", fx.revision)
             self.assertEqual(receipt["result"], "refused")
+            self.assertIn("dirty", receipt["reasons"])
             self.assertFalse((empty_bin / LOCATOR_COMMAND).exists() or (empty_bin / LOCATOR_COMMAND).is_symlink())
             self.assertFalse((empty_bin / f".{LOCATOR_COMMAND}.json").exists())
 
@@ -937,7 +940,7 @@ class Issue49LocatorAttestation(unittest.TestCase):
         self.assertNotIn("exact owned session", docstring)
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary)
-            self.assertEqual(fx.register()[0], 0)
+            self.assertEqual(fx.register("--expect-revision", fx.revision)[0], 0)
             rc, receipt = fx.via_link("--target", "local", "--session", "kaola-issue-49-no-such-session")
             self.assertEqual(set(receipt["session"]), {"name", "present"}, "no ownership or existence claim in the receipt")
 
@@ -979,6 +982,7 @@ class Issue49LocatorAttestation(unittest.TestCase):
             self.assertEqual(tampered(target="cloud")["reasons"], ["target-mismatch"])
             self.assertEqual(tampered(root=str(fx.base / "elsewhere"))["reasons"], ["registration-root-mismatch"])
             self.assertEqual(tampered(accepted_revision="1" * 40)["reasons"], ["registration-stale"])
+            self.assertEqual(tampered(accepted_revision=None)["reasons"], ["locator-registration-unreadable"], "a null accepted revision can never be current")
             self.assertEqual(tampered(schema="kaola-project-runner-locator-registration/0")["reasons"], ["locator-registration-unreadable"])
             fx.registration.write_text("{not json", encoding="utf-8")
             rc, receipt = fx.via_link("--target", "local")
@@ -1027,7 +1031,13 @@ class Issue49LocatorAttestation(unittest.TestCase):
             rejected = ("github.com/KaolaBrother/kaola-project-runner", "http://github.com/KaolaBrother/kaola-project-runner",
                         "git://github.com/KaolaBrother/kaola-project-runner", "file:///tmp/kaola-project-runner",
                         "/Users/owner/kaola-project-runner", "../kaola-project-runner", "https://github.com/KaolaBrother",
-                        "https://user:secret@github.com/a/b/c")
+                        "https://user:secret@github.com/a/b/c",
+                        # Malformed credential-bearing, query, and fragment forms are unsupported, never echoed.
+                        "https://user:se@cret@github.com/KaolaBrother/kaola-project-runner.git",
+                        "https://github.com/KaolaBrother/kaola-project-runner.git?token=secret",
+                        "https://github.com/KaolaBrother/kaola-project-runner#secret",
+                        "git@github.com:KaolaBrother/kaola-project-runner.git?secret=1",
+                        "ssh://git@github.com/KaolaBrother/kaola-project-runner?ref=secret")
             for url in rejected:
                 git(fx.checkout, "remote", "set-url", "origin", url)
                 rc, receipt = fx.locate()
@@ -1037,6 +1047,7 @@ class Issue49LocatorAttestation(unittest.TestCase):
                 leak_check = dict(receipt, root={k: v for k, v in receipt["root"].items() if k != "expected_origin"})
                 self.assertNotIn(url, json.dumps(leak_check), "the raw origin never leaks into the receipt")
                 self.assertNotIn("secret", json.dumps(receipt))
+                self.assertNotIn("cret@github", json.dumps(receipt), "no fragment of a malformed origin is echoed")
             git(fx.checkout, "remote", "set-url", "origin", "https://github.com/someone-else/kaola-project-runner.git")
             rc, receipt = fx.locate()
             self.assertEqual(receipt["reasons"], ["origin-mismatch"])

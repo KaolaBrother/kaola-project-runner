@@ -71,6 +71,11 @@ def products() -> dict[str, Path]:
     return result
 
 
+def emitted_line_size(value) -> int:
+    """Bytes of the receipt line the helpers print: sorted-key JSON plus its newline."""
+    return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")) + 1
+
+
 def render(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run([sys.executable, str(root / "scripts" / "render-skills.py"), *args], cwd=root, text=True, capture_output=True)
 
@@ -253,8 +258,15 @@ class BoundedOrdinaryOutputs(unittest.TestCase):
         self.assertIn("if not args.full:\n            receipt = bound_capture_receipt(receipt)", capture_branch)
         state_branch = acp.split('elif args.command in ("observe", "status"):', 1)[1].split("elif args.command ==", 1)[0]
         self.assertIn("receipt = bound_state_receipt(receipt)", state_branch)
-        self.assertIn("print(json.dumps(bound_observation(build_from_environment())", OBSERVATION.read_text(encoding="utf-8"))
-        self.assertIn("print(json.dumps(bound_observation(status_view(json.load(sys.stdin)))", OBSERVATION.read_text(encoding="utf-8"))
+        observation = OBSERVATION.read_text(encoding="utf-8")
+        self.assertIn("print(json.dumps(bound_observation(build_from_environment())", observation)
+        self.assertIn('view = emit_status_view(json.load(sys.stdin), os.environ.get("KPR_STATUS_RESULT"), os.environ.get("KPR_STATUS_LEGACY"))', observation)
+        # The status/start wrapper adds nothing after the final bound: result (and legacy_ownership for
+        # grok) travel into status-view as environment and the helper bounds the line it emits.
+        self.assertIn('KPR_STATUS_RESULT="$1" KPR_STATUS_LEGACY="$STATE_LEGACY_OWNERSHIP" "$PYTHON_BIN" "$OBSERVATION_HELPER" status-view', core)
+        self.assertIn('KPR_STATUS_RESULT=started "$PYTHON_BIN" "$OBSERVATION_HELPER" status-view; exit 0', core)
+        self.assertNotIn("STATUS_JSON=", core)
+        self.assertNotIn('d["result"]=', core)
         for skill_id in WORKER_SKILL_IDS:
             shipped = PROJECT / "skills" / skill_id / "scripts" / "kaola-tmux.sh"
             self.assertEqual(shipped.read_bytes(), TMUX_CORE.read_bytes(), skill_id)
@@ -369,6 +381,186 @@ class BoundedObserveAndStatus(unittest.TestCase):
             small = self.helper("build", self.environment(root, frame_file, processes[:3]))
             self.assertNotIn("truncated", small)
             self.assertEqual(small["raw_current_frame"], "small frame\n❯\n")
+
+
+class BoundedStatusIsIdempotentAndFinal(BoundedObserveAndStatus):
+    """The status path bounds twice (build, then status-view with the wrapper fields).
+
+    Repeated bounding must merge, never replace, the ``truncated`` block: original totals,
+    counts, and digests survive, the newest frame lines and the process excerpt stay, and the
+    line that is finally emitted (with ``result`` and, for grok, ``legacy_ownership``) is the
+    one that stays within budget. 1 500 child processes and a 400-column, 340-row frame.
+    """
+
+    ROWS = 340
+
+    def load_module(self):
+        spec = importlib.util.spec_from_file_location("kaola_observation_final", OBSERVATION)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader
+        spec.loader.exec_module(module)
+        return module
+
+    def build_in_process(self, module, env: dict[str, str]) -> dict:
+        saved = dict(os.environ)
+        os.environ.clear()
+        os.environ.update(env)
+        try:
+            return module.build_from_environment()
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
+
+    @staticmethod
+    def frame_text(width: int, rows: int) -> str:
+        return "".join(f"fill {i:05d} " + "x" * (width - 11) + "\n" for i in range(1, rows + 1))
+
+    def assert_evidence(self, receipt: dict, frame_bytes: bytes, processes: list, where: str) -> None:
+        self.assertIn("truncated", receipt, where)
+        fields = receipt["truncated"]["fields"]
+        self.assertIn("raw_current_frame", fields, f"{where}: the frame evidence must survive")
+        self.assertIn("child_processes", fields, f"{where}: the process evidence must survive")
+        frame = fields["raw_current_frame"]
+        self.assertEqual(frame["total_bytes"], len(frame_bytes), where)
+        self.assertEqual(frame["sha256"], hashlib.sha256(frame_bytes).hexdigest(), where)
+        self.assertEqual(frame["kept_bytes"], len(receipt["raw_current_frame"].encode("utf-8")), where)
+        self.assertLess(frame["kept_bytes"], frame["total_bytes"], where)
+        self.assertIn(f"fill {self.ROWS:05d}", receipt["raw_current_frame"], f"{where}: the newest frame line is kept")
+        self.assertNotIn("fill 00001", receipt["raw_current_frame"], where)
+        self.assertTrue(receipt["raw_current_frame"].startswith("fill "), f"{where}: whole lines only")
+        stream = "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in processes).encode("utf-8")
+        procs = fields["child_processes"]
+        self.assertEqual(procs["total"], len(processes), where)
+        self.assertEqual(procs["stream_bytes"], len(stream), where)
+        self.assertEqual(procs["stream_sha256"], hashlib.sha256(stream).hexdigest(), where)
+        self.assertEqual(procs["kept"], len(receipt["child_processes"]), where)
+        self.assertEqual(receipt["child_processes"], processes[:procs["kept"]], f"{where}: the process excerpt stays the first entries")
+        self.assertEqual(receipt["child_process_count"], len(processes), f"{where}: counts stay whole")
+        self.assertIn("capture --full", receipt["truncated"]["hint"], where)
+
+    def test_repeated_bounding_merges_prior_truncation_metadata(self) -> None:
+        module = self.load_module()
+        limit = BUDGETS["capture_receipt_bytes"]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            root.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            frame = self.frame_text(400, self.ROWS)
+            frame_file = Path(temporary) / "frame.txt"
+            frame_file.write_text(frame, encoding="utf-8")
+            frame_bytes = frame.encode("utf-8")
+            processes = [{"pid": 200 + i, "ppid": 101, "state": "S", "command": f"worker {i} " + "y" * 60} for i in range(1500)]
+            unbounded = self.build_in_process(module, self.environment(root, frame_file, processes))
+            self.assertGreater(emitted_line_size(unbounded), limit)
+            first = module.bound_observation(unbounded, limit)
+            self.assertLessEqual(emitted_line_size(first), limit)
+            self.assert_evidence(first, frame_bytes, processes, "first bound")
+            self.assertEqual(first["truncated"]["fields"]["child_processes"]["kept"], 32)
+            # Idempotent: bounding an already bounded receipt at the same limit changes nothing.
+            self.assertEqual(module.bound_observation(first, limit), first)
+            self.assertEqual(module.bound_observation(json.loads(json.dumps(first)), limit), first)
+            # Monotone: a tighter second bound (what status-view's added fields force) keeps every
+            # original total, count, and digest, lowers only the kept figures, and keeps the newest line.
+            tighter = module.bound_observation(json.loads(json.dumps(first)), emitted_line_size(first) - 700)
+            self.assertLessEqual(emitted_line_size(tighter), emitted_line_size(first) - 700)
+            self.assert_evidence(tighter, frame_bytes, processes, "second bound")
+            self.assertLess(tighter["truncated"]["fields"]["raw_current_frame"]["kept_bytes"], first["truncated"]["fields"]["raw_current_frame"]["kept_bytes"])
+            self.assertEqual(tighter["truncated"]["fields"]["child_processes"]["kept"], 32, "the process excerpt outlives a frame cut")
+            self.assertEqual(tighter["snapshot_id"], unbounded["snapshot_id"])
+            self.assertEqual(tighter["pane_revision"], unbounded["pane_revision"])
+            # A third, much tighter bound may drop the process excerpt entirely, but never its evidence.
+            third = module.bound_observation(json.loads(json.dumps(tighter)), 24000)
+            self.assertLessEqual(emitted_line_size(third), 24000)
+            fields = third["truncated"]["fields"]
+            self.assertEqual(fields["child_processes"]["total"], len(processes))
+            self.assertEqual(fields["child_processes"]["stream_sha256"], first["truncated"]["fields"]["child_processes"]["stream_sha256"])
+            self.assertEqual(fields["child_processes"]["kept"], len(third["child_processes"]))
+            self.assertEqual(fields["raw_current_frame"]["total_bytes"], len(frame_bytes))
+            self.assertEqual(fields["raw_current_frame"]["sha256"], hashlib.sha256(frame_bytes).hexdigest())
+            self.assertIn(f"fill {self.ROWS:05d}", third["raw_current_frame"])
+            # And bounding that one again is still a no-op.
+            self.assertEqual(module.bound_observation(json.loads(json.dumps(third)), 24000), third)
+
+    def test_real_build_to_status_path_keeps_evidence_and_wrapper_fields_within_budget(self) -> None:
+        """Drive build then status-view exactly as emit_status/start do, over a width sweep that
+        forces the second bound, and measure the line the wrapper actually emits."""
+        module = self.load_module()
+        limit = BUDGETS["capture_receipt_bytes"]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            root.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            processes = [{"pid": 200 + i, "ppid": 101, "state": "S", "command": f"worker {i} " + "y" * 60} for i in range(1500)]
+            frame_file = Path(temporary) / "frame.txt"
+            forced = 0
+            for width in (*range(200, 400, 10), 399, 400):
+                frame = self.frame_text(width, self.ROWS)
+                frame_file.write_text(frame, encoding="utf-8")
+                frame_bytes = frame.encode("utf-8")
+                self.assertGreater(len(frame_bytes), limit)
+                for platform, result, legacy in (("grok", "present", "false"), ("claude-code", "started", None)):
+                    env = self.environment(root, frame_file, processes)
+                    env.update(KPR_PLATFORM=platform, KPR_RUNTIME=platform)
+                    build = subprocess.run([sys.executable, str(OBSERVATION), "build"], capture_output=True, env=env)
+                    self.assertEqual(build.returncode, 0, build.stderr.decode())
+                    self.assertLessEqual(len(build.stdout), limit, "the emitted observe line, newline included")
+                    observed = json.loads(build.stdout)
+                    self.assert_evidence(observed, frame_bytes, processes, f"width {width} build")
+                    # Does the status view plus the wrapper fields push this bounded receipt over the limit?
+                    intermediate = module.status_view(observed)
+                    intermediate["result"] = result
+                    if legacy is not None:
+                        intermediate["legacy_ownership"] = legacy == "true"
+                    if emitted_line_size(intermediate) > limit:
+                        forced += 1
+                    wrapper_env = dict(env, KPR_STATUS_RESULT=result)
+                    if legacy is not None:
+                        wrapper_env["KPR_STATUS_LEGACY"] = legacy
+                    status = subprocess.run([sys.executable, str(OBSERVATION), "status-view"], input=build.stdout, capture_output=True, env=wrapper_env)
+                    self.assertEqual(status.returncode, 0, status.stderr.decode())
+                    self.assertEqual(len(status.stdout.splitlines()), 1)
+                    self.assertLessEqual(len(status.stdout), limit, f"width {width}: the emitted status line, newline included")
+                    receipt = json.loads(status.stdout)
+                    self.assert_evidence(receipt, frame_bytes, processes, f"width {width} status")
+                    self.assertEqual(receipt["result"], result, f"width {width}: the wrapper field is inside the bounded line")
+                    if platform == "grok":
+                        self.assertIs(receipt["legacy_ownership"], False)
+                        self.assertIn("grok_tui", receipt)
+                    else:
+                        self.assertNotIn("legacy_ownership", receipt)
+                    self.assertTrue(receipt["present"] and receipt["tui_detected"])
+                    self.assertEqual(receipt["snapshot_id"], observed["snapshot_id"])
+                    self.assertEqual(receipt["truncated"]["fields"]["child_processes"]["kept"], 32)
+                    self.assertLessEqual(receipt["truncated"]["fields"]["raw_current_frame"]["kept_bytes"], observed["truncated"]["fields"]["raw_current_frame"]["kept_bytes"])
+            self.assertGreater(forced, 0, "the sweep must force the second bound at least once")
+
+
+class BoundedAcpStateIsFinal(unittest.TestCase):
+    """bound_state_receipt measures the line it emits, so no summary entry can push it over."""
+
+    def test_state_receipt_never_exceeds_the_limit_when_pending_permissions_decide(self) -> None:
+        spec = importlib.util.spec_from_file_location("kaola_acp_final", ACP_CLI)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader
+        spec.loader.exec_module(module)
+        pending = [{"request_id": f"req-{i:04d}", "title": "permission " + "p" * 40, "options": ["allow", "reject"]} for i in range(400)]
+        receipt = {"schema": "kaola-acp-state/1", "state": "waiting-permission", "activity_hint": "blocked", "holder_pid": 4242,
+                   "event_cursor": 12, "pending_permissions": pending,
+                   "record": {"platform": "grok", "session": "s", "repo": "/r", "notes": "n" * 3000}}
+        raw = json.dumps(pending, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        for limit in range(6000, 6400, 7):
+            bounded = module.bound_state_receipt(json.loads(json.dumps(receipt)), limit)
+            self.assertLessEqual(emitted_line_size(bounded), limit, f"limit {limit}")
+            summary = bounded["truncated"]["fields"]["pending_permissions"]
+            self.assertEqual(summary["total"], len(pending))
+            self.assertEqual(summary["kept"], len(bounded["pending_permissions"]))
+            self.assertEqual(summary["kept"] + summary["dropped"], summary["total"])
+            self.assertGreater(summary["kept"], 0, "the newest permissions survive")
+            self.assertEqual(bounded["pending_permissions"], pending[-summary["kept"]:], "the newest entries are the ones kept")
+            self.assertEqual(summary["sha256"], hashlib.sha256(raw).hexdigest())
+            self.assertEqual(bounded["truncated"]["fields"]["record"]["kind"], "object")
+            self.assertEqual(bounded["state"], "waiting-permission")
+        self.assertEqual(module.bound_state_receipt(json.loads(json.dumps(receipt)), 10 ** 6), receipt, "within budget passes through")
 
 
 class BoundedAcpCapture(unittest.TestCase):

@@ -9,9 +9,9 @@ bridge asks that command, on the bound target, where the canonical checkout is. 
 path is never written into any Skill: moving the checkout means running ``register`` again
 from its new location. There is no service, daemon, registry, or filesystem scan.
 
-``register --target local|cloud`` validates origin, the optional expected revision, the clean
-state, and the link path before it touches anything; a refused registration leaves an
-existing link and registration receipt unchanged. On success it links the command and
+``register --target local|cloud --expect-revision R`` validates origin, the required expected
+revision, the clean state, and the link path before it touches anything; a refused
+registration leaves an existing link and registration receipt unchanged. On success it links the command and
 atomically writes a minimal, credential-free **registration receipt** beside the link
 (``.kaola-project-runner-locate.json``): schema, resolved repo root, declared target, host
 kernel and hashed fingerprint, accepted revision. It stores no hostname field, no username
@@ -94,7 +94,9 @@ def normalise_origin(raw: str) -> str | None:
 
     Userinfo, port, a trailing slash, and ``.git`` are dropped; the raw value is never
     returned. A bare ``github.com/Owner/repo``, ``http://``, ``git://``, ``file://``, or a
-    local path is not an accepted form.
+    local path is not an accepted form, and neither is a malformed value whose host still
+    carries an ``@`` (a second userinfo separator) or whose host or path carries a query
+    (``?``) or fragment (``#``): no fragment of such a value is ever echoed.
     """
     value = raw.strip()
     match = URL_FORM.match(value)
@@ -105,6 +107,8 @@ def normalise_origin(raw: str) -> str | None:
         if not match:
             return None
         host, path = match.group(1), match.group(2)
+    if "@" in host or any(mark in host or mark in path for mark in "?#"):
+        return None
     host = host.lower()
     path = path.strip("/")
     if path.endswith(".git"):
@@ -234,6 +238,9 @@ def load_registration(directory: Path) -> tuple[dict[str, object] | None, list[s
         return None, ["locator-registration-unreadable"]
     if not isinstance(data, dict) or data.get("schema") != REGISTRATION_SCHEMA:
         return None, ["locator-registration-unreadable"]
+    accepted = data.get("accepted_revision")
+    if not isinstance(accepted, str) or not REVISION.match(accepted):
+        return None, ["locator-registration-unreadable"]
     return data, []
 
 
@@ -252,7 +259,7 @@ def registration_facts(directory: Path, target: str | None, root: Path | None, h
     target_match = target is None or data.get("target") == target
     root_match = root is not None and data.get("root") == str(root)
     accepted = data.get("accepted_revision")
-    revision_current = accepted is None or accepted == head
+    revision_current = accepted == head
     facts.update(
         present=True,
         target=data.get("target"),
@@ -327,8 +334,9 @@ def receipt_command(args: argparse.Namespace) -> int:
 def register_command(args: argparse.Namespace) -> int:
     """Link the locator and write its registration receipt -- only after every fact is validated.
 
-    Origin, the optional expected revision, the clean state, the link path, and the receipt
-    path are all checked first; any refusal returns before the filesystem is touched, so a
+    Origin, the required expected revision (``--expect-revision``, so a registration can
+    always go ``registration-stale``), the clean state, the link path, and the receipt path
+    are all checked first; any refusal returns before the filesystem is touched, so a
     foreign, dirty, or mismatched checkout can never replace an existing, good locator or
     its receipt. The link is replaced first and the receipt second, each atomically: a
     failure between the two leaves a receipt that no longer matches the link, which every
@@ -340,7 +348,9 @@ def register_command(args: argparse.Namespace) -> int:
     if root is None:
         receipt.update(result="refused", reasons=reasons)
         return emit(receipt)
-    if args.expect_revision is not None and not REVISION.match(args.expect_revision):
+    if args.expect_revision is None:
+        reasons.append("expect-revision-required")
+    elif not REVISION.match(args.expect_revision):
         reasons.append("expect-revision-not-40-hex")
         args.expect_revision = None
     facts, more = root_facts(root, args.expect_revision)
@@ -407,7 +417,8 @@ def main() -> int:
                           help="the execution target this registration is declared for")
     register.add_argument("--bin-dir", help="owner-chosen directory on PATH for the link and receipt "
                                             "(default: the installer's bin directory)")
-    register.add_argument("--expect-revision")
+    register.add_argument("--expect-revision", help="the accepted 40-hex revision this registration is for "
+                                                    "(required; a later HEAD move is registration-stale)")
     argv = sys.argv[1:]
     if not argv or argv[0].startswith("-"):
         argv = ["receipt", *argv]

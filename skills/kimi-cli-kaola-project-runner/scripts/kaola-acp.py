@@ -225,6 +225,11 @@ def event_stream_bytes(items: list[Any]) -> bytes:
     ).encode("utf-8")
 
 
+def line_size(value: Any) -> int:
+    """Bytes of the emitted receipt line: the JSON plus the newline ``print`` writes."""
+    return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")) + 1
+
+
 def bound_capture_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_BYTES) -> dict[str, Any]:
     """Keep an ordinary capture receipt within ``limit`` bytes, verifiably.
 
@@ -235,8 +240,7 @@ def bound_capture_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_
     pass ``--full``. The newest entries are always the ones kept.
     """
     key = next((name for name in BOUNDED_LISTS if isinstance(receipt.get(name), list)), None)
-    line = json.dumps(receipt, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    if key is None or len(line) <= limit:
+    if key is None or line_size(receipt) <= limit:
         return receipt
     items = list(receipt[key])
     stream = event_stream_bytes(items)
@@ -255,10 +259,10 @@ def bound_capture_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_
             "stream_sha256": hashlib.sha256(stream).hexdigest(),
             "hint": "newest entries kept; pass --full for the whole record",
         }
-        line = json.dumps(bounded, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        if len(line) <= limit or not kept:
+        size = line_size(bounded)
+        if size <= limit or not kept:
             return bounded
-        excess = len(line) - limit
+        excess = size - limit
         dropped = 0
         while start < len(items) and (dropped < excess or dropped == 0):
             dropped += sizes[start]
@@ -277,41 +281,41 @@ STATE_BOUNDED_HINT = ("ordinary observe/status receipts are bounded: summarised 
 def bound_state_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_BYTES) -> dict[str, Any]:
     """Keep an ordinary observe/status receipt within ``limit`` bytes, verifiably.
 
-    When the JSON line would exceed the limit, each field in ``STATE_BOUNDED_FIELDS`` is
-    replaced in turn by ``{"omitted": true, "bytes", "sha256"}`` (``pending_permissions``
-    first drops its oldest entries and keeps the newest that fit) and ``truncated.fields``
-    records, per bounded field, the byte size and sha256 of the full value plus its key list
-    or counts. A receipt within budget passes through unchanged.
+    When the emitted line (JSON plus its newline) would exceed the limit, each field in
+    ``STATE_BOUNDED_FIELDS`` is replaced in turn by ``{"omitted": true, "bytes", "sha256"}``
+    (``pending_permissions`` first drops its oldest entries and keeps the newest that fit) and
+    ``truncated.fields`` records, per bounded field, the byte size and sha256 of the full
+    value plus its key list or counts. The summary entry is written before its field is cut,
+    so the budget is measured on the line that is actually emitted. A receipt within budget
+    passes through unchanged.
     """
-    def size(value: Any) -> int:
-        return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
-
-    if size(receipt) <= limit:
+    if line_size(receipt) <= limit:
         return receipt
     bounded = dict(receipt)
     fields: dict[str, Any] = {}
     bounded["truncated"] = {"fields": fields, "hint": STATE_BOUNDED_HINT}
     for key in STATE_BOUNDED_FIELDS:
-        if size(bounded) <= limit:
+        if line_size(bounded) <= limit:
             break
         value = bounded.get(key)
         if not isinstance(value, (dict, list)) or not value:
             continue
         raw = json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")
         summary: dict[str, Any] = {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+        fields[key] = summary
         if key == "pending_permissions" and isinstance(value, list):
             kept = list(value)
-            while size(bounded) > limit and kept:
+            summary.update(kind="list", total=len(value), kept=len(kept), dropped=0)
+            while line_size(bounded) > limit and kept:
                 kept = kept[1:]
                 bounded[key] = kept
-            summary.update(kind="list", total=len(value), kept=len(kept), dropped=len(value) - len(kept))
+                summary.update(kept=len(kept), dropped=len(value) - len(kept))
         elif isinstance(value, list):
             summary.update(kind="list", count=len(value))
             bounded[key] = {"omitted": True, "bytes": len(raw), "sha256": summary["sha256"]}
         else:
             summary.update(kind="object", keys=sorted(str(k) for k in value))
             bounded[key] = {"omitted": True, "bytes": len(raw), "sha256": summary["sha256"]}
-        fields[key] = summary
     return bounded
 
 

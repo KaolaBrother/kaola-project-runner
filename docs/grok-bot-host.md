@@ -128,16 +128,16 @@ The locator is the smallest existing-repo-compatible mechanism: a symlink named
 the same bin directory the installer's `--bin-links` already manages (it is now
 one of those links; `--bin-dir DIR` chooses any other directory on PATH). No
 service, daemon, registry, or filesystem scan; the link is the whole locator.
-`register --target local|cloud` validates origin, the optional
-`--expect-revision`, the clean state, the link path, and the receipt path
-**before** it touches anything: a foreign, dirty, or mismatched checkout is
+`register --target local|cloud --expect-revision R` validates origin, the
+required `--expect-revision`, the clean state, the link path, and the receipt
+path **before** it touches anything: a foreign, dirty, or mismatched checkout is
 refused and an existing locator link and registration receipt stay exactly as
 they were (`Issue49LocatorAttestation` proves it); only a clean, matching
 checkout re-registers. On success it links the command and then atomically
 writes the **registration receipt** `.kaola-project-runner-locate.json` beside
 the link (`kaola-project-runner-locator-registration/1`): resolved ROOT, the
-declared target, host kernel and hashed fingerprint, the accepted revision or
-`null`. It stores no hostname field, no username field, no credential, and no
+declared target, host kernel and hashed fingerprint, the accepted revision
+(required, so a later HEAD move is always `registration-stale`). It stores no hostname field, no username field, no credential, and no
 account data (the root is a real local path and may include the user's home);
 the receipt is device-local and never enters any Skill. Every later locator call
 compares the running host fingerprint, the declared `--target`, the ROOT the
@@ -148,11 +148,12 @@ receipt exists), so a fresh conversation needs no memory of the fingerprint.
 The origin is accepted only in an explicit `https://`, `ssh://`, or scp
 `host:path` form and normalised without userinfo or port; a bare
 `github.com/Owner/repo`, `http://`, or local-path origin is
-`origin-form-unsupported`. It never reads, prints, hashes, or forwards a
+`origin-form-unsupported`, as is a malformed value with a second `@` in its
+host or a `?`/`#` query or fragment (nothing of it is echoed). It never reads, prints, hashes, or forwards a
 credential and runs Git with `GIT_TERMINAL_PROMPT=0`.
 
 ```bash
-python3 "$ROOT/scripts/kaola-locate.py" register --target local|cloud [--bin-dir DIR] [--expect-revision R]   # validate, link, write the receipt
+python3 "$ROOT/scripts/kaola-locate.py" register --target local|cloud --expect-revision R [--bin-dir DIR]   # validate, link, write the receipt
 kaola-project-runner-locate                                          # ROOT, origin, HEAD, clean, fingerprint, registration facts
 kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
   --project <consumer project root> --worker <platform id> --session <exact session name>
@@ -184,7 +185,7 @@ facts are what the executing host's own Git reports (`rev-parse`, `status
 tampered `.git` on that trusted host are explicitly outside this boundary, and
 no content hashing is attempted. Reasons: `origin-mismatch`,
 `origin-form-unsupported`, `revision-mismatch`, `dirty`, `no-head`,
-`not-a-checkout`, `target-required`, `expect-revision-not-40-hex`,
+`not-a-checkout`, `target-required`, `expect-revision-required`, `expect-revision-not-40-hex`,
 `locator-not-registered`, `locator-registration-unreadable`,
 `host-fingerprint-mismatch`, `target-mismatch`, `registration-root-mismatch`,
 `registration-stale`, `project-not-on-this-host`, `project-not-a-checkout`,

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Pre-UAT bounding correction** (Issue #49 final delta review of R2/P2; Mission 10; fresh
+  content commit R3 and pin commit P3). PTY `kaola-observation.py bound_observation` is now
+  idempotent and monotone: the status/start path bounds twice (`build`, then `status-view`), and
+  the second bound merges the existing `truncated` block instead of replacing it, so the original
+  `child_processes` total/count/sha256 and `raw_current_frame` total/sha256 survive while the
+  newest frame lines and the process excerpt stay. The wrapper fields `result` and (grok)
+  `legacy_ownership` are added inside `status-view` before its bound, so the emitted `status`/
+  `start` line, newline included, stays within `capture_receipt_bytes` even on a 400-column pane;
+  ACP `bound_state_receipt`/`bound_capture_receipt` measure the emitted line the same way and
+  record a summary before cutting its field, so no summary entry can push a receipt over. Tests:
+  repeated bounding, the real build-to-status path with 1 500 child processes and 400×320 frames,
+  final wrapper serialization, ACP pending-permission limits. `kaola-locate.py register` now
+  requires `--expect-revision` (`expect-revision-required`; a receipt without a 40-hex accepted
+  revision is `locator-registration-unreadable`), and origins with a second `@` in the host or a
+  `?`/`#` query or fragment are `origin-form-unsupported` with nothing echoed. Budgets and
+  `templates/grok-golden/` unchanged.
 - **Pre-UAT closure of the Issue #49 re-review notes** (Mission 9; fresh content commit R2
   and pin commit P2). Ordinary `observe`/`status` receipts are now really bounded on both
   transports by the shared `capture_receipt_bytes` budget: PTY through

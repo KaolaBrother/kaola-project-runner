@@ -668,6 +668,11 @@ def _json_size(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
 
+def _line_size(value: Any) -> int:
+    """Bytes of the emitted receipt line: the JSON plus the newline ``print`` writes."""
+    return _json_size(value) + 1
+
+
 def _tail_lines(data: bytes, keep: int) -> bytes:
     tail = data[-keep:] if keep > 0 else b""
     newline = tail.find(b"\n")
@@ -680,20 +685,29 @@ def bound_observation(observation: dict[str, Any], limit: int = CAPTURE_RECEIPT_
     """Keep an ordinary observe/status receipt within ``limit`` bytes, verifiably.
 
     Structural facts (identity, hard evidence, relay, counts, Git, model, flags) stay whole.
-    When the JSON line would exceed the limit, ``child_processes`` is first cut to a short
-    excerpt of its first entries, then ``raw_current_frame`` keeps its newest whole lines,
-    and only if that is still not enough is the process excerpt dropped entirely, so the
-    most relevant excerpt (the newest visible output) survives. ``truncated.fields``
-    records, per bounded field, the kept and total sizes (or counts) and the sha256 of the
-    full value, so the receipt stays verifiable. ``snapshot_id`` and ``pane_revision`` are
-    computed before bounding, from the full frame, and are unchanged. A receipt already
-    bounded once keeps its original totals and digests.
+    When the emitted line (JSON plus its newline) would exceed the limit, ``child_processes``
+    is first cut to a short excerpt of its first entries, then ``raw_current_frame`` keeps its
+    newest whole lines, and only if that is still not enough is the process excerpt dropped
+    entirely, so the most relevant excerpt (the newest visible output) survives.
+    ``truncated.fields`` records, per bounded field, the kept and total sizes (or counts) and
+    the sha256 of the full value, so the receipt stays verifiable. ``snapshot_id`` and
+    ``pane_revision`` are computed before bounding, from the full frame, and are unchanged.
+
+    Bounding is idempotent and monotone: the status path bounds the same receipt twice
+    (``build`` and then ``status-view`` with its added fields), so an existing ``truncated``
+    block is merged, never replaced. Every prior entry survives with its original total,
+    count, and digest; a field cut further only lowers its ``kept`` figure; a receipt that
+    already fits is returned unchanged.
     """
-    if _json_size(observation) <= limit:
+    previous = {
+        name: dict(entry)
+        for name, entry in ((observation.get("truncated") or {}).get("fields") or {}).items()
+        if isinstance(entry, dict)
+    }
+    if _line_size(observation) <= limit:
         return observation
     bounded = dict(observation)
-    previous = (observation.get("truncated") or {}).get("fields") or {}
-    fields: dict[str, Any] = {}
+    fields: dict[str, Any] = dict(previous)
     bounded["truncated"] = {"fields": fields, "hint": OBSERVATION_BOUNDED_HINT}
     processes = observation.get("child_processes")
     process_entry: dict[str, Any] | None = None
@@ -709,11 +723,13 @@ def bound_observation(observation: dict[str, Any], limit: int = CAPTURE_RECEIPT_
             "stream_bytes": origin.get("stream_bytes", len(stream)),
             "stream_sha256": origin.get("stream_sha256", hashlib.sha256(stream).hexdigest()),
         }
+        if process_entry["kept"] < process_entry["total"]:
+            fields["child_processes"] = process_entry
 
     def trim_processes(floor: int) -> None:
         assert process_entry is not None
         kept = list(bounded["child_processes"])
-        while _json_size(bounded) > limit and len(kept) > floor:
+        while _line_size(bounded) > limit and len(kept) > floor:
             kept = kept[:max(floor, len(kept) - max(1, len(kept) // 4))]
             bounded["child_processes"] = kept
             process_entry["kept"] = len(kept)
@@ -722,7 +738,7 @@ def bound_observation(observation: dict[str, Any], limit: int = CAPTURE_RECEIPT_
     if process_entry is not None:
         trim_processes(PROCESS_EXCERPT)
     frame = observation.get("raw_current_frame")
-    if _json_size(bounded) > limit and isinstance(frame, str) and frame:
+    if _line_size(bounded) > limit and isinstance(frame, str) and frame:
         data = frame.encode("utf-8")
         origin = previous.get("raw_current_frame") or {}
         entry: dict[str, Any] = {
@@ -733,15 +749,30 @@ def bound_observation(observation: dict[str, Any], limit: int = CAPTURE_RECEIPT_
         }
         fields["raw_current_frame"] = entry
         keep = len(data)
-        while _json_size(bounded) > limit and keep > 0:
-            keep = max(keep - max(_json_size(bounded) - limit, 512), 0)
+        while _line_size(bounded) > limit and keep > 0:
+            keep = max(keep - max(_line_size(bounded) - limit, 512), 0)
             tail = _tail_lines(data, keep)
             keep = min(keep, len(tail))
             bounded["raw_current_frame"] = tail.decode("utf-8", errors="replace")
             entry["kept_bytes"] = len(tail)
-    if process_entry is not None and _json_size(bounded) > limit:
+    if process_entry is not None and _line_size(bounded) > limit:
         trim_processes(0)
     return bounded
+
+
+def emit_status_view(observation: dict[str, Any], result: str | None, legacy: str | None) -> dict[str, Any]:
+    """The final PTY status/start line: wrapper fields first, one bound last.
+
+    ``result`` (the wrapper's outcome such as ``present``, ``started``, ``already-running``)
+    and, for the grok platform only, ``legacy_ownership`` are added *before* the bound so
+    the serialized line, not an intermediate view, is what stays within the budget.
+    """
+    view = status_view(observation)
+    if result:
+        view["result"] = result
+    if legacy is not None and view.get("platform") == "grok":
+        view["legacy_ownership"] = legacy == "true"
+    return bound_observation(view)
 
 
 def main() -> int:
@@ -798,7 +829,8 @@ def main() -> int:
         pane_facts = json.loads(os.environ.get("KPR_ADAPTER_PANE_FACTS", "{}"))
         print(json.dumps(function(frame, activity, pane_facts), ensure_ascii=False, sort_keys=True))
     else:
-        print(json.dumps(bound_observation(status_view(json.load(sys.stdin))), ensure_ascii=False, sort_keys=True))
+        view = emit_status_view(json.load(sys.stdin), os.environ.get("KPR_STATUS_RESULT"), os.environ.get("KPR_STATUS_LEGACY"))
+        print(json.dumps(view, ensure_ascii=False, sort_keys=True))
     return 0
 
 
