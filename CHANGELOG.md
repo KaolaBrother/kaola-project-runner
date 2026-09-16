@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.3.2 — 2026-09-16
+
+- **Grok Bot bridge pin refreshed** (Issue #57). After the #53 and #56 changes
+  were accepted on `main`, a new content/pin pair replaced the stale pre-#56
+  target. The pin remains a separate branch so its machine-checked four-file
+  delta is not mixed with Workflow archive commits; one thin private Skill is
+  still the account-facing artifact. No account write or Marketplace publication
+  is implied by this release.
+
 - **Claude Code ACP bridge robustness edges** (Issue #53, follow-up to the #50 reviews). The
   vendored bridge removes its `.tmp` sibling when the session record cannot be renamed into
   place, and clears the per-session cancel flag when a turn starts so a `session/cancel` that
