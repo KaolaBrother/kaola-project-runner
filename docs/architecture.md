@@ -4,7 +4,7 @@
 
 Kaola Project Runner is a runtime-neutral Agent Skills CLI communication driver: any agent that
 can load a skill directory and run shell commands in an environment containing the target CLI can
-use the same eight worker Skills, and Codex remains a fully supported consuming runtime. A separate
+use the same nine worker Skills, and Codex remains a fully supported consuming runtime. A separate
 generated control-plane Skill, `kaola-project-runner` (display name Project Runner), supervises
 explicitly authorized workers through those transport Skills. Worker Skills do not orchestrate
 Kaola Workflow, implement Workflow, or own a runtime's configuration.
@@ -56,7 +56,7 @@ use the communication channel.
 prompt, PR handoff, heartbeat, foreground scheduler, and closing references. Project prompt, task-mode,
 scheduling, handoff, and lifecycle bytes. Those bytes remain frozen as reference evidence; active
 generated worker Skills do not impose them, and they are not the contract for `kaola-project-runner`.
-`templates/SKILL.md.tmpl` is the authoritative eight-platform communication-only contract.
+`templates/SKILL.md.tmpl` is the authoritative nine-platform communication-only contract.
 `templates/orchestrator/` is the authoritative main-Skill contract.
 
 Only platform facts may vary: executable, runtime carrier preflight, launch/continue/resume syntax,
@@ -64,19 +64,28 @@ TUI/editor/approval/session observation, graceful quit, and capability declarati
 runtime-native recurring capability is reported as evidence; the invoking agent may still choose an
 outer Codex carrier.
 
+ACP mode and permission option IDs are manifest-driven: every worker manifest declares
+`acp_mode_config_id` (for example, Droid uses `autonomy_level`; platforms without an ACP mode
+option leave it empty). The ACP holder no longer assumes one global mode/config ID, while the
+existing eight platforms retain byte-identical behavior.
+
 ## Generated Skills
 
 `render-skills.py` combines the active communication template, frozen optional references, fixed manifests, metadata templates, shared tmux
-core, relay/client/protocol/observation helpers, and one matching adapter into eight self-contained
+core, relay/client/protocol/observation helpers, and one matching adapter into nine self-contained
 worker directories under `skills/`, and renders the fixed orchestrator directory
 `skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
-derived from the eight manifests (no orchestrator platform manifest or adapter). It also emits
+derived from the nine manifests (no orchestrator platform manifest or adapter). It also emits
 the Grok Bot host bundle `hosts/grok-bot/`: one thin bridge Skill
 `kaola-project-runner.md`, its fingerprint manifest `bridge.json`, and the install guide
 `INSTALL.md`. Every managed
 directory has a `.generated-by-kaola-project-runner` marker. A published Skill never follows a path
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
 byte inventories, including the orchestrator package and `hosts/grok-bot/`.
+
+The nine-worker inventory includes Claude Code, Codex, Cursor CLI, Devin, Droid, Grok CLI,
+Kimi CLI, OpenCode, and ZCode. Droid uses the native ACP agent `droid exec --output-format acp`
+as its default transport and keeps PTY as an explicit fallback.
 
 Grok Bot is a **bridge host**. Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
 automated account-Skill creation, so the account receives exactly **one** very small Skill
@@ -100,7 +109,7 @@ for the content commit R, stage `pinned` for the pin commit P that names R; the 
 renderer and verifier proves R exists, is an ancestor, is a content-stage commit, holds the
 locator and every entry path, and differs from P only by `accepted-revision.json` plus the
 three generated products with a one-line bridge diff; an accepted R/P pair is never rebased or
-squashed, and a moved `main` means a fresh R/P). Grok Bot is a **host**, not an eighth platform: there is
+squashed, and a moved `main` means a fresh R/P). Grok Bot is a **host**, not a tenth platform: there is
 no `platforms/grok-bot.yaml`, no transport adapter, no runtime copy, no per-worker account
 Skills, and no installer destination. `scripts/kaola-grok-bot-verify.py` proves the bridge
 shape and budgets and, with `--repo`, byte identity with a fresh render. `--platform grok`
@@ -130,7 +139,7 @@ budget or a loading boundary regresses.
 
 There is exactly one canonical Skill system: `templates/orchestrator/` (the main Skill and its
 references), `templates/SKILL.md.tmpl` with `templates/agents/` and `templates/references/` (the
-worker contract), the eight `platforms/*.yaml` manifests, and the shared `scripts/`. A **host
+worker contract), the nine `platforms/*.yaml` manifests, and the shared `scripts/`. A **host
 adapter** re-packages that system for one host inside `render-skills.py`; it never authors a
 second body. Grok Bot is such a packaging adapter (the delimited "Host adapter: grok-bot" section
 of the renderer), not a CLI transport platform: there is no `platforms/grok-bot.yaml` and no
@@ -166,7 +175,7 @@ passed, and then only exact-owned links.
 
 ## Session ownership
 
-The core accepts `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, or `codex`. New sessions
+The core accepts `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, or `droid`. New sessions
 receive:
 
 ```text

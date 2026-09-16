@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Droid CLI worker platform (Issue #58).** Droid is now the ninth worker platform, using the
+  native `droid exec --output-format acp` agent by default and the native tmux TUI as an explicit
+  PTY fallback. Both transports default to Auto Model and bypass permissions: ACP applies
+  `model=auto` and `autonomy_level=auto-high`, while PTY uses `--skip-permissions-unsafe` with a
+  process-scoped `--settings` overlay that never writes `~/.factory`. Droid has no model or effort
+  upgrade tier; reasoning effort is passed only when explicitly called. The new
+  `acp_mode_config_id` manifest key makes ACP mode/permission option IDs manifest-driven while
+  preserving byte-identical behavior for existing platforms. Orchestrator budgets were
+  re-measured for the ninth roster entry, and live ACP/PTY verification, resume, bypass, and
+  zero-residue evidence is recorded in `docs/droid-live-verification-2026-09-17.md`.
+
 ## 0.3.2 — 2026-09-16
 
 - **Grok Bot bridge pin refreshed** (Issue #57). After the #53 and #56 changes

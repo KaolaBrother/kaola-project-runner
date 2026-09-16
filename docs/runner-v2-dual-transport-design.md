@@ -5,7 +5,7 @@
 日期：2026-09-11
 
 > v0.2 → v0.3 变更摘要（依据 `docs/poc-acp-transport-2026-09-11.md`）
-> - 默认通道决定：原生 ACP 五平台（Grok / Kimi / Cursor / Devin / OpenCode）`default_transport: acp`，Claude Code 保持 `pty`（§5.1、§12）
+> - 默认通道决定：原生 ACP 六平台（Grok / Kimi / Cursor / Devin / OpenCode / Droid）`default_transport: acp`，Claude Code 保持 `pty`（§5.1、§12）
 > - `--continue` 改为 `session/load` 最近记录的 `acp_session_id`；`session/list` / `session/resume` / `session/close` 在 Grok/Kimi 上均不存在（§4、§7.2）
 > - permission 流程在实跑中未触发（Grok `always-approve`；Kimi `mode=default` 亦不发 `request_permission`）：`permit` 机制保留（mock 覆盖），live 验收改为条件项（§10.3）
 > - 持有者 socket 改为 `$TMPDIR/kaola-<uid>-acp/<hash>.sock`，记录目录内 `holder.sock` 为 symlink（§3.2）
@@ -44,7 +44,7 @@ Runner v2 向 orchestrator 同时暴露两条通道——**`acp`** 与 **`pty`�
 | --- | --- | --- |
 | G1 | orchestrator 每轮控制一个 CLI 所消耗的 token 显著下降 | PoC 记录字节数 + 固定 tokenizer token 数、命令调用次数、推理轮数 |
 | G2 | Runner 更轻：ACP 路径不需要 tmux、屏幕 snapshot、pane revision、控制字过滤、按键旁路；**但每个 acp 会话有一个连接持有者进程**（形态同现有 relay，见 §3.3） | 行数、模块数、live smoke 步骤数 |
-| G3 | 保留六平台与现有 tmux 能力，不做破坏性迁移 | `kaola-tmux.sh` 现有命令面全部可用且回执不变（仅新增字段） |
+| G3 | 保留九平台与现有 tmux 能力，不做破坏性迁移 | `kaola-tmux.sh` 现有命令面全部可用且回执不变（仅新增字段） |
 | G4 | 保持 Runner 原则：只报事实、不设 hardgate、不替 orchestrator 做语义判断 | 设计审查 |
 | G5 | 借鉴 Paseo 的 ACP 思路与 quirk 知识，不引入 Paseo 源码、全局 daemon、桌面/移动端、relay、voice | 依赖清单 |
 
@@ -88,7 +88,7 @@ lease/fence、snapshot 关联、pane revision、控制字过滤、bracketed-past
 
 ### 2.4 ACP 事实清单（按来源分三类）
 
-#### A. 六平台 ACP 启动命令
+#### A. 七平台 ACP 启动命令
 
 | 平台 | 命令 | 来源类型 | 备注 |
 | --- | --- | --- | --- |
@@ -97,6 +97,7 @@ lease/fence、snapshot 关联、pane revision、控制字过滤、bracketed-past
 | Cursor CLI | `cursor-agent acp` | Paseo `getCursorACPCommand`（`provider-registry.ts`） | Paseo 生产路径 |
 | Devin CLI | `devin acp` | Paseo catalog | Paseo 生产路径 |
 | OpenCode | `opencode acp` | OpenCode 官方文档 | **Paseo 未以 ACP 驱动 OpenCode**（走 HTTP）；`/undo /redo` 不支持 |
+| Droid | `droid exec --output-format acp` | Droid 0.220.0 live verification | 原生 ACP agent；无 bridge、无 translator |
 | Claude Code | `npx --yes @agentclientprotocol/claude-agent-acp@<pin>`（需 `CLAUDE_CODE_EXECUTABLE`） | Paseo `acp-wrapper-smoke.test.ts`（pin 0.31.4） | **Paseo 生产路径是 Claude Agent SDK 直连，非 ACP**；wrapper 仅 smoke 验证 |
 
 #### B. 协议规范事实（agentclientprotocol.com, v1）
@@ -147,7 +148,7 @@ Controlling Agent (orchestrator)
 | 组件 | 职责 | 不负责 |
 | --- | --- | --- |
 | Skill 模板 | 告诉 orchestrator：默认通道、通道能力事实、成本事实、fallback 规则 | 任何自动决策 |
-| platform manifest | `default_transport`、`acp_command`、`acp_client_capabilities`、`acp_quirks`、`acp_verified_versions`、`acp_env_allowlist`、`acp_login_requires_pty`、`acp_model_config_id`、`acp_effort_config_id`、`acp_wrapper_pin`（完整表见 §9.2） | 运行时探测结果 |
+| platform manifest | `default_transport`、`acp_command`、`acp_client_capabilities`、`acp_quirks`、`acp_verified_versions`、`acp_env_allowlist`、`acp_login_requires_pty`、`acp_model_config_id`、`acp_effort_config_id`、`acp_mode_config_id`、`acp_wrapper_pin`（完整表见 §9.2） | 运行时探测结果 |
 | `kaola-acp.py`（CLI） | 解析命令、连接持有者 socket、格式化回执 | 持有 stdio |
 | `kaola-acp-holder.py`（每会话持有者，纯 Python 3） | spawn、stdio JSON-RPC、读线程、事件日志、pending permission、权限应答、cancel、stop 序列 | 判断任务完成、是否 fallback |
 | `kaola-tmux.sh` + relay | 不变 | — |
@@ -215,7 +216,13 @@ manifest `default_transport`（v0.3 决定）：
 | Cursor CLI | `acp` | 原生 `cursor-agent acp`（Paseo 生产路径）；生产实现中以 preflight + 场景 1/3/4/7 实跑补证据 |
 | Devin CLI | `acp` | 原生 `devin acp`；同上；`self_hosting_risk` 在 Devin 驱动 Devin 时为 true |
 | OpenCode | `acp` | 原生 `opencode acp`（官方文档）；同上 |
+| Droid | `acp` | 原生 `droid exec --output-format acp`；0.220.0 live ACP gate PASS；PTY 为显式 fallback |
 | Claude Code | `pty` | 依赖 npx wrapper（供应链、首次下载超时、可能需要 `terminal:true`）且当前无有效账号；preflight 仍报告 acp 事实 |
+
+Droid's transport facts are `default_transport: acp`, native agent
+`droid exec --output-format acp`, and PTY launch
+`droid --settings <process-scoped overlay> --skip-permissions-unsafe`; its manifest mode
+option ID is `acp_mode_config_id: autonomy_level`.
 
 任一平台若在实跑中 preflight `initialize` 失败或版本不支持，回执事实即可让 orchestrator 选 pty；不为此改 manifest 默认值。
 
@@ -383,6 +390,7 @@ spawn -> initialize(protocolVersion=1, clientCapabilities=manifest 值)
 
 - grok（实测 1.0.25）：`configOptions` = `model`{grok-4.6, grok-4.5} + `reasoning_effort`{xhigh, high, medium, low}；无 `agentInfo`、无 `usage_update`、私有 `session_info_update`；无 approval configOption，`always-approve`；仅 `loadSession`。`acp_model_config_id: "model"`，effort 走 `reasoning_effort`。
 - kimi（实测 0.41.0）：`configOptions` = `model`{kimi-for-coding, kimi-for-coding-highspeed, k3, k3-256k} + `thinking`{low, high, max} + `mode`{default, plan, auto, yolo}；`mode=default` 实测不发 `request_permission`；仅 `loadSession`。`acp_model_config_id: "model"`，effort 走 `thinking`。不做模型目录探测。
+- droid（实测 0.220.0）：原生 agent `droid exec --output-format acp`，无 bridge、无 translator；`session/new` 声明 `model`、`reasoning_effort`、`autonomy_level`，其中 `autonomy_level=auto-high` 为 full bypass。默认 `model=auto`，无 upgrade tier，effort 仅显式传入；PTY 使用 `--skip-permissions-unsafe` 加进程级 `--settings` overlay，`/quit` 停止，`--resume --last` 继续。Manifest `acp_mode_config_id: autonomy_level`。
 - cursor：commands/models 异步发布；v2 不等待目录。
 - devin：resume 必传 `sessionId + cwd + mcpServers`。
 - claude-code：wrapper pin；需 `CLAUDE_CODE_EXECUTABLE`；npx 首次下载可能超时 → preflight 报 `wrapper-fetch-timeout`；可能需要 `terminal:true`。

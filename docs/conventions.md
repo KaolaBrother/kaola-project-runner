@@ -3,13 +3,13 @@
 ## Change boundary
 
 The existing Grok Workflow contract is golden and live-proven historical evidence. Do not rewrite its
-bytes. It is not the active Runner authority: all eight worker Skills use the shared communication-only
+bytes. It is not the active Runner authority: all nine worker Skills use the shared communication-only
 template and do not impose task modes, prompts, PR handoff, heartbeat, scheduler, or closing policy.
 Project-level heartbeat, acceptance, Workflow merge preference with conditional open-PR priority, idle-session stop, and end-of-run close-out live in the generated main Skill `kaola-project-runner`.
 
 ## Source of truth
 
-- Active eight-platform worker Skill: `templates/SKILL.md.tmpl`.
+- Active nine-platform worker Skill: `templates/SKILL.md.tmpl`.
 - Main orchestrator Skill: `templates/orchestrator/` (English `SKILL.md.tmpl`; not a platform
   manifest or adapter).
 - One canonical Skill system, host adapters for packaging: every host output is derived by
@@ -35,6 +35,8 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
 - Shared evidence-first transport guidance: `templates/references/transport.md.tmpl` plus exact reversible
   renderer overlays; never broad-replace golden prose.
 - Fixed runtime facts: one `platforms/*.yaml` manifest.
+- Every manifest includes the `acp_mode_config_id` key so ACP mode/permission option IDs remain
+  platform-specific; empty values record platforms whose agents expose no ACP mode option.
 - Executable differences: one `scripts/adapters/*.sh` adapter.
 - `skills/`: generated, committed output; never hand-edit it.
 - Workflow commands and roles: the Kaola Workflow distribution, not this repository.

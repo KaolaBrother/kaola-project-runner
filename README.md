@@ -2,8 +2,8 @@
 
 **Let one agent work through another agent's CLI.**
 
-Kaola Project Runner provides eight self-contained **worker** Agent Skills for **Claude Code,
-Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, and ZCode**, plus one generated **main
+Kaola Project Runner provides nine self-contained **worker** Agent Skills for **Claude Code,
+Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, and Droid CLI**, plus one generated **main
 orchestrator** Skill (`kaola-project-runner`, display name **Project Runner**). A controlling
 agent can start a session in a Git repository, send instructions, read replies and runtime
 evidence, and stop that exact owned session. Communication uses structured ACP (Agent Client
@@ -11,7 +11,7 @@ Protocol) or a tmux terminal.
 
 Use a worker Skill to delegate implementation, request a second review, or continue work in
 another runtime. Use the main Skill when the host Agent should supervise explicitly authorized
-CLI workers through those eight transport Skills. Pair either with
+CLI workers through those nine transport Skills. Pair either with
 [Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow) to give that work a recoverable
 path from issue to verified delivery.
 
@@ -23,7 +23,7 @@ For example, Claude Code can load the Codex Runner Skill to work through Codex C
 ### Target CLIs
 
 Each target has its own generated **worker** Skill, platform manifest, and launch adapter.
-The main orchestrator Skill is generated separately and is not a ninth platform.
+The main orchestrator Skill is generated separately and is not a tenth platform.
 
 | Target runtime | Skill | CLI executable | Default transport |
 |---|---|---|---|
@@ -35,6 +35,12 @@ The main orchestrator Skill is generated separately and is not a ninth platform.
 | Kimi CLI | `kimi-cli-kaola-project-runner` | `kimi` | ACP |
 | OpenCode | `opencode-kaola-project-runner` | `opencode` | ACP |
 | ZCode | `zcode-kaola-project-runner` | explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` | ACP (PTY unsupported) |
+| Droid CLI | `droid-kaola-project-runner` | `droid` | ACP |
+
+Droid is driven through its native ACP agent command, `droid exec --output-format acp`, with
+Auto Model and full bypass defaults on both transports. Its explicit PTY fallback uses the
+native TUI with `/quit` and `--resume --last`; login remains native through TUI `/login` or
+`FACTORY_API_KEY`.
 
 ACP returns structured replies and events. PTY preserves the native terminal UI, including
 terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
@@ -79,7 +85,7 @@ diagnostic entry, and login happens in the ZCode desktop App.
 ### Main orchestrator Skill
 
 `kaola-project-runner` (display name Project Runner) is a control-plane Skill for a host Agent
-that already has explicit CLI authorization. It recovers live work, dispatches through the eight
+that already has explicit CLI authorization. It recovers live work, dispatches through the nine
 worker Skills, reviews evidence before finalize, and keeps close-out ownership after a session
 stops. Prefer the selected authorized Workflow sync/merge when a PR is not required; a PR
 is not opened merely for handoff when that sink is suitable. If PRs exist, advance actionable
@@ -105,7 +111,7 @@ checkout. The bridge carries no policy, transport, reference, path, runtime copy
 credential; a release changes only its accepted-revision line, and an accepted content/pin
 pair is never rebased or squashed. Nothing on one target reaches
 the other, and the cloud never installs or updates the Mac. Grok Bot is a packaging adapter
-inside the renderer, not a transport platform; still eight worker platforms, and `--platform grok`
+inside the renderer, not a transport platform; still nine worker platforms, and `--platform grok`
 remains the Grok CLI worker. Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
 automated account-Skill creation, so one native skill write is the only account operation and
 the owner's read-only Local Computer UAT is the live boundary — see
@@ -198,7 +204,7 @@ This combination gives you:
 - **Verifiable handoffs:** replies show what the CLI says; repository changes, validation evidence,
   and forge state establish what it delivered. A delivered PR is distinct from a merged change.
 
-All eight worker Skills include this optional Workflow guidance. Starting a worker Skill alone does
+All nine worker Skills include this optional Workflow guidance. Starting a worker Skill alone does
 not install Workflow, claim an issue, send `workflow-next`, or create a heartbeat. The main
 orchestrator Skill may register a host heartbeat after an authorized CLI allowlist exists. Runtime
 coverage is also independent: Workflow's support for a runtime does not imply a Runner adapter
@@ -225,7 +231,7 @@ cd kaola-project-runner
 ./scripts/install-local.sh
 ```
 
-The default installs all eight worker Skills plus the main orchestrator Skill into
+The default installs all nine worker Skills plus the main orchestrator Skill into
 `${CODEX_HOME:-$HOME/.codex}/skills` as standalone copies. Use `--method link` to symlink
 Skills to this checkout for Project Runner development. Select another host, a worker
 subset, or skip the orchestrator:
@@ -301,11 +307,19 @@ argument. Invoke it by absolute path; `--repo` identifies the project being work
 Model selection uses `--tier default|upgrade` or an explicit `--model ID` with optional
 `--effort LEVEL`. Presets live in the [platform manifests](platforms/); Fast is off unless requested.
 Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the runtime supports it.
+Droid is the exception to the upgrade policy: both tiers remain Auto Model, and reasoning effort
+is passed only when explicitly selected. Its `-fast` catalog IDs are explicit `--model` choices,
+not a separate Fast toggle.
 
 **Permission defaults matter:** launches generally request the platform's broad automatic-approval
 mode. OpenCode's default ACP path has no skip-permission launch flag. Use `--permission-mode` where
 supported and check the native semantics: Codex ACP's `read-only` mode can write workspace files;
 strict Codex read-only execution requires `--transport pty --permission-mode read-only`.
+Droid defaults to full bypass on both transports: PTY uses `--skip-permissions-unsafe` and a
+process-scoped settings overlay, while ACP applies `model=auto` and `autonomy_level=auto-high`.
+Its `--permission-mode` values are `bypassPermissions|low|medium|high|manual`; PTY maps them to
+`--skip-permissions-unsafe`, `--auto <level>`, or no flag, and ACP maps them to
+`auto-high|auto-low|auto-medium|auto-high|normal`.
 Authentication and workspace trust remain native CLI concerns.
 
 For ACP session watching, use `kaola-acp list`, `kaola-acp PLATFORM view`, or
@@ -326,7 +340,8 @@ start, read, send, read-back, and exact-session stop with the actual CLI and acc
 
 Published evidence includes [PTY communication tests](docs/live-smoke-issue-9-2026-08-31.md),
 [Grok and Kimi ACP experiments](docs/poc-acp-transport-2026-09-11.md), and
-[Cursor, Devin, and OpenCode ACP verification](docs/acp-live-verification-2026-09-11.md).
+[Cursor, Devin, and OpenCode ACP verification](docs/acp-live-verification-2026-09-11.md), and
+[Droid ACP and PTY verification](docs/droid-live-verification-2026-09-17.md).
 These are dated results, not a guarantee for every CLI version, model, or account. The recorded
 Claude tests establish prompt transport and login-error read-back, not authenticated model
 execution; its ACP wrapper failed initialization in the published September 11 run.

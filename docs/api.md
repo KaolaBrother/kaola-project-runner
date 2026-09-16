@@ -7,8 +7,8 @@ scripts/render-skills.py --write
 scripts/render-skills.py --check
 ```
 
-`--write` deterministically rebuilds eight managed worker Skill directories plus
-`skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eighth
+`--write` deterministically rebuilds nine managed worker Skill directories plus
+`skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not a tenth
 platform) and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-project-runner.md` (the one
 thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revision.json`; at
 the pinned stage it carries the accepted 40-hex commit and its label or release, the locator
@@ -32,10 +32,10 @@ is reported as `budget: <surface> is N B > M B (<key>)` and nothing is written (
 pin is likewise never written). `--check` returns nonzero for any missing, stale,
 or unexpected file, Skill directory, or host bundle file. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
-`acp_command`, `acp_client_capabilities`, `acp_quirks`, `acp_verified_versions`,
+Transport fields are `default_transport`,
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
 `acp_effort_config_id`, `acp_fast_config_id`, `acp_fast_values`, `acp_model_map`, and
-`acp_wrapper_pin`. `acp_init_meta` is an optional `key=value;...` list sent as
+`acp_effort_config_id`, `acp_mode_config_id`, `acp_fast_config_id`, `acp_fast_values`, `acp_model_map`, and
 `clientCapabilities._meta` during `initialize` — Cursor's `parameterizedModelPicker=true` makes
 its ACP surface advertise separate `model`/`effort`/`fast` options with base model IDs and string
 `"true"`/`"false"` fast values. `acp_model_map` is an optional `picker-id=acp-option-value;...`
@@ -93,11 +93,22 @@ scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
                          [--bin-links | --no-bin-links] [--uninstall]
 ```
 
-Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, and `zcode`.
-Omit `--platform` for all eight workers. `--platform` never selects the main Skill;
+Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, and `droid`.
+Omit `--platform` for all nine workers. `--platform` never selects the main Skill;
 `kaola-project-runner` is not a platform ID. The orchestrator is installed for every `--runtime`
 and `--skills-dir` destination unless `--no-orchestrator` is passed. Every selected destination is
 preflighted before mutation; foreign paths are never replaced.
+
+Droid's executable override is `DROID_BIN`. Its ACP command is the native
+`droid exec --output-format acp`; no bridge or translator is used. Droid defaults to Auto Model
+(`model=auto`) and full bypass (`autonomy_level=auto-high`) on ACP, while PTY uses
+`--skip-permissions-unsafe` plus a process-scoped `--settings` overlay. The supported
+`--permission-mode` values are `bypassPermissions|low|medium|high|manual`; PTY maps them to
+`--skip-permissions-unsafe`, `--auto <level>`, or no flag, and ACP maps them to
+`auto-high|auto-low|auto-medium|auto-high|normal` through `acp_mode_config_id: autonomy_level`.
+ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reasoning_effort`, and
+`autonomy_level`. Droid has no model/effort upgrade tier and no separate Fast toggle; effort is
+passed only when explicitly requested.
 
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
@@ -200,7 +211,7 @@ operation. Session names match
 `[A-Za-z0-9][A-Za-z0-9_.-]{0,79}`. Without `--text`, `send` reads non-empty stdin.
 
 Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
-`CURSOR_AGENT_BIN`, and `DEVIN_BIN`. Test/embedding overrides are `TMUX_BIN`, `PYTHON_BIN`, `PS_BIN`, and
+`CURSOR_AGENT_BIN`, `DEVIN_BIN`, and `DROID_BIN`. Test/embedding overrides are `TMUX_BIN`, `PYTHON_BIN`, `PS_BIN`, and
 `KAOLA_START_TIMEOUT`; `GROK_START_TIMEOUT` remains a Grok-only compatibility alias.
 
 ## Transport selection
@@ -280,6 +291,11 @@ Model evidence under `model` includes `requested_model_source`, `requested_model
 `model_mismatch_reason`, and structured provenance. ACP `start` receipts additionally carry
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
+
+Droid's default is Auto Model (`auto`) with no effort pin; `--tier upgrade` mirrors the default
+and is a no-op. Effort is passed only when explicitly selected. Its native ACP mode option is
+manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
+`auto-high`, and there is no bridge or translator.
 
 ## Agent-directed transport results
 
