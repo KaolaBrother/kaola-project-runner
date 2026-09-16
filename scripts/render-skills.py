@@ -43,7 +43,7 @@ REQUIRED = {
     "upgrade_model_effort", "fast_support", "fast_summary",
     "default_transport", "acp_command",
     "acp_client_capabilities", "acp_quirks", "acp_verified_versions", "acp_env_allowlist",
-    "acp_login_requires_pty", "acp_model_config_id", "acp_effort_config_id",
+    "acp_login_requires_pty", "acp_mode_config_id", "acp_model_config_id", "acp_effort_config_id",
     "acp_fast_config_id", "acp_model_map", "acp_wrapper_pin",
     "acp_init_meta", "acp_fast_values",
 }

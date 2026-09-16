@@ -1,6 +1,6 @@
 # Droid ACP transport
 
-Command: `droid exec --output-format acp`. Login requires a PTY: `true`. Platform quirks: native ACP agent (no bridge, no translator, acp_wrapper_pin empty); config options are declared in the session/new result, never initialize: model, reasoning_effort, autonomy_level (full bypass = auto-high); the default ACP session is already auto-high; launch flags do not shape ACP sessions; session/resume preferred and the native session id surfaces in the session/new result and session/list (resume/load do not echo it); auth stays native (device-pairing or FACTORY_API_KEY), never handled by the Runner.
+Command: `droid exec --output-format acp`. Login requires a PTY: `true`. Platform quirks: native ACP agent (no bridge, no translator, acp_wrapper_pin empty); config options are declared in the session/new result, never initialize: model, reasoning_effort, autonomy_level (full bypass = auto-high); the default ACP session is already auto-high; the Runner's --permission-mode names translate onto autonomy values over ACP (bypassPermissions/high→auto-high, medium→auto-medium, low→auto-low, manual→normal) because the agent has no mode configId; launch flags do not shape ACP sessions; session/resume preferred and the native session id surfaces in the session/new result and session/list (resume/load do not echo it); auth stays native (device-pairing or FACTORY_API_KEY), never handled by the Runner.
 
 ## Command surface
 

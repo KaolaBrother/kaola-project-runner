@@ -47,14 +47,6 @@ ACP_SKIP_MODE = {
     "zcode": "yolo",
 }
 
-# A platform whose ACP autonomy option is not named "mode". Droid declares its
-# config options (autonomy_level, model, reasoning_effort) in the session/new
-# result, so the mode branch must target `autonomy_level`; every other
-# platform keeps the default "mode" configId byte-for-byte.
-ACP_MODE_CONFIG_ID = {
-    "droid": "autonomy_level",
-}
-
 # Runner permission-mode names are not Droid autonomy_level values; translate
 # them before sending so a caller-permission-mode mapping on ACP stays the
 # semantic equivalent of the PTY --permission-mode mapping.
@@ -1418,10 +1410,12 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                     application["fast"] = {"applied": False, "reason": "no-advertised-config-option"}
                     receipt["fast"] = fast_report(args, policy, "none", False)
         if mode_value and "error" not in receipt:
-            if args.platform in ACP_SKIP_MODE:
-                config_id = ACP_MODE_CONFIG_ID.get(args.platform, "mode")
-            else:
-                config_id = ""
+            # The mode/permission option id is a per-platform manifest fact
+            # (``acp_mode_config_id``): droid's autonomy option is
+            # ``autonomy_level``, the other ACP-mode platforms advertise
+            # ``mode``, and an empty value means the agent exposes no ACP
+            # mode config option at all.
+            config_id = args.manifest.get("acp_mode_config_id") or ""
             if not config_id:
                 application["mode"] = {"applied": False, "reason": "no-advertised-config-option"}
                 if args.mode:
