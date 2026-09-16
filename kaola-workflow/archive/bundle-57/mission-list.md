@@ -1,0 +1,14 @@
+# Issue #57: refresh the private Grok Bot bridge pin for v0.3.2
+
+- item: Establish the current content/pin contract and a delivery sequence that preserves the accepted old pair and Workflow sink invariants.
+  status: done
+  dispatched: self; findings land in this mission result before any candidate commit
+  result: Current clean main 6f246bc is a fresh content-stage R after #53/#56; the accepted old R/P 07a84dc/8a34f49 and PR #55 remain untouched. The pin gate allows only accepted-revision.json and three generated Grok Bot products to differ from R, so P is a separate pin branch/artifact and must not be merged into main or followed by Workflow archive files on that branch. The bundle-57 Workflow branch remains content-stage and owns archive/sink; the pin branch provides the bridge delivery. Initial P uses an honest pre-release label; a formal v0.3.2 tag at R permits a later release-labelled pin without changing R.
+- item: Create the fresh v0.3.2 content commit R and its pin commit P, changing only the authorized bridge pin surfaces at P.
+  status: done
+  dispatched: self; R is existing main commit 6f246bc and P lands on a new pin branch/worktree, with exact hashes recorded here
+  result: R=6f246bc6a69c215f0e88452449a71bcb511576f1 (content stage, already includes #53/#56). P=519df29 on workflow/grok-bot-pin-v0.3.2 at .kw/worktrees/grok-bot-pin-v0.3.2. P changes exactly templates/grok-bot/accepted-revision.json plus the three generated hosts/grok-bot products; bridge body differs by one accepted-revision line. Render --check --require-pinned PASS, verifier --require-pinned PASS, 42 Grok Bot host contract tests OK, full ./scripts/validate.sh exit 0 (/tmp/kaola-57-pin-validate.log). Old R/P and PR #55 untouched.
+- item: Validate the exact R/P candidate against the renderer, verifier, relevant tests, and a diff review; report any remaining UAT boundary.
+  status: done
+  dispatched: self; exact-candidate review and delivery proof land in this result, then Workflow finalization receipts
+  result: Exact P=519df29a693671d914dd1b74546c76bfb99d72de on origin/workflow/grok-bot-pin-v0.3.2 (ls-remote matched). Independent self-review of git diff 6f246bc..519df29: only the four allowed files, no whitespace errors, bridge body one-line revision replacement, generated manifest saveable=true, no account UI gate in the bridge/guide. Clean P checkout passed render --check --require-pinned, kaola-grok-bot-verify --require-pinned, 42 Grok Bot host tests, and full ./scripts/validate.sh exit 0 (/tmp/kaola-57-pin-validate.log). UAT boundary: no new Grok Bot account write or SKILL_EXPOSURE re-run; prior exposure remains accepted and the new pin is a source artifact for a later one-skill update. Review is self-review because the user explicitly requested direct self-execution without Fable.
