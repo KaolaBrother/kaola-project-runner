@@ -182,23 +182,41 @@ output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --pla
 [[ "$output" == *"already installed:"* ]] \
   || fail "test_copy_reinstall_noop" "expected no-op report, got: $output"
 
+# Runtime-generated Python cache is not an installed payload edit.
+mkdir -p "$dest/grok-kaola-project-runner/scripts/__pycache__"
+printf '%s\n' bytecode >"$dest/grok-kaola-project-runner/scripts/__pycache__/runtime.cpython-314.pyc"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)" \
+  || fail "test_copy_cache_is_advisory" "cache-only reinstall failed: $output"
+[[ "$output" == *"already installed:"* ]] \
+  || fail "test_copy_cache_is_advisory" "cache-only drift was not a no-op: $output"
+
 # source update replaces the unmodified owned copy and refreshes the receipt
+mkdir -p "$repo/skills/grok-kaola-project-runner/scripts/__pycache__"
+printf '%s\n' source-bytecode >"$repo/skills/grok-kaola-project-runner/scripts/__pycache__/runtime.cpython-314.pyc"
 printf '%s\n' '# updated fixture' >>"$repo/skills/grok-kaola-project-runner/SKILL.md"
 output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)" \
   || fail "test_copy_update" "update failed: $output"
 [[ "$output" == *"update:"* ]] || fail "test_copy_update" "expected update report, got: $output"
 grep -q 'updated fixture' "$dest/grok-kaola-project-runner/SKILL.md" \
   || fail "test_copy_update" "destination did not receive updated content"
+assert_absent "test_copy_excludes_source_cache" "$dest/grok-kaola-project-runner/scripts/__pycache__"
 
-# a user-edited copy is preserved against replace and remove
+# A receipt-owned edited payload is repaired from the canonical source, with
+# the previous bytes retained for the controlling Agent to inspect.
 printf '%s\n' '# user edit' >>"$dest/grok-kaola-project-runner/SKILL.md"
-set +e
 output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)"
-rc=$?
-set -e
-[[ "$rc" -ne 0 ]] || fail "test_edited_copy_replace_refused" "unexpected success"
-grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
-  || fail "test_edited_copy_replace_refused" "edited content was overwritten"
+[[ "$output" == *"repair:"* && "$output" == *"drift"* ]] \
+  || fail "test_edited_copy_repaired" "expected actionable drift report, got: $output"
+! grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
+  || fail "test_edited_copy_repaired" "canonical payload not restored"
+backup="$(find "$dest" -maxdepth 1 -type d -name '.grok-kaola-project-runner.drift.*' -print -quit)"
+[[ -n "$backup" ]] || fail "test_edited_copy_backup" "missing recoverable drift backup"
+grep -q 'user edit' "$backup/SKILL.md" \
+  || fail "test_edited_copy_backup" "previous edited bytes not preserved"
+
+# Uninstall still protects a subsequently edited copy because deleting it is
+# a separate destructive operation, not a transport or install gate.
+printf '%s\n' '# user edit' >>"$dest/grok-kaola-project-runner/SKILL.md"
 set +e
 output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok --uninstall 2>&1)"
 rc=$?
@@ -236,6 +254,20 @@ output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --pla
   || fail "test_link_to_copy" "copy-over-link failed: $output"
 assert_dir "test_link_to_copy" "$dest/grok-kaola-project-runner"
 assert_file "test_link_to_copy_receipt" "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+
+# A drifted owned copy can also return to an explicit development link. The
+# prior payload remains recoverable rather than being silently removed.
+printf '%s\n' '# changed before relink' >>"$dest/grok-kaola-project-runner/SKILL.md"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method link --platform grok --no-orchestrator 2>&1)" \
+  || fail "test_drifted_copy_to_link" "relink failed: $output"
+assert_link "test_drifted_copy_to_link" "$dest/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+[[ "$output" == *"repair:"* && "$output" == *"drift"* ]] \
+  || fail "test_drifted_copy_to_link" "missing drift diagnosis: $output"
+backup="$(find "$dest" -maxdepth 1 -type d -name '.grok-kaola-project-runner.drift.*' -print -quit)"
+[[ -n "$backup" ]] || fail "test_drifted_copy_to_link_backup" "missing previous copy"
+grep -q 'changed before relink' "$backup/SKILL.md" \
+  || fail "test_drifted_copy_to_link_backup" "previous payload not retained"
 
 # --- foreign paths are never replaced, even with a .generated marker ---------
 repo="$tmp_root/repo-foreign-dir"
@@ -567,7 +599,7 @@ if [[ "$root_dest/grok-kaola-project-runner/SKILL.md" -ef "$source_skill" ]]; th
   fail "test_grok_root_link_migrates_to_copy_inode" "migrated grok copy still shares the source inode"
 fi
 
-# Foreign symlink and modified owned copy stay protected under the default.
+# Foreign symlinks stay protected; managed drift is repaired under the default.
 foreign="$tmp_root/issue-46-foreign-target"
 foreign_dest="$tmp_root/issue-46-foreign/skills"
 mkdir -p "$foreign" "$foreign_dest"
@@ -583,13 +615,15 @@ assert_absent "test_default_copy_foreign_symlink_no_partial_orchestrator" \
   "$foreign_dest/kaola-project-runner"
 
 printf '%s\n' '# user edit' >>"$dest/grok-kaola-project-runner/SKILL.md"
-set +e
 output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok 2>&1)"
-rc=$?
-set -e
-[[ "$rc" -ne 0 ]] || fail "test_default_copy_modified_refused" "unexpected success"
-grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
-  || fail "test_default_copy_modified_refused" "edited content was overwritten"
+[[ "$output" == *"repair:"* && "$output" == *"drift"* ]] \
+  || fail "test_default_copy_modified_repaired" "expected drift repair report, got: $output"
+! grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
+  || fail "test_default_copy_modified_repaired" "canonical content not restored"
+backup="$(find "$dest" -maxdepth 1 -type d -name '.grok-kaola-project-runner.drift.*' -print -quit)"
+[[ -n "$backup" ]] || fail "test_default_copy_modified_backup" "missing recoverable backup"
+grep -q 'user edit' "$backup/SKILL.md" \
+  || fail "test_default_copy_modified_backup" "previous bytes not retained"
 
 # --- neutral validator --------------------------------------------------------
 good="$tmp_root/validator/good-skill"

@@ -226,7 +226,12 @@ kaola-project-runner-locate --target local --expect-revision <accepted commit>  
 `--runtime` and `--skills-dir` are mutually exclusive. Copies work without this checkout;
 `--method link` requires it to remain in place. Reinstalling the default over an owned
 source link migrates that Skill to a copy. The installer preserves foreign files and
-modified copies.
+links. A receipt-owned copy with payload drift is restored from the generated source
+on reinstall; the previous copy is kept at the reported `.drift.*` path so the
+controlling Agent can inspect it. Python `__pycache__` is ignored as a runtime
+byproduct. Edit repo templates/manifests, not installed Skill copies; drift is a
+diagnostic and does not gate Runner communication. Uninstall still refuses to
+delete a modified copy.
 
 Use the host's Skill discovery mechanism, or have the agent read the installed `SKILL.md` directly.
 In Codex, a Skill can be invoked as `$claude-code-kaola-project-runner`, for example.

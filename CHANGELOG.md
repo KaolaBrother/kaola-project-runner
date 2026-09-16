@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Managed Skill install drift is advisory and repairable** (Issue #54).
+  Runtime-generated Python bytecode no longer makes a receipt-owned installed
+  copy look modified. A normal reinstall detects real payload drift, restores
+  the generated Skill atomically, reports the exact path, and keeps the prior
+  copy at a recoverable `.drift.*` sibling for Agent inspection. It does not
+  add a runtime gate or make Skill directories read-only. Foreign paths remain
+  outside the installer's ownership; uninstall still protects modified copies.
+
 ## 0.3.0 — 2026-09-16
 
 - **ZCode default transport is ACP; PTY is unsupported by the bundled runtime** (Issue #51,

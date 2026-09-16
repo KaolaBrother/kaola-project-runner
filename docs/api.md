@@ -111,9 +111,14 @@ identical standalone copy on the destination filesystem and records a per-Skill 
 `<skills-dir>/.kaola-install-receipts/<skill>.json` (outside the generated payload). `--method link`
 is an explicit development choice that creates exact owned symlinks to this checkout. An owned
 source symlink migrates to a copy when reinstalled with the default or `--method copy`. An
-unchanged owned copy is a no-op; only an unmodified owned installation is replaced or removed; a
-`.generated` marker without a valid receipt is not delete authority. `--uninstall` affects only the
-selected destination and selected owned Skills.
+unchanged owned copy is a no-op. Python `__pycache__`/bytecode is ignored when comparing
+the generated payload with the receipt. A receipt-owned copy with payload drift is
+diagnosed and atomically repaired on reinstall; its previous bytes remain in a
+reported sibling `.drift.*` directory for Agent inspection. This is not a
+runtime execution gate or permission lock. A `.generated` marker without a
+valid receipt is not replacement or delete authority. `--uninstall` still
+refuses to delete a modified copy and affects only the selected destination
+and selected owned Skills.
 
 `--bin-links` additionally manages owned `$HOME/.local/bin/kaola-acp` / `kaola-acp-holder` symlinks
 to this repository's scripts. It defaults on only for the Codex runtime destination; uninstall

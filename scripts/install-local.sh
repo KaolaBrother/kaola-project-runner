@@ -202,8 +202,11 @@ import hashlib, os, sys
 root = sys.argv[1]
 entries = []
 for dirpath, dirnames, filenames in os.walk(root):
+    # Python may cache imported helpers inside an installed Skill. These are
+    # runtime byproducts, not generated payload bytes or ownership evidence.
+    dirnames[:] = [name for name in dirnames if name != "__pycache__"]
     dirnames.sort()
-    for name in dirnames + filenames:
+    for name in dirnames + [name for name in filenames if not name.endswith((".pyc", ".pyo"))]:
         entries.append(os.path.join(dirpath, name))
 digest = hashlib.sha256()
 for path in sorted(entries, key=lambda p: os.path.relpath(p, root)):
@@ -270,19 +273,20 @@ drop_owned_receipt() {
 stage_copy() {
   "$installer_python" - "$1" "$2" <<'PY'
 import shutil, sys
-shutil.copytree(sys.argv[1], sys.argv[2], symlinks=True)
+shutil.copytree(sys.argv[1], sys.argv[2], symlinks=True,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
 PY
 }
 
 place_staged() {
-  # Move $1 into place at $2; an existing $2 is set aside at $3 and removed
-  # after the staged tree lands, so the destination never holds partial content.
+  # Move $1 into place at $2; an existing $2 is set aside at $3. Keep $3 on
+  # managed drift so an Agent can inspect or restore the previous bytes.
   # If the staged rename fails, the previous target is restored from backup;
   # if restoration itself fails, the backup is retained and its recovery path
   # is reported instead of being deleted.
-  "$installer_python" - "$1" "$2" "$3" <<'PY'
+  "$installer_python" - "$1" "$2" "$3" "${4:-0}" <<'PY'
 import os, shutil, sys
-staged, target, backup = sys.argv[1:4]
+staged, target, backup, keep_previous = sys.argv[1:5]
 moved = False
 if os.path.lexists(target):
     try:
@@ -306,7 +310,7 @@ except OSError as exc:
         "place_staged: rename %s -> %s failed: %s; previous installation restored from %s"
         % (staged, target, exc, backup)
     )
-if os.path.lexists(backup):
+if os.path.lexists(backup) and keep_previous != "1":
     if os.path.isdir(backup) and not os.path.islink(backup):
         shutil.rmtree(backup)
     else:
@@ -345,8 +349,7 @@ plan_skill() {
         if [[ -n "$recorded" && "$actual" == "$recorded" ]]; then
           actions+=("relink|$name|$source|$target")
         elif [[ -n "$recorded" ]]; then
-          printf 'refusing to replace modified installed copy (user edits preserved): %s\n' "$target" >&2
-          exit 1
+          actions+=("relink-drift|$name|$source|$target")
         else
           printf 'refusing to replace foreign directory without ownership receipt: %s\n' "$target" >&2
           exit 1
@@ -374,10 +377,8 @@ plan_skill() {
         fi
         actual="$(tree_digest "$target")"
         if [[ "$actual" != "$recorded" ]]; then
-          printf 'refusing to replace modified installed copy (user edits preserved): %s\n' "$target" >&2
-          exit 1
-        fi
-        if [[ "$actual" == "$(tree_digest "$source")" ]]; then
+          actions+=("repair|$name|$source|$target")
+        elif [[ "$actual" == "$(tree_digest "$source")" ]]; then
           actions+=("already|$name|$source|$target")
         else
           actions+=("update|$name|$source|$target")
@@ -478,9 +479,15 @@ for row in "${actions[@]}"; do
     already)
       printf 'already installed: %s\n' "$target"
       ;;
-    install|update|copy-over-link)
+    install|update|copy-over-link|repair)
       temp="$target_parent/.${name}.tmp.$$"
-      backup="$target_parent/.${name}.old.$$"
+      keep_previous=0
+      if [[ "$action" == repair ]]; then
+        backup="$target_parent/.${name}.drift.$$"
+        keep_previous=1
+      else
+        backup="$target_parent/.${name}.old.$$"
+      fi
       [[ ! -e "$temp" && ! -L "$temp" && ! -e "$backup" && ! -L "$backup" ]] || {
         printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
       if [[ "$method" == copy ]]; then
@@ -493,7 +500,7 @@ for row in "${actions[@]}"; do
       else
         ln -s "$source" "$temp"
       fi
-      if ! place_staged "$temp" "$target" "$backup"; then
+      if ! place_staged "$temp" "$target" "$backup" "$keep_previous"; then
         rm -rf "$temp" 2>/dev/null || true
         printf 'atomic replacement failed: %s\n' "$target" >&2
         exit 1
@@ -503,21 +510,35 @@ for row in "${actions[@]}"; do
       else
         drop_owned_receipt "$name"
       fi
-      printf '%s: %s\n' "$action" "$target"
+      if [[ "$action" == repair ]]; then
+        printf 'repair: %s (managed drift; previous copy: %s; edit repo templates/manifests, not installed Skills)\n' "$target" "$backup"
+      else
+        printf '%s: %s\n' "$action" "$target"
+      fi
       ;;
-    migrate|relink)
+    migrate|relink|relink-drift)
       temp="$target_parent/.${name}.tmp.$$"
-      backup="$target_parent/.${name}.old.$$"
+      keep_previous=0
+      if [[ "$action" == relink-drift ]]; then
+        backup="$target_parent/.${name}.drift.$$"
+        keep_previous=1
+      else
+        backup="$target_parent/.${name}.old.$$"
+      fi
       [[ ! -e "$temp" && ! -L "$temp" && ! -e "$backup" && ! -L "$backup" ]] || {
         printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
       ln -s "$source" "$temp"
-      if ! place_staged "$temp" "$target" "$backup"; then
+      if ! place_staged "$temp" "$target" "$backup" "$keep_previous"; then
         rm -rf "$temp" 2>/dev/null || true
         printf 'atomic replacement failed: %s\n' "$target" >&2
         exit 1
       fi
-      [[ "$action" == relink ]] && drop_owned_receipt "$name"
-      printf '%s: %s -> %s\n' "$action" "$target" "$source"
+      [[ "$action" == relink || "$action" == relink-drift ]] && drop_owned_receipt "$name"
+      if [[ "$action" == relink-drift ]]; then
+        printf 'repair: %s -> %s (managed drift; previous copy: %s; edit repo templates/manifests, not installed Skills)\n' "$target" "$source" "$backup"
+      else
+        printf '%s: %s -> %s\n' "$action" "$target" "$source"
+      fi
       ;;
     uninstall)
       unlink "$target"
