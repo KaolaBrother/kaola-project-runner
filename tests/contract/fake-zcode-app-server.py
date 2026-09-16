@@ -270,20 +270,28 @@ class FakeAppServer:
 
         if method == "session/list":
             self.result(rid, {"sessions": [
-                {"sessionId": sid, "title": f"fake session {sid}"} for sid in self.sessions
+                {"sessionId": sid, "title": f"fake session {sid}",
+                 "createdAt": 1789552001462 + index, "updatedAt": 1789552106400 + index,
+                 "status": "idle", "mode": session.get("mode") or "yolo"}
+                for index, (sid, session) in enumerate(self.sessions.items())
             ]})
             return
 
         if method == "session/resume":
-            overlay = self.register_overlay(rid, params, method)
-            if overlay is None:
-                return
+            # CLI 0.16.5 parity: a faithful resume (no overlay) succeeds even in
+            # a fresh app-server; the persisted model is simply unavailable
+            # until a provider overlay registers it (see session/send).
+            overlay = {}
+            if params.get("runtimeModel") is not None:
+                overlay = self.register_overlay(rid, params, method)
+                if overlay is None:
+                    return
             session_id = params.get("sessionId")
             model = overlay.get("model") or {}
             self.sessions.setdefault(session_id, {
                 "mode": "yolo",
-                "modelId": model.get("modelId") or "fake-model",
-                "providerId": model.get("providerId") or "builtin:fake-coding-plan",
+                "modelId": model.get("modelId") or "GLM-5.3-Flash",
+                "providerId": model.get("providerId") or "builtin:bigmodel-coding-plan",
                 "thoughtLevel": "high",
                 "subscribed": False,
             })
@@ -351,6 +359,11 @@ class FakeAppServer:
             if session_id not in self.sessions:
                 self.error(rid, 1404, "session not found")
                 return
+            session = self.sessions[session_id]
+            if session.get("modelId") not in self.catalog.get(session.get("providerId") or "", []):
+                self.error(rid, -32031, "ZCODE_RUNTIME_MODEL_UNAVAILABLE: the persisted model is "
+                                        "not registered in this app-server (register a provider)")
+                return
             self.result(rid, {"accepted": True})
             threading.Thread(target=self.run_turn, args=(session_id,), daemon=True).start()
             return
@@ -360,6 +373,8 @@ class FakeAppServer:
             flag = self.stop_flags.get(session_id)
             if flag is not None:
                 flag.set()
+            if rid is not None:
+                self.result(rid, {"stopped": True})
             return
 
         if method == "session/setMode":

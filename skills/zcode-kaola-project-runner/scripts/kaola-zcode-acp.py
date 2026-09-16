@@ -55,6 +55,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 ADAPTER_NAME = "kaola-zcode-acp"
@@ -325,6 +326,17 @@ def select_coding_plan_provider(home: str | None = None) -> dict[str, Any]:
         except (OSError, ValueError):
             chosen["plan_cache_status"] = None
     return chosen
+
+
+def rfc3339_from_epoch_ms(value: Any) -> str | None:
+    """Epoch milliseconds (native ZCode) -> RFC 3339 UTC instant, else None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        moment = datetime.fromtimestamp(value / 1000.0, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
 def provider_facts(choice: dict[str, Any]) -> dict[str, Any]:
@@ -678,6 +690,33 @@ class ZCodeAcpAgent:
             session.subscribed = True
         self.hydrate_settings(session)
         return session.backend_id
+
+    def reregister_provider(self, session: Session) -> None:
+        """After a faithful resume the fresh app-server has no provider
+        catalog, so the persisted model reports ZCODE_RUNTIME_MODEL_UNAVAILABLE
+        on the next send. Re-register the same Coding Plan provider through
+        session/setModel with the session's own persisted model. A persisted
+        model outside that provider fails closed; nothing is substituted.
+        """
+        if self.backend is None or session.backend_id is None:
+            return
+        choice = self.resolve_provider()
+        provider_id = session.provider_id or choice["provider_id"]
+        model_id = session.model_id or choice["default_model_id"]
+        if provider_id != choice["provider_id"] or model_id not in choice["model_ids"]:
+            raise RuntimeError_(
+                f"persisted session model {provider_id}\\{model_id} is not offered by the "
+                f"enabled GLM Coding Plan provider {choice['provider_id']}; refusing to "
+                "substitute (select a model explicitly)"
+            )
+        self.backend.call("session/setModel", {
+            "sessionId": session.backend_id,
+            "model": {"providerId": provider_id, "modelId": model_id},
+            "runtimeModel": build_runtime_model(choice, model_id),
+            "persistAsWorkspaceLastUsed": False,
+        })
+        session.provider_id = provider_id
+        session.model_id = model_id
 
     def hydrate_settings(self, session: Session) -> None:
         """Read native mode/model/thought. Never invent a substitute model."""
@@ -1078,6 +1117,7 @@ class ZCodeAcpAgent:
                 })
                 session.subscribed = True
                 self.hydrate_settings(session)
+                self.reregister_provider(session)
         self.respond(rid, {})
 
     def on_session_list(self, rid: Any, params: dict[str, Any]) -> None:
@@ -1086,10 +1126,20 @@ class ZCodeAcpAgent:
         result = backend.call("session/list", {"workspace": workspace}) or {}
         sessions = []
         for item in result.get("sessions") or []:
-            sessions.append({
+            entry: dict[str, Any] = {
                 "sessionId": item.get("sessionId"),
                 "title": item.get("title") or "",
-            })
+            }
+            # Native timestamps are epoch milliseconds; ACP clients (and the
+            # Runner's --continue picker) expect RFC 3339 instants.
+            for key in ("updatedAt", "createdAt"):
+                instant = rfc3339_from_epoch_ms(item.get(key))
+                if instant is not None:
+                    entry[key] = instant
+            for key in ("status", "mode"):
+                if item.get(key) is not None:
+                    entry[key] = item[key]
+            sessions.append(entry)
         self.respond(rid, {"sessions": sessions})
 
     def on_session_prompt(self, rid: Any, params: dict[str, Any]) -> None:
@@ -1134,7 +1184,12 @@ class ZCodeAcpAgent:
         if session is not None and session.backend_id:
             session.cancelled = True
             try:
-                self.ensure_backend().notify("session/stop", {"sessionId": session.backend_id})
+                # A request (with id) bypasses the app-server's processing
+                # queue (CLI 0.16.5 fast-paths session/stop only when it has
+                # an id); a bare notification waits behind the running turn.
+                self.ensure_backend().call(
+                    "session/stop", {"sessionId": session.backend_id}, timeout=15.0
+                )
             except RuntimeError_ as exc:
                 log(f"cancel failed: {exc}")
         if rid is not None:

@@ -15,8 +15,21 @@
   logs, receipts or on disk; `~/.zcode/cli/config.json` is never written; no auth environment
   is injected. `agentInfo._meta.zcode` reports secret-free provider facts (id, label, baseURL,
   plan-cache status, model ids, rejected providers). `session/set_config_option model` lists
-  the provider's models and refuses any other provider. Contract suite grows to 18 tests with a
+  the provider's models and refuses any other provider. Contract suite grows to 19 tests with a
   desktop-registry fixture; the fake app-server now rejects a create without the overlay.
+  Three live findings repaired in the same change: `session/stop` is sent as a request (the
+  CLI fast-paths only requests past its processing queue), `session/list` converts native
+  epoch-millisecond timestamps to RFC 3339 so `start --continue` can pick the latest native
+  session, and a faithful `session/resume` is followed by a `session/setModel` re-registration
+  of the same provider with the session's persisted model (a fresh app-server otherwise answers
+  `ZCODE_RUNTIME_MODEL_UNAVAILABLE` on the next send). Live UAT on the recording Mac: sentinel,
+  provider/model identity (`builtin:bigmodel-coding-plan\GLM-5.3`), yolo read-only tool,
+  `--continue`/`--resume` with conversation memory, two isolated concurrent sessions, exact stop
+  with zero residue, and private-file identity all pass; cancel is acknowledged immediately but
+  CLI 0.16.5 finishes the in-flight model response before reporting the turn (native latency,
+  measured without the Runner); the bundled runtime cannot open its TUI (`Cannot find package
+  '@zcode/tui'`) and headless `--prompt` needs `~/.zcode/cli/config.json`, so the PTY fallback
+  gate cannot pass on that Mac and `default_transport` stays `pty`.
 - **ZCode skip-all permission mode is yolo on ACP and PTY** (Issue #51, Mission 4
   owner correction). Installed CLI 0.16.5 `--help` lists `--mode` as Permission
   mode (`build|edit|plan|yolo`, default yolo for `--prompt`); the packaged

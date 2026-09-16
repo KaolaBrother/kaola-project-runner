@@ -859,7 +859,7 @@ class ZcodeAcpContractTests(unittest.TestCase):
                 self.assertEqual(driver.cli_config.read_text(encoding="utf-8"), '{"hooks":{}}\n')
                 self.stop_driver()
 
-    def test_resume_is_faithful_first_then_overlay(self) -> None:
+    def test_resume_is_faithful_then_reregisters_persisted_model(self) -> None:
         driver = self.start("basic")
         self.handshake(driver)
         driver.request(20, "session/load", {"sessionId": "sess_persisted1", "cwd": str(driver.cwd)})
@@ -867,11 +867,45 @@ class ZcodeAcpContractTests(unittest.TestCase):
         assert loaded is not None
         self.assertNotIn("error", loaded)
         resumes = driver.rpc_calls("session/resume")
-        self.assertEqual(len(resumes), 2)
+        self.assertEqual(len(resumes), 1)
         self.assertNotIn("runtimeModel", resumes[0].get("params") or {})
-        overlay = (resumes[1].get("params") or {}).get("runtimeModel") or {}
-        self.assertEqual(overlay.get("provider", {}).get("providerId"), CODING_PLAN_ID)
+        # The persisted model (GLM-5.3-Flash in the fake) is kept, not replaced
+        # by the default, and the provider is re-registered through setModel.
+        set_model = driver.rpc_calls("session/setModel")
+        self.assertEqual(len(set_model), 1)
+        params = set_model[0].get("params") or {}
+        self.assertEqual(params.get("model"), {"providerId": CODING_PLAN_ID, "modelId": "GLM-5.3-Flash"})
+        self.assertEqual((params.get("runtimeModel") or {}).get("provider", {}).get("providerId"), CODING_PLAN_ID)
+        driver.request(21, "session/prompt", {
+            "sessionId": "sess_persisted1", "prompt": [{"type": "text", "text": "again"}],
+        })
+        done = driver.wait_result(21, timeout=8)
+        assert done is not None
+        self.assertEqual((done.get("result") or {}).get("stopReason"), "end_turn")
+        driver.request(22, "session/list", {})
+        listed = driver.wait_result(22, timeout=8)
+        assert listed is not None
+        sessions = (listed.get("result") or {}).get("sessions") or []
+        self.assertTrue(sessions)
+        for item in sessions:
+            self.assertRegex(item.get("updatedAt") or "", r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
+        self.assertEqual(sessions[0]["updatedAt"], "2026-09-16T09:48:26.400Z")
         self.assert_registry_read_only_and_secret_contained(driver)
+
+    def test_cancel_sends_stop_as_a_request(self) -> None:
+        driver = self.start("slow")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "slow"}],
+        })
+        driver.wait_for(lambda msg: msg.get("method") == "session/update", timeout=8)
+        driver.send({"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": session_id}})
+        done = driver.wait_result(3, timeout=8)
+        assert done is not None
+        self.assertEqual((done.get("result") or {}).get("stopReason"), "cancelled")
+        stops = driver.rpc_calls("session/stop")
+        self.assertEqual(len(stops), 1)
+        self.assertIsNotNone(stops[0].get("id"), "session/stop must carry a request id")
 
 
 if __name__ == "__main__":
