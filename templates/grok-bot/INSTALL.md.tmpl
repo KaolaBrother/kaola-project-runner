@@ -30,9 +30,8 @@ Save `hosts/grok-bot/{{BRIDGE_FILE}}` as the account-private Skill `{{SKILL_NAME
 `description` from its frontmatter (`hosts/grok-bot/{{MANIFEST}}` holds the already-resolved
 values and `"saveable": true`; never save YAML quotes), `body` = everything after the closing
 `---`. If a Skill with the same name exists, update it in place; never create a second one and
-never touch any other Skill. Neither the account Skill list nor `/` completion is a check: the
-list does not expose an account-private Skill, and a 1:1 chat has no `/` discovery. Step 3 is
-the evidence. A later pin changes only the accepted-revision line; repeat this one write then.
+never touch any other Skill. A later pin changes only the accepted-revision line; repeat this
+one write then.
 
 ## 2. First configuration on Local Computer (Mac): read-only, never from the cloud
 
@@ -80,7 +79,9 @@ locator), the worker preflight returns its evidence, and nothing was started, se
 cloned, fetched, checked out, or installed. Record that the Bot read only
 `ROOT/skills/{{SKILL_NAME}}/SKILL.md` and `ROOT/skills/<platform id>-{{SKILL_NAME}}/SKILL.md`,
 read no script source, and that the cloud Agent Computer executed nothing and accessed no Mac
-file. After UAT, remove `$BIN/{{LOCATOR}}` and `$BIN/.{{LOCATOR}}.json` or keep them
+file. This establishes placement only, not live use: a real-use smoke on one session is
+separately authorized and is not part of installation.
+After UAT, remove `$BIN/{{LOCATOR}}` and `$BIN/.{{LOCATOR}}.json` or keep them
 registered; the installer-managed link is restored with `./scripts/install-local.sh
 --bin-links` from the normal checkout (it refuses to overwrite a link it does not own, so
 remove a UAT link placed in its directory first) and then registered from that checkout.
