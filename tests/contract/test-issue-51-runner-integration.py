@@ -557,6 +557,63 @@ def test_transport_dispatch_pty_default_acp_override() -> None:
         sandbox.cleanup()
 
 
+def test_skip_all_mode_is_yolo_on_acp_and_pty() -> None:
+    """CLI 0.16.5 --help: --mode is Permission mode, values build|edit|plan|yolo,
+    default yolo for --prompt. Packaged PermissionService: 'Yolo mode bypasses
+    permission prompts'. PTY must pass --mode yolo; ACP skip-all is yolo."""
+    acp = load_module(CHECKOUT_CLI, "kaola_acp_i51_mode")
+    check(acp.ACP_SKIP_MODE.get("zcode") == "yolo", "ACP_SKIP_MODE zcode is yolo")
+    tmux = TMUX.read_text(encoding="utf-8")
+    check(
+        re.search(r"\bzcode\) permission_mode=yolo\b", tmux) is not None,
+        "PTY no-flag start maps zcode skip-all to yolo",
+    )
+    check(
+        re.search(r"\bzcode\) acp_args\+=\(--mode yolo\)", tmux) is not None,
+        "ACP start without caller --mode sends yolo",
+    )
+    adapter_src = ADAPTER_SRC.read_text(encoding="utf-8")
+    check(
+        re.search(r'add_argument\("--mode".*default="yolo"', adapter_src) is not None,
+        "ACP adapter argparse default mode is yolo",
+    )
+    sandbox = Sandbox("skip-all")
+    try:
+        script = r"""
+set -euo pipefail
+permission_mode=yolo
+RESOLVED_MODEL_ID=""
+# shellcheck source=/dev/null
+source "$1"
+adapter_build_launch "$2" "" false
+printf '%s\n' "${ADAPTER_LAUNCH_ARGS[*]}"
+"""
+        result = subprocess.run(
+            ["bash", "-c", script, "skip-all", str(PTY_ADAPTER), str(sandbox.repo)],
+            capture_output=True,
+            text=True,
+            env=sandbox.env(),
+            timeout=10,
+        )
+        check(result.returncode == 0, f"PTY adapter_build_launch runs: {result.stderr[-300:]}")
+        argv = result.stdout.split()
+        check("--mode" in argv, "PTY launch argv includes --mode")
+        check(
+            argv[argv.index("--mode") + 1] == "yolo",
+            f"PTY launch --mode is yolo, not {argv!r}",
+        )
+
+        session = sandbox.session()
+        receipt = sandbox.cli(SKILL_CLI, "start", session=session)
+        applied = (receipt.get("config_application") or {}).get("mode") or {}
+        check(
+            applied.get("applied") is True and applied.get("value") == "yolo",
+            f"ACP start without caller --mode applies yolo ({applied})",
+        )
+    finally:
+        sandbox.cleanup()
+
+
 def test_installer_knows_zcode_and_rejects_zcode_bot() -> None:
     sandbox = Sandbox("install")
     try:

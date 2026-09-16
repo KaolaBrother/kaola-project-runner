@@ -30,7 +30,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN). ACP runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Native Coding Plan login stays inside ZCode.
+Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Native Coding Plan login stays inside ZCode.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

@@ -45,11 +45,16 @@ adapter_preflight() {
 
 adapter_build_launch() {
   local launch_repo="$1" resume_id="$2" continue_mode="$3"
+  local mode="${permission_mode:-yolo}"
   ADAPTER_LAUNCH_ARGS=()
   if [[ -n "${KAOLA_ZCODE_ENTRY:-}" && "${KAOLA_ZCODE_ENTRY}" == /* && -f "${KAOLA_ZCODE_ENTRY}" ]]; then
     ADAPTER_LAUNCH_ARGS+=("$KAOLA_ZCODE_ENTRY")
   fi
   ADAPTER_LAUNCH_ARGS+=(--cwd "$launch_repo")
+  # Native --help: --mode is the current permission-mode flag; default yolo for
+  # --prompt. Legacy --permission-mode default maps to yolo.
+  case "$mode" in default|"") mode=yolo ;; esac
+  ADAPTER_LAUNCH_ARGS+=(--mode "$mode")
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--resume "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi

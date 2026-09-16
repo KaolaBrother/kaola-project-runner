@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **ZCode skip-all permission mode is yolo on ACP and PTY** (Issue #51, Mission 4
+  owner correction). Installed CLI 0.16.5 `--help` lists `--mode` as Permission
+  mode (`build|edit|plan|yolo`, default yolo for `--prompt`); the packaged
+  engine states "Yolo mode bypasses permission prompts" and maps
+  `bypassPermissions`/`dontAsk` to `yolo`. PTY no-flag start now passes
+  `--mode yolo`; ACP skip-all remains `yolo`. Default transport stays PTY.
 - **ZCode ACP live protocol repair** (Issue #51, Mission 4). CLI 0.16.5 asks
   `session/requestRuntimePreferences` during `session/create`; the adapter now
   answers protocol defaults and never reads Settings or forwards auth headers.

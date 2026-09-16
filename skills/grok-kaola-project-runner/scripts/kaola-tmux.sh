@@ -102,6 +102,7 @@ if [[ "$permission_mode_given" != true ]]; then
     claude-code) permission_mode=bypassPermissions ;;
     devin) permission_mode=dangerous ;;
     codex) permission_mode=agent-full-access ;;
+    zcode) permission_mode=yolo ;;
   esac
 fi
 
@@ -179,7 +180,7 @@ repo="$(canonical_dir "$repo")"; git_root="$(git -C "$repo" rev-parse --show-top
 git_root="$(canonical_dir "$git_root")"; [[ "$git_root" == "$repo" ]] || die "--repo must name the Git root: $git_root"
 [[ "$session" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$ ]] || die "invalid session name"
 TMUX_SESSION_TARGET="=$session"
-if [[ "$platform" != claude-code && "$platform" != devin && "$platform" != codex && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
+if [[ "$platform" != claude-code && "$platform" != devin && "$platform" != codex && "$platform" != zcode && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
 if [[ "$command_name" != start && "$command_name" != preflight && ( "$model_given" == true || "$effort_given" == true || "$tier_given" == true || "$fast_given" == true ) ]]; then die "model, effort, tier, and fast are start/preflight-only"; fi
 if [[ "$command_name" != start && "$permission_mode_given" == true ]]; then die "permission mode is start-only"; fi
 if [[ "$tier_given" == true ]]; then
@@ -206,6 +207,10 @@ if [[ "$platform" == codex ]]; then
   case "$permission_mode" in read-only|agent|agent-full-access) ;; *) die "unsupported Codex permission mode" ;; esac
 elif [[ "$platform" == devin ]]; then
   case "$permission_mode" in auto|accept-edits|smart|dangerous) ;; *) die "unsupported Devin permission mode" ;; esac
+elif [[ "$platform" == zcode ]]; then
+  # CLI 0.16.5 --help: --mode/--permission-mode are build|edit|plan|yolo (legacy
+  # alias also lists default). Packaged engine: yolo bypasses permission prompts.
+  case "$permission_mode" in build|edit|plan|yolo|default) ;; *) die "unsupported ZCode permission mode" ;; esac
 else
   case "$permission_mode" in acceptEdits|auto|bypassPermissions|manual|dontAsk|plan) ;; *) die "unsupported Claude permission mode" ;; esac
 fi
