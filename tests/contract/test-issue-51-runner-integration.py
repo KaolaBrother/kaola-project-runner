@@ -54,13 +54,21 @@ DENIED_ENV = (
     "ZCODE_ACP_HUB_HOST",
     "ZCODE_ACP_HUB_PORT",
 )
+# The desktop provider registry (`v2/config.json`) and plan cache are the two
+# read-only exceptions (Issue #51 owner correction); everything else stays shut.
 FORBIDDEN_OPEN_MARKERS = (
-    "/.zcode/",
+    "/.zcode/cli/",
     "credentials.json",
     "setting.json",
     "tasks-index.sqlite",
+    "telemetry-state.json",
+    "/.zcode/v2/certs",
     "zcode-acp/config.json",
 )
+DESKTOP_CONFIG_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-desktop-config.json"
+PLAN_CACHE_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-coding-plan-cache.json"
+FIXTURE_SECRET = json.loads(DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"))["provider"][
+    "builtin:bigmodel-coding-plan"]["options"]["apiKey"]
 
 CHECKS: list[str] = []
 
@@ -125,10 +133,15 @@ class Sandbox:
             path.mkdir(parents=True)
         (self.home / ".zcode" / "v2").mkdir(parents=True)
         (self.home / ".config" / "zcode-acp").mkdir(parents=True)
-        (self.home / ".zcode" / "v2" / "config.json").write_text("{}\n", encoding="utf-8")
+        (self.home / ".zcode" / "cli").mkdir(parents=True)
+        (self.home / ".zcode" / "v2" / "config.json").write_text(
+            DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+        (self.home / ".zcode" / "v2" / "coding-plan-cache.json").write_text(
+            PLAN_CACHE_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
         (self.home / ".zcode" / "v2" / "credentials.json").write_text("{}\n", encoding="utf-8")
         (self.home / ".zcode" / "v2" / "setting.json").write_text("{}\n", encoding="utf-8")
         (self.home / ".zcode" / "v2" / "tasks-index.sqlite").write_bytes(b"")
+        (self.home / ".zcode" / "cli" / "config.json").write_text('{"hooks":{}}\n', encoding="utf-8")
         (self.home / ".config" / "zcode-acp" / "config.json").write_text("{}\n", encoding="utf-8")
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         trap = self.trap_dir / "zcode"
@@ -465,7 +478,34 @@ def test_start_send_cancel_stop_schema_v3() -> None:
             entry for entry in sandbox.open_entries()
             if any(marker in entry for marker in FORBIDDEN_OPEN_MARKERS)
         ]
-        check(forbidden == [], f"adapter opened no credential/config files: {forbidden}")
+        check(forbidden == [], f"adapter opened no credential/CLI-config files: {forbidden}")
+        registry_writes = [
+            entry for entry in sandbox.open_entries()
+            if "/.zcode/v2/" in entry and not entry.endswith(":mode=r")
+        ]
+        check(registry_writes == [], f"desktop registry opened read-only only: {registry_writes}")
+        overlays = record.get("overlays") or []
+        check(bool(overlays) and overlays[0].get("method") == "session/create",
+              "session/create carried the in-memory runtimeModel overlay")
+        check(all(o.get("providerId") == "builtin:bigmodel-coding-plan" for o in overlays),
+              "overlay names the enabled GLM Coding Plan provider only")
+        check(all(o.get("apiKeySource") == "inline" and o.get("apiKeyValue") == FIXTURE_SECRET
+                  for o in overlays),
+              "plan credential reached the app-server in memory (inline union)")
+        meta = ((agent.get("_meta") or {}).get("zcode") or {})
+        check(meta.get("plan") == "coding-plan" and meta.get("providerId") == "builtin:bigmodel-coding-plan",
+              "start receipt agent_info carries secret-free Coding Plan provider facts")
+        check(meta.get("planCacheStatus") == "available", "plan cache status reported as available")
+        record_blob = "\n".join(
+            path.read_text(encoding="utf-8", errors="replace")
+            for path in sandbox.record_root.rglob("*") if path.is_file()
+        )
+        check(FIXTURE_SECRET not in json.dumps(receipt) and FIXTURE_SECRET not in blob
+              and FIXTURE_SECRET not in record_blob,
+              "plan credential never appears in receipts or Runner records")
+        cli_config = sandbox.home / ".zcode" / "cli" / "config.json"
+        check(cli_config.read_text(encoding="utf-8") == '{"hooks":{}}\n',
+              "~/.zcode/cli/config.json untouched")
         tcp = [
             entry for entry in sandbox.open_entries()
             if entry.startswith("socket.connect:(")

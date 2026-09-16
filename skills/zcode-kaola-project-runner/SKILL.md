@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport facts
 
-Default transport: **pty**. The ACP command is `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`; its known quirks are `Runner-owned ACP translator over installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist so Coding Plan login stays native; login itself stays a PTY act`, and login requires a PTY: `true`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **pty**. The ACP command is `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`; its known quirks are `Runner-owned ACP translator over installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist (no auth env injection); CLI 0.16.5 needs a model provider that headless app-server cannot read from the desktop login, so the adapter passes the enabled GLM Coding Plan provider from ~/.zcode/v2/config.json in memory via runtimeModel on session/create, session/resume and session/setModel (desktop-App parity, apiKey source inline, never logged, never written to disk); Start Plan (headless captcha) and pay-as-you-go providers are refused; agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login itself stays a PTY act`, and login requires a PTY: `true`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 
@@ -52,8 +52,8 @@ SESSION="zcode-kaola-<purpose>"
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares two per-run
-presets — `--tier default` (**native Coding Plan default**: ``,
-) and `--tier upgrade` (**native Coding Plan default**:
+presets — `--tier default` (**Coding Plan first listed model (GLM-5.3 on the recording Mac)**: ``,
+) and `--tier upgrade` (**Coding Plan first listed model (GLM-5.3 on the recording Mac)**:
 ``, ) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,

@@ -1,0 +1,50 @@
+{
+  "provider": {
+    "builtin:bigmodel": {
+      "name": "Bigmodel - API Key",
+      "kind": "anthropic",
+      "options": {"apiKey": "", "baseURL": "https://open.bigmodel.cn/api/anthropic"},
+      "source": "custom",
+      "models": {
+        "GLM-5.3": {"reasoning": {"enabled": true, "variants": ["low", "max", "high"], "defaultVariant": "max"},
+                    "limit": {"context": 1000000, "output": 128000},
+                    "modalities": {"input": ["text"], "output": ["text"]}}
+      }
+    },
+    "builtin:bigmodel-coding-plan": {
+      "name": "BigModel - Coding Plan",
+      "kind": "anthropic",
+      "options": {"apiKey": "fixture-coding-plan-id.fixture-secret-9f1c2b7a3e", "baseURL": "https://open.bigmodel.cn/api/anthropic"},
+      "enabled": true,
+      "source": "custom",
+      "models": {
+        "GLM-5.3": {"reasoning": {"enabled": true, "variants": ["low", "max", "high"], "defaultVariant": "max"},
+                    "limit": {"context": 1000000, "output": 128000},
+                    "modalities": {"input": ["text"], "output": ["text"]},
+                    "zcode": {"modified": false, "priority": 99}},
+        "GLM-5.3-Flash": {"reasoning": {"enabled": true, "variants": ["low", "max", "high"], "defaultVariant": "max"},
+                          "limit": {"context": 1000000, "output": 128000},
+                          "modalities": {"input": ["text", "image", "video"], "output": ["text"]},
+                          "zcode": {"modified": false, "priority": 100}}
+      }
+    },
+    "builtin:bigmodel-start-plan": {
+      "name": "BigModel- Coding Plan",
+      "kind": "anthropic",
+      "options": {"apiKey": "fixture-start-plan-jwt-must-never-be-used", "baseURL": "https://zcode.z.ai/api/v1/zcode-plan/anthropic"},
+      "enabled": false,
+      "source": "custom",
+      "models": {},
+      "systemDisabledReason": "coding_plan_not_entitled"
+    },
+    "builtin:zai-coding-plan": {
+      "name": "Z.ai - Coding Plan",
+      "kind": "anthropic",
+      "options": {"apiKey": "", "baseURL": "https://api.z.ai/api/anthropic", "apiKeyRequired": true},
+      "enabled": false,
+      "source": "custom",
+      "models": {"GLM-5.3": {"limit": {"context": 1000000, "output": 128000}}},
+      "systemDisabledReason": "oauth_provider_inactive"
+    }
+  }
+}

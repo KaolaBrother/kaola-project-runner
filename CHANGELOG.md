@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **ZCode ACP bridges the desktop Coding Plan provider in memory** (Issue #51, Mission 4
+  owner correction, 2026-09-16). Headless CLI 0.16.5 `app-server` fails `session/create`
+  with `Model config is missing` because it resolves providers from `~/.zcode/cli/config.json`
+  while the desktop App keeps the logged-in providers under `~/.zcode/v2/`. The adapter now
+  reads `~/.zcode/v2/config.json` read-only, selects the one `enabled` `*-coding-plan`
+  provider (Start Plan providers need the desktop captcha flow headlessly and are refused;
+  plain pay-as-you-go providers are refused so no turn bills outside the plan), and passes it
+  to the app-server as the protocol's own `runtimeModel` overlay (`apiKey: {source: "inline"}`,
+  the desktop App's mechanism) on `session/create`, on `session/resume` as a fallback after a
+  faithful resume, and on `session/setModel`. The credential never appears in ACP output,
+  logs, receipts or on disk; `~/.zcode/cli/config.json` is never written; no auth environment
+  is injected. `agentInfo._meta.zcode` reports secret-free provider facts (id, label, baseURL,
+  plan-cache status, model ids, rejected providers). `session/set_config_option model` lists
+  the provider's models and refuses any other provider. Contract suite grows to 18 tests with a
+  desktop-registry fixture; the fake app-server now rejects a create without the overlay.
 - **ZCode skip-all permission mode is yolo on ACP and PTY** (Issue #51, Mission 4
   owner correction). Installed CLI 0.16.5 `--help` lists `--mode` as Permission
   mode (`build|edit|plan|yolo`, default yolo for `--prompt`); the packaged
@@ -11,9 +26,9 @@
 - **ZCode ACP live protocol repair** (Issue #51, Mission 4). CLI 0.16.5 asks
   `session/requestRuntimePreferences` during `session/create`; the adapter now
   answers protocol defaults and never reads Settings or forwards auth headers.
-  Default transport stays PTY: headless `app-server` still requires an explicit
-  model provider in `~/.zcode/cli/config.json` and must not be filled from v2
-  desktop login.
+  At that point default transport stayed PTY: headless `app-server` required an
+  explicit model provider in `~/.zcode/cli/config.json` (superseded by the
+  in-memory Coding Plan bridging entry above).
 - **ZCode as the eighth CLI worker platform** (Issue #51, Mission 3). Adds
   `platforms/zcode.yaml` and `scripts/adapters/zcode.sh`, generates
   `zcode-kaola-project-runner` from the shared worker template, and reuses the

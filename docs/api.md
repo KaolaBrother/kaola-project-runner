@@ -65,7 +65,12 @@ bridge fail closed (`session/new`, `session/resume`, and `session/prompt` return
 `-32603`) rather than search PATH. For ZCode the Runner never searches PATH: `preflight` and
 `start` fail closed unless `KAOLA_ZCODE_ENTRY` and `KAOLA_ZCODE_NODE` are both explicit
 absolute files (the adapter then launches `app-server --stdio` with `ELECTRON_RUN_AS_NODE=1`
-and an allowlisted child environment so native Coding Plan login stays inside ZCode). The
+and an allowlisted child environment, and hands the desktop App's enabled GLM Coding Plan
+provider to the app-server in memory as the protocol's `runtimeModel` overlay, read from
+`~/.zcode/v2/config.json` read-only; Start Plan and pay-as-you-go providers are refused,
+`~/.zcode/cli/config.json` is never written, and the credential never reaches receipts). The
+`start`/`preflight` receipt's `agent_info._meta.zcode` carries the secret-free provider facts
+(`providerId`, `baseURL`, `planCacheStatus`, `modelIds`, `rejectedProviders`). The
 renderer copies `dist/index.js`, `dist/DERIVATION.json`,
 `LICENSE`, and `UPSTREAM.md` from `vendor/claude-code-acp/` into the Claude Code worker only,
 and copies `scripts/kaola-zcode-acp.py` into the ZCode worker only;

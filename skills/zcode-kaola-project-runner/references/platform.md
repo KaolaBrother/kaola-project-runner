@@ -6,8 +6,8 @@
 - Default tmux session prefix: `zcode-kaola`
 - Continue: `--continue`
 - Exact resume: `--resume <session-id>`
-- Runner default preset (`--tier default`): **native Coding Plan default** — `` with ``
-- Runner upgrade preset (`--tier upgrade`): **native Coding Plan default** — `` with ``
+- Runner default preset (`--tier default`): **Coding Plan first listed model (GLM-5.3 on the recording Mac)** — `` with ``
+- Runner upgrade preset (`--tier upgrade`): **Coding Plan first listed model (GLM-5.3 on the recording Mac)** — `` with ``
 - Fast support: no native Fast toggle; thought level is a separate config option (low/high/max)
 
 ## Preflight
@@ -30,7 +30,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Native Coding Plan login stays inside ZCode.
+Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only, selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused), and hands it to the app-server in memory as the protocol's runtimeModel overlay; it never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login itself stays inside the ZCode App.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

@@ -13,11 +13,17 @@ could not be isolated from quota, task-index, goal-loop, sandbox, credential
 and remote surfaces, implement a Runner-owned adapter against `docs/PROTOCOL.md`.
 
 The core handlers import those surfaces; a maintainable reduction would still
-carry credential/config reads (`~/.zcode/v2/config.json` and
-`~/.config/zcode-acp/config.json`) and a `runtimeModel` overlay that inlines
-third-party API keys on `session/setModel`. That is incompatible with
-subscription-login-first Coding Plan use. Gate 2 is the selected
-implementation.
+carry `~/.config/zcode-acp/config.json` reads, `ANTHROPIC_API_KEY` environment
+injection and a registry push of every configured provider. Gate 2 is the
+selected implementation.
+
+Owner correction (2026-09-16): the upstream `runtimeModel` / provider-registry
+overlay is the desktop App's own mechanism for handing providers to the
+app-server in memory, and CLI 0.16.5 cannot create a headless session without
+it. The Runner adapter therefore reuses that protocol shape (reference:
+`src/config/runtime-model.ts` and `src/config/provider-registry.ts` at the pin)
+but only for the one enabled GLM Coding Plan provider, without env injection,
+without a full registry push and without any disk write.
 
 ## Reference (documentation only)
 
@@ -42,16 +48,20 @@ ZCode `session/create` / `subscribe` / `send` / `stop` / `read` / `resume` /
 `list` / `close` / `setMode` / `setModel` / `setThoughtLevel` and
 `interaction/requestPermission` / `interaction/requestUserInput`.
 
-`session/setModel` forwards `{sessionId, model, persistAsWorkspaceLastUsed:false}`
-only. It never reads config, never inlines `apiKey`, and never sends a
-`runtimeModel` overlay. Unknown models fail closed; the adapter does not
-substitute another model.
+`session/create`, `session/resume` (fallback after a faithful resume) and
+`session/setModel` carry a `runtimeModel` overlay built read-only from the
+desktop registry `~/.zcode/v2/config.json`: the enabled `*-coding-plan`
+provider with `apiKey: {source: "inline"}`, `persistAsWorkspaceLastUsed:false`.
+Start Plan and pay-as-you-go providers are refused; unknown models and other
+providers fail closed; the adapter never substitutes a model or a provider,
+never writes `~/.zcode/cli/config.json`, and never logs the credential.
 
 ## Removed / never implemented
 
 quota client, tasks-index sqlite, remote hub / WebSocket listener, TUI /
-martty / elicitation forms, sandbox, goal-loop, provider-registry push,
-credential helpers, PATH/registry discovery, `ZCODE_MODEL` / `ZCODE_PROVIDER`
+martty / elicitation forms, sandbox, goal-loop, full provider-registry push
+(`workspace/updateProviderRegistry`), `ANTHROPIC_API_KEY` env credential
+helpers, PATH/registry discovery, `ZCODE_MODEL` / `ZCODE_PROVIDER`
 injection, postinstall, `ws`, `zcode-acp-martty`, `@agentclientprotocol/sdk`.
 
 ## Local adapter
@@ -60,14 +70,14 @@ injection, postinstall, `ws`, `zcode-acp-martty`, `@agentclientprotocol/sdk`.
 - Hermetic backend: `tests/contract/fake-zcode-app-server.py`
 - Contract: `tests/contract/test-zcode-acp-contract.py`
 
-Run the contract with `python3 tests/contract/test-zcode-acp-contract.py`. It is not yet
-invoked from `scripts/validate.sh`: this worktree is based on Issue #49 pin commit P
-(`df8b85e`), and that pin allows the tracked tree to differ from content commit R
-(`bbfba65`) only by the four Grok Bot pin files. Editing `validate.sh` or committing
-any other path fails that gate. Wiring into `validate.sh` belongs with the
-Issue #49/#50 reconcile (Mission 4), not this adapter.
+- Desktop registry fixture: `tests/contract/fixtures/zcode-desktop-config.json`
+
+Run the contract with `python3 tests/contract/test-zcode-acp-contract.py`; it is
+invoked from `scripts/validate.sh`.
 
 The ZCode runtime path is explicit (`--zcode-entry` / `--zcode-node` or
-`KAOLA_ZCODE_ENTRY` / `KAOLA_ZCODE_NODE`) and fail-closed. Native Coding Plan
-login stays inside the installed runtime via `HOME` only; the adapter never
-opens credential or settings files.
+`KAOLA_ZCODE_ENTRY` / `KAOLA_ZCODE_NODE`) and fail-closed. Login stays inside the
+installed ZCode App; the adapter opens only `~/.zcode/v2/config.json` and
+`~/.zcode/v2/coding-plan-cache.json`, read-only, and never `credentials.json`,
+`setting.json`, `tasks-index.sqlite`, `~/.zcode/cli/config.json` or
+`~/.config/zcode-acp/config.json`.

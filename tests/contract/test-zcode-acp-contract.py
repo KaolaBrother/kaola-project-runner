@@ -33,13 +33,24 @@ FORBIDDEN_IMPORTS = {
     "socket", "ssl", "http", "httpx", "urllib", "requests", "aiohttp",
     "websockets", "sqlite3", "sqlite",
 }
+# Issue #51 owner correction: the desktop provider registry (`v2/config.json`)
+# and the plan cache are read-only exceptions; everything else stays shut.
 FORBIDDEN_OPEN_MARKERS = (
-    "/.zcode/",
+    "/.zcode/cli/",
     "credentials.json",
     "setting.json",
     "tasks-index.sqlite",
+    "telemetry-state.json",
+    "/.zcode/v2/certs",
     "zcode-acp/config.json",
 )
+FIXTURES = PROJECT / "tests" / "contract" / "fixtures"
+DESKTOP_CONFIG_FIXTURE = FIXTURES / "zcode-desktop-config.json"
+PLAN_CACHE_FIXTURE = FIXTURES / "zcode-coding-plan-cache.json"
+DESKTOP_CONFIG = json.loads(DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"))
+CODING_PLAN_ID = "builtin:bigmodel-coding-plan"
+FIXTURE_SECRET = DESKTOP_CONFIG["provider"][CODING_PLAN_ID]["options"]["apiKey"]
+START_PLAN_SECRET = DESKTOP_CONFIG["provider"]["builtin:bigmodel-start-plan"]["options"]["apiKey"]
 DENIED_ENV = (
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
@@ -95,6 +106,7 @@ class AdapterDriver:
         scenario: str = "basic",
         extra_env: dict[str, str] | None = None,
         cwd: Path | None = None,
+        desktop_config: dict | str | None = None,
     ) -> None:
         self.tmp = tmp
         self.scenario = scenario
@@ -106,12 +118,24 @@ class AdapterDriver:
         self.home = tmp / "home"
         self.home.mkdir(parents=True, exist_ok=True)
         (self.home / ".zcode" / "v2").mkdir(parents=True, exist_ok=True)
+        (self.home / ".zcode" / "cli").mkdir(parents=True, exist_ok=True)
         (self.home / ".config" / "zcode-acp").mkdir(parents=True, exist_ok=True)
-        (self.home / ".zcode" / "v2" / "config.json").write_text("{}\n", encoding="utf-8")
+        if desktop_config is None:
+            registry_text = DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8")
+        elif isinstance(desktop_config, str):
+            registry_text = desktop_config
+        else:
+            registry_text = json.dumps(desktop_config, indent=1)
+        if registry_text != "ABSENT":
+            (self.home / ".zcode" / "v2" / "config.json").write_text(registry_text, encoding="utf-8")
+        (self.home / ".zcode" / "v2" / "coding-plan-cache.json").write_text(
+            PLAN_CACHE_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
         (self.home / ".zcode" / "v2" / "credentials.json").write_text("{}\n", encoding="utf-8")
         (self.home / ".zcode" / "v2" / "setting.json").write_text("{}\n", encoding="utf-8")
         (self.home / ".zcode" / "v2" / "tasks-index.sqlite").write_bytes(b"")
+        (self.home / ".zcode" / "cli" / "config.json").write_text('{"hooks":{}}\n', encoding="utf-8")
         (self.home / ".config" / "zcode-acp" / "config.json").write_text("{}\n", encoding="utf-8")
+        self.cli_config = self.home / ".zcode" / "cli" / "config.json"
         self.shim = self._write_shim()
         self.messages: list[dict] = []
         self.queue: queue.Queue = queue.Queue()
@@ -337,8 +361,15 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertFalse(pid_alive(fake_pid), f"fake app-server still alive pid={fake_pid}")
         self.driver = None
 
-    def start(self, scenario: str = "basic", extra_env: dict[str, str] | None = None) -> AdapterDriver:
-        self.driver = AdapterDriver(self.tmp, scenario=scenario, extra_env=extra_env)
+    def start(
+        self,
+        scenario: str = "basic",
+        extra_env: dict[str, str] | None = None,
+        desktop_config: dict | str | None = None,
+    ) -> AdapterDriver:
+        self.driver = AdapterDriver(
+            self.tmp, scenario=scenario, extra_env=extra_env, desktop_config=desktop_config,
+        )
         return self.driver
 
     def handshake(self, driver: AdapterDriver) -> str:
@@ -436,6 +467,7 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertEqual(forbidden, [])
         connects = [entry for entry in driver.open_entries() if entry.startswith("socket.connect:")]
         self.assertEqual(connects, [])
+        self.assert_registry_read_only_and_secret_contained(driver)
         driver.request(4, "session/close", {"sessionId": session_id})
         closed = driver.wait_result(4)
         self.assertIsNotNone(closed)
@@ -560,18 +592,29 @@ class ZcodeAcpContractTests(unittest.TestCase):
         assert mode_result is not None
         self.assertNotIn("error", mode_result)
         driver.request(4, "session/set_config_option", {
-            "sessionId": session_id, "configId": "model", "value": "builtin:zai-coding-plan\\other-model",
+            "sessionId": session_id, "configId": "model", "value": f"{CODING_PLAN_ID}\\GLM-5.3-Flash",
         })
         model_ok = driver.wait_result(4, timeout=8)
         self.assertIsNotNone(model_ok)
         assert model_ok is not None
         self.assertNotIn("error", model_ok)
+        options = {o["id"]: o for o in (model_ok.get("result") or {}).get("configOptions") or []}
+        self.assertEqual(options["model"]["currentValue"], f"{CODING_PLAN_ID}\\GLM-5.3-Flash")
+        self.assertEqual(
+            sorted(o["value"] for o in options["model"]["options"]),
+            [f"{CODING_PLAN_ID}\\GLM-5.3", f"{CODING_PLAN_ID}\\GLM-5.3-Flash"],
+        )
         set_model = driver.rpc_calls("session/setModel")
         self.assertTrue(set_model)
-        payload = json.dumps(set_model[-1])
-        self.assertNotIn("apiKey", payload)
-        self.assertNotIn("runtimeModel", payload)
-        self.assertFalse((set_model[-1].get("params") or {}).get("persistAsWorkspaceLastUsed"))
+        params = set_model[-1].get("params") or {}
+        self.assertEqual(params.get("model"), {"providerId": CODING_PLAN_ID, "modelId": "GLM-5.3-Flash"})
+        self.assertNotIn("apiKey", params.get("model") or {})
+        overlay = params.get("runtimeModel") or {}
+        self.assertEqual(overlay.get("provider", {}).get("providerId"), CODING_PLAN_ID)
+        self.assertEqual(overlay.get("provider", {}).get("apiKey"), {"source": "inline", "value": FIXTURE_SECRET})
+        self.assertFalse(params.get("persistAsWorkspaceLastUsed"))
+        before = len(set_model)
+        # Unknown model: refused by the adapter before any backend call.
         driver.request(5, "session/set_config_option", {
             "sessionId": session_id, "configId": "model", "value": "no-such-model",
         })
@@ -579,6 +622,24 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertIsNotNone(rejected)
         assert rejected is not None
         self.assertIn("error", rejected)
+        # Pay-as-you-go provider for the same model id: refused, never billed.
+        driver.request(7, "session/set_config_option", {
+            "sessionId": session_id, "configId": "model", "value": "builtin:bigmodel\\GLM-5.3",
+        })
+        billing = driver.wait_result(7, timeout=8)
+        self.assertIsNotNone(billing)
+        assert billing is not None
+        self.assertIn("not the enabled GLM Coding Plan provider", (billing.get("error") or {}).get("message", ""))
+        # Start Plan provider: refused likewise.
+        driver.request(8, "session/set_config_option", {
+            "sessionId": session_id, "configId": "model", "value": "builtin:bigmodel-start-plan\\GLM-5.3",
+        })
+        start_plan = driver.wait_result(8, timeout=8)
+        self.assertIsNotNone(start_plan)
+        assert start_plan is not None
+        self.assertIn("error", start_plan)
+        self.assertEqual(len(driver.rpc_calls("session/setModel")), before)
+        self.assert_registry_read_only_and_secret_contained(driver)
         driver.request(6, "session/set_config_option", {
             "sessionId": session_id, "configId": "thoughtLevel", "value": "max",
         })
@@ -637,12 +698,180 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertIsNotNone(init)
         assert init is not None
         self.assertEqual((init.get("result") or {}).get("authMethods"), [])
+        meta = (((init.get("result") or {}).get("agentInfo") or {}).get("_meta") or {}).get("zcode") or {}
+        self.assertEqual(meta.get("plan"), "coding-plan")
+        self.assertEqual(meta.get("providerId"), CODING_PLAN_ID)
+        self.assertEqual(meta.get("baseURL"), "https://open.bigmodel.cn/api/anthropic")
+        self.assertEqual(meta.get("planCacheStatus"), "available")
+        self.assertEqual(meta.get("modelIds"), ["GLM-5.3", "GLM-5.3-Flash"])
+        self.assertEqual(meta.get("defaultModelId"), "GLM-5.3")
+        self.assertIn("builtin:bigmodel-start-plan", meta.get("rejectedProviders") or {})
+        self.assertIn("builtin:bigmodel", meta.get("rejectedProviders") or {})
+        self.assertNotIn(FIXTURE_SECRET, json.dumps(init))
         driver.request(2, "authenticate", {"methodId": "anything"})
         auth = driver.wait_result(2)
         self.assertIsNotNone(auth)
         assert auth is not None
         self.assertEqual(auth.get("result"), {})
         self.assertFalse(driver.record_path.is_file())
+
+    # -- Issue #51 owner correction: in-memory Coding Plan bridging ---------
+
+    def assert_registry_read_only_and_secret_contained(self, driver: AdapterDriver) -> None:
+        registry_opens = [e for e in driver.open_entries() if "/.zcode/v2/" in e]
+        self.assertTrue(registry_opens, "adapter read the desktop registry")
+        self.assertTrue(all(e.endswith(":mode=r") for e in registry_opens), registry_opens)
+        touched = {e.split(":mode=")[0].rsplit("/", 1)[-1] for e in registry_opens}
+        self.assertLessEqual(touched, {"config.json", "coding-plan-cache.json"})
+        stdout_blob = json.dumps(driver.messages)
+        self.assertNotIn(FIXTURE_SECRET, stdout_blob)
+        self.assertNotIn(START_PLAN_SECRET, stdout_blob)
+        self.assertNotIn(FIXTURE_SECRET, bytes(driver.stderr_bytes).decode("utf-8", "replace"))
+        self.assertEqual(driver.cli_config.read_text(encoding="utf-8"), '{"hooks":{}}\n')
+
+    def test_create_carries_coding_plan_overlay_in_memory(self) -> None:
+        driver = self.start("basic")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "sentinel"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        assert done is not None
+        self.assertEqual((done.get("result") or {}).get("stopReason"), "end_turn")
+        creates = driver.rpc_calls("session/create")
+        self.assertEqual(len(creates), 1)
+        overlay = (creates[0].get("params") or {}).get("runtimeModel") or {}
+        self.assertEqual(overlay.get("model"), {"providerId": CODING_PLAN_ID, "modelId": "GLM-5.3"})
+        provider = overlay.get("provider") or {}
+        self.assertEqual(provider.get("providerId"), CODING_PLAN_ID)
+        self.assertEqual(provider.get("kind"), "anthropic")
+        self.assertEqual(provider.get("apiFormat"), "anthropic-messages")
+        self.assertEqual(provider.get("baseURL"), "https://open.bigmodel.cn/api/anthropic")
+        self.assertEqual(provider.get("apiKey"), {"source": "inline", "value": FIXTURE_SECRET})
+        self.assertEqual([m["modelId"] for m in provider.get("models") or []], ["GLM-5.3", "GLM-5.3-Flash"])
+        flash = provider["models"][1]
+        self.assertEqual(flash.get("reasoning", {}).get("defaultLevel"), "max")
+        self.assertEqual([lvl["value"] for lvl in flash["reasoning"]["levels"]], ["low", "max", "high"])
+        self.assertEqual(flash.get("contextWindow"), 1000000)
+        self.assertTrue(flash.get("supportsImages"))
+        self.assertTrue(overlay.get("revision", "").startswith("kaola-zcode-acp:"))
+        self.assertNotIn(FIXTURE_SECRET, overlay["revision"])
+        # Only the selected provider ever crosses to the backend.
+        self.assertNotIn(START_PLAN_SECRET, json.dumps(creates))
+        self.assertNotIn("builtin:bigmodel-start-plan", json.dumps(creates))
+        record = wait_for(lambda: driver.record() or None, 3)
+        assert record is not None
+        overlays = record.get("overlays") or []
+        self.assertEqual([o["method"] for o in overlays], ["session/create"])
+        self.assertEqual(overlays[0]["apiKeyValue"], FIXTURE_SECRET)
+        config_updates = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "config_option_update"]
+        self.assertTrue(config_updates)
+        model_opt = next(o for o in config_updates[-1]["configOptions"] if o["id"] == "model")
+        self.assertEqual(model_opt.get("currentValue"), f"{CODING_PLAN_ID}\\GLM-5.3")
+        self.assert_registry_read_only_and_secret_contained(driver)
+
+    def test_fake_rejects_create_without_overlay(self) -> None:
+        """The fake is discriminating: no overlay reproduces CLI 0.16.5's error."""
+        proc = subprocess.Popen(
+            [sys.executable, str(FAKE), "app-server", "--stdio"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            env={"PATH": os.environ.get("PATH", "/usr/bin"), "FAKE_ZCODE_SCENARIO": "basic"},
+        )
+        assert proc.stdin is not None and proc.stdout is not None
+        try:
+            proc.stdin.write(json.dumps({
+                "id": 1, "method": "session/create",
+                "params": {"workspace": {"workspacePath": "/tmp", "workspaceKey": "/tmp"}, "mode": "yolo"},
+            }).encode("utf-8") + b"\n")
+            proc.stdin.flush()
+            reply = json.loads(proc.stdout.readline().decode("utf-8"))
+            self.assertIn("Model config is missing", (reply.get("error") or {}).get("message", ""))
+            bad = json.dumps({
+                "id": 2, "method": "session/create",
+                "params": {"workspace": {"workspacePath": "/tmp", "workspaceKey": "/tmp"},
+                           "runtimeModel": {"revision": "x", "generatedAt": 1,
+                                            "model": {"providerId": "p", "modelId": "m"},
+                                            "provider": {"providerId": "p", "kind": "anthropic",
+                                                         "apiKey": "bare-string-rejected",
+                                                         "models": [{"modelId": "m"}]}}},
+            })
+            proc.stdin.write(bad.encode("utf-8") + b"\n")
+            proc.stdin.flush()
+            reply = json.loads(proc.stdout.readline().decode("utf-8"))
+            self.assertEqual((reply.get("error") or {}).get("code"), -32602)
+        finally:
+            proc.stdin.close()
+            proc.wait(timeout=5)
+            proc.stdout.close()
+
+    def test_fail_closed_without_eligible_coding_plan(self) -> None:
+        cases = {
+            "start-plan-only": {"provider": {
+                "builtin:bigmodel-start-plan": {
+                    **DESKTOP_CONFIG["provider"]["builtin:bigmodel-start-plan"],
+                    "enabled": True, "models": {"GLM-5.3": {}},
+                },
+            }},
+            "pay-as-you-go-only": {"provider": {
+                "builtin:bigmodel": {
+                    **DESKTOP_CONFIG["provider"]["builtin:bigmodel"], "enabled": True,
+                    "options": {"apiKey": "payg-key-must-not-be-used",
+                                "baseURL": "https://open.bigmodel.cn/api/anthropic"},
+                },
+            }},
+            "coding-plan-disabled": {"provider": {
+                CODING_PLAN_ID: {**DESKTOP_CONFIG["provider"][CODING_PLAN_ID], "enabled": False,
+                                 "systemDisabledReason": "oauth_provider_inactive"},
+            }},
+            "coding-plan-no-credential": {"provider": {
+                CODING_PLAN_ID: {**DESKTOP_CONFIG["provider"][CODING_PLAN_ID],
+                                 "options": {"apiKey": "", "baseURL": "https://open.bigmodel.cn/api/anthropic"}},
+            }},
+            "registry-absent": "ABSENT",
+            "registry-malformed": "{not json",
+        }
+        for label, registry in cases.items():
+            with self.subTest(label):
+                driver = self.start("basic", desktop_config=registry)
+                driver.request(1, "initialize", {"protocolVersion": 1, "clientCapabilities": {}})
+                init = driver.wait_result(1)
+                assert init is not None
+                meta = (((init.get("result") or {}).get("agentInfo") or {}).get("_meta") or {}).get("zcode") or {}
+                self.assertEqual(meta.get("plan"), "unavailable", label)
+                self.assertNotIn("payg-key-must-not-be-used", json.dumps(init))
+                self.assertNotIn(START_PLAN_SECRET, json.dumps(init))
+                driver.request(2, "session/new", {"cwd": str(driver.cwd), "mcpServers": []})
+                new = driver.wait_result(2)
+                assert new is not None
+                session_id = (new.get("result") or {}).get("sessionId")
+                driver.request(3, "session/prompt", {
+                    "sessionId": session_id, "prompt": [{"type": "text", "text": "hello"}],
+                })
+                failed = driver.wait_result(3, timeout=8)
+                assert failed is not None
+                message = (failed.get("error") or {}).get("message", "")
+                self.assertIn("HUMAN_DECISION_REQUIRED" if registry not in ("ABSENT", "{not json") else "registry", message, label)
+                # Nothing was spawned, nothing forwarded, nothing written.
+                self.assertFalse(driver.record_path.is_file(), label)
+                self.assertNotIn("payg-key-must-not-be-used", json.dumps(driver.messages))
+                self.assertNotIn(START_PLAN_SECRET, json.dumps(driver.messages))
+                self.assertEqual(driver.cli_config.read_text(encoding="utf-8"), '{"hooks":{}}\n')
+                self.stop_driver()
+
+    def test_resume_is_faithful_first_then_overlay(self) -> None:
+        driver = self.start("basic")
+        self.handshake(driver)
+        driver.request(20, "session/load", {"sessionId": "sess_persisted1", "cwd": str(driver.cwd)})
+        loaded = driver.wait_result(20, timeout=8)
+        assert loaded is not None
+        self.assertNotIn("error", loaded)
+        resumes = driver.rpc_calls("session/resume")
+        self.assertEqual(len(resumes), 2)
+        self.assertNotIn("runtimeModel", resumes[0].get("params") or {})
+        overlay = (resumes[1].get("params") or {}).get("runtimeModel") or {}
+        self.assertEqual(overlay.get("provider", {}).get("providerId"), CODING_PLAN_ID)
+        self.assert_registry_read_only_and_secret_contained(driver)
 
 
 if __name__ == "__main__":

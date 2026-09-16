@@ -56,9 +56,14 @@ that file is what `start --continue` reads, it holds ids and cwd paths only, and
 delete it. ZCode's ACP agent is the Runner-owned translator `scripts/kaola-zcode-acp.py`,
 shipped only inside the ZCode worker Skill and resolved from `$SKILL_DIR/scripts/`. It talks
 ACP to the Runner and the installed ZCode `app-server --stdio` protocol to an explicit
-absolute `KAOLA_ZCODE_ENTRY` plus `KAOLA_ZCODE_NODE` (never PATH, never npm). Native Coding
-Plan login stays inside ZCode; the adapter's child environment is an allowlist, so
-`ANTHROPIC_API_KEY` and other billing levers are not forwarded. Default transport stays PTY
+absolute `KAOLA_ZCODE_ENTRY` plus `KAOLA_ZCODE_NODE` (never PATH, never npm). Login stays
+inside the ZCode App; the adapter's child environment is an allowlist, so `ANTHROPIC_API_KEY`
+and other billing levers are not forwarded. Because headless CLI 0.16.5 cannot see the desktop
+login, the adapter reads the App's provider registry (`~/.zcode/v2/config.json`) read-only,
+selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go providers are
+refused, never fallen back to) and hands it to the app-server in memory as the protocol's
+`runtimeModel` overlay, the same mechanism the desktop App uses; nothing is written under
+`~/.zcode`, and the credential never reaches receipts or logs. Default transport stays PTY
 until the live subscription gate of Issue #51 passes; `--transport acp` is already available,
 and login itself always stays a PTY act.
 

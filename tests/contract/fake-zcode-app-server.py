@@ -7,7 +7,14 @@ Runner-owned adapter can be accepted offline with no ZCode install, no login,
 no account and no network.
 
 It also records its own argv and environment to ``FAKE_ZCODE_RECORD`` so the
-suite can assert that the adapter forwarded no credential environment.
+suite can assert that the adapter forwarded no credential environment, plus
+the provider/model/credential it received in the ``runtimeModel`` overlay so
+the suite can prove in-memory bridging without the value ever reaching ACP.
+
+CLI 0.16.5 parity: ``session/create`` and ``session/resume`` without a
+``runtimeModel`` overlay fail with ``Model config is missing`` (the backend
+would otherwise read ``~/.zcode/cli/config.json``); the overlay is validated
+against the backend's strict zod shapes (`$f` / `Nje` / `mEt`).
 
 Scenarios (argv ``--scenario``):
   basic        text + reasoning stream, one tool call, usage, turn.completed
@@ -18,7 +25,8 @@ Scenarios (argv ``--scenario``):
   failure      turn.failed with an error payload
   slow         waits for session/stop, then reports a terminal turn (cancel)
   batch        a tool.updated batch payload
-  strict_model session/setModel rejects unknown model ids (no silent fallback)
+  strict_model kept for compatibility; every scenario now rejects a model
+               that the registered overlay did not list (no silent fallback)
 """
 
 from __future__ import annotations
@@ -65,6 +73,113 @@ def log_rpc(direction: str, msg: dict[str, Any]) -> None:
         handle.write(json.dumps({"direction": direction, "msg": msg}, sort_keys=True) + "\n")
 
 
+MODEL_CONFIG_MISSING = (
+    "ModelProtocolError: Model config is missing. Create ~/.zcode/cli/config.json "
+    "with an explicit model provider before running ZCode."
+)
+PROVIDER_KEYS = {
+    "providerId", "kind", "apiFormat", "label", "source", "baseURL", "apiKey",
+    "apiKeyRequired", "headers", "providerOptions", "logoUrl", "modelsDevProviderId", "models",
+}
+MODEL_ELEMENT_KEYS = {
+    "modelId", "label", "description", "contextWindow", "maxOutputTokens", "reasoning",
+    "reasoningProfile", "supportsImages", "supportsPdf", "supportsVideo", "supportsTools",
+    "supportsStructuredOutput", "providerOptions",
+}
+
+
+def validate_runtime_model(overlay: Any) -> str | None:
+    """Mirror the backend's strict schemas; return an error message or None."""
+    if not isinstance(overlay, dict):
+        return "runtimeModel must be an object"
+    extra = set(overlay) - {"revision", "generatedAt", "model", "provider", "thoughtLevel"}
+    if extra:
+        return f"runtimeModel unrecognized keys: {sorted(extra)}"
+    if not isinstance(overlay.get("revision"), str) or not overlay["revision"]:
+        return "runtimeModel.revision must be a non-empty string"
+    if not isinstance(overlay.get("generatedAt"), int):
+        return "runtimeModel.generatedAt must be an integer timestamp"
+    model = overlay.get("model")
+    if not isinstance(model, dict) or set(model) - {"providerId", "modelId", "variant"}:
+        return "runtimeModel.model must be {providerId, modelId[, variant]}"
+    if not model.get("providerId") or not model.get("modelId"):
+        return "runtimeModel.model needs providerId and modelId"
+    provider = overlay.get("provider")
+    if not isinstance(provider, dict):
+        return "runtimeModel.provider must be an object"
+    extra = set(provider) - PROVIDER_KEYS
+    if extra:
+        return f"runtimeModel.provider unrecognized keys: {sorted(extra)}"
+    if provider.get("providerId") != model["providerId"]:
+        return "runtimeModel.provider.providerId must match runtimeModel.model.providerId"
+    if provider.get("kind") not in ("anthropic", "openai", "openai-compatible"):
+        return "runtimeModel.provider.kind invalid"
+    if "apiFormat" in provider and provider["apiFormat"] not in (
+        "anthropic-messages", "openai-chat-completions", "openai-responses"
+    ):
+        return "runtimeModel.provider.apiFormat invalid"
+    if "source" in provider and provider["source"] not in (
+        "builtin", "models-dev", "custom", "user", "workspace", "ephemeral"
+    ):
+        return "runtimeModel.provider.source invalid"
+    api_key = provider.get("apiKey")
+    if api_key is not None:
+        if not isinstance(api_key, dict) or api_key.get("source") not in (
+            "credential", "env", "server-config", "inline"
+        ):
+            return "runtimeModel.provider.apiKey must be a discriminated union"
+        if api_key["source"] == "inline" and (set(api_key) != {"source", "value"} or not api_key["value"]):
+            return "runtimeModel.provider.apiKey inline needs exactly {source, value}"
+    models = provider.get("models")
+    if not isinstance(models, list) or not models:
+        return "runtimeModel.provider.models must be a non-empty array"
+    for element in models:
+        if not isinstance(element, dict) or not element.get("modelId"):
+            return "runtimeModel.provider.models[] needs modelId"
+        extra = set(element) - MODEL_ELEMENT_KEYS
+        if extra:
+            return f"runtimeModel.provider.models[] unrecognized keys: {sorted(extra)}"
+        reasoning = element.get("reasoning")
+        if reasoning is not None:
+            if not isinstance(reasoning, dict) or not isinstance(reasoning.get("enabled"), bool):
+                return "runtimeModel reasoning needs enabled"
+            levels = reasoning.get("levels")
+            if not isinstance(levels, list) or any(
+                not isinstance(level, dict) or set(level) - {"value", "label", "description"}
+                or not level.get("value") or not level.get("label")
+                for level in levels
+            ):
+                return "runtimeModel reasoning.levels must be [{value, label}]"
+    if not any(element["modelId"] == model["modelId"] for element in models):
+        return "runtimeModel.model.modelId is not in runtimeModel.provider.models"
+    return None
+
+
+def record_overlay(overlay: dict[str, Any], method: str) -> None:
+    """Append what the overlay carried (test evidence; secret stays in tmp)."""
+    path = os.environ.get("FAKE_ZCODE_RECORD")
+    if not path:
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
+        payload = {}
+    api_key = (overlay.get("provider") or {}).get("apiKey") or {}
+    payload.setdefault("overlays", []).append({
+        "method": method,
+        "providerId": overlay["provider"]["providerId"],
+        "modelId": overlay["model"]["modelId"],
+        "baseURL": overlay["provider"].get("baseURL"),
+        "apiKeySource": api_key.get("source"),
+        "apiKeyValue": api_key.get("value"),
+        "modelIds": [m["modelId"] for m in overlay["provider"]["models"]],
+        "revision": overlay["revision"],
+    })
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+
+
 class FakeAppServer:
     def __init__(self, scenario: str):
         self.scenario = scenario
@@ -73,6 +188,24 @@ class FakeAppServer:
         self.counter = 0
         self.next_request_id = 1000
         self.stop_flags: dict[str, threading.Event] = {}
+        # Workspace catalog registered through overlays (backend `q8` parity).
+        self.catalog: dict[str, list[str]] = {}
+
+    def register_overlay(self, rid: Any, params: dict[str, Any], method: str) -> dict[str, Any] | None:
+        overlay = params.get("runtimeModel")
+        if overlay is None:
+            if not self.catalog:
+                self.error(rid, -32000, MODEL_CONFIG_MISSING)
+                return None
+            return {}
+        problem = validate_runtime_model(overlay)
+        if problem:
+            self.error(rid, -32602, f"invalid params: {problem}")
+            return None
+        provider = overlay["provider"]
+        self.catalog[provider["providerId"]] = [m["modelId"] for m in provider["models"]]
+        record_overlay(overlay, method)
+        return overlay
 
     # -- helpers ----------------------------------------------------------
 
@@ -102,12 +235,16 @@ class FakeAppServer:
         params = msg.get("params") or {}
 
         if method == "session/create":
+            overlay = self.register_overlay(rid, params, method)
+            if overlay is None:
+                return
             self.counter += 1
             session_id = f"sess_fake{self.counter}"
+            model = overlay.get("model") or {}
             self.sessions[session_id] = {
                 "mode": params.get("mode") or "yolo",
-                "modelId": "fake-model",
-                "providerId": "builtin:zai-coding-plan",
+                "modelId": model.get("modelId") or "fake-model",
+                "providerId": model.get("providerId") or "builtin:fake-coding-plan",
                 "thoughtLevel": "high",
                 "subscribed": False,
             }
@@ -138,11 +275,15 @@ class FakeAppServer:
             return
 
         if method == "session/resume":
+            overlay = self.register_overlay(rid, params, method)
+            if overlay is None:
+                return
             session_id = params.get("sessionId")
+            model = overlay.get("model") or {}
             self.sessions.setdefault(session_id, {
                 "mode": "yolo",
-                "modelId": "fake-model",
-                "providerId": "builtin:zai-coding-plan",
+                "modelId": model.get("modelId") or "fake-model",
+                "providerId": model.get("providerId") or "builtin:fake-coding-plan",
                 "thoughtLevel": "high",
                 "subscribed": False,
             })
@@ -174,16 +315,20 @@ class FakeAppServer:
             if session is None:
                 self.error(rid, 1404, "session not found")
                 return
-            if params.get("runtimeModel") or (params.get("model") or {}).get("apiKey"):
-                self.error(rid, 1401, "runtime overlay / apiKey is not accepted")
+            if (params.get("model") or {}).get("apiKey"):
+                self.error(rid, -32602, "invalid params: model.apiKey unrecognized key")
                 return
+            if params.get("runtimeModel") is not None:
+                if self.register_overlay(rid, params, method) is None:
+                    return
             model = params.get("model") or {}
             model_id = model.get("modelId") or params.get("modelId")
-            if self.scenario == "strict_model" and model_id not in ("fake-model", "other-model"):
-                self.error(rid, 1402, f"unknown model {model_id}")
-                return
             if not model_id:
                 self.error(rid, -32602, "setModel requires modelId")
+                return
+            known = self.catalog.get(model.get("providerId") or "", [])
+            if model_id not in known:
+                self.error(rid, 1402, f"unknown model {model_id} for provider {model.get('providerId')}")
                 return
             session["modelId"] = model_id
             if model.get("providerId"):

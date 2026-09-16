@@ -10,13 +10,31 @@ Issue #51 selection gate, Gate 2: the active community adapter
 handlers), so this is a Runner-owned translation written against that project's
 `docs/PROTOCOL.md` as reference. See `third_party/zcode-acp/UPSTREAM.md`.
 
+Model provider bridging (Issue #51 owner correction, 2026-09-16). CLI 0.16.5
+resolves its model provider from ``~/.zcode/cli/config.json`` while the desktop
+App keeps the logged-in providers under ``~/.zcode/v2/config.json``; a headless
+``session/create`` therefore fails with ``Model config is missing``. The desktop
+App itself feeds providers to the app-server in memory (``runtimeModel`` /
+provider-registry overlays whose ``apiKey`` is ``{source: "inline"}``), and
+this adapter does the same, bounded as follows:
+
+* ``~/.zcode/v2/config.json`` (and ``coding-plan-cache.json`` for plan status)
+  are opened read-only; nothing under ``~/.zcode`` is ever written, and
+  ``~/.zcode/cli/config.json`` is never touched;
+* only an ``enabled`` provider whose id ends in ``-coding-plan`` with a
+  non-empty plan credential and model list is eligible; ``*-start-plan``
+  (headless captcha) and pay-as-you-go providers are refused, never fallen
+  back to, and the selected provider is reported in ``agentInfo._meta``;
+* the credential travels only inside the ``session/create`` /
+  ``session/resume`` / ``session/setModel`` overlay to the child's stdin; it
+  is never logged, never placed in an ACP message, never written to disk;
+* ``~/.zcode/v2/credentials.json`` and ``~/.config/zcode-acp/config.json``
+  are never opened;
+
 Deliberate non-capabilities, enforced here and asserted by the contract suite:
 
-* no credential or config read - never opens ``~/.zcode/v2/config.json``,
-  ``~/.zcode/v2/credentials.json`` or ``~/.config/zcode-acp/config.json``;
 * no auth environment injection - the child env is built from a strict
-  allowlist, so ``ANTHROPIC_API_KEY`` and friends are never forwarded and the
-  native runtime resolves its own Coding Plan login;
+  allowlist, so ``ANTHROPIC_API_KEY`` and friends are never forwarded;
 * no config rewrite, no ``tasks-index.sqlite`` write;
 * no network, no quota client, no remote hub, no listener, no daemon, no TUI,
   no sandbox. This module imports no socket, http, urllib or sqlite3.
@@ -29,16 +47,31 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import hashlib
 import json
 import os
 import signal
 import subprocess
 import sys
 import threading
+import time
 from typing import Any
 
 ADAPTER_NAME = "kaola-zcode-acp"
-ADAPTER_VERSION = "0.1.0"
+ADAPTER_VERSION = "0.2.0"
+
+# Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+PLAN_CACHE_RELPATH = os.path.join(".zcode", "v2", "coding-plan-cache.json")
+CODING_PLAN_SUFFIX = "-coding-plan"
+START_PLAN_SUFFIX = "-start-plan"
+# Backend `kind` enum and the apiFormat it maps to (desktop converter parity).
+API_FORMAT_BY_KIND = {
+    "anthropic": "anthropic-messages",
+    "openai": "openai-chat-completions",
+    "openai-compatible": "openai-chat-completions",
+}
+PROVIDER_SOURCES = ("builtin", "models-dev", "custom", "user", "workspace", "ephemeral")
 
 # Environment names that must never reach the ZCode child. The child env is
 # built from ENV_ALLOWLIST, so these are already excluded by construction;
@@ -152,6 +185,193 @@ def build_child_env() -> dict[str, str]:
     if leaked:  # unreachable by construction; kept as an enforced invariant
         raise RuntimeError_(f"denied env leaked into child: {leaked}")
     return env
+
+
+# --------------------------------------------------------------------------
+# Desktop Coding Plan provider -> in-memory runtimeModel overlay
+# --------------------------------------------------------------------------
+
+
+def _read_json_readonly(path: str) -> Any:
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _model_element(model_id: str, entry: Any) -> dict[str, Any]:
+    """config.json model entry -> protocol model element (schema `mEt`)."""
+    entry = entry if isinstance(entry, dict) else {}
+    element: dict[str, Any] = {"modelId": model_id}
+    name = entry.get("name")
+    if isinstance(name, str) and name:
+        element["label"] = name
+    limit = entry.get("limit") if isinstance(entry.get("limit"), dict) else {}
+    if isinstance(limit.get("context"), int) and limit["context"] > 0:
+        element["contextWindow"] = limit["context"]
+    if isinstance(limit.get("output"), int) and limit["output"] > 0:
+        element["maxOutputTokens"] = limit["output"]
+    reasoning = entry.get("reasoning") if isinstance(entry.get("reasoning"), dict) else {}
+    variants = [v for v in (reasoning.get("variants") or []) if isinstance(v, str) and v]
+    if reasoning.get("enabled") is True and variants:
+        block: dict[str, Any] = {
+            "enabled": True,
+            "levels": [{"value": v, "label": v} for v in variants],
+        }
+        default = reasoning.get("defaultVariant")
+        if isinstance(default, str) and default in variants:
+            block["defaultLevel"] = default
+        element["reasoning"] = block
+    modalities = entry.get("modalities") if isinstance(entry.get("modalities"), dict) else {}
+    inputs = modalities.get("input") if isinstance(modalities.get("input"), list) else []
+    if "image" in inputs:
+        element["supportsImages"] = True
+    if "video" in inputs:
+        element["supportsVideo"] = True
+    return element
+
+
+def select_coding_plan_provider(home: str | None = None) -> dict[str, Any]:
+    """Pick the desktop's enabled GLM Coding Plan provider, or fail closed.
+
+    Read-only. Eligible: id ends with ``-coding-plan``, ``enabled`` is true,
+    the plan credential is non-empty and at least one model is listed.
+    ``*-start-plan`` needs the desktop captcha flow headlessly and is refused;
+    every other provider (pay-as-you-go API keys included) is refused so no
+    turn can silently bill outside the plan. Nothing here logs the credential.
+    """
+    home = home or os.environ.get("HOME") or ""
+    if not home:
+        raise RuntimeError_("no HOME: cannot locate the desktop provider registry")
+    config_path = os.path.join(home, DESKTOP_CONFIG_RELPATH)
+    if not os.path.isfile(config_path):
+        raise RuntimeError_(
+            f"desktop provider registry not found: {config_path} "
+            "(log in through the ZCode desktop App first)"
+        )
+    try:
+        config = _read_json_readonly(config_path)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError_(f"desktop provider registry unreadable: {exc.__class__.__name__}")
+    providers = config.get("provider") if isinstance(config, dict) else None
+    if not isinstance(providers, dict) or not providers:
+        raise RuntimeError_("desktop provider registry lists no providers")
+
+    rejected: dict[str, str] = {}
+    chosen: dict[str, Any] | None = None
+    for provider_id, raw in providers.items():
+        if not isinstance(provider_id, str) or not isinstance(raw, dict):
+            continue
+        options = raw.get("options") if isinstance(raw.get("options"), dict) else {}
+        models = raw.get("models") if isinstance(raw.get("models"), dict) else {}
+        if provider_id.endswith(START_PLAN_SUFFIX):
+            rejected[provider_id] = "start-plan (headless captcha flow, refused)"
+            continue
+        if not provider_id.endswith(CODING_PLAN_SUFFIX):
+            rejected[provider_id] = "not a coding-plan provider (refused: no pay-as-you-go billing)"
+            continue
+        if raw.get("enabled") is not True:
+            reason = raw.get("systemDisabledReason")
+            rejected[provider_id] = f"not enabled ({reason})" if isinstance(reason, str) else "not enabled"
+            continue
+        key = options.get("apiKey")
+        if not isinstance(key, str) or not key:
+            rejected[provider_id] = "no plan credential in desktop registry"
+            continue
+        if not models:
+            rejected[provider_id] = "no models listed"
+            continue
+        kind = raw.get("kind") if isinstance(raw.get("kind"), str) else "anthropic"
+        if kind not in API_FORMAT_BY_KIND:
+            rejected[provider_id] = f"unsupported provider kind {kind}"
+            continue
+        base_url = options.get("baseURL")
+        if not isinstance(base_url, str) or not base_url:
+            rejected[provider_id] = "no baseURL"
+            continue
+        if chosen is not None:
+            rejected[provider_id] = f"eligible but {chosen['provider_id']} was listed first"
+            continue
+        model_ids = [m for m in models if isinstance(m, str) and m]
+        source = raw.get("source") if raw.get("source") in PROVIDER_SOURCES else "custom"
+        chosen = {
+            "provider_id": provider_id,
+            "label": raw.get("name") if isinstance(raw.get("name"), str) else provider_id,
+            "kind": kind,
+            "api_format": API_FORMAT_BY_KIND[kind],
+            "base_url": base_url,
+            "source": source,
+            "api_key_required": options.get("apiKeyRequired")
+            if isinstance(options.get("apiKeyRequired"), bool) else None,
+            "model_ids": model_ids,
+            "default_model_id": model_ids[0],
+            "models": [_model_element(m, models[m]) for m in model_ids],
+            "_secret": key,  # never logged, never serialized into ACP output
+            "plan_cache_status": None,
+            "rejected": rejected,
+        }
+    if chosen is None:
+        detail = "; ".join(f"{pid}: {why}" for pid, why in sorted(rejected.items())) or "none listed"
+        raise RuntimeError_(
+            "no enabled GLM Coding Plan provider in the desktop registry "
+            f"(HUMAN_DECISION_REQUIRED: enable a Coding Plan in the ZCode App) [{detail}]"
+        )
+    cache_path = os.path.join(home, PLAN_CACHE_RELPATH)
+    if os.path.isfile(cache_path):
+        try:
+            cache = _read_json_readonly(cache_path)
+            items = ((cache.get("entryStatus") or {}).get("items") or {}) if isinstance(cache, dict) else {}
+            status = items.get(chosen["provider_id"]) if isinstance(items, dict) else None
+            if isinstance(status, dict) and isinstance(status.get("status"), str):
+                chosen["plan_cache_status"] = status["status"]
+        except (OSError, ValueError):
+            chosen["plan_cache_status"] = None
+    return chosen
+
+
+def provider_facts(choice: dict[str, Any]) -> dict[str, Any]:
+    """Secret-free provider facts for receipts (agentInfo._meta.zcode)."""
+    return {
+        "plan": "coding-plan",
+        "providerId": choice["provider_id"],
+        "providerLabel": choice["label"],
+        "kind": choice["kind"],
+        "baseURL": choice["base_url"],
+        "credential": "desktop-registry-inline-memory",
+        "modelIds": list(choice["model_ids"]),
+        "defaultModelId": choice["default_model_id"],
+        "planCacheStatus": choice.get("plan_cache_status"),
+        "rejectedProviders": dict(choice.get("rejected") or {}),
+    }
+
+
+def build_runtime_model(choice: dict[str, Any], model_id: str) -> dict[str, Any]:
+    """Protocol `runtimeModel` overlay (schema `$f`) for the chosen provider."""
+    if model_id not in choice["model_ids"]:
+        raise RuntimeError_(
+            f"model {model_id} is not offered by {choice['provider_id']} "
+            f"(available: {', '.join(choice['model_ids'])})"
+        )
+    digest = hashlib.sha256(
+        "|".join([choice["provider_id"], choice["kind"], choice["base_url"],
+                  ",".join(sorted(choice["model_ids"]))]).encode("utf-8")
+    ).hexdigest()[:12]
+    provider: dict[str, Any] = {
+        "providerId": choice["provider_id"],
+        "kind": choice["kind"],
+        "apiFormat": choice["api_format"],
+        "label": choice["label"],
+        "source": choice["source"],
+        "baseURL": choice["base_url"],
+        "apiKey": {"source": "inline", "value": choice["_secret"]},
+        "models": [dict(m) for m in choice["models"]],
+    }
+    if choice.get("api_key_required") is not None:
+        provider["apiKeyRequired"] = choice["api_key_required"]
+    return {
+        "revision": f"{ADAPTER_NAME}:{digest}",
+        "generatedAt": int(time.time() * 1000),
+        "model": {"providerId": choice["provider_id"], "modelId": model_id},
+        "provider": provider,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -345,6 +565,8 @@ class Session:
 
 class ZCodeAcpAgent:
     def __init__(self, entry: str, node: str, default_cwd: str, default_mode: str):
+        self.provider: dict[str, Any] | None = None
+        self.provider_error: str | None = None
         self.entry = entry
         self.node = node
         self.default_cwd = default_cwd
@@ -404,13 +626,38 @@ class ZCodeAcpAgent:
             self.backend.start()
         return self.backend
 
+    def resolve_provider(self) -> dict[str, Any]:
+        """Read-only desktop registry lookup, cached; raises when ineligible."""
+        if self.provider is not None:
+            return self.provider
+        if self.provider_error is not None:
+            raise RuntimeError_(self.provider_error)
+        try:
+            self.provider = select_coding_plan_provider()
+        except RuntimeError_ as exc:
+            self.provider_error = str(exc)
+            raise
+        return self.provider
+
+    def overlay_for(self, session: Session, model_id: str | None = None) -> dict[str, Any]:
+        choice = self.resolve_provider()
+        wanted = model_id or session.model_id or choice["default_model_id"]
+        if wanted not in choice["model_ids"]:
+            wanted = choice["default_model_id"]
+        return build_runtime_model(choice, wanted)
+
     def materialize(self, session: Session) -> str:
         """Create and subscribe the backend session on first real use."""
+        # Fail closed before spawning anything when no Coding Plan is eligible.
+        overlay = self.overlay_for(session)
         backend = self.ensure_backend()
         if session.backend_id is None:
             workspace = {"workspacePath": session.cwd, "workspaceKey": session.cwd}
+            # runtimeModel carries the desktop Coding Plan provider in memory;
+            # CLI 0.16.5 otherwise demands ~/.zcode/cli/config.json.
             result = backend.call(
-                "session/create", {"workspace": workspace, "mode": session.mode}
+                "session/create",
+                {"workspace": workspace, "mode": session.mode, "runtimeModel": overlay},
             ) or {}
             backend_id = (result.get("session") or {}).get("sessionId")
             if not backend_id:
@@ -488,13 +735,20 @@ class ZCodeAcpAgent:
             "type": "select",
             "options": [],
         }
+        if self.provider is not None:
+            model_option["options"] = [
+                {"value": f"{self.provider['provider_id']}\\{model_id}",
+                 "name": f"{model_id} ({self.provider['label']})"}
+                for model_id in self.provider["model_ids"]
+            ]
         if session.model_id:
             model_value = (
                 f"{session.provider_id}\\{session.model_id}"
                 if session.provider_id else session.model_id
             )
             model_option["currentValue"] = model_value
-            model_option["options"] = [{"value": model_value, "name": session.model_id}]
+            if not any(o["value"] == model_value for o in model_option["options"]):
+                model_option["options"].append({"value": model_value, "name": session.model_id})
         return [mode_option, model_option, thought_option]
 
     @staticmethod
@@ -763,8 +1017,19 @@ class ZCodeAcpAgent:
                 "promptCapabilities": {"embeddedContext": True},
             },
             "authMethods": [],
-            "agentInfo": {"name": ADAPTER_NAME, "version": ADAPTER_VERSION},
+            "agentInfo": {
+                "name": ADAPTER_NAME,
+                "version": ADAPTER_VERSION,
+                "_meta": {"zcode": self.provider_meta()},
+            },
         })
+
+    def provider_meta(self) -> dict[str, Any]:
+        """Secret-free provider/billing facts; read-only registry lookup."""
+        try:
+            return provider_facts(self.resolve_provider())
+        except RuntimeError_ as exc:
+            return {"plan": "unavailable", "reason": str(exc)}
 
     def on_session_new(self, rid: Any, params: dict[str, Any]) -> None:
         cwd = params.get("cwd") or self.default_cwd
@@ -789,9 +1054,19 @@ class ZCodeAcpAgent:
             with self.lock:
                 self.sessions[acp_id] = session
             if acp_id.startswith("sess_"):
+                # Fail closed before spawning when no Coding Plan is eligible.
+                overlay = self.overlay_for(session)
                 backend = self.ensure_backend()
                 workspace = {"workspacePath": cwd, "workspaceKey": cwd}
-                backend.call("session/resume", {"sessionId": acp_id, "workspace": workspace})
+                try:
+                    # Faithful resume keeps the session's own persisted model.
+                    backend.call("session/resume", {"sessionId": acp_id, "workspace": workspace})
+                except RuntimeError_:
+                    # A fresh app-server has no workspace catalog yet; the
+                    # overlay supplies the same Coding Plan provider in memory.
+                    backend.call("session/resume", {
+                        "sessionId": acp_id, "workspace": workspace, "runtimeModel": overlay,
+                    })
                 session.backend_id = acp_id
                 with self.lock:
                     self.by_backend[acp_id] = session
@@ -925,17 +1200,42 @@ class ZCodeAcpAgent:
                 })
             elif config_id == "model":
                 model = self.parse_model_value(text)
-                # Native login owns auth. Never attach apiKey / runtimeModel overlays.
+                choice = self.resolve_provider()
+                provider_id = model.get("providerId") or choice["provider_id"]
+                if provider_id != choice["provider_id"]:
+                    # Never switch billing paths silently: only the eligible
+                    # Coding Plan provider may be selected.
+                    self.respond(rid, error={
+                        "code": -32602,
+                        "message": (
+                            f"provider {provider_id} is not the enabled GLM Coding Plan "
+                            f"provider {choice['provider_id']}; refusing"
+                        ),
+                    })
+                    return
+                model_id = model.get("modelId") or ""
+                if model_id not in choice["model_ids"]:
+                    self.respond(rid, error={
+                        "code": -32602,
+                        "message": (
+                            f"model {model_id} is not offered by {provider_id} "
+                            f"(available: {', '.join(choice['model_ids'])})"
+                        ),
+                    })
+                    return
+                # The overlay re-registers the same provider in the backend's
+                # workspace catalog (desktop parity); runtime-only, not persisted.
                 self.ensure_backend().call(
                     "session/setModel",
                     {
                         "sessionId": backend_id,
-                        "model": model,
+                        "model": {"providerId": provider_id, "modelId": model_id},
+                        "runtimeModel": build_runtime_model(choice, model_id),
                         "persistAsWorkspaceLastUsed": False,
                     },
                 )
-                session.model_id = model.get("modelId")
-                session.provider_id = model.get("providerId")
+                session.model_id = model_id
+                session.provider_id = provider_id
             elif config_id in ("thought", "thoughtLevel", "thought_level"):
                 session.thought = text
                 self.ensure_backend().call(
