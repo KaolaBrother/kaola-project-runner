@@ -192,7 +192,11 @@ scripts/kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME \
   [--if-snapshot ID] [--force]
 ```
 
-`--repo` must resolve to the exact Git top-level. Session names match
+`--repo` must resolve to the exact Git top-level. A linked worktree is a valid Git top-level on
+both PTY and ACP and is not a transport refusal; preferring the consuming project's canonical
+project root is Agent guidance, so a Workflow child worktree is not required as `--repo`.
+Asking the CLI to invoke `workflow-next` is an Agent-selected prompt, not a Runner
+operation. Session names match
 `[A-Za-z0-9][A-Za-z0-9_.-]{0,79}`. Without `--text`, `send` reads non-empty stdin.
 
 Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,

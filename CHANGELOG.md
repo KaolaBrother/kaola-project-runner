@@ -21,6 +21,24 @@
   `permit` under this bridge settles only the reported `tool_call` status because the `claude -p`
   child has no stdin and no `--permission-prompt-tool`.
 
+- **Grok Bot install and UAT no longer depend on an impossible account-UI check** (Issue #56).
+  The account Skill list (Settings > Plugins > Yours) does not expose an account-private Skill
+  and a 1:1 Bot chat has no `/` discovery, so the guide's "verify the list shows exactly one
+  Skill and `/` offers it" step could never be satisfied. That gate is gone, and the
+  agent-facing guide and shared host reference now carry no account-UI discussion at all: only
+  the one native save, the execution-target binding, the locator and load, the read-only
+  preflight, and the real-use boundary. The attestation and worker `preflight` are stated to
+  establish placement on the bound target, not live use; a real-use smoke on one session stays
+  separately authorized and is never part of installation. Accepted `SKILL_EXPOSURE: PASS` is
+  not reopened. Delivery is unchanged — one thin account Skill, no Marketplace, no second
+  Skill, no new installation step — and `docs/grok-bot-host.md` records the reason once.
+
+- **Root-start plus in-session Workflow is the ordinary ownership default** (Issue #52).
+  For Workflow-backed work, start the runtime worker at the consuming project's canonical
+  project root and ask that CLI to invoke `workflow-next` so its Workflow creates or
+  recovers the child worktree. Linked-worktree starts and existing-run recovery stay
+  Agent decisions on both PTY and ACP; adapters do not gain a `.kw/worktrees` refusal.
+
 ## 0.3.1 — 2026-09-16
 
 - **Managed Skill install drift is advisory and repairable** (Issue #54).

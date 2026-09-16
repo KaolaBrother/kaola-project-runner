@@ -1201,5 +1201,98 @@ class Issue49WorkerIsolation(unittest.TestCase):
             self.assertNotIn(text, main)
 
 
+class Issue56NoAccountUiOnAgentSurfaces(unittest.TestCase):
+    """Issue #56: the Agent receives only what it needs to use the Skill, and no account-UI talk.
+
+    Grok Bot's account Skill list cannot expose this account-private Skill and a 1:1 Bot chat has
+    no slash discovery, so the old ``Settings > Plugins > Yours``/``/`` verification step was an
+    impossible gate. The owner's correction is not a counter-argument on the agent-facing
+    surfaces: the discussion is simply absent from them. The bridge, the guide, and the shared
+    host reference carry only the one save, the target binding, the locator and load, the
+    read-only preflight, and the real-use boundary. ``docs/grok-bot-host.md`` is the one
+    maintainer surface that records why, once. Three kinds of evidence stay distinct: the
+    accepted ``SKILL_EXPOSURE: PASS`` at ``bc8592d323864c30010b48ae724f329f8df6753e`` (the
+    account holds a loadable bridge), the attestation plus worker ``preflight`` (placement on the
+    bound target), and a separately authorized real-use smoke (actual runtime use).
+    """
+
+    # Account-UI vocabulary, and the specific gate phrasings that were removed.
+    UI_VOCABULARY = ("Plugins", "Yours", "slash discovery", "`/` discovery", "`/` completion", "account Skill list")
+    STALE_UI_GATES = ("lists exactly one Skill", "shows exactly one Skill", "`/` offers it",
+                      "and `/` offers", "enabled, and `/`", "delete the Skill under Settings")
+    # Everything the Grok Bot agent reads: the bridge it is saved as, and what it loads from ROOT.
+    AGENT_FACING = ("hosts/grok-bot/INSTALL.md", "templates/grok-bot/INSTALL.md.tmpl",
+                    "templates/grok-bot/bridge.md.tmpl", f"hosts/grok-bot/{ORCHESTRATOR_ID}.md",
+                    "templates/orchestrator/references/grok-bot-host.md",
+                    f"skills/{ORCHESTRATOR_ID}/references/grok-bot-host.md")
+
+    def read(self, relative: str) -> str:
+        return (PROJECT / relative).read_text(encoding="utf-8")
+
+    def test_agent_facing_surfaces_carry_no_account_ui_discussion_at_all(self) -> None:
+        offenders: list[str] = []
+        for relative in self.AGENT_FACING:
+            text = self.read(relative)
+            for token in self.UI_VOCABULARY + self.STALE_UI_GATES:
+                if token in text:
+                    offenders.append(f"{relative}: {token!r} (the Agent needs none of this)")
+        self.assertEqual(offenders, [])
+
+    def test_no_surface_gates_on_the_account_list_or_reopens_exposure(self) -> None:
+        offenders: list[str] = []
+        for relative in self.AGENT_FACING + ("docs/grok-bot-host.md",):
+            wrong = authorizes_wrong_move(self.read(relative), (
+                r"verify: settings", r"(?:verify|confirm|check) (?:that )?.{0,30}(?:skill list|Plugins|Yours)",
+                r"`/` (?:offers|lists|shows|exposes) it",
+                r"re-?(?:run|report|confirm) .{0,40}SKILL_EXPOSURE"))
+            if wrong:
+                offenders.append(f"{relative}: {wrong}")
+        self.assertEqual(offenders, [])
+
+    def test_no_surface_claims_the_read_only_step_proves_live_use(self) -> None:
+        for relative in self.AGENT_FACING + ("docs/grok-bot-host.md",):
+            wrong = authorizes_wrong_move(self.read(relative), (
+                r"preflight (?:proves|is proof of|confirms) (?:live|real|actual|runtime) use",
+                r"(?:attestation|preflight|step 3) (?:proves|means) (?:the Bot|the Agent) (?:can |is )?(?:actually )?us",
+                r"read-only .{0,30}(?:proves|is proof of) (?:live|real|actual|runtime) use"))
+            self.assertIsNone(wrong, f"{relative}: {wrong}")
+        # The guide separates placement from live use, in that order.
+        guide = normalize(self.read("hosts/grok-bot/INSTALL.md")).lower()
+        self.assertIn("establishes placement only, not live use", guide)
+        self.assertIn("separately authorized and is not part of installation", guide)
+        reference = normalize(self.read(f"skills/{ORCHESTRATOR_ID}/references/grok-bot-host.md")).lower()
+        self.assertIn("establishes placement on the bound target, not live use", reference)
+        self.assertIn("separately authorized and is never part of installation", reference)
+
+    def test_docs_record_the_reason_once_and_keep_the_three_evidence_kinds_distinct(self) -> None:
+        text = self.read("docs/grok-bot-host.md")
+        self.assertEqual(text.count("Plugins"), 1, "the maintainer note records the account UI exactly once")
+        self.assertIn("Historical note (Issue #56, recorded here only)", text)
+        lowered = normalize(text).lower()
+        for clause in ("those checks were impossible", "not installation or acceptance gates",
+                       "no account-ui discussion at all", "skill_exposure: pass",
+                       "establish **placement** on the bound target", "**actual runtime use** is a",
+                       "separately authorized scoped real-use smoke", "never part of installation"):
+            self.assertIn(clause, lowered, clause)
+
+    def test_the_minimal_installation_shape_is_unchanged(self) -> None:
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["skill_count"], 1)
+        guide, docs = self.read("hosts/grok-bot/INSTALL.md"), self.read("docs/grok-bot-host.md")
+        lowered = normalize(guide).lower()
+        # The whole Agent-facing spine and nothing more: one save, binding, locator, preflight, boundary.
+        for clause in ("one write", "--target local", "--target cloud", LOCATOR_COMMAND.lower(), "read-only preflight"):
+            self.assertIn(clause, lowered, clause)
+        self.assertEqual(len(re.findall(r"(?m)^## \d+\. ", guide)), 6, "no new installation step was added")
+        self.assertIn("never create a second one", guide)
+        self.assertIn("never publish this skill to a public or team marketplace", lowered)
+        wrong = authorizes_wrong_move(guide, (r"publish.{0,40}marketplace", r"import.{0,20}ZIP", r"second account Skill",
+                                              r"per-worker account Skills", r"runtime copy"))
+        self.assertIsNone(wrong, wrong)
+        self.assertIn("one thin account Skill", docs)
+        # The bridge body stays thin: the correction added nothing to it.
+        self.assertLessEqual(len(BRIDGE.read_bytes()), BUDGETS["bridge_bytes"])
+
+
 if __name__ == "__main__":
     unittest.main()

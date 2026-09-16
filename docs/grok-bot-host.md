@@ -218,10 +218,9 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
    `hosts/grok-bot/kaola-project-runner.md` (`bridge.json` `saveable: true`) as
    the private Skill `kaola-project-runner` (name/description from the
    frontmatter, resolved values in `bridge.json`; body after the closing
-   `---`); same-name update in place. Settings → Plugins → Yours shows exactly
-   one Skill; `/` offers it. This is the only account operation (no Marketplace,
-   credential, ZIP import, unofficial Sand or RPC path, or state hack). A
-   content-stage bridge is never saved.
+   `---`); same-name update in place. This is the only account operation (no
+   Marketplace, credential, ZIP import, unofficial Sand or RPC path, or state
+   hack). A content-stage bridge is never saved.
 2. **First configuration on Local Computer.** On the Mac the owner selects a
    clean checkout or worktree detached at R (the existing `main` checkout may
    hold untracked Workflow records and would be `dirty`) and an owner-selected
@@ -247,7 +246,25 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
    checkout (it refuses to overwrite a link it does not own, so remove a UAT
    link placed in its directory first) and then registered from that checkout.
 
-A saved bridge is not live adoption; this read-only UAT is the boundary.
+A saved bridge is not live adoption; this read-only UAT is the boundary. Three
+kinds of evidence stay distinct and none substitutes for another: Grok Bot's
+accepted `SKILL_EXPOSURE: PASS` at `bc8592d` settles that the account holds the
+loadable bridge; the locator attestation and the worker `preflight` establish
+**placement** on the bound target (ROOT, registration, consumer project,
+selected worker script, session presence); and **actual runtime use** is a
+separately authorized scoped real-use smoke against one existing project and
+session, never part of installation.
+
+Historical note (Issue #56, recorded here only). The guide and the shared host
+reference must never tell the Agent to confirm the write in Settings → Plugins →
+Yours or through `/` discovery, as they once did. That account list does not
+expose an account-private Skill and a 1:1 Bot chat offers no slash discovery, so
+those checks were impossible: they are not installation or acceptance gates and
+are never asked of the owner or the Bot again. The agent-facing guide and
+reference now carry no account-UI discussion at all, because the Agent needs only
+the one save, the target binding, the locator, the read-only preflight, and the
+real-use boundary.
+
 Routine-only heartbeat, takeover, `HUMAN_DECISION_REQUIRED` in this Bot
 conversation, and acceptance-before-finalize stay as stated in the main Skill
 and `skills/kaola-project-runner/references/grok-bot-host.md`.
@@ -263,8 +280,8 @@ the accepted revision, so a stale registration is refused). Cloud:
 then `register`. Rollback is a new pin commit naming an older R, applied the
 same way; the accepted pair itself is never rewritten. Cloud registration passes
 `--target cloud --expect-revision R` exactly like Local Computer. Removal: delete
-the Skill under Settings → Plugins → Yours and remove the locator link and its
-receipt (`rm "$BIN/kaola-project-runner-locate" "$BIN/.kaola-project-runner-locate.json"`,
+the account Skill through the same native write used to save it and remove the
+locator link and its receipt (`rm "$BIN/kaola-project-runner-locate" "$BIN/.kaola-project-runner-locate.json"`,
 or `./scripts/install-local.sh --uninstall --bin-links` for the installer-managed
 link). Do not Reset Agent Computer; do not stop unrelated workers.
 

@@ -66,3 +66,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 - Validate with `./scripts/validate.sh` and record exact outcomes. Live Cursor experiments use
   `cursor-grok-4.6-xhigh` with Fast disabled and never use `/model` as a read-only probe. A model
   mismatch remains evidence and must not disable communication.
+- Ordinary Workflow-backed work starts the worker session at the consuming project's canonical
+  project root and asks that runtime to invoke workflow-next in-session; the worker's Workflow
+  owns the child worktree. Linked-worktree starts and existing-run recovery are Agent
+  decisions, not transport gates.
