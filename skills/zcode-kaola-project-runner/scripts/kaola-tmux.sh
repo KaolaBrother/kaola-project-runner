@@ -52,7 +52,7 @@ PY
 }
 
 platform="${1:-}"; [[ -n "$platform" ]] || { usage; exit 2; }; shift
-case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode) ;; *) die "unknown platform: $platform" ;; esac
+case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode|droid) ;; *) die "unknown platform: $platform" ;; esac
 adapter_file="$script_dir/adapters/$platform.sh"; [[ -f "$adapter_file" ]] || die "adapter not installed"
 [[ -f "$OBSERVATION_HELPER" && -f "$RELAY" && -f "$RELAY_CLIENT" && -f "$MODEL_POLICY_HELPER" ]] || die "relay control plane is incomplete"
 # shellcheck source=/dev/null
@@ -103,6 +103,7 @@ if [[ "$permission_mode_given" != true ]]; then
     devin) permission_mode=dangerous ;;
     codex) permission_mode=agent-full-access ;;
     zcode) permission_mode=yolo ;;
+    droid) permission_mode=bypassPermissions ;;
   esac
 fi
 
@@ -160,6 +161,7 @@ if [[ "$transport" == acp ]]; then
       claude-code) acp_args+=(--mode bypassPermissions) ;;
       codex) acp_args+=(--mode agent-full-access) ;;
       zcode) acp_args+=(--mode yolo) ;;
+      droid) acp_args+=(--mode auto-high) ;;
     esac
   fi
   [[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")
@@ -180,7 +182,7 @@ repo="$(canonical_dir "$repo")"; git_root="$(git -C "$repo" rev-parse --show-top
 git_root="$(canonical_dir "$git_root")"; [[ "$git_root" == "$repo" ]] || die "--repo must name the Git root: $git_root"
 [[ "$session" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$ ]] || die "invalid session name"
 TMUX_SESSION_TARGET="=$session"
-if [[ "$platform" != claude-code && "$platform" != devin && "$platform" != codex && "$platform" != zcode && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
+if [[ "$platform" != claude-code && "$platform" != devin && "$platform" != codex && "$platform" != zcode && "$platform" != droid && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
 if [[ "$command_name" != start && "$command_name" != preflight && ( "$model_given" == true || "$effort_given" == true || "$tier_given" == true || "$fast_given" == true ) ]]; then die "model, effort, tier, and fast are start/preflight-only"; fi
 if [[ "$command_name" != start && "$permission_mode_given" == true ]]; then die "permission mode is start-only"; fi
 if [[ "$tier_given" == true ]]; then
@@ -211,6 +213,10 @@ elif [[ "$platform" == zcode ]]; then
   # CLI 0.16.5 --help: --mode/--permission-mode are build|edit|plan|yolo (legacy
   # alias also lists default). Packaged engine: yolo bypasses permission prompts.
   case "$permission_mode" in build|edit|plan|yolo|default) ;; *) die "unsupported ZCode permission mode" ;; esac
+elif [[ "$platform" == droid ]]; then
+  # Droid PTY: bypassPermissions maps to --skip-permissions-unsafe, the
+  # autonomy levels to --auto low|medium|high, manual to no flag.
+  case "$permission_mode" in bypassPermissions|low|medium|high|manual) ;; *) die "unsupported Droid permission mode" ;; esac
 else
   case "$permission_mode" in acceptEdits|auto|bypassPermissions|manual|dontAsk|plan) ;; *) die "unsupported Claude permission mode" ;; esac
 fi

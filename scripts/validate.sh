@@ -38,6 +38,7 @@ python3 "$repo_root/tests/contract/test-progressive-disclosure.py"
 python3 "$repo_root/tests/contract/test-issue-50-claude-acp-bridge.py"
 python3 "$repo_root/tests/contract/test-issue-50-runner-integration.py"
 python3 "$repo_root/tests/contract/test-zcode-acp-contract.py"
+python3 "$repo_root/tests/contract/test-droid-acp-contract.py"
 python3 "$repo_root/tests/contract/test-issue-51-runner-integration.py"
 python3 "$repo_root/tests/contract/test-issue-52-workflow-worktree.py"
 # Acceptance line "git diff --check clean": tracked changes must carry no whitespace errors.

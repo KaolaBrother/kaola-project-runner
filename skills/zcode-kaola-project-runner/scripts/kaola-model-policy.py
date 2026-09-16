@@ -139,6 +139,9 @@ def probes_for(platform: str) -> list[list[str]]:
         # supported reasoning levels, and per-model fast service tiers.
         "codex": [["debug", "models"], ["--help"]],
         "zcode": [["--help"]],
+        # Droid: `--version` plus read-only ~/.factory/settings.json model /
+        # reasoningEffort facts surface in the adapter preflight detail.
+        "droid": [["--version"]],
     }[platform]
 
 

@@ -31,7 +31,7 @@ HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
 MODEL_POLICY_HELPER = SCRIPT_DIR / "kaola-model-policy.py"
 FAST_VARIANT_SUFFIXES = ("-fast", "-priority")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
-PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode", "zcode")
+PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode")
 START_WAIT = 20.0
 SESSION_PREFIX = "kaola"
 # Issue #22: default start sets session/set_config_option configId=mode to each
@@ -42,8 +42,30 @@ ACP_SKIP_MODE = {
     "claude-code": "bypassPermissions",
     "codex": "agent-full-access",
     "devin": "bypass",
+    "droid": "auto-high",
     "kimi-cli": "yolo",
     "zcode": "yolo",
+}
+
+# A platform whose ACP autonomy option is not named "mode". Droid declares its
+# config options (autonomy_level, model, reasoning_effort) in the session/new
+# result, so the mode branch must target `autonomy_level`; every other
+# platform keeps the default "mode" configId byte-for-byte.
+ACP_MODE_CONFIG_ID = {
+    "droid": "autonomy_level",
+}
+
+# Runner permission-mode names are not Droid autonomy_level values; translate
+# them before sending so a caller-permission-mode mapping on ACP stays the
+# semantic equivalent of the PTY --permission-mode mapping.
+ACP_MODE_VALUE_MAP = {
+    "droid": {
+        "bypassPermissions": "auto-high",
+        "high": "auto-high",
+        "medium": "auto-medium",
+        "low": "auto-low",
+        "manual": "normal",
+    },
 }
 
 # A manifest ``acp_command`` may name files shipped inside the Skill with this
@@ -1266,6 +1288,11 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         )
         application: dict[str, Any] = {}
         mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
+        # A platform whose option values are not the Runner permission-mode
+        # names (droid: autonomy_level) translates before sending; unknown
+        # values pass through so the agent's rejection stays a limitation.
+        if args.platform in ACP_MODE_VALUE_MAP:
+            mode_value = ACP_MODE_VALUE_MAP[args.platform].get(mode_value, mode_value)
         # Model first, then effort, then Fast — the ACP config order the
         # upstream adapter expects.
         option_pairs = [
@@ -1392,7 +1419,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                     receipt["fast"] = fast_report(args, policy, "none", False)
         if mode_value and "error" not in receipt:
             if args.platform in ACP_SKIP_MODE:
-                config_id = "mode"
+                config_id = ACP_MODE_CONFIG_ID.get(args.platform, "mode")
             else:
                 config_id = ""
             if not config_id:

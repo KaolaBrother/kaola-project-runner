@@ -52,6 +52,9 @@ case "${WRONG_PROCESS_PLATFORM:?}" in
   codex)
     printf '%s\n' 'OpenAI Codex' '› Ask Codex to do anything'
     ;;
+  droid)
+    printf '%s\n' 'Droid' 'Waiting for response' 'Press Esc to interrupt' '❯'
+    ;;
 esac
 
 printf 'argv0=%s\nargv1=%s\nargv2=%s\n' "$0" "${1-}" "${2-}" >"${WRONG_PROCESS_ARGS_LOG:?}"
@@ -112,15 +115,16 @@ set_runtime_binary() {
     kimi-cli) KIMI_BIN="$path" ;;
     cursor-cli) CURSOR_AGENT_BIN="$path" ;;
     codex) CODEX_BIN="$path" ;;
+    droid) DROID_BIN="$path" ;;
   esac
-  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN CODEX_BIN
+  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN CODEX_BIN DROID_BIN
 }
 
 issue_setup
 trap issue_cleanup EXIT
 
 wrong_shell="$(make_wrong_shell)"
-platforms=(grok claude-code opencode kimi-cli cursor-cli codex)
+platforms=(grok claude-code opencode kimi-cli cursor-cli codex droid)
 
 for platform in "${platforms[@]}"; do
   repo="$(issue_new_repo "wrong-process-$platform")"
@@ -162,6 +166,7 @@ for platform in "${platforms[@]}"; do
     kimi-cli) spoof_marker='Kimi Code' ;;
     cursor-cli) spoof_marker='Cursor Agent' ;;
     codex) spoof_marker='OpenAI Codex' ;;
+    droid) spoof_marker='Droid' ;;
   esac
   grep -Fq "$spoof_marker" <<<"$pane_before" || \
     fail "test_${platform}_wrong_process_is_spoofed_but_owned" "fixture did not expose spoofed runtime marker: $pane_before"

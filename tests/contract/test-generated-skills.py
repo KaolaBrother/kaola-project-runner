@@ -73,6 +73,12 @@ PLATFORMS = {
         "prompt": "Use $zcode-kaola-project-runner to start an exact ZCode tmux session, read its output, and send only the input I choose.",
         "tokens": ("zcode", "zcode-kaola-project-runner"),
     },
+    "droid-kaola-project-runner": {
+        "display": "Droid Kaola Project Runner",
+        "short": "Communicate with Droid through exact tmux",
+        "prompt": "Use $droid-kaola-project-runner to start an exact Droid tmux session, read its output, and send only the input I choose.",
+        "tokens": ("droid", "droid-kaola-project-runner"),
+    },
 }
 
 REQUIRED = ("SKILL.md", "agents/openai.yaml")

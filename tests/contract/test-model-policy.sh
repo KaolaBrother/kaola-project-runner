@@ -313,6 +313,23 @@ while (( index < ${#args[@]} )); do
       effort="${args[$index]:-}"
       ;;
     --effort=*|--reasoning-effort=*|--variant=*) effort="${argument#*=}" ;;
+    --settings)
+      index=$((index + 1))
+      if [[ -n "${args[$index]:-}" && -r "${args[$index]}" ]]; then
+        read -r settings_model settings_effort < <(SETTINGS_PATH="${args[$index]}" python3 - <<'PY'
+import json
+import os
+try:
+    data = json.load(open(os.environ["SETTINGS_PATH"], encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+print((str(data.get("model") or "")) + " " + (str(data.get("reasoningEffort") or "")))
+PY
+)
+        [[ -z "$selected" && -n "$settings_model" ]] && selected="$settings_model"
+        [[ -z "$effort" && -n "$settings_effort" ]] && effort="$settings_effort"
+      fi
+      ;;
     -c|--config)
       index=$((index + 1))
       case "${args[$index]:-}" in
@@ -375,6 +392,7 @@ case "$runtime" in
   cursor-cli) title=Cursor ;;
   devin) title=Devin ;;
   codex) title='OpenAI Codex' ;;
+  droid) title=droid ;;
 esac
 printf '\033]0;%s\007' "$title"
 printf '%s\n' "$title Kaola TUI"
@@ -411,7 +429,7 @@ trap issue_cleanup EXIT
 repo="$(issue_new_repo model-policy)"
 export KAOLA_START_TIMEOUT=4
 
-platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex)
+platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex droid)
 for platform in "${platforms[@]}"; do
   case "$platform" in
     claude-code)
@@ -448,6 +466,11 @@ for platform in "${platforms[@]}"; do
       default_name='GPT-5.6 Sol High'; default_id=gpt-5.6-sol; default_effort=high; binary_env=CODEX_BIN
       upgrade_name='GPT-6 Astra High'; upgrade_id=gpt-6-astra; upgrade_effort=high
       override_id=gpt-6-astra; override_effort=high
+      ;;
+    droid)
+      default_name='Auto Model'; default_id=auto; default_effort=''; binary_env=DROID_BIN
+      upgrade_name='Auto Model'; upgrade_id=auto; upgrade_effort=''
+      override_id=gpt-5.6-sol; override_effort=high
       ;;
   esac
 

@@ -58,6 +58,7 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 | codex | `codex-kaola-project-runner` | Codex CLI Kaola Project Runner | acp |
 | cursor-cli | `cursor-cli-kaola-project-runner` | Cursor CLI Kaola Project Runner | acp |
 | devin | `devin-kaola-project-runner` | Devin CLI Kaola Project Runner | acp |
+| droid | `droid-kaola-project-runner` | Droid Kaola Project Runner | acp |
 | grok | `grok-kaola-project-runner` | Grok Kaola Project Runner | acp |
 | kimi-cli | `kimi-cli-kaola-project-runner` | Kimi CLI Kaola Project Runner | acp |
 | opencode | `opencode-kaola-project-runner` | OpenCode Kaola Project Runner | acp |

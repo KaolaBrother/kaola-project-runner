@@ -42,7 +42,7 @@ make_fixture() {
   mkdir -p "$root/skills/kaola-project-runner"
   printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
-  for id in grok claude-code opencode kimi-cli cursor-cli devin codex zcode; do
+  for id in grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;
       claude-code) name=claude-code-kaola-project-runner ;;
@@ -52,6 +52,7 @@ make_fixture() {
       devin) name=devin-kaola-project-runner ;;
       codex) name=codex-kaola-project-runner ;;
       zcode) name=zcode-kaola-project-runner ;;
+      droid) name=droid-kaola-project-runner ;;
     esac
     mkdir -p "$root/skills/$name"
     printf '%s\n' "$name" >"$root/skills/$name/.generated-by-kaola-project-runner"
@@ -71,19 +72,19 @@ run_installer() {
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/kaola-installer-issue-1.XXXXXX")"
 trap 'rm -rf "$tmp_root"' EXIT
 
-ids=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode)
-names=(grok-kaola-project-runner claude-code-kaola-project-runner opencode-kaola-project-runner kimi-cli-kaola-project-runner cursor-cli-kaola-project-runner devin-kaola-project-runner codex-kaola-project-runner zcode-kaola-project-runner)
+ids=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid)
+names=(grok-kaola-project-runner claude-code-kaola-project-runner opencode-kaola-project-runner kimi-cli-kaola-project-runner cursor-cli-kaola-project-runner devin-kaola-project-runner codex-kaola-project-runner zcode-kaola-project-runner droid-kaola-project-runner)
 
 if [[ ! -f "$installer_source" ]]; then
   fail "test_installer_exists" "missing $installer_source"
 else
-  # A normal install must atomically prepare all eight workers plus the orchestrator.
+  # A normal install must atomically prepare all nine workers plus the orchestrator.
   repo="$tmp_root/repo-all"
   codex="$tmp_root/codex-all"
   make_fixture "$repo"
-  output="$(run_installer "$repo" "$codex" --method link 2>&1)" || fail "test_install_all_eight" "install failed: $output"
+  output="$(run_installer "$repo" "$codex" --method link 2>&1)" || fail "test_install_all_nine" "install failed: $output"
   for i in "${!ids[@]}"; do
-    assert_link "test_install_all_eight_${ids[$i]}" "$codex/skills/${names[$i]}" "$(source_for "$repo" "${names[$i]}")"
+    assert_link "test_install_all_nine_${ids[$i]}" "$codex/skills/${names[$i]}" "$(source_for "$repo" "${names[$i]}")"
   done
   assert_link "test_install_all_includes_orchestrator" "$codex/skills/kaola-project-runner" \
     "$(source_for "$repo" kaola-project-runner)"

@@ -155,6 +155,13 @@ receipt.setdefault("files", {})[relative] = {
 receipt_path.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
 PY
       ;;
+    droid)
+      # Droid's Kaola carrier lives in its native config home (same root as
+      # ~/.factory/settings.json); the adapter reads it read-only as evidence.
+      mkdir -p "$HOME/.factory/skills/workflow-next" "$HOME/.factory/skills/kaola-workflow-finalize"
+      printf '%s\n' workflow-next >"$HOME/.factory/skills/workflow-next/SKILL.md"
+      printf '%s\n' finalize >"$HOME/.factory/skills/kaola-workflow-finalize/SKILL.md"
+      ;;
   esac
 }
 
@@ -168,8 +175,9 @@ runtime_env() {
     cursor-cli) CURSOR_AGENT_BIN="$path" ;;
     devin) DEVIN_BIN="$path" ;;
     codex) CODEX_BIN="$path" ;;
+    droid) DROID_BIN="$path" ;;
   esac
-  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN DEVIN_BIN CODEX_BIN
+  export GROK_BIN CLAUDE_BIN OPENCODE_BIN KIMI_BIN CURSOR_AGENT_BIN DEVIN_BIN CODEX_BIN DROID_BIN
 }
 
 runtime_env_name() {
@@ -181,6 +189,7 @@ runtime_env_name() {
     cursor-cli) printf '%s\n' CURSOR_AGENT_BIN ;;
     devin) printf '%s\n' DEVIN_BIN ;;
     codex) printf '%s\n' CODEX_BIN ;;
+    droid) printf '%s\n' DROID_BIN ;;
   esac
 }
 
@@ -207,7 +216,7 @@ else
   export CODEX_HOME="$issue_tmp_root/codex-home"
   export KAOLA_START_TIMEOUT=3
 
-  platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex)
+  platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex droid)
   for platform in "${platforms[@]}"; do
     IFS=$'\t' read -r fake log < <(issue_make_fake_runtime "$platform")
     fake_paths+=("$fake")
@@ -222,6 +231,7 @@ else
       cursor-cli) runtime_session_id=cursor-fixture ;;
       devin) runtime_session_id=devin-fixture-session ;;
       codex) runtime_session_id=codex-fixture-session ;;
+      droid) runtime_session_id=7f9c8d1e-2b3a-4c5d-8e6f-1a2b3c4d5e6f ;;
     esac
     export FAKE_RUNTIME_NAME="$platform" FAKE_RUNTIME_LOG="$log" FAKE_RUNTIME_SESSION_ID="$runtime_session_id"
 
@@ -297,6 +307,23 @@ else
       grep -Fq -- 'model_reasoning_effort=\"high\"' <<<"$log_text" || fail "test_${platform}_runner_default_effort" "Codex launch lacks -c model_reasoning_effort override: $log_text"
       grep -Fq -- 'service_tier=\"default\"' <<<"$log_text" || fail "test_${platform}_runner_default_fast_off" "Codex launch lacks -c service_tier default: $log_text"
       grep -Fq -- '--sandbox danger-full-access --ask-for-approval never' <<<"$log_text" || fail "test_${platform}_no_flag_permission_mode" "No-flag Codex PTY start must launch with danger-full-access/never: $log_text"
+    elif [[ "$platform" == droid ]]; then
+      grep -Fq $'cwd='"$canonical_repo"$'\targs=' <<<"$log_text" || fail "test_${platform}_new_launch" "runtime did not start from canonical repo cwd: $log_text"
+      grep -Fq -- '--skip-permissions-unsafe' <<<"$log_text" || fail "test_${platform}_no_flag_permission_bypass" "No-flag Droid PTY start must launch with --skip-permissions-unsafe: $log_text"
+      grep -Eq -- '--auto (low|medium|high)' <<<"$log_text" && fail "test_${platform}_no_flag_no_auto_flag" "No-flag Droid PTY start must not add --auto: $log_text"
+      settings_path="$(sed -nE 's/.*--settings ([^ ]+).*/\1/p' <<<"$log_text" | tail -1)"
+      [[ -n "$settings_path" && -f "$settings_path" ]] || fail "test_${platform}_settings_overlay" "no process-scoped --settings file in launch: $log_text"
+      DROID_SETTINGS_JSON="$(cat "$settings_path")" python3 -c 'import json,os; d=json.loads(os.environ["DROID_SETTINGS_JSON"]); assert d == {"model": "auto"}, d' || \
+        fail "test_${platform}_settings_overlay" "default overlay must pin model=auto only: $(cat "$settings_path")"
+      # Explicit --model/--effort travel in the same process-scoped overlay.
+      explicit_session="${platform}-explicit-$$"
+      run_runner "$platform" start --repo "$repo" --session "$explicit_session" --model gpt-5.6-sol --effort high >/dev/null || \
+        fail "test_${platform}_explicit_model_launch" "explicit model/effort start failed"
+      run_runner "$platform" stop --repo "$repo" --session "$explicit_session" --force >/dev/null || "$issue_tmux_bin" kill-session -t "=$explicit_session" 2>/dev/null || true
+      explicit_log="$(cat "${fake_logs[$(( ${#fake_logs[@]} - 1 ))]}")"
+      explicit_settings="$(sed -nE 's/.*--settings ([^ ]+).*/\1/p' <<<"$explicit_log" | tail -1)"
+      DROID_SETTINGS_JSON="$(cat "$explicit_settings")" python3 -c 'import json,os; d=json.loads(os.environ["DROID_SETTINGS_JSON"]); assert d == {"model": "gpt-5.6-sol", "reasoningEffort": "high"}, d' || \
+        fail "test_${platform}_explicit_model_effort_overlay" "explicit overlay must pin model and reasoningEffort: $(cat "$explicit_settings")"
     else
       grep -Fq "args=--cwd $canonical_repo --minimal --always-approve" <<<"$log_text" || fail "test_${platform}_new_launch" "Grok launch lacks --cwd/--minimal/--always-approve shape: $log_text"
     fi
@@ -312,6 +339,10 @@ else
         grep -Fq -- 'args=resume --last' <<<"$log_text" || fail "test_${platform}_continue_launch" "Codex continue must be resume --last: $log_text"
         grep -Fq -- '--all' <<<"$log_text" && fail "test_${platform}_continue_launch" "Codex continue must never use --all: $log_text"
         ;;
+      droid)
+        grep -Fq -- 'args=--resume --last' <<<"$log_text" || fail "test_${platform}_continue_launch" "Droid continue must be --resume --last: $log_text"
+        grep -Fq -- '--continue' <<<"$log_text" && fail "test_${platform}_continue_launch" "Droid continue must never use --continue: $log_text"
+        ;;
       *) grep -Fq -- '--continue' <<<"$log_text" || fail "test_${platform}_continue_launch" "--continue absent from invocation: $log_text" ;;
     esac
 
@@ -324,7 +355,7 @@ else
     case "$platform" in
       opencode|kimi-cli) grep -Fq -- '--session' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "session option absent: $log_text" ;;
       codex) grep -Fq -- "args=resume $resume_value" <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume subcommand absent: $log_text" ;;
-      grok|claude-code|cursor-cli|devin) grep -Fq -- '--resume' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume option absent: $log_text" ;;
+      grok|claude-code|cursor-cli|devin|droid) grep -Fq -- '--resume' <<<"$log_text" || fail "test_${platform}_exact_resume_launch" "resume option absent: $log_text" ;;
     esac
 
     # Surface absence is advisory evidence and never refuses CLI communication.
@@ -347,6 +378,9 @@ else
       cursor-cli)
         rm "$CURSOR_HOME/kaola-workflow/cursor-authority.json"
         ;;
+      droid)
+        rm "$HOME/.factory/skills/workflow-next/SKILL.md"
+        ;;
       grok)
         # Grok's inspect authority is controlled by the fake runtime output;
         # the missing-surface case is covered by a second fixture below.
@@ -357,7 +391,7 @@ else
         fail "test_${platform}_missing_kaola_surface_advisory" "preflight blocked CLI communication: $missing_surface"
       json_assert "test_${platform}_missing_kaola_surface_advisory" "d['result'] == 'ready' and d['platform'] == '$platform'" "$missing_surface"
       case "$platform" in
-        claude-code|opencode|kimi-cli|devin|codex)
+        claude-code|opencode|kimi-cli|devin|codex|droid)
           json_assert "test_${platform}_missing_kaola_surface_evidence" "not d['workflow_next'] and not d['kaola_workflow_finalize']" "$missing_surface"
           ;;
         cursor-cli)

@@ -46,11 +46,11 @@ project-local paths) and is mutually exclusive with --runtime.
 receipt. --method link is an explicit development choice that symlinks each
 Skill to this checkout. An owned source link migrates to a copy on a default
 or --method copy reinstall.
-Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex, zcode
+Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex, zcode, droid
 --platform filters worker Skills only. The main Skill kaola-project-runner
 (display name Project Runner) is installed for every destination unless
 --no-orchestrator is passed. It is not a platform ID.
-With no --platform, installs all eight worker Skills plus the orchestrator
+With no --platform, installs all nine worker Skills plus the orchestrator
 (unless skipped). With no destination flags the legacy Codex destination is
 used. Existing foreign paths are never replaced.
 --bin-links also manages the $HOME/.local/bin/kaola-acp* helper links and the
@@ -70,6 +70,7 @@ skill_name_for() {
     devin) printf '%s\n' 'devin-kaola-project-runner' ;;
     codex) printf '%s\n' 'codex-kaola-project-runner' ;;
     zcode) printf '%s\n' 'zcode-kaola-project-runner' ;;
+    droid) printf '%s\n' 'droid-kaola-project-runner' ;;
     *) return 1 ;;
   esac
 }
@@ -171,7 +172,7 @@ else
 fi
 
 if [[ ${#selection[@]} -eq 0 ]]; then
-  selection=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode)
+  selection=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid)
 fi
 
 deduped=()
