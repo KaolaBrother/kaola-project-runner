@@ -792,6 +792,8 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
 
 
 SPAWN_RECORD_TOLERANCE = 5.0
+SPAWN_RECORD_SLACK = 1.0
+PS_ENV = {**os.environ, "LC_ALL": "C"}
 
 
 def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> list[int]:
@@ -800,7 +802,8 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
     children the agent itself recorded at spawn in ``children.jsonl`` under
     the record directory. A child group counts only while a recorded member
     pid is still alive in that group with its recorded start time (holder
-    note) or a start time within SPAWN_RECORD_TOLERANCE of the recorded spawn
+    note) or a start time at or before the recorded spawn and within
+    SPAWN_RECORD_TOLERANCE of it
     (spawn record), so a reused pid or group id is never touched."""
     groups: list[int] = []
     pgid = record.get("agent_pgid")
@@ -821,8 +824,11 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
             pass
     if not children and not spawned:
         return groups
+    # ``lstart`` is rendered in the caller's locale on macOS: pin C so it
+    # parses and matches what the holder recorded under the same pin.
     table = subprocess.run(
-        ["ps", "-axo", "pid=,pgid=,state=,lstart="], capture_output=True, text=True
+        ["ps", "-axo", "pid=,pgid=,state=,lstart="], capture_output=True, text=True,
+        env=PS_ENV,
     )
     by_pid: dict[int, tuple[int, str]] = {}
     for line in table.stdout.splitlines():
@@ -847,7 +853,8 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
             started = time.mktime(time.strptime(live[1], "%a %b %d %H:%M:%S %Y"))
         except ValueError:
             continue
-        if abs(started - spawned_at / 1000.0) <= SPAWN_RECORD_TOLERANCE:
+        delta = spawned_at / 1000.0 - started
+        if -SPAWN_RECORD_SLACK <= delta <= SPAWN_RECORD_TOLERANCE:
             groups.append(child)
     return groups
 

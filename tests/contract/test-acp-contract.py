@@ -1350,6 +1350,10 @@ class StoppedStatusTests(unittest.TestCase):
                     spawn_record.write_text(json.dumps(stale) + "\n")
                     self.assertNotIn(child.pid, module.recorded_groups(record, directory),
                                      "an entry whose spawn time does not match the live process is ignored")
+                    early = dict(stale, spawned_at=spawned_at - 3_000)
+                    spawn_record.write_text(json.dumps(early) + "\n")
+                    self.assertNotIn(child.pid, module.recorded_groups(record, directory),
+                                     "a process that started after its recorded spawn is not the recorded child")
                     self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"], "stopped")
                     spawn_record.write_text("not json\n" + json.dumps({"pid": "x"}) + "\n")
                     self.assertEqual(module.holder_lost_receipt(args, "/unused", record)["outcome"], "stopped")

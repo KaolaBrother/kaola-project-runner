@@ -63,10 +63,17 @@ def process_alive(pid: int) -> bool:
     return True
 
 
+PS_ENV = {**os.environ, "LC_ALL": "C"}
+
+
 def process_table() -> list[tuple[int, int, int, str]]:
-    """Live (non-zombie) processes as (pid, ppid, pgid, start time)."""
+    """Live (non-zombie) processes as (pid, ppid, pgid, start time). ``ps``
+    renders ``lstart`` in the caller's locale on macOS; pin C so the text is
+    the ctime layout ``start_epoch`` parses and stays comparable between the
+    holder that recorded it and a later CLI process under another locale."""
     result = subprocess.run(
-        ["ps", "-axo", "pid=,ppid=,pgid=,state=,lstart="], capture_output=True, text=True
+        ["ps", "-axo", "pid=,ppid=,pgid=,state=,lstart="], capture_output=True, text=True,
+        env=PS_ENV,
     )
     rows: list[tuple[int, int, int, str]] = []
     for line in result.stdout.splitlines():
@@ -107,12 +114,22 @@ def child_groups(root_pid: int, root_pgid: int,
 
 CHILD_RECORD_NAME = "children.jsonl"
 # ``ps lstart`` is truncated to the second and the agent records ``Date.now()``
-# only after ``spawn`` returned, so a genuine child sits a fraction of a second
-# to a few seconds after its recorded time. The window is a reuse guard, not a
-# clock: matching a different process would need this pid to be freed and
-# handed to a new process-group leader inside it, which sequential pid
-# allocation cannot do in seconds.
+# only after ``spawn`` returned, so a genuine child's start time is at or
+# before its recorded time, by under a second plus the spawn latency. The
+# window is a reuse guard, not a clock: matching a different process would
+# need this pid to be freed and handed to a new process-group leader inside
+# it, which sequential pid allocation cannot do in seconds. A process that
+# started after the record (beyond one second of clock slack) is never the
+# recorded child.
 SPAWN_RECORD_TOLERANCE = 5.0
+SPAWN_RECORD_SLACK = 1.0
+
+
+def spawn_time_matches(started: float, spawned_ms: float) -> bool:
+    """Whether a live start time (epoch seconds, second granularity) can be
+    the child recorded at ``spawned_ms``."""
+    delta = spawned_ms / 1000.0 - started
+    return -SPAWN_RECORD_SLACK <= delta <= SPAWN_RECORD_TOLERANCE
 
 
 def start_epoch(started: str) -> float | None:
@@ -127,8 +144,9 @@ def live_spawn_entries(path: Path, table: list[tuple[int, int, int, str]] | None
                        ) -> list[tuple[dict[str, Any], str]]:
     """Entries of the agent's spawn record (`KAOLA_ACP_CHILD_RECORD`, one JSON
     line per child: pid, pgid, spawned_at ms) whose identity still holds:
-    that pid is alive in that group with a start time within
-    SPAWN_RECORD_TOLERANCE of the recorded spawn, so a reused pid is ignored.
+    that pid is alive in that group with a start time at or before the
+    recorded spawn and within SPAWN_RECORD_TOLERANCE of it, so a reused pid
+    is ignored.
     Each is returned with the live start time. This is what still identifies
     a child whose agent died before forwarding any output about it."""
     try:
@@ -151,7 +169,7 @@ def live_spawn_entries(path: Path, table: list[tuple[int, int, int, str]] | None
         if live is None or live[0] != pgid:
             continue
         started = start_epoch(live[1])
-        if started is None or abs(started - spawned / 1000.0) > SPAWN_RECORD_TOLERANCE:
+        if started is None or not spawn_time_matches(started, spawned):
             continue
         live_entries.append((entry, live[1]))
     return live_entries

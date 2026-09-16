@@ -325,8 +325,8 @@ see the path. The file is trusted exactly like `record.json` (same-user writable
 root); the holder rewrites it at each agent start keeping only entries whose identity still holds.
 Noted groups are recorded as `agent_child_pgids` with the member pids and start times seen
 (`agent_child_groups`); after the agent group the holder sweeps every recorded group in which a
-recorded member is still alive under its recorded start time, or under a start time within five
-seconds of its recorded spawn (SIGTERM, grace, SIGKILL), so a reused pid or group id is never
+recorded member is still alive under its recorded start time, or under a start time at or before
+its recorded spawn and within five seconds of it (SIGTERM, grace, SIGKILL), so a reused pid or group id is never
 signalled; the stop receipt lists the signalled groups as `swept_child_pgids` and `residual_pids`
 covers them. A holder-lost `stop --force` applies the same identity checks to `record.json` and
 `children.jsonl`, SIGKILLs the live members of the recorded agent group plus the confirmed child

@@ -355,9 +355,9 @@ def test_force_stop_sweeps_detached_claude_groups() -> None:
     holder (record-based force stop)."""
     sandbox = Sandbox("force")
     try:
-        def hanging_turn(index: int, label: str, mode: str = "hang") -> tuple[str, dict]:
+        def hanging_turn(index: int, label: str, mode: str = "hang", **env: str) -> tuple[str, dict]:
             session = sandbox.session()
-            receipt = sandbox.cli(SKILL_CLI, "start", session=session)
+            receipt = sandbox.cli(SKILL_CLI, "start", session=session, **env)
             check(receipt.get("error") is None and receipt["state"] == "ready", f"{label}: start reaches ready")
             receipt = sandbox.cli(SKILL_CLI, "send", "--text", f"[{mode}]{label}", "--no-wait", session=session)
             check(receipt["outcome"] == "in_progress", f"{label}: hanging prompt accepted")
@@ -445,6 +445,28 @@ def test_force_stop_sweeps_detached_claude_groups() -> None:
         check(rec["pgid"] in receipt.get("swept_pgids", []), "silent-holder-lost: the never-announced claude group was swept")
         expect_gone(rec, "silent-holder-lost")
 
+        # G/H: macOS `ps` localises `lstart` from the caller's locale; the holder
+        # inherits it from `start`, the holder-lost path from `stop`. Identity
+        # must still hold when either runs under a non-English locale.
+        session, rec = hanging_turn(5, "silent-zh-holder", mode="silent", LC_ALL="zh_CN.UTF-8")
+        status = sandbox.cli(SKILL_CLI, "status", session=session)
+        os.kill(status["agent_pid"], signal.SIGKILL)
+        wait_until(lambda: not pid_alive(status["agent_pid"]), 5, "silent-zh-holder: bridge killed")
+        receipt = sandbox.cli(SKILL_CLI, "stop", "--force", session=session)
+        check(receipt.get("error") is None and receipt.get("residual_pids") == [], "silent-zh-holder: force stop reports no residual pids")
+        check(rec["pgid"] in receipt.get("swept_child_pgids", []), "silent-zh-holder: a holder started under zh_CN still identifies the never-announced child")
+        expect_gone(rec, "silent-zh-holder")
+
+        session, rec = hanging_turn(6, "silent-de-holder-lost", mode="silent")
+        status = sandbox.cli(SKILL_CLI, "status", session=session)
+        for pid in (status["holder_pid"], status["agent_pid"]):
+            os.kill(pid, signal.SIGKILL)
+        wait_until(lambda: not pid_alive(status["holder_pid"]) and not pid_alive(status["agent_pid"]), 5, "silent-de-holder-lost: holder and bridge killed")
+        receipt = sandbox.cli(SKILL_CLI, "stop", "--force", session=session, LC_ALL="de_DE.UTF-8")
+        check(receipt.get("holder_lost") is True and receipt.get("residual_pids") == [], "silent-de-holder-lost: record-based force stop reports no residual pids")
+        check(rec["pgid"] in receipt.get("swept_pgids", []), "silent-de-holder-lost: a stop under de_DE still identifies the never-announced child")
+        expect_gone(rec, "silent-de-holder-lost")
+
         # F: a later start of the same session compacts the spawn record so only
         # entries whose identity still holds survive (the swept child's is gone).
         def spawn_record_lines() -> list[dict]:
@@ -459,7 +481,7 @@ def test_force_stop_sweeps_detached_claude_groups() -> None:
         receipt = sandbox.cli(SKILL_CLI, "send", "--text", "after-restart", session=session)
         check(receipt["final_text"] == "echo:after-restart", "restart: a turn completes")
         lines = spawn_record_lines()
-        check([entry["pid"] for entry in lines] == [sandbox.records()[5]["pid"]],
+        check([entry["pid"] for entry in lines] == [sandbox.records()[7]["pid"]],
               "restart: the spawn record holds exactly this instance's child")
         receipt = sandbox.cli(SKILL_CLI, "stop", session=session)
         check(receipt.get("error") is None and receipt.get("residual_pids") == [], "restart: stop reports no residual pids")

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readdirSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readdirSync, readFileSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
@@ -12,6 +12,10 @@ import type { ChildProcess } from "node:child_process";
 vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, appendFileSync: vi.fn(actual.appendFileSync) };
+});
 
 import { spawn } from "node:child_process";
 import { ClaudeRunner, ClaudeBinaryError, resolveClaudeBinary } from "../src/claude-runner.js";
@@ -137,12 +141,13 @@ describe("per-session launch options", () => {
     }
   });
 
-  it("spawns without a record file when KAOLA_ACP_CHILD_RECORD is unset", async () => {
+  it("writes no spawn record when KAOLA_ACP_CHILD_RECORD is unset", async () => {
     delete process.env.KAOLA_ACP_CHILD_RECORD;
+    vi.mocked(appendFileSync).mockClear();
     const runner = new ClaudeRunner(config());
     mockSpawn.mockReturnValue(streamProcess([]));
     await runner.startSessionStreaming("/tmp", "x", () => {});
-    expect(existsSync(join(tmpdir(), "children.jsonl"))).toBe(false);
+    expect(appendFileSync).not.toHaveBeenCalled();
   });
 
   it("keeps --dangerously-skip-permissions only without a permission mode", async () => {
