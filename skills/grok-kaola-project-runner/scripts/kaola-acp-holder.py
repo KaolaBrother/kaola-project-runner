@@ -1869,8 +1869,16 @@ class Holder:
             pgid = os.getpgid(proc.pid)
         except OSError:
             pgid = proc.pid
-        for child, members in child_groups(proc.pid, pgid).items():
-            self.agent_child_groups.setdefault(child, {}).update(members)
+        noted = child_groups(proc.pid, pgid)
+        if not noted:
+            return
+        # Copy-on-write: the reader thread notes here while op threads iterate
+        # the mapping in write_record/_terminate_group; rebinding a fresh dict
+        # keeps every iteration on a stable object.
+        merged = {child: dict(members) for child, members in self.agent_child_groups.items()}
+        for child, members in noted.items():
+            merged.setdefault(child, {}).update(members)
+        self.agent_child_groups = merged
 
     def _terminate_group(self, force: bool) -> list[int]:
         proc = self.agent.proc

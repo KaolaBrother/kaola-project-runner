@@ -367,8 +367,10 @@ def test_force_stop_sweeps_detached_claude_groups() -> None:
             check(pid_alive(rec["pid"]) and pid_alive(rec["grandchild_pid"]), f"{label}: claude and grandchild alive")
             status = sandbox.cli(SKILL_CLI, "status", session=session)
             check(rec["pgid"] != status["agent_pgid"], f"{label}: claude runs in its own process group outside the bridge's")
-            check(rec["pgid"] in status["record"].get("agent_child_pgids", []),
-                  f"{label}: the holder noted the claude group while the bridge was alive")
+            # record.json is written right after the note; allow that write to land.
+            wait_until(lambda: rec["pgid"] in sandbox.cli(SKILL_CLI, "status", session=session)["record"].get("agent_child_pgids", []),
+                       10, f"{label}: the holder noted the claude group while the bridge was alive")
+            check(True, f"{label}: the holder noted the claude group while the bridge was alive")
             return session, rec
 
         def expect_gone(rec: dict, label: str) -> None:

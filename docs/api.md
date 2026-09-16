@@ -319,8 +319,10 @@ accepted and again when stop begins, records them as `agent_child_pgids` with th
 start times seen (`agent_child_groups`), and after the agent group sweeps every recorded group in
 which a recorded member is still alive under its recorded start time (SIGTERM, grace, SIGKILL), so
 a reused group id is never signalled; the stop receipt lists the signalled groups as
-`swept_child_pgids` and `residual_pids` covers them. A holder-lost `stop --force` sweeps the recorded groups the same way
-(`swept_pgids`), and a recorded normal stop reads as `stopped` only when none of them is alive. Stopping never deletes CLI history, session records, or work artifacts,
+`swept_child_pgids` and `residual_pids` covers them. A holder-lost `stop --force` SIGKILLs the live
+members of the recorded agent group plus the identity-confirmed child groups at once and reports
+those groups as `swept_pgids`; a recorded normal stop reads as `stopped` only when none of them is
+alive. Stopping never deletes CLI history, session records, or work artifacts,
 and no completion signal (`end_turn`, idle frame, successful receipt) triggers or gates it. Resume is
 a separate Agent choice: `--resume <native-session-id>` (ACP `session/resume`/`session/load` per
 advertised capability, or the platform's PTY flag) or `--continue` for the platform's latest
