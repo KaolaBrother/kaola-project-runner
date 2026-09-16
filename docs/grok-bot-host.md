@@ -1,7 +1,7 @@
 # Grok Bot host
 
 Grok Bot is a Project Runner **host**, at the same rank as Codex, Claude Code,
-Cursor, and Devin. It is not an eighth CLI worker, and it is not an installer
+Cursor, and Devin. It is not a tenth CLI worker, and it is not an installer
 destination: it is a **bridge host**.
 
 | Id | Meaning | Flag |
