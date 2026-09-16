@@ -2,7 +2,7 @@
 
 These steps are for the owner and for Grok Bot itself. They are not a Skill. The account
 receives **exactly one** small private Skill, `kaola-project-runner` (Project Runner bridge,
-`hosts/grok-bot/kaola-project-runner.md`, 2317 bytes, stage `content`). Every policy,
+`hosts/grok-bot/kaola-project-runner.md`, 2280 bytes, stage `pinned`). Every policy,
 worker, reference, and script stays in the repository and is loaded on demand from a verified
 checkout on the bound execution target. Research on Grok Bot 0.51.0 found no supported automated
 way to create an account Skill (`NO_SUPPORTED_PATH`), so the one native skill write below is the
@@ -36,14 +36,14 @@ The Mac already holds a `KaolaBrother/kaola-project-runner` checkout; its `main`
 Workflow records and other local files, which the locator correctly reports as `dirty`. Do not
 weaken that check and do not assume any fixed path: the owner selects a clean checkout or
 worktree of the existing repository, detached at R, for example
-`git worktree add --detach <owner-chosen path> <accepted commit>` run on the Mac. The cloud
+`git worktree add --detach <owner-chosen path> 381b389e127a17893ea7d8698dfe0a824a859ff3` run on the Mac. The cloud
 Agent Computer never clones, installs, updates, or manages anything on the Mac. In the Bot with
 **Execution on Local Computer**, inside that workspace:
 
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"                       # the owner-selected clean checkout at R
-python3 "$ROOT/scripts/kaola-locate.py" register --expect-revision <accepted commit>   # validates origin/revision/clean first; links kaola-project-runner-locate into the installer's bin directory (--bin-dir DIR for another directory on PATH)
-kaola-project-runner-locate --target local --expect-revision <accepted commit>   # result must be "ok"
+python3 "$ROOT/scripts/kaola-locate.py" register --expect-revision 381b389e127a17893ea7d8698dfe0a824a859ff3   # validates origin/revision/clean first; links kaola-project-runner-locate into the installer's bin directory (--bin-dir DIR for another directory on PATH)
+kaola-project-runner-locate --target local --expect-revision 381b389e127a17893ea7d8698dfe0a824a859ff3   # result must be "ok"
 ```
 
 Record the `host.fingerprint` from the `register` receipt with the target: `--target` is the
@@ -57,7 +57,7 @@ again, and a refused registration leaves an existing locator unchanged.
 ## 3. Read-only preflight UAT against an existing local project and session
 
 ```bash
-kaola-project-runner-locate --target local --expect-revision <accepted commit> \
+kaola-project-runner-locate --target local --expect-revision 381b389e127a17893ea7d8698dfe0a824a859ff3 \
   --project /path/of/the/existing/local/project --worker <platform id> --session <existing-session-name>
 "$ROOT/skills/<platform id>-kaola-project-runner/scripts/runtime-tmux.sh" preflight --repo /path/of/the/existing/local/project --session <existing-session-name>
 ```
@@ -75,7 +75,7 @@ file.
 For a project that lives on the cloud computer, that computer chooses its own persistent
 directory, clones or updates its own checkout with its own existing Git or GitHub CLI
 authentication (`git clone https://github.com/KaolaBrother/kaola-project-runner.git` or
-`gh repo clone KaolaBrother/kaola-project-runner`, then `git checkout --detach <accepted commit>`), registers its
+`gh repo clone KaolaBrother/kaola-project-runner`, then `git checkout --detach 381b389e127a17893ea7d8698dfe0a824a859ff3`), registers its
 own locator with `python3 ROOT/scripts/kaola-locate.py register`, records its own fingerprint,
 and passes `--target cloud`. That checkout never operates on Mac paths, CLIs, tmux, or sessions.
 
