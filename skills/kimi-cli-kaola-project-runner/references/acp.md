@@ -6,7 +6,7 @@ Command: `kimi acp`. Login requires a PTY: `false`. Platform quirks: .
 
 Use `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; other native keys and editor replacement are PTY-only capabilities. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
 
-Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Orchestrator ordinary turns must not poll raw frames as a human UI. PTY remains login and native TUI takeover.
+Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Orchestrator ordinary turns must not poll raw frames as a human UI. Where supported, PTY can handle terminal-only login and native TUI takeover; check platform quirks before using it.
 
 ## Level-zero receipt
 

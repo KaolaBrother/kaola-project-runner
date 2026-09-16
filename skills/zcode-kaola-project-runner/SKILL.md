@@ -17,7 +17,7 @@ Default transport: **acp**. The ACP command is `python3 $SKILL_DIR/scripts/kaola
 
 ## Cost hints
 
-ACP usually carries structured text and events with less terminal-rendering overhead. PTY preserves the native interactive UI and is required for terminal-only login or selection flows. These are cost and capability facts; the controlling Agent chooses the transport.
+ACP usually carries structured text and events with less terminal-rendering overhead. Where supported, PTY preserves the native interactive UI and handles terminal-only login or selection flows. These are cost and capability facts; the controlling Agent chooses the transport.
 
 ## Fallback
 

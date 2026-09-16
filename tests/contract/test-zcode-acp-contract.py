@@ -829,6 +829,13 @@ class ZcodeAcpContractTests(unittest.TestCase):
                                 "baseURL": "https://open.bigmodel.cn/api/anthropic"},
                 },
             }},
+            "custom-coding-plan-suffix": {"provider": {
+                "custom:payg-coding-plan": {
+                    **DESKTOP_CONFIG["provider"][CODING_PLAN_ID], "enabled": True,
+                    "options": {"apiKey": "custom-payg-key-must-not-be-used",
+                                "baseURL": "https://example.invalid/api"},
+                },
+            }},
             "coding-plan-disabled": {"provider": {
                 CODING_PLAN_ID: {**DESKTOP_CONFIG["provider"][CODING_PLAN_ID], "enabled": False,
                                  "systemDisabledReason": "oauth_provider_inactive"},

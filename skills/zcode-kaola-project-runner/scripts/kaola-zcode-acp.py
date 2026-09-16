@@ -64,7 +64,7 @@ ADAPTER_VERSION = "0.2.0"
 # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
 DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
 PLAN_CACHE_RELPATH = os.path.join(".zcode", "v2", "coding-plan-cache.json")
-CODING_PLAN_SUFFIX = "-coding-plan"
+CODING_PLAN_PROVIDER_IDS = frozenset(("builtin:bigmodel-coding-plan", "builtin:zai-coding-plan"))
 START_PLAN_SUFFIX = "-start-plan"
 # Backend `kind` enum and the apiFormat it maps to (desktop converter parity).
 API_FORMAT_BY_KIND = {
@@ -258,7 +258,7 @@ def _model_element(model_id: str, entry: Any) -> dict[str, Any]:
 def select_coding_plan_provider(home: str | None = None) -> dict[str, Any]:
     """Pick the desktop's enabled GLM Coding Plan provider, or fail closed.
 
-    Read-only. Eligible: id ends with ``-coding-plan``, ``enabled`` is true,
+    Read-only. Eligible: a known built-in Coding Plan id, ``enabled`` is true,
     the plan credential is non-empty and at least one model is listed.
     ``*-start-plan`` needs the desktop captcha flow headlessly and is refused;
     every other provider (pay-as-you-go API keys included) is refused so no
@@ -291,7 +291,7 @@ def select_coding_plan_provider(home: str | None = None) -> dict[str, Any]:
         if provider_id.endswith(START_PLAN_SUFFIX):
             rejected[provider_id] = "start-plan (headless captcha flow, refused)"
             continue
-        if not provider_id.endswith(CODING_PLAN_SUFFIX):
+        if provider_id not in CODING_PLAN_PROVIDER_IDS:
             rejected[provider_id] = "not a coding-plan provider (refused: no pay-as-you-go billing)"
             continue
         if raw.get("enabled") is not True:
