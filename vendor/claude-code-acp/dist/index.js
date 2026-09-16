@@ -15293,7 +15293,7 @@ var RequestError = class _RequestError extends Error {
 };
 
 // src/session-store.ts
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, rmSync } from "fs";
 import { join as join2 } from "path";
 
 // src/config.ts
@@ -15560,14 +15560,18 @@ var SessionStore = class {
     return emptyRecord();
   }
   writePersisted(data) {
+    const temp = `${this.storeFile}.${process.pid}.${Date.now()}.tmp`;
     try {
       if (!existsSync(this.storeDir)) {
         mkdirSync(this.storeDir, { recursive: true });
       }
-      const temp = `${this.storeFile}.${process.pid}.${Date.now()}.tmp`;
       writeFileSync(temp, JSON.stringify(data, null, 2));
       renameSync(temp, this.storeFile);
     } catch (err) {
+      try {
+        rmSync(temp, { force: true });
+      } catch {
+      }
       logger.error(
         `Failed to write persisted sessions: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -15580,7 +15584,7 @@ import { spawn } from "child_process";
 import {
   writeFileSync as writeFileSync2,
   mkdtempSync,
-  rmSync,
+  rmSync as rmSync2,
   statSync,
   accessSync,
   constants as fsConstants
@@ -15773,7 +15777,7 @@ var ClaudeRunner = class {
   }
   removeTempDir(dir) {
     try {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync2(dir, { recursive: true, force: true });
     } catch {
     }
     this.tempDirs = this.tempDirs.filter((entry) => entry !== dir);
@@ -16395,6 +16399,7 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
           `Session ${sessionId} not found`
         );
       }
+      cancelledSessions.delete(sessionId);
       const text = prompt.filter(
         (block) => block.type === "text"
       ).map((block) => block.text).join("\n");

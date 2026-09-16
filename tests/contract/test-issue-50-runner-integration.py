@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -341,6 +342,72 @@ def test_start_send_cancel_stop_through_generated_skill() -> None:
         check(True, "holder and bridge exited after stop")
         check(sandbox.temp_residue() == [], "no bridge temp file survives stop")
         check(not sandbox.trap_hit.exists(), "PATH claude never ran during the session")
+    finally:
+        sandbox.cleanup()
+
+
+def test_force_stop_sweeps_detached_claude_groups() -> None:
+    """`claude -p` runs detached in its own process group, outside the
+    bridge's. Force stop must end it and report it whether the bridge is
+    healthy, died before its own shutdown ran, or died together with the
+    holder (record-based force stop)."""
+    sandbox = Sandbox("force")
+    try:
+        def hanging_turn(index: int, label: str) -> tuple[str, dict]:
+            session = sandbox.session()
+            receipt = sandbox.cli(SKILL_CLI, "start", session=session)
+            check(receipt.get("error") is None and receipt["state"] == "ready", f"{label}: start reaches ready")
+            receipt = sandbox.cli(SKILL_CLI, "send", "--text", f"[hang]{label}", "--no-wait", session=session)
+            check(receipt["outcome"] == "in_progress", f"{label}: hanging prompt accepted")
+            wait_until(lambda: len(sandbox.records()) > index and sandbox.records()[index].get("grandchild_pid"),
+                       15, f"{label}: hanging claude launched")
+            wait_until(lambda: sandbox.cli(SKILL_CLI, "status", session=session).get("mutation_status") == "accepted",
+                       10, f"{label}: turn accepted (first update seen)")
+            rec = sandbox.records()[index]
+            check(pid_alive(rec["pid"]) and pid_alive(rec["grandchild_pid"]), f"{label}: claude and grandchild alive")
+            status = sandbox.cli(SKILL_CLI, "status", session=session)
+            check(rec["pgid"] != status["agent_pgid"], f"{label}: claude runs in its own process group outside the bridge's")
+            check(rec["pgid"] in status["record"].get("agent_child_pgids", []),
+                  f"{label}: the holder noted the claude group while the bridge was alive")
+            return session, rec
+
+        def expect_gone(rec: dict, label: str) -> None:
+            wait_until(lambda: not pid_alive(rec["pid"]) and not pid_alive(rec["grandchild_pid"]), 8,
+                       f"{label}: claude and grandchild ended")
+            check(True, f"{label}: claude and its grandchild are gone")
+
+        # A: force stop while the bridge is healthy and a turn is running.
+        session, rec = hanging_turn(0, "healthy")
+        status = sandbox.cli(SKILL_CLI, "status", session=session)
+        receipt = sandbox.cli(SKILL_CLI, "stop", "--force", session=session)
+        check(receipt.get("error") is None and receipt.get("stopped") is True, "healthy: force stop succeeds")
+        check(receipt.get("residual_pids") == [], "healthy: force stop reports no residual pids")
+        check(receipt.get("swept_child_pgids") == [], "healthy: the bridge ended its own claude group, nothing left to sweep")
+        expect_gone(rec, "healthy")
+        wait_until(lambda: not pid_alive(status["holder_pid"]) and not pid_alive(status["agent_pid"]), 8, "healthy: holder and bridge exited")
+
+        # B: the bridge dies before its shutdown could stop the child; holder alive.
+        session, rec = hanging_turn(1, "bridge-dead")
+        status = sandbox.cli(SKILL_CLI, "status", session=session)
+        os.kill(status["agent_pid"], signal.SIGKILL)
+        wait_until(lambda: not pid_alive(status["agent_pid"]), 5, "bridge-dead: bridge killed")
+        check(pid_alive(rec["pid"]) and pid_alive(rec["grandchild_pid"]), "bridge-dead: the claude group outlives the killed bridge")
+        receipt = sandbox.cli(SKILL_CLI, "stop", "--force", session=session)
+        check(receipt.get("error") is None and receipt.get("residual_pids") == [], "bridge-dead: force stop reports no residual pids")
+        check(rec["pgid"] in receipt.get("swept_child_pgids", []), "bridge-dead: the orphaned claude group was swept")
+        expect_gone(rec, "bridge-dead")
+
+        # C: holder and bridge both gone; the record carries the child groups.
+        session, rec = hanging_turn(2, "holder-lost")
+        status = sandbox.cli(SKILL_CLI, "status", session=session)
+        for pid in (status["holder_pid"], status["agent_pid"]):
+            os.kill(pid, signal.SIGKILL)
+        wait_until(lambda: not pid_alive(status["holder_pid"]) and not pid_alive(status["agent_pid"]), 5, "holder-lost: holder and bridge killed")
+        check(pid_alive(rec["pid"]) and pid_alive(rec["grandchild_pid"]), "holder-lost: the claude group outlives holder and bridge")
+        receipt = sandbox.cli(SKILL_CLI, "stop", "--force", session=session)
+        check(receipt.get("holder_lost") is True and receipt.get("residual_pids") == [], "holder-lost: record-based force stop reports no residual pids")
+        check(rec["pgid"] in receipt.get("swept_pgids", []), "holder-lost: the recorded claude group was swept")
+        expect_gone(rec, "holder-lost")
     finally:
         sandbox.cleanup()
 

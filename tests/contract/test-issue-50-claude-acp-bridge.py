@@ -468,6 +468,36 @@ def test_cancel_kills_process_group() -> None:
         sandbox.cleanup()
 
 
+def test_stale_cancel_does_not_taint_next_turn() -> None:
+    """A cancel that lands when no child is running (after the previous turn
+    finished, before or after its response) must not mark the next turn
+    cancelled, and must not turn a genuine resume failure into a cancel."""
+    sandbox = Sandbox("stale-cancel")
+    try:
+        bridge = Bridge(sandbox)
+        bridge.initialize()
+        sid = bridge.new_session()["sessionId"]
+        first = bridge.prompt(sid, "first")
+        check(first["stopReason"] == "end_turn", "first turn completes")
+        claude_id = sandbox.records()[0]["session_id"]
+        bridge.notify("session/cancel", {"sessionId": sid})
+        time.sleep(0.3)
+        second = bridge.prompt(sid, "second")
+        check(second["stopReason"] == "end_turn", "a turn after a stale cancel is not reported cancelled")
+        check(len(sandbox.records()) == 2 and argv_value(sandbox.records()[1]["argv"], "--resume") == claude_id,
+              "the turn after a stale cancel ran and resumed the same Claude session")
+        bridge.notify("session/cancel", {"sessionId": sid})
+        time.sleep(0.3)
+        third = bridge.prompt(sid, "[fail] resume breaks")
+        check(third["stopReason"] == "end_turn", "a genuine resume failure after a stale cancel is not reported as cancelled")
+        check("Resume failed" in bridge.stderr(), "the resume failure took the documented fresh-start fallback")
+        check(len(sandbox.records()) == 4 and "--resume" not in sandbox.records()[3]["argv"],
+              "the fallback ran a fresh conversation instead of swallowing the failure")
+        bridge.stop()
+    finally:
+        sandbox.cleanup()
+
+
 def test_stop_during_turn_cleans_everything() -> None:
     sandbox = Sandbox("stop")
     try:
@@ -595,6 +625,7 @@ def main() -> int:
         test_cwd_validation,
         test_permission_roundtrip,
         test_cancel_kills_process_group,
+        test_stale_cancel_does_not_taint_next_turn,
         test_stop_during_turn_cleans_everything,
         test_missing_binary_fails_closed,
         test_concurrent_session_isolation,

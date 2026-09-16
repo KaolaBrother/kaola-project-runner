@@ -455,6 +455,12 @@ export function createClaudeCodeAgent(
         );
       }
 
+      // Kaola fork: a cancel belongs to the turn it lands in. One that
+      // arrived after the previous child closed but before that turn's
+      // response left is stale; it must not mark this turn cancelled or
+      // hide a genuine resume failure behind the cancel path.
+      cancelledSessions.delete(sessionId);
+
       // Extract text from content blocks
       const text = prompt
         .filter((block): block is { type: "text"; text: string } =>

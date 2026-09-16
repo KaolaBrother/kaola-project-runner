@@ -50,7 +50,13 @@ drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` from the child environment. ACP
 Code's default after the live subscription gate of Issue #50 passed on this Mac (2026-09-16:
 Fable High sentinel, native transcript model `claude-fable-5-1`, tool call, cancel, continue,
 resume, zero residue, Settings untouched); `--transport pty` remains the explicit fallback, and
-login itself always stays a PTY act. The bridge keeps its own map of ACP sessions to native
+login itself always stays a PTY act. Under this bridge `permit` settles only the reported
+`tool_call` status: the `claude -p` child has no stdin and no `--permission-prompt-tool`, so a
+permission answer cannot gate or resume the child, and on 2.1.272 a Bash tool call emitted no
+`permission_request` in `bypassPermissions` or `manual` mode. Because each `claude -p` runs
+detached in its own process group, the holder notes those groups (with member pids and start
+times) while the bridge is alive and `stop` sweeps whichever is still alive under that identity
+(`swept_child_pgids`), including after the bridge died first. The bridge keeps its own map of ACP sessions to native
 Claude session ids in `~/.claude-code-acp/sessions.json` (override with `CLAUDE_ACP_STATE_DIR`);
 that file is what `start --continue` reads, it holds ids and cwd paths only, and rollback may
 delete it. ZCode's ACP agent is the Runner-owned translator `scripts/kaola-zcode-acp.py`,

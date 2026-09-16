@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { McpServerConfig } from "./claude-runner.js";
 import { loadConfig } from "./config.js";
@@ -284,16 +284,22 @@ export class SessionStore {
   }
 
   private writePersisted(data: PersistedRecord): void {
+    // Kaola fork: write to a sibling temp file and rename so a concurrent
+    // bridge (one per Runner session) never reads a torn record. A failed
+    // write or rename must not leave the temp sibling behind.
+    const temp = `${this.storeFile}.${process.pid}.${Date.now()}.tmp`;
     try {
       if (!existsSync(this.storeDir)) {
         mkdirSync(this.storeDir, { recursive: true });
       }
-      // Kaola fork: write to a sibling temp file and rename so a concurrent
-      // bridge (one per Runner session) never reads a torn record.
-      const temp = `${this.storeFile}.${process.pid}.${Date.now()}.tmp`;
       writeFileSync(temp, JSON.stringify(data, null, 2));
       renameSync(temp, this.storeFile);
     } catch (err) {
+      try {
+        rmSync(temp, { force: true });
+      } catch {
+        // nothing more to do; the error below is already reported
+      }
       logger.error(
         `Failed to write persisted sessions: ${err instanceof Error ? err.message : String(err)}`
       );

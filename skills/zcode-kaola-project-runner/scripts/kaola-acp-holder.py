@@ -63,6 +63,60 @@ def process_alive(pid: int) -> bool:
     return True
 
 
+def process_table() -> list[tuple[int, int, int, str]]:
+    """Live (non-zombie) processes as (pid, ppid, pgid, start time)."""
+    result = subprocess.run(
+        ["ps", "-axo", "pid=,ppid=,pgid=,state=,lstart="], capture_output=True, text=True
+    )
+    rows: list[tuple[int, int, int, str]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split(None, 4)
+        if len(fields) != 5 or not all(field.isdigit() for field in fields[:3]):
+            continue
+        if fields[3].upper().startswith("Z"):
+            continue
+        rows.append((int(fields[0]), int(fields[1]), int(fields[2]), fields[4].strip()))
+    return rows
+
+
+def child_groups(root_pid: int, root_pgid: int) -> dict[int, dict[int, str]]:
+    """Process groups that descendants of ``root_pid`` run in, other than
+    ``root_pgid`` itself, as ``pgid -> {member pid: start time}``. An ACP
+    agent that spawns its CLI detached (own process group) leaves it outside
+    the agent's group, so the group signal and the residue sweep would never
+    see it. The member identities let a later sweep tell the group from an
+    unrelated one that reused the same id."""
+    children: dict[int, list[tuple[int, int, str]]] = {}
+    for pid, ppid, pgid, started in process_table():
+        children.setdefault(ppid, []).append((pid, pgid, started))
+    found: dict[int, dict[int, str]] = {}
+    seen: set[int] = set()
+    stack = [root_pid]
+    while stack:
+        parent = stack.pop()
+        for pid, pgid, started in children.get(parent, []):
+            if pid in seen:
+                continue
+            seen.add(pid)
+            stack.append(pid)
+            if pgid != root_pgid:
+                found.setdefault(pgid, {})[pid] = started
+    return found
+
+
+def live_child_groups(groups: dict[int, dict[int, str]]) -> dict[int, list[int]]:
+    """Recorded child groups whose identity still holds (a recorded member
+    is alive with its recorded start time in that group), with their
+    current live members."""
+    table = process_table()
+    by_pid = {pid: (pgid, started) for pid, _, pgid, started in table}
+    live: dict[int, list[int]] = {}
+    for pgid, members in groups.items():
+        if any(by_pid.get(pid) == (pgid, started) for pid, started in members.items()):
+            live[pgid] = [pid for pid, _, group, _ in table if group == pgid]
+    return live
+
+
 def group_members(pgid: int) -> list[int]:
     result = subprocess.run(
         ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
@@ -898,6 +952,11 @@ class Holder:
         self.capabilities: dict[str, Any] = {}
         self.auth_methods: list[dict[str, Any]] = []
         self.pending_permissions: dict[str, dict[str, Any]] = {}
+        # Process groups the agent spawned outside its own group (for example
+        # the Claude bridge's detached `claude -p` children), noted while the
+        # agent is alive so stop can sweep them even after the agent is gone.
+        self.agent_child_groups: dict[int, dict[int, str]] = {}
+        self.swept_child_pgids: list[int] = []
         self.projection = ViewProjection()
         self.followers: list[Follower] = []
         self.followers_lock = threading.Lock()
@@ -943,6 +1002,9 @@ class Holder:
             "holder_instance_id": self.holder_instance_id,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
+            "agent_child_pgids": sorted(self.agent_child_groups),
+            "agent_child_groups": {str(pgid): {str(pid): started for pid, started in members.items()}
+                                   for pgid, members in sorted(self.agent_child_groups.items())},
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
             "acp_session_id": self.acp_session_id,
             "session_meta": self.session_meta,
@@ -1178,6 +1240,7 @@ class Holder:
             self.pending_permissions[normalize_id(request_id)] = entry
             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
                 self.turn["mutation_status"] = "accepted"
+                self.note_agent_children()
             self.events.append({"kind": "request_permission", "request": entry})
             self.write_record()
             self.fanout_follow_delta()
@@ -1196,6 +1259,7 @@ class Holder:
         turn = self.turn
         if turn["active"] and turn["mutation_status"] == "in_progress":
             turn["mutation_status"] = "accepted"
+            self.note_agent_children()
         if variant == "agent_message_chunk":
             text = ((update.get("content") or {}).get("text")) or ""
             turn["final_text"] += text
@@ -1787,16 +1851,32 @@ class Holder:
         self.state = "stopped"
         self.write_record()
         result = {"stopped": True, "residual_pids": residual,
+                  "swept_child_pgids": self.swept_child_pgids,
                   "agent_exit_code": self.agent.exit_code,
                   "agent_exit_signal": self.agent.exit_signal,
                   "mutation_status": self.turn.get("mutation_status"),
                   "_exit_after_reply": True}
         return result
 
+    def note_agent_children(self) -> None:
+        """Record the agent's out-of-group descendants while it is still alive
+        to be their parent; once the agent dies they are reparented and the
+        link is gone."""
+        proc = self.agent.proc
+        if proc is None or self.agent.exited.is_set():
+            return
+        try:
+            pgid = os.getpgid(proc.pid)
+        except OSError:
+            pgid = proc.pid
+        for child, members in child_groups(proc.pid, pgid).items():
+            self.agent_child_groups.setdefault(child, {}).update(members)
+
     def _terminate_group(self, force: bool) -> list[int]:
         proc = self.agent.proc
         if proc is None:
             return []
+        self.note_agent_children()
         pgid = proc.pid
         try:
             pgid = os.getpgid(proc.pid)
@@ -1819,8 +1899,35 @@ class Holder:
                     os.kill(member, signal.SIGKILL)
                 except (ProcessLookupError, PermissionError):
                     pass
+        # Groups the agent spawned outside its own (detached CLI children):
+        # the agent normally stops them itself; whatever it left behind, or
+        # could not reach because it died first, is terminated here. Only a
+        # group whose recorded member identity still holds is touched.
+        live = live_child_groups(self.agent_child_groups)
+        self.swept_child_pgids = sorted(live)
+        if live:
+            for child in self.swept_child_pgids:
+                try:
+                    os.killpg(child, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
+            members = [pid for pids in live.values() for pid in pids]
+            deadline = time.monotonic() + TERM_GRACE
+            while time.monotonic() < deadline and any(process_alive(pid) for pid in members):
+                time.sleep(0.05)
+            for child in self.swept_child_pgids:
+                for member in group_members(child):
+                    if process_alive(member):
+                        try:
+                            os.kill(member, signal.SIGKILL)
+                        except (ProcessLookupError, PermissionError):
+                            pass
         time.sleep(0.1)
-        return [pid for pid in group_members(pgid) if process_alive(pid)]
+        residual = [pid for pid in group_members(pgid) if process_alive(pid)]
+        for child in self.swept_child_pgids:
+            residual.extend(pid for pid in group_members(child)
+                            if process_alive(pid) and pid not in residual)
+        return residual
 
     def op_set_config_option(self, params: dict[str, Any]) -> dict[str, Any]:
         option_id = params.get("config_id")

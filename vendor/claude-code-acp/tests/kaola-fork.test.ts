@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
@@ -155,6 +155,18 @@ describe("session record v2", () => {
     after.create("acp-5", "/repo");
     expect(after.getClaudeSessionId("acp-5")).toBeUndefined();
     expect(after.hasPersisted("claude-3")).toBe(false);
+  });
+
+  it("leaves no temp sibling when the record cannot be renamed into place", () => {
+    // A directory at the record path makes renameSync fail after the temp
+    // sibling was written; the failure is logged and the sibling removed.
+    mkdirSync(join(dir, "sessions.json"), { recursive: true });
+    writeFileSync(join(dir, "sessions.json", "occupied"), "x");
+    const store = new SessionStore(dir);
+    store.create("acp-t", "/repo");
+    store.setClaudeSessionId("acp-t", "claude-t");
+    expect(readdirSync(dir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+    expect(readdirSync(dir)).toEqual(["sessions.json"]);
   });
 
   it("binds an explicit resume id and converts a version-1 file", () => {

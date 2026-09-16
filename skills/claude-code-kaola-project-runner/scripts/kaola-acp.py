@@ -725,11 +725,12 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
         members = subprocess.run(
             ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
         )
+        groups = recorded_groups(record)
         residual = []
         for line in members.stdout.splitlines():
             fields = line.split()
             if (len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit()
-                    and int(fields[1]) == record["agent_pgid"]
+                    and int(fields[1]) in groups
                     and not fields[2].upper().startswith("Z")):
                 residual.append(int(fields[0]))
         if members.returncode == 0 and not residual:
@@ -781,41 +782,68 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
     return receipt
 
 
+def recorded_groups(record: dict[str, Any]) -> list[int]:
+    """The agent's own process group plus the out-of-group child groups the
+    holder noted while the agent was alive (detached CLI children). A child
+    group counts only while a recorded member pid is still alive with its
+    recorded start time, so a reused group id is never touched."""
+    groups: list[int] = []
+    pgid = record.get("agent_pgid")
+    if isinstance(pgid, int) and pgid > 0:
+        groups.append(pgid)
+    children = record.get("agent_child_groups") or {}
+    if children:
+        table = subprocess.run(
+            ["ps", "-axo", "pid=,pgid=,state=,lstart="], capture_output=True, text=True
+        )
+        by_pid: dict[int, tuple[int, str]] = {}
+        for line in table.stdout.splitlines():
+            fields = line.split(None, 3)
+            if (len(fields) == 4 and fields[0].isdigit() and fields[1].isdigit()
+                    and not fields[2].upper().startswith("Z")):
+                by_pid[int(fields[0])] = (int(fields[1]), fields[3].strip())
+        for child, members in children.items():
+            if not str(child).isdigit() or int(child) in groups:
+                continue
+            if any(str(pid).isdigit() and by_pid.get(int(pid)) == (int(child), started)
+                   for pid, started in (members or {}).items()):
+                groups.append(int(child))
+    return groups
+
+
+def live_group_members(groups: list[int]) -> list[int]:
+    members = subprocess.run(
+        ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
+    )
+    found: list[int] = []
+    for line in members.stdout.splitlines():
+        fields = line.split()
+        if (len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit()
+                and int(fields[1]) in groups and not fields[2].upper().startswith("Z")):
+            found.append(int(fields[0]))
+    return found
+
+
 def force_kill_from_record(args: argparse.Namespace, repo: str,
                            record: dict[str, Any]) -> dict[str, Any]:
     """stop --force path when the holder is already gone."""
-    pgid = record.get("agent_pgid")
+    groups = recorded_groups(record)
     receipt = base_receipt(args, repo)
     killed: list[int] = []
-    if isinstance(pgid, int) and pgid > 0:
-        members = subprocess.run(
-            ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
-        )
-        for line in members.stdout.splitlines():
-            fields = line.split()
-            if len(fields) == 3 and fields[0].isdigit() and int(fields[1]) == pgid:
-                if fields[2].upper().startswith("Z"):
-                    continue
-                pid = int(fields[0])
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                    killed.append(pid)
-                except (ProcessLookupError, PermissionError):
-                    pass
-    leftover = []
-    if isinstance(pgid, int) and pgid > 0:
+    for pid in live_group_members(groups):
+        try:
+            os.kill(pid, signal.SIGKILL)
+            killed.append(pid)
+        except (ProcessLookupError, PermissionError):
+            pass
+    leftover: list[int] = []
+    if groups:
         time.sleep(0.1)
-        members = subprocess.run(
-            ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
-        )
-        for line in members.stdout.splitlines():
-            fields = line.split()
-            if len(fields) == 3 and fields[0].isdigit() and int(fields[1]) == pgid:
-                if not fields[2].upper().startswith("Z"):
-                    leftover.append(int(fields[0]))
+        leftover = live_group_members(groups)
     receipt.update({
         "stopped": True,
         "holder_lost": True,
+        "swept_pgids": groups,
         "force_killed_pids": killed,
         "residual_pids": leftover,
         "mutation_status": "unknown"

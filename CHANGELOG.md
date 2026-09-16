@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Claude Code ACP bridge robustness edges** (Issue #53, follow-up to the #50 reviews). The
+  vendored bridge removes its `.tmp` sibling when the session record cannot be renamed into
+  place, and clears the per-session cancel flag when a turn starts so a `session/cancel` that
+  lands between one turn's child exit and the next turn cannot report the next turn as
+  `cancelled` or turn a genuine `--resume` failure into a cancel. The ACP holder now notes the
+  process groups the agent spawned outside its own group (the bridge's detached `claude -p`
+  children) while the agent is alive, records them as `agent_child_pgids`, and sweeps them on
+  `stop` (`swept_child_pgids`, covered by `residual_pids`); a holder-lost `stop --force` sweeps
+  the recorded groups too (`swept_pgids`). `stop --force` is exercised offline for a healthy
+  bridge, a bridge killed before its own shutdown, and holder plus bridge gone. Documented that
+  `permit` under this bridge settles only the reported `tool_call` status because the `claude -p`
+  child has no stdin and no `--permission-prompt-tool`.
+
 ## 0.3.1 — 2026-09-16
 
 - **Managed Skill install drift is advisory and repairable** (Issue #54).

@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport facts
 
-Default transport: **acp**. The ACP command is `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`; its known quirks are `vendored pinned fork of harukitosa/claude-code-acp (MIT), never the npm registry package or npx; one claude -p subprocess per turn, later turns pass --resume; the bridge drops ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN so the subscription login and native Settings resolve inside claude; login itself stays a PTY act`, and login requires a PTY: `true`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **acp**. The ACP command is `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`; its known quirks are `vendored pinned fork of harukitosa/claude-code-acp (MIT), never the npm registry package or npx; one claude -p subprocess per turn, later turns pass --resume; the bridge drops ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN so the subscription login and native Settings resolve inside claude; login itself stays a PTY act; permit settles only the reported tool_call status because the claude -p child has no stdin and no --permission-prompt-tool, so a permission answer cannot gate or resume the child (cli 2.1.272 emitted no permission_request in bypassPermissions or manual mode)`, and login requires a PTY: `true`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 

@@ -10,7 +10,8 @@ API credential variables were present. Then it emits a minimal
 ``FAKE_CLAUDE_MODE`` (or a ``[mode]`` prefix on the prompt text): ``echo``
 (default) answers and exits; ``permission`` first emits a
 ``permission_request`` line; ``hang`` starts a ``sleep`` grandchild and
-blocks until killed.
+blocks until killed; ``fail`` announces its session id and exits 1 like a
+CLI that could not serve the turn.
 """
 
 import json
@@ -22,7 +23,7 @@ import time
 import uuid
 
 RECORD = os.environ.get("FAKE_CLAUDE_RECORD")
-MODES = ("echo", "permission", "hang")
+MODES = ("echo", "permission", "hang", "fail")
 
 
 def option(argv, flag):
@@ -89,6 +90,9 @@ def main():
         with open(RECORD, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
     emit({"type": "system", "subtype": "init", "session_id": session_id, "model": "fake-model"})
+    if mode == "fail":
+        sys.stderr.write("fake claude: cannot serve this turn\n")
+        return 1
     if mode == "hang":
         emit({"type": "assistant", "session_id": session_id,
               "message": {"content": [{"type": "text", "text": "hanging"}]}})
