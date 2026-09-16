@@ -1,0 +1,35 @@
+{
+  "command": "node node_modules/tsup/dist/cli-default.js --out-dir dist",
+  "inputs": {
+    "bin/claude-code-acp.js": "3fa961c18fa4538b31d2c6f1ae634ac30f155bf0d307a12b62995ecd9ec584a3",
+    "package-lock.json": "f7145b99bdf8b2b60f8fbf78be47f15876edc0e6d5bd592581b59a1122394366",
+    "package.json": "00ef476eeb3af012c464018718450d8e79d6a6c108746ae6b4023be51c9e9119",
+    "src/agent.ts": "941a534764d96a3006e035c61602f7831eab3ba13a7fd308d12a5748d324ede0",
+    "src/claude-runner.ts": "bd30a83cd5f56a8f7e03b40fafcc8576fcceeae82a61f533de8d5fbc3f5ef25c",
+    "src/config.ts": "18ccfb00af87f9302d53eea9840b0c97f72aba6b648157452c128b384e031654",
+    "src/index.ts": "98d0f733537066b74e7cb265a54f35d45644a43941879fe4e5adbb7956baf654",
+    "src/logger.ts": "3347c28e1066988a5c9aac0deac2bf0d7cbaa49e0eb807b0bdc3b34c2601e726",
+    "src/session-store.ts": "3f3c81805f4d911361c953c57b70d0a3949bbb13c743a6c165b29182e36f7628",
+    "src/validation.ts": "ebdeac56090f38a71a600601ee34dab9c16ecedb05e63a2fba159d9fd078fe0e",
+    "tsconfig.json": "b6e707efcf77a4a999b6250bf06d88cbfe80caecafdfda01bf83339a6d619766",
+    "tsup.config.ts": "0d1a39464cbc93b5e87fb48b3c6bad2c39e7eee06896d8cebc0dff890e80327a"
+  },
+  "output": {
+    "dist/index.js": {
+      "bytes": 618140,
+      "sha256": "1fa758fc33d9ca0c5fa60b7ce335d59a044870ee123a7d7353ba4d4b24a8e2b4"
+    }
+  },
+  "toolchain": {
+    "@agentclientprotocol/sdk": "0.16.1",
+    "esbuild": "0.27.4",
+    "node": "v24.18.0",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "zod": "4.3.6"
+  },
+  "upstream": {
+    "commit": "6c20f2802e390c80b0542247c6b9738e11efdc11",
+    "url": "https://github.com/harukitosa/claude-code-acp"
+  }
+}

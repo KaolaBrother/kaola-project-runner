@@ -1,0 +1,3 @@
+# dist/index.js is the tsup/esbuild bundle recorded by dist/DERIVATION.json; it is
+# committed byte-for-byte as built, so whitespace checks do not apply to it.
+dist/index.js -whitespace
