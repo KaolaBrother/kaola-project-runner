@@ -1,0 +1,13 @@
+salvage_ts=2026-09-16T07:55:46Z
+worktree=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/bundle-51
+branch=workflow/bundle-51
+old_head=df8b85e319f2a2b46a9a63d0f1dd25a3ab5b34e5
+old_head_subject=Pin the Grok Bot bridge to content commit bbfba65fac7667c6705e1ee0b0d53d5a735eeadd as a pre-release UAT candidate (Issue #49, Mission 9, pin commit P2).
+target=f9eb6e83196accb2221be55fc4a77d05eee01083
+target_subject=chore: archive bundle-50 [sink]
+---files---
+scripts/kaola-zcode-acp.py	39909	1789537834446682482	mode=0o100755	sha256=e4836280fb369066ce38624b39cf519b55bf008c45e8219bdfa79481388dcabb
+tests/contract/fake-zcode-app-server.py	14723	1789537941805816206	mode=0o100755	sha256=8ec176311dee501b6b6652871f714966bc4416a828fbd6ecf1ef770dd8d50eb2
+tests/contract/hooks/zcode-probe/sitecustomize.py	1118	1789537941806355746	mode=0o100644	sha256=170922287358c34faa9296934b88cc456642549106093e362e67f4b680860fa7
+tests/contract/test-zcode-acp-contract.py	26206	1789538210473299712	mode=0o100644	sha256=dc1f7c163a15979f1b38b7fd427cf2e199b68164caa05c5d18d537f587698174
+third_party/zcode-acp/UPSTREAM.md	3520	1789538357487388396	mode=0o100644	sha256=0e47df67419cf24bcbf688c9f1b5d9ee66b8e2fa67b1fc38ab99fd0f522aed79
