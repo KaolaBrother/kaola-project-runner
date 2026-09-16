@@ -190,6 +190,22 @@ Workflow facts, and ordinary frame changes are advisory evidence and do not auth
 a separately measured transport capability, not a semantic decision engine. Grok retains its legacy
 markers and JSON aliases.
 
+## Canonical project root and Workflow child worktrees
+
+`--repo` must name a Git top-level. The ordinary Workflow default is the consuming project's
+**canonical project root** (the main checkout). A Workflow **child worktree** is also a Git
+top-level; starting there is an Agent decision, not a transport refusal, on both PTY and ACP.
+`KAOLA_PROJECT_RUNNER_REPO` is the realpath of the Agent-selected `--repo`, not a classifier that
+the path is the canonical project root.
+
+Inspect `git worktree list`, Workflow `workflow-state.md` / `mission-list.md`, and existing exact
+sessions before choosing where to start. Then, for ordinary Workflow-backed work, start at the
+canonical project root and ask that runtime's main conversation to invoke `workflow-next` so its
+Workflow creates or recovers the child worktree. Several exact sessions may share one canonical
+project root with distinct Workflow-owned worktrees. Path shape such as `.kw/worktrees` is not a
+security boundary. See the generated orchestrator reference
+`skills/kaola-project-runner/references/workflow-worktree.md`.
+
 ## Measured relay transfer
 
 The managed relay remains the pane leader and owns the CLI in a nested PTY, but ordinary communication

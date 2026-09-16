@@ -9,7 +9,7 @@ This Skill is the main control-plane Skill. It is not a platform Runner and has
 no transport adapter. The eight platform Runner Skills are workers: they only
 identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, Mission List,
-worktree, finalize, archive, and sink.
+child worktree, finalize, archive, and sink.
 
 You own scheduling and acceptance decisions. Helpers may research, inspect,
 test, review, or execute assigned work. They must not take over continuous topic
@@ -113,11 +113,18 @@ value; `capture --full` is the only explicit, unbounded request.
 | Count | Named CLI without a count: one. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
 | Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
-| Workflow | On; the worker's Workflow creates its worktree. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
+| Workflow | On; start at the canonical project root; the worker's Workflow creates its worktree. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
 | Heartbeat | 30 minutes unless specified; zero or "no heartbeat" means one-shot. Prefer one host-native recurring task, otherwise same-session blocking sleep. Never use both. |
 | Permissions | Existing Runner default bypass start. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
 | Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
+
+Ordinary Workflow-backed work starts the worker `--repo` at the consuming
+project's canonical Git root and asks that runtime's main conversation to
+invoke its installed workflow-next. Inspect Git and Workflow evidence first.
+Linked-worktree starts, outer bundle preparation, and existing-run recovery are
+Agent decisions on both PTY and ACP, not transport gates. See
+[references/workflow-worktree.md](references/workflow-worktree.md).
 
 `self_hosting_risk` and model mismatches are reported evidence, not automatic
 start gates. Bypass is not broader authorization. OpenCode ACP permission
@@ -246,7 +253,8 @@ prompt per ready session; do not replay a prompt whose effects are known or
 uncertain.
 
 The worker is not the orchestrator. Its prompt should name the authorized
-scope, whether Workflow is on, write ownership, that it must not self-finalize
+scope, whether Workflow is on, whether `--repo` is the canonical project root or
+a Workflow child worktree, write ownership, that it must not self-finalize
 before acceptance, and that irreversible or value choices print
 `HUMAN_DECISION_REQUIRED` and wait.
 

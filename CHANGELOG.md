@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Root-start plus in-session Workflow is the ordinary ownership default** (Issue #52).
+  For Workflow-backed work, start the runtime worker at the consuming project's canonical
+  project root and ask that CLI to invoke `workflow-next` so its Workflow creates or
+  recovers the child worktree. Linked-worktree starts and existing-run recovery stay
+  Agent decisions on both PTY and ACP; adapters do not gain a `.kw/worktrees` refusal.
+
 ## 0.3.1 — 2026-09-16
 
 - **Managed Skill install drift is advisory and repairable** (Issue #54).
