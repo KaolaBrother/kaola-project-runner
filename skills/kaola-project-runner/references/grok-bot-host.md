@@ -25,7 +25,11 @@ commit P** that follows it (stage `pinned`, commit R, an honest pre-release
 label or a release tag at R). The bridge is saved from P; every execution target
 is checked out clean and detached at R. `render-skills.py --check
 --require-pinned` at P proves R exists, is an ancestor, is a content-stage
-commit, and holds the locator and every entry path.
+commit, holds the locator and every entry path, and that P differs from R only
+by `accepted-revision.json` plus the three generated products with a one-line
+bridge diff. Never rebase, squash, or amend an accepted R/P pair: if `main`
+moves first, create a fresh R and P and repeat review and UAT. A release is a
+tag at R followed by a new P naming it; rollback is a new P naming an older R.
 
 ## Execution targets: bind first, never cross
 
@@ -44,9 +48,11 @@ the same target.
   fixed path is assumed and the clean check is never weakened). The cloud
   computer never clones, installs, updates, or manages anything on the Mac; the
   Mac path lives only in the Mac's locator link, never in the account Skill.
-  Moving the checkout means re-registering the locator, and `register`
-  validates origin, expected revision, and clean state before it touches an
-  existing link.
+  Moving the checkout or changing R means re-registering the locator;
+  `register --target local|cloud` validates origin, expected revision, and clean
+  state before it touches an existing link, then atomically writes a
+  credential-free registration receipt beside the link (resolved ROOT, declared
+  target, host fingerprint, accepted revision) that stays device-local.
 - The cloud target may keep its own independently cloned checkout and locator
   (its own existing Git or GitHub CLI authentication; never a token in any
   Skill, receipt, or prompt). That checkout never touches Mac paths or sessions.
@@ -64,17 +70,23 @@ The receipt is one bounded JSON line: the target kind as you declared it, host
 kernel and hashed hostname fingerprint, ROOT identity (normalised origin, HEAD,
 clean, revision match), project identity (path on this host, Git top level,
 normalised origin), the worker script path under the same ROOT, and whether tmux
-reports a session of that exact name (presence only; ownership is the worker
+reports a session of that exact name (presence only, on the tmux server the
+locator can reach: not existence elsewhere, never ownership, which is the worker
 preflight's proof). `--target` is the Agent's declaration: the script cannot
 tell a Mac from a cloud computer. What ties the receipt to the bound target is
-that the locator link is device-local and that `host.fingerprint` equals the
-value recorded when that target's locator was registered; compare it every
-time. `root.path` and `project.path` are real local paths (they may include the
-user's home): bounded evidence for this target that never enters any account
-Skill. `result: refused` with reasons (`origin-mismatch`, `revision-mismatch`,
-`dirty`, `project-not-on-this-host`, `script-outside-root`, `target-required`,
-...) means do not load or dispatch; a path that does not exist on the executing
-host is `project-not-on-this-host` whatever target was declared. Then run
+that the locator link is device-local and that the locator compares the running
+`host.fingerprint` and the declared target with the value recorded at
+registration in the receipt beside its link, refusing on mismatch, so a fresh
+conversation needs no memory of it. `root.path` and `project.path` are real
+local paths (they may include the user's home): bounded evidence for this target
+that never enters any account Skill. `result: refused` with reasons
+(`origin-mismatch`, `origin-form-unsupported`, `revision-mismatch`, `dirty`,
+`locator-not-registered`, `host-fingerprint-mismatch`, `target-mismatch`,
+`registration-stale`, `project-not-on-this-host`, `script-outside-root`,
+`target-required`, ...) means do not load or dispatch; a path that does not
+exist on the executing host is `project-not-on-this-host` whatever target was
+declared. Revision and clean facts are what that host's Git reports; index
+tricks or a tampered `.git` on a trusted host are outside this boundary. Then run
 `ROOT/skills/<platform id>-kaola-project-runner/scripts/runtime-tmux.sh` on that
 same target with the project root as `--repo`.
 

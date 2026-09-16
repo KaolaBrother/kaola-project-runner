@@ -132,6 +132,17 @@ while IFS= read -r line; do
   if [[ "$line" == '/quit' || "$line" == '/exit' ]]; then
     exit 0
   fi
+  if [[ "$line" == FILL:* ]]; then
+    # FILL:<lines>:<width> prints that many numbered filler lines so a live test can
+    # make the visible frame exceed the ordinary receipt budget on purpose.
+    IFS=: read -r _ fill_count fill_width <<<"$line"
+    fill_text="$(printf '%*s' "$fill_width" '' | tr ' ' 'x')"
+    for ((fill_index = 1; fill_index <= fill_count; fill_index++)); do
+      printf 'fill %05d %s\n' "$fill_index" "$fill_text"
+    done
+    printf 'minimal · /help\n❯ '
+    continue
+  fi
   if [[ "$line" == 'BUSY' ]]; then
     printf 'Waiting for response…'
     sleep "${FAKE_BUSY_SECONDS:-3}"

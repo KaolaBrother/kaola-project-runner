@@ -31,6 +31,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -152,8 +153,15 @@ def authorizes_wrong_move(text: str, patterns: tuple[str, ...]) -> str | None:
 
 
 def git_repo(temporary: str) -> tuple[Path, str]:
-    """A copy of the project as a real Git checkout (one content-stage commit), for pin tests."""
+    """A copy of the project as a real Git checkout (one content-stage commit), for pin tests.
+
+    The copy is re-rendered at the content stage before its first commit, so the fixture is
+    the same whether the project itself currently sits at a content or a pinned stage: a
+    content commit holds content-stage products, which is what the pin gate demands of R.
+    """
     root = copy_repo(temporary)
+    written = render(root, "--write")
+    assert written.returncode == 0, written.stderr
     git(root, "init", "-q")
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "content")
@@ -225,6 +233,8 @@ class LocatorFixture:
         git(self.project, "add", "-A")
         git(self.project, "commit", "-q", "-m", "consumer")
 
+        self.bin = self.base / "bin dir"
+
     def locate(self, *args: str, env: dict[str, str] | None = None) -> tuple[int, dict]:
         base = dict(os.environ, HOME=str(self.base / "home"), GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
         if env:
@@ -233,6 +243,27 @@ class LocatorFixture:
                                    text=True, capture_output=True, env=base, cwd=str(self.base))
         assert completed.stdout.strip(), completed.stderr
         return completed.returncode, json.loads(completed.stdout)
+
+    def register(self, *args: str, target: str = "local") -> tuple[int, dict]:
+        """register --target into the fixture bin directory (the owner-chosen directory on PATH)."""
+        return self.locate("register", "--target", target, "--bin-dir", str(self.bin), *args)
+
+    def attest(self, *args: str) -> tuple[int, dict]:
+        """A direct script call that names the registration directory explicitly."""
+        return self.locate(*args, "--bin-dir", str(self.bin))
+
+    def via_link(self, *args: str) -> tuple[int, dict]:
+        """Run the registered link itself in a fresh process: a fresh conversation with no memory."""
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.base / "home"),
+               "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
+        completed = subprocess.run([sys.executable, str(self.bin / LOCATOR_COMMAND), *args],
+                                   text=True, capture_output=True, env=env, cwd=str(self.base))
+        assert completed.stdout.strip(), completed.stderr
+        return completed.returncode, json.loads(completed.stdout)
+
+    @property
+    def registration(self) -> Path:
+        return self.bin / f".{LOCATOR_COMMAND}.json"
 
 
 class Issue49NotAnEighthPlatform(unittest.TestCase):
@@ -371,8 +402,17 @@ class Issue49SingleBridge(unittest.TestCase):
         self.assertEqual(set(re.findall(r"hosts/grok-bot/([a-z0-9-]+)\.md", text)), {ORCHESTRATOR_ID})
         lowered = normalize(text).lower()
         for clause in ("exactly one", "one write", "update it in place", "no_supported_path", "execution on local computer",
-                       "never clones, installs, updates, or manages anything on the mac", "kaola-locate.py\" register --expect-revision",
+                       "never clones, installs, updates, or manages anything on the mac",
+                       "kaola-locate.py\" register --target local --bin-dir \"$bin\" --expect-revision",
                        f"{LOCATOR_COMMAND} --target local --expect-revision", "--target cloud", "read-only preflight",
+                       # Mission 9: cloud registration mirrors Local Computer; the registration receipt; UAT bin directory.
+                       "register --target cloud --bin-dir", "registration receipt", f"$bin/.{LOCATOR_COMMAND}.json",
+                       "owner-selected persistent directory on path", "installer-managed `--bin-links` link is left alone",
+                       "install-local.sh --bin-links", "fresh conversation needs no memory", "link and receipt stay device-local",
+                       "presence only, not existence elsewhere",
+                       # Mission 9: never rewrite an accepted pair; release and rollback shape.
+                       "never rebase, squash, or amend an accepted r/p pair", "create a fresh r and p", "a release is a tag at r",
+                       "rollback is a new p naming an older r", "one-line bridge diff",
                        "nothing was started, sent, stopped, cloned, fetched, checked out, or installed",
                        "cloud agent computer executed nothing", "never publish this skill to a public or team marketplace",
                        # Two-commit model and the honest UAT checkout (Mission 8).
@@ -454,7 +494,11 @@ class Issue49BridgeInvariance(unittest.TestCase):
             self.assertEqual(host_products(root), before_products, "canonical and manifest edits must not touch any host product")
             self.assertIn("Canonical policy sentence", (root / "skills" / ORCHESTRATOR_ID / "SKILL.md").read_text(encoding="utf-8"))
             self.assertIn("Renamed Runtime", (root / "skills" / "claude-code-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8"))
-            git(root, "checkout", "-q", "--", "platforms/claude-code.yaml")
+            # The pin gate demands a tree that differs from R only by the pin itself, so the canonical
+            # experiments above are reverted (and the workers re-rendered) before pinning.
+            git(root, "checkout", "-q", "--", ".")
+            self.assertEqual(render(root, "--write").returncode, 0)
+            self.assertEqual(git(root, "status", "--porcelain"), "")
             # Pin commit P: pinning the content commit changes exactly one line of the bridge.
             set_stage(root, "pinned", commit=content, label="pre-release UAT candidate; not a release")
             written = render(root, "--write")
@@ -499,6 +543,9 @@ class Issue49BridgeInvariance(unittest.TestCase):
             self.assertIn("exactly one of release", render(root, "--check").stderr)
             set_stage(root, "pinned", commit="a" * 40, label="x", release="v1.0.0")
             self.assertIn("exactly one of release", render(root, "--check").stderr)
+            for masquerade in ("release v1.0.0", "Release candidate", "v1.2.3 candidate", "candidate for v0.3.0"):
+                set_stage(root, "pinned", commit="a" * 40, label=masquerade)
+                self.assertIn("must not masquerade as a release", render(root, "--check").stderr, masquerade)
             set_stage(root, "content", commit="a" * 40)
             self.assertIn("content stage carries no commit", render(root, "--check").stderr)
             accepted.write_text(json.dumps({"stage": "released"}) + "\n", encoding="utf-8")
@@ -597,6 +644,68 @@ class Issue49PinModel(unittest.TestCase):
             self.assertIn("cannot be verified", result.stderr)
             self.assertNotEqual(render(root, "--write").returncode, 0, "an unverifiable pin is never written")
 
+    def test_pin_gate_enforces_the_p_delta_and_the_one_line_bridge_diff(self) -> None:
+        """P may differ from R only by the accepted revision and the three generated products."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root, content = git_repo(temporary)
+            bundle = root / "hosts" / HOST_ID
+            set_stage(root, "pinned", commit=content, label="candidate")
+            self.assertEqual(render(root, "--write").returncode, 0)
+            self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
+            self.assertEqual(sorted(line.split(None, 1)[1] for line in git(root, "status", "--porcelain").splitlines()),
+                             sorted(["hosts/grok-bot/INSTALL.md", "hosts/grok-bot/bridge.json", f"hosts/grok-bot/{ORCHESTRATOR_ID}.md",
+                                     "templates/grok-bot/accepted-revision.json"]))
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "pin")
+            pin = git(root, "rev-parse", "HEAD")
+            self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
+            # Any other tracked change in the tree under test is refused, before and after the pin commit.
+            readme = root / "docs" / "README.md"
+            readme.write_text(readme.read_text(encoding="utf-8") + "\nstray edit\n", encoding="utf-8")
+            stderr = self.check_findings(root)
+            self.assertIn("P may differ from", stderr)
+            self.assertIn("found docs/README.md", stderr)
+            self.assertNotEqual(render(root, "--write").returncode, 0, "an unverifiable pin is never written")
+            git(root, "checkout", "-q", "--", "docs/README.md")
+            self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
+            # A pair merged with an advanced main carries main's paths: refused.
+            git(root, "checkout", "-q", "-b", "main-moved", content)
+            (root / "docs" / "moved.md").write_text("main moved\n", encoding="utf-8")
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "main moved")
+            git(root, "checkout", "-q", "-")
+            git(root, "merge", "-q", "--no-edit", "main-moved")
+            stderr = self.check_findings(root)
+            self.assertIn("found docs/moved.md", stderr)
+            git(root, "reset", "-q", "--hard", pin)
+            # A rebase of the pair onto the moved main is refused the same way (the accepted R is unchanged).
+            git(root, "rebase", "-q", "main-moved")
+            stderr = self.check_findings(root)
+            self.assertIn("found docs/moved.md", stderr)
+            git(root, "reset", "-q", "--hard", pin)
+            # A squash of R and P into one commit no longer has R as an ancestor.
+            git(root, "checkout", "-q", "--orphan", "squashed")
+            git(root, "commit", "-q", "-m", "squash")
+            self.assertIn("is not an ancestor of HEAD", self.check_findings(root))
+            git(root, "checkout", "-q", "-f", "master") if git(root, "branch", "--list", "master") else git(root, "checkout", "-q", "-f", "main")
+            git(root, "reset", "-q", "--hard", pin)
+            self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
+            # The bridge may differ from R's bridge by exactly the accepted-revision line: a content commit
+            # whose committed bridge is stale (hand-edited) cannot be pinned.
+            set_stage(root, "content")
+            self.assertEqual(render(root, "--write").returncode, 0)
+            bridge = bundle / f"{ORCHESTRATOR_ID}.md"
+            bridge.write_text(bridge.read_text(encoding="utf-8") + "\nhand-edited line\n", encoding="utf-8")
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "content with a stale bridge")
+            stale = git(root, "rev-parse", "HEAD")
+            bridge.write_bytes(bridge.read_bytes().replace(b"\nhand-edited line\n", b""))
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "content repaired")
+            set_stage(root, "pinned", commit=stale, label="candidate")
+            stderr = self.check_findings(root)
+            self.assertIn("exactly one line", stderr)
+
     def test_project_stage_is_consistent_with_its_own_checkout(self) -> None:
         accepted = json.loads(ACCEPTED_REVISION.read_text(encoding="utf-8"))
         check = render(PROJECT, "--check")
@@ -610,6 +719,9 @@ class Issue49PinModel(unittest.TestCase):
                 self.assertIn(path, tree, path)
             pinned = json.loads(git(PROJECT, "show", f"{accepted['commit']}:templates/grok-bot/accepted-revision.json"))
             self.assertEqual(pinned["stage"], "content", "the pinned commit is a content commit, never a self-pin")
+            delta = set(git(PROJECT, "diff", "--name-only", accepted["commit"], "HEAD").splitlines())
+            self.assertTrue(delta <= {"templates/grok-bot/accepted-revision.json", f"hosts/grok-bot/{ORCHESTRATOR_ID}.md",
+                                      "hosts/grok-bot/bridge.json", "hosts/grok-bot/INSTALL.md"}, delta)
         else:
             self.assertIn("content stage, unpinned", check.stdout)
 
@@ -618,11 +730,15 @@ class Issue49LocatorAttestation(unittest.TestCase):
     def test_receipt_is_ok_bounded_and_credential_free(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary, origin_url="https://user:secret@github.com/KaolaBrother/kaola-project-runner.git")
-            rc, receipt = fx.locate("--target", "local", "--expect-revision", fx.revision, "--project", str(fx.project),
-                                    "--worker", "claude-code", "--session", "kaola-issue-49-no-such-session")
+            rc, registered = fx.register("--expect-revision", fx.revision)
+            self.assertEqual(rc, 0, registered)
+            rc, receipt = fx.via_link("--target", "local", "--expect-revision", fx.revision, "--project", str(fx.project),
+                                      "--worker", "claude-code", "--session", "kaola-issue-49-no-such-session")
             self.assertEqual(rc, 0, receipt)
             self.assertEqual(receipt["result"], "ok")
             self.assertEqual(receipt["target"], "local")
+            self.assertEqual(receipt["registration"]["path"], str(fx.registration))
+            self.assertTrue(all(receipt["registration"][key] for key in ("present", "fingerprint_match", "target_match", "root_match", "revision_current")))
             self.assertEqual(receipt["root"]["origin"], EXPECTED_ORIGIN)
             self.assertEqual(receipt["root"]["head"], fx.revision)
             self.assertTrue(receipt["root"]["clean"] and receipt["root"]["revision_match"])
@@ -638,51 +754,65 @@ class Issue49LocatorAttestation(unittest.TestCase):
             self.assertNotIn("secret", line)
             self.assertNotIn("user:", line)
             self.assertNotIn("@github", line)
+            stored = fx.registration.read_text(encoding="utf-8")
+            for leak in ("secret", "user:", "@github", platform.node()):
+                if leak:
+                    self.assertNotIn(leak, stored, "the registration receipt is credential-free and names no host")
 
     def test_fails_closed_on_origin_revision_dirty_and_unknown_worker(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary)
-            rc, receipt = fx.locate("--target", "local", "--expect-revision", "0" * 40)
+            self.assertEqual(fx.register("--expect-revision", fx.revision)[0], 0)
+            rc, receipt = fx.attest("--target", "local", "--expect-revision", "0" * 40)
             self.assertEqual(rc, 1)
-            self.assertIn("revision-mismatch", receipt["reasons"])
-            rc, receipt = fx.locate("--target", "local", "--worker", "bogus")
-            self.assertIn("worker-unknown", receipt["reasons"])
-            rc, receipt = fx.locate("--expect-revision", "abc")
+            self.assertEqual(receipt["reasons"], ["revision-mismatch"])
+            rc, receipt = fx.attest("--target", "local", "--worker", "bogus")
+            self.assertEqual(receipt["reasons"], ["worker-unknown"])
+            rc, receipt = fx.attest("--expect-revision", "abc")
             self.assertIn("expect-revision-not-40-hex", receipt["reasons"])
-            rc, receipt = fx.locate("--project", str(fx.project))
+            rc, receipt = fx.attest("--project", str(fx.project))
             self.assertIn("target-required", receipt["reasons"])
             (fx.checkout / "scratch.txt").write_text("dirty\n", encoding="utf-8")
-            rc, receipt = fx.locate("--target", "local")
+            rc, receipt = fx.attest("--target", "local")
             self.assertEqual(receipt["result"], "refused")
-            self.assertIn("dirty", receipt["reasons"])
+            self.assertEqual(receipt["reasons"], ["dirty"])
             (fx.checkout / "scratch.txt").unlink()
             git(fx.checkout, "remote", "set-url", "origin", "https://github.com/someone-else/kaola-project-runner.git")
-            rc, receipt = fx.locate("--target", "local")
+            rc, receipt = fx.attest("--target", "local")
             self.assertIn("origin-mismatch", receipt["reasons"])
             self.assertNotIn("someone-else/kaola-project-runner.git", json.dumps(receipt).replace(receipt["root"]["origin"], ""))
 
-    def test_paths_absent_on_the_executing_host_are_refused_whatever_target_is_declared(self) -> None:
-        """--target is echoed, never inferred: the refusal comes from the path not existing here."""
+    def test_paths_absent_on_the_executing_host_are_refused_and_the_declared_target_must_match_the_registration(self) -> None:
+        """--target is echoed, never inferred: the script cannot tell a Mac from a cloud computer.
+
+        What binds the declaration is the registration receipt: a target other than the
+        registered one is refused, and a path that does not exist here is refused whatever
+        target was declared.
+        """
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary)
+            self.assertEqual(fx.register("--expect-revision", fx.revision)[0], 0)
             for declared, absent in (("local", "/workspace/consumer-project"), ("cloud", "/Users/owner/projects/consumer")):
-                rc, receipt = fx.locate("--target", declared, "--expect-revision", fx.revision, "--project", absent,
-                                        "--worker", "claude-code", "--session", "s")
+                rc, receipt = fx.via_link("--target", declared, "--expect-revision", fx.revision, "--project", absent,
+                                          "--worker", "claude-code", "--session", "s")
                 self.assertEqual(receipt["result"], "refused")
                 self.assertEqual(receipt["target"], declared, "the declaration is echoed as given")
                 self.assertIn("project-not-on-this-host", receipt["reasons"])
                 self.assertFalse(receipt["project"]["on_this_host"])
-            # The same real path is accepted under either declaration: the script cannot tell a Mac from a cloud computer.
-            for declared in ("local", "cloud"):
-                rc, receipt = fx.locate("--target", declared, "--expect-revision", fx.revision, "--project", str(fx.project))
-                self.assertEqual(receipt["result"], "ok", receipt)
+            self.assertIn("target-mismatch", receipt["reasons"], "cloud was declared but local was registered")
+            # The same real path is accepted under the registered declaration only.
+            rc, receipt = fx.via_link("--target", "local", "--expect-revision", fx.revision, "--project", str(fx.project))
+            self.assertEqual(receipt["result"], "ok", receipt)
+            rc, receipt = fx.via_link("--target", "cloud", "--expect-revision", fx.revision, "--project", str(fx.project))
+            self.assertEqual(receipt["reasons"], ["target-mismatch"])
+            self.assertFalse(receipt["registration"]["target_match"])
             # A relative path is never accepted as a project identity.
-            rc, receipt = fx.locate("--target", "local", "--project", "consumer project")
+            rc, receipt = fx.via_link("--target", "local", "--project", "consumer project")
             self.assertIn("project-not-on-this-host", receipt["reasons"])
             # A non-git directory has no project identity.
             plain = fx.base / "plain"
             plain.mkdir()
-            rc, receipt = fx.locate("--target", "cloud", "--project", str(plain))
+            rc, receipt = fx.via_link("--target", "local", "--project", str(plain))
             self.assertIn("project-not-a-checkout", receipt["reasons"])
 
     def test_worker_script_must_live_under_the_same_canonical_root(self) -> None:
@@ -692,28 +822,29 @@ class Issue49LocatorAttestation(unittest.TestCase):
             outside = fx.base / "elsewhere.sh"
             outside.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
             outside.chmod(0o755)
+            self.assertEqual(fx.register()[0], 0)
             script.unlink()
             script.symlink_to(outside)
-            rc, receipt = fx.locate("--target", "local", "--worker", "claude-code")
+            rc, receipt = fx.via_link("--target", "local", "--worker", "claude-code")
             self.assertIn("script-outside-root", receipt["reasons"])
             script.unlink()
-            rc, receipt = fx.locate("--target", "local", "--worker", "claude-code")
+            rc, receipt = fx.via_link("--target", "local", "--worker", "claude-code")
             self.assertIn("script-missing", receipt["reasons"])
 
     def test_register_links_the_locator_and_rediscovery_follows_a_moved_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary)
-            bin_dir = fx.base / "bin dir"
-            rc, receipt = fx.locate("register", "--bin-dir", str(bin_dir))
+            bin_dir = fx.bin
+            rc, receipt = fx.register()
             self.assertEqual(rc, 0, receipt)
             link = bin_dir / LOCATOR_COMMAND
             self.assertTrue(link.is_symlink())
             self.assertEqual(Path(os.readlink(link)), (fx.checkout / "scripts" / "kaola-locate.py").resolve())
             self.assertFalse(receipt["locator"]["replaced"])
+            self.assertTrue(receipt["registration"]["changed"] and not receipt["registration"]["replaced"])
+            self.assertEqual(json.loads(fx.registration.read_text(encoding="utf-8"))["root"], str(fx.checkout.resolve()))
             # The link is the whole locator: running it resolves the same ROOT.
-            completed = subprocess.run([sys.executable, str(link), "--target", "local", "--expect-revision", fx.revision],
-                                       text=True, capture_output=True, env=dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null"))
-            via_link = json.loads(completed.stdout)
+            rc, via_link = fx.via_link("--target", "local", "--expect-revision", fx.revision)
             self.assertEqual(via_link["result"], "ok", via_link)
             self.assertEqual(Path(via_link["root"]["path"]), fx.checkout.resolve())
             # Path change = re-registration from the new location; no Skill changes.
@@ -721,30 +852,39 @@ class Issue49LocatorAttestation(unittest.TestCase):
             shutil.move(str(fx.checkout), str(moved))
             stale = subprocess.run([sys.executable, str(link)], text=True, capture_output=True)
             self.assertNotEqual(stale.returncode, 0)
-            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--bin-dir", str(bin_dir)],
+            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir)],
                                        text=True, capture_output=True, env=dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null"))
             receipt = json.loads(completed.stdout)
             self.assertEqual(receipt["result"], "ok", receipt)
-            self.assertTrue(receipt["locator"]["replaced"])
+            self.assertTrue(receipt["locator"]["replaced"] and receipt["registration"]["replaced"])
             self.assertEqual(Path(os.readlink(link)), (moved / "scripts" / "kaola-locate.py").resolve())
-            # A foreign link or file at the locator path is never replaced.
+            self.assertEqual(json.loads(fx.registration.read_text(encoding="utf-8"))["root"], str(moved.resolve()))
+            # A foreign link or file at the locator path is never replaced, and the receipt stays as it was.
+            recorded = fx.registration.read_bytes()
             link.unlink()
             link.symlink_to(fx.base / "foreign")
-            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--bin-dir", str(bin_dir)],
+            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir)],
                                        text=True, capture_output=True)
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("foreign-locator-link", completed.stdout)
             self.assertEqual(Path(os.readlink(link)), fx.base / "foreign")
+            self.assertEqual(fx.registration.read_bytes(), recorded)
+            # register without --target is not a registration at all.
+            completed = subprocess.run([sys.executable, str(moved / "scripts" / "kaola-locate.py"), "register", "--bin-dir", str(bin_dir)],
+                                       text=True, capture_output=True)
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("--target", completed.stderr)
 
     def test_register_validates_every_fact_before_touching_an_existing_locator(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary)
-            bin_dir = fx.base / "bin"
-            rc, receipt = fx.locate("register", "--bin-dir", str(bin_dir), "--expect-revision", fx.revision)
+            bin_dir = fx.bin
+            rc, receipt = fx.register("--expect-revision", fx.revision)
             self.assertEqual(rc, 0, receipt)
             self.assertTrue(receipt["locator"]["changed"])
             link = bin_dir / LOCATOR_COMMAND
             good = os.readlink(link)
+            good_receipt = fx.registration.read_bytes()
             # A second checkout of the same origin must not take the link over while it is dirty,
             # at the wrong revision, or at a foreign origin; the good link stays exactly as it was.
             other = fx.base / "other checkout"
@@ -752,14 +892,15 @@ class Issue49LocatorAttestation(unittest.TestCase):
             git(other, "checkout", "-q", "--detach", fx.revision)
             git(other, "remote", "set-url", "origin", "https://github.com/KaolaBrother/kaola-project-runner.git")
             def register_from(checkout: Path, *args: str) -> dict:
-                completed = subprocess.run([sys.executable, str(checkout / "scripts" / "kaola-locate.py"), "register", "--bin-dir", str(bin_dir), *args],
+                completed = subprocess.run([sys.executable, str(checkout / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir), *args],
                                            text=True, capture_output=True, env=dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1"))
                 self.assertNotEqual(completed.returncode, 0, completed.stdout)
                 self.assertTrue(completed.stdout.strip(), completed.stderr)
                 data = json.loads(completed.stdout)
                 self.assertEqual(data["result"], "refused")
-                self.assertFalse(data["locator"]["changed"])
+                self.assertFalse(data["locator"]["changed"] or data["registration"]["changed"])
                 self.assertEqual(os.readlink(link), good, "a refused registration must leave the existing locator unchanged")
+                self.assertEqual(fx.registration.read_bytes(), good_receipt, "a refused registration must leave the receipt unchanged")
                 return data
             (other / "scratch.txt").write_text("dirty\n", encoding="utf-8")
             self.assertIn("dirty", register_from(other)["reasons"])
@@ -768,31 +909,137 @@ class Issue49LocatorAttestation(unittest.TestCase):
             self.assertIn("expect-revision-not-40-hex", register_from(other, "--expect-revision", "abc")["reasons"])
             git(other, "remote", "set-url", "origin", "https://github.com/someone-else/kaola-project-runner.git")
             self.assertIn("origin-mismatch", register_from(other)["reasons"])
-            # A clean, matching checkout may take over (re-registration), and only then does the link change.
+            git(other, "remote", "set-url", "origin", "github.com/KaolaBrother/kaola-project-runner")
+            self.assertEqual(register_from(other)["reasons"], ["origin-form-unsupported"])
+            # A clean, matching checkout may take over (re-registration), and only then do link and receipt change.
             git(other, "remote", "set-url", "origin", "https://github.com/KaolaBrother/kaola-project-runner.git")
-            completed = subprocess.run([sys.executable, str(other / "scripts" / "kaola-locate.py"), "register", "--bin-dir", str(bin_dir), "--expect-revision", fx.revision],
+            completed = subprocess.run([sys.executable, str(other / "scripts" / "kaola-locate.py"), "register", "--target", "local", "--bin-dir", str(bin_dir), "--expect-revision", fx.revision],
                                        text=True, capture_output=True, env=dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1"))
             data = json.loads(completed.stdout)
             self.assertEqual(data["result"], "ok", data)
             self.assertTrue(data["locator"]["changed"] and data["locator"]["replaced"])
             self.assertEqual(Path(os.readlink(link)), (other / "scripts" / "kaola-locate.py").resolve())
-            # A dirty tree also blocks a first registration: nothing is linked at all.
+            self.assertEqual(json.loads(fx.registration.read_text(encoding="utf-8"))["root"], str(other.resolve()))
+            # A dirty tree also blocks a first registration: nothing is linked or recorded at all.
             empty_bin = fx.base / "empty bin"
             (fx.checkout / "scratch.txt").write_text("dirty\n", encoding="utf-8")
-            rc, receipt = fx.locate("register", "--bin-dir", str(empty_bin))
+            rc, receipt = fx.locate("register", "--target", "local", "--bin-dir", str(empty_bin))
             self.assertEqual(receipt["result"], "refused")
             self.assertFalse((empty_bin / LOCATOR_COMMAND).exists() or (empty_bin / LOCATOR_COMMAND).is_symlink())
+            self.assertFalse((empty_bin / f".{LOCATOR_COMMAND}.json").exists())
 
     def test_session_field_reports_presence_only_and_docstring_says_so(self) -> None:
         docstring = normalize(LOCATOR.read_text(encoding="utf-8").split('"""', 2)[1])
-        self.assertIn("presence only; ownership is proven by the worker preflight", docstring)
+        self.assertIn("presence on that server only: not proof that the session exists elsewhere, and never ownership, which the worker preflight proves", docstring)
         self.assertIn("as declared by the caller", docstring)
         self.assertIn("may include the user's home directory", docstring)
+        self.assertIn("no content hashing is attempted", docstring)
         self.assertNotIn("exact owned session", docstring)
         with tempfile.TemporaryDirectory() as temporary:
             fx = LocatorFixture(temporary)
-            rc, receipt = fx.locate("--target", "local", "--session", "kaola-issue-49-no-such-session")
-            self.assertEqual(set(receipt["session"]), {"name", "present"}, "no ownership claim in the receipt")
+            self.assertEqual(fx.register()[0], 0)
+            rc, receipt = fx.via_link("--target", "local", "--session", "kaola-issue-49-no-such-session")
+            self.assertEqual(set(receipt["session"]), {"name", "present"}, "no ownership or existence claim in the receipt")
+
+    def test_registration_receipt_is_durable_across_conversations_and_fails_closed_on_tampering(self) -> None:
+        """A fresh process with no memory runs the link and the locator compares the receipt itself."""
+        with tempfile.TemporaryDirectory() as temporary:
+            fx = LocatorFixture(temporary)
+            rc, registered = fx.register("--expect-revision", fx.revision)
+            self.assertEqual(rc, 0, registered)
+            record = json.loads(fx.registration.read_text(encoding="utf-8"))
+            self.assertEqual(set(record), {"schema", "root", "target", "host", "accepted_revision"})
+            self.assertEqual(record["schema"], "kaola-project-runner-locator-registration/1")
+            self.assertEqual((record["root"], record["target"], record["accepted_revision"]), (str(fx.checkout.resolve()), "local", fx.revision))
+            self.assertEqual(set(record["host"]), {"kernel", "fingerprint"})
+            self.assertEqual(len(record["host"]["fingerprint"]), 12)
+            node = platform.node()
+            if node:
+                self.assertNotIn(node, fx.registration.read_text(encoding="utf-8"), "the hostname itself is never stored")
+            # Fresh conversation: nothing but the link and the receipt on disk.
+            rc, receipt = fx.via_link("--target", "local", "--expect-revision", fx.revision)
+            self.assertEqual(receipt["result"], "ok", receipt)
+            self.assertEqual(receipt["registration"]["accepted_revision"], fx.revision)
+            self.assertTrue(receipt["registration"]["fingerprint_match"] and receipt["registration"]["target_match"])
+            # A different declared target is refused by the receipt, not by any host classification.
+            rc, receipt = fx.via_link("--target", "cloud", "--expect-revision", fx.revision)
+            self.assertEqual(receipt["reasons"], ["target-mismatch"])
+            # Tampering with each recorded fact is refused.
+            original = fx.registration.read_text(encoding="utf-8")
+            def tampered(**changes: object) -> dict:
+                data = json.loads(original)
+                data.update(changes)
+                fx.registration.write_text(json.dumps(data) + "\n", encoding="utf-8")
+                rc, receipt = fx.via_link("--target", "local", "--expect-revision", fx.revision)
+                self.assertEqual(rc, 1, receipt)
+                self.assertEqual(receipt["result"], "refused")
+                return receipt
+            self.assertEqual(tampered(host={"kernel": record["host"]["kernel"], "fingerprint": "0" * 12})["reasons"], ["host-fingerprint-mismatch"])
+            self.assertEqual(tampered(host={"kernel": "Other", "fingerprint": record["host"]["fingerprint"]})["reasons"], ["host-fingerprint-mismatch"])
+            self.assertEqual(tampered(target="cloud")["reasons"], ["target-mismatch"])
+            self.assertEqual(tampered(root=str(fx.base / "elsewhere"))["reasons"], ["registration-root-mismatch"])
+            self.assertEqual(tampered(accepted_revision="1" * 40)["reasons"], ["registration-stale"])
+            self.assertEqual(tampered(schema="kaola-project-runner-locator-registration/0")["reasons"], ["locator-registration-unreadable"])
+            fx.registration.write_text("{not json", encoding="utf-8")
+            rc, receipt = fx.via_link("--target", "local")
+            self.assertEqual(receipt["reasons"], ["locator-registration-unreadable"])
+            # A missing receipt refuses any declared target; plain discovery still answers.
+            fx.registration.unlink()
+            rc, receipt = fx.via_link("--target", "local")
+            self.assertEqual(receipt["reasons"], ["locator-not-registered"])
+            rc, receipt = fx.via_link()
+            self.assertEqual(receipt["result"], "ok", receipt)
+            self.assertFalse(receipt["registration"]["present"])
+            self.assertEqual(Path(receipt["root"]["path"]), fx.checkout.resolve())
+            # A receipt that exists but mismatches refuses even a plain discovery call.
+            fx.registration.write_text(original.replace(record["host"]["fingerprint"], "f" * 12), encoding="utf-8")
+            rc, receipt = fx.via_link()
+            self.assertEqual(receipt["reasons"], ["host-fingerprint-mismatch"])
+            # Re-registration repairs it; changing R without re-registering is stale.
+            fx.registration.write_text(original, encoding="utf-8")
+            (fx.checkout / "next.txt").write_text("next\n", encoding="utf-8")
+            git(fx.checkout, "add", "-A")
+            git(fx.checkout, "commit", "-q", "-m", "next content commit")
+            rc, receipt = fx.via_link("--target", "local")
+            self.assertEqual(receipt["reasons"], ["registration-stale"])
+            self.assertFalse(receipt["registration"]["revision_current"])
+            rc, registered = fx.register("--expect-revision", git(fx.checkout, "rev-parse", "HEAD"))
+            self.assertEqual(registered["result"], "ok", registered)
+            self.assertTrue(registered["registration"]["replaced"])
+            rc, receipt = fx.via_link("--target", "local")
+            self.assertEqual(receipt["result"], "ok", receipt)
+
+    def test_origin_is_accepted_only_in_explicit_https_ssh_or_scp_forms(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fx = LocatorFixture(temporary)
+            accepted = ("https://github.com/KaolaBrother/kaola-project-runner.git",
+                        "https://user:secret@github.com:443/KaolaBrother/kaola-project-runner/",
+                        "ssh://git@github.com/KaolaBrother/kaola-project-runner.git",
+                        "git@github.com:KaolaBrother/kaola-project-runner.git",
+                        "github.com:KaolaBrother/kaola-project-runner")
+            for url in accepted:
+                git(fx.checkout, "remote", "set-url", "origin", url)
+                rc, receipt = fx.locate()
+                self.assertEqual(receipt["root"]["origin"], EXPECTED_ORIGIN, url)
+                self.assertNotIn("origin-mismatch", receipt.get("reasons", []), url)
+                self.assertNotIn("origin-form-unsupported", receipt.get("reasons", []), url)
+                self.assertNotIn("secret", json.dumps(receipt))
+            rejected = ("github.com/KaolaBrother/kaola-project-runner", "http://github.com/KaolaBrother/kaola-project-runner",
+                        "git://github.com/KaolaBrother/kaola-project-runner", "file:///tmp/kaola-project-runner",
+                        "/Users/owner/kaola-project-runner", "../kaola-project-runner", "https://github.com/KaolaBrother",
+                        "https://user:secret@github.com/a/b/c")
+            for url in rejected:
+                git(fx.checkout, "remote", "set-url", "origin", url)
+                rc, receipt = fx.locate()
+                self.assertEqual(rc, 1, url)
+                self.assertIn("origin-form-unsupported", receipt["reasons"], url)
+                self.assertIsNone(receipt["root"]["origin"], url)
+                leak_check = dict(receipt, root={k: v for k, v in receipt["root"].items() if k != "expected_origin"})
+                self.assertNotIn(url, json.dumps(leak_check), "the raw origin never leaks into the receipt")
+                self.assertNotIn("secret", json.dumps(receipt))
+            git(fx.checkout, "remote", "set-url", "origin", "https://github.com/someone-else/kaola-project-runner.git")
+            rc, receipt = fx.locate()
+            self.assertEqual(receipt["reasons"], ["origin-mismatch"])
 
     def test_locator_has_no_credential_handling_or_filesystem_scan(self) -> None:
         text = LOCATOR.read_text(encoding="utf-8")

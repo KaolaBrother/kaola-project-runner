@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- **Pre-UAT closure of the Issue #49 re-review notes** (Mission 9; fresh content commit R2
+  and pin commit P2). Ordinary `observe`/`status` receipts are now really bounded on both
+  transports by the shared `capture_receipt_bytes` budget: PTY through
+  `kaola-observation.py bound_observation` (newest `raw_current_frame` lines and first
+  `child_processes` entries kept; `truncated.fields` with kept/total sizes and sha256;
+  `snapshot_id`/`pane_revision` from the full frame), ACP through `bound_state_receipt` in
+  `kaola-acp.py` (large structures summarised by size and sha256; `pending_permissions` keeps
+  its newest entries); only `capture --full` stays unbounded (behavioural tests, including a
+  live private-tmux path). `kaola-locate.py register` now requires `--target local|cloud` and,
+  after validating, atomically writes a credential-free device-local registration receipt
+  `.kaola-project-runner-locate.json` beside the owner-chosen link (resolved root, declared
+  target, host fingerprint, accepted revision, schema); every later call compares the running
+  host fingerprint, declared target, root, and HEAD with it and fails closed
+  (`locator-not-registered`, `host-fingerprint-mismatch`, `target-mismatch`,
+  `registration-root-mismatch`, `registration-stale`); a refused registration leaves link and
+  receipt unchanged. Origins are accepted only in explicit `https://`, `ssh://`, or scp forms
+  (`origin-form-unsupported` for a bare `github.com/...` or local path). The pin gate now
+  machine-enforces the P delta (only `accepted-revision.json` plus the three generated
+  `hosts/grok-bot/` products; bridge diff exactly the accepted-revision line), so a rebased,
+  squashed, or `main`-merged pair fails `--require-pinned`; a label may not masquerade as a
+  release. Docs: never rebase/squash an accepted R/P pair (fresh R/P when `main` moves),
+  release = tag at R then P after the tag, rollback = new pin naming an older R; cloud
+  registration passes `--target cloud --expect-revision R`; session field is presence on the
+  reachable tmux server only; `bridge.json` content-stage null fields; trusted-host Git-index
+  edge cases stated as bounded; UAT registers into an owner-selected bin directory on PATH and
+  says how to restore the installer-managed link. Budgets and `templates/grok-golden/` unchanged.
 - **Grok Bot bridge: honest two-commit content/pin model** (Issue #49 review of `fb65c51`,
   Mission 8). `templates/grok-bot/accepted-revision.json` now declares a `stage`: `content`
   (the content commit R; the bridge carries an explicit "none yet" line, `bridge.json` says

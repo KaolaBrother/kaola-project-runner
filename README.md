@@ -65,7 +65,8 @@ device-local locator `kaola-project-runner-locate` for the verified `kaola-proje
 checkout (expected origin, accepted pinned revision, clean tree), and loads only the main
 Skill and, at dispatch, one selected `<platform>-kaola-project-runner` worker from that
 checkout. The bridge carries no policy, transport, reference, path, runtime copy, or
-credential; a release changes only its accepted-revision line. Nothing on one target reaches
+credential; a release changes only its accepted-revision line, and an accepted content/pin
+pair is never rebased or squashed. Nothing on one target reaches
 the other, and the cloud never installs or updates the Mac. Grok Bot is a packaging adapter
 inside the renderer, not a transport platform; still seven platforms, and `--platform grok`
 remains the Grok CLI worker. Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
@@ -174,8 +175,8 @@ subset, or skip the orchestrator:
 
 # Grok Bot: no installer destination. Save hosts/grok-bot/kaola-project-runner.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:
-python3 scripts/kaola-locate.py register --expect-revision <accepted commit>   # validates origin/revision/clean, then links kaola-project-runner-locate (same bin dir as --bin-links)
-kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt (target as declared; compare host.fingerprint)
+python3 scripts/kaola-locate.py register --target local --bin-dir <dir on PATH> --expect-revision <accepted commit>   # validates origin/revision/clean, links kaola-project-runner-locate, writes the registration receipt beside it
+kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt; the locator compares host fingerprint and target with its receipt
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode

@@ -19,7 +19,11 @@ Read `raw_current_frame`, terminal coordinates, editor and approval observations
 input/output offsets, Git facts, and any Workflow/forge evidence together. These are observations, not
 Runner-owned state or authorization. The Skill does not decide whether the runtime is idle, busy,
 waiting, complete, holding a draft, asking for approval, or safe to mutate. The controlling agent
-decides what the evidence means and which action to take.
+decides what the evidence means and which action to take. Ordinary `observe` and `status` receipts
+are bounded like `capture`: over the shared budget, `raw_current_frame` keeps its newest whole lines
+and `child_processes` its first entries, and `truncated.fields` names each bounded field with its kept
+and total size and the sha256 of the full value (`snapshot_id` and `pane_revision` are computed from
+the full frame); only `capture --full` is unbounded.
 
 An observation may contain `snapshot_id` and `pane_revision` so later receipts can correlate an action
 with what the agent previously saw. They are evidence identifiers, not freshness gates. A normal redraw,

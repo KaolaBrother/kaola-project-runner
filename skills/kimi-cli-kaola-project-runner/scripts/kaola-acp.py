@@ -209,7 +209,8 @@ def view_error(code: str, message: str) -> dict[str, Any]:
     return {"schema": VIEW_SCHEMA, "error": {"code": code, "message": message}}
 
 
-# Ordinary capture receipts are bounded (progressive disclosure); this limit equals
+# Ordinary receipts are bounded (progressive disclosure): capture through
+# bound_capture_receipt, observe/status through bound_state_receipt; this limit equals
 # ``capture_receipt_bytes`` in templates/budgets.json and the PTY bound in
 # kaola-observation.py. ``capture --full`` is the explicit, unbounded request and
 # never passes through bound_capture_receipt.
@@ -262,6 +263,56 @@ def bound_capture_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_
         while start < len(items) and (dropped < excess or dropped == 0):
             dropped += sizes[start]
             start += 1
+
+
+# Ordinary observe/status receipts share the same budget. Scalar facts (state, activity,
+# turn outcome, cursors, pids, fingerprints) always stay whole; the large structures below
+# are summarised, in this order, until the line fits.
+STATE_BOUNDED_FIELDS = ("record", "initial_config_options", "session_meta", "capabilities",
+                        "agent_info", "pending_permissions")
+STATE_BOUNDED_HINT = ("ordinary observe/status receipts are bounded: summarised structures are "
+                      "named with their byte size and sha256; pending_permissions keeps its newest entries")
+
+
+def bound_state_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_BYTES) -> dict[str, Any]:
+    """Keep an ordinary observe/status receipt within ``limit`` bytes, verifiably.
+
+    When the JSON line would exceed the limit, each field in ``STATE_BOUNDED_FIELDS`` is
+    replaced in turn by ``{"omitted": true, "bytes", "sha256"}`` (``pending_permissions``
+    first drops its oldest entries and keeps the newest that fit) and ``truncated.fields``
+    records, per bounded field, the byte size and sha256 of the full value plus its key list
+    or counts. A receipt within budget passes through unchanged.
+    """
+    def size(value: Any) -> int:
+        return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+
+    if size(receipt) <= limit:
+        return receipt
+    bounded = dict(receipt)
+    fields: dict[str, Any] = {}
+    bounded["truncated"] = {"fields": fields, "hint": STATE_BOUNDED_HINT}
+    for key in STATE_BOUNDED_FIELDS:
+        if size(bounded) <= limit:
+            break
+        value = bounded.get(key)
+        if not isinstance(value, (dict, list)) or not value:
+            continue
+        raw = json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        summary: dict[str, Any] = {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+        if key == "pending_permissions" and isinstance(value, list):
+            kept = list(value)
+            while size(bounded) > limit and kept:
+                kept = kept[1:]
+                bounded[key] = kept
+            summary.update(kind="list", total=len(value), kept=len(kept), dropped=len(value) - len(kept))
+        elif isinstance(value, list):
+            summary.update(kind="list", count=len(value))
+            bounded[key] = {"omitted": True, "bytes": len(raw), "sha256": summary["sha256"]}
+        else:
+            summary.update(kind="object", keys=sorted(str(k) for k in value))
+            bounded[key] = {"omitted": True, "bytes": len(raw), "sha256": summary["sha256"]}
+        fields[key] = summary
+    return bounded
 
 
 def command_view(args: argparse.Namespace, repo: str, directory: Path) -> dict[str, Any]:
@@ -1234,6 +1285,7 @@ def main() -> int:
         record = read_record(directory)
         if record:
             receipt.setdefault("record", record)
+        receipt = bound_state_receipt(receipt)
     elif args.command == "capture":
         receipt = op_or_holder_lost(
             args, repo, directory, "capture",

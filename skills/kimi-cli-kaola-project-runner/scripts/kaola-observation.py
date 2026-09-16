@@ -629,9 +629,9 @@ def status_view(observation: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-# Ordinary capture receipts are bounded (progressive disclosure); this limit
-# equals ``capture_receipt_bytes`` in templates/budgets.json. ``capture --full``
-# bypasses it by explicit request.
+# Ordinary receipts are bounded (progressive disclosure): capture through bound_text,
+# observe/status through bound_observation; this limit equals ``capture_receipt_bytes``
+# in templates/budgets.json. ``capture --full`` bypasses it by explicit request.
 CAPTURE_RECEIPT_BYTES = 65536
 TRUNCATION_MARKER = "[kaola capture truncated: kept last {kept} of {total} bytes; sha256 of the full capture {digest}; pass --full for the whole capture]\n"
 
@@ -653,6 +653,95 @@ def bound_text(data: bytes, limit: int = CAPTURE_RECEIPT_BYTES) -> bytes:
         tail = tail[newline + 1:]
     marker = TRUNCATION_MARKER.format(kept=len(tail), total=len(data), digest=digest).encode("utf-8")
     return tail + marker
+
+
+# The first entries of the process tree kept while the frame is trimmed.
+PROCESS_EXCERPT = 32
+OBSERVATION_BOUNDED_HINT = (
+    "ordinary observe/status receipts are bounded: raw_current_frame keeps its newest whole "
+    "lines and child_processes its first entries; snapshot_id and pane_revision were computed "
+    "from the full frame; capture --full is the only unbounded request"
+)
+
+
+def _json_size(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+
+
+def _tail_lines(data: bytes, keep: int) -> bytes:
+    tail = data[-keep:] if keep > 0 else b""
+    newline = tail.find(b"\n")
+    if 0 <= newline < len(tail) - 1:
+        tail = tail[newline + 1:]
+    return tail
+
+
+def bound_observation(observation: dict[str, Any], limit: int = CAPTURE_RECEIPT_BYTES) -> dict[str, Any]:
+    """Keep an ordinary observe/status receipt within ``limit`` bytes, verifiably.
+
+    Structural facts (identity, hard evidence, relay, counts, Git, model, flags) stay whole.
+    When the JSON line would exceed the limit, ``child_processes`` is first cut to a short
+    excerpt of its first entries, then ``raw_current_frame`` keeps its newest whole lines,
+    and only if that is still not enough is the process excerpt dropped entirely, so the
+    most relevant excerpt (the newest visible output) survives. ``truncated.fields``
+    records, per bounded field, the kept and total sizes (or counts) and the sha256 of the
+    full value, so the receipt stays verifiable. ``snapshot_id`` and ``pane_revision`` are
+    computed before bounding, from the full frame, and are unchanged. A receipt already
+    bounded once keeps its original totals and digests.
+    """
+    if _json_size(observation) <= limit:
+        return observation
+    bounded = dict(observation)
+    previous = (observation.get("truncated") or {}).get("fields") or {}
+    fields: dict[str, Any] = {}
+    bounded["truncated"] = {"fields": fields, "hint": OBSERVATION_BOUNDED_HINT}
+    processes = observation.get("child_processes")
+    process_entry: dict[str, Any] | None = None
+    if isinstance(processes, list) and processes:
+        origin = previous.get("child_processes") or {}
+        stream = "".join(
+            json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in processes
+        ).encode("utf-8")
+        process_entry = {
+            "kind": "list",
+            "total": origin.get("total", len(processes)),
+            "kept": len(processes),
+            "stream_bytes": origin.get("stream_bytes", len(stream)),
+            "stream_sha256": origin.get("stream_sha256", hashlib.sha256(stream).hexdigest()),
+        }
+
+    def trim_processes(floor: int) -> None:
+        assert process_entry is not None
+        kept = list(bounded["child_processes"])
+        while _json_size(bounded) > limit and len(kept) > floor:
+            kept = kept[:max(floor, len(kept) - max(1, len(kept) // 4))]
+            bounded["child_processes"] = kept
+            process_entry["kept"] = len(kept)
+            fields["child_processes"] = process_entry
+
+    if process_entry is not None:
+        trim_processes(PROCESS_EXCERPT)
+    frame = observation.get("raw_current_frame")
+    if _json_size(bounded) > limit and isinstance(frame, str) and frame:
+        data = frame.encode("utf-8")
+        origin = previous.get("raw_current_frame") or {}
+        entry: dict[str, Any] = {
+            "kind": "text",
+            "total_bytes": origin.get("total_bytes", len(data)),
+            "sha256": origin.get("sha256", hashlib.sha256(data).hexdigest()),
+            "kept_bytes": len(data),
+        }
+        fields["raw_current_frame"] = entry
+        keep = len(data)
+        while _json_size(bounded) > limit and keep > 0:
+            keep = max(keep - max(_json_size(bounded) - limit, 512), 0)
+            tail = _tail_lines(data, keep)
+            keep = min(keep, len(tail))
+            bounded["raw_current_frame"] = tail.decode("utf-8", errors="replace")
+            entry["kept_bytes"] = len(tail)
+    if process_entry is not None and _json_size(bounded) > limit:
+        trim_processes(0)
+    return bounded
 
 
 def main() -> int:
@@ -693,7 +782,7 @@ def main() -> int:
         sys.stdout.buffer.write(bound_text(sys.stdin.buffer.read(), limit))
         sys.stdout.buffer.flush()
     elif args.command == "build":
-        print(json.dumps(build_from_environment(), ensure_ascii=False, sort_keys=True))
+        print(json.dumps(bound_observation(build_from_environment()), ensure_ascii=False, sort_keys=True))
     elif args.command == "receipt":
         print(make_answer_receipt(json.load(sys.stdin)))
     elif args.command in {"claude-frame", "generic-frame", "opencode-frame", "kimi-frame", "cursor-frame"}:
@@ -709,7 +798,7 @@ def main() -> int:
         pane_facts = json.loads(os.environ.get("KPR_ADAPTER_PANE_FACTS", "{}"))
         print(json.dumps(function(frame, activity, pane_facts), ensure_ascii=False, sort_keys=True))
     else:
-        print(json.dumps(status_view(json.load(sys.stdin)), ensure_ascii=False, sort_keys=True))
+        print(json.dumps(bound_observation(status_view(json.load(sys.stdin))), ensure_ascii=False, sort_keys=True))
     return 0
 
 

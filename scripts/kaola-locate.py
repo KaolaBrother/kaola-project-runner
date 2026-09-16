@@ -3,28 +3,42 @@
 
 This file lives at ``<checkout>/scripts/kaola-locate.py``. A target (the Mac that runs
 Local Computer, or a cloud Agent Computer) registers it once as the command
-``kaola-project-runner-locate`` -- a symlink in the same bin directory that
-``install-local.sh --bin-links`` uses -- and from then on the thin account bridge asks that
-command, on the bound target, where the canonical checkout is. The checkout path is never
-written into any Skill: moving the checkout means running ``register`` again from its new
-location. There is no service, daemon, registry, or filesystem scan; the link is the whole
-locator.
+``kaola-project-runner-locate`` -- a symlink in an owner-chosen bin directory on PATH (the
+installer's ``--bin-links`` directory is the default) -- and from then on the thin account
+bridge asks that command, on the bound target, where the canonical checkout is. The checkout
+path is never written into any Skill: moving the checkout means running ``register`` again
+from its new location. There is no service, daemon, registry, or filesystem scan.
+
+``register --target local|cloud`` validates origin, the optional expected revision, the clean
+state, and the link path before it touches anything; a refused registration leaves an
+existing link and registration receipt unchanged. On success it links the command and
+atomically writes a minimal, credential-free **registration receipt** beside the link
+(``.kaola-project-runner-locate.json``): schema, resolved repo root, declared target, host
+kernel and hashed fingerprint, accepted revision. It stores no hostname field, no username
+field, and no account data (the root is a real local path and may include the user's home). Every later call
+through the link compares the running host fingerprint, the declared ``--target``, the root
+the link resolves to, and HEAD against that receipt and fails closed on any mismatch, so a
+fresh conversation needs no memory of the fingerprint. Both files stay device-local.
 
 Every receipt is one bounded JSON line: the target kind **as declared by the caller**
 (``--target`` is echoed, never inferred: this script cannot prove whether it runs on a Mac or
 a cloud computer; what ties a receipt to the bound target is that the locator link is
-device-local and that its host fingerprint matches the one recorded at registration), host
-kernel and a hashed hostname fingerprint, the resolved repo root, the normalised origin (never
-the raw URL, never userinfo), HEAD, clean state, and -- when attesting a dispatch -- the
-consumer project identity, the selected worker's script path under the same root, and whether
-tmux reports a session of the exact requested name (presence only; ownership is proven by the
-worker preflight, not here). ``root.path`` and ``project.path`` are real local paths and may
+device-local and that the running host fingerprint and declared target match the registration
+receipt), host kernel and a hashed hostname fingerprint, the resolved repo root, the
+normalised origin (only explicit ``https://``, ``ssh://``, or scp ``host:path`` forms are
+accepted; a bare ``github.com/...`` or a local path is refused; never the raw URL, never
+userinfo), HEAD, clean state, and -- when attesting a dispatch -- the consumer project
+identity, the selected worker's script path under the same root, and whether the tmux server
+reachable from this environment reports a session of the exact requested name (presence on
+that server only: not proof that the session exists elsewhere, and never ownership, which the
+worker preflight proves). ``root.path`` and ``project.path`` are real local paths and may
 include the user's home directory: bounded local evidence for the bound target, never to be
-stored in any account Skill. ``result`` is ``ok`` or ``refused`` with reasons; nothing here
-reads, prints, hashes, or forwards a credential, and Git runs with ``GIT_TERMINAL_PROMPT=0``
-so a missing credential can only fail, never prompt. ``register`` validates origin, optional
-expected revision, clean state, and the link path before it touches anything; a refused
-registration leaves an existing locator link unchanged.
+stored in any account Skill. Revision and clean-state facts are what the target's own Git
+reports (``rev-parse``, ``status --porcelain``); index tricks such as ``assume-unchanged`` or
+``skip-worktree`` and a tampered ``.git`` on the executing host are outside this boundary --
+the target host is trusted and no content hashing is attempted. ``result`` is ``ok`` or
+``refused`` with reasons; nothing here reads, prints, hashes, or forwards a credential, and
+Git runs with ``GIT_TERMINAL_PROMPT=0`` so a missing credential can only fail, never prompt.
 """
 
 from __future__ import annotations
@@ -41,7 +55,9 @@ import sys
 from pathlib import Path
 
 SCHEMA = "kaola-project-runner-locator/1"
+REGISTRATION_SCHEMA = "kaola-project-runner-locator-registration/1"
 LOCATOR_COMMAND = "kaola-project-runner-locate"
+REGISTRATION_FILE = f".{LOCATOR_COMMAND}.json"
 EXPECTED_ORIGIN = "github.com/KaolaBrother/kaola-project-runner"
 ORCHESTRATOR = "kaola-project-runner"
 WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "grok", "kimi-cli", "opencode")
@@ -49,6 +65,13 @@ TARGETS = ("local", "cloud")
 REVISION = re.compile(r"^[0-9a-f]{40}$")
 RECEIPT_LIMIT = 4096
 GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
+# The path this process was started through: the locator link when invoked as
+# ``kaola-project-runner-locate``, the script itself when invoked directly.
+INVOKED = Path(__file__)
+# Scheme, optional userinfo (dropped), host, optional port, path; the scheme separator is
+# spelled `:/{2}` so no credential-looking userinfo literal appears in this source.
+URL_FORM = re.compile(r"^(https|ssh):/{2}(?:[^@/\s]+@)?([^/:\s]+)(?::\d+)?/(.+)$")
+SCP_FORM = re.compile(r"^(?:[^@/\s]+@)?([^:/\s]+):(?!//)([^\s]+)$")
 
 
 def git(root: Path, *args: str) -> str | None:
@@ -66,22 +89,29 @@ def git(root: Path, *args: str) -> str | None:
     return completed.stdout.strip()
 
 
-def normalise_origin(raw: str) -> str:
-    """github.com/Owner/repo from any https/ssh/scp form; userinfo, port and .git are dropped."""
+def normalise_origin(raw: str) -> str | None:
+    """host/Owner/repo from an explicit https://, ssh://, or scp host:path form, else None.
+
+    Userinfo, port, a trailing slash, and ``.git`` are dropped; the raw value is never
+    returned. A bare ``github.com/Owner/repo``, ``http://``, ``git://``, ``file://``, or a
+    local path is not an accepted form.
+    """
     value = raw.strip()
-    if "://" in value:
-        authority, _, path = value.split("://", 1)[1].partition("/")
-        host = authority.rsplit("@", 1)[-1]
+    match = URL_FORM.match(value)
+    if match:
+        host, path = match.group(2), match.group(3)
     else:
-        scp = re.match(r"^(?:[^@/\s]+@)?([^:/\s]+):(.+)$", value)
-        if scp:
-            host, path = scp.group(1), scp.group(2)
-        else:
-            host, _, path = value.partition("/")
-    host = host.split(":", 1)[0].lower()
+        match = SCP_FORM.match(value)
+        if not match:
+            return None
+        host, path = match.group(1), match.group(2)
+    host = host.lower()
     path = path.strip("/")
     if path.endswith(".git"):
         path = path[:-4]
+    parts = path.split("/")
+    if len(parts) != 2 or not all(parts) or "." in (parts[0], parts[1]) or ".." in parts:
+        return None
     return f"{host}/{path}"
 
 
@@ -94,7 +124,7 @@ def host_facts() -> dict[str, str]:
 
 
 def this_checkout() -> tuple[Path | None, list[str]]:
-    script = Path(__file__).resolve()
+    script = INVOKED.resolve()
     candidate = script.parent.parent
     top = git(candidate, "rev-parse", "--show-toplevel")
     if top is None:
@@ -109,7 +139,9 @@ def root_facts(root: Path, expect_revision: str | None) -> tuple[dict[str, objec
     reasons: list[str] = []
     origin_raw = git(root, "remote", "get-url", "origin")
     origin = normalise_origin(origin_raw) if origin_raw else None
-    if origin is None or origin.lower() != EXPECTED_ORIGIN.lower():
+    if origin_raw and origin is None:
+        reasons.append("origin-form-unsupported")
+    elif origin is None or origin.lower() != EXPECTED_ORIGIN.lower():
         reasons.append("origin-mismatch")
     head = git(root, "rev-parse", "HEAD")
     if head is None or not REVISION.match(head):
@@ -170,6 +202,7 @@ def worker_facts(root: Path, worker: str) -> tuple[dict[str, object], list[str]]
 
 
 def session_facts(name: str) -> dict[str, object]:
+    """Presence of an exact session name on the tmux server reachable from here; nothing more."""
     tmux = shutil.which("tmux")
     present: bool | None = None
     if tmux:
@@ -180,6 +213,65 @@ def session_facts(name: str) -> dict[str, object]:
         except (OSError, subprocess.TimeoutExpired):
             present = None
     return {"name": name, "present": present}
+
+
+def registration_dir(bin_dir: str | None) -> Path:
+    """The directory holding the locator link and its registration receipt."""
+    if bin_dir:
+        return Path(bin_dir).expanduser()
+    if INVOKED.is_symlink():
+        return INVOKED.parent
+    return Path.home() / ".local" / "bin"
+
+
+def load_registration(directory: Path) -> tuple[dict[str, object] | None, list[str]]:
+    path = directory / REGISTRATION_FILE
+    if not path.is_file():
+        return None, ["locator-not-registered"]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, ["locator-registration-unreadable"]
+    if not isinstance(data, dict) or data.get("schema") != REGISTRATION_SCHEMA:
+        return None, ["locator-registration-unreadable"]
+    return data, []
+
+
+def registration_facts(directory: Path, target: str | None, root: Path | None, head: str | None,
+                       required: bool) -> tuple[dict[str, object], list[str]]:
+    """Compare this call with the registration receipt beside the link; fail closed on mismatch."""
+    path = directory / REGISTRATION_FILE
+    facts: dict[str, object] = {"path": str(path), "present": False}
+    data, reasons = load_registration(directory)
+    if data is None:
+        return facts, reasons if (required or path.exists()) else []
+    host = host_facts()
+    recorded_host = data.get("host") if isinstance(data.get("host"), dict) else {}
+    fingerprint_match = (recorded_host.get("fingerprint") == host["fingerprint"]
+                         and recorded_host.get("kernel") == host["kernel"])
+    target_match = target is None or data.get("target") == target
+    root_match = root is not None and data.get("root") == str(root)
+    accepted = data.get("accepted_revision")
+    revision_current = accepted is None or accepted == head
+    facts.update(
+        present=True,
+        target=data.get("target"),
+        accepted_revision=accepted,
+        fingerprint_match=fingerprint_match,
+        target_match=target_match,
+        root_match=root_match,
+        revision_current=revision_current,
+    )
+    mismatches: list[str] = []
+    if not fingerprint_match:
+        mismatches.append("host-fingerprint-mismatch")
+    if not target_match:
+        mismatches.append("target-mismatch")
+    if not root_match:
+        mismatches.append("registration-root-mismatch")
+    if not revision_current:
+        mismatches.append("registration-stale")
+    return facts, mismatches
 
 
 def emit(receipt: dict[str, object]) -> int:
@@ -202,14 +294,24 @@ def receipt_command(args: argparse.Namespace) -> int:
         args.expect_revision = None
     root, root_reasons = this_checkout()
     reasons.extend(root_reasons)
+    head: str | None = None
     if root is not None:
         facts, more = root_facts(root, args.expect_revision)
         receipt["root"] = facts
+        head = facts["head"] if isinstance(facts["head"], str) else None
         reasons.extend(more)
         if args.worker is not None:
             wf, more = worker_facts(root, args.worker)
             receipt["worker"] = wf
             reasons.extend(more)
+    # A declared target is an attestation: the registration receipt is required and every
+    # recorded fact must match. A plain discovery call still fails closed on a present,
+    # mismatching receipt but tolerates an absent one.
+    registration, more = registration_facts(
+        registration_dir(args.bin_dir), args.target, root, head, required=args.target is not None,
+    )
+    receipt["registration"] = registration
+    reasons.extend(more)
     if args.project is not None:
         pf, more = project_facts(args.project)
         receipt["project"] = pf
@@ -223,14 +325,18 @@ def receipt_command(args: argparse.Namespace) -> int:
 
 
 def register_command(args: argparse.Namespace) -> int:
-    """Link the locator to this checkout -- only after every fact has been validated.
+    """Link the locator and write its registration receipt -- only after every fact is validated.
 
-    Origin, the optional expected revision, the clean state, and the link path are all
-    checked first; any refusal returns before the filesystem is touched, so a foreign,
-    dirty, or mismatched checkout can never replace an existing, good locator.
+    Origin, the optional expected revision, the clean state, the link path, and the receipt
+    path are all checked first; any refusal returns before the filesystem is touched, so a
+    foreign, dirty, or mismatched checkout can never replace an existing, good locator or
+    its receipt. The link is replaced first and the receipt second, each atomically: a
+    failure between the two leaves a receipt that no longer matches the link, which every
+    later call refuses (``registration-root-mismatch``) until ``register`` runs again.
     """
     root, reasons = this_checkout()
-    receipt: dict[str, object] = {"schema": SCHEMA, "host": host_facts(), "action": "register"}
+    receipt: dict[str, object] = {"schema": SCHEMA, "host": host_facts(), "action": "register",
+                                  "target": args.target}
     if root is None:
         receipt.update(result="refused", reasons=reasons)
         return emit(receipt)
@@ -240,8 +346,9 @@ def register_command(args: argparse.Namespace) -> int:
     facts, more = root_facts(root, args.expect_revision)
     reasons.extend(more)
     receipt["root"] = facts
-    bin_dir = Path(args.bin_dir).expanduser() if args.bin_dir else Path.home() / ".local" / "bin"
+    bin_dir = registration_dir(args.bin_dir)
     link = bin_dir / LOCATOR_COMMAND
+    registration_path = bin_dir / REGISTRATION_FILE
     source = (root / "scripts" / "kaola-locate.py").resolve()
     previous: str | None = None
     if link.is_symlink():
@@ -250,10 +357,15 @@ def register_command(args: argparse.Namespace) -> int:
             reasons.append("foreign-locator-link")
     elif link.exists():
         reasons.append("locator-path-occupied")
+    registered_before = registration_path.is_file() and not registration_path.is_symlink()
+    if (registration_path.exists() or registration_path.is_symlink()) and not registered_before:
+        reasons.append("registration-path-occupied")
     locator: dict[str, object] = {"path": str(link), "command": LOCATOR_COMMAND, "changed": False,
                                   "replaced": False}
+    registration: dict[str, object] = {"path": str(registration_path), "schema": REGISTRATION_SCHEMA,
+                                       "changed": False, "replaced": False}
     if reasons:
-        receipt.update(result="refused", reasons=reasons, locator=locator)
+        receipt.update(result="refused", reasons=reasons, locator=locator, registration=registration)
         return emit(receipt)
     bin_dir.mkdir(parents=True, exist_ok=True)
     temp = bin_dir / f".{LOCATOR_COMMAND}.tmp.{os.getpid()}"
@@ -262,7 +374,19 @@ def register_command(args: argparse.Namespace) -> int:
     os.symlink(str(source), temp)
     os.replace(temp, link)
     locator.update(changed=True, replaced=previous is not None)
-    receipt.update(result="ok", locator=locator)
+    record = {
+        "schema": REGISTRATION_SCHEMA,
+        "root": str(root),
+        "target": args.target,
+        "host": host_facts(),
+        "accepted_revision": args.expect_revision,
+    }
+    temp_record = bin_dir / f"{REGISTRATION_FILE}.tmp.{os.getpid()}"
+    temp_record.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temp_record, registration_path)
+    registration.update(changed=True, replaced=registered_before, target=args.target,
+                        accepted_revision=args.expect_revision)
+    receipt.update(result="ok", locator=locator, registration=registration)
     return emit(receipt)
 
 
@@ -275,8 +399,14 @@ def main() -> int:
     receipt.add_argument("--project")
     receipt.add_argument("--worker")
     receipt.add_argument("--session")
-    register = sub.add_parser("register", help=f"link {LOCATOR_COMMAND} to this checkout (after validating it)")
-    register.add_argument("--bin-dir")
+    receipt.add_argument("--bin-dir", help="directory of the locator link and its registration receipt "
+                                           "(default: the link's own directory, else the installer's bin directory)")
+    register = sub.add_parser("register", help=f"link {LOCATOR_COMMAND} to this checkout and write its "
+                                               "registration receipt (after validating it)")
+    register.add_argument("--target", choices=TARGETS, required=True,
+                          help="the execution target this registration is declared for")
+    register.add_argument("--bin-dir", help="owner-chosen directory on PATH for the link and receipt "
+                                            "(default: the installer's bin directory)")
     register.add_argument("--expect-revision")
     argv = sys.argv[1:]
     if not argv or argv[0].startswith("-"):

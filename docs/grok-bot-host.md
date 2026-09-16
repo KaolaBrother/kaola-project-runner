@@ -64,12 +64,28 @@ checkout: R exists, is an ancestor of HEAD, is itself a content-stage commit
 (never a self-pin, never another pin commit), holds
 `scripts/kaola-locate.py`, `skills/kaola-project-runner/SKILL.md`, and every
 selectable worker's `SKILL.md` and `scripts/runtime-tmux.sh`, and a named
-`release` is a tag at R. An unverifiable pin is never written. `--require-pinned`
-(renderer and verifier) is the final gate for P; R passes plain `--check` at the
-content stage, so both commits are reproducible without weakening the P gate.
-The label is 3–80 plain characters and states the truth ("pre-release UAT
-candidate for Issue #49; not a release"); a release tag is used only once the
-tag exists at R. Nothing here releases or tags.
+`release` is a tag at R, and the **P delta** is machine-enforced: the tracked
+working tree, compared directly with R (so the gate holds before P is committed
+and at a clean HEAD = P alike), may differ from R only by `templates/grok-bot/accepted-revision.json` and the three
+generated `hosts/grok-bot/` products, and the bridge may differ from R's bridge
+by exactly one line (the content-stage placeholder replaced by the
+accepted-revision line). A rebased or squashed pair, or a pair merged with an
+advanced `main`, therefore fails `--require-pinned`. An unverifiable pin is
+never written. `--require-pinned` (renderer and verifier) is the final gate for
+P; R passes plain `--check` at the content stage, so both commits are
+reproducible without weakening the P gate. The label is 3–80 plain characters,
+states the truth ("pre-release UAT candidate for Issue #49; not a release"), and
+may not masquerade as a release (no `vX.Y.Z` token, never beginning with
+"release"); a release tag is used only once the tag exists at R. Nothing here
+releases or tags.
+
+Finalization precondition: **never rebase, squash, or amend an accepted R/P
+pair**; the reviewed and UAT-tested bytes are R and P exactly. If `main` moves
+before merge, create a fresh content commit R′ and pin commit P′ on top of it
+and re-run review and UAT. A release is a tag placed at R followed by a new pin
+commit naming that tag (`release: vX.Y.Z` at R); rollback is a new pin commit
+naming an older R, followed by the same one account write and per-target
+re-registration.
 
 ## Execution targets: bind first, never cross
 
@@ -112,16 +128,32 @@ The locator is the smallest existing-repo-compatible mechanism: a symlink named
 the same bin directory the installer's `--bin-links` already manages (it is now
 one of those links; `--bin-dir DIR` chooses any other directory on PATH). No
 service, daemon, registry, or filesystem scan; the link is the whole locator.
-`register` validates origin, the optional `--expect-revision`, the clean state,
-and the link path **before** it touches anything: a foreign, dirty, or
-mismatched checkout is refused and an existing locator link stays exactly as it
-was (`Issue49LocatorAttestation` proves it); only a clean, matching checkout
-re-registers. It never reads, prints, hashes, or forwards a credential and runs
-Git with `GIT_TERMINAL_PROMPT=0`.
+`register --target local|cloud` validates origin, the optional
+`--expect-revision`, the clean state, the link path, and the receipt path
+**before** it touches anything: a foreign, dirty, or mismatched checkout is
+refused and an existing locator link and registration receipt stay exactly as
+they were (`Issue49LocatorAttestation` proves it); only a clean, matching
+checkout re-registers. On success it links the command and then atomically
+writes the **registration receipt** `.kaola-project-runner-locate.json` beside
+the link (`kaola-project-runner-locator-registration/1`): resolved ROOT, the
+declared target, host kernel and hashed fingerprint, the accepted revision or
+`null`. It stores no hostname field, no username field, no credential, and no
+account data (the root is a real local path and may include the user's home);
+the receipt is device-local and never enters any Skill. Every later locator call
+compares the running host fingerprint, the declared `--target`, the ROOT the
+link resolves to, and HEAD with that receipt and fails closed
+(`host-fingerprint-mismatch`, `target-mismatch`, `registration-root-mismatch`,
+`registration-stale`; `locator-not-registered` when a target is declared and no
+receipt exists), so a fresh conversation needs no memory of the fingerprint.
+The origin is accepted only in an explicit `https://`, `ssh://`, or scp
+`host:path` form and normalised without userinfo or port; a bare
+`github.com/Owner/repo`, `http://`, or local-path origin is
+`origin-form-unsupported`. It never reads, prints, hashes, or forwards a
+credential and runs Git with `GIT_TERMINAL_PROMPT=0`.
 
 ```bash
-python3 "$ROOT/scripts/kaola-locate.py" register [--bin-dir DIR] [--expect-revision R]   # validate, then link
-kaola-project-runner-locate                                          # ROOT, origin, HEAD, clean, fingerprint
+python3 "$ROOT/scripts/kaola-locate.py" register --target local|cloud [--bin-dir DIR] [--expect-revision R]   # validate, link, write the receipt
+kaola-project-runner-locate                                          # ROOT, origin, HEAD, clean, fingerprint, registration facts
 kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
   --project <consumer project root> --worker <platform id> --session <exact session name>
 ```
@@ -132,11 +164,12 @@ worker dispatch. Its receipt is one JSON line (≤ 4 KB, `locator_receipt_bytes`
 | Field | Evidence |
 |---|---|
 | `target` | the kind **as declared** by the caller, `local` or `cloud` (required when attesting); echoed, never inferred |
-| `host` | kernel and a hashed hostname fingerprint; compare it with the value recorded at that target's registration |
+| `host` | kernel and a hashed hostname fingerprint; the locator compares it with the value recorded in the registration receipt |
 | `root` | ROOT path on this host (a real local path, may include the user's home), normalised origin (never the raw URL or userinfo), HEAD, `clean`, `revision_match` |
+| `registration` | receipt path, `present`, recorded target and accepted revision, `fingerprint_match`, `target_match`, `root_match`, `revision_current` |
 | `project` | path on this host (real local path), Git top level, normalised origin |
 | `worker` | selected id, `skills/<id>-kaola-project-runner/scripts/runtime-tmux.sh`, `under_root`, `executable` |
-| `session` | exact session name and whether tmux reports it present (presence only; ownership is the worker preflight's proof) |
+| `session` | exact session name and whether the tmux server reachable from the locator reports it present (presence on that server only: not existence elsewhere, never ownership, which is the worker preflight's proof) |
 | `result` | `ok`, or `refused` with `reasons` |
 
 What the receipt proves is bounded and real: the command ran on the bound
@@ -145,15 +178,23 @@ target (the link is device-local), the host is the one registered there
 the session all co-locate on that executing host. What it cannot prove is
 physical host kind: the script does not classify Mac versus cloud, and the
 docs, tests, and bridge do not claim it does. Paths in the receipt are local
-evidence for that target and never enter the account Skill. Reasons:
-`origin-mismatch`, `revision-mismatch`, `dirty`, `no-head`, `not-a-checkout`,
-`target-required`, `expect-revision-not-40-hex`, `project-not-on-this-host`,
-`project-not-a-checkout`, `worker-unknown`, `script-missing`,
-`script-outside-root`, `script-not-executable`, `foreign-locator-link`,
-`locator-path-occupied`. A path that does not exist on the executing host is
-refused as `project-not-on-this-host` whatever target was declared; the
-contract tests prove that and that the same real path is accepted under either
-declaration.
+evidence for that target and never enter the account Skill. Revision and clean
+facts are what the executing host's own Git reports (`rev-parse`, `status
+--porcelain`): index tricks such as `assume-unchanged` or `skip-worktree` and a
+tampered `.git` on that trusted host are explicitly outside this boundary, and
+no content hashing is attempted. Reasons: `origin-mismatch`,
+`origin-form-unsupported`, `revision-mismatch`, `dirty`, `no-head`,
+`not-a-checkout`, `target-required`, `expect-revision-not-40-hex`,
+`locator-not-registered`, `locator-registration-unreadable`,
+`host-fingerprint-mismatch`, `target-mismatch`, `registration-root-mismatch`,
+`registration-stale`, `project-not-on-this-host`, `project-not-a-checkout`,
+`worker-unknown`, `script-missing`, `script-outside-root`,
+`script-not-executable`, `foreign-locator-link`, `locator-path-occupied`,
+`registration-path-occupied`. A path that does not exist on the executing host
+is refused as `project-not-on-this-host` whatever target was declared; a target
+other than the registered one is `target-mismatch`; the contract tests prove
+both, plus fresh-conversation semantics (the link alone, in a new process,
+passes) and tampering (each edited receipt field is refused).
 
 ## Host adapter boundary
 
@@ -182,11 +223,15 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
    content-stage bridge is never saved.
 2. **First configuration on Local Computer.** On the Mac the owner selects a
    clean checkout or worktree detached at R (the existing `main` checkout may
-   hold untracked Workflow records and would be `dirty`). With Execution on
-   Local Computer, inside that workspace: `git rev-parse --show-toplevel` →
-   ROOT, `python3 "$ROOT/scripts/kaola-locate.py" register --expect-revision R`
-   (validates first, then links), then `kaola-project-runner-locate --target
-   local --expect-revision R` → `ok`; record `host.fingerprint` with the target.
+   hold untracked Workflow records and would be `dirty`) and an owner-selected
+   persistent directory on PATH for the locator link (`BIN`), so the
+   installer-managed `--bin-links` link in `~/.local/bin` is left alone. With
+   Execution on Local Computer, inside that workspace: `git rev-parse
+   --show-toplevel` → ROOT, `python3 "$ROOT/scripts/kaola-locate.py" register
+   --target local --bin-dir "$BIN" --expect-revision R` (validates first, then
+   links and writes `$BIN/.kaola-project-runner-locate.json`), then
+   `kaola-project-runner-locate --target local --expect-revision R` → `ok`
+   (the locator itself checks the fingerprint and target against the receipt).
 3. **Read-only preflight.** Attest with `--project <existing local project>
    --worker <platform id> --session <existing session>`, then run
    `ROOT/skills/<platform id>-kaola-project-runner/scripts/runtime-tmux.sh
@@ -195,7 +240,11 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
    and nothing started, sent, stopped, cloned, fetched, checked out, or
    installed; the Bot read only the main Skill and the one selected worker
    Skill, no script source; the cloud Agent Computer executed nothing and
-   accessed no Mac file.
+   accessed no Mac file. After UAT, remove `$BIN/kaola-project-runner-locate`
+   and its receipt or keep them registered; the normal installer-managed link
+   is restored with `./scripts/install-local.sh --bin-links` from the normal
+   checkout (it refuses to overwrite a link it does not own, so remove a UAT
+   link placed in its directory first) and then registered from that checkout.
 
 A saved bridge is not live adoption; this read-only UAT is the boundary.
 Routine-only heartbeat, takeover, `HUMAN_DECISION_REQUIRED` in this Bot
@@ -207,12 +256,16 @@ and `skills/kaola-project-runner/references/grok-bot-host.md`.
 A new pin (content commit R′, then pin commit P′) rewrites
 `templates/grok-bot/accepted-revision.json`; `--write` then changes exactly one
 line of the bridge, which is one more account write. Local: the owner moves the
-Mac checkout or worktree to R′ on the Mac and the locator re-verifies. Cloud:
-`git -C ROOT fetch origin <commit> && git -C ROOT checkout --detach <commit>`.
-Rollback is the previous accepted revision. Removal: delete the Skill under
-Settings → Plugins → Yours and remove the locator link
-(`./scripts/install-local.sh --uninstall --bin-links` or `rm` the link). Do not
-Reset Agent Computer; do not stop unrelated workers.
+Mac checkout or worktree to R′ and runs `register` again (the receipt records
+the accepted revision, so a stale registration is refused). Cloud:
+`git -C ROOT fetch origin <commit> && git -C ROOT checkout --detach <commit>`,
+then `register`. Rollback is a new pin commit naming an older R, applied the
+same way; the accepted pair itself is never rewritten. Cloud registration passes
+`--target cloud --expect-revision R` exactly like Local Computer. Removal: delete
+the Skill under Settings → Plugins → Yours and remove the locator link and its
+receipt (`rm "$BIN/kaola-project-runner-locate" "$BIN/.kaola-project-runner-locate.json"`,
+or `./scripts/install-local.sh --uninstall --bin-links` for the installer-managed
+link). Do not Reset Agent Computer; do not stop unrelated workers.
 
 ## Token cost (chars ÷ 4 … ÷ 3.5)
 

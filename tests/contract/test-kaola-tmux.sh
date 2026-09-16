@@ -208,6 +208,45 @@ else
   fi
   "$issue_tmux_bin" has-session -t "=$unrelated" || fail "test_unrelated_session_survives_graceful_stop" "unrelated session was changed"
 
+  # Progressive disclosure on the live wrapper path: an ordinary observe/status receipt
+  # is bounded by the shared capture budget, keeps the newest frame lines, names the
+  # dropped part with the sha256 of the whole frame, and still carries a usable snapshot.
+  run_runner grok start --repo "$repo" --session "$session" >/dev/null
+  budget="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["capture_receipt_bytes"])' "$project_root/templates/budgets.json")"
+  "$issue_tmux_bin" resize-window -t "=$session" -x 400 -y 300 || fail "test_bounded_observe_live" "resize-window failed"
+  sleep 0.5
+  run_runner grok send --repo "$repo" --session "$session" --text 'FILL:280:320' >/dev/null || fail "test_bounded_observe_live" "fill send failed"
+  big_observe=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    big_observe="$(run_runner grok observe --repo "$repo" --session "$session")"
+    grep -q '"truncated"' <<<"$big_observe" && grep -q 'fill 00280' <<<"$big_observe" && break
+    sleep 1
+  done
+  [[ "$(printf '%s' "$big_observe" | wc -c)" -le "$budget" ]] || fail "test_bounded_observe_live" "observe receipt exceeds the budget"
+  json_assert "test_bounded_observe_live" "d['result'] == 'observed' and isinstance(d['snapshot_id'], str) and d['snapshot_id'] and d['truncated']['fields']['raw_current_frame']['total_bytes'] > $budget and d['truncated']['fields']['raw_current_frame']['kept_bytes'] == len(d['raw_current_frame'].encode('utf-8')) and len(d['truncated']['fields']['raw_current_frame']['sha256']) == 64 and 'fill 00280' in d['raw_current_frame'] and 'fill 00001' not in d['raw_current_frame'] and 'capture --full' in d['truncated']['hint']" "$big_observe"
+  big_status="$(run_runner grok status --repo "$repo" --session "$session")"
+  [[ "$(printf '%s' "$big_status" | wc -c)" -le "$budget" ]] || fail "test_bounded_status_live" "status receipt exceeds the budget"
+  big_total="$(JSON_INPUT="$big_observe" python3 -c 'import json,os; print(json.loads(os.environ["JSON_INPUT"])["truncated"]["fields"]["raw_current_frame"]["total_bytes"])')"
+  json_assert "test_bounded_status_live" "d['result'] == 'present' and d['tui_detected'] and d['truncated']['fields']['raw_current_frame']['total_bytes'] == $big_total and d['truncated']['fields']['raw_current_frame']['kept_bytes'] == len(d['raw_current_frame'].encode('utf-8'))" "$big_status"
+  big_snapshot="$(snapshot_id "$big_observe")"
+  if big_sent="$(run_runner grok send --repo "$repo" --session "$session" --if-snapshot "$big_snapshot" --text after-fill)"; then
+    json_assert "test_bounded_observe_snapshot_still_drives_send" "d['result'] == 'sent' and d['based_on_snapshot'] == '$big_snapshot'" "$big_sent"
+  else
+    fail "test_bounded_observe_snapshot_still_drives_send" "send after bounded observe failed: $big_sent"
+  fi
+  sleep 1
+  bounded_capture="$(run_runner grok capture --repo "$repo" --session "$session" --lines 400)"
+  [[ "$(printf '%s' "$bounded_capture" | wc -c)" -le "$budget" ]] || fail "test_bounded_capture_live" "ordinary capture exceeds the budget"
+  grep -q 'kaola capture truncated' <<<"$bounded_capture" || fail "test_bounded_capture_live" "ordinary capture carries no truncation marker"
+  full_capture="$(run_runner grok capture --repo "$repo" --session "$session" --lines 400 --full)"
+  [[ "$(printf '%s' "$full_capture" | wc -c)" -gt "$budget" ]] || fail "test_full_capture_live_is_unbounded" "capture --full was bounded"
+  grep -q 'kaola capture truncated' <<<"$full_capture" && fail "test_full_capture_live_is_unbounded" "capture --full carries a truncation marker"
+  "$issue_tmux_bin" resize-window -t "=$session" -x 80 -y 24 || true
+  small_observe="$(run_runner grok observe --repo "$repo" --session "$session")"
+  grep -q '"truncated"' <<<"$small_observe" && fail "test_within_budget_observe_is_untouched" "a within-budget observe carries a truncated block"
+  bounded_stop="$(run_runner grok stop --repo "$repo" --session "$session" --force)"
+  json_assert "test_bounded_observe_session_stops" "d['result'] == 'stopped'" "$bounded_stop"
+
   run_runner grok start --repo "$repo" --session "$session" >/dev/null
   force_observe="$(run_runner grok observe --repo "$repo" --session "$session")"
   force_snapshot="$(snapshot_id "$force_observe")"

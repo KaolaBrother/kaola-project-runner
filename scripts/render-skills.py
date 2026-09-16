@@ -342,6 +342,8 @@ GROK_BOT_ADAPTER_INPUTS = (
 )
 STAGES = ("content", "pinned")
 LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,;:#().+-]{2,79}$")
+# A label is honest pre-release text: it may not look like a release tag or begin with "release".
+LABEL_MASQUERADE = re.compile(r"(?i)(?:^\s*release\b|\bv\d+\.\d+\.\d+\b)")
 CONTENT_STAGE_LINE = (
     "Accepted revision: none yet. This is the unpinned content-stage render; do not save it to any "
     "account. The pin commit that follows names the content commit."
@@ -403,6 +405,8 @@ def accepted_revision() -> dict[str, str | None]:
         raise ValueError(f"{path}: release must look like vX.Y.Z, got {release!r}")
     if label and not LABEL.match(label):
         raise ValueError(f"{path}: label must be 3-80 plain characters, got {label!r}")
+    if label and LABEL_MASQUERADE.search(label):
+        raise ValueError(f"{path}: label must not masquerade as a release (use release for a tag at R), got {label!r}")
     return {"stage": stage, "commit": commit, "release": release or None, "label": label or None}
 
 
@@ -471,6 +475,51 @@ def pin_findings(revision: dict[str, str | None], manifests: list[dict[str, str]
         tag_commit = git_out("rev-parse", f"{revision['release']}^{{commit}}")
         if tag_commit != commit:
             findings.append(f"pin: release {revision['release']} is not a tag at {short}")
+    findings.extend(pin_delta_findings(commit, revision))
+    return findings
+
+
+# The pin commit P may differ from its content commit R only by these four files.
+PIN_DELTA_PATHS = frozenset({
+    f"templates/{GROK_BOT_HOST}/{ACCEPTED_REVISION_FILE}",
+    f"hosts/{GROK_BOT_HOST}/{BRIDGE_FILE}",
+    f"hosts/{GROK_BOT_HOST}/{BRIDGE_MANIFEST}",
+    f"hosts/{GROK_BOT_HOST}/{INSTALL_GUIDE}",
+})
+
+
+def pin_delta_findings(commit: str, revision: dict[str, str | None]) -> list[str]:
+    """P differs from R only by the accepted revision and the three generated host products.
+
+    The delta under test is the tracked working tree compared directly with R (``git diff
+    <R>``), so the gate holds both before P is committed (HEAD = R with the four files
+    modified) and after (a clean HEAD = P), and a change made and reverted in between does
+    not count. A rebased or squashed pair, or a pair merged with an advanced ``main``,
+    carries other paths and fails. The bridge must differ from R's bridge by exactly one
+    line: the content-stage placeholder replaced by the accepted-revision line.
+    """
+    short = commit[:12]
+    changed = git_out("diff", "--name-only", commit)
+    if changed is None:
+        return [f"pin: cannot compute the delta between {short} and this tree"]
+    findings: list[str] = []
+    delta = set(changed.splitlines())
+    for path in sorted(delta - PIN_DELTA_PATHS):
+        findings.append(
+            f"pin: P may differ from {short} only by templates/{GROK_BOT_HOST}/{ACCEPTED_REVISION_FILE} "
+            f"and the three generated hosts/{GROK_BOT_HOST}/ products; found {path}"
+        )
+    pinned_bridge = git_out("show", f"{commit}:hosts/{GROK_BOT_HOST}/{BRIDGE_FILE}")
+    if pinned_bridge is None:
+        return findings + [f"pin: accepted commit {short} lacks hosts/{GROK_BOT_HOST}/{BRIDGE_FILE}"]
+    before = pinned_bridge.splitlines()
+    after = bridge_document(bridge_values()).decode("utf-8").strip().splitlines()
+    changed = [(a, b) for a, b in zip(before, after) if a != b]
+    if len(before) != len(after) or len(changed) != 1 or changed[0] != (CONTENT_STAGE_LINE, accepted_line(revision)):
+        findings.append(
+            f"pin: the bridge must differ from {short} by exactly one line (the content-stage placeholder "
+            f"replaced by the accepted-revision line); found {len(changed) if len(before) == len(after) else 'a different line count'}"
+        )
     return findings
 
 

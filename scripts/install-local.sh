@@ -35,7 +35,9 @@ Grok Bot is a bridge host, not an installer destination: the account holds one
 thin generated Skill (hosts/grok-bot/kaola-project-runner.md) that loads the
 main and one selected worker Skill from this checkout on the bound execution
 target through the device-local locator kaola-project-runner-locate
-(scripts/kaola-locate.py register, or --bin-links). See docs/grok-bot-host.md.
+(scripts/kaola-locate.py register --target local|cloud, which validates the
+checkout, links the command, and writes its registration receipt beside the
+link; a bare --bin-links link carries no receipt). See docs/grok-bot-host.md.
 Grok CLI worker uses --platform grok, not --runtime grok.
 
 --skills-dir installs into any explicit destination parent (including

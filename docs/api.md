@@ -10,16 +10,21 @@ scripts/render-skills.py --check
 `--write` deterministically rebuilds seven managed worker Skill directories plus
 `skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eighth
 platform) and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-project-runner.md` (the one
-thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revision.json`; it
-carries the accepted 40-hex commit and release, the locator command, and the two canonical
-entry paths, and no canonical content), `bridge.json` (fingerprint manifest: name, resolved
-description, accepted commit, release, bytes, file/body sha256), and `INSTALL.md` (from
+thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revision.json`; at
+the pinned stage it carries the accepted 40-hex commit and its label or release, the locator
+command, and the two canonical entry paths, and no canonical content), `bridge.json`
+(fingerprint manifest: `stage`, `saveable`, name, resolved description, `accepted_commit`,
+`release`, `label`, bytes, file/body sha256; at the content stage `accepted_commit`, `release`,
+and `label` are `null` and `saveable` is `false`), and `INSTALL.md` (from
 `templates/grok-bot/INSTALL.md.tmpl`). `accepted-revision.json` declares a stage: `content`
 (the content commit R; the bridge carries an explicit "none yet" line and `bridge.json` says
 `saveable: false`) or `pinned` (the pin commit P; `commit` = R plus exactly one of `release`
 `vX.Y.Z` or `label`). At the pinned stage the renderer runs the pin gate against the Git
 checkout (`pin: …` findings: commit missing, not an ancestor of HEAD, not a content-stage
-commit, lacks `scripts/kaola-locate.py` or an entry path, release tag not at R) and
+commit, lacks `scripts/kaola-locate.py` or an entry path, release tag not at R, the tree
+differs from R by a path other than `accepted-revision.json` and the three generated
+`hosts/grok-bot/` products, or the bridge differs by more than the one accepted-revision
+line; a label that looks like a release tag or begins with "release" is refused) and
 `--require-pinned` fails on a content-stage file; the same gate runs from
 `kaola-grok-bot-verify.py --repo [--require-pinned]`. Every product is measured against
 `templates/budgets.json` first; an over-budget Skill, reference, description, bridge, or guide
@@ -82,30 +87,48 @@ links.
 ## Locator and host-target attestation
 
 ```text
-scripts/kaola-locate.py register [--bin-dir DIR] [--expect-revision SHA]
-scripts/kaola-locate.py [receipt] [--target local|cloud] [--expect-revision SHA]
+scripts/kaola-locate.py register --target local|cloud [--bin-dir DIR] [--expect-revision SHA]
+scripts/kaola-locate.py [receipt] [--target local|cloud] [--expect-revision SHA] [--bin-dir DIR]
                         [--project ABS_PATH] [--worker ID] [--session NAME]
 kaola-project-runner-locate ...          # the registered bin link, same arguments
 ```
 
 `register` validates first and links second: origin, the optional expected revision, the
-clean state, and the link path are all checked before anything is touched, and a refusal
-(`origin-mismatch`, `revision-mismatch`, `dirty`, `expect-revision-not-40-hex`,
-`foreign-locator-link`, `locator-path-occupied`) leaves an existing locator link unchanged
-(`locator.changed: false`). Only a clean, matching checkout links
-`kaola-project-runner-locate` in the installer's bin directory (default `$HOME/.local/bin`,
-the same convention as `--bin-links`) to this checkout's `scripts/kaola-locate.py`, replacing a
-link that already points at some `scripts/kaola-locate.py` (re-registration after moving a
-checkout; `locator.replaced: true`). The receipt form prints one bounded JSON line
+clean state, the link path, and the receipt path are all checked before anything is touched,
+and a refusal (`origin-mismatch`, `origin-form-unsupported`, `revision-mismatch`, `dirty`,
+`expect-revision-not-40-hex`, `foreign-locator-link`, `locator-path-occupied`,
+`registration-path-occupied`) leaves an existing link and registration receipt unchanged
+(`locator.changed: false`, `registration.changed: false`). Only a clean, matching checkout
+links `kaola-project-runner-locate` in the owner-chosen `--bin-dir` (default: the link's own
+directory when run through the link, else the installer's `$HOME/.local/bin`, the same
+convention as `--bin-links`) to this checkout's `scripts/kaola-locate.py`, replacing a link
+that already points at some `scripts/kaola-locate.py` (re-registration after moving a
+checkout; `locator.replaced: true`), and then atomically writes the registration receipt
+`.kaola-project-runner-locate.json` beside the link
+(`kaola-project-runner-locator-registration/1`: resolved `root`, declared `target`, `host`
+kernel + hashed fingerprint, `accepted_revision` or `null`; no hostname, username field, or
+credential; device-local, never in any Skill). The origin is accepted only in an explicit
+`https://`, `ssh://`, or scp `host:path` form and normalised to `github.com/Owner/repo`
+without userinfo or port; a bare `github.com/Owner/repo`, `http://`, or local-path origin is
+`origin-form-unsupported`. The receipt form prints one bounded JSON line
 (`kaola-project-runner-locator/1`, ≤ 4 KB): `target` (the kind as declared by the caller,
-echoed and never inferred), `host` (kernel + hashed hostname fingerprint; compare it with the
-value recorded at registration), `root` (real local path, normalised origin without userinfo,
-HEAD, `clean`, `revision_match`), and, when given, `project` (real local path, top level,
+echoed and never inferred), `host` (kernel + hashed hostname fingerprint), `root` (real local
+path, normalised origin, HEAD, `clean`, `revision_match`), `registration` (receipt path,
+`present`, recorded target and accepted revision, `fingerprint_match`, `target_match`,
+`root_match`, `revision_current`), and, when given, `project` (real local path, top level,
 origin), `worker` (id, script path under the same root, `under_root`, `executable`), `session`
-(name, `present`: tmux presence only, not ownership). `result` is `ok` (exit 0) or `refused`
-(exit 1) with `reasons`; `--target` is required when any of `--project`, `--worker`,
-`--session` is given. Git runs with `GIT_TERMINAL_PROMPT=0`; no credential is read, printed,
-hashed, or forwarded; paths in the receipt are local evidence and never enter an account Skill.
+(name, `present`: presence on the tmux server reachable from the locator only, not existence
+elsewhere and not ownership). A declared `--target` requires the registration receipt
+(`locator-not-registered`, `locator-registration-unreadable`) and every recorded fact must
+match (`host-fingerprint-mismatch`, `target-mismatch`, `registration-root-mismatch`,
+`registration-stale` when HEAD is no longer the registered accepted revision); a plain
+discovery call without `--target` tolerates an absent receipt but still refuses a mismatching
+one. `result` is `ok` (exit 0) or `refused` (exit 1) with `reasons`; `--target` is required
+when any of `--project`, `--worker`, `--session` is given. Revision and clean facts are what
+the host's Git reports (index tricks or a tampered `.git` on a trusted host are outside this
+boundary; no content hashing). Git runs with `GIT_TERMINAL_PROMPT=0`; no credential is read,
+printed, hashed, or forwarded; paths in the receipt are local evidence and never enter an
+account Skill.
 
 ## tmux core
 
@@ -145,7 +168,15 @@ Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` 
 
 ## Observation schema
 
-`observe` returns evidence for the controlling agent. Schema version 3 includes `snapshot_id`,
+`observe` returns evidence for the controlling agent. Ordinary PTY `observe`/`status` receipts
+are bounded by `capture_receipt_bytes` (`kaola-observation.py bound_observation`): over budget,
+`raw_current_frame` keeps its newest whole lines, then `child_processes` its first entries, and
+`truncated.fields` records each bounded field's kept/total size or counts and the sha256 of
+the full value; `snapshot_id` and `pane_revision` are computed from the full frame before
+bounding. ACP `observe`/`status` receipts are bounded the same way by `bound_state_receipt`
+in `kaola-acp.py` (`record`, `initial_config_options`, `session_meta`, `capabilities`,
+`agent_info` summarised by size and sha256; `pending_permissions` keeps its newest entries).
+Only `capture --full` is unbounded. Schema version 3 includes `snapshot_id`,
 `pane_revision`, `raw_current_frame`, exact ownership and pane facts, runtime child/process evidence,
 relay input/output facts, Git reporting facts, and compatibility editor/activity/approval/decision
 signals. Those compatibility fields are advisory evidence for the controlling agent; generic

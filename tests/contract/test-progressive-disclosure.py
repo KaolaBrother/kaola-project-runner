@@ -5,9 +5,12 @@ Discovery exposes only a stable name and a short description. Activating Project
 Runner loads its body only, never a worker body. Selecting one worker loads that
 worker only. References load only when the current operation needs them. Scripts
 execute mechanically; the model never reads their source. Ordinary tool outputs are
-bounded receipts on both transports -- PTY ``capture`` through ``bound-text``, ACP
-``capture`` through ``bound_capture_receipt`` (``capture --full`` is the explicit
-exception on both) -- proven behaviourally here against the mock ACP agent. Host adapters may not
+bounded receipts on both transports -- PTY ``capture`` through ``bound-text`` and PTY
+``observe``/``status`` through ``bound_observation``; ACP ``capture`` through
+``bound_capture_receipt`` and ACP ``observe``/``status`` through ``bound_state_receipt``
+(``capture --full`` is the explicit exception on both) -- proven behaviourally here
+against the observation helper and the mock ACP agent, and on the live wrapper path by
+``tests/contract/test-kaola-tmux.sh``. Host adapters may not
 flatten, concatenate, eagerly preload, or duplicate canonical Skill bodies. Budgets
 live in ``templates/budgets.json``; ``render-skills.py --check`` and this suite fail
 when a budget or a loading boundary regresses.
@@ -16,6 +19,7 @@ when a budget or a loading boundary regresses.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -247,6 +251,10 @@ class BoundedOrdinaryOutputs(unittest.TestCase):
         acp = ACP_CLI.read_text(encoding="utf-8")
         capture_branch = acp.split('elif args.command == "capture":', 1)[1].split("elif args.command ==", 1)[0]
         self.assertIn("if not args.full:\n            receipt = bound_capture_receipt(receipt)", capture_branch)
+        state_branch = acp.split('elif args.command in ("observe", "status"):', 1)[1].split("elif args.command ==", 1)[0]
+        self.assertIn("receipt = bound_state_receipt(receipt)", state_branch)
+        self.assertIn("print(json.dumps(bound_observation(build_from_environment())", OBSERVATION.read_text(encoding="utf-8"))
+        self.assertIn("print(json.dumps(bound_observation(status_view(json.load(sys.stdin)))", OBSERVATION.read_text(encoding="utf-8"))
         for skill_id in WORKER_SKILL_IDS:
             shipped = PROJECT / "skills" / skill_id / "scripts" / "kaola-tmux.sh"
             self.assertEqual(shipped.read_bytes(), TMUX_CORE.read_bytes(), skill_id)
@@ -260,6 +268,107 @@ class BoundedOrdinaryOutputs(unittest.TestCase):
         self.assertEqual(receipt["schema"], "kaola-project-runner-locator/1")
         self.assertLessEqual(len(completed.stdout.encode("utf-8")), BUDGETS["locator_receipt_bytes"])
         self.assertEqual(len(completed.stdout.strip().splitlines()), 1)
+
+
+class BoundedObserveAndStatus(unittest.TestCase):
+    """Ordinary PTY observe/status receipts are bounded by the same budget, verifiably."""
+
+    RELAY = {
+        "managed": True, "protocol_version": 1, "epoch": "1" * 32, "pid": 100, "start_fingerprint": "sha256:" + "1" * 64,
+        "socket_path": "/tmp/relay-" + "2" * 32 + ".sock", "socket_owner_uid": 501, "socket_mode": "0600", "peer_pid_verified": True,
+        "state": "running", "child_pid": 101, "child_pgid": 101, "child_start_fingerprint": "sha256:" + "3" * 64,
+        "child_runtime_path": "/usr/local/bin/claude", "child_process": "claude", "child_process_state": "S", "child_process_match": True,
+        "process_group_running": True, "lease_active": False, "child_input_offset": 10, "child_output_offset": 20,
+        "child_output_digest": "sha256:" + "8" * 64, "resize_revision": 0, "bracketed_paste": True, "terminal_fence": "decrqm-nonce-v1",
+    }
+
+    def environment(self, root: Path, frame_file: Path, processes: list) -> dict[str, str]:
+        env = {name: value for name, value in os.environ.items() if not name.startswith("KPR_")}
+        env.update({
+            "KPR_FRAME_FILE": str(frame_file), "KPR_PRESENT": "true", "KPR_OWNED": "true", "KPR_PLATFORM_MATCH": "true",
+            "KPR_REPO_MATCH": "true", "KPR_PANE_COUNT": "1", "KPR_PANE_ID": "%1", "KPR_PANE_DEAD": "false", "KPR_PANE_INPUT_OFF": "false",
+            "KPR_PANE_PATH": str(root), "KPR_PANE_PID": "100", "KPR_PANE_COMMAND": "python3", "KPR_PANE_TITLE": "Claude Code",
+            "KPR_PANE_PROCESS": "python3 kaola-pane-relay.py", "KPR_RELAY_PROCESS_MATCH": "true", "KPR_PROCESS_MATCH": "true",
+            "KPR_TUI": "true", "KPR_PANE_WIDTH": "400", "KPR_PANE_HEIGHT": "300", "KPR_CURSOR_X": "0", "KPR_CURSOR_Y": "0",
+            "KPR_CURSOR_FLAG": "true", "KPR_ALTERNATE_ON": "false", "KPR_HISTORY_SIZE": "10", "KPR_HISTORY_BYTES": "100",
+            "KPR_ADAPTER_JSON": json.dumps({"editor_state": "empty", "editor_fingerprint": None, "visible_shell_count": 0,
+                                            "visible_agent_count": 0, "native_approval": {"state": "absent", "kind": None, "fingerprint": None},
+                                            "structured_decision_marker": None, "activity_hint": "idle"}),
+            "KPR_RELAY_JSON": json.dumps(self.RELAY), "KPR_PROCESS_JSON": json.dumps(processes), "KPR_BARRIER_JSON": "null",
+            "KPR_RESULT": "observed", "KPR_PLATFORM": "claude-code", "KPR_RUNTIME": "Claude Code", "KPR_SESSION": "pd-observe",
+            "KPR_REPO": str(root), "KPR_RUNTIME_SESSION_ID": "", "KPR_MODEL_JSON": "{}",
+        })
+        return env
+
+    def helper(self, command: str, env: dict[str, str], stdin: bytes = b"") -> dict:
+        completed = subprocess.run([sys.executable, str(OBSERVATION), command], input=stdin, capture_output=True, env=env)
+        self.assertEqual(completed.returncode, 0, completed.stderr.decode())
+        line = completed.stdout
+        self.assertEqual(len(line.strip().splitlines()), 1)
+        self.assertLessEqual(len(line.strip()), BUDGETS["capture_receipt_bytes"], command)
+        return json.loads(line)
+
+    def test_pty_observe_and_status_over_budget_keep_newest_frame_lines_and_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            root.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            frame = "".join(f"line {i:06d} " + "x" * 90 + "\n" for i in range(1200))
+            frame_file = Path(temporary) / "frame.txt"
+            frame_file.write_text(frame, encoding="utf-8")
+            processes = [{"pid": 200 + i, "ppid": 101, "state": "S", "command": f"worker {i} " + "y" * 60} for i in range(1500)]
+            env = self.environment(root, frame_file, processes)
+            frame_bytes = frame.encode("utf-8")
+            self.assertGreater(len(frame_bytes), BUDGETS["capture_receipt_bytes"])
+            # The unbounded observation (in-process) decides snapshot_id and pane_revision from the full frame.
+            spec = importlib.util.spec_from_file_location("kaola_observation_pd", OBSERVATION)
+            module = importlib.util.module_from_spec(spec)
+            assert spec.loader
+            spec.loader.exec_module(module)
+            saved = dict(os.environ)
+            os.environ.clear()
+            os.environ.update(env)
+            try:
+                unbounded = module.build_from_environment()
+            finally:
+                os.environ.clear()
+                os.environ.update(saved)
+            self.assertGreater(len(json.dumps(unbounded, ensure_ascii=False, sort_keys=True).encode("utf-8")), BUDGETS["capture_receipt_bytes"])
+            observed = self.helper("build", env)
+            self.assertEqual(observed["result"], "observed")
+            self.assertEqual(observed["snapshot_id"], unbounded["snapshot_id"], "snapshot_id is computed from the full frame")
+            self.assertEqual(observed["pane_revision"], unbounded["pane_revision"])
+            fields = observed["truncated"]["fields"]
+            self.assertEqual(fields["raw_current_frame"]["total_bytes"], len(frame_bytes))
+            self.assertEqual(fields["raw_current_frame"]["sha256"], hashlib.sha256(frame_bytes).hexdigest())
+            self.assertEqual(fields["raw_current_frame"]["kept_bytes"], len(observed["raw_current_frame"].encode("utf-8")))
+            self.assertLess(fields["raw_current_frame"]["kept_bytes"], len(frame_bytes))
+            self.assertTrue(observed["raw_current_frame"].startswith("line "), "truncation lands on a line boundary")
+            self.assertIn("line 001199", observed["raw_current_frame"], "the newest frame lines are kept")
+            self.assertNotIn("line 000000", observed["raw_current_frame"])
+            self.assertEqual(fields["child_processes"]["total"], len(processes))
+            self.assertEqual(fields["child_processes"]["kept"], len(observed["child_processes"]))
+            self.assertEqual(fields["child_processes"]["kept"], 32, "a short process excerpt survives beside the frame excerpt")
+            self.assertEqual(observed["child_processes"], processes[:32], "the first process entries are kept")
+            stream = "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in processes).encode("utf-8")
+            self.assertEqual(fields["child_processes"]["stream_sha256"], hashlib.sha256(stream).hexdigest())
+            self.assertEqual(observed["child_process_count"], len(processes), "counts stay whole")
+            self.assertEqual(observed["hard_evidence"], unbounded["hard_evidence"], "structural facts stay whole")
+            self.assertEqual(observed["relay"], unbounded["relay"])
+            self.assertIn("capture --full", observed["truncated"]["hint"])
+            # status-view keeps the original totals and digests of an already bounded observation.
+            status = self.helper("status-view", env, json.dumps(observed).encode("utf-8"))
+            self.assertEqual(status["result"], "observed")
+            self.assertEqual(status["truncated"]["fields"]["raw_current_frame"]["total_bytes"], len(frame_bytes))
+            self.assertEqual(status["truncated"]["fields"]["raw_current_frame"]["sha256"], hashlib.sha256(frame_bytes).hexdigest())
+            self.assertEqual(status["truncated"]["fields"]["raw_current_frame"]["kept_bytes"], len(status["raw_current_frame"].encode("utf-8")))
+            self.assertEqual(status["truncated"]["fields"]["child_processes"]["total"], len(processes))
+            self.assertTrue(status["tui_detected"] and status["present"])
+            # A receipt within budget passes through unchanged.
+            frame_file.write_text("small frame\n❯\n", encoding="utf-8")
+            small = self.helper("build", self.environment(root, frame_file, processes[:3]))
+            self.assertNotIn("truncated", small)
+            self.assertEqual(small["raw_current_frame"], "small frame\n❯\n")
 
 
 class BoundedAcpCapture(unittest.TestCase):
@@ -327,6 +436,71 @@ class BoundedAcpCapture(unittest.TestCase):
         small = self.cli("capture", "--lines", "5")
         self.assertNotIn("truncated", small, "a receipt within budget passes through unchanged")
         self.assertEqual(len(small["events"]), 5)
+        for command in ("observe", "status"):
+            plain = self.cli(command)
+            self.assertNotIn("truncated", plain, f"{command} within budget passes through unchanged")
+
+
+class BoundedAcpObserveAndStatus(unittest.TestCase):
+    """Ordinary ACP observe/status receipts are bounded the same way, proven against the mock agent."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory(prefix="kaola-pd-acp-state-")
+        cls.root = Path(cls._tmp.name)
+        cls.repo = cls.root / "repo"
+        cls.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
+        cls.session = f"pdstate-{os.getpid()}"
+        # A native option list large enough that the session/new result alone exceeds the budget.
+        cls.options = [{"id": f"option_{i:04d}", "name": f"Option {i}", "category": "mode",
+                        "description": "d" * 120, "currentValue": "a",
+                        "options": [{"value": "a", "name": "A"}, {"value": "b", "name": "B"}]} for i in range(600)]
+        cls.started = False
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if cls.started:
+            cls.cli("stop", "--force", check=False)
+        cls._tmp.cleanup()
+
+    @classmethod
+    def cli(cls, command: str, *args: str, check: bool = True) -> dict:
+        env = dict(os.environ, KAOLA_ACP_RECORD_ROOT=str(cls.root / "records"), MOCK_ACP_LOG=str(cls.root / "mock.jsonl"),
+                   MOCK_ACP_CONFIG=json.dumps({"new": cls.options}))
+        argv = [sys.executable, str(ACP_CLI), "grok", command, "--repo", str(cls.repo), "--session", cls.session,
+                "--command", f"{sys.executable} {MOCK_ACP_AGENT} --scenario tool_call_only", *args]
+        completed = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120)
+        if check and completed.returncode != 0:
+            raise AssertionError(f"{command} failed: {completed.stderr}\n{completed.stdout}")
+        return json.loads(completed.stdout) if completed.stdout.strip() else {}
+
+    def test_observe_and_status_over_budget_summarise_structures_by_size_and_sha256(self) -> None:
+        type(self).started = True
+        self.cli("start")
+        stream = json.dumps(self.options, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        self.assertGreater(len(stream), BUDGETS["capture_receipt_bytes"])
+        for command in ("observe", "status"):
+            receipt = self.cli(command)
+            line = json.dumps(receipt, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            self.assertLessEqual(len(line), BUDGETS["capture_receipt_bytes"], command)
+            fields = receipt["truncated"]["fields"]
+            self.assertIn("initial_config_options", fields, command)
+            self.assertEqual(fields["initial_config_options"]["kind"], "list")
+            self.assertEqual(fields["initial_config_options"]["count"], len(self.options))
+            self.assertEqual(fields["initial_config_options"]["bytes"], len(stream))
+            self.assertEqual(fields["initial_config_options"]["sha256"], hashlib.sha256(stream).hexdigest(), "the digest names the full value")
+            self.assertEqual(receipt["initial_config_options"], {"omitted": True, "bytes": len(stream), "sha256": hashlib.sha256(stream).hexdigest()})
+            for name, summary in fields.items():
+                self.assertEqual(len(summary["sha256"]), 64, name)
+                self.assertEqual(receipt[name]["omitted"], True, name)
+                self.assertEqual(receipt[name]["bytes"], summary["bytes"], name)
+            self.assertEqual(fields["record"]["kind"], "object")
+            self.assertIn("initial_config_options", fields["record"]["keys"], "the on-disk record carried the same list")
+            for scalar in ("state", "activity_hint", "holder_pid", "event_cursor", "mutation_status", "acp_session_id"):
+                self.assertIn(scalar, receipt, f"{command}: scalar facts stay whole")
+            self.assertNotIsInstance(receipt["state"], dict)
+            self.assertIn("sha256", receipt["truncated"]["hint"])
 
 
 class InvariantIsDocumented(unittest.TestCase):

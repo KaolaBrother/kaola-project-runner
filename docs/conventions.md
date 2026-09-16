@@ -51,9 +51,11 @@ After an allowed source change:
 **Progressive disclosure.** Discovery exposes only a stable name and a short description.
 Activating Project Runner loads its body only, never a worker body. Selecting one worker loads
 that worker only. References load only when the current operation needs them. Scripts execute
-mechanically; the model never reads their source. Observe, capture, and verifier outputs are
-bounded receipts: hashes, counts, and relevant excerpts, never whole files or unbounded terminal
-history, on PTY and ACP alike (`capture --full` is the explicit, requested exception). Host adapters may not flatten,
+mechanically; the model never reads their source. Observe, status, capture, and verifier
+outputs are bounded receipts: hashes, counts, and relevant excerpts, never whole files or
+unbounded terminal history, on PTY and ACP alike; an over-budget receipt keeps its newest part
+and names the rest in a `truncated` block with counts and sha256 (`capture --full` is the
+explicit, requested exception). Host adapters may not flatten,
 concatenate, eagerly preload, or duplicate canonical Skill bodies for packaging convenience.
 Every platform adapter and host declares measurable byte budgets for discovery, activation,
 selected-worker increment, references, and tool outputs in `templates/budgets.json`;

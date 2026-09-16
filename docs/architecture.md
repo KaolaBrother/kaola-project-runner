@@ -88,11 +88,16 @@ only the main Skill and, at dispatch, one selected worker from that checkout. `s
 kaola-locate.py` is the locator and the fail-closed host-target attestation (bounded receipt:
 target kind as declared, host fingerprint to compare with the registered one, ROOT identity,
 project identity, worker script under the same ROOT, session presence; real local paths, no
-credentials; it does not classify physical host kind). `register` validates before it links.
+credentials; it does not classify physical host kind). `register --target local|cloud`
+validates before it links and then writes a credential-free registration receipt beside the
+link (resolved ROOT, declared target, host fingerprint, accepted revision) that every later
+call compares with the running host and declared target, failing closed on mismatch.
 The bridge follows a two-commit content/pin model (`accepted-revision.json` stage `content`
 for the content commit R, stage `pinned` for the pin commit P that names R; the pin gate in the
-renderer and verifier proves R exists, is an ancestor, is a content-stage commit, and holds the
-locator and every entry path). Grok Bot is a **host**, not an eighth platform: there is
+renderer and verifier proves R exists, is an ancestor, is a content-stage commit, holds the
+locator and every entry path, and differs from P only by `accepted-revision.json` plus the
+three generated products with a one-line bridge diff; an accepted R/P pair is never rebased or
+squashed, and a moved `main` means a fresh R/P). Grok Bot is a **host**, not an eighth platform: there is
 no `platforms/grok-bot.yaml`, no transport adapter, no runtime copy, no per-worker account
 Skills, and no installer destination. `scripts/kaola-grok-bot-verify.py` proves the bridge
 shape and budgets and, with `--repo`, byte identity with a fresh render. `--platform grok`
@@ -104,12 +109,14 @@ Local Computer UAT is the boundary. See [Grok Bot host](grok-bot-host.md).
 Discovery exposes only a stable name and a short description. Activating Project Runner
 loads its body only, never a worker body. Selecting one worker loads that worker only.
 References load only when the current operation needs them. Scripts execute mechanically;
-the model never reads their source. Observe, capture, and verifier outputs are bounded
-receipts (hashes, counts, relevant excerpts), never whole files or unbounded terminal
-history, on both transports: PTY `capture` through `kaola-observation.py bound-text`, ACP
-`capture` through `bound_capture_receipt` in `kaola-acp.py` (oldest entries dropped, a
-`truncated` block with counts, stream bytes, and sha256); `capture --full` is the explicit
-exception. Host adapters may not flatten,
+the model never reads their source. Observe, status, capture, and verifier outputs are
+bounded receipts (hashes, counts, relevant excerpts), never whole files or unbounded terminal
+history, on both transports: PTY `capture` through `kaola-observation.py bound-text` and PTY
+`observe`/`status` through `bound_observation` (newest frame lines and first process entries
+kept, `truncated.fields` with sizes and sha256, `snapshot_id` from the full frame); ACP
+`capture` through `bound_capture_receipt` and ACP `observe`/`status` through
+`bound_state_receipt` in `kaola-acp.py` (oldest entries dropped or structures summarised by
+size and sha256 under a `truncated` block); `capture --full` is the only explicit exception. Host adapters may not flatten,
 concatenate, eagerly preload, or duplicate canonical Skill bodies for packaging convenience.
 `templates/budgets.json` declares the measurable byte budgets (descriptions, main Skill, each
 worker, each reference, bridge, guide, locator receipt, ordinary capture receipt);
