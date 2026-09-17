@@ -269,7 +269,23 @@ class AcpFollowContractTests(unittest.TestCase):
                     proc.wait(timeout=3)
                 except subprocess.TimeoutExpired:
                     pass
+        # The follow CLIs run with text pipes. Killing the process reaps it,
+        # but the test-side stream wrappers stay open until gc, which surfaces
+        # ResourceWarnings during suite teardown; let the collector threads
+        # reach EOF and close the streams explicitly before clearing.
+        for collector in self._collectors:
+            collector.thread.join(timeout=2)
+            if collector.err_thread is not None:
+                collector.err_thread.join(timeout=2)
+        for proc in self._follows:
+            for stream in (proc.stdout, proc.stderr, proc.stdin):
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except (OSError, ValueError):
+                        pass
         self._follows.clear()
+        self._collectors.clear()
         for platform, session, repo in list(self._started):
             self.run_cli(
                 platform, "stop", repo=repo, session=session,

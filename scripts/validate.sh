@@ -40,31 +40,92 @@ bash -n "$repo_root/scripts/kaola-tmux.sh" "$repo_root"/scripts/adapters/*.sh \
   "$repo_root/scripts/install-local.sh"
 bash "$repo_root/tests/contract/test-installer-migration.sh"
 bash "$repo_root/tests/contract/test-installer-runtimes.sh"
-python3 "$repo_root/tests/contract/test-issue-9-contract.py"
-python3 "$repo_root/tests/contract/test-direct-transport-contract.py"
-python3 "$repo_root/tests/contract/test-devin-regressions.py"
-python3 "$repo_root/tests/contract/test-acp-contract.py"
-python3 "$repo_root/tests/contract/test-acp-watch-contract.py"
-python3 "$repo_root/tests/contract/test-acp-follow-contract.py"
-python3 "$repo_root/tests/contract/test-acp-holder-continue.py"
-python3 "$repo_root/tests/contract/test-acp-sweep-contract.py"
-python3 "$repo_root/tests/contract/test-issue-33-config-meta.py"
-python3 "$repo_root/tests/contract/test-runner-v2.py"
-python3 "$repo_root/tests/contract/test-generated-skills.py"
-python3 "$repo_root/tests/contract/test-issue-24-opencode-pty-bypass.py"
-python3 "$repo_root/tests/contract/test-issue-41-orchestrator.py"
+
+# The contract suites dominate validate wall time (measured ~200 s combined).
+# Every suite is a self-contained fixture under the validate-owned TMPDIR
+# root — its temp dirs, ACP record dirs, and the shared kaola-<uid>-acp
+# socket dir all descend from $validate_tmp — so they run as two balanced
+# lanes instead of one serial list. Nothing is skipped: each suite runs the
+# identical command it ran serially, its log is replayed in the original
+# order after both lanes finish, and the logs live under $validate_tmp so
+# the Issue #63 sweep still covers exactly this invocation's holders and the
+# root removal takes the logs with it. A lane failure is reported and the
+# script exits nonzero only after every suite has completed.
+python_suites_all=(
+  "test-issue-9-contract.py"
+  "test-direct-transport-contract.py"
+  "test-devin-regressions.py"
+  "test-acp-contract.py"
+  "test-acp-watch-contract.py"
+  "test-acp-follow-contract.py"
+  "test-acp-holder-continue.py"
+  "test-acp-sweep-contract.py"
+  "test-issue-33-config-meta.py"
+  "test-runner-v2.py"
+  "test-generated-skills.py"
+  "test-issue-24-opencode-pty-bypass.py"
+  "test-issue-41-orchestrator.py"
+  "test-issue-49-grok-bot-host.py"
+  "test-progressive-disclosure.py"
+  "test-issue-50-claude-acp-bridge.py"
+  "test-issue-50-runner-integration.py"
+  "test-zcode-acp-contract.py"
+  "test-droid-acp-contract.py"
+  "test-issue-51-runner-integration.py"
+  "test-zcode-host-contract.py"
+  "test-zcode-heartbeat-contract.py"
+  "test-issue-52-workflow-worktree.py"
+  "test-issue-64-receipt-bound.py"
+)
+python_suites_a=(
+  "test-acp-contract.py"
+  "test-zcode-heartbeat-contract.py"
+  "test-acp-follow-contract.py"
+  "test-progressive-disclosure.py"
+  "test-droid-acp-contract.py"
+  "test-issue-41-orchestrator.py"
+  "test-runner-v2.py"
+  "test-direct-transport-contract.py"
+  "test-issue-9-contract.py"
+)
+python_suites_b=(
+  "test-issue-33-config-meta.py"
+  "test-issue-50-runner-integration.py"
+  "test-issue-49-grok-bot-host.py"
+  "test-acp-watch-contract.py"
+  "test-acp-holder-continue.py"
+  "test-zcode-host-contract.py"
+  "test-issue-50-claude-acp-bridge.py"
+  "test-issue-51-runner-integration.py"
+  "test-acp-sweep-contract.py"
+  "test-zcode-acp-contract.py"
+  "test-generated-skills.py"
+  "test-devin-regressions.py"
+  "test-issue-52-workflow-worktree.py"
+  "test-issue-24-opencode-pty-bypass.py"
+  "test-issue-64-receipt-bound.py"
+)
+run_suite_lane() {
+  for suite in "$@"; do
+    if ! python3 "$repo_root/tests/contract/$suite" >"$validate_tmp/$suite.log" 2>&1; then
+      printf 'FAILED: %s\n' "$suite"
+      return 1
+    fi
+  done
+}
+run_suite_lane "${python_suites_a[@]}" & lane_a=$!
+run_suite_lane "${python_suites_b[@]}" & lane_b=$!
+python_status=0
+wait "$lane_a" || python_status=1
+wait "$lane_b" || python_status=1
+for suite in "${python_suites_all[@]}"; do
+  cat "$validate_tmp/$suite.log"
+done
+if (( python_status )); then
+  exit 1
+fi
 python3 "$repo_root/scripts/kaola-grok-bot-verify.py" "$repo_root/hosts/grok-bot" --repo "$repo_root"
-python3 "$repo_root/tests/contract/test-issue-49-grok-bot-host.py"
-python3 "$repo_root/tests/contract/test-progressive-disclosure.py"
-python3 "$repo_root/tests/contract/test-issue-50-claude-acp-bridge.py"
-python3 "$repo_root/tests/contract/test-issue-50-runner-integration.py"
-python3 "$repo_root/tests/contract/test-zcode-acp-contract.py"
-python3 "$repo_root/tests/contract/test-droid-acp-contract.py"
-python3 "$repo_root/tests/contract/test-issue-51-runner-integration.py"
-python3 "$repo_root/tests/contract/test-zcode-host-contract.py"
-python3 "$repo_root/tests/contract/test-zcode-heartbeat-contract.py"
-python3 "$repo_root/tests/contract/test-issue-52-workflow-worktree.py"
-python3 "$repo_root/tests/contract/test-issue-64-receipt-bound.py"
+
 # Acceptance line "git diff --check clean": tracked changes must carry no whitespace errors.
 if git -C "$repo_root" rev-parse --git-dir >/dev/null 2>&1; then
   git -C "$repo_root" diff --check

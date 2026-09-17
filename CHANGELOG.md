@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **validate wall time cut with zero coverage loss.** The 24 contract suites in
+  `./scripts/validate.sh` no longer run as one serial list: they run as two
+  balanced lanes (each suite runs the identical command it ran serially, with
+  its output replayed in the original order afterwards, and its per-suite log
+  under the validate-owned `TMPDIR` root so the Issue #63 exit sweep still
+  covers exactly this invocation's holders). Follow-suite teardown also closes
+  its `follow` CLI pipes, removing the `ResourceWarning: unclosed file` noise
+  from the run.
 - **ZCode-host Skill ties heartbeat-prompt maintenance to worker events.**
   After each worker terminated/idle notification the host agent settles the next
   step, then updates `.kaola/heartbeat-prompt.json` — project info, pace, plans,
@@ -20,7 +28,6 @@
   still summarised exactly as before with byte size and sha256 attestation,
   capture receipts and the PTY bound keep the unchanged 64 KiB
   `capture_receipt_bytes`, and `--full` and credential hygiene are untouched.
-
 - **Interrupted validate runs no longer leak ACP holders (Issue #63).**
   `./scripts/validate.sh` now runs its suites under one validate-owned
   `TMPDIR` root and sweeps that root on exit, interrupt, and terminate
