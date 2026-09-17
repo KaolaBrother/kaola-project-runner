@@ -74,7 +74,12 @@ directory. A ZCode Host session is one named Runner session like any other:
 when it dispatches an inner worker, including another ZCode, the inner session
 is a separate Runner session with its own record root entry and process group —
 an inner stop never reaches the outer Host, and the outer stop sweeps only
-recorded inner sessions. A **bridge
+recorded inner sessions. A ZCode Host session's heartbeat is event-driven:
+no Routine, cron, or sleep loop. It maintains the full prompt at the project
+root `.kaola/heartbeat-prompt.json` (overwritten on change) and exports
+`KAOLA_ACP_HEARTBEAT_HOST` on each worker start; each worker termination or
+turn-end idle then delivers one full heartbeat pass into this session. No
+worker event, no trigger. A **bridge
 host** (Grok Bot today) reaches this checkout through one thin account Skill
 instead: it binds an execution target first (Local Computer, or the cloud Agent
 Computer), asks that target's device-local locator `kaola-project-runner-locate` for the verified
@@ -148,8 +153,9 @@ instructions materially change; replace obsolete text rather than append
 conflicting versions. Do not hard-code host tool names into this Skill. A
 report-only request disables execution actions.
 
-Native recurring wake and blocking sleep must not be stacked. After close-out,
-cancel the native heartbeat or stop scheduling the next sleep. No CLI
+Native recurring wake and blocking sleep must not be stacked. On a ZCode Host
+session, worker events are the only heartbeat trigger (see Hosts). After
+close-out, cancel the native heartbeat or stop scheduling the next sleep. No CLI
 allowlist means no heartbeat. Temporarily having no ready task is not project
 completion. On Grok Bot the native recurring carrier is one Routine on this Bot;
 do not hard-code other hosts' scheduler APIs.

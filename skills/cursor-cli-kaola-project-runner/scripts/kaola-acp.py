@@ -75,6 +75,15 @@ BRIDGE_BINARY_ENV = {
 }
 ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
 ZCODE_NODE_ENV = "KAOLA_ZCODE_NODE"
+# Issue #62 phase 2: a worker start may declare the ZCode Host session whose
+# holder carries worker events back into that host session (the event-driven
+# heartbeat carrier). JSON: {"platform": "zcode", "session": ..., "repo": ...}.
+# The CLI validates it, resolves the host holder's deterministic socket, and
+# hands both to the spawned worker holder; that holder does the notifying from
+# its existing agent-exit and turn-end paths. Other hosts keep their periodic
+# carriers: the target platform is ZCode only, and it fails closed.
+HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
+HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
 # Set by a holder for its agent: the JSONL file where an agent that spawns
 # detached Runner holders (a ZCode Host turn starting a nested Worker, a
 # Claude Code agent doing the same, ...) records each holder's identity so the
@@ -1199,6 +1208,39 @@ def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     return receipt
 
 
+def heartbeat_host_target(args: argparse.Namespace, repo: str) -> dict[str, Any] | None:
+    """Validate the declared heartbeat host (ZCode Host only) and resolve its
+    holder socket. Fails closed: a malformed, non-ZCode, or self-referential
+    target is a usage error, never a silently dropped event carrier."""
+    raw = os.environ.get(HEARTBEAT_HOST_ENV) or ""
+    if not raw:
+        return None
+    try:
+        target = json.loads(raw)
+    except ValueError:
+        die(f"{HEARTBEAT_HOST_ENV} is not valid JSON")
+    if not isinstance(target, dict):
+        die(f"{HEARTBEAT_HOST_ENV} must be a JSON object")
+    platform = target.get("platform")
+    session = target.get("session")
+    host_repo = target.get("repo")
+    if platform != "zcode":
+        die(f'{HEARTBEAT_HOST_ENV} target platform must be "zcode" (the event-driven '
+            f"heartbeat carrier is a ZCode Host capability), got {platform!r}")
+    if not isinstance(session, str) or not SESSION_PATTERN.match(session):
+        die(f"{HEARTBEAT_HOST_ENV} target session is missing or invalid")
+    if not isinstance(host_repo, str) or not host_repo:
+        die(f"{HEARTBEAT_HOST_ENV} target repo is missing")
+    host_repo = resolve_repo(host_repo)
+    if session == args.session and host_repo == repo:
+        die(f"{HEARTBEAT_HOST_ENV} names this worker's own session; "
+            "a session cannot be its own heartbeat host")
+    digest = hashlib.sha256(host_repo.encode("utf-8")).hexdigest()[:16]
+    directory = record_root(args) / platform / session / digest
+    return {"platform": platform, "session": session, "repo": host_repo,
+            "socket": str(sock_path_for_directory(directory))}
+
+
 def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args))
@@ -1215,6 +1257,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             receipt["mutation_status"] = "not_started"
             receipt["mutation_performed"] = False
             return receipt
+    heartbeat_host = heartbeat_host_target(args, repo)
     directory = record_dir(args, repo)
     tmux = subprocess.run(
         ["tmux", "has-session", "-t", f"={args.session}"], capture_output=True
@@ -1256,15 +1299,20 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     if init_meta:
         holder_argv += ["--init-meta", json.dumps(init_meta)]
     with open(log_path, "ab") as log:
+        holder_env = agent_environment(args)
+        if heartbeat_host is not None:
+            holder_env[HEARTBEAT_HOST_SOCKET_ENV] = heartbeat_host["socket"]
         proc = subprocess.Popen(
             holder_argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-            start_new_session=True, env=agent_environment(args),
+            start_new_session=True, env=holder_env,
         )
     # When this start runs inside an outer agent (nested Host/Worker chain),
     # record the holder's identity for the outer holder's exact sweep.
     child_record = record_holder_child_spawn(proc)
     if child_record is not None:
         receipt["child_record"] = child_record
+    if heartbeat_host is not None:
+        receipt["heartbeat_host"] = heartbeat_host
     sock = sock_path(args, repo)
     deadline = time.monotonic() + START_WAIT
     state: dict[str, Any] | None = None

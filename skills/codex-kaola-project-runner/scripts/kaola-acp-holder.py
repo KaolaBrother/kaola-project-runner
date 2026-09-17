@@ -113,6 +113,46 @@ def child_groups(root_pid: int, root_pgid: int,
 
 
 CHILD_RECORD_NAME = "children.jsonl"
+
+# Issue #62 phase 2: the event-driven heartbeat carrier for a ZCode Host. A
+# worker holder armed with KAOLA_ACP_HEARTBEAT_HOST (plus the CLI-resolved
+# host socket) notifies the ZCode Host holder from its existing agent-exit
+# and turn-end paths; the host holder stages events in one bounded in-memory
+# list, records stage/delivery/confirmation in its own event log (the only
+# persistence: no new store), and delivers one ordinary ``session/prompt``
+# through the normal admission path - never a raw send, never a second stdin
+# writer, never a periodic scheduler. Other hosts are untouched: the carrier
+# op exists only for platform zcode.
+HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
+HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
+HEARTBEAT_EVENT_CAP = 32
+HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+HEARTBEAT_NOTIFY_GRACE = 6.0
+WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+WORKER_EVENT_KINDS = ("terminated", "idle")
+
+
+def parse_heartbeat_host() -> dict[str, str] | None:
+    """The armed carrier target, or None. The CLI already validated it and
+    died on anything invalid; this re-checks the shape so a hand-spawned
+    holder never carries a malformed target (disabled loudly, never fatal)."""
+    raw = os.environ.get(HEARTBEAT_HOST_ENV) or ""
+    if not raw:
+        return None
+    socket_path = os.environ.get(HEARTBEAT_HOST_SOCKET_ENV) or ""
+    try:
+        target = json.loads(raw)
+    except ValueError:
+        target = None
+    if (not isinstance(target, dict) or target.get("platform") != "zcode"
+            or not isinstance(target.get("session"), str) or not target["session"]
+            or not isinstance(target.get("repo"), str) or not target["repo"]
+            or not socket_path or not os.path.isabs(socket_path)):
+        sys.stderr.write(f"[kaola-acp-holder] invalid {HEARTBEAT_HOST_ENV}: "
+                         "heartbeat carrier disabled\n")
+        return None
+    return {"platform": "zcode", "session": target["session"],
+            "repo": target["repo"], "socket": socket_path}
 # ``ps lstart`` is truncated to the second and the agent records ``Date.now()``
 # only after ``spawn`` returned, so a genuine child's start time is at or
 # before its recorded time, by under a second plus the spawn latency. The
@@ -1074,6 +1114,13 @@ class Holder:
         self.record_lock = threading.Lock()
         self.last_activity = time.monotonic()
         self.agent_exited = threading.Event()
+        # Event-driven heartbeat carrier (Issue #62 phase 2): this holder's
+        # pending worker events when it is a ZCode Host session, or the armed
+        # notify target when it is a worker of one.
+        self.pending_worker_events: list[dict[str, Any]] = []
+        self.worker_events_lock = threading.Lock()
+        self.heartbeat_notify_lock = threading.Lock()
+        self.heartbeat_host = parse_heartbeat_host()
 
     # -- record ---------------------------------------------------------------
 
@@ -1414,6 +1461,12 @@ class Holder:
         turn["mutation_status"] = "completed"
         turn["active"] = False
         self.projection.close_message()
+        outcome = turn["outcome"]
+        if outcome in ("turn_completed", "turn_failed") and not self.agent.exited.is_set():
+            # One business idle episode per ended turn with the agent alive;
+            # the 600s idle_watcher stays a non-business exit timer.
+            self._notify_heartbeat_host_now(
+                "idle", f"outcome={outcome} stop_reason={turn.get('stop_reason')}")
         self.last_prompt = {
             "fingerprint": turn["fingerprint"],
             "written_at": turn["written_at"],
@@ -1425,8 +1478,15 @@ class Holder:
         self.fanout_follow_delta()
         with self.turn_cond:
             self.turn_cond.notify_all()
+        self._worker_event_turn_end(turn.get("fingerprint"), outcome)
 
     def on_agent_exit(self, code: int) -> None:
+        reason = (f"exit_code={self.agent.exit_code}"
+                  if self.agent.exit_code is not None
+                  else f"exit_signal={self.agent.exit_signal}")
+        # Before agent_exited: op_stop waits out the notify lock, so an exact
+        # stop never kills a half-delivered worker-event notification.
+        self._notify_heartbeat_host_now("terminated", reason)
         self.agent_exited.set()
         self.events.append({"kind": "process_exited", "code": self.agent.exit_code,
                             "signal": self.agent.exit_signal})
@@ -1647,6 +1707,241 @@ class Holder:
     def _await_prompt(self, request_id: int) -> None:
         response = self.agent.wait_response(request_id, None)
         self.on_prompt_response(request_id, response)
+
+    # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+
+    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
+        """One carrier send from this worker holder to the ZCode Host holder.
+
+        Synchronous and bounded: the caller is an existing agent-exit or
+        turn-end path, and ``op_stop`` waits out this lock before exiting, so
+        an exact stop never kills a half-delivered event. The receipt (staged,
+        delivered, or an honest error) is evidence in this holder's event log.
+        """
+        target = self.heartbeat_host
+        if target is None:
+            return
+        params = {"schema": WORKER_EVENT_SCHEMA, "kind": kind,
+                  "platform": self.args.platform, "session": self.args.session,
+                  "repo": self.args.repo, "reason": reason,
+                  "event_cursor": self.events.cursor}
+        receipt: dict[str, Any] = {}
+        with self.heartbeat_notify_lock:
+            try:
+                connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                try:
+                    connection.settimeout(HEARTBEAT_NOTIFY_TIMEOUT)
+                    connection.connect(target["socket"])
+                    connection.sendall(canonical(
+                        {"op": "worker_event", "request_id": secrets.token_hex(8),
+                         "params": params}) + b"\n")
+                    buffer = bytearray()
+                    while b"\n" not in buffer:
+                        data = connection.recv(65536)
+                        if not data:
+                            break
+                        buffer.extend(data)
+                    line = buffer.partition(b"\n")[0]
+                    if line.strip():
+                        receipt = json.loads(line.decode("utf-8", "replace"))
+                finally:
+                    connection.close()
+            except (OSError, ValueError) as exc:
+                receipt = {"error": {"code": "host-unreachable", "message": str(exc)}}
+        if not receipt:
+            receipt = {"error": {"code": "host-closed",
+                                 "message": "heartbeat host closed without a receipt"}}
+        self.events.append({"kind": "heartbeat_carrier_sent", "event_kind": kind,
+                            "reason": reason, "target_session": target["session"],
+                            "receipt": receipt})
+
+    def _heartbeat_payload(self, events: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+        """One literal notification prompt: fixed structured event metadata,
+        the current FULL heartbeat prompt body read at delivery time from the
+        file the ZCode Host agent maintains in the consuming project, and the
+        one-pass instruction. No worker raw output, no shell execution."""
+        source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
+        body: str | None = None
+        try:
+            data = json.loads(source.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and isinstance(data.get("body"), str) and data["body"]:
+                body = data["body"]
+        except (OSError, ValueError):
+            body = None
+        maintained = body is not None
+        if not maintained:
+            body = (f"No maintained heartbeat prompt was found at {source}. Recover "
+                    "authorization and field state from the consuming project records, "
+                    "then run one full pass.")
+        lines = [
+            "kaola-host-notify/1: event-driven heartbeat carrier (ZCode Host)",
+            "worker events (structured, one JSON object per line):",
+        ]
+        for event in events:
+            lines.append(json.dumps(
+                {key: event.get(key) for key in
+                 ("event_id", "kind", "platform", "session", "repo", "reason",
+                  "event_cursor")},
+                ensure_ascii=False, sort_keys=True))
+        digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        if maintained:
+            lines.append(f"heartbeat prompt source: {source} (fingerprint sha256:{digest}, "
+                         f"{len(body.encode('utf-8'))} bytes)")
+        else:
+            lines.append(f"heartbeat prompt source: none maintained at {source} "
+                         f"(fallback trigger context, sha256:{digest})")
+        lines.append("heartbeat prompt body follows, verbatim:")
+        lines.append("<<<heartbeat-prompt")
+        lines.append(body)
+        lines.append("heartbeat-prompt>>>")
+        lines.append("Perform exactly one full Project Runner heartbeat pass - recover "
+                     "authorization and field state, handle worker questions, dispatch "
+                     "suitable authorized work, verify deliveries, and close out - per "
+                     "PROJECT_RUNNER_HEARTBEAT_V2. This worker event is the only heartbeat "
+                     "trigger; this ZCode Host registers no periodic carrier.")
+        return "\n".join(lines), {"heartbeat_fingerprint": f"sha256:{digest}",
+                                  "heartbeat_source": str(source),
+                                  "heartbeat_maintained": maintained}
+
+    def _deliver_worker_events(self) -> dict[str, Any]:
+        """Deliver every staged event as one ordinary prompt through the
+        normal admission path. A busy or dead-agent host keeps events staged
+        for the next boundary or resume; nothing here bypasses op_prompt."""
+        with self.worker_events_lock:
+            staged = [item for item in self.pending_worker_events
+                      if "prompt_fingerprint" not in item]
+        if not staged:
+            return {"delivered": False, "reason": "queue-empty"}
+        if self.agent.proc is None or self.agent.exited.is_set():
+            return {"delivered": False, "reason": "agent-not-running"}
+        if self.turn["active"]:
+            return {"delivered": False, "reason": "prompt-in-progress"}
+        text, meta = self._heartbeat_payload(staged)
+        prompt = self.op_prompt({"text": text, "wait": False})
+        error = prompt.get("error")
+        if error or prompt.get("outcome") != "in_progress":
+            return {"delivered": False, "error": error or prompt}
+        fingerprint = prompt.get("prompt_fingerprint")
+        with self.worker_events_lock:
+            for item in staged:
+                item["prompt_fingerprint"] = fingerprint
+        self.events.append({
+            "kind": "worker_event_delivered",
+            "event_ids": [item["event_id"] for item in staged],
+            "prompt_fingerprint": fingerprint,
+            **meta,
+        })
+        return {"delivered": True, "prompt_fingerprint": fingerprint,
+                "count": len(staged)}
+
+    def _worker_event_turn_end(self, fingerprint: Any, outcome: str | None) -> None:
+        """At a turn boundary: confirm the events this turn delivered, then
+        flush whatever staged meanwhile. A notification turn that did not
+        complete leaves its events staged - no retry loop; the next healthy
+        boundary, a newly staged event, or a resume redelivers them."""
+        confirmed: list[str] = []
+        was_notification = False
+        with self.worker_events_lock:
+            hit = [item for item in self.pending_worker_events
+                   if fingerprint is not None
+                   and item.get("prompt_fingerprint") == fingerprint]
+            was_notification = bool(hit)
+            if hit and outcome == "turn_completed":
+                for item in hit:
+                    self.pending_worker_events.remove(item)
+                confirmed = [item["event_id"] for item in hit]
+            elif hit:
+                for item in hit:
+                    item.pop("prompt_fingerprint", None)
+        if confirmed:
+            self.events.append({"kind": "worker_event_confirmed",
+                                "event_ids": confirmed})
+        if not was_notification or outcome == "turn_completed":
+            if self.agent.proc is not None and not self.agent.exited.is_set():
+                self._deliver_worker_events()
+
+    def op_worker_event(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Carrier op on a ZCode Host holder: stage one worker event, then
+        deliver when the host turn is already idle."""
+        if self.args.platform != "zcode":
+            return {"error": {"code": "worker-event-unsupported",
+                              "message": "the event-driven heartbeat carrier is a ZCode "
+                                         f"Host capability; this session's platform is "
+                                         f"{self.args.platform}"}}
+        kind = params.get("kind")
+        platform = params.get("platform")
+        session = params.get("session")
+        repo = params.get("repo")
+        reason = params.get("reason")
+        cursor = params.get("event_cursor")
+        if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                or not platform or not isinstance(session, str) or not session
+                or not isinstance(repo, str) or not repo
+                or not isinstance(reason, str)
+                or not isinstance(cursor, int) or isinstance(cursor, bool)):
+            return {"error": {"code": "worker-event-invalid",
+                              "message": "worker_event needs kind terminated|idle plus "
+                                         "platform, session, repo, reason, and an integer "
+                                         "event_cursor"}}
+        event = {"schema": WORKER_EVENT_SCHEMA,
+                 "event_id": f"{platform}/{session}/{kind}/{cursor}",
+                 "kind": kind, "platform": platform, "session": session,
+                 "repo": repo, "reason": reason, "event_cursor": cursor,
+                 "staged_at": round(time.time(), 3)}
+        with self.worker_events_lock:
+            if any(item.get("event_id") == event["event_id"]
+                   for item in self.pending_worker_events):
+                return {"event_id": event["event_id"], "duplicate": True,
+                        "pending": len(self.pending_worker_events)}
+            if len(self.pending_worker_events) >= HEARTBEAT_EVENT_CAP:
+                return {"error": {"code": "worker-event-queue-full",
+                                  "capacity": HEARTBEAT_EVENT_CAP,
+                                  "message": f"{HEARTBEAT_EVENT_CAP} worker events are "
+                                             "already waiting for this host turn boundary"}}
+            self.pending_worker_events.append(event)
+            pending = len(self.pending_worker_events)
+        self.events.append({"kind": "worker_event", "event": event})
+        receipt: dict[str, Any] = {"event_id": event["event_id"], "staged": True,
+                                   "pending": pending}
+        if (not self.turn["active"] and self.agent.proc is not None
+                and not self.agent.exited.is_set()):
+            receipt.update(self._deliver_worker_events())
+        return receipt
+
+    def _restore_worker_events(self) -> None:
+        """Resume redelivery: rebuild the pending list from this holder's own
+        event log (staged without a matching confirmation) and deliver it into
+        the resumed session. At-least-once; the heartbeat pass itself is the
+        dedup authority, per the skeleton's recover step."""
+        staged: list[dict[str, Any]] = []
+        confirmed: set[str] = set()
+        for entry in self.events.read_since(0, None):
+            if entry.get("kind") == "worker_event":
+                event = entry.get("event")
+                if isinstance(event, dict) and isinstance(event.get("event_id"), str):
+                    staged.append(event)
+            elif entry.get("kind") == "worker_event_confirmed":
+                ids = entry.get("event_ids")
+                if isinstance(ids, list):
+                    confirmed.update(item for item in ids if isinstance(item, str))
+        pending: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for event in staged:
+            if event["event_id"] in confirmed or event["event_id"] in seen:
+                continue
+            seen.add(event["event_id"])
+            pending.append(event)
+        if len(pending) > HEARTBEAT_EVENT_CAP:
+            dropped = [event["event_id"] for event in pending[:-HEARTBEAT_EVENT_CAP]]
+            pending = pending[-HEARTBEAT_EVENT_CAP:]
+            self.events.append({"kind": "worker_event_overflow", "dropped": dropped,
+                                "capacity": HEARTBEAT_EVENT_CAP})
+        self.pending_worker_events = pending
+        if pending:
+            self.events.append({"kind": "worker_event_restored",
+                                "event_ids": [event["event_id"] for event in pending]})
+            self._deliver_worker_events()
+
 
     def op_wait(self, params: dict[str, Any]) -> dict[str, Any]:
         timeout = params.get("timeout")
@@ -1952,6 +2247,9 @@ class Holder:
                     pass
                 self.agent.exited.wait(EXIT_GRACE)
         residual = self._terminate_group(force)
+        # Never kill a half-delivered worker-event notification on the way out.
+        if self.heartbeat_notify_lock.acquire(timeout=HEARTBEAT_NOTIFY_GRACE):
+            self.heartbeat_notify_lock.release()
         self.state = "stopped"
         self.write_record()
         result = {"stopped": True, "residual_pids": residual,
@@ -2101,6 +2399,8 @@ class Holder:
             return self.op_capture(params)
         if op == "view":
             return self.op_view(params)
+        if op == "worker_event":
+            return self.op_worker_event(params)
         if op == "set_config_option":
             return self.op_set_config_option(params)
         if op == "stop":
@@ -2220,6 +2520,10 @@ class Holder:
                 self._terminate_group(force=True)
             elif self.agent.proc and not self.agent.exited.is_set():
                 pass
+        elif self.args.resume or self.args.use_continue:
+            # session/load resume: redeliver events the previous holder never
+            # saw confirmed (Issue #62 phase 2).
+            self._restore_worker_events()
         threading.Thread(target=self.idle_watcher, daemon=True).start()
         threading.Thread(target=self.follow_heartbeat_loop, daemon=True).start()
         while not self.stop_requested or self.listener:

@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **Event-driven heartbeat for a ZCode Host (Issue #62, Phase 2).** A ZCode
+  Host session now has an event-driven heartbeat carrier instead of a periodic
+  one: it registers no Routine, cron, or sleep loop, and no new daemon, port,
+  scheduler, or second agent-stdin writer exists. A worker started with
+  `KAOLA_ACP_HEARTBEAT_HOST` naming the host session notifies the ZCode Host
+  holder from the worker holder's existing agent-exit and turn-end paths
+  (`terminated`; one `idle` episode per ended turn with the agent alive — the
+  600s idle watcher stays a non-business exit timer). The host holder stages
+  events in one bounded in-memory list (cap 32, deduped by event id), records
+  stage/delivery/confirmation in its existing event log, and delivers one
+  ordinary `session/prompt` through the normal admission path: a busy host
+  flushes at the next completed turn boundary, and `start --resume` redelivers
+  unconfirmed events, so nothing is silently dropped. The delivered prompt is
+  literal text — fixed structured event metadata plus the current full
+  heartbeat prompt body read at delivery time from the consuming project's
+  `.kaola/heartbeat-prompt.json` (fingerprint supplementary), plus one
+  instruction to run a single full `PROJECT_RUNNER_HEARTBEAT_V2` pass; no
+  worker raw output travels with it. The carrier is ZCode-Host-only: the op is
+  refused on other platforms' holders and the CLI fails closed on non-ZCode
+  and self targets. Other hosts' periodic heartbeats, the shared main Skill
+  policy, and the heartbeat skeleton stay one unchanged set (the only Skill
+  change is the minimal ZCode-host override documenting the carrier). See
+  `docs/zcode-host.md`.
+
 - **ZCode Host lifecycle foundation (Issue #62, Phase 1).** ZCode is now both a
   worker platform and a native skill-directory Host: `--runtime zcode` installs
   to `~/.zcode/skills`, and the live-verified workspace `.zcode/skills`
