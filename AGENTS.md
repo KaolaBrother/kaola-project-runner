@@ -17,6 +17,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 - Install: `./scripts/render-skills.py --write && ./scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH] [--method link|copy] [--platform ID[,ID...]] [--no-orchestrator]`
 - Test: `./scripts/validate.sh`
 - Lint/typecheck/build: `./scripts/render-skills.py --check`
+- **Release: before tagging/publishing any new version, verify every platform's pin/adapter requirements are met — e.g. the Grok Bot bridge must have a `saveable: true` pin (pin commit P naming content commit R at the release tag) — or explicitly record why a platform is intentionally not pinned this release.**
 - Dev server: N/A
 
 ## Project Constraints
