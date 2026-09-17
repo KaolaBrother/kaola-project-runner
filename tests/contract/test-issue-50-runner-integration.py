@@ -37,7 +37,7 @@ MANIFEST = ROOT / "platforms" / "claude-code.yaml"
 FAKE = ROOT / "tests" / "contract" / "fake-claude.py"
 UPSTREAM_COMMIT = "6c20f2802e390c80b0542247c6b9738e11efdc11"
 ACP_COMMAND = "node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js"
-VENDORED_FILES = ("dist/index.js", "dist/DERIVATION.json", "LICENSE", "UPSTREAM.md")
+VENDORED_FILES = ("dist/index.js", "dist/DERIVATION.json", "LICENSE")
 PYTHON = sys.executable or shutil.which("python3")
 
 CHECKS: list[str] = []

@@ -25,7 +25,7 @@ MARKER = ".generated-by-kaola-project-runner"
 # The one vendored ACP bridge (Issue #50): shipped only inside this platform's worker Skill.
 VENDORED_BRIDGE_PLATFORM = "claude-code"
 VENDORED_BRIDGE = "claude-code-acp"
-VENDORED_BRIDGE_FILES = ("dist/index.js", "dist/DERIVATION.json", "LICENSE", "UPSTREAM.md")
+VENDORED_BRIDGE_FILES = ("dist/index.js", "dist/DERIVATION.json", "LICENSE")
 # Issue #51: Runner-owned ZCode ACP translator, shipped only inside the ZCode worker.
 ZCODE_PLATFORM = "zcode"
 ZCODE_ADAPTER = "kaola-zcode-acp.py"
