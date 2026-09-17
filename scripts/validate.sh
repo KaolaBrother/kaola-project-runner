@@ -40,6 +40,7 @@ python3 "$repo_root/tests/contract/test-issue-50-runner-integration.py"
 python3 "$repo_root/tests/contract/test-zcode-acp-contract.py"
 python3 "$repo_root/tests/contract/test-droid-acp-contract.py"
 python3 "$repo_root/tests/contract/test-issue-51-runner-integration.py"
+python3 "$repo_root/tests/contract/test-zcode-host-contract.py"
 python3 "$repo_root/tests/contract/test-issue-52-workflow-worktree.py"
 # Acceptance line "git diff --check clean": tracked changes must carry no whitespace errors.
 if git -C "$repo_root" rev-parse --git-dir >/dev/null 2>&1; then

@@ -67,8 +67,14 @@ Derived from this checkout's platform manifests (not a hardcoded roster):
 ### Hosts
 
 This Skill is host-neutral. Native skill-directory installs exist for Codex,
-Claude Code, Cursor, and Devin; there the nine workers are sibling Skill
-directories next to this one, called by their installed directory. A **bridge
+Claude Code, Cursor, Devin, and ZCode (`~/.zcode/skills`; a workspace
+`.zcode/skills` works through `--skills-dir`); there the nine workers are
+sibling Skill directories next to this one, called by their installed
+directory. A ZCode Host session is one named Runner session like any other:
+when it dispatches an inner worker, including another ZCode, the inner session
+is a separate Runner session with its own record root entry and process group —
+an inner stop never reaches the outer Host, and the outer stop sweeps only
+recorded inner sessions. A **bridge
 host** (Grok Bot today) reaches this checkout through one thin account Skill
 instead: it binds an execution target first (Local Computer, or the cloud Agent
 Computer), asks that target's device-local locator `kaola-project-runner-locate` for the verified

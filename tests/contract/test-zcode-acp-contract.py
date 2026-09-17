@@ -1020,5 +1020,78 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertIsNotNone(stops[0].get("id"), "session/stop must carry a request id")
 
 
+    def test_forwards_runner_internal_env_facts_but_never_credentials(self) -> None:
+        child_record = self.tmp / "outer-children.jsonl"
+        driver = self.start(
+            "basic",
+            extra_env={
+                "KAOLA_ACP_CHILD_RECORD": str(child_record),
+                "KAOLA_ZCODE_ENTRY": "/tmp/kaola-zcode-explicit-entry.cjs",
+                "KAOLA_ZCODE_NODE": "/usr/bin/env python3",
+            },
+        )
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "hello"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        record = wait_for(lambda: driver.record() or None, 3)
+        self.assertIsNotNone(record)
+        assert record is not None
+        # Explicit ZCode runtime facts pass to a nested ZCode child (Issue #62
+        # reuse); the explicit credential names never travel.
+        env_names = record.get("env_names") or []
+        self.assertIn("KAOLA_ZCODE_ENTRY", env_names)
+        self.assertIn("KAOLA_ZCODE_NODE", env_names)
+        leaked = [name for name in DENIED_ENV if name in env_names]
+        self.assertEqual(leaked, [])
+        # Trust boundary: the holder's child-record path is a write handle to a
+        # holder record and must never reach an external agent child.
+        self.assertNotIn("KAOLA_ACP_CHILD_RECORD", env_names)
+        self.assertNotIn(FIXTURE_SECRET, json.dumps(driver.messages))
+        self.assertFalse(child_record.exists(), "no child was spawned by a bare prompt")
+
+    def test_native_session_identity_and_load_result(self) -> None:
+        driver = self.start("basic")
+        session_id = self.handshake(driver)
+        # Materialize is lazy: the identity update appears on the first prompt.
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "hello"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        identities = [
+            update for update in driver.updates(session_id)
+            if update.get("sessionUpdate") == "native_session_identity"
+        ]
+        self.assertEqual(len(identities), 1, identities)
+        self.assertNotIn(FIXTURE_SECRET, json.dumps(identities))
+        payload = identities[0]
+        self.assertEqual(payload.get("acpSessionId"), session_id)
+        self.assertTrue(str(payload.get("nativeSessionId") or "").startswith("sess_"))
+        # session/load adopts the native id and returns it plus config options.
+        driver.request(20, "session/load", {"sessionId": "sess_persisted1", "cwd": str(driver.cwd)})
+        loaded = driver.wait_result(20, timeout=8)
+        self.assertIsNotNone(loaded)
+        assert loaded is not None
+        self.assertNotIn("error", loaded)
+        result = loaded.get("result") or {}
+        self.assertEqual(result.get("sessionId"), "sess_persisted1")
+        option_ids = {item.get("id") for item in result.get("configOptions") or []}
+        self.assertIn("mode", option_ids)
+        self.assertIn("model", option_ids)
+        # A faithful resume re-emits the credential-free identity for the
+        # loaded native id.
+        resumed = [
+            update for update in driver.updates("sess_persisted1")
+            if update.get("sessionUpdate") == "native_session_identity"
+        ]
+        self.assertTrue(resumed)
+        self.assertEqual(resumed[-1].get("nativeSessionId"), "sess_persisted1")
+        self.assertNotIn(FIXTURE_SECRET, json.dumps(driver.messages))
+        self.assert_registry_read_only_and_secret_contained(driver)
+
+
 if __name__ == "__main__":
     unittest.main()

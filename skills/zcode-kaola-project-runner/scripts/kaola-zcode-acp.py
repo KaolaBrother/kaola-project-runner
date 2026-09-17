@@ -59,7 +59,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 ADAPTER_NAME = "kaola-zcode-acp"
-ADAPTER_VERSION = "0.2.0"
+ADAPTER_VERSION = "0.3.0"
 
 # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
 DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
@@ -97,7 +97,13 @@ DENIED_ENV = (
 
 # Only these names are copied from the parent environment. HOME is required so
 # the native runtime can find its own login; the adapter itself never reads
-# anything under it.
+# anything under it. The two KAOLA_* names are Runner-internal facts, never
+# credentials: the explicit ZCode entry/node paths this adapter was itself
+# started with (a nested ZCode ACP worker reuses the same already-verified
+# runtime; the nested start re-validates them with the same fail-closed
+# checks). The holder's child-record path (KAOLA_ACP_CHILD_RECORD) is
+# deliberately NOT forwarded: an external agent child must never gain a write
+# handle to another holder's record (Issue #62, trust boundary).
 ENV_ALLOWLIST = (
     "HOME",
     "PATH",
@@ -110,6 +116,8 @@ ENV_ALLOWLIST = (
     "SHELL",
     "TZ",
     "TERM",
+    "KAOLA_ZCODE_ENTRY",
+    "KAOLA_ZCODE_NODE",
 )
 
 # Protocol-documented backend modes / thought levels. These are vocabulary,
@@ -724,8 +732,25 @@ class ZCodeAcpAgent:
                 },
             )
             session.subscribed = True
+            self.emit_session_identity(session)
         self.hydrate_settings(session)
         return session.backend_id
+
+    def emit_session_identity(self, session: Session) -> None:
+        """Report the two wire-level identities once the backend session exists:
+        the ACP session id this client holds and the native ZCode session id
+        (``sess_*``) the backend created for it (Issue #62). The Runner session
+        name is already on every Runner receipt, so the three layers stay
+        separately trackable. Credential-free structured facts; the holder
+        records the update in its event log and every ACP client sees it.
+        """
+        if session.backend_id is None:
+            return
+        self.update(session, {
+            "sessionUpdate": "native_session_identity",
+            "acpSessionId": session.acp_id,
+            "nativeSessionId": session.backend_id,
+        })
 
     def reregister_provider(self, session: Session) -> None:
         """After a faithful resume the fresh app-server has no provider
@@ -1143,7 +1168,14 @@ class ZCodeAcpAgent:
                     raise
             with self.lock:
                 self.sessions[acp_id] = session
-        self.respond(rid, {})
+        # The load result carries the adopted identity (``sessionId``) so the
+        # holder's record and every receipt track which session was loaded;
+        # for a native ``sess_*`` load this ties the Runner session to the
+        # resumable native id (Issue #62).
+        self.respond(rid, {
+            "sessionId": session.acp_id,
+            "configOptions": self.config_options(session),
+        })
 
     def _resume_backend_session(self, session: Session) -> None:
         acp_id = session.acp_id
@@ -1172,6 +1204,7 @@ class ZCodeAcpAgent:
             "afterSeq": 0,
         })
         session.subscribed = True
+        self.emit_session_identity(session)
         self.hydrate_settings(session)
         self.reregister_provider(session)
 

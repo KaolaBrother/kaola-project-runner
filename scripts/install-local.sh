@@ -31,6 +31,10 @@ Consuming runtimes (verified native skill directories):
   claude-code  ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
   cursor       $HOME/.cursor/skills
   devin        ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
+  zcode        $HOME/.zcode/skills (ZCode Host install; the live-verified
+               discovery form is the workspace .zcode/skills, which
+               --skills-dir covers; the user-level directory follows the
+               same layout, see docs/zcode-host.md)
 Grok Bot is a bridge host, not an installer destination: the account holds one
 thin generated Skill (hosts/grok-bot/kaola-project-runner.md) that loads the
 main and one selected worker Skill from this checkout on the bound execution
@@ -39,6 +43,10 @@ target through the device-local locator kaola-project-runner-locate
 checkout, links the command, and writes its registration receipt beside the
 link; a bare --bin-links link carries no receipt). See docs/grok-bot-host.md.
 Grok CLI worker uses --platform grok, not --runtime grok.
+ZCode is both a worker platform (--platform zcode) and a native
+skill-directory Host (--runtime zcode installs to $HOME/.zcode/skills; a
+workspace .zcode/skills destination goes through --skills-dir; see
+docs/zcode-host.md).
 
 --skills-dir installs into any explicit destination parent (including
 project-local paths) and is mutually exclusive with --runtime.
@@ -81,6 +89,7 @@ runtime_skills_dir() {
     claude-code) printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" ;;
     cursor) printf '%s\n' "$HOME/.cursor/skills" ;;
     devin) printf '%s\n' "${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills" ;;
+    zcode) printf '%s\n' "$HOME/.zcode/skills" ;;
     *) return 1 ;;
   esac
 }

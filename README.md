@@ -101,7 +101,9 @@ historical evidence, not this Skill's contract.
 ### Agents that load the Skills
 
 The installer provides native skill-directory destinations for **Codex, Claude Code,
-Cursor, and Devin**. **Grok Bot** is a **bridge host**: the account holds exactly one very
+Cursor, Devin, and ZCode** (`--runtime zcode` → `~/.zcode/skills`; a workspace
+`.zcode/skills` works through `--skills-dir` — see [ZCode host](docs/zcode-host.md)).
+**Grok Bot** is a **bridge host**: the account holds exactly one very
 small generated Skill, `hosts/grok-bot/kaola-project-runner.md` (≈ 2 KB), that binds an
 execution target first (Local Computer, or the cloud Agent Computer), asks that target's
 device-local locator `kaola-project-runner-locate` for the verified `kaola-project-runner`
@@ -241,6 +243,12 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime claude-code
 ./scripts/install-local.sh --runtime cursor
 ./scripts/install-local.sh --runtime devin
+
+# ZCode is both a worker platform and a native skill-directory Host:
+# --runtime zcode installs to ~/.zcode/skills; a workspace .zcode/skills
+# destination (the live-verified discovery form) goes through --skills-dir.
+./scripts/install-local.sh --runtime zcode
+./scripts/install-local.sh --skills-dir "$PWD/.zcode/skills"
 
 # Grok Bot: no installer destination. Save hosts/grok-bot/kaola-project-runner.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:

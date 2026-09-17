@@ -116,6 +116,22 @@ shape and budgets and, with `--repo`, byte identity with a fresh render. `--plat
 still selects the Grok CLI worker. A saved bridge is not live adoption; the owner's read-only
 Local Computer UAT is the boundary. See [Grok Bot host](grok-bot-host.md).
 
+ZCode is additionally a native skill-directory **Host** (Issue #62): `--runtime zcode` installs
+to `~/.zcode/skills`, and the live-verified workspace `.zcode/skills` discovery form goes
+through `--skills-dir`; see [ZCode host](zcode-host.md). Nested Host→Worker isolation is a
+process/session **contract** verified by an offline harness: an inner Runner session started
+under an outer holder is a separate session with its own record-root entry and process
+group. When the outer holder's agent starts the inner session, the nested start appends the
+inner holder's identity (`pid`, `pgid`, `spawned_at`) to the outer holder's `children.jsonl`
+(via `KAOLA_ACP_CHILD_RECORD`), so an inner stop never reaches the outer Host and the outer
+stop sweeps only recorded inner holders — the holder-lost `stop --force` path uses the same
+identity-checked record. `KAOLA_ACP_CHILD_RECORD` is a write handle to a holder record: only a
+holder sets it for its own agent, and the ZCode adapter never forwards it to the app-server
+child. Real model-driven Host dispatch (a Host Agent actually delegating a turn to a Worker)
+is deferred to controlled live E2E, not emulated by executing prompts. The three session
+layers stay separately trackable: the Runner session name, the ACP session id, and the native
+`sess_*` id (reported credential-free as `native_session_identity`).
+
 ### Progressive disclosure
 
 Discovery exposes only a stable name and a short description. Activating Project Runner

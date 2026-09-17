@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **ZCode Host lifecycle foundation (Issue #62, Phase 1).** ZCode is now both a
+  worker platform and a native skill-directory Host: `--runtime zcode` installs
+  to `~/.zcode/skills`, and the live-verified workspace `.zcode/skills`
+  discovery form works through `--skills-dir`. The generic external-ACP-client →
+  ZCode Host → Project Runner → Worker entry reports distinguishable session
+  identities: the adapter emits a credential-free `native_session_identity`
+  update carrying the ACP session id and the native `sess_*` id the backend
+  materialized/resumed, and `session/load` returns the adopted id plus its
+  config options. Nested Host→Worker isolation reuses the holder child-record
+  mechanism: a ZCode Host turn that starts an inner Worker (including another
+  ZCode) records the inner holder into the outer holder's `children.jsonl`
+  (runner-internal `KAOLA_ACP_CHILD_RECORD` env, forwardable as a fact, never a
+  credential), so an inner stop never reaches the outer Host and the outer stop
+  sweeps only recorded inner sessions — even after the outer agent died first
+  (holder-lost `stop --force`). Credential boundaries and the denied-name env
+  list are unchanged. See `docs/zcode-host.md`.
+
 ## 0.3.3 — 2026-09-17
 
 - **Droid CLI worker platform (Issue #58).** Droid is now the ninth worker platform, using the

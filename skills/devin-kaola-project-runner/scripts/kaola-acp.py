@@ -75,6 +75,40 @@ BRIDGE_BINARY_ENV = {
 }
 ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
 ZCODE_NODE_ENV = "KAOLA_ZCODE_NODE"
+# Set by a holder for its agent: the JSONL file where an agent that spawns
+# detached Runner holders (a ZCode Host turn starting a nested Worker, a
+# Claude Code agent doing the same, ...) records each holder's identity so the
+# outer holder's exact stop can sweep it even after the outer agent died
+# first. Written only by this CLI at holder spawn; read only through the
+# identity-checked group resolution in this file and kaola-acp-holder.py.
+CHILD_RECORD_ENV = "KAOLA_ACP_CHILD_RECORD"
+
+
+def record_holder_child_spawn(proc: subprocess.Popen) -> dict[str, Any] | None:
+    """Append the spawned holder's identity to the parent agent's child record.
+
+    One JSON line ``{pid, pgid, spawned_at ms}``. The holder is spawned with
+    ``start_new_session`` so it leads its own process group (``pgid == pid``).
+    The append is best effort: the holder's process-tree note already covers
+    the outer-agent-alive case, and a lost line never blocks start; the
+    recorded identity is only ever trusted while a live pid keeps it.
+    """
+    path = os.environ.get(CHILD_RECORD_ENV) or ""
+    if not path:
+        return None
+    try:
+        pgid = os.getpgid(proc.pid)
+    except OSError:
+        pgid = proc.pid
+    entry = {"pid": proc.pid, "pgid": pgid, "spawned_at": int(time.time() * 1000)}
+    recorded = False
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+        recorded = True
+    except OSError:
+        recorded = False
+    return {"path": path, "recorded": recorded, "pid": proc.pid, "pgid": pgid}
 
 
 def zcode_runtime_error() -> str | None:
@@ -1226,6 +1260,11 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             holder_argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
             start_new_session=True, env=agent_environment(args),
         )
+    # When this start runs inside an outer agent (nested Host/Worker chain),
+    # record the holder's identity for the outer holder's exact sweep.
+    child_record = record_holder_child_spawn(proc)
+    if child_record is not None:
+        receipt["child_record"] = child_record
     sock = sock_path(args, repo)
     deadline = time.monotonic() + START_WAIT
     state: dict[str, Any] | None = None

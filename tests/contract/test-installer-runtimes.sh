@@ -109,6 +109,14 @@ assert_link "test_runtime_devin_install" "$home/devin-config/skills/grok-kaola-p
   "$(source_for "$repo" grok-kaola-project-runner)"
 assert_absent "test_runtime_devin_no_bin_links" "$home/.local/bin/kaola-acp"
 
+# ZCode is a worker platform and a native skill-directory Host:
+# --runtime zcode installs to $HOME/.zcode/skills.
+output="$(run_installer "$repo" "$home" --runtime zcode --platform grok --method link 2>&1)" \
+  || fail "test_runtime_zcode_install" "install failed: $output"
+assert_link "test_runtime_zcode_install" "$home/.zcode/skills/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+assert_absent "test_runtime_zcode_no_bin_links" "$home/.local/bin/kaola-acp"
+
 # --- argument validation -----------------------------------------------------
 set +e
 output="$(run_installer "$repo" "$home" --runtime bogus --platform grok 2>&1)"
@@ -157,6 +165,17 @@ assert_link "test_skills_dir_with_spaces_grok" "$dest/grok-kaola-project-runner"
 assert_link "test_skills_dir_with_spaces_codex" "$dest/codex-kaola-project-runner" \
   "$(source_for "$repo" codex-kaola-project-runner)"
 assert_absent "test_skills_dir_no_bin_links" "$home/.local/bin/kaola-acp"
+
+# A workspace .zcode/skills destination (the live-verified ZCode Host
+# discovery form) goes through --skills-dir; the payload is identical.
+ws="$tmp_root/workspace-zcode/.zcode/skills"
+output="$(run_installer "$repo" "$home" --skills-dir "$ws" --method link --platform zcode 2>&1)" \
+  || fail "test_workspace_zcode_skills_dir" "install failed: $output"
+assert_link "test_workspace_zcode_skills_dir" "$ws/zcode-kaola-project-runner" \
+  "$(source_for "$repo" zcode-kaola-project-runner)"
+assert_orch="$tmp_root/workspace-zcode/.zcode/skills/kaola-project-runner"
+assert_link "test_workspace_zcode_orchestrator" "$assert_orch" \
+  "$(source_for "$repo" kaola-project-runner)"
 
 # --- copy method: payload identical, receipt outside the payload -------------
 repo="$tmp_root/repo-copy"
