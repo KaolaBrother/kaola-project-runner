@@ -75,11 +75,13 @@ when it dispatches an inner worker, including another ZCode, the inner session
 is a separate Runner session with its own record root entry and process group —
 an inner stop never reaches the outer Host, and the outer stop sweeps only
 recorded inner sessions. A ZCode Host session's heartbeat is event-driven:
-no Routine, cron, or sleep loop. It maintains the full prompt at the project
-root `.kaola/heartbeat-prompt.json` (overwritten on change) and exports
-`KAOLA_ACP_HEARTBEAT_HOST` on each worker start; each worker termination or
-turn-end idle then delivers one full heartbeat pass into this session. No
-worker event, no trigger. A **bridge
+no Routine, cron, or sleep loop. It owns the full working prompt at the project
+root `.kaola/heartbeat-prompt.json`: after each worker termination or turn-end
+idle it settles the next step, then updates the file (project info, pace,
+plans, coordination) so the next heartbeat pass carries fresh state. It
+exports `KAOLA_ACP_HEARTBEAT_HOST` on each worker start; each worker
+termination or turn-end idle then delivers one full heartbeat pass into this
+session. No worker event, no trigger. A **bridge
 host** (Grok Bot today) reaches this checkout through one thin account Skill
 instead: it binds an execution target first (Local Computer, or the cloud Agent
 Computer), asks that target's device-local locator `kaola-project-runner-locate` for the verified

@@ -131,7 +131,9 @@ worker agent terminated / worker turn ended (one idle episode)
   object per event: id, kind, platform, session, repo, reason, event cursor),
   the current **full** heartbeat prompt body read at delivery time from
   `<repo>/.kaola/heartbeat-prompt.json` — the single file the ZCode Host agent
-  maintains and overwrites on change (fingerprint and byte count are
+  owns; after each worker terminated/idle notification it settles the next step
+  and updates the file (project info, pace, plans, coordination), so the next
+  heartbeat pass carries that refreshed state (fingerprint and byte count are
   supplementary) — and one instruction to perform a single full pass per
   `PROJECT_RUNNER_HEARTBEAT_V2`. No worker raw output travels with it. A
   missing or unreadable prompt file delivers an explicit fallback trigger

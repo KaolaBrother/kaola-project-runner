@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **ZCode-host Skill ties heartbeat-prompt maintenance to worker events.**
+  After each worker terminated/idle notification the host agent settles the next
+  step, then updates `.kaola/heartbeat-prompt.json` — project info, pace, plans,
+  coordination — so the next heartbeat pass carries the refreshed state
+  (`templates/orchestrator/SKILL.md.tmpl`, regenerated into the shipped main
+  Skill, and `docs/zcode-host.md`).
 - **Bounded ACP `observe`/`status` receipts now fit real session state (Issue #64).**
   The ordinary `observe`/`status` receipt budget rises from 64 KiB (the capture
   budget) to its own `state_receipt_bytes` limit of 256 KiB in
