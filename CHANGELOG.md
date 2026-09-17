@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.4 — 2026-09-17
+
 - **Event-driven heartbeat for a ZCode Host (Issue #62, Phase 2).** A ZCode
   Host session now has an event-driven heartbeat carrier instead of a periodic
   one: it registers no Routine, cron, or sleep loop, and no new daemon, port,
