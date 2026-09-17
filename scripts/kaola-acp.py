@@ -410,12 +410,21 @@ def view_error(code: str, message: str) -> dict[str, Any]:
 
 
 # Ordinary receipts are bounded (progressive disclosure): capture through
-# bound_capture_receipt, observe/status through bound_state_receipt; this limit equals
-# ``capture_receipt_bytes`` in templates/budgets.json and the PTY bound in
+# bound_capture_receipt, observe/status through bound_state_receipt. The capture limit
+# equals ``capture_receipt_bytes`` in templates/budgets.json and the PTY bound in
 # kaola-observation.py. ``capture --full`` is the explicit, unbounded request and
 # never passes through bound_capture_receipt.
 CAPTURE_RECEIPT_BYTES = 65536
 BOUNDED_LISTS = ("events", "tool_calls")
+# Issue #64: an ordinary observe/status receipt carries whole session state, and a real
+# platform's ``session_meta`` (Devin ~70.6 KB) beside the stored ``record`` (~142.5 KB)
+# busts the capture budget, which replaced the whole ``session_meta`` with
+# ``{omitted, bytes, sha256}`` and left ``configOptions`` ``currentValue`` (the
+# configured model) unreachable. The state path keeps its own larger
+# ``state_receipt_bytes`` limit in templates/budgets.json: realistic meta and record
+# sizes stay whole, and a field over this limit is still summarised exactly as before
+# — the omission mechanism, credential hygiene, and ``--full`` are unchanged.
+STATE_RECEIPT_BYTES = 262144
 
 
 def event_stream_bytes(items: list[Any]) -> bytes:
@@ -478,7 +487,7 @@ STATE_BOUNDED_HINT = ("ordinary observe/status receipts are bounded: summarised 
                       "named with their byte size and sha256; pending_permissions keeps its newest entries")
 
 
-def bound_state_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_BYTES) -> dict[str, Any]:
+def bound_state_receipt(receipt: dict[str, Any], limit: int = STATE_RECEIPT_BYTES) -> dict[str, Any]:
     """Keep an ordinary observe/status receipt within ``limit`` bytes, verifiably.
 
     When the emitted line (JSON plus its newline) would exceed the limit, each field in

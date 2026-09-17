@@ -239,7 +239,10 @@ bounding. The budget is measured on the emitted line (newline included) and appl
 `status`/`start` add `result` (and `legacy_ownership` for grok) inside `status-view` before
 its bound, and a receipt bounded twice (build, then status-view) merges its `truncated`
 block, keeping every original total, count, and digest and lowering only the kept figures. ACP `observe`/`status` receipts are bounded the same way by `bound_state_receipt`
-in `kaola-acp.py` (`record`, `initial_config_options`, `session_meta`, `capabilities`,
+in `kaola-acp.py`, on their own larger `state_receipt_bytes` budget (256 KiB, Issue #64:
+a realistic platform `session_meta` — Devin's is ~70 KB — and the stored `record`
+(~142 KB) stay whole, so `session_meta.configOptions` `currentValue` remains readable;
+only larger structures are summarised) (`record`, `initial_config_options`, `session_meta`, `capabilities`,
 `agent_info` summarised by size and sha256; `pending_permissions` keeps its newest entries).
 Only `capture --full` is unbounded. Schema version 3 includes `snapshot_id`,
 `pane_revision`, `raw_current_frame`, exact ownership and pane facts, runtime child/process evidence,

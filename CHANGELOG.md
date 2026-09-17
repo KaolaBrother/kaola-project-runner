@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Bounded ACP `observe`/`status` receipts now fit real session state (Issue #64).**
+  The ordinary `observe`/`status` receipt budget rises from 64 KiB (the capture
+  budget) to its own `state_receipt_bytes` limit of 256 KiB in
+  `templates/budgets.json` and `scripts/kaola-acp.py`: a realistic platform
+  `session_meta` (Devin's is ~70.6 KB) and the stored `record` (~142.5 KB)
+  now stay whole, so `session_meta.configOptions` `currentValue` — the
+  configured model, e.g. `swe-2-max` — is readable from ordinary receipts
+  instead of being swallowed by the whole-field `{omitted, bytes, sha256}`
+  placeholder. The bound itself is preserved: a structure over 256 KiB is
+  still summarised exactly as before with byte size and sha256 attestation,
+  capture receipts and the PTY bound keep the unchanged 64 KiB
+  `capture_receipt_bytes`, and `--full` and credential hygiene are untouched.
+
 - **Interrupted validate runs no longer leak ACP holders (Issue #63).**
   `./scripts/validate.sh` now runs its suites under one validate-owned
   `TMPDIR` root and sweeps that root on exit, interrupt, and terminate

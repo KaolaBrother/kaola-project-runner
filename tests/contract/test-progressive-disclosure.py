@@ -83,7 +83,7 @@ def render(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 class BudgetsDeclared(unittest.TestCase):
     def test_budget_table_is_complete_and_positive(self) -> None:
         for key in ("description_chars", "main_skill_bytes", "worker_skill_bytes", "reference_bytes", "bridge_bytes",
-                    "bridge_guide_bytes", "locator_receipt_bytes", "capture_receipt_bytes"):
+                    "bridge_guide_bytes", "locator_receipt_bytes", "capture_receipt_bytes", "state_receipt_bytes"):
             self.assertIsInstance(BUDGETS.get(key), int, key)
             self.assertGreater(BUDGETS[key], 0, key)
         # Budgets are ordered the way disclosure is: discovery < bridge < worker < main.
@@ -98,6 +98,7 @@ class BudgetsDeclared(unittest.TestCase):
         self.assertIn(f"RECEIPT_LIMIT = {BUDGETS['locator_receipt_bytes']}", locator)
         acp = ACP_CLI.read_text(encoding="utf-8")
         self.assertIn(f"CAPTURE_RECEIPT_BYTES = {BUDGETS['capture_receipt_bytes']}", acp)
+        self.assertIn(f"STATE_RECEIPT_BYTES = {BUDGETS['state_receipt_bytes']}", acp)
 
 
 class DiscoveryIsNameAndShortDescription(unittest.TestCase):
@@ -644,10 +645,13 @@ class BoundedAcpObserveAndStatus(unittest.TestCase):
         cls.repo.mkdir()
         subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
         cls.session = f"pdstate-{os.getpid()}"
-        # A native option list large enough that the session/new result alone exceeds the budget.
+        # A native option list heavy enough that the observe receipt still busts the
+        # state_receipt_bytes budget once the record mirror is cut: the start's own
+        # config applications replace session_meta.configOptions with the mock default,
+        # so the surviving fixture weight is initial_config_options alone (Issue #64).
         cls.options = [{"id": f"option_{i:04d}", "name": f"Option {i}", "category": "mode",
                         "description": "d" * 120, "currentValue": "a",
-                        "options": [{"value": "a", "name": "A"}, {"value": "b", "name": "B"}]} for i in range(600)]
+                        "options": [{"value": "a", "name": "A"}, {"value": "b", "name": "B"}]} for i in range(1000)]
         cls.started = False
 
     @classmethod
@@ -675,8 +679,12 @@ class BoundedAcpObserveAndStatus(unittest.TestCase):
         for command in ("observe", "status"):
             receipt = self.cli(command)
             line = json.dumps(receipt, ensure_ascii=False, sort_keys=True).encode("utf-8")
-            self.assertLessEqual(len(line), BUDGETS["capture_receipt_bytes"], command)
+            self.assertLessEqual(len(line), BUDGETS["state_receipt_bytes"], command)
+            # Issue #64: a session_meta that fits the state budget stays whole instead
+            # of becoming an omitted stub.
             fields = receipt["truncated"]["fields"]
+            self.assertNotIn("session_meta", fields, command)
+            self.assertIsInstance(receipt["session_meta"], dict, command)
             self.assertIn("initial_config_options", fields, command)
             self.assertEqual(fields["initial_config_options"]["kind"], "list")
             self.assertEqual(fields["initial_config_options"]["count"], len(self.options))
