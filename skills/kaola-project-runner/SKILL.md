@@ -50,19 +50,20 @@ resource-management subsystem.
 
 ### Supported workers
 
-Derived from this checkout's platform manifests (not a hardcoded roster):
+Derived from this checkout's platform manifests (not a hardcoded roster); every
+platform's default transport is ACP:
 
-| Platform id | Skill directory | Display name | Default transport |
-|---|---|---|---|
-| claude-code | `claude-code-kaola-project-runner` | Claude Code Kaola Project Runner | acp |
-| codex | `codex-kaola-project-runner` | Codex CLI Kaola Project Runner | acp |
-| cursor-cli | `cursor-cli-kaola-project-runner` | Cursor CLI Kaola Project Runner | acp |
-| devin | `devin-kaola-project-runner` | Devin CLI Kaola Project Runner | acp |
-| droid | `droid-kaola-project-runner` | Droid Kaola Project Runner | acp |
-| grok | `grok-kaola-project-runner` | Grok Kaola Project Runner | acp |
-| kimi-cli | `kimi-cli-kaola-project-runner` | Kimi CLI Kaola Project Runner | acp |
-| opencode | `opencode-kaola-project-runner` | OpenCode Kaola Project Runner | acp |
-| zcode | `zcode-kaola-project-runner` | ZCode Kaola Project Runner | acp |
+| Platform id | Skill directory | Display name |
+|---|---|---|
+| claude-code | `claude-code-kaola-project-runner` | Claude Code Kaola Project Runner |
+| codex | `codex-kaola-project-runner` | Codex CLI Kaola Project Runner |
+| cursor-cli | `cursor-cli-kaola-project-runner` | Cursor CLI Kaola Project Runner |
+| devin | `devin-kaola-project-runner` | Devin CLI Kaola Project Runner |
+| droid | `droid-kaola-project-runner` | Droid Kaola Project Runner |
+| grok | `grok-kaola-project-runner` | Grok Kaola Project Runner |
+| kimi-cli | `kimi-cli-kaola-project-runner` | Kimi CLI Kaola Project Runner |
+| opencode | `opencode-kaola-project-runner` | OpenCode Kaola Project Runner |
+| zcode | `zcode-kaola-project-runner` | ZCode Kaola Project Runner |
 
 ### Hosts
 
@@ -87,16 +88,13 @@ instead: it binds an execution target first (Local Computer, or the cloud Agent
 Computer), asks that target's device-local locator `kaola-project-runner-locate` for the verified
 repo root ROOT, and loads only `ROOT/skills/kaola-project-runner` and, per dispatch,
 one selected `ROOT/skills/<platform id>-kaola-project-runner`. On a bridge host, before
-each worker dispatch run the locator attestation on the bound target
-(`kaola-project-runner-locate --target local|cloud --expect-revision <accepted> --project <root>
---worker <platform id> --session <name>`) and refuse any `refused` receipt: the
-consumer project, the selected worker script under the same ROOT, and a session of
-the exact name must all be on that one target (`--target` is your declaration;
-the locator compares it and the running host fingerprint with the registration
-receipt kept beside its link and refuses on mismatch; session ownership is the
-worker preflight's proof). Local Computer and the cloud Agent Computer never reach each other's
-files, CLIs, tmux, or sessions, and nothing clones, installs, or updates Local
-Computer from the cloud. Grok Bot is a host, not a worker and not a tenth
+each worker dispatch run the locator attestation on the bound target with the
+`kaola-project-runner-locate` command in `references/grok-bot-host.md` and refuse any `refused`
+receipt: the consumer project, the selected worker script under the same ROOT,
+and a session of the exact name must all be on that one target. Local Computer
+and the cloud Agent Computer never reach each other's files, CLIs, tmux, or
+sessions, and nothing clones, installs, or updates Local Computer from the
+cloud. Grok Bot is a host, not a worker and not a tenth
 platform: `--platform grok` is the Grok CLI worker; `--platform grok-bot` is
 invalid.
 

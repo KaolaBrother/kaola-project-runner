@@ -50,7 +50,8 @@ resource-management subsystem.
 
 ### Supported workers
 
-Derived from this checkout's platform manifests (not a hardcoded roster):
+Derived from this checkout's platform manifests (not a hardcoded roster); every
+platform's default transport is ACP:
 
 {{SUPPORTED_WORKERS}}
 
@@ -77,16 +78,13 @@ instead: it binds an execution target first (Local Computer, or the cloud Agent
 Computer), asks that target's device-local locator `{{LOCATOR}}` for the verified
 repo root ROOT, and loads only `ROOT/skills/{{SKILL_NAME}}` and, per dispatch,
 one selected `ROOT/skills/<platform id>-{{SKILL_NAME}}`. On a bridge host, before
-each worker dispatch run the locator attestation on the bound target
-(`{{LOCATOR}} --target local|cloud --expect-revision <accepted> --project <root>
---worker <platform id> --session <name>`) and refuse any `refused` receipt: the
-consumer project, the selected worker script under the same ROOT, and a session of
-the exact name must all be on that one target (`--target` is your declaration;
-the locator compares it and the running host fingerprint with the registration
-receipt kept beside its link and refuses on mismatch; session ownership is the
-worker preflight's proof). Local Computer and the cloud Agent Computer never reach each other's
-files, CLIs, tmux, or sessions, and nothing clones, installs, or updates Local
-Computer from the cloud. Grok Bot is a host, not a worker and not a tenth
+each worker dispatch run the locator attestation on the bound target with the
+`{{LOCATOR}}` command in `references/grok-bot-host.md` and refuse any `refused`
+receipt: the consumer project, the selected worker script under the same ROOT,
+and a session of the exact name must all be on that one target. Local Computer
+and the cloud Agent Computer never reach each other's files, CLIs, tmux, or
+sessions, and nothing clones, installs, or updates Local Computer from the
+cloud. Grok Bot is a host, not a worker and not a tenth
 platform: `--platform grok` is the Grok CLI worker; `--platform grok-bot` is
 invalid.
 

@@ -111,14 +111,15 @@ def render(template: str, manifest: dict[str, str], source: Path) -> str:
 
 
 def supported_worker_summary(manifests: list[dict[str, str]]) -> str:
+    # Every platform's default transport is ACP today; the transport column was a
+    # nine-row constant, so it is folded into the lead-in sentence in SKILL.md.tmpl.
     rows = [
-        "| Platform id | Skill directory | Display name | Default transport |",
-        "|---|---|---|---|",
+        "| Platform id | Skill directory | Display name |",
+        "|---|---|---|",
     ]
     for manifest in manifests:
         rows.append(
-            f"| {manifest['id']} | `{manifest['skill_name']}` | "
-            f"{manifest['display_name']} | {manifest['default_transport']} |"
+            f"| {manifest['id']} | `{manifest['skill_name']}` | {manifest['display_name']} |"
         )
     return "\n".join(rows)
 
