@@ -22,6 +22,8 @@ SKILL_IDS = (
     "cursor-cli-kaola-project-runner",
     "devin-kaola-project-runner",
     "codex-kaola-project-runner",
+    "zcode-kaola-project-runner",
+    "droid-kaola-project-runner",
 )
 
 EXPECTED_MARKDOWN = {
