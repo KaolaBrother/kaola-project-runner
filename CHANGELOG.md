@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.5 — 2026-09-18
 
 - **validate wall time cut with zero coverage loss.** The 24 contract suites in
   `./scripts/validate.sh` no longer run as one serial list: they run as two
