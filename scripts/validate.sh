@@ -8,8 +8,28 @@ repo_root="$(cd "$script_dir/.." && pwd -P)"
 # runtime) configuration is required, and real user configuration is never
 # read or modified.
 sandbox_home="$(mktemp -d "${TMPDIR:-/tmp}/kaola-validate-home.XXXXXX")"
-trap 'rm -rf "$sandbox_home"' EXIT
+# Issue #63: the suites run under one validate-owned TMPDIR root, so every
+# fixture temp root and the shared kaola-<uid>-acp ACP socket dir — and with
+# them every spawned holder's --record-dir/--socket — lands under it. An
+# interrupted or early-exited run (set -e, SIGINT, SIGTERM) then sweeps
+# exactly its own holders on the way out instead of leaking them re-parented
+# to launchd. The root is short and flat because ACP admin sockets live
+# under it and AF_UNIX sun_path is ~104 bytes on macOS.
+validate_tmp="$(mktemp -d "/tmp/kaola-val.XXXXXX")"
+cleanup_done=""
+cleanup() {
+  if [[ -z "$cleanup_done" ]]; then
+    cleanup_done=1
+    # Sweep before removal and never let a nonzero sweep block the removal.
+    python3 "$repo_root/scripts/kaola-acp-sweep.py" --root "$validate_tmp" || true
+    rm -rf "$validate_tmp" "$sandbox_home" || true
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 export HOME="$sandbox_home"
+export TMPDIR="$validate_tmp"
 unset CODEX_HOME CLAUDE_CONFIG_DIR DEVIN_CONFIG_DIR
 
 python3 "$repo_root/scripts/render-skills.py" --check
@@ -27,6 +47,7 @@ python3 "$repo_root/tests/contract/test-acp-contract.py"
 python3 "$repo_root/tests/contract/test-acp-watch-contract.py"
 python3 "$repo_root/tests/contract/test-acp-follow-contract.py"
 python3 "$repo_root/tests/contract/test-acp-holder-continue.py"
+python3 "$repo_root/tests/contract/test-acp-sweep-contract.py"
 python3 "$repo_root/tests/contract/test-issue-33-config-meta.py"
 python3 "$repo_root/tests/contract/test-runner-v2.py"
 python3 "$repo_root/tests/contract/test-generated-skills.py"

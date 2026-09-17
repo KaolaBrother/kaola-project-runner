@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Interrupted validate runs no longer leak ACP holders (Issue #63).**
+  `./scripts/validate.sh` now runs its suites under one validate-owned
+  `TMPDIR` root and sweeps that root on exit, interrupt, and terminate
+  through the new `scripts/kaola-acp-sweep.py`: an interrupted or early-failed
+  run stops exactly the holders it spawned (matched by their
+  `--record-dir`/`--socket` under that root, via the same admin-socket
+  `stop` op a normal teardown uses) instead of leaving them re-parented to
+  launchd with their mock agents. Foreign and concurrent runs hold their own
+  random roots and are never matched or signaled.
+
 ## 0.3.4 — 2026-09-17
 
 - **Event-driven heartbeat for a ZCode Host (Issue #62, Phase 2).** A ZCode
