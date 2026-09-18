@@ -3,15 +3,19 @@
 
 kaola-codex-compact-hook.py owns exactly one hooks.json entry
 (``kaola-project-runner:compact-context``) plus its payload copy. Foreign
-entries -- Workflow-owned, user-owned, anything -- are never modified, and a
-malformed hooks.json is refused rather than clobbered. These tests run the real
-script against throwaway CODEX_HOME directories only.
+entries -- Workflow-owned, user-owned, anything -- keep their JSON content
+untouched (the file is re-serialized canonically on write; byte-level
+formatting is not promised), and a malformed hooks.json is refused rather
+than clobbered. These tests run the real script against throwaway CODEX_HOME
+directories only.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shlex
+import stat
 import subprocess
 import sys
 import tempfile
@@ -95,7 +99,7 @@ class CodexCompactHookContract(unittest.TestCase):
         handler = entry["hooks"][0]
         self.assertEqual(handler["type"], "command")
         payload = self.home / "kaola-project-runner" / "hooks" / "compact-recovery.md"
-        self.assertEqual(handler["command"], f'cat "{payload}"')
+        self.assertEqual(handler["command"], f"cat {shlex.quote(str(payload))}")
         self.assertEqual(handler["timeout"], 5)
         self.assertTrue(payload.is_file())
         self.assertEqual(payload.read_bytes(), PAYLOAD_SOURCE.read_bytes())
@@ -153,6 +157,36 @@ class CodexCompactHookContract(unittest.TestCase):
         self.assertFalse(receipt["installed"])
         self.assertFalse((self.home / "hooks.json").exists())
         self.assertFalse((self.home / "kaola-project-runner").exists())
+
+    def test_metachar_home_command_quotes_and_only_reads(self) -> None:
+        """A CODEX_HOME with shell metacharacters cannot alter execution."""
+        evil = Path(self.tmp.name) / "odd \"q\" $(touch PWNED)'s"
+        receipt = run_hook(evil, "install")
+        self.assertEqual(receipt["result"], "ok")
+        command = our_entries(evil)[0]["hooks"][0]["command"]
+        payload = evil / "kaola-project-runner" / "hooks" / "compact-recovery.md"
+        self.assertEqual(command, f"cat {shlex.quote(str(payload))}")
+        self.assertIn("'", command)
+        proc = subprocess.run(
+            ["/bin/sh", "-c", command],
+            capture_output=True, text=True, timeout=15, cwd=self.tmp.name,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, payload.read_text(encoding="utf-8"))
+        for root, _dirs, files in os.walk(self.tmp.name):
+            self.assertNotIn("PWNED", files, f"side effect in {root}")
+
+    def test_backup_is_written_0600(self) -> None:
+        """The content-addressed backup mirrors config at 0600, not umask."""
+        self.seed_foreign()
+        run_hook(self.home, "install")
+        backups = list(self.home.glob("hooks.json.kaola-backup-*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(stat.S_IMODE(backups[0].stat().st_mode), 0o600)
+        receipt = run_hook(self.home, "uninstall")
+        self.assertEqual(receipt["removed_entries"], 1)
+        for backup in self.home.glob("hooks.json.kaola-backup-*"):
+            self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o600)
 
     def test_payload_teaches_role_reload_and_no_repeat(self) -> None:
         text = PAYLOAD_SOURCE.read_text(encoding="utf-8")

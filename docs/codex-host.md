@@ -42,12 +42,17 @@ python3 scripts/kaola-codex-compact-hook.py uninstall # remove only our entry
   `CODEX_HOME` selects another root (isolated testing).
 - Owns exactly one entry, id `kaola-project-runner:compact-context`, under
   `hooks.SessionStart` — matched by id, so foreign entries (Workflow-owned,
-  user-owned) are preserved untouched. Re-install is idempotent; uninstall
-  removes only that entry and our payload copy.
+  user-owned) keep their JSON content untouched. The document is
+  re-serialized canonically on write, so byte-level formatting of the file
+  is not preserved (and is not claimed); entry content is. Re-install is
+  idempotent; uninstall removes only that entry and our payload copy.
 - Copies the payload to
   `<codex_home>/kaola-project-runner/hooks/compact-recovery.md` so the hook does
   not depend on a checkout path, and keeps one content-addressed
-  `hooks.json.kaola-backup-<sha12>` before rewriting an existing file.
+  `hooks.json.kaola-backup-<sha12>` (atomic write, mode 0600) before
+  rewriting an existing file. The hook command quotes the payload path with
+  `shlex.quote`, so a `CODEX_HOME` containing shell metacharacters cannot
+  change what the hook executes.
 - Refuses (no write) on a malformed `hooks.json`.
 
 ### Trust and coexistence

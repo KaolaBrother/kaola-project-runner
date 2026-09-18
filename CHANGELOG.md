@@ -243,8 +243,12 @@
   `scripts/kaola-codex-compact-hook.py` installs, reports, and removes exactly
   one Runner-owned entry - `kaola-project-runner:compact-context` - in
   `${CODEX_HOME}/hooks.json`, matched by id so Workflow-owned and other foreign
-  hooks are preserved byte-for-byte; the payload copy lives under
-  `<codex_home>/kaola-project-runner/hooks/`, a malformed file is refused
+  entries keep their JSON content untouched (the file is re-serialized
+  canonically, so byte-level formatting is not promised); the hook command
+  quotes its payload path with `shlex.quote` so a metacharacter-bearing
+  `CODEX_HOME` cannot alter execution, the payload copy lives under
+  `<codex_home>/kaola-project-runner/hooks/`, the prior config is kept as a
+  0600 atomic backup, a malformed file is refused
   rather than clobbered, and `status` never writes. The short payload only
   re-points the host: confirm role, fully re-read the installed Skill, recover
   authorization/heartbeat/run records - never re-intake, re-claim, or

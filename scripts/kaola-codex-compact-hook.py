@@ -8,18 +8,23 @@ exactly one Runner-owned entry in ``${CODEX_HOME}/hooks.json`` -- id
 ``kaola-project-runner:compact-context`` -- plus one payload copy at
 ``<codex_home>/kaola-project-runner/hooks/compact-recovery.md``.
 
-Merge safety is the contract: the entry is matched by id only, foreign entries
-(Workflow-owned, user-owned, or plugin-era leftovers) are preserved byte-for-byte
-in the parsed document, and uninstall removes only our entry and our payload
-copy. The hook itself performs no dispatch and edits no project state; it prints
-the short recovery prompt that becomes the model's ``additionalContext``.
+Merge safety is the contract: the entry is matched by id only and foreign
+entries (Workflow-owned, user-owned, or plugin-era leftovers) keep their JSON
+content untouched. The document is re-serialized canonically on write, so
+byte-level formatting is not preserved and none is claimed; uninstall removes
+only our entry and our payload copy. The hook itself performs no dispatch and
+edits no project state; it prints the short recovery prompt that becomes the
+model's ``additionalContext``.
 
 Every action prints one bounded JSON receipt; ``result`` is ``ok`` or
 ``refused`` with reasons. A malformed existing ``hooks.json`` is refused rather
-than clobbered. Before rewriting an existing ``hooks.json`` the prior content is
-kept once as ``hooks.json.kaola-backup-<sha12>`` (content-addressed, so repeated
-installs do not accumulate backups). Nothing here reads, prints, or forwards a
-credential, and ``status`` never writes.
+than clobbered. Before rewriting an existing ``hooks.json`` the prior content
+is kept once as ``hooks.json.kaola-backup-<sha12>`` (content-addressed, so
+repeated installs do not accumulate backups; the backup is written atomically
+at mode 0600 since it mirrors config content). The hook command quotes the
+payload path with ``shlex.quote`` so a ``CODEX_HOME`` containing shell
+metacharacters cannot alter what the hook executes. Nothing here reads,
+prints, or forwards a credential, and ``status`` never writes.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -58,7 +64,7 @@ def hook_entry(payload_path: Path) -> dict:
         "hooks": [
             {
                 "type": "command",
-                "command": f'cat "{payload_path}"',
+                "command": f"cat {shlex.quote(str(payload_path))}",
                 "timeout": 5,
             }
         ],
@@ -106,6 +112,14 @@ def atomic_write(path: Path, content: bytes, mode: int | None = None) -> None:
         raise
 
 
+def write_backup(hooks_path: Path) -> None:
+    """Keep one content-addressed 0600 backup of the prior hooks.json."""
+    digest = hashlib.sha256(hooks_path.read_bytes()).hexdigest()[:12]
+    backup = hooks_path.with_name(f"{hooks_path.name}.kaola-backup-{digest}")
+    if not backup.exists():
+        atomic_write(backup, hooks_path.read_bytes())
+
+
 def receipt(action: str, result: str, **fields) -> None:
     out = {"schema": "kaola-codex-compact-hook/1", "action": action, "result": result}
     out.update(fields)
@@ -144,10 +158,7 @@ def cmd_install(home: Path) -> int:
     if changed:
         session[:] = merged
         if hooks_path.exists():
-            digest = hashlib.sha256(hooks_path.read_bytes()).hexdigest()[:12]
-            backup = hooks_path.with_name(f"{hooks_path.name}.kaola-backup-{digest}")
-            if not backup.exists():
-                backup.write_bytes(hooks_path.read_bytes())
+            write_backup(hooks_path)
         existing_mode = hooks_path.stat().st_mode & 0o777 if hooks_path.exists() else None
         atomic_write(
             hooks_path,
@@ -187,10 +198,7 @@ def cmd_uninstall(home: Path) -> int:
         removed = len(session) - len(kept)
         if removed:
             session[:] = kept
-            digest = hashlib.sha256(hooks_path.read_bytes()).hexdigest()[:12]
-            backup = hooks_path.with_name(f"{hooks_path.name}.kaola-backup-{digest}")
-            if not backup.exists():
-                backup.write_bytes(hooks_path.read_bytes())
+            write_backup(hooks_path)
             atomic_write(
                 hooks_path,
                 (json.dumps(data, indent=2) + "\n").encode("utf-8"),
