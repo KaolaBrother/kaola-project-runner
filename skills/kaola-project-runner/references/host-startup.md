@@ -79,13 +79,12 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
    dispatch, the Host's turn ending on its own, and a `kaola-host-notify/1` pass
    arriving from a worker event. A background blocking `send` that returns to a
    human or outer Agent is not that loop and does not prove it.
-6. **Take back what the Host hands you.** A Host whose worker is unbound cannot
-   wake itself: recording the duty in its heartbeat body starts no beat. When it
-   reports that reading a worker, or rebinding it at a safe idle point, now
-   depends on you, that duty is yours — read the named session from the named
-   anchor, and drive the exact `stop`/`start` rebinding yourself. A Host that
-   reports itself blocked for want of a wake source stays blocked until you act;
-   it is not idle and is not finished.
+6. **Exceptions reach you; worker handling does not.** The Host schedules its
+   own workers through the Runner, including recovering one that ended up
+   unbound — reading its result with a bounded `wait` and rebinding it by exact
+   `stop`/`start`. Do not take that over session by session. What comes to you
+   is an exception it cannot resolve and the decision it needs: answer that, and
+   keep the Host.
 7. **Keep, then stop.** A Host that returns `end_turn` has finished that beat,
    not the project: with workers in flight or delivery, acceptance or close-out
    open it is not idle. Keep it and send no "continue" — its next beat is a

@@ -131,10 +131,14 @@ worker agent terminated / worker turn ended (one idle episode)
   returns `session-exists` together with the binding in force) cannot alter it,
   and there is no rebind operation — recovery is the existing exact
   `stop`/`start` at a safe idle point. Because an unbound worker wakes nobody,
-  the guidance also requires the Host to hand the read-back and rebind duty to
-  its outer controlling Agent before ending the turn, and to report itself
-  blocked when there is no outer Agent and no other confirmed wake source:
-  recording the duty in the heartbeat body is bookkeeping, not a trigger.
+  the guidance has the Host recover that case itself, with operations it already
+  has: when the unbound worker is its only wake source it reads the in-flight
+  result inside the beat with the existing bounded `wait --timeout` (a recovery
+  exception, explicitly not the ordinary event wait and not a poll loop), then
+  rebinds by exact `stop`/`start`. Recording the duty in the heartbeat body is
+  bookkeeping, not a trigger; per-worker reading and rebinding is not delegated
+  outward, and only a recovery that cannot be completed is reported as an
+  exception with the decision it needs.
 - **Events.** `terminated` fires once from the worker holder's existing
   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
   out the send; `idle` fires once per ended turn with the agent still alive

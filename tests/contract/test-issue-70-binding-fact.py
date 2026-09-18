@@ -184,12 +184,13 @@ def test_rebinding_runs_through_the_existing_exact_stop_and_start() -> None:
         sandbox.cleanup()
 
 
-def test_recovery_hands_the_wake_duty_over_instead_of_only_recording_it() -> None:
+def test_recovery_is_internal_bounded_and_only_exceptions_go_outward() -> None:
     """A Host whose only worker is unbound cannot wake itself, so "write it in
-    the heartbeat body and end the turn" is a stall, not a wait. The generated
-    guidance must hand the duty to the outer Agent - and say *blocked* when
-    there is no one to hand it to - and the startup reference must state that
-    the outer Agent takes it back."""
+    the heartbeat body and end the turn" is a stall. The Runner recovers that
+    itself, with operations it already has - one bounded ``wait`` to read the
+    in-flight result, then exact stop/start to rebind - and only an unresolvable
+    exception goes out to the Agent that delegated to it. No timer, no poll
+    loop, no rebind operation, nothing cancelled."""
     import re
 
     ref = (ROOT / "skills" / "kaola-project-runner" / "references"
@@ -199,26 +200,30 @@ def test_recovery_hands_the_wake_duty_over_instead_of_only_recording_it() -> Non
     flat_ref = re.sub(r"\s+", " ", ref)
     flat_startup = re.sub(r"\s+", " ", startup)
 
-    check("Recording it in your heartbeat body wakes nobody" in flat_ref,
+    check("Recovery is yours, along the boundary you already have — not work to push "
+          "onto the Agent that delegated to you" in flat_ref,
+          "recovery stays inside the Runner instead of being pushed outward")
+    check("a heartbeat note wakes nobody" in flat_ref,
           "the reference denies that a recorded duty is a wake-up")
+    check("read its result here with the bounded `wait --timeout <seconds>`" in flat_ref,
+          "the reference reuses the existing bounded wait to read the in-flight result")
+    check("That bounded read is the recovery exception" in flat_ref
+          and "never the ordinary wait, never a poll loop" in flat_ref,
+          "the bounded read is scoped as an exception, not the event wait")
+    check("Rebind at that safe idle point" in flat_ref and "exact `stop`" in flat_ref,
+          "rebinding stays the existing exact stop/start")
+    check("report the exception and the decision you need" in flat_ref
+          and "A heartbeat note claiming a wait you lack is no report" in flat_ref,
+          "only an unresolvable case is reported outward, and never as a fake wait")
+    check("Exceptions reach you; worker handling does not" in flat_startup
+          and "Do not take that over session by session" in flat_startup,
+          "startup keeps per-worker handling inside the Host")
+    # the superseded outward hand-off must be gone
     check("Tell the outer controlling Agent, in this reply, which session to read"
-          in flat_ref,
-          "the reference hands the read-back duty to the outer Agent in the reply")
-    check("no other confirmed wake source you are **blocked**" in flat_ref,
-          "the reference calls the no-wake-source case blocked")
-    check("hand the duty to the outer Agent and report it, before ending the turn"
-          in flat_ref,
-          "an unverified binding is handed over, not merely recorded")
-    check("Take back what the Host hands you" in flat_startup
-          and "that duty is yours" in flat_startup,
-          "startup tells the outer Agent it owns the handed-back duty")
-    check("A Host that reports itself blocked for want of a wake source stays blocked"
-          in flat_startup,
-          "startup says a blocked Host stays blocked until the outer Agent acts")
-    # and the old, insufficient instruction is gone
-    check("record in your heartbeat body that you must come back and read it yourself"
           not in flat_ref,
-          "the record-only recovery step no longer stands alone")
+          "the per-worker hand-off to the delegating Agent no longer stands")
+    check("Take back what the Host hands you" not in flat_startup,
+          "startup no longer tells the outer Agent to take over the worker")
 
 
 def main() -> int:
