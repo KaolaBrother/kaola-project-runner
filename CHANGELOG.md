@@ -283,8 +283,13 @@
   `references/zcode-compact-recovery.md` carries the recovery text the
   controlling Agent puts once at the head of the next prompt to a compacted
   Host — verified live on 3.12.3 to make the model re-read the installed
-  Skill (see `docs/zcode-host.md`). No ZCode config, hook, transport gate, or
-  ledger is added for it.
+  Skill (see `docs/zcode-host.md`). The durable block and per-send carrier
+  ask for a checkable detail that exists in whichever Skill is in use —
+  `references/zcode-compact-recovery.md`'s reload marker for
+  `kaola-project-runner`, or the Host naming convention inside
+  `references/handoff.md` for `kaola-delegator` — never a file the Skill
+  does not ship. No ZCode config, hook, transport gate, or ledger is added
+  for it.
 
 - **A failing `./scripts/validate.sh` suite no longer hides the rest of its lane (Issue #83).**
   `run_suite_lane` returned on the first failing suite, so every suite ordered

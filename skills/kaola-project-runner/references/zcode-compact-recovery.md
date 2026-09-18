@@ -42,7 +42,11 @@ applies only to the designated Host — one project has only one Runner
 Agent — and ordinary Workers pass over it. Fill in only the Skill path —
 the installed payload actually in use (`kaola-project-runner` or
 `kaola-delegator`). There is no fixed cross-project marker or schema to
-adopt; the proof marker stays inside the Skill payload itself.
+adopt; the proof detail stays inside the Skill payload itself — and each
+Skill's checkable detail lives in a file that Skill genuinely ships:
+`references/zcode-compact-recovery.md` for `kaola-project-runner`,
+`references/handoff.md` for `kaola-delegator` (which has no
+compact-recovery reference).
 
 ```text
 ## Compact recovery (designated Project Runner Host only)
@@ -54,12 +58,15 @@ it entirely — it never makes a worker into a runner.
 
 Your Host work is driven by the installed Skill at
 <installed SKILL.md path>. If your context was compacted and that Skill's
-full text is no longer present, completely re-read the file before any
-runner work, then recover the live scene from current authorization, the
-effective-now heartbeat, and existing run and in-flight records — never
-re-intake, re-claim, restart sessions, or re-dispatch in-flight work.
-Prove the re-read by quoting the reload marker inside that Skill's
-references/zcode-compact-recovery.md.
+full text is no longer present, completely re-read its SKILL.md plus the
+reference named for it below before any runner work, then recover the
+live scene from current authorization, the effective-now heartbeat, and
+existing run and in-flight records — never re-intake, re-claim, restart
+sessions, or re-dispatch in-flight work. Prove the re-read by quoting the
+checkable detail for the Skill in use: the reload marker inside
+kaola-project-runner's references/zcode-compact-recovery.md, or the Host
+naming convention (zcode-<PROJECT_CODE>-orchestrator-main) inside
+kaola-delegator's references/handoff.md.
 ```
 
 Recovery semantics are the same as for the per-send carrier: re-read the
@@ -83,25 +90,32 @@ work and never makes decisions — it only restores footing.
 ## The per-send carrier
 
 Put this text at the head of the next prompt to the compacted **Host** — the
-designated ZCode Project Runner session only, never an ordinary Worker —
-with the Skill path actually installed:
+designated ZCode Project Runner session, or an outer host genuinely running
+kaola-delegator; never an ordinary Worker — with the Skill path actually
+installed:
 
 ```text
-Recovery marker: KPR-ZCODE-RECOVERY-V1. You are the designated ZCode Project
-Runner Host. After context compaction, completely re-read the installed
-Skill at <installed kaola-project-runner SKILL.md path>, then recover the
-live scene from current authorization, the effective-now heartbeat, and the
-run records — never re-intake, re-claim, restart sessions, or re-dispatch
-in-flight work. Reply with the reload marker inside the Skill's
-references/zcode-compact-recovery.md to prove the read.
+Recovery marker: KPR-ZCODE-RECOVERY-V1. You are the designated Host for this
+project's runner work. After context compaction, completely re-read the
+installed Skill at <installed SKILL.md path> plus the reference named for
+it below, then recover the live scene from current authorization, the
+effective-now heartbeat, and the run records —
+never re-intake, re-claim, restart sessions, or re-dispatch in-flight work.
+Reply with the checkable detail for the Skill in use — the reload marker
+inside kaola-project-runner's references/zcode-compact-recovery.md, or the
+Host naming convention inside kaola-delegator's references/handoff.md —
+to prove the read.
 ```
 
 Skill reload marker: `KPR-SKILL-RELOAD-V1`. It lives only inside this file
 in the installed Skill payload, so a reply quoting it proves a real read,
 not a memory answer; the verification experiments used
-`KPR-SKILL-RELOAD-7931` and `KPR-SKILL-RELOAD-8842` the same way. For a
-stronger check, also ask for a detail only the re-read Skill states and
-verify it yourself.
+`KPR-SKILL-RELOAD-7931` and `KPR-SKILL-RELOAD-8842` the same way. For
+`kaola-delegator` the checkable detail is the Host naming convention
+(`zcode-<PROJECT_CODE>-orchestrator-main`) inside its
+`references/handoff.md` — the compact-recovery reference exists only in
+`kaola-project-runner`. For a stronger check, also ask for a detail only
+the re-read Skill states and verify it yourself.
 
 ## Evidence and boundaries
 

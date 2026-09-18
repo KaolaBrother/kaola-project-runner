@@ -587,6 +587,62 @@ class ZcodeCompactCarrierSurface(unittest.TestCase):
         ):
             self.assertIn(needle, self.ref)
 
+    def test_proof_detail_exists_for_each_installed_skill(self) -> None:
+        """The block's proof detail must live in a file each Skill ships.
+
+        Regression pin for the Delegator-path defect: the durable block and
+        per-send carrier must not send a kaola-delegator Host to quote a
+        marker inside references/zcode-compact-recovery.md — the generated
+        kaola-delegator ships no such file. Its checkable detail lives in
+        references/handoff.md.
+        """
+        blocks = self.ref.split("```text")
+        self.assertGreaterEqual(len(blocks), 3, "durable block + carrier")
+        durable = blocks[1]
+        carrier = blocks[2]
+
+        # kaola-project-runner path: named file exists in the generated
+        # surface and carries the reload marker.
+        self.assertIn("kaola-project-runner", durable)
+        self.assertIn("references/zcode-compact-recovery.md", durable)
+        runner_ref = (
+            PROJECT
+            / "skills"
+            / "kaola-project-runner"
+            / "references"
+            / "zcode-compact-recovery.md"
+        )
+        self.assertTrue(runner_ref.is_file())
+        self.assertIn("KPR-SKILL-RELOAD-V1", runner_ref.read_text())
+
+        # kaola-delegator path: the block points at references/handoff.md —
+        # a file the Delegator genuinely ships — and names its checkable
+        # detail. A delegator is never sent to zcode-compact-recovery.md.
+        for text, name in ((durable, "durable block"), (carrier, "carrier")):
+            self.assertIn("kaola-delegator", text, name)
+            self.assertIn("references/handoff.md", text, name)
+            self.assertIn("orchestrator-main", text, name)
+            self.assertNotIn(
+                "kaola-delegator's references/zcode-compact-recovery.md",
+                text,
+                name,
+            )
+
+        # Generated-surface check when the Delegator ships on this branch
+        # (it lands via main's #74/#86 — absent before rebase).
+        for cand in (
+            PROJECT / "skills" / "kaola-delegator" / "references" / "handoff.md",
+            PROJECT
+            / "templates"
+            / "kaola-delegator"
+            / "references"
+            / "handoff.md.tmpl",
+        ):
+            if cand.is_file():
+                self.assertIn(
+                    "orchestrator-main", cand.read_text(encoding="utf-8"), cand
+                )
+
     def test_host_startup_points_at_the_carrier(self) -> None:
         self.assertIn(
             "zcode-compact-recovery.md](zcode-compact-recovery.md)",
