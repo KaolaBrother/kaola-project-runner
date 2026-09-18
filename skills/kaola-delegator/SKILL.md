@@ -18,12 +18,15 @@ engine. One project has only one Agent running Project Runner.
 
 From the user and existing Git, Workflow, Issue, and Runner records collect:
 goal; already-done and remaining work; authorized worker platforms/members and
-counts and concurrency; quota as separate concurrency, account, and token
-figures; priority; delivery and stop boundary; the explicit project path. On a
+counts and concurrency; the quota the user actually gave, each figure in its own
+unit; priority; delivery and stop boundary; the explicit project path. On a
 **live** Host, apply only the user's latest change — do not re-ask the full
 set. On a **new** Host, missing, conflicting, or expired key values must be
-confirmed before `start`. Do not open a blank Host. Do not invent platforms, fuse quota units, raise quota,
-reuse a stale quota, or expand authorization.
+confirmed before `start`. A quota unit the user never gave is not a missing key
+value — carry it as unspecified and start; a quota whose unit is unclear is, so
+ask. Do not open a blank Host. Do not invent platforms, fuse quota units, raise
+quota, treat an unspecified quota as unlimited, reuse a stale quota, or expand
+authorization.
 
 ## One Host
 

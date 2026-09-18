@@ -88,17 +88,17 @@ gate and not ownership.
    `$HOST` is allowed after step 4. That is a new ACP session and a new
    holder — say so.
    Rebuild the frontier from Git, Workflow claim / Mission List, Issues, and
-   existing run receipts. Do not re-claim Issues, re-dispatch in-flight
-   workers, or redo done work. Do not `start` that new Host until step 4 is
-   complete.
+   run receipts. Do not re-claim Issues, re-dispatch in-flight workers, or
+   redo done work. Do not `start` it until step 4 is complete.
 4. A new Host (first start, or after failed `--resume`) needs current
    authorization **before** `start`: goal and remaining work; allowed worker
-   platforms/members; counts and concurrency; account and token quota as
-   separate figures; priority; delivery and stop boundary. Restore those from
-   the latest valid project facts when they are complete. Missing,
-   conflicting, or expired key values: ask the user; do not `start`. Do not
-   guess and do not reuse a stale quota. Do not open a blank Host. A live
-   Host A→B attach is not a new session: do not re-ask the full set.
+   platforms/members; counts and concurrency; the quota given, in its own
+   units; priority; delivery and stop boundary. Restore those from the latest
+   valid project facts when complete. Missing, conflicting, or expired key
+   values: ask the user; do not `start`. A unit the user never gave is none
+   of those: send it `unspecified`. Do not guess and do not reuse a stale
+   quota. Do not open a blank Host. A live Host A→B attach is not a new
+   session: do not re-ask the full set.
 5. With step 4 complete and no live Host: start once under `$HOST` at
    `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/`holder_instance_id`
    from the start receipt, then send the first handoff.
@@ -113,9 +113,9 @@ Idle Host: `send` is enough. `--no-wait` means admitted, not delivered, and not
 project complete. A first Host `end_turn` is only that beat finishing.
 
 Busy Host (`prompt-in-progress` / turn active): do not claim a `--no-wait` send
-was consumed. Use the ZCode Runner's existing `steer` when that is the chosen
-update, or keep the user change undelivered until a safe idle send. `unknown`
-or `not_consumed` is not a resend. Never invent a queue.
+was consumed. Use the ZCode Runner's existing `steer`, or hold the user change
+undelivered until a safe idle send. `unknown` or `not_consumed` is not a
+resend. Never invent a queue.
 
 ```bash
 "$ZCODE" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
@@ -123,7 +123,7 @@ or `not_consumed` is not a resend. Never invent a queue.
 "$ZCODE" capture --repo "$PROJECT" --session "$HOST" --lines 200
 ```
 
-Handoff text (concurrency, account quota, and token budget stay three numbers):
+Handoff text (quota units never merge; `unspecified` is not unlimited):
 
 ```text
 Load <skills>/kaola-project-runner/SKILL.md (Project Runner) and follow it.
@@ -133,7 +133,7 @@ goal=<user goal>
 done=<already done>
 remaining=<remaining work>
 authorized_platforms=<id:count, ...>
-quota_concurrency=<n>
+quota_concurrency=<as given>
 quota_account=<as given>
 quota_token=<as given>
 priority=<as given>

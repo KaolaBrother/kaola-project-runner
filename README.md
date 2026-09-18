@@ -32,7 +32,10 @@ does not start a second Host. If the Host is confirmed stopped and `sess_*` cann
 start a new standard-named Host as a new ACP session only after current authorization is
 complete (goal, remaining work, platforms/members, counts/concurrency, quota, priority,
 delivery/stop boundary); missing key values: ask, do not `start`, do not guess a stale
-quota. Continue from Git / Workflow / Issue records. Changing the outer Agent does not
+quota. Quota travels in the units the user actually gave: a unit the user never gave is
+carried as unspecified and does not block the start, not as unlimited and not as a
+fourth question; a unit whose meaning is unclear is ambiguous, so ask. Continue from
+Git / Workflow / Issue records. Changing the outer Agent does not
 stop a live Host or re-claim issues. Grok Bot, after the account bridge, attests each Host
 `status`/`start`/`resume`/`send`/`stop` on that bound target with the existing locator
 `--project` `--worker zcode` `--session` (the exact live name); Codex and generic do not.

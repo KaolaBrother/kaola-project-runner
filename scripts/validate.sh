@@ -92,6 +92,7 @@ python_suites_all=(
   "test-issue-74-kaola-delegator.py"
   "test-issue-84-zcode-native-resume.py"
   "test-issue-85-zcode-resume-advertised-model.py"
+  "test-issue-86-delegator-quota.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -134,6 +135,7 @@ python_suites_b=(
   "test-issue-70-binding-fact.py"
   "test-issue-73-canonical-root.py"
   "test-issue-74-kaola-delegator.py"
+  "test-issue-86-delegator-quota.py"
 )
 run_suite_lane() {
   local status=0
