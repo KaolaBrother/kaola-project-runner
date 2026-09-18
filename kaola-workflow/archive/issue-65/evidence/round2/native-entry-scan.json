@@ -1,0 +1,1086 @@
+{
+ "claude-code": {
+  "roots": [
+   "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code"
+  ],
+  "files_scanned": 3,
+  "bytes_scanned": 210714385,
+  "steering_vocabulary": {
+   "MidTurn": {
+    "count": 53,
+    "sample": "rkerDirSync /$bunfs/root/chunk-t3qsw8k4.js clearForwardToMachine heardSyncAnswer hostSyncsMidTurn registerWorkerDirSyncForMidTurn settleAfterMachineCommand RemoteHomeSettingsDialog CloudC"
+   },
+   "midTurn": {
+    "count": 31,
+    "sample": "es veto_malformed_source classifierMetaLines hostClassifierContext inHumanTurn senderText midTurn resultInfo harnessMarked serialized toAutoClassifierInput failed for  tengu_auto_mode_mal"
+   },
+   "steer": {
+    "count": 30,
+    "sample": "mand colorterm-truecolor powershell-tool-env status-line statusline prompt-queue enter-to-steer-in-relatime todo-list vscode-command-install ide-upsell-external-terminal install-github-"
+   },
+   "mid_turn": {
+    "count": 27,
+    "sample": "ckground_fork Couldn't start the background session (detail withheld on this connection). mid_turn had_prompt had_worktree worktree_handed_off [^a-z] tui_optout_reason tengu_tui_optout_rea"
+   },
+   "Steer": {
+    "count": 21,
+    "sample": "them in your editor. src/app.ts:42 Also try:   to attach a whole directory tree. @folder/ Steer with modes shift+tab, plan, auto Undo anything /rewind, Esc-Esc6 Claude checkpoints your "
+   },
+   "midturn": {
+    "count": 20,
+    "sample": "sgCount permissionBridgeSubscribed bridgeWriteChain lastMidturnLlmAt lastMidturnLlmDetail midturnLlmIntervalMs midturnLlmEpoch tengu_bg_classifier_config useSmallFastModel disableThinking"
+   },
+   "steered": {
+    "count": 19,
+    "sample": "rst_write artifact_legacy_verb_ artifact_core_verb_ shapeClass tengu_artifact_legacy_verb steered Nothing was read, Claude wants to read the comment threads on Y  The thread starts with  "
+   },
+   "SteeringSnapshot": {
+    "count": 15,
+    "sample": "tedCaches fleetHostLogout performLogout TIER_LABELS apply3PDefaultFallbacks captureAdmin3PSteeringSnapshot withProbeDeadline clearCACertsCache getCACertificates loadExtraCACerts PEM_CERT_BLOCK_RE "
+   },
+   "Steered": {
+    "count": 14,
+    "sample": "rver; refusing delivery agent: failed to clear stop marker for  frozenCommandDenies pluginSteered replaceCommandRules getTranscript isFork inheritedWorktreePath spawnedWithWorktree worktr"
+   },
+   "Midturn": {
+    "count": 12,
+    "sample": "patchEmitted lastBridgeNeeds lastMsgCount permissionBridgeSubscribed bridgeWriteChain lastMidturnLlmAt lastMidturnLlmDetail midturnLlmIntervalMs midturnLlmEpoch tengu_bg_classifier_config"
+   },
+   "QueuedMessage": {
+    "count": 9,
+    "sample": "ssage renderToolUseTag isPewterOwlBrief isPewterOwlTool renderToolUseMessage renderToolUseQueuedMessage UserChannelMessage UserCrossSessionMessage UserForkBoilerplateMessage RIPPLE_RAMP UltraRi"
+   },
+   "steering": {
+    "count": 8,
+    "sample": "lPreload [Claude in Chrome] Skill invoked while the chrome MCP client is in a dead state; steering away from browser tools claude-in-chrome8 Let Claude browse and interact with pages in yo"
+   },
+   "steerOnly": {
+    "count": 7,
+    "sample": "ot destructure property 'foundPlanModeAttachment' from null or undefined value planExists steerOnly bashFirst bashFirstSteer Cannot destructure property 'isAppifactReplToolEnabled' from nul"
+   },
+   "steers": {
+    "count": 6,
+    "sample": "n created. read, for an artifact shared with the person: what Claude needs from it, which steers the isolated summary. publish: a last-resort overwrite that **discards** the newer publis"
+   },
+   "SteerFloor": {
+    "count": 5,
+    "sample": "eLimitDurationMs fastModeRateLimitExpiresAt overages graceBand billingAccessOverride modelSteerFloor promptModel cachedEmail emailFetchPromise coreUserData gitEmail gitUserName loggedNonObje"
+   },
+   "appendMessage": {
+    "count": 3,
+    "sample": "runtimeModel proactivityState setSDKStatus readFileCache turnEventsSettleMs submitMessage appendMessages getReadFileState evictNestedMemoryPaths : dropping a settlement whose slot config change"
+   },
+   "queuedMessage": {
+    "count": 3,
+    "sample": "utOfBand failQueued answerForwardsInFlight queuedSendUuids sendUuidsInFlight heldMessages queuedMessages withdrawQueuedSends withdrawHeldSends withdrawHeld withdrawQueuedSend cancelForward fail"
+   },
+   "STEER": {
+    "count": 2,
+    "sample": "ON_UP|LIMIT_(ROLL_ONLY|MOTOR_UP)|HOVER_((WATER|TERRAIN|UP)_ONLY|GLOBAL_HEIGHT)|MOUSELOOK_(STEER|BANK)|CAMERA_DECOUPLED))|PRIM_(ALLOW_UNSIT|ALPHA_MODE(_(BLEND|EMISSIVE|MASK|NONE))?|NORMA"
+   },
+   "steer_delegation": {
+    "count": 2,
+    "sample": "imple bg-session focus_mode act_dont_rederive delivering_work_max overcorrection subagent_steer_delegation opus5_reduced_delegation heron_brook brook_heron willow_tern autonomy_append endconv_defe"
+   },
+   "steered_by": {
+    "count": 2,
+    "sample": "rootAnchors root_kind worktree_check fallback_eligible git_file_kind gitFileKind steering steered_by current_branch_only alsoLeaveOut credential_paths refused_on wip_step held_ref git_exit_c"
+   },
+   "steer_applied": {
+    "count": 2,
+    "sample": "EBE steer Cannot destructure property 'steer' from null or undefined value tengu_subagent_steer_applied relay_message_ids relay_rows relay_thread_ts Cannot destructure property 'messageIds' fro"
+   },
+   "steeringVarTable": {
+    "count": 2,
+    "sample": "ult  Set by your organization  Set by ANTHROPIC_DEFAULT_MODEL envFamily concreteBaseline- steeringVarTable has no row for tier family \" [-@]\\d{8}$ keeping the tier default; enforceAvailableModels:"
+   },
+   "pendingInput": {
+    "count": 1,
+    "sample": "onnect queries setMode setPendingValue pendingValue writeSync writeCallback errorCallback pendingInput pendingOutput writeResult cork drainRequestBody dumpRequestBody ended finished flags flus"
+   },
+   "interject": {
+    "count": 1,
+    "sample": "g else could usefully happen while it runs \\u2014 otherwise background it so the user can interject. Never fabricate or predict a pending agent's results \\u2014 the notification is never so"
+   },
+   "steerable": {
+    "count": 1,
+    "sample": " denied command strings are recovered from transcripts, so they are MODEL-AUTHORED \\u2014 steerable by prompt injection in any repo the user ever opened \\u2014 and an exact rule is a standi"
+   }
+  },
+  "other_surfaces": {
+   "websocket": 340,
+   "stream-json": 138,
+   "jsonrpc": 118,
+   "listen(": 78,
+   "--sdk": 41,
+   "json-rpc": 27,
+   "--input-format": 26,
+   "/v1/sessions": 26,
+   "ws://": 20,
+   "unix://": 9,
+   "namedpipe": 9,
+   "--stdio": 2
+  }
+ },
+ "codex": {
+  "roots": [
+   "/opt/homebrew/lib/node_modules/@openai/codex"
+  ],
+  "files_scanned": 6,
+  "bytes_scanned": 288145182,
+  "steering_vocabulary": {
+   "steer": {
+    "count": 22,
+    "sample": "cessor.rs failed to submit turn input:  expected active turn id ` ` but found ` failed to steer turn:  Use [$review-agent]( ) for this review. failed to start review:  expected active t"
+   },
+   "steering": {
+    "count": 22,
+    "sample": "ailed to send handoff output:  failed to send   response.create:  1failed to send handoff steering acknowledgement:  .failed to send realtime noop function output:  realtime stream closed:"
+   },
+   "Steer": {
+    "count": 11,
+    "sample": "atcherGroup with 2 elementsstruct PersistentModeSnapshot with 1 elementstruct MisalignmentSteer with 1 elementbundleIdsstruct ComputerUseMacosRequirements with 1 elementstruct ThreadMet"
+   },
+   "InterruptWith": {
+    "count": 9,
+    "sample": "nvalidateStringWrapperToPrimitiveProtector BytecodeBudgetInterrupt_Ignition BytecodeBudgetInterruptWithStackCheck_Ignition BytecodeBudgetInterrupt_Sparkplug BytecodeBudgetInterruptWithStackChec"
+   },
+   "interjections": {
+    "count": 8,
+    "sample": "llet should be a complete standalone point.\\n- Do not begin responses with conversational interjections or meta commentary. Avoid openers such as acknowledgements ( Done  Got it Great question,"
+   },
+   "Steerable": {
+    "count": 7,
+    "sample": "::ResponseTooManyFailedAttempts with 1 elementstruct variant CodexErrorInfo::ActiveTurnNotSteerable with 1 elementstruct variant CodexErrorInfo::ResponseStreamConnectionFailed with 1 elemen"
+   },
+   "steering28_": {
+    "count": 7,
+    "sample": "ETA17h 16continue_if_idle28_$u7b$$u7b$closure$u7d$$u7d$10__CALLSITE .27inject_active_turn_steering28_$u7b$$u7b$closure$u7d$$u7d$10__CALLSITE .3new17h2e6a9cd3c0de0148E metrics11GoalMetrics .ru"
+   },
+   "steerstruct": {
+    "count": 5,
+    "sample": "sed_execpolicy_amendmentrejectionnetwork_policy_amendmentdeptherrorTypedetailedExplanationsteerstruct MisalignmentErrorDetails with 3 elementsstruct CommandExecutionRequestApprovalResponse wi"
+   },
+   "steerable": {
+    "count": 3,
+    "sample": "rcannot steer a review turncannot steer a compact turnfailed to serialize active-turn-not-steerable turn erroractive turn uses a different output schemainput must not be emptyreview-agentno"
+   },
+   "steerturn": {
+    "count": 3,
+    "sample": "emovefs/copyfs/unwatchskills/config/writeplugin/installturn/startturn/settings/updateturn/steerturn/interruptthread/realtime/startthread/realtime/appendAudiothread/realtime/appendTextthread"
+   },
+   "Steerstruct": {
+    "count": 3,
+    "sample": "truct variant ClientRequest::FuzzyFileSearchSessionStartstruct variant ClientRequest::TurnSteerstruct variant ClientRequest::ThreadShellCommandstruct variant ClientRequest::ThreadInjectItemss"
+   },
+   "SteerableTurnKind": {
+    "count": 3,
+    "sample": "te extraRoots read-onlyworkspace-writedanger-full-accessCodexErrorInfoApprovalsReviewerNonSteerableTurnKind processHandle ttystreamStdinstreamStdoutStderroutputBytesCaptimeoutMssize rowscols deltaB"
+   },
+   "steered": {
+    "count": 3,
+    "sample": " messages and final-status notifications. The wait also ends early when new user input is steered into the active turn. Does not return the content; returns either a summary of which agen"
+   },
+   "PendingInput": {
+    "count": 3,
+    "sample": "es17h6860e9dcd738ce3cE 9raw_lines17h175ba5c1ff5c4fceE bottom_pane..pending_input_preview..PendingInputPreview$u20$as$u20$codex_tui..render..renderable..Renderable$GT$ history_cell..request_use"
+   },
+   "steer_inner28_": {
+    "count": 3,
+    "sample": "config_snapshot17h58927b6f21ccbb81E 17hc9c530822a9bd80aE !4META17hbd11290a5692d4a6E 6turn_steer_inner28_$u7b$$u7b$closure$u7d$$u7d$10__CALLSITE !7build_review_turn17h420128288517b8ebE 17hc0ea665"
+   },
+   "steerreserved": {
+    "count": 2,
+    "sample": "oadedread threadinternal error: entered unreachable code: start-if-idle submission cannot steerreserved thread ID cannot be used when resuming a threadopenai/standard-form-inputCODEX_INTERNAL_O"
+   },
+   "Steerablestruct": {
+    "count": 2,
+    "sample": "AgentConfigImportHistoryRecordTypeResultParamsstruct variant CodexErrorInfo::ActiveTurnNotSteerablestruct variant CodexErrorInfo::HttpConnectionFailedstruct variant CodexErrorInfo::ResponseStream"
+   },
+   "steer_response17h7dba6e7fad2b956dE": {
+    "count": 2,
+    "sample": "27bE code_mode_tool_call17hd17154b7f0bc83c4E plugin_measurements17h696a8f667a3e777eE turn_steer_response17h7dba6e7fad2b956dE ingest_plugin_state_changed17hd5453b0e3071f242E thread_archive_event_params17h0bc11cbd3e5"
+   },
+   "steer17h9492d44e58ee26b0E": {
+    "count": 2,
+    "sample": "ate17h31f237de6e303516E Rrestore_thread_input_state17habd5dd5a39fc6568E 2enqueue_rejected_steer17h9492d44e58ee26b0E R9has_pending_protected_request17h1c94eec58c546bb5E startup_draft_when_ready17ha6360226d6"
+   },
+   "steer_race17h58db3e27142393f4E": {
+    "count": 2,
+    "sample": "u20$codex_tui..app..App$GT$26handle_file_change_request17hfee66fc110387e12E U2active_turn_steer_race17h58db3e27142393f4E U3agents_overview_threads37_$LT$impl$u20$codex_tui..app..App$GT$3 U4app_server_event_targ"
+   },
+   "steerable_turn_error17h57df023be355a410E": {
+    "count": 2,
+    "sample": "roval_decisions17h095c21fe729ca25cE U2RuntimePermissionProfileOverride1 U6active_turn_not_steerable_turn_error17h57df023be355a410E UApp 5handle_pet_preview_loaded17hcece789be4a8edcaE U8handle_configured_pet_loaded17hffa1"
+   },
+   "Steerableturn_kindOtherTurnErrorcodex_error_infoadditional_detailsmisalignmentlimit_idresets_atInputTexttextInputImageimage_urlInputAudioaudio_urltslevelfeedback_log_bodyInsufficientScopeErrorwww_authenticate_headerrequired_scopeBUG": {
+    "count": 1,
+    "sample": "backFailedSandboxErrorResponseStreamDisconnectedResponseTooManyFailedAttemptsActiveTurnNotSteerableturn_kindOtherTurnErrorcodex_error_infoadditional_detailsmisalignmentlimit_idresets_atInputTexttextInputImageimage_urlInputAudioaudio_urltslevelfeedback_log_bodyInsufficientScopeErrorwww_authenticate_headerrequired_scopeBUG: inner connection already taken!UnsupportedSignatureAlgorithmForPublicKeyContextsignature"
+   },
+   "SteerableTurnKindreviewcompactPatchApplyBeginEvent": {
+    "count": 1,
+    "sample": "ventinvocationmcp_app_resource_uriread_only_hintWebSearchBeginEventCollabResumeEndEventNonSteerableTurnKindreviewcompactPatchApplyBeginEvent rate_limit_reachedworkspace_owner_credits_depletedworkspace_member_credits_depletedworksp"
+   },
+   "steerablethread_rollback_failedCollabAgentRefHookRunSummaryevent_namehandler_typeexecution_modesource_pathdisplay_orderstatus_messagePlanDeltaEventReviewDecisionapprovedapproved_execpolicy_amendmentproposed_execpolicy_amendmentapproved_for_sessionapproved_mcp_policy_amendmentdeniedrejectiontimed_outabortSubAgentSourcethread_spawndepthTokenUsageInfototal_token_usagelast_token_usage": {
+    "count": 1,
+    "sample": "sandbox_errorresponse_stream_disconnectedresponse_too_many_failed_attemptsactive_turn_not_steerablethread_rollback_failedCollabAgentRefHookRunSummaryevent_namehandler_typeexecution_modesource_pathdisplay_orderstatus_messagePlanDeltaEventReviewDecisionapprovedapproved_execpolicy_amendmentproposed_execpolicy_amendmentapproved_for_sessionapproved_mcp_policy_amendmentdeniedrejectiontimed_outabortSubAgentSourcethread_spawndepthTokenUsageInfototal_token_usagelast_token_usage fullon-failureCreditsSnapshothas_creditsunlimitedbalance end_ordinal_exclusiveend_byte_of"
+   },
+   "SteerableitemsitemsViewstartedAtcompletedAtwritesapproveschedulestruct": {
+    "count": 1,
+    "sample": "backFailedsandboxErrorresponseStreamDisconnectedresponseTooManyFailedAttemptsactiveTurnNotSteerableitemsitemsViewstartedAtcompletedAtwritesapproveschedulestruct ScheduledTaskSummary with 4 elementsmcpServerssubagentscommandsmemoryON_INSTALLON_USEwait"
+   },
+   "steerdeltaBase64capReachedestimatedUsageCreditsMicrosestimatedUsageUsdMicrosnetNewInputTokenscachedInputTokensinputTokensoutputTokenstotalTokens": {
+    "count": 1,
+    "sample": "codexErrorInfoadditionalDetailsappServersubAgentTurnItemsView errorTypedetailedExplanationsteerdeltaBase64capReachedestimatedUsageCreditsMicrosestimatedUsageUsdMicrosnetNewInputTokenscachedInputTokensinputTokensoutputTokenstotalTokens marketplaceNamemarketplacePath clientIddeviceTypeplatformosVersiondeviceModelappVersionla"
+   },
+   "SteerResponse": {
+    "count": 1,
+    "sample": "ruct SkillMetadata with 9 elementsstruct TurnStartResponse with 1 elementturnIdstruct TurnSteerResponse with 1 elementin-process app-server worker channel is closedin-process app-server reject "
+   },
+   "Steerableturn_kindActiveTurnOutputSchemaMismatchEmptyInputexpect": {
+    "count": 1,
+    "sample": "erCapabilitiesNotIdlePendingTriggerTurnNoActiveTurnExpectedTurnMismatchactualActiveTurnNotSteerableturn_kindActiveTurnOutputSchemaMismatchEmptyInputexpect const string value \"prompts/get\"expect const string value \"initialize\"expect const string"
+   },
+   "steerappend": {
+    "count": 1,
+    "sample": "readload historyinternal error: entered unreachable code: start-if-idle submission cannot steerappend rollout itemsupdate thread metadataitems must not be emptyout-of-band elicitation count i"
+   },
+   "steercannot": {
+    "count": 1,
+    "sample": "nput``toolOutput.name` must not be emptyexpectedTurnId must not be emptyno active turn to steercannot steer a review turncannot steer a compact turnfailed to serialize active-turn-not-steerab"
+   },
+   "steerdefault_mode_request_user_inputsend_async_messageterminal_visualization_instructionsguardian_approvalguardian_reuse_parent_compactionguardian_enhanced_node_repl_transcriptsguardian_node_repl_transcript_imagesguardianv2guardian_extgoalstoken_budgetcontext_managementrollout_budgetcurrent_time_remindercollaboration_modestool_call_mcp_elicitationbedrock_setup_wizardfast_modestep_model_switchingrealtime_conversationimage_detail_originaltui_app_serverPrevent": {
+    "count": 1,
+    "sample": "reasoning_summariesskill_mcp_dependency_installskill_searchskill_env_var_dependency_promptsteerdefault_mode_request_user_inputsend_async_messageterminal_visualization_instructionsguardian_approvalguardian_reuse_parent_compactionguardian_enhanced_node_repl_transcriptsguardian_node_repl_transcript_imagesguardianv2guardian_extgoalstoken_budgetcontext_managementrollout_budgetcurrent_time_remindercollaboration_modestool_call_mcp_elicitationbedrock_setup_wizardfast_modestep_model_switchingrealtime_conversationimage_detail_originaltui_app_serverPrevent sleep while runningKeep your computer awake while Codex is running a thread.NEW: Prevent "
+   },
+   "Steerableturn_kindActiveTurnOutputSchemaMismatchEmptyInputWebTrustedFile": {
+    "count": 1,
+    "sample": "nsi16Utf8BytesNotIdlePendingTriggerTurnNoActiveTurnExpectedTurnMismatchactualActiveTurnNotSteerableturn_kindActiveTurnOutputSchemaMismatchEmptyInputWebTrustedFile`Ready` polled after completionSpanContextspan_idtrace_flagsis_remotetrace_stateforked_fro"
+   },
+   "steerable_reviewnon_steerable_compactempty_inputinput_too_largestartedendpoint_recommendationlegacy_discoverycompletedfailedinterruptedcreatedusage_accountedstatus_changedclearedexplicitimplicitstandalone_turnpre_turnmid_turnacceptedrejecteduser_requestedcontext_limitmodel_downshiftcomp_hash_changedmementoprefix_compactiondefaultqueuedeventsplugin_idremote_plugin_idplugin_namemarketplace_namehas_skillsmcp_server_countconnector_idsproduct_client_idarchivedunarchivedtool_errorapproval_deniedapproval_abortedsandbox_deniedpolicy_forbiddensearchopen_pagefind_in_pageothergoal_idevent_kindgoal_statuscumulative_tokens_accountedcumulative_time_accounted_secondsmodel_slughook_namehook_sourcehandler_typeexecution_modestatuscodex_rs_versionruntime_osruntime_os_versionruntime_archroot_turn_idturn_triggercodex_turn_sourcesubmission_typeephemeralinitialization_modemodel_providersandbox_policyreasoning_summaryservice_tierapproval_policyapprovals_reviewerguardian_v2_enabledsandbox_network_accesscollaboration_modepersonalityworkspace_kindnum_input_imagesimage_preparationsis_first_turnexplicit_client_interrupt_requested_at_msturn_errorcodex_error_http_status_codesteer_counttotal_tool_call_countshell_command_countfile_change_countmcp_tool_call_countdynamic_tool_call_countsubagent_tool_call_countimage_generation_countinput_tokenscached_input_tokenscache_write_input_tokensoutput_tokensreasoning_output_tokenstotal_tokensbefore_first_sampling_mssampling_mscompaction_msbetween_sampling_overhead_msafter_last_sampling_mssampling_request_countsampling_retry_countstarted_atcompleted_atnot_neededconfig_allowedguardian_approvedguardian_deniedguardian_aborteduser_approveduser_approved_for_sessionuser_denieduser_abortedstdiowebsocketin_processreview_idsubject_kindsubject_nametriggerresolutionstarted_at_mscompleted_at_mscell_idparent_call_idoriginating_response_idsubsequent_response_idtool_nameexecution_duration_msreview_countguardian_review_countuser_review_countfinal_approval_outcometerminal_statusfailure_kindrequested_additional_permissionsrequested_network_accessapproveddeniedabortedshellsandbox_permissionsadditional_permissionsunified_execttywrite_stdinexecvesourceprogramapply_patchnetwork_accessmcp_tool_callserverconnector_idconnector_nametool_titlerequest_permissionsmcp_server_namesactionexpected_turn_idaccepted_turn_idresultrejection_reasoncreated_atweb_search_actionquery_presentquery_counttarget_item_idapproval_request_sourcereviewed_actionreviewed_action_truncatedfailure_reasonattempt_countuser_authorizationguardian_thread_idguardian_session_kindguardian_modelguardian_reasoning_effortguardian_default_review_model_idguardian_catalog_contains_auto_reviewguardian_review_model_overriddenguardian_review_model_overrideguardian_model_provider_idhad_prior_review_contextreview_timeout_mstool_call_counttime_to_first_token_mscompletion_latency_mstrunk_newtrunk_reusedephemeral_forkedreasonimplementationphaseactive_context_tokens_beforeactive_context_tokens_afterretained_image_countcompaction_summary_tokensfile_add_countfile_update_countfile_delete_countfile_move_countskill_scoperepo_urlinvoke_typemcp_server_namemcp_tool_namemcp_error_presenttimeoutcancelledprompt_build_errorsession_errorparse_errorskill_nameclient_nameclient_versionrpc_transportexperimental_api_enabledtimed_outfailed_closedforked_from_thread_idmain_turndelegated_subagentsuccessdynamic_tool_nameoutput_content_item_countoutput_text_item_countoutput_image_item_countoutput_audio_item_countrevised_prompt_presentsaved_path_presenttransparent_backgroundimagegen_request_idscript_pathcommand_execution_sourceexit_codecommand_total_action_countcommand_read_action_countcommand_list_files_action_countcommand_search_action_countcommand_unknown_action_counterror_typesub_error_typelifecycleskillartifact_typeoperation_kindexpected_output_countoutput_formatexecution_backendexecution_idoperationmeasurement_namenumber_valuedimensionssender_thread_idreceiver_thread_countreceiver_thread_idsrequested_modelrequested_reasoning_effortagent_state_countcompleted_agent_countfailed_agent_countsuggestion_idpluginsproduct_surfacerepo_hashaccepted_added_linesaccepted_deleted_linesline_fingerprintsimport_idprovider_idfailure_stagesuccess_countfailed_countguardianuserinitialsandbox_denialnetwork_policy_denialexecve_interceptapp_namenonesession_approvalexec_policy_amendmentnetwork_policy_amendmentcommand_executionfile_changepermissionsreviewcompactthread_spawnmemory_consolidationPreToolUsePermissionRequestPostToolUsePreCompactPostCompactSessionStartSessionEndSubagentStartSubagentStopInterruptsystemprojectmdmsession_flagsplugincloud_requirementscloud_managed_configlegacy_managed_config_filelegacy_managed_config_mdm": {
+    "count": 1,
+    "sample": "eightprepared_widthprepared_heightnewforkedresumedno_active_turnexpected_turn_mismatchnon_steerable_reviewnon_steerable_compactempty_inputinput_too_largestartedendpoint_recommendationlegacy_discoverycompletedfailedinterruptedcreatedusage_accountedstatus_changedclearedexplicitimplicitstandalone_turnpre_turnmid_turnacceptedrejecteduser_requestedcontext_limitmodel_downshiftcomp_hash_changedmementoprefix_compactiondefaultqueuedeventsplugin_idremote_plugin_idplugin_namemarketplace_namehas_skillsmcp_server_countconnector_idsproduct_client_idarchivedunarchivedtool_errorapproval_deniedapproval_abortedsandbox_deniedpolicy_forbiddensearchopen_pagefind_in_pageothergoal_idevent_kindgoal_statuscumulative_tokens_accountedcumulative_time_accounted_secondsmodel_slughook_namehook_sourcehandler_typeexecution_modestatuscodex_rs_versionruntime_osruntime_os_versionruntime_archroot_turn_idturn_triggercodex_turn_sourcesubmission_typeephemeralinitialization_modemodel_providersandbox_policyreasoning_summaryservice_tierapproval_policyapprovals_reviewerguardian_v2_enabledsandbox_network_accesscollaboration_modepersonalityworkspace_kindnum_input_imagesimage_preparationsis_first_turnexplicit_client_interrupt_requested_at_msturn_errorcodex_error_http_status_codesteer_counttotal_tool_call_countshell_command_countfile_change_countmcp_tool_call_countdynamic_tool_call_countsubagent_tool_call_countimage_generation_countinput_tokenscached_input_tokenscache_write_input_tokensoutput_tokensreasoning_output_tokenstotal_tokensbefore_first_sampling_mssampling_mscompaction_msbetween_sampling_overhead_msafter_last_sampling_mssampling_request_countsampling_retry_countstarted_atcompleted_atnot_neededconfig_allowedguardian_approvedguardian_deniedguardian_aborteduser_approveduser_approved_for_sessionuser_denieduser_abortedstdiowebsocketin_processreview_idsubject_kindsubject_nametriggerresolutionstarted_at_mscompleted_at_mscell_idparent_call_idoriginating_response_idsubsequent_response_idtool_nameexecution_duration_msreview_countguardian_review_countuser_review_countfinal_approval_outcometerminal_statusfailure_kindrequested_additional_permissionsrequested_network_accessapproveddeniedabortedshellsandbox_permissionsadditional_permissionsunified_execttywrite_stdinexecvesourceprogramapply_patchnetwork_accessmcp_tool_callserverconnector_idconnector_nametool_titlerequest_permissionsmcp_server_namesactionexpected_turn_idaccepted_turn_idresultrejection_reasoncreated_atweb_search_actionquery_presentquery_counttarget_item_idapproval_request_sourcereviewed_actionreviewed_action_truncatedfailure_reasonattempt_countuser_authorizationguardian_thread_idguardian_session_kindguardian_modelguardian_reasoning_effortguardian_default_review_model_idguardian_catalog_contains_auto_reviewguardian_review_model_overriddenguardian_review_model_overrideguardian_model_provider_idhad_prior_review_contextreview_timeout_mstool_call_counttime_to_first_token_mscompletion_latency_mstrunk_newtrunk_reusedephemeral_forkedreasonimplementationphaseactive_context_tokens_beforeactive_context_tokens_afterretained_image_countcompaction_summary_tokensfile_add_countfile_update_countfile_delete_countfile_move_countskill_scoperepo_urlinvoke_typemcp_server_namemcp_tool_namemcp_error_presenttimeoutcancelledprompt_build_errorsession_errorparse_errorskill_nameclient_nameclient_versionrpc_transportexperimental_api_enabledtimed_outfailed_closedforked_from_thread_idmain_turndelegated_subagentsuccessdynamic_tool_nameoutput_content_item_countoutput_text_item_countoutput_image_item_countoutput_audio_item_countrevised_prompt_presentsaved_path_presenttransparent_backgroundimagegen_request_idscript_pathcommand_execution_sourceexit_codecommand_total_action_countcommand_read_action_countcommand_list_files_action_countcommand_search_action_countcommand_unknown_action_counterror_typesub_error_typelifecycleskillartifact_typeoperation_kindexpected_output_countoutput_formatexecution_backendexecution_idoperationmeasurement_namenumber_valuedimensionssender_thread_idreceiver_thread_countreceiver_thread_idsrequested_modelrequested_reasoning_effortagent_state_countcompleted_agent_countfailed_agent_countsuggestion_idpluginsproduct_surfacerepo_hashaccepted_added_linesaccepted_deleted_linesline_fingerprintsimport_idprovider_idfailure_stagesuccess_countfailed_countguardianuserinitialsandbox_denialnetwork_policy_denialexecve_interceptapp_namenonesession_approvalexec_policy_amendmentnetwork_policy_amendmentcommand_executionfile_changepermissionsreviewcompactthread_spawnmemory_consolidationPreToolUsePermissionRequestPostToolUsePreCompactPostCompactSessionStartSessionEndSubagentStartSubagentStopInterruptsystemprojectmdmsession_flagsplugincloud_requirementscloud_managed_configlegacy_managed_config_filelegacy_managed_config_mdm codex_thread_initializedcodex_artifact_operationuser_shellcodex_command_execution_eventco"
+   },
+   "steercodex_turn_steer_eventcodex_guardian_reviewcontrol": {
+    "count": 1,
+    "sample": "/src/reducer.rsevent analytics/src/reducer.rs:1879event analytics/src/reducer.rs:1893turn steercodex_turn_steer_eventcodex_guardian_reviewcontrol toolcodex_control_tool_call_eventcode mode toolcodex_plugin_installedcodex_plugin_uninsta"
+   },
+   "Steerableauto_reviewcompactaccessKeysbedrockApiKeyregionenvironmentCredentialsapikeychatgptchatgptAuthTokensheadersagentIdentitypersonalAccessTokenbedrockAccessKeysmatch_typefile_namescoreindicesfilesdirectoryinternal": {
+    "count": 1,
+    "sample": "backFailedsandboxErrorresponseStreamDisconnectedresponseTooManyFailedAttemptsactiveTurnNotSteerableauto_reviewcompactaccessKeysbedrockApiKeyregionenvironmentCredentialsapikeychatgptchatgptAuthTokensheadersagentIdentitypersonalAccessTokenbedrockAccessKeysmatch_typefile_namescoreindicesfilesdirectoryinternal error: entered unreachable codecharsetutf-8expected RawValuecallableCOMMANDSSESSIONSgranu"
+   },
+   "steerclientIddisplayNamedeviceTypeplatformosVersiondeviceModelappVersionlastSeenAtserverNameinstallationIdenvironmentIdconnectingconnectederroreddatanextCursorpairingCodemanualPairingCodeexpiresAtclaimedreadynotConfiguredupdateRequiredelevatedunelevatedstartedmodereasoning_effortdataBase64fileNameisDirectoryisFileisSymlinkcreatedAtMsmodifiedAtMsentriesreviewThreadIdapiKeyplanTypeamazonBedrockusesCodexManagedCredentialshasCreditsunlimitedbalanceusedPercentwindowDurationMinsmessageIdmessageTypemessageBodyarchivedAtlimitNameprimarysecondarycreditsindividualLimitspendControlReachedrateLimitReachedTypeaccountcodexRateLimitsloginIdauthUrlchatgptDeviceCodeverificationUrlchatgptAuthTokensrate_limit_reachedworkspace_owner_credits_depletedworkspace_member_credits_depletedworkspace_owner_usage_limit_reachedworkspace_member_usage_limit_reachedresetTypegrantedAtdescriptionheadlineannouncementlifetimeTokenspeakDailyTokenslongestRunningTurnSeccurrentStreakDayslongestStreakDayscancelednotFoundlimitusedremainingPercentsentcooldown_activeavailableredeemingredeemedstartDatetokensrateLimitsrateLimitsByLimitIdrateLimitResetCreditsaccountIdrateLimitUpselldailyUsageBucketsthreadUsagefeatureEnabledmessagesavailableCountresetnothingToResetnoCreditalreadyRedeemedoutcomerootsmetadatapositionprojectthreadIdfailed": {
+    "count": 1,
+    "sample": "pServersubAgentappearancenotLoadedfulllegacypaginatediconcolorerrorTypedetailedExplanationsteerclientIddisplayNamedeviceTypeplatformosVersiondeviceModelappVersionlastSeenAtserverNameinstallationIdenvironmentIdconnectingconnectederroreddatanextCursorpairingCodemanualPairingCodeexpiresAtclaimedreadynotConfiguredupdateRequiredelevatedunelevatedstartedmodereasoning_effortdataBase64fileNameisDirectoryisFileisSymlinkcreatedAtMsmodifiedAtMsentriesreviewThreadIdapiKeyplanTypeamazonBedrockusesCodexManagedCredentialshasCreditsunlimitedbalanceusedPercentwindowDurationMinsmessageIdmessageTypemessageBodyarchivedAtlimitNameprimarysecondarycreditsindividualLimitspendControlReachedrateLimitReachedTypeaccountcodexRateLimitsloginIdauthUrlchatgptDeviceCodeverificationUrlchatgptAuthTokensrate_limit_reachedworkspace_owner_credits_depletedworkspace_member_credits_depletedworkspace_owner_usage_limit_reachedworkspace_member_usage_limit_reachedresetTypegrantedAtdescriptionheadlineannouncementlifetimeTokenspeakDailyTokenslongestRunningTurnSeccurrentStreakDayslongestStreakDayscancelednotFoundlimitusedremainingPercentsentcooldown_activeavailableredeemingredeemedstartDatetokensrateLimitsrateLimitsByLimitIdrateLimitResetCreditsaccountIdrateLimitUpselldailyUsageBucketsthreadUsagefeatureEnabledmessagesavailableCountresetnothingToResetnoCreditalreadyRedeemedoutcomerootsmetadatapositionprojectthreadIdfailed to write whole buffera Display implementation returned an error unexpectedlydescription()"
+   },
+   "steerx": {
+    "count": 1,
+    "sample": "ged for possible cybersecurity risk.MisalignmentErrorDetailserror_typedetailed_explanationsteerx-request-id type CloudflareblockedAccess blocked by Cloudflare. This usually happens when "
+   },
+   "Steerdeveloperassistant": {
+    "count": 1,
+    "sample": "ctionexeccompletedin_progressincompleteinternally tagged enum LocalShellActionMisalignmentSteerdeveloperassistant tag already takensize overflows MAX_SIZEexpected a header name, but got Nonestruct Safety"
+   },
+   "steerdeveloper_instructionsmodelmodel_reasoning_effortmodel_reasoning_summarymodel_verbositypersonalityservice_tierfeatures": {
+    "count": 1,
+    "sample": "ration from dateinternal error: entered unreachable code: start-if-idle submission cannot steerdeveloper_instructionsmodelmodel_reasoning_effortmodel_reasoning_summarymodel_verbositypersonalityservice_tierfeatures OkErr}falsetrue string or mapcommandmessageMinimalTmpdirUnknownFileSystemSandboxEntryacce"
+   },
+   "Steerableturn_kindActiveTurnOutputSchemaMismatchEmptyInputunexpected": {
+    "count": 1,
+    "sample": "seContentItemsNotIdlePendingTriggerTurnNoActiveTurnExpectedTurnMismatchactualActiveTurnNotSteerableturn_kindActiveTurnOutputSchemaMismatchEmptyInputunexpected empty broadcast channel`Ready` polled after completionFunctionCallOutputPayloadThreadConf"
+   }
+  },
+  "other_surfaces": {
+   "websocket": 1243,
+   "app-server": 692,
+   "jsonrpc": 215,
+   "appserver": 109,
+   "json-rpc": 30,
+   "ws://": 23,
+   "unix://": 10,
+   "session/input": 2
+  }
+ },
+ "cursor-cli": {
+  "roots": [
+   "/Users/ylminiserver/.local/share/cursor-agent/versions"
+  ],
+  "files_scanned": 904,
+  "bytes_scanned": 1606224954,
+  "steering_vocabulary": {
+   "InterruptWith": {
+    "count": 108,
+    "sample": "pperToPrimitiveProtector Runtime::BytecodeBudgetInterrupt_Ignition Runtime::BytecodeBudgetInterruptWithStackCheck_Ignition Runtime::BytecodeBudgetInterrupt_Sparkplug Runtime::BytecodeBudgetInte"
+   },
+   "QueuedMessage": {
+    "count": 96,
+    "sample": "=e.inputMode||\"none\"!==e.paletteMode||e.isSuggestingPlan||e.isSuggestingDebugAction||e.hasQueuedMessages)}function s({input:e,key:t,draft:n,inputSnapshotRef:o,getShortcutContext:r,trackShortcut"
+   },
+   "steer": {
+    "count": 87,
+    "sample": "s}}),[e,c,E,d,S]),A=(0,i.useMemo)((()=>t?S?\"editing   enter done   esc close\":n?`enter ${\"steer\"===o?\"steer\":\"interrupt-and-send\"===o?\"interrupt and send\":\"send now\"}   select/edit   es"
+   },
+   "queuedMessage": {
+    "count": 45,
+    "sample": "Files:Dn,rejectPendingDecision:On,approvePendingDecision:_n,agentStore:Ln,modelManager:Nn,queuedMessages:zn,isCompact:Fn,setIsCompact:Yn}=(0,g.C9)(),{conversationTokensUsed:Un,conversationToken"
+   },
+   "steering": {
+    "count": 41,
+    "sample": "l-switch commands in the slash palette.\",path:[\"modelSlashCommands\"],kind:\"boolean\"},{id:\"steering\",group:\"General\",label:\"Steering\",description:\"Send follow-ups into the active turn inste"
+   },
+   "pendingInput": {
+    "count": 36,
+    "sample": "=>{h=t}));g.catch((()=>{}));const y=this.innerTransport.stream(e,l,r,n,p,f,d);this.startAppendingInputs(m,c,r,n,p,h);const C=yield y,v=C.message,b={[Symbol.asyncIterator](){const e=v[Symbol.as"
+   },
+   "PendingInput": {
+    "count": 27,
+    "sample": "(e);return new eo({displayNum:n,resolution:r.resolution})}class Co{constructor(e){this.hasPendingInputEventLogger=!1,this.display=e.display,this.readyTimeoutMs=e.readyTimeoutMs??3e4,this.initi"
+   },
+   "midturn": {
+    "count": 9,
+    "sample": "ured_logging:!1,mcp_tool_allowlist_modes:!1,memory_pressure_profiling:!0,meta_mcp_tool:!1,midturn_move_to_cloud_ads:!1,migrate_default_model_config_to_auto_smart_cost:!1,migrate_editor_mo"
+   },
+   "steer_float_up": {
+    "count": 3,
+    "sample": "andbox_settings_visible:!0,composer_separate_shell_activity_groups:!1,composer_transcript_steer_float_up:!1,context_usage_canvas:!1,context_visualizer:!0,conversation_table_of_contents:!1,cpp_pe"
+   },
+   "Steering": {
+    "count": 2,
+    "sample": "lette.\",path:[\"modelSlashCommands\"],kind:\"boolean\"},{id:\"steering\",group:\"General\",label:\"Steering\",description:\"Send follow-ups into the active turn instead of stopping it first.\",path:[\""
+   }
+  },
+  "other_surfaces": {
+   "websocket": 5250,
+   "jsonrpc": 1365,
+   "listen(": 428,
+   "namedpipe": 153,
+   "ws://": 54,
+   "stream-json": 48,
+   "--stdio": 9,
+   "session/prompt": 6
+  }
+ },
+ "devin": {
+  "roots": [
+   "/Users/ylminiserver/.local/share/devin/cli/_versions"
+  ],
+  "files_scanned": 691,
+  "bytes_scanned": 609398450,
+  "steering_vocabulary": {
+   "queuedMessage": {
+    "count": 16,
+    "sample": "mandRevisioncognition.ai/chainscognition.ai/megaplancognition.ai/ruleMentionscognition.ai/queuedMessagescognition.ai/authcognition.ai/modelsFilecognition.ai/sessionListFolderscognition.ai/sidec"
+   },
+   "STEERING_SURFACE": {
+    "count": 6,
+    "sample": "nly work yourself in that same turn, and for anything that concerns the running handoff, {STEERING_SURFACE}. Redirect it with a corrected brief, tell it to wrap up and report what it has, or send "
+   },
+   "QueuedMessage": {
+    "count": 6,
+    "sample": "eE4growB19_ K155YOjvQu_11dioxus_core5tasks4TaskE4growB19_ a9ATfgK4dcg_9chisel_ui7readbox13QueuedMessageE4growCsaOYydqXsSgr_6chisel bjBtv9kYksJ_5rav1e7encoder13SBSQueueEntryE4growCsc2VlRePA0Np_5"
+   },
+   "steering": {
+    "count": 3,
+    "sample": " Working with the user If the user sends a new message while you are working, treat it as steering the active task rather than replacing it: incorporate corrections, constraints, and quest"
+   }
+  },
+  "other_surfaces": {
+   "jsonrpc": 708,
+   "websocket": 342,
+   "json-rpc": 57,
+   "session/prompt": 21,
+   "ws://": 6
+  }
+ },
+ "droid": {
+  "roots": [
+   "/Users/ylminiserver/.local/bin/droid"
+  ],
+  "files_scanned": 1,
+  "bytes_scanned": 176468304,
+  "steering_vocabulary": {
+   "QueuedMessage": {
+    "count": 122,
+    "sample": "erSessionDefaults SlackAskUser ServiceAccounts SoftwareFactoryConjureDashboard Academy AppQueuedMessages NewModelSelector DesktopMultipleWindows RichFilePreviews MissionUiEntrypoints VoiceDicta"
+   },
+   "queuedMessage": {
+    "count": 41,
+    "sample": " workflowHint tipsTitle tip1 tip2 tip3 tip4 tip5 docsLink gettingStarted steeringMessages queuedMessages queuedReviewHint queuedReviewActiveHint imageAttachment_one imageAttachment_other fileAt"
+   },
+   "appendMessage": {
+    "count": 37,
+    "sample": "l detailSuffix serverNames providers resetAt guidance both ADD_MESSAGE system messageType appendMessage <system-reminder>[\\s\\S]*?<\\/system-reminder> UpgradeSessionModel Cannot destructure prope"
+   },
+   "steer": {
+    "count": 19,
+    "sample": "nges REMINDER: You are the orchestrator. Your role is to plan, design worker systems, and steer execution. Do NOT implement code yourself. When the user asks for changes or fixes, utili"
+   },
+   "steering": {
+    "count": 19,
+    "sample": "orkers to perform the implementations. Focus on high-level planning, task delegation, and steering the mission to success. [Agent] Failed to persist planning mission artifacts2 MISSION CON"
+   },
+   "Steer": {
+    "count": 12,
+    "sample": "utonomously research task before implementing orchestrate missions (/missions) Send* Send/Steer (sent after the next tool call) Queue (sent after Droid finishes) New line Paste image Cl"
+   },
+   "queueUserMessage": {
+    "count": 11,
+    "sample": "etExecutingTool setCompacting setThinking applyDroidWorkingState hydrateDroidWorkingState queueUserMessage queueUserMessages replaceDaemonQueuedMessages rememberProcessedMessageRequestId markReque"
+   },
+   "steeringMessages": {
+    "count": 8,
+    "sample": "rkflowBudgetValue workflowHint tipsTitle tip1 tip2 tip3 tip4 tip5 docsLink gettingStarted steeringMessages queuedMessages queuedReviewHint queuedReviewActiveHint imageAttachment_one imageAttachmen"
+   },
+   "steError": {
+    "count": 8,
+    "sample": "oveAllHint hiddenCount_one hiddenCount_other modelNoImageSupport failedClipboard unknownPasteError failedAttachFile unknownLoadError removeButton imageAttachment tooManyInputImages invalid"
+   },
+   "Steering_one": {
+    "count": 6,
+    "sample": "ne fileAttachment_other moreLines_one moreLines_other moreQueued_one moreQueued_other moreSteering_one moreSteering_other operationCancelled directoryNotAccessible fileAlreadyExists pathNotFou"
+   },
+   "Steering_other": {
+    "count": 6,
+    "sample": "_other moreLines_one moreLines_other moreQueued_one moreQueued_other moreSteering_one moreSteering_other operationCancelled directoryNotAccessible fileAlreadyExists pathNotFound invalidPath text"
+   },
+   "Steering": {
+    "count": 4,
+    "sample": " open the commands menu Use ! to drop into Bash mode# Use Ctrl+O to expand/collapse diffs Steering messages: Queued messages:C Ctrl+R to modify queue   Ctrl+G to pull top   Ctrl+X to clear"
+   },
+   "steeringItems": {
+    "count": 4,
+    "sample": "lor previewOptions reviewActive selectedItemId overflowLabel Cannot destructure property 'steeringItems' from null or undefined value- common:pendingMessages.queuedReviewActiveHint common:pendi"
+   },
+   "steeringCount": {
+    "count": 4,
+    "sample": "unt installedVersion handleVSCodeInstall getVSCodeStatusText Cannot destructure property 'steeringCount' from null or undefined value steeringCount queuedCount Cannot destructure property 'term"
+   },
+   "SteerHintApplicable": {
+    "count": 3,
+    "sample": "re property 'availableWidth' from null or undefined value availableWidth isDraftClipped isSteerHintApplicable steerHint Cannot destructure property 'isBashExecuting' from null or undefined value isSe"
+   },
+   "steerHint": {
+    "count": 3,
+    "sample": "leWidth' from null or undefined value availableWidth isDraftClipped isSteerHintApplicable steerHint Cannot destructure property 'isBashExecuting' from null or undefined value isSessionRunni"
+   },
+   "AppendMessage": {
+    "count": 3,
+    "sample": " processMissionHandoffNudge shouldExitAfterDelegatedTurn pauseMissionAfterInterrupt handleAppendMessages interruptIdleSessionScripts handleInterruptSession buildMcpStatusNotificationForGate awa"
+   },
+   "STEER": {
+    "count": 2,
+    "sample": "ON_UP|LIMIT_(ROLL_ONLY|MOTOR_UP)|HOVER_((WATER|TERRAIN|UP)_ONLY|GLOBAL_HEIGHT)|MOUSELOOK_(STEER|BANK)|CAMERA_DECOUPLED))|PRIM_(ALLOW_UNSIT|ALPHA_MODE(_(BLEND|EMISSIVE|MASK|NONE))?|NORMA"
+   },
+   "SteeringComponent": {
+    "count": 2,
+    "sample": "isterTask updateDrawIcon updateMenuItem updateObjectTree useAIOperMapObstructionTest useAISteeringComponent useAudioTimeForMoves userInputDisabled vectorAdd vectorCos vectorCrossProduct vectorDiff "
+   },
+   "pendingInput": {
+    "count": 1,
+    "sample": "onnect queries setMode setPendingValue pendingValue writeSync writeCallback errorCallback pendingInput pendingOutput writeResult cork drainRequestBody dumpRequestBody ended finished flags flus"
+   }
+  },
+  "other_surfaces": {
+   "jsonrpc": 683,
+   "websocket": 534,
+   "stream-json": 133,
+   "json-rpc": 63,
+   "--input-format": 51,
+   "listen(": 49,
+   "ws://": 43,
+   "namedpipe": 10,
+   "unix://": 7,
+   "session/prompt": 3,
+   "/v1/sessions": 2
+  }
+ },
+ "grok": {
+  "roots": [
+   "/opt/homebrew/lib/node_modules/@xai-official/grok"
+  ],
+  "files_scanned": 19,
+  "bytes_scanned": 184879824,
+  "steering_vocabulary": {
+   "interjection": {
+    "count": 24,
+    "sample": "p_session_impl/goal_support.rs crates/codegen/xai-grok-shell/src/session/acp_session_impl/interjection.rs crates/codegen/xai-grok-shell/src/session/acp_session_impl/mcp_snapshot.rs crates/code"
+   },
+   "interject": {
+    "count": 17,
+    "sample": "en/xai-grok-shell/src/extensions/terminal.rs crates/codegen/xai-grok-shell/src/extensions/interject.rs crates/codegen/xai-grok-shell/src/heap_profile/monitor.rs crates/codegen/xai-grok-shel"
+   },
+   "steer": {
+    "count": 12,
+    "sample": "background tasks or a subagent (a hint explains the hold and how to send one now). With `\"steer\"`, the same Enter still shows the row in the queue, then the shell injects it mid-turn at"
+   },
+   "Steer": {
+    "count": 3,
+    "sample": "p on sendevent crates/codegen/xai-grok-pager/src/app/dispatch/settings/setters.rs:988QueueSteer  Follow-up behavior: event crates/codegen/xai-grok-pager/src/app/dispatch/settings/setter"
+   },
+   "steers": {
+    "count": 3,
+    "sample": "ad of entering the active turn. - `interject` is urgent: it is delivered ahead of pending steers at the earliest safe point, and it interrupts a subagent that is blocked waiting on backg"
+   },
+   "mid_turn": {
+    "count": 3,
+    "sample": "sstruct ResumeStatusSnapshotstruct WebSearchToolCall with 3 elementsfield index 0 <= i < 5mid_turn_abortstruct ModelsCachestruct ModelsCache with 8 elementsstruct FileActionRequeststruct F"
+   },
+   "steering": {
+    "count": 2,
+    "sample": " task. Default to treating it as guidance for the work in progress   users are more often steering than canceling.Always follow these principles when writing code (recall them in your thin"
+   },
+   "interjected": {
+    "count": 2,
+    "sample": " (+ more)Search Tools  resultquery: limit:    __parentsteerinterjectsending to queued for interjected to rejected   unconfirmed   skilldirwebsitesubagentsfilesMCP toolstoolsReadingListedListi"
+   },
+   "Interjection": {
+    "count": 2,
+    "sample": "dle status fetch failedcatalog entry fetch failedCouldn't load entry: recap request failedInterjection failed. Requeued: Undo failed: Billing error: setting persistedsetting persist failed; ro"
+   },
+   "interjectionevent": {
+    "count": 2,
+    "sample": "ate_goal ack receiver dropped before harness could respondinterject-fallback-x.ai/session/interjectionevent crates/codegen/xai-grok-shell/src/session/acp_session_impl/interjection.rs:384event crate"
+   },
+   "interjectionagent_messagetask_completedsubagent_completednotification_draingoal_summarygoal_classifier_nudgescheduler_firedstop_hook_feedbackworking_directory_switchparent_human_messagesession_prefixdirect_bashgoal_setupunknownmid_turn_abortpermission_rejectedpermission_cancelledminimallowmediumxhighmaxa": {
+    "count": 1,
+    "sample": "chhumanprimarycompaction_metalength_continueproject_instructionsauto_continueauto_recoveryinterjectionagent_messagetask_completedsubagent_completednotification_draingoal_summarygoal_classifier_nudgescheduler_firedstop_hook_feedbackworking_directory_switchparent_human_messagesession_prefixdirect_bashgoal_setupunknownmid_turn_abortpermission_rejectedpermission_cancelledminimallowmediumxhighmaxa Display implementation returned an error unexpectedlycalled `Result::unwrap()` on an `Err"
+   },
+   "interject_promptFocus": {
+    "count": 1,
+    "sample": "has_file_changesWindow too small  navigatedisable worktreeDisable WorktreeChange directoryinterject_promptFocus scrollbackToggle todo paneToggle multilineReorder agent upPrevious sessiongit_info.refres"
+   },
+   "steerinterjectsending": {
+    "count": 1,
+    "sample": "y Source]Web Search  site  Sources:  (+ more)Search Tools  resultquery: limit:    __parentsteerinterjectsending to queued for interjected to rejected   unconfirmed   skilldirwebsitesubagentsfilesMCP to"
+   },
+   "midturn": {
+    "count": 1,
+    "sample": ">scheduled task executionresultsserverscore# ## Input shellexecute PAGER_IMPL_wait_status_midturncombinedDisplayTextshideFromScrollback  monitor events from  (use /workflow stop Your prom"
+   },
+   "interjectionIdFailed": {
+    "count": 1,
+    "sample": "ceworkflowPath event crates/codegen/xai-grok-pager/src/app/acp_handler/mod.rs:664sessionIdinterjectionIdFailed to parse x.ai/session/interjection hook ( hook failed, ignored: event crates/codegen/xai-"
+   },
+   "interjectnot": {
+    "count": 1,
+    "sample": "nterject contentcancelSubagentscouldn't send interjection: serialize interject paramsx.ai/interjectnot supported by this agent versionsession.create.backend_rpcstartup.session_create.backend_r"
+   },
+   "interjectFailed": {
+    "count": 1,
+    "sample": "erialize suggestPrompt paramsx.ai/suggestPromptserialize queue/interject paramsx.ai/queue/interjectFailed to send queue/interject notification: session.load.startSession loadingload_session: acp "
+   },
+   "InterjectPromptStashPromptEnableVoiceModeVoiceToggleScrollDownHalfPageUpHalfPageDownGotoTopGotoBottomSelectNextSelectPrevNextResponsePrevResponseExpandToggleFoldToggleExpandAllExpandAllThinkingToggleRawToggleMouseCaptureNextModelCancelTurnToggleYoloToggleMultilineFocusPromptFocusScrollbackCopyBlockMetaOpenBlockViewerOpenNextLinkOpenPrevLinkToggleTodosToggleTasksToggleQueueOpenSessionsOpenExtensionsEditPromptExternalCycleModeKillBgTaskDumpInputLogNewSessionNewSessionInWorktreeExitSessionCommandPaletteModelPickerShortcutsHelpOpenSettingsOpenDashboardDashboardSelectNextDashboardSelectPrevDashboardTogglePinDashboardBeginRenameDashboardStopDashboardCycleModeDashboardToggleGroupingDashboardReorderUpDashboardReorderDownDashboardShortcutsHelpDashboardExitDashboardOverlayExitDashboardOverlayPrevDashboardOverlayNextDashboardOverlayStopDashboardToggleAutoApproveDashboardOpenLocationPickerDashboardToggleWorktree": {
+    "count": 1,
+    "sample": "PlanarConfigUnsupportedDataTypeUnsupportedInterpretationMisalignedTileBoundariesSendPromptInterjectPromptStashPromptEnableVoiceModeVoiceToggleScrollDownHalfPageUpHalfPageDownGotoTopGotoBottomSelectNextSelectPrevNextResponsePrevResponseExpandToggleFoldToggleExpandAllExpandAllThinkingToggleRawToggleMouseCaptureNextModelCancelTurnToggleYoloToggleMultilineFocusPromptFocusScrollbackCopyBlockMetaOpenBlockViewerOpenNextLinkOpenPrevLinkToggleTodosToggleTasksToggleQueueOpenSessionsOpenExtensionsEditPromptExternalCycleModeKillBgTaskDumpInputLogNewSessionNewSessionInWorktreeExitSessionCommandPaletteModelPickerShortcutsHelpOpenSettingsOpenDashboardDashboardSelectNextDashboardSelectPrevDashboardTogglePinDashboardBeginRenameDashboardStopDashboardCycleModeDashboardToggleGroupingDashboardReorderUpDashboardReorderDownDashboardShortcutsHelpDashboardExitDashboardOverlayExitDashboardOverlayPrevDashboardOverlayNextDashboardOverlayStopDashboardToggleAutoApproveDashboardOpenLocationPickerDashboardToggleWorktree [?25lReaderInvalidAgentIdoverflow when multiplying duration by scalar [HDecode ErrorShall"
+   },
+   "steerGROK_SCROLL_MODEGROK_SCROLL_LINESGROK_SCROLL_SPEEDGROK_INVERT_SCROLL1": {
+    "count": 1,
+    "sample": "ce_enabledceiling_msmin_hzmax_hz autowheeltrackpad GROK_DEFAULT_SELECTED_PERMISSIONuiqueuesteerGROK_SCROLL_MODEGROK_SCROLL_LINESGROK_SCROLL_SPEEDGROK_INVERT_SCROLL1 invalid hex color: # unknown color name: pager.tomldotsmall-circlecirclesmall-triangledia"
+   },
+   "interjectionqueued_after_canceltransportsourcespawn_failedtimeoutauth_requiredclient_errorcompleteddirectqueueallowprimaryworkspacemid_turn_abortno_progressverificationinfraplannernot_achievedturn_startedsession_idturn_numberyolo_modeconversation_message_countsession_relationshipschema_versionredirect_kindphase_changedphasefirst_tokenloop_startedloop_indextool_startedtool_nametool_completedduration_msoutcometool_call_idrewriting_hookpermission_requestedpermission_resolvedwait_msturn_endedcancellation_categorycancellation_contextinterjectedimage_countyolo_toggledenabledreasontodo_gate_firedfirespendingin_progresstodo_gate_exhaustedlaziness_classifier_firedconfidencelaziness_nudge_firedlaziness_classifier_abortedgoal_classifier_firedattemptgoal_classifier_verdictverdictlatency_msgoal_classifier_fail_opengoal_classifier_fail_closedgoal_classifier_cap_reachedgoal_classifier_mid_turn_deferredpending_depthgoal_classifier_dropped_after_capattempts_seengoal_classifier_pending_queue_cleareddroppedgoal_planner_firedgoal_planner_completedgoal_planner_fail_closedgoal_strategist_firedconsecutive_failureseverygoal_strategist_completedgoal_strategist_failedgoal_strategist_contract_restore_failedgoal_summarizer_firedgoal_summarizer_completedgoal_summarizer_fail_opengoal_role_model_resolvedskeptic_idxagent_typegoal_role_model_fail_opengoal_verifier_skeptic_verdictrefutedgoal_verifier_aggregate_verdictrefuted_counttotalgoal_premature_stop_detectedpatternmcp_config_resolvedserversmcp_managed_config_resultserver_countmcp_oauth_discovery_timeoutserver_nameurlmcp_oauth_probe_resolvedmcp_server_startingtargettimeout_secmcp_server_connectedtool_counttoolsmcp_server_failederror_typeerror_messagemcp_tool_registration_failedmcp_init_completedtotal_serverssucceededfailedtotal_toolsis_reinitfailed_serversmcp_init_cancelledmcp_tool_call_startedcall_idmcp_tool_call_completedis_timeoutreconnect_attemptedauth_retry_attemptedmcp_transport_errormcp_transport_decode_errorsamplemcp_transport_reconnectmcp_auth_retrytriggerhealthyclient_statemcp_server_toggledwaiting_for_modelstreaming_textstreaming_reasoningtool_executionpermission_promptfailed": {
+    "count": 1,
+    "sample": "d to open tssuccesspermission_rejectedpermission_cancelledhook_deniedinvalid_toolcancelledinterjectionqueued_after_canceltransportsourcespawn_failedtimeoutauth_requiredclient_errorcompleteddirectqueueallowprimaryworkspacemid_turn_abortno_progressverificationinfraplannernot_achievedturn_startedsession_idturn_numberyolo_modeconversation_message_countsession_relationshipschema_versionredirect_kindphase_changedphasefirst_tokenloop_startedloop_indextool_startedtool_nametool_completedduration_msoutcometool_call_idrewriting_hookpermission_requestedpermission_resolvedwait_msturn_endedcancellation_categorycancellation_contextinterjectedimage_countyolo_toggledenabledreasontodo_gate_firedfirespendingin_progresstodo_gate_exhaustedlaziness_classifier_firedconfidencelaziness_nudge_firedlaziness_classifier_abortedgoal_classifier_firedattemptgoal_classifier_verdictverdictlatency_msgoal_classifier_fail_opengoal_classifier_fail_closedgoal_classifier_cap_reachedgoal_classifier_mid_turn_deferredpending_depthgoal_classifier_dropped_after_capattempts_seengoal_classifier_pending_queue_cleareddroppedgoal_planner_firedgoal_planner_completedgoal_planner_fail_closedgoal_strategist_firedconsecutive_failureseverygoal_strategist_completedgoal_strategist_failedgoal_strategist_contract_restore_failedgoal_summarizer_firedgoal_summarizer_completedgoal_summarizer_fail_opengoal_role_model_resolvedskeptic_idxagent_typegoal_role_model_fail_opengoal_verifier_skeptic_verdictrefutedgoal_verifier_aggregate_verdictrefuted_counttotalgoal_premature_stop_detectedpatternmcp_config_resolvedserversmcp_managed_config_resultserver_countmcp_oauth_discovery_timeoutserver_nameurlmcp_oauth_probe_resolvedmcp_server_startingtargettimeout_secmcp_server_connectedtool_counttoolsmcp_server_failederror_typeerror_messagemcp_tool_registration_failedmcp_init_completedtotal_serverssucceededfailedtotal_toolsis_reinitfailed_serversmcp_init_cancelledmcp_tool_call_startedcall_idmcp_tool_call_completedis_timeoutreconnect_attemptedauth_retry_attemptedmcp_transport_errormcp_transport_decode_errorsamplemcp_transport_reconnectmcp_auth_retrytriggerhealthyclient_statemcp_server_toggledwaiting_for_modelstreaming_textstreaming_reasoningtool_executionpermission_promptfailed to write whole bufferinternal error: entered unreachable code Error @@@@@@@@@@@@@@@@@@@@@"
+   },
+   "steerqueuestruct": {
+    "count": 1,
+    "sample": "ipedfailed to start osascript pipe reader: pbpaste-Prefertxtno clipboard backend availablesteerqueuestruct UiConfigstruct Infostruct ContextualHintsa formatting trait implementation returned an er"
+   },
+   "interjectioncountcrates": {
+    "count": 1,
+    "sample": "ell/src/session/acp_session_impl/interjection.rs:412xai_grok_shell::session::acp_session::interjectioncountcrates/codegen/xai-grok-shell/src/session/acp_session_impl/interjection.rsinterjection drain abo"
+   },
+   "InterjectionParentInterjectTransport": {
+    "count": 1,
+    "sample": "eterministictransientdegeneratenew connector created in cache populated above1.xhyperHumanInterjectionParentInterjectTransport is closedreceiveProtocol error on incoming message: Invalid requestIgnoring unparsable in"
+   },
+   "PushUserMessage": {
+    "count": 1,
+    "sample": "MetadataHasDanglingToolCallsGetConversationItemAtGetLastUserQueryTextTakeHarnessTraceTurnsPushUserMessageAndAckStripConversationImagesChatStateActor dead: send failedApplyTurnRequestPruningChatSt"
+   },
+   "interjectionIdqueuedMCP": {
+    "count": 1,
+    "sample": "led: using jj workspace for subagent isolationallowCopyoutfailed to deserialize response: interjectionIdqueuedMCP Doctor   Config sources   No MCP servers configured.   Run `grok mcp add --help` to get s"
+   },
+   "interjectionInjected": {
+    "count": 1,
+    "sample": "ell/src/session/acp_session_impl/interjection.rs:366expanded skill references in mid-turn interjectionInjected mid-turn interjections as standalone synthetic user messagesinterjection drain skipped: c"
+   },
+   "interjections": {
+    "count": 1,
+    "sample": "pl/interjection.rs:366expanded skill references in mid-turn interjectionInjected mid-turn interjections as standalone synthetic user messagesinterjection drain skipped: chat-state actor unavail"
+   },
+   "interjectiondisplayTextevent": {
+    "count": 1,
+    "sample": "p_session_impl/interjection.rs:82Converted stranded interjection into a queued prompt turninterjectiondisplayTextevent crates/codegen/xai-grok-shell/src/session/acp_session_impl/mcp_snapshot.rs:259xai_grok_sh"
+   },
+   "interjectionfront_awaiting_commitshell": {
+    "count": 1,
+    "sample": "prompt to pending_inputsserver_queue_inputcancels_turnblocked_in_waitgoal_activemerged_as_interjectionfront_awaiting_commitshell.prompt.send_now_decisionsyntheticshell.prompt.hook_block_hold_releasedPromptBlockMeta ser"
+   },
+   "MidTurn": {
+    "count": 1,
+    "sample": "ool_calllast_sample.output_tokens true_noopHookDeniedPermissionRejectedPermissionCancelledMidTurnAbortmax_turns_reachedaction_stationaritytask_abortedoutput does not match the required sc"
+   },
+   "interjectionscancel": {
+    "count": 1,
+    "sample": "nduser_cancel rewind_dispositionshell.cancel.rewind_decisionshell.prompt.send_now_flushed_interjectionscancel.kill_foregroundCommand was moved to the background because the user sent a new message. T"
+   },
+   "interjectsession": {
+    "count": 1,
+    "sample": "r events after TaskCompleted auto-wakequeue_removequeue_reorderqueue_clearqueue_editqueue_interjectsession summary savedQueued mid-turn interjectionworkflow-completed-A background workflow stopped"
+   },
+   "interjectionworkflow": {
+    "count": 1,
+    "sample": "movequeue_reorderqueue_clearqueue_editqueue_interjectsession summary savedQueued mid-turn interjectionworkflow-completed-A background workflow stopped. Review the workflow completion reminder, report "
+   },
+   "steerplugin": {
+    "count": 1,
+    "sample": "SendSubagentMessageInputactive-message telemetry: tool arguments did not parse; recording steerplugin.loadedxai_grok_shell::session::telemetryplugin_versionplugin_scopehas_mcpcommand_path_cou"
+   },
+   "steerinterjectBashToolInputis_backgroundfiles_with_matchesGrepSearchInputoutput_mode": {
+    "count": 1,
+    "sample": "edNotActiveOrFinalizingAdmissionUncertainNotAcceptedBeforeDeadlineUnsupportedChannelClosedsteerinterjectBashToolInputis_backgroundfiles_with_matchesGrepSearchInputoutput_mode-B-ihead_limitsubagent wake failed before start; keeping prior recordbackground subagent f"
+   },
+   "InterjectRequeststruct": {
+    "count": 1,
+    "sample": "a with 5 elementsstruct ProxyOptionalParamstruct ProxyOptionalParam with 2 elementsstruct InterjectRequeststruct InterjectRequest with 4 elementsstruct variant RetryState::Exhaustedstruct variant RetryS"
+   },
+   "InterjectRequest": {
+    "count": 1,
+    "sample": " ProxyOptionalParamstruct ProxyOptionalParam with 2 elementsstruct InterjectRequeststruct InterjectRequest with 4 elementsstruct variant RetryState::Exhaustedstruct variant RetryState::Failedstruc"
+   },
+   "steerJoin": {
+    "count": 1,
+    "sample": "sion_uncertainnot_accepted_before_deadlineunsupportedmax_bytesobserved_byteschannel_closedsteerJoin the current turn at its next safe point (default).queueWait as a later turn.interjectUrge"
+   },
+   "interjectUrgent": {
+    "count": 1,
+    "sample": "osedsteerJoin the current turn at its next safe point (default).queueWait as a later turn.interjectUrgent: delivered ahead of pending steers at the earliest safe point; also interrupts a wait on "
+   },
+   "MIDTURN": {
+    "count": 1,
+    "sample": "d735ca9763fc677E 6format_waiting_for_subject17ha2b907bea9f26970E 30PAGER_IMPL_WAIT_STATUS_MIDTURN17hdaba05eb47ba93e7E 4meta16 5spawn 7tracker 5PromptInputMode11is_exit_key17h41736b83c6434"
+   }
+  },
+  "other_surfaces": {
+   "websocket": 190,
+   "jsonrpc": 73,
+   "session/prompt": 18,
+   "json-rpc": 16,
+   "ws://": 6,
+   "--stdio": 2,
+   "stream-json": 1
+  }
+ },
+ "kimi-cli": {
+  "roots": [
+   "/Users/ylminiserver/.kimi-code"
+  ],
+  "files_scanned": 1944,
+  "bytes_scanned": 348076175,
+  "steering_vocabulary": {
+   "steer": {
+    "count": 758,
+    "sample": "nstructor(conn, apiClient) { this.conn = conn; this.apiClient = apiClient; Sets inputs to steer music generation. Updates the session's current weighted prompts. @param params - Contain"
+   },
+   "steered": {
+    "count": 78,
+    "sample": "(), steeredAt: string() PromptSteered = class extends AgentEvent2 { static type = \"prompt.steered\"; static durable = true; static observable = true; static schema = promptSteeredSchema; P"
+   },
+   "Steer": {
+    "count": 40,
+    "sample": "erationMode[\"MUSIC_GENERATION_MODE_UNSPECIFIED\"] = \"MUSIC_GENERATION_MODE_UNSPECIFIED\"; * Steer text prompts to regions of latent space with higher quality music. MusicGenerationMode[\"Q"
+   },
+   "queuedMessage": {
+    "count": 32,
+    "sample": "t = async () => { const taskId = request.params.taskId; if (this._taskMessageQueue) { let queuedMessage; while (queuedMessage = await this._taskMessageQueue.dequeue(taskId, extra.sessionId)) { "
+   },
+   "steeredAt": {
+    "count": 31,
+    "sample": "tId: string(), activePromptId: string(), promptIds: array(string()), content: custom$1(), steeredAt: string() PromptSteered = class extends AgentEvent2 { static type = \"prompt.steered\"; sta"
+   },
+   "Steers": {
+    "count": 30,
+    "sample": "pOrdinals = /* @__PURE__ */ new Map(); stepUsageByTurn = /* @__PURE__ */ new Map(); mergedSteers = []; pendingFullCut = false; pendingClearTimer; todoItems; todoUpdatedAt; planMode = fal"
+   },
+   "appendMessage": {
+    "count": 21,
+    "sample": "void 0; const folds = new Map(meta.folds); const domainAppend = folds.get(protocol.events.appendMessage); folds.set(protocol.events.appendMessage, (state, event, ctx) => { if (!custom && protoc"
+   },
+   "AppendMessage": {
+    "count": 19,
+    "sample": "/contextMemory/contextEvents.ts var contextMessageSchema, loopRecordedEventSchema, contextAppendMessageSchema, ContextAppendMessage, contextAppendLoopEventSchema, ContextAppendLoopEvent, contex"
+   },
+   "Steered": {
+    "count": 19,
+    "sample": "edSchema, PromptCompleted, promptAbortedSchema, PromptAborted, promptSteeredSchema, PromptSteered, PromptQueued, PromptSubmitted, PromptStarted; var init_promptEvents = __esmMin((() => { "
+   },
+   "QueuedMessage": {
+    "count": 14,
+    "sample": "n.init(); host.track(\"init_complete\"); host.streamingUI.finalizeTurn((item) => { host.sendQueuedMessage(session, item); } catch (error) { if (isAbortError(error)) { host.setAppState({ streaming"
+   },
+   "steerQueued": {
+    "count": 14,
+    "sample": "runSteerIntoTurn:F,resumeQueueIfIdle:O,steerPrompt:B,steerPromptDirect:P,steerPromptNow:W,steerQueued:R,steerQueuedNow:$,uploadImage:U,enqueue:q,flushQueueHead:Q,resumeAfterExhaustedHeadChang"
+   },
+   "InterruptWith": {
+    "count": 12,
+    "sample": "ime::IncrementUseCounter Runtime::BytecodeBudgetInterrupt_Ignition Runtime::BytecodeBudgetInterruptWithStackCheck_Ignition Runtime::BytecodeBudgetInterrupt_Sparkplug Runtime::BytecodeBudgetInte"
+   },
+   "steerSignal": {
+    "count": 11,
+    "sample": "{ isError: true, output: `Task not found: ${args.task_id}` let waited; const signal = ctx.steerSignal === void 0 ? ctx.signal : AbortSignal.any([ctx.signal, ctx.steerSignal]); const progress "
+   },
+   "steering": {
+    "count": 11,
+    "sample": "mum number of new turns that may be triggered by background-task completions, to keep the steering loop bounded (the default is effectively unbounded)|\\n\\n`keep_alive_on_exit` can be overr"
+   },
+   "SteerDeduped": {
+    "count": 10,
+    "sample": ".promptId === void 0 ? void 0 : info.userMessageId ?? turnUserMessageIdOf(turnId), openingSteerDeduped: false this.turns.set(turnId, this.currentTurn); this.timelineIds.push(turnId); seedTask("
+   },
+   "steerIfActive": {
+    "count": 8,
+    "sample": "ubmit({ message: { role: \"user\", content: [...input] meta: { origin, tracked: !steer }, { steerIfActive: steer }); return this.loop.promptHandle(id).launched; renderSkillPrompt(skill, rawArgs) "
+   },
+   "steers": {
+    "count": 8,
+    "sample": ".skills * Facade (`agentPromptService.submitSteer`). Matches v1 on both paths: mid-turn * steers join the running turn, and an idle-session steer degrades to * launching a fresh turn (th"
+   },
+   "steeredContents": {
+    "count": 8,
+    "sample": "MessagesIntoSnapshot(messages, options) { const items = []; const attachments = []; const steeredContents = new Map([...options?.steeredContents ?? []].map(([key, byKind]) => [key, new Map(byKind"
+   },
+   "SteeredTurnFailedError": {
+    "count": 7,
+    "sample": " / `steer`) before exiting. var run_v2_print_exports = /* @__PURE__ */ __exportAll({ PrintSteeredTurnFailedError: () => PrintSteeredTurnFailedError, applyPrintBackgroundPolicy: () => applyPrintBackgroun"
+   },
+   "steerController": {
+    "count": 5,
+    "sample": "is.activeRequestTrace, toolTurnId: () => this.active?.id, steerSignal: () => this.active?.steerController.signal, source: () => this.active === void 0 ? void 0 : { type: \"turn\", turnId: this.acti"
+   },
+   "SteerStates": {
+    "count": 5,
+    "sample": "k unwireSession}, which every close * path (client, engine, delete) funnels through. printSteerStates = /* @__PURE__ */ new Map(); * The model/provider registries (`IModelService` / `IProvide"
+   },
+   "SteerQueued": {
+    "count": 5,
+    "sample": "onSubmit:He[18]||(He[18]=rt=>o(\"submit\",rt)),onSteer:He[19]||(He[19]=rt=>o(\"steer\",rt)),onSteerQueued:He[20]||(He[20]=rt=>o(\"steerQueued\",rt)),onCommand:He[21]||(He[21]=rt=>o(\"command\",rt)),o"
+   },
+   "steeredByKind": {
+    "count": 4,
+    "sample": "ey = JSON.stringify(message.content ?? []); const steerKind = originKind ?? \"user\"; const steeredByKind = message.id !== void 0 && options?.turnPromptIds?.has(message.id) === true ? void 0 : st"
+   },
+   "steerUserMessage": {
+    "count": 4,
+    "sample": "isting.timestamp = event.time; ops.push(this.userOp(existing)); return ops; ops.push(this.steerUserMessage(turn, event.input, { origin: userOriginOf(event.origin), skillActivations: skillActivatio"
+   },
+   "SteerResultSchema": {
+    "count": 4,
+    "sample": "hema, promptListResponseSchema, promptSubmitResultSchema, promptSteerRequestSchema, promptSteerResultSchema, promptAbortResponseSchema; var init_rest_prompt = __esmMin((() => { init_zod$1(); init_i"
+   },
+   "steerManyRoute": {
+    "count": 4,
+    "sample": "n?.dispose(); app.post(submitRoute.path, submitRoute.options, submitRoute.handler); const steerManyRoute = defineRoute({ method: \"POST\", path: \"/sessions/{session_id}/prompts::steer\", body: prom"
+   },
+   "SteerPromptIds": {
+    "count": 4,
+    "sample": "ups; currentTurn; currentStep; pendingTaskNotifications = []; pendingSteers = []; unpairedSteerPromptIds = []; stepOrdinals = /* @__PURE__ */ new Map(); frameOrdinal = 0; attachmentOrdinal = 0; "
+   },
+   "steerUserFrame": {
+    "count": 4,
+    "sample": "nId, step if (this.currentStep !== void 0) for (const pending of this.pendingSteers) this.steerUserFrame(ops, turnId, this.currentStep.stepId, pending.input, pending.files, pending.promptIds, pe"
+   },
+   "Steerable": {
+    "count": 4,
+    "sample": " { super(); this.messages = options.messages; if (options.messages.length > 0) { const hasSteerable = options.messages.some((m) => m.mode !== \"bash\"); const canSteer = options.canSteerImmed"
+   },
+   "SteerText": {
+    "count": 4,
+    "sample": "at(-1)?.type !== \"text\"; if (parts.length > 0 && !(lastIsMedia && startsWithMedia)) appendSteerText(parts, \"\\n\\n\"); if (item.parts !== void 0 && item.parts.length > 0) for (const part of it"
+   },
+   "SteerInFlight": {
+    "count": 4,
+    "sample": ":j,noteQueueFlushFailure:F,clearQueueFlushFailure:O,noteSteerStart:B,noteSteerSettled:P,isSteerInFlight:W,noteNonComposerPromptId:R,recentNonComposerPromptIds:$,setInFlight:U,stampPromptIds:q,c"
+   },
+   "steerPrompt": {
+    "count": 4,
+    "sample": ",promptBacklog:M,wouldEnqueuePrompt:z,sendPrompt:j,runSteerIntoTurn:F,resumeQueueIfIdle:O,steerPrompt:B,steerPromptDirect:P,steerPromptNow:W,steerQueued:R,steerQueuedNow:$,uploadImage:U,enque"
+   },
+   "steerPromptDirect": {
+    "count": 4,
+    "sample": ":M,wouldEnqueuePrompt:z,sendPrompt:j,runSteerIntoTurn:F,resumeQueueIfIdle:O,steerPrompt:B,steerPromptDirect:P,steerPromptNow:W,steerQueued:R,steerQueuedNow:$,uploadImage:U,enqueue:q,flushQueueHead:"
+   },
+   "SteerSchema": {
+    "count": 3,
+    "sample": "llations].toSorted((a, b) => a - b) var turnInputShape, turnPromptSchema, TurnPrompt, turnSteerSchema, TurnSteer, turnCancelSchema, TurnCancel, turnEndedSchema, TurnEnded, turnKey; var init_t"
+   },
+   "SteeredSchema": {
+    "count": 3,
+    "sample": ".ts var promptCompletedSchema, PromptCompleted, promptAbortedSchema, PromptAborted, promptSteeredSchema, PromptSteered, PromptQueued, PromptSubmitted, PromptStarted; var init_promptEvents = __e"
+   },
+   "SteerMessages": {
+    "count": 3,
+    "sample": "s(message) { return message.content.slice(bundledSkillBlockCount(message)); function mergeSteerMessages(messages) { const clientMetadata = messages.some((message) => (userOriginOf$1(message.ori"
+   },
+   "steerPayloadSchema": {
+    "count": 3,
+    "sample": "omptSkillActivationSchema$1, promptWithSkillsPayloadSchema, promptWithSkillsResultSchema, steerPayloadSchema, activateSkillPayloadSchema, promptLaunchResultSchema, runShellCommandPayloadSchema, shel"
+   },
+   "SteeredLeftovers": {
+    "count": 3,
+    "sample": "}`, ordinal, origin, steps: [] items.push(draftToTurnItem(turn)); return turn; const flushSteeredLeftovers = () => { const leftovers = pendingNotificationFrames.filter((pending) => pending.steered"
+   },
+   "steerKind": {
+    "count": 3,
+    "sample": " message.origin continue; const contentKey = JSON.stringify(message.content ?? []); const steerKind = originKind ?? \"user\"; const steeredByKind = message.id !== void 0 && options?.turnPromp"
+   },
+   "steeredRemaining": {
+    "count": 3,
+    "sample": "turnPromptIds?.has(message.id) === true ? void 0 : steeredContents.get(contentKey); const steeredRemaining = steeredByKind?.get(steerKind) ?? 0; if (steeredByKind !== void 0 && steeredRemaining > "
+   }
+  },
+  "other_surfaces": {
+   "websocket": 1178,
+   "jsonrpc": 180,
+   "listen(": 53,
+   "/v1/sessions": 25,
+   "json-rpc": 25,
+   "stream-json": 7,
+   "ws://": 2,
+   "session/prompt": 2
+  }
+ },
+ "opencode": {
+  "roots": [
+   "/opt/homebrew/bin/opencode",
+   "/opt/homebrew/lib/node_modules/opencode-ai"
+  ],
+  "files_scanned": 1,
+  "bytes_scanned": 143182562,
+  "steering_vocabulary": {
+   "steer": {
+    "count": 77,
+    "sample": "d),T_=yield*c9.make(),AT=!1,Z_=s;if(p){let o=yield*e_.latestSequence(D,j.id),J_=0;if(p===\"steer\")J_=yield*r9.promoteSteers(D,_,j.id,o);if(p===\"queue\")J_+=Number(yield*r9.promoteNextQueu"
+   },
+   "appendMessage": {
+    "count": 10,
+    "sample": "et Y=Q(X.callID);if(Y<0)return;if(x.messages[Y]?.type!==\"shell\")return;x.messages[Y]=X})},appendMessage(X){return Z.sync(()=>{x.messages.push(X)})}}}function K9(x,$){let J=(W,D)=>W?.content.fin"
+   },
+   "Steers": {
+    "count": 4,
+    "sample": "1,Z_=s;if(p){let o=yield*e_.latestSequence(D,j.id),J_=0;if(p===\"steer\")J_=yield*r9.promoteSteers(D,_,j.id,o);if(p===\"queue\")J_+=Number(yield*r9.promoteNextQueued(D,_,j.id)),J_+=yield*r9."
+   },
+   "interjections": {
+    "count": 2,
+    "sample": "l language. # Working with the user ## General Do not begin responses with conversational interjections or meta commentary. Avoid openers such as acknowledgements (\"Done \\u2014\", \"Got it\", \"Gre"
+   },
+   "Steer": {
+    "count": 2,
+    "sample": ".general.row.followup.option.queue\":\"Queue\",\"settings.general.row.followup.option.steer\":\"Steer\",\"settings.general.row.showFileTree.title\":\"File tree\",\"settings.general.row.showFileTree"
+   },
+   "steerable": {
+    "count": 1,
+    "sample": "view\",name:\"Gemini 3.1 Flash TTS Preview\",description:\"Low-latency speech generation with steerable prompts and expressive audio tags\",family:\"gemini-flash\",attachment:!1,reasoning:!0,reaso"
+   },
+   "interruptWith": {
+    "count": 1,
+    "sample": "Unsafe:()=>C5,make:()=>_s,isDoneUnsafe:()=>zC,isDone:()=>Rs,isDeferred:()=>Bs,into:()=>NC,interruptWith:()=>g3,interrupt:()=>zs,failSync:()=>Us,failCauseSync:()=>qs,failCause:()=>yq,fail:()=>qC"
+   },
+   "steeri": {
+    "count": 1,
+    "sample": "or.notFound.description\":\"See vahekaart osutab seansile, mida selles serveris enam ei eksisteeri.\",\"session.error.notFound.closeTab\":\"Sule vahekaart\",\"session.error.serverConnection\":\"Se"
+   }
+  },
+  "other_surfaces": {
+   "websocket": 314,
+   "listen(": 51,
+   "jsonrpc": 48,
+   "--stdio": 14,
+   "ws://": 9,
+   "unix://": 8,
+   "namedpipe": 5,
+   "session/prompt": 1
+  }
+ },
+ "zcode": {
+  "roots": [
+   "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
+  ],
+  "files_scanned": 1,
+  "bytes_scanned": 12615227,
+  "steering_vocabulary": {
+   "pendingInput": {
+    "count": 184,
+    "sample": "num([\"sendText\",\"sendGoalCommand\",\"compact\"]),yEt=f.enum([\"queue\",\"guide\"]),ikn=f.object({pendingInputId:pe,inputId:pe.optional(),queryId:pe.optional(),input:f.string(),inputPreview:f.string()"
+   },
+   "PendingInput": {
+    "count": 68,
+    "sample": "r.payload,o=new Map(t.pendingSteerInputs.map(l=>[l.pendingInputId,l])),i=new Set(n.orderedPendingInputIds),s=n.orderedPendingInputIds.flatMap(l=>{let c=o.get(l);return c?[c]:[]}),u=t.pendingSt"
+   },
+   "SteerInputs": {
+    "count": 29,
+    "sample": "urnCount:0,totalTokenCount:0,contextUsed:0,contextWindow:2e5,pendingPermissions:[],pendingSteerInputs:[],activeToolCalls:[],streamingToolLedger:[],backgroundTasks:[],currentTurnId:void 0,last"
+   },
+   "steer": {
+    "count": 25,
+    "sample": "d\",\"compact\"]),text:f.string(),attachments:f.array(qB).default([]),delivery:gbn,order:_bn,steer:ybn,dispatch:NBe,admittedAt:Hn,provenance:f.object({sourceCommandId:f.string().min(1),que"
+   },
+   "SteerDiscarded": {
+    "count": 16,
+    "sample": "hanged\",TurnSteerDrained:\"turn_steer_drained\",TurnSteerRejected:\"turn_steer_rejected\",TurnSteerDiscarded:\"turn_steer_discarded\",SessionInputPromoted:\"session_input_promoted\",TurnSteerReordered:\""
+   },
+   "steerable": {
+    "count": 15,
+    "sample": "on Azr(){let e=this.activeTurn;if(e)return{kind:e.kind,queueLength:e.pendingInputs.length,steerable:e.steerable,turnId:e.turnId}}function Rzr(e){return this.cachedTools===null&&(this.cached"
+   },
+   "mid_turn": {
+    "count": 14,
+    "sample": "\",\"reactive\",\"session_memory\"]).optional(),phase:f.enum([\"standalone_turn\",\"pre_request\",\"mid_turn\",\"reactive\"]).optional(),compactReason:f.string().optional(),boundaryId:f.string().option"
+   },
+   "SteerQueued": {
+    "count": 14,
+    "sample": "ed:\"session_ended\",TurnStarted:\"turn_started\",TurnInputReceived:\"turn_input_received\",TurnSteerQueued:\"turn_steer_queued\",TurnSteerDeliveryChanged:\"turn_steer_delivery_changed\",TurnSteerDispa"
+   },
+   "SteerDrained": {
+    "count": 12,
+    "sample": ":\"turn_steer_delivery_changed\",TurnSteerDispatchChanged:\"turn_steer_dispatch_changed\",TurnSteerDrained:\"turn_steer_drained\",TurnSteerRejected:\"turn_steer_rejected\",TurnSteerDiscarded:\"turn_ste"
+   },
+   "steerTurn": {
+    "count": 12,
+    "sample": ")}return r.length}var Qm=T(()=>{\"use strict\";Ut();Yi();ps();a(Uzr,\"hasSteerInput\");a($zr,\"steerTurn\");a(qzr,\"enqueueDeferredInput\");a(Vzr,\"beginActiveTurn\");a(Gzr,\"reserveTurnStart\");a(Wzr,"
+   },
+   "Steer": {
+    "count": 11,
+    "sample": "bn=f.enum([\"assistant\",\"tool\",\"subagent\",\"compact\",\"goalVerifier\",\"goalContinuation\",\"turnSteer\",\"mixed\",\"unknown\"]),Qbn=f.object({kind:f.enum([\"primaryTurn\",\"foregroundSubagent\",\"compa"
+   },
+   "SteerDeliveryChanged": {
+    "count": 9,
+    "sample": "_started\",TurnInputReceived:\"turn_input_received\",TurnSteerQueued:\"turn_steer_queued\",TurnSteerDeliveryChanged:\"turn_steer_delivery_changed\",TurnSteerDispatchChanged:\"turn_steer_dispatch_changed\",Turn"
+   },
+   "SteerReordered": {
+    "count": 9,
+    "sample": "rnSteerDiscarded:\"turn_steer_discarded\",SessionInputPromoted:\"session_input_promoted\",TurnSteerReordered:\"turn_steer_reordered\",QueueAutoDrainChanged:\"queue_auto_drain_changed\",FollowupModeChang"
+   },
+   "SteerDispatchChanged": {
+    "count": 7,
+    "sample": "teerQueued:\"turn_steer_queued\",TurnSteerDeliveryChanged:\"turn_steer_delivery_changed\",TurnSteerDispatchChanged:\"turn_steer_dispatch_changed\",TurnSteerDrained:\"turn_steer_drained\",TurnSteerRejected:\"tu"
+   },
+   "SteerForNextRequest": {
+    "count": 5,
+    "sample": "s,traceContext:t.turnTraceContext});if(!n||n.pendingInputIds.length===0)return!1;t.drainedSteerForNextRequest=n,XI(t.turnRequestState,n.runtimeEntries),t.currentUserMessageId=n.latestMessageId??t.cur"
+   },
+   "steering": {
+    "count": 4,
+    "sample": "negative().optional()}).strict(),ybn=f.object({state:f.enum([\"notRequested\",\"submitting\",\"steering\",\"guided\",\"fellBack\"]),reasonCode:f.string().optional()}).strict(),NBe=f.object({state:f."
+   },
+   "MidTurn": {
+    "count": 4,
+    "sample": ":\"local_tool_result_clear\"},Zu={StandaloneTurn:\"standalone_turn\",PreRequest:\"pre_request\",MidTurn:\"mid_turn\",Reactive:\"reactive\"},Pl={UserRequested:\"user_requested\",ContextLimit:\"context_"
+   },
+   "steerDelivery": {
+    "count": 4,
+    "sample": "this.messageHistory.addEntries([k]),p.push(k),await this.persistUserPrompt(x,v.input,b,i,{steerDelivery:w,sessionInputId:v.id,sourceCommandId:v.intent?.sourceCommandId??String(v.queryId??v.id),"
+   },
+   "steerQueued": {
+    "count": 3,
+    "sample": "n.resumed\",\"session.updated\",\"session.titleUpdated\",\"session.closed\",\"turn.started\",\"turn.steerQueued\",\"turn.steerDrained\",\"turn.completed\",\"turn.failed\",\"message.upserted\",\"message.removed\","
+   },
+   "steerDrained": {
+    "count": 3,
+    "sample": ".updated\",\"session.titleUpdated\",\"session.closed\",\"turn.started\",\"turn.steerQueued\",\"turn.steerDrained\",\"turn.completed\",\"turn.failed\",\"message.upserted\",\"message.removed\",\"part.started\",\"part"
+   },
+   "Steerable": {
+    "count": 3,
+    "sample": ".logger?.debug(\"Turn steer queued\",{..._e(r.traceContext),activeTurnKind:r.kind,activeTurnSteerable:r.steerable,inputId:t.inputId,queryId:i,event:\"turn.steer.queued\",expectedTurnId:t.expect"
+   },
+   "SteeringContext": {
+    "count": 3,
+    "sample": "s\",\"mcp_tool_schemas\",\"messages\"]);a(L$r,\"logContextUsageSnapshot\");a(B$r,\"logModelRequestSteeringContext\");a(j$r,\"buildModelMessageTailDiagnostics\");a(F$r,\"buildContextUsageSnapshot\");a(z$r,\"bui"
+   },
+   "steered_input": {
+    "count": 3,
+    "sample": "ompletion,kind:\"started_turn\",turnId:m.turnId}):(d?.(),m.kind===\"queued\"&&await r(l.text,\"steered_input\",u?.traceContext??e.traceContext,p.storedAttachments),m)}catch(p){throw d?.(),p}},\"sendIn"
+   },
+   "QueuedMessage": {
+    "count": 3,
+    "sample": "(this,\"ZCodeProtocolNdjsonConnection\")}options;buffer=\"\";processing=Promise.resolve();lastQueuedMessageStarted=Promise.resolve();closedPromise;resolveClosed;rejectClosed;terminal=!1;transportCl"
+   },
+   "SteerInputCount": {
+    "count": 2,
+    "sample": "gative(),recoveredCompactTimelineCount:f.number().int().nonnegative().optional(),recoveredSteerInputCount:f.number().int().nonnegative().optional(),resumedTodoCount:f.number().int().nonnegative()"
+   },
+   "SteerRejected": {
+    "count": 2,
+    "sample": "erDispatchChanged:\"turn_steer_dispatch_changed\",TurnSteerDrained:\"turn_steer_drained\",TurnSteerRejected:\"turn_steer_rejected\",TurnSteerDiscarded:\"turn_steer_discarded\",SessionInputPromoted:\"ses"
+   },
+   "steered": {
+    "count": 2,
+    "sample": ",\"failed\"]),messageId:E.string(),agentId:E.string().optional(),delivery:E.enum([\"queued\",\"steered\",\"resumed_background\"]).optional(),error:E.string().optional(),message:E.string().optiona"
+   },
+   "SteerDelivery": {
+    "count": 2,
+    "sample": "eerDelivery||o?.clientId||o?.intent||o?.executionKind?{metadata:{...o?.steerDelivery?{turnSteerDelivery:o.steerDelivery}:{},...o?.intent?{inputIntent:o.intent}:{},...u?{conversationInputIntent:"
+   },
+   "steer_queued": {
+    "count": 1,
+    "sample": ",TurnStarted:\"turn_started\",TurnInputReceived:\"turn_input_received\",TurnSteerQueued:\"turn_steer_queued\",TurnSteerDeliveryChanged:\"turn_steer_delivery_changed\",TurnSteerDispatchChanged:\"turn_st"
+   },
+   "steer_delivery_changed": {
+    "count": 1,
+    "sample": ":\"turn_input_received\",TurnSteerQueued:\"turn_steer_queued\",TurnSteerDeliveryChanged:\"turn_steer_delivery_changed\",TurnSteerDispatchChanged:\"turn_steer_dispatch_changed\",TurnSteerDrained:\"turn_steer_drai"
+   },
+   "steer_dispatch_changed": {
+    "count": 1,
+    "sample": "ed\",TurnSteerDeliveryChanged:\"turn_steer_delivery_changed\",TurnSteerDispatchChanged:\"turn_steer_dispatch_changed\",TurnSteerDrained:\"turn_steer_drained\",TurnSteerRejected:\"turn_steer_rejected\",TurnSteerD"
+   },
+   "steer_drained": {
+    "count": 1,
+    "sample": "ry_changed\",TurnSteerDispatchChanged:\"turn_steer_dispatch_changed\",TurnSteerDrained:\"turn_steer_drained\",TurnSteerRejected:\"turn_steer_rejected\",TurnSteerDiscarded:\"turn_steer_discarded\",Sessio"
+   },
+   "steer_rejected": {
+    "count": 1,
+    "sample": "urn_steer_dispatch_changed\",TurnSteerDrained:\"turn_steer_drained\",TurnSteerRejected:\"turn_steer_rejected\",TurnSteerDiscarded:\"turn_steer_discarded\",SessionInputPromoted:\"session_input_promoted\","
+   },
+   "steer_discarded": {
+    "count": 1,
+    "sample": "ned:\"turn_steer_drained\",TurnSteerRejected:\"turn_steer_rejected\",TurnSteerDiscarded:\"turn_steer_discarded\",SessionInputPromoted:\"session_input_promoted\",TurnSteerReordered:\"turn_steer_reordered\","
+   },
+   "steer_reordered": {
+    "count": 1,
+    "sample": "n_steer_discarded\",SessionInputPromoted:\"session_input_promoted\",TurnSteerReordered:\"turn_steer_reordered\",QueueAutoDrainChanged:\"queue_auto_drain_changed\",FollowupModeChanged:\"followup_mode_chan"
+   },
+   "SteerInput": {
+    "count": 1,
+    "sample": "ted\",targetTurnId:o})}return r.length}var Qm=T(()=>{\"use strict\";Ut();Yi();ps();a(Uzr,\"hasSteerInput\");a($zr,\"steerTurn\");a(qzr,\"enqueueDeferredInput\");a(Vzr,\"beginActiveTurn\");a(Gzr,\"reserv"
+   },
+   "steerSubagentMessage": {
+    "count": 1,
+    "sample": "t=>setTimeout(t,e))}var SUr=T(()=>{\"use strict\";a(kUr,\"createSubagentMessageSink\");a(nci,\"steerSubagentMessage\");a(oci,\"formatSubagentCoordinatorMessage\");a(ici,\"sleep\")});function IUr(e,t){if(e===\"*\""
+   },
+   "steering_context": {
+    "count": 1,
+    "sample": "putVisibleAtTail:n,drainedPendingInputIds:e.drained?.pendingInputIds,event:\"model.request.steering_context\",injectedMessageIds:e.drained?.injectedMessageIds,latestUserMessageFromEnd:kjr(e.messages"
+   },
+   "steer_active_turn": {
+    "count": 1,
+    "sample": "d 0&&p?.steerable===!0&&(r?.queueDelivery===\"guide\"||r?.delivery===\"auto\"||r?.delivery===\"steer_active_turn\")&&r?.queueDelivery!==\"queue\"){let _=r?.queueDelivery===\"guide\"?\"guide\":void 0;return awa"
+   },
+   "steerDeliveryOfMessage": {
+    "count": 1,
+    "sample": "esizableContent\");a(IFi,\"synthesizeSubtaskPart\");a(TFi,\"synthesizeAssistantParts\");a(Wfn,\"steerDeliveryOfMessage\");a(CFi,\"isTurnBoundaryStarter\");a(EFi,\"backgroundResultOriginMetaOfMessage\");a(AFi,\"isLe"
+   }
+  },
+  "other_surfaces": {
+   "jsonrpc": 49,
+   "--sdk": 15,
+   "websocket": 14,
+   "app-server": 9,
+   "listen(": 4,
+   "session/send": 3,
+   "stream-json": 3,
+   "json-rpc": 1,
+   "--input-format": 1
+  }
+ }
+}

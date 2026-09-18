@@ -77,8 +77,12 @@ python_suites_all=(
   "test-zcode-heartbeat-contract.py"
   "test-issue-52-workflow-worktree.py"
   "test-issue-64-receipt-bound.py"
+  "test-issue-65-steering.py"
+  "test-issue-65-steer-race.py"
+  "test-issue-65-host-contract.py"
 )
 python_suites_a=(
+  "test-issue-65-steering.py"
   "test-acp-contract.py"
   "test-zcode-heartbeat-contract.py"
   "test-acp-follow-contract.py"
@@ -106,6 +110,8 @@ python_suites_b=(
   "test-issue-52-workflow-worktree.py"
   "test-issue-24-opencode-pty-bypass.py"
   "test-issue-64-receipt-bound.py"
+  "test-issue-65-steer-race.py"
+  "test-issue-65-host-contract.py"
 )
 run_suite_lane() {
   for suite in "$@"; do

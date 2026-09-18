@@ -82,9 +82,14 @@ def acp_start_skip_case(runner: str) -> str:
     return match.group(1)
 
 
-def skill_quirks(text: str) -> str | None:
-    match = re.search(r"its known quirks are `([^`]*)`", text)
-    return match.group(1) if match else None
+def skill_quirks_pointer(text: str) -> str | None:
+    """Issue #65: the quirks string is no longer duplicated verbatim in the
+    budgeted SKILL.md. The Skill names the on-demand reference that carries it;
+    `test_generated_acp_reference_quirks_document_pty_bypass` checks the content
+    there, so the quirk is still documented by the generated Skill."""
+    match = re.search(
+        r"ACP quirks are in \[references/acp\.md\]\(references/acp\.md\)", text)
+    return match.group(0) if match else None
 
 
 def acp_reference_quirks(text: str) -> str | None:
@@ -223,18 +228,22 @@ class Issue24DocumentGeneratedAcpSurface(unittest.TestCase):
         )
 
     def test_templates_still_interpolate_acp_quirks(self) -> None:
-        self.assertIn("{{ACP_QUIRKS}}", SKILL_TMPL.read_text(encoding="utf-8"))
+        # The quirks travel once, in the on-demand ACP reference; the worker
+        # Skill points at it rather than carrying a second copy.
+        self.assertNotIn("{{ACP_QUIRKS}}", SKILL_TMPL.read_text(encoding="utf-8"))
+        self.assertIn("references/acp.md", SKILL_TMPL.read_text(encoding="utf-8"))
         self.assertIn("{{ACP_QUIRKS}}", ACP_TMPL.read_text(encoding="utf-8"))
 
     def test_manifest_acp_quirks_documents_pty_bypass(self) -> None:
         quirks = parse_manifest(MANIFEST)["acp_quirks"]
         self.assert_documents_pty_auto_bypass(quirks, "platforms/opencode.yaml acp_quirks")
 
-    def test_generated_skill_quirks_document_pty_bypass(self) -> None:
+    def test_generated_skill_points_at_the_quirks_reference(self) -> None:
         body = SKILL.read_text(encoding="utf-8")
-        quirks = skill_quirks(body)
-        self.assertIsNotNone(quirks, "generated SKILL.md missing known-quirks interpolation")
-        self.assert_documents_pty_auto_bypass(quirks or "", "generated SKILL.md known quirks")
+        self.assertIsNotNone(
+            skill_quirks_pointer(body),
+            "generated SKILL.md must name the reference carrying this platform's quirks",
+        )
         self.assertIn("`opencode acp`", body)
         self.assertNotRegex(
             body,
@@ -254,9 +263,8 @@ class Issue24DocumentGeneratedAcpSurface(unittest.TestCase):
             SKILL_TMPL.read_text(encoding="utf-8"), manifest, SKILL_TMPL
         )
         acp = renderer.render(ACP_TMPL.read_text(encoding="utf-8"), manifest, ACP_TMPL)
-        self.assert_documents_pty_auto_bypass(
-            skill_quirks(skill) or "",
-            "rendered SKILL.md.tmpl quirks",
+        self.assertIsNotNone(
+            skill_quirks_pointer(skill), "rendered SKILL.md.tmpl points at the quirks reference"
         )
         self.assert_documents_pty_auto_bypass(
             acp_reference_quirks(acp) or "",

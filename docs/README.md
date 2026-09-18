@@ -1,7 +1,8 @@
 # Documentation Index
 
 - [Architecture](architecture.md): golden contract, worker vs main Skill, generated Skills, boundaries, ownership, and canonical-root versus Workflow child worktree guidance
-- [API](api.md): renderer, installer, tmux core, status, and adapter contracts
+- [API](api.md): renderer, installer, tmux core, status, adapter contracts, and the `steer`
+  operation (native and composite modes, receipt vocabulary)
 - [Grok Bot host](grok-bot-host.md): one thin bridge Skill, execution-target binding (Local Computer vs cloud), device-local locator and fail-closed attestation, one-write install, read-only Mac UAT boundary, Routine heartbeat, token-cost comparison
 - [ZCode Host](zcode-host.md): ZCode as worker platform and as native skill-directory host, the
   generic ACP entry, the event-driven heartbeat carrier and its prompt-file defect receipt, and

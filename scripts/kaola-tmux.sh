@@ -26,6 +26,7 @@ Usage:
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N] [--full]
   kaola-tmux.sh PLATFORM send      --repo ABS_PATH --session NAME [--if-snapshot ID] [--text TEXT]
+  kaola-tmux.sh PLATFORM steer     --repo ABS_PATH --session NAME --text TEXT [--steer-mode native|interrupt] [--cancel-timeout SECONDS]   # acp transport only
   kaola-tmux.sh PLATFORM key       --repo ABS_PATH --session NAME [--if-snapshot ID] --key NAME
   kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME [--decision-id ID] [--if-snapshot ID] --replace-editor [--text TEXT]
   kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force]
@@ -69,13 +70,13 @@ if [[ "$command_name" == follow ]]; then
   printf '%s\n' '{"error":{"code":"follow-unsupported","message":"follow is not a pty/tmux command; use kaola-acp"},"kind":"error"}'
   exit 1
 fi
-case "$command_name" in preflight|start|observe|status|capture|send|wait|permit|cancel|key|answer|stop) ;; *) die "unknown command: $command_name" ;; esac
+case "$command_name" in preflight|start|observe|status|capture|send|steer|wait|permit|cancel|key|answer|stop) ;; *) die "unknown command: $command_name" ;; esac
 repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_value="" text_given=false
 if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
 model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false
 tier="" tier_given=false fast="off" fast_given=false
 acp_wait=true timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
-expected_holder_instance_id="" expected_holder_instance_id_given=false
+expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" cancel_timeout=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;; --session) session="$2"; shift 2 ;; --resume) resume_id="$2"; shift 2 ;;
@@ -86,6 +87,7 @@ while [[ $# -gt 0 ]]; do
     --effort) effort="$2"; effort_given=true; shift 2 ;; --tier) tier="$2"; tier_given=true; shift 2 ;;
     --fast) fast="$2"; fast_given=true; shift 2 ;; --permission-mode) permission_mode="$2"; permission_mode_given=true; shift 2 ;;
     --transport) transport="$2"; transport_given=true; shift 2 ;; --key) key_name="$2"; shift 2 ;;
+    --steer-mode) steer_mode="$2"; shift 2 ;; --cancel-timeout) cancel_timeout="$2"; shift 2 ;;
     --wait) acp_wait=true; shift ;; --no-wait) acp_wait=false; shift ;; --timeout) timeout="$2"; shift 2 ;;
     --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
     --expected-holder-instance-id) expected_holder_instance_id="$2"; expected_holder_instance_id_given=true; shift 2 ;;
@@ -107,6 +109,9 @@ if [[ "$permission_mode_given" != true ]]; then
   esac
 fi
 
+if [[ ( -n "$steer_mode" || -n "$cancel_timeout" ) && "$command_name" != steer ]]; then
+  die "--steer-mode and --cancel-timeout are steer-only"
+fi
 PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
 manifest_file="$script_dir/platform.yaml"
 [[ -f "$manifest_file" ]] || manifest_file="$(dirname "$script_dir")/platforms/$platform.yaml"
@@ -131,9 +136,11 @@ if [[ "$transport" == acp ]]; then
   [[ "$continue_mode" == true ]] && acp_args+=(--continue)
   [[ "$force" == true ]] && acp_args+=(--force)
   [[ "$text_given" == true ]] && acp_args+=(--text "$text_value")
-  [[ "$command_name" == send && "$text_given" == false ]] && acp_args+=(--stdin)
+  [[ ( "$command_name" == send || "$command_name" == steer ) && "$text_given" == false ]] && acp_args+=(--stdin)
   [[ "$acp_wait" == false ]] && acp_args+=(--no-wait)
   [[ -n "$timeout" ]] && acp_args+=(--timeout "$timeout")
+  [[ -n "$steer_mode" ]] && acp_args+=(--steer-mode "$steer_mode")
+  [[ -n "$cancel_timeout" ]] && acp_args+=(--cancel-timeout "$cancel_timeout")
   [[ -n "$request_id" ]] && acp_args+=(--request-id "$request_id")
   [[ -n "$option" ]] && acp_args+=(--option "$option")
   [[ "$expected_holder_instance_id_given" == true ]] && acp_args+=(--expected-holder-instance-id "$expected_holder_instance_id")
@@ -170,6 +177,14 @@ if [[ "$transport" == acp ]]; then
   exec "${acp_args[@]}"
 fi
 
+if [[ "$command_name" == steer ]]; then
+  # Issue #65: over PTY a mid-turn write is an ordinary keystroke stream. The
+  # native UI alone decides whether it steers, queues, or interrupts, and the
+  # terminal returns no receipt that separates those. The Runner refuses to call
+  # that steering rather than reporting an unproven injection.
+  printf '%s\n' '{"error":{"code":"steer-unsupported-transport","message":"steer is an acp-transport operation; over pty use send and read the native result"},"mutation_performed":false,"mutation_status":"not_started","schema_version":3,"steer_consumed":false,"steer_outcome":"unsupported"}'
+  exit 1
+fi
 TMUX_BIN="$(resolve_tool "${TMUX_BIN:-tmux}")" || die "tmux executable not found"
 PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
 PS_BIN="$(resolve_tool "${PS_BIN:-ps}")" || die "ps executable not found"

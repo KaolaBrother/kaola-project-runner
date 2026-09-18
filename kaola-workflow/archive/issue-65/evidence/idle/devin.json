@@ -1,0 +1,108 @@
+{
+  "id": "devin",
+  "cmd": "devin acp",
+  "probed_at": "2026-09-18T10:28:58+0800",
+  "live": false,
+  "agent_info": {
+    "name": "affogato",
+    "title": "Devin Agent",
+    "version": "0.0.0-dev"
+  },
+  "protocol_version": 1,
+  "init_meta": {
+    "mcpConfigPath": "/Users/ylminiserver/.config/devin/mcp_config.json"
+  },
+  "agent_capabilities": {
+    "loadSession": true,
+    "promptCapabilities": {
+      "image": true,
+      "audio": false,
+      "embeddedContext": true
+    },
+    "mcpCapabilities": {
+      "http": false,
+      "sse": false
+    },
+    "sessionCapabilities": {
+      "list": {},
+      "delete": {},
+      "additionalDirectories": {}
+    },
+    "auth": {},
+    "_meta": {
+      "cognition.ai/multiRootWorkspace": true,
+      "cognition.ai/sessionRename": true,
+      "cognition.ai/sessionShare": true,
+      "cognition.ai/documentLifecycle": true,
+      "cognition.ai/userEdits": true,
+      "cognition.ai/terminalLifecycle": true,
+      "cognition.ai/userConfig": true,
+      "cognition.ai/userShellCommand": true,
+      "cognition.ai/editableCommands": true,
+      "cognition.ai/commandRevision": true,
+      "cognition.ai/chains": true,
+      "cognition.ai/megaplan": true,
+      "cognition.ai/ruleMentions": true
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": {},
+      "delete": {},
+      "additionalDirectories": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "flannel-glazer",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "Method not found"
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "Method not found"
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "Method not found"
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "Method not found"
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 1.08,
+  "stderr_tail": ""
+}

@@ -309,6 +309,29 @@ SESSION="opencode-example"
 ./scripts/kaola-tmux.sh opencode status --repo "$REPO" --session "$SESSION"
 ```
 
+`steer` delivers one Agent-chosen message to a turn that is **already running**, alongside
+`send`. It is an ACP-only tool, and the Agent picks the mode:
+
+```bash
+# Native mid-turn entry, where the platform really has one (today Claude Code and Codex):
+./scripts/kaola-tmux.sh codex steer --repo "$REPO" --session "$SESSION" \
+  --text 'Stop the current approach and do X instead.'
+
+# Everywhere else, the composite: interrupt the turn, then continue the same session.
+./scripts/kaola-tmux.sh droid steer --repo "$REPO" --session "$SESSION" \
+  --steer-mode interrupt --text 'Stop the current approach and do X instead.'
+```
+
+The composite cancels the running turn, confirms it actually stopped, and then sends the text once
+as the next turn on the same ACP session, so the conversation keeps its context. That is
+interrupted-then-continued, never injection: the receipt says `interrupted_and_resent` with
+`side_effects_possible`, because the interrupted turn's finished work is not undone. A platform with
+no native entry refuses a bare `steer` with `steer-mode-required` rather than interrupting on its own,
+and if a cancel is not confirmed nothing is sent at all. The receipt never overstates consumption —
+`injected` only when the agent acknowledges it, `written` when the text was merely flushed into a
+platform that acknowledges nothing, and `unknown` when it is undecided. See
+[docs/api.md](docs/api.md).
+
 Installed Skills use their own `scripts/runtime-tmux.sh` with the same operations and no platform
 argument. Invoke it by absolute path; `--repo` identifies the project being worked on.
 

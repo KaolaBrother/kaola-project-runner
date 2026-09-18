@@ -57,6 +57,39 @@ export interface LaunchOptions {
   fast?: "on" | "off";
 }
 
+/**
+ * Kaola fork (Issue #65): the outcome of one native mid-turn steering write.
+ *
+ * Claude Code's `--input-format stream-json` channel acknowledges **nothing**
+ * when a message is injected into a running turn: a live probe on cli 2.1.272
+ * shows the whole stdout stream carrying no echo of the injected text and no
+ * `user` event other than tool results, even though the turn demonstrably
+ * absorbed it. So this runner cannot honestly say "the turn consumed it" -
+ * it can only say what it knows:
+ *
+ * - `written`      the bytes were flushed to the running turn's stdin with no
+ *                  error, and the turn was still running before and after the
+ *                  flush. Consumption is NOT confirmed by this platform.
+ * - `notConsumed`  nothing was written: no running turn, the turn had already
+ *                  settled, stdin was closed, or the write failed before any
+ *                  byte left.
+ * - `unknown`      a write was issued but its fate is undecided: the flush
+ *                  errored or never completed, or the turn settled while the
+ *                  write was in flight. Never resend on this.
+ *
+ * `injected` stays in the type for an agent channel that really does confirm
+ * consumption; this runner does not emit it today.
+ */
+export type SteerOutcome = "injected" | "written" | "notConsumed" | "unknown";
+
+/** Kaola fork: what backs a steering outcome, so a receipt cannot overclaim. */
+export interface SteerResult {
+  outcome: SteerOutcome;
+  /** `agent-confirmed` only when the channel acknowledged consumption. */
+  confirmation: "agent-confirmed" | "write-only" | "none";
+  reason?: string;
+}
+
 /** Kaola fork: raised when the configured Claude binary cannot be used. */
 export class ClaudeBinaryError extends Error {
   constructor(message: string) {
@@ -68,11 +101,40 @@ export class ClaudeBinaryError extends Error {
 const SENSITIVE_FLAGS = new Set(["-p", "--print"]);
 const REDACT_FLAGS = new Set(["--resume"]);
 const KILL_GRACE_MS = 2000;
+/**
+ * Kaola fork (Issue #65): every streaming turn reads its user messages from
+ * stdin instead of a positional `-p <prompt>`. That is the native Claude Code
+ * entry for mid-turn steering — a second user message written while the turn is
+ * running joins that turn (verified on cli 2.1.272: one `result` event, the
+ * steer replaced the remaining tool steps). It also keeps the prompt text out
+ * of the process argument list.
+ */
+const STREAM_INPUT_ARGS = ["--input-format", "stream-json"];
+
+/**
+ * Kaola fork (Issue #65): how long one steering chunk may take to reach the
+ * child's stdin before its fate is reported as undecided.
+ */
+const STEER_FLUSH_TIMEOUT_MS = 2000;
+
+/** Kaola fork: one `stream-json` user message line for the child's stdin. */
+export function streamUserMessage(text: string): string {
+  return (
+    JSON.stringify({
+      type: "user",
+      message: { role: "user", content: [{ type: "text", text }] },
+    }) + "\n"
+  );
+}
 
 export function maskArgs(args: string[]): string {
   const masked: string[] = [];
   for (let i = 0; i < args.length; i++) {
-    if (SENSITIVE_FLAGS.has(args[i]) && i + 1 < args.length) {
+    if (
+      SENSITIVE_FLAGS.has(args[i]) &&
+      i + 1 < args.length &&
+      !args[i + 1].startsWith("-")
+    ) {
       masked.push(args[i], `<prompt: ${args[i + 1].length} chars>`);
       i++;
     } else if (REDACT_FLAGS.has(args[i]) && i + 1 < args.length) {
@@ -159,8 +221,23 @@ function isRunning(proc: ChildProcess): boolean {
   return proc.exitCode === null && proc.signalCode === null;
 }
 
+/** Kaola fork (Issue #65): one streaming turn and whether it can still be steered. */
+interface RunningTurn {
+  proc: ChildProcess;
+  settled: boolean;
+  /**
+   * The last asynchronous stdin error for this turn. Node reports a broken or
+   * closed pipe on the stream, not from `write()`, so swallowing it would let a
+   * later steer report success onto a pipe that is already gone.
+   */
+  stdinError?: Error;
+  /** Steering writes still in flight, so the settle path can see them. */
+  inFlight: number;
+}
+
 export class ClaudeRunner {
   private runningProcesses = new Map<string, ChildProcess>();
+  private streamingTurns = new Map<string, RunningTurn>();
   private tempDirs: string[] = [];
   private config: AgentConfig;
 
@@ -234,13 +311,13 @@ export class ClaudeRunner {
   ): Promise<ClaudeResult> {
     const args = [
       "-p",
-      prompt,
+      ...STREAM_INPUT_ARGS,
       "--output-format",
       "stream-json",
       "--verbose",
       ...this.buildExtraArgs(options),
     ];
-    return this.runStreaming(args, cwd, onEvent, trackingId);
+    return this.runStreaming(args, cwd, onEvent, trackingId, undefined, prompt);
   }
 
   async continueSessionStreaming(
@@ -253,7 +330,7 @@ export class ClaudeRunner {
   ): Promise<ClaudeResult> {
     const args = [
       "-p",
-      prompt,
+      ...STREAM_INPUT_ARGS,
       "--resume",
       claudeSessionId,
       "--output-format",
@@ -261,7 +338,7 @@ export class ClaudeRunner {
       "--verbose",
       ...this.buildExtraArgs(options),
     ];
-    return this.runStreaming(args, cwd, onEvent, trackingId);
+    return this.runStreaming(args, cwd, onEvent, trackingId, undefined, prompt);
   }
 
   async startSessionWithMcp(
@@ -276,14 +353,14 @@ export class ClaudeRunner {
     if (onEvent) {
       const args = [
         "-p",
-        prompt,
+        ...STREAM_INPUT_ARGS,
         "--output-format",
         "stream-json",
         "--verbose",
         ...this.buildExtraArgs(options),
         ...mcpArgs,
       ];
-      return this.runStreaming(args, cwd, onEvent, trackingId, dir);
+      return this.runStreaming(args, cwd, onEvent, trackingId, dir, prompt);
     } else {
       const args = [
         "-p",
@@ -353,11 +430,97 @@ export class ClaudeRunner {
   }
 
   cancel(trackingId: string): void {
+    const turn = this.streamingTurns.get(trackingId);
+    if (turn) {
+      turn.settled = true;
+      this.streamingTurns.delete(trackingId);
+    }
     const proc = this.runningProcesses.get(trackingId);
     if (proc) {
       this.runningProcesses.delete(trackingId);
       this.terminate(proc);
     }
+  }
+
+  /**
+   * Kaola fork (Issue #65): deliver one Agent-chosen steering message to the
+   * turn that is running for `trackingId`.
+   *
+   * This is a transport act, not a judgment: `injected` says only that the text
+   * reached the running turn's stdin before that turn reported its result, and
+   * never that the model adopted it. With no running turn — or one whose result
+   * already landed — the text is NOT consumed and nothing is written, so an
+   * idle session can never be steered into an untracked turn.
+   */
+  async steer(trackingId: string, text: string): Promise<SteerResult> {
+    const turn = this.streamingTurns.get(trackingId);
+    if (!turn) return { outcome: "notConsumed", confirmation: "none", reason: "noRunningTurn" };
+    if (turn.settled) {
+      return { outcome: "notConsumed", confirmation: "none", reason: "turnAlreadySettled" };
+    }
+    // Read into a local: narrowing this branch must not hide a NEW error that
+    // arrives on the stream while the write below is in flight.
+    const priorError = turn.stdinError;
+    if (priorError) {
+      return {
+        outcome: "notConsumed",
+        confirmation: "none",
+        reason: `stdinError:${priorError.message}`,
+      };
+    }
+    const stdin = turn.proc.stdin;
+    if (!stdin || stdin.destroyed || stdin.writableEnded || !isRunning(turn.proc)) {
+      return { outcome: "notConsumed", confirmation: "none", reason: "stdinClosed" };
+    }
+
+    turn.inFlight += 1;
+    let flush: { error?: Error; timedOut?: boolean };
+    try {
+      flush = await new Promise<{ error?: Error; timedOut?: boolean }>((resolve) => {
+        let done = false;
+        const settle = (value: { error?: Error; timedOut?: boolean }) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve(value);
+        };
+        // A `write()` that returns false is only backpressure; the callback
+        // still fires once the chunk reaches the pipe. Waiting for it turns
+        // "enqueued in this process" into "handed to the child".
+        const timer = setTimeout(() => settle({ timedOut: true }), STEER_FLUSH_TIMEOUT_MS);
+        timer.unref?.();
+        try {
+          stdin.write(streamUserMessage(text), (err) =>
+            settle({ error: err ?? undefined })
+          );
+        } catch (err) {
+          settle({ error: err instanceof Error ? err : new Error(String(err)) });
+        }
+      });
+    } finally {
+      turn.inFlight -= 1;
+    }
+
+    if (flush.timedOut) {
+      return { outcome: "unknown", confirmation: "none", reason: "flushTimeout" };
+    }
+    if (flush.error) {
+      // The chunk may have been partially written before the pipe broke, so
+      // this is undecided, not a clean "nothing happened".
+      return { outcome: "unknown", confirmation: "none", reason: `flushError:${flush.error.message}` };
+    }
+    const lateError = turn.stdinError;
+    if (lateError) {
+      return { outcome: "unknown", confirmation: "none", reason: `stdinError:${lateError.message}` };
+    }
+    if (turn.settled) {
+      // The CLI reported its result while this write was in flight: the text may
+      // have landed in the finished turn, in a new one, or nowhere.
+      return { outcome: "unknown", confirmation: "none", reason: "turnSettledDuringWrite" };
+    }
+    // Flushed into a turn that was running before and after the write. Claude
+    // Code acknowledges nothing, so this is the strongest true statement.
+    return { outcome: "written", confirmation: "write-only" };
   }
 
   /** Kaola fork: SIGTERM the child's process group, SIGKILL after a grace period. */
@@ -389,12 +552,16 @@ export class ClaudeRunner {
     this.cleanup();
   }
 
-  private spawnClaude(args: string[], cwd: string | undefined): ChildProcess {
+  private spawnClaude(
+    args: string[],
+    cwd: string | undefined,
+    stdinMode: "ignore" | "pipe" = "ignore"
+  ): ChildProcess {
     const binary = resolveClaudeBinary(this.config);
     const proc = spawn(binary, args, {
       cwd,
       env: this.sanitizeEnv(),
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [stdinMode, "pipe", "pipe"],
       detached: true,
     });
     recordChildSpawn(proc, binary);
@@ -457,13 +624,14 @@ export class ClaudeRunner {
     cwd: string | undefined,
     onEvent: (event: StreamEvent) => void,
     trackingId?: string,
-    tempDir?: string
+    tempDir?: string,
+    prompt?: string
   ): Promise<ClaudeResult> {
     return new Promise((resolve, reject) => {
       logger.debug(`spawn streaming: claude ${maskArgs(args)}`);
       let proc: ChildProcess;
       try {
-        proc = this.spawnClaude(args, cwd);
+        proc = this.spawnClaude(args, cwd, prompt === undefined ? "ignore" : "pipe");
       } catch (err) {
         if (tempDir) this.removeTempDir(tempDir);
         reject(err);
@@ -472,6 +640,61 @@ export class ClaudeRunner {
 
       if (trackingId) {
         this.runningProcesses.set(trackingId, proc);
+      }
+
+      // Kaola fork (Issue #65): the open stdin IS the steering channel. The turn
+      // stays steerable until the CLI reports its `result`; then stdin is ended
+      // so the child exits and this turn keeps the same one-subprocess lifetime
+      // it always had.
+      const turn: RunningTurn | undefined =
+        prompt === undefined ? undefined : { proc, settled: false, inFlight: 0 };
+      if (turn && trackingId) {
+        this.streamingTurns.set(trackingId, turn);
+      }
+      const endStdin = () => {
+        if (turn) turn.settled = true;
+        const close = () => {
+          try {
+            proc.stdin?.end();
+          } catch {
+            // the child may already be gone
+          }
+        };
+        // A steering chunk still in flight must not be truncated by the close.
+        // The steer itself already reports `unknown` once the turn settles, so
+        // this only avoids corrupting the child's input stream.
+        if (turn && turn.inFlight > 0) {
+          let waited = 0;
+          const drain = setInterval(() => {
+            waited += 25;
+            if (!turn.inFlight || waited >= STEER_FLUSH_TIMEOUT_MS) {
+              clearInterval(drain);
+              close();
+            }
+          }, 25);
+          drain.unref?.();
+          return;
+        }
+        close();
+      };
+      if (prompt !== undefined) {
+        proc.stdin?.on("error", (err: Error) => {
+          // Record it: an asynchronous EPIPE must make the NEXT steer honest
+          // rather than vanish into a silent handler.
+          if (turn) turn.stdinError = err;
+          logger.debug(`streaming stdin error: ${err.message}`);
+        });
+        try {
+          proc.stdin?.write(streamUserMessage(prompt));
+        } catch (err) {
+          if (trackingId) {
+            this.runningProcesses.delete(trackingId);
+            this.streamingTurns.delete(trackingId);
+          }
+          if (tempDir) this.removeTempDir(tempDir);
+          reject(err);
+          return;
+        }
       }
 
       let buffer = "";
@@ -499,6 +722,8 @@ export class ClaudeRunner {
             if (parsed.type === "result") {
               sessionId = parsed.session_id ?? sessionId;
               resultText = parsed.result ?? resultText;
+              // This turn is over: no further steer may claim it.
+              endStdin();
             }
           } catch {
             // Skip unparseable lines
@@ -507,8 +732,10 @@ export class ClaudeRunner {
       });
 
       proc.on("close", (code) => {
+        if (turn) turn.settled = true;
         if (trackingId) {
           this.runningProcesses.delete(trackingId);
+          this.streamingTurns.delete(trackingId);
         }
         if (tempDir) this.removeTempDir(tempDir);
 

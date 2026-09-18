@@ -23,6 +23,84 @@
   verdict and the body, so the body that passed the checks is the body
   delivered; delivery itself is unchanged, and the heartbeat-skeleton reference
   now names the `body` field.
+- **Every platform can now be steered mid-run, and the receipt says exactly how
+  (Issue #65).** A unified `steer` operation joins `send`/`wait`/`cancel`/`stop`
+  on the same exact session/repo routing — no scheduler, no second stdin writer,
+  no second lifecycle. Its scope is the ACP channel; over `pty` it is an honest
+  `steer-unsupported-transport` rather than an unproven injection claim. The
+  Agent chooses between two modes. `--steer-mode native` uses the platform's own
+  mid-turn entry and exists where that entry really does: **Claude Code** and
+  **Codex**. `--steer-mode interrupt` is the composite available everywhere — it
+  cancels the running turn, confirms it actually stopped, and sends the text
+  once as the next prompt on the same ACP session, so the conversation keeps its
+  context. All nine platforms were verified live on the real installed CLIs
+  through the generated Skill's own script: the steering instruction asked for a
+  codeword planted in the first prompt, and the reply carried it back.
+- **Steering never overstates what happened (Issue #65).** `steer_outcome`,
+  `steer_consumed`, and `steer_confirmation` keep `injected` (the agent
+  acknowledged consumption), `written` (flushed into a running turn on a
+  platform that acknowledges nothing), `interrupted_and_resent`,
+  `resent_without_interrupt`, `started_new_turn`, `not_consumed`, `unsupported`,
+  `rejected`, and `unknown` apart. The composite is reported as
+  interrupted-then-continued with `side_effects_possible`, never as injection,
+  and the interrupted turn keeps its own request id, output, and terminal state
+  next to a distinct `new_turn_request_id`. Nothing degrades silently: a
+  platform without a native entry refuses a bare `steer` with
+  `steer-mode-required` instead of interrupting on its own, an unconfirmed
+  cancel sends nothing at all (`steer-cancel-unconfirmed`, outcome `unknown`, no
+  blind retry), an idle session is never natively steered, a holder whose `start`
+  never negotiated an ACP session id refuses `send` and `steer` outright with
+  `no-acp-session` instead of writing a null-session frame and calling it
+  `in_progress`, and a holder started before this release answers
+  `steer-holder-outdated` having written nothing.
+  `native_steering` also distinguishes `unknown` from `unsupported`, so an
+  uninvestigated surface is never recorded as a proven absence.
+- **Cancels are bound to the turn object they targeted (Issue #65).** `cancel` accepts
+  an `expected_request_id`, and the composite steer uses it. Connections are
+  served on separate threads and worker events start turns of their own, so a
+  turn that ends on its own can be replaced between a caller's snapshot and its
+  cancel — the cancel would then hit the newcomer while the receipt still named
+  the old turn, and the steering text would be dispatched onto a turn nobody
+  asked to interrupt. Now nothing is cancelled and nothing is sent: the outcome
+  is `unknown` with `steer-turn-changed`. The wait is bound the same way, so a
+  receipt never describes a different turn than the one it cancelled, and a
+  dispatched turn's id comes from its own admission rather than from whatever is
+  running afterwards. The binding is to the turn object, which is replaced and
+  never reset in place, so the admission check, the outbound cancel, the wait
+  and the receipt are all taken from that one turn while the lock is held —
+  nothing downstream re-reads the current turn. `cancel_sent` distinguishes "we
+  cancelled nothing" from "we asked the target to stop and cannot confirm what
+  followed", and `side_effects_possible` is reported honestly for both. A late
+  answer to a finished turn can no longer settle the turn running now.
+- **The Claude Code bridge gained the native channel it was missing
+  (Issue #65).** The vendored bridge now drives every streaming turn with
+  `claude -p --input-format stream-json` and writes the prompt to an open
+  stdin — the CLI's own mid-turn steering channel — and serves
+  `_session/steering`, advertising it at the `initialize` top-level
+  `_meta.steering`. The turn still ends on the CLI's `result`, which closes
+  stdin, so the one-subprocess-per-turn lifetime is unchanged; as a side effect
+  the prompt text no longer appears in the process argument list at all.
+- **ZCode: engine-capable, protocol-surface unsupported — steered by the
+  composite, and one real bug fixed (Issue #65).** ZCode 0.16.5 has a turn-steer
+  queue internally but does not expose it on the `app-server --stdio` protocol
+  the Runner drives (no steer method, a `.strict()` `session/send` schema with no
+  delivery field, and a hard `-32010` while a turn is active), so it is steered
+  through `--steer-mode interrupt` like the other six. Probing that surface also exposed a defect in
+  our own adapter: `kaola-zcode-acp.py` overwrote the active turn's request id
+  when a second prompt arrived, orphaning the original request and handing its
+  completion to the newcomer. It now refuses the concurrent prompt with the same
+  `-32010`, so one turn keeps one request id.
+- **The ZCode Host post-dispatch contract is now operating instructions
+  (Issue #65).** The generated main Skill states the action rules — hand the Host
+  its real Runner identity, bind `KAOLA_ACP_HEARTBEAT_HOST` per worker `start`
+  and check the receipt's `heartbeat_host`, dispatch with `send --no-wait` and
+  read the acceptance, update the one `.kaola/heartbeat-prompt.json`, then end
+  the turn naturally instead of sleeping, polling, or blocking — and a Host
+  awaiting in-flight workers is explicitly not a stoppable idle worker. The new
+  on-demand reference `references/zcode-host-dispatch.md` carries the runnable
+  role-by-role procedure for the outer Agent, the Host, and the worker/carrier,
+  including how to read a worker's real reply by its own identity and event
+  cursor. Nothing here needs the Python source to be read.
 
 ## 0.3.5 — 2026-09-18
 

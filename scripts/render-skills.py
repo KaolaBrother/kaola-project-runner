@@ -46,6 +46,7 @@ REQUIRED = {
     "acp_login_requires_pty", "acp_mode_config_id", "acp_model_config_id", "acp_effort_config_id",
     "acp_fast_config_id", "acp_model_map", "acp_wrapper_pin",
     "acp_init_meta", "acp_fast_values",
+    "native_steering", "acp_steer_method", "steering_summary",
 }
 
 
@@ -83,13 +84,69 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: invalid recurring_execution")
     if result["default_transport"] not in {"acp", "pty"}:
         raise ValueError(f"{path}: invalid default_transport")
+    # Issue #65: the native steering fact and its transport entry travel together.
+    if result["native_steering"] not in {"supported", "unsupported", "unknown"}:
+        raise ValueError(f"{path}: invalid native_steering")
+    if result["native_steering"] == "supported" and not result["acp_steer_method"]:
+        raise ValueError(f"{path}: native_steering supported needs acp_steer_method")
+    if result["native_steering"] != "supported" and result["acp_steer_method"]:
+        raise ValueError(f"{path}: acp_steer_method requires native_steering supported")
+    if not result["steering_summary"]:
+        raise ValueError(f"{path}: empty steering_summary")
     if not result["acp_command"]:
         raise ValueError(f"{path}: empty acp_command")
     return result
 
 
+STEERING_SUPPORTED = """## Steering a running turn
+
+{runtime}'s ACP surface steers natively, so `steer` is an Agent choice for a
+turn already running — not a Runner policy:
+
+```bash
+"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" --text '<redirection>'
+```
+
+Read `steer_outcome` with `steer_confirmation`: only `injected` means the agent
+acknowledged consumption, `written` means the text reached the running turn but
+this platform confirms nothing, and `not_consumed`/`unknown` mean do not resend
+blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
+cancels the turn first. See [references/steering.md](references/steering.md).
+"""
+
+STEERING_COMPOSITE = """## Steering a running turn
+
+{runtime}'s ACP surface exposes no native mid-turn entry, so a bare `steer`
+refuses and writes nothing. The available path is the composite, which you
+choose explicitly:
+
+```bash
+"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" \\
+  --steer-mode interrupt --text '<redirection>'
+```
+
+It **cancels** the running turn, confirms it stopped, then sends your text as the
+next turn on the same session, which keeps the conversation's context. That is
+interrupted-then-continued, never injection: work in progress stops and may have
+left partial side effects (`side_effects_possible`). An unconfirmed cancel sends
+nothing and reports `unknown`. See [references/steering.md](references/steering.md).
+"""
+
+
+def steering_block(manifest: dict[str, str]) -> str:
+    """Issue #65: every platform documents the steering path it really has on
+    its ACP surface. A native tool is advertised only where the native entry
+    exists; everywhere else the Skill documents the explicit composite instead
+    of leaving the Agent with nothing."""
+    template = (STEERING_SUPPORTED if manifest["native_steering"] == "supported"
+                else STEERING_COMPOSITE)
+    return template.format(runtime=manifest["runtime_name"]).rstrip()
+
+
 def variables(manifest: dict[str, str]) -> dict[str, str]:
-    return {key.upper(): value for key, value in manifest.items()}
+    values = {key.upper(): value for key, value in manifest.items()}
+    values["STEERING_BLOCK"] = steering_block(manifest)
+    return values
 
 
 def render_text(template: str, values: dict[str, str], source: Path) -> str:
@@ -217,6 +274,12 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     acp = TEMPLATES / "references" / "acp.md.tmpl"
     result["references/acp.md"] = render(
         acp.read_text(encoding="utf-8"), manifest, acp
+    ).encode()
+    # Issue #65: steering is its own on-demand reference, so the ACP surface
+    # reference stays about the ordinary command surface.
+    steering = TEMPLATES / "references" / "steering.md.tmpl"
+    result["references/steering.md"] = render(
+        steering.read_text(encoding="utf-8"), manifest, steering
     ).encode()
 
     core = ROOT / "scripts" / "kaola-tmux.sh"

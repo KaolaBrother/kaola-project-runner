@@ -20,17 +20,16 @@ yourself.
 
 ## Two entry points
 
-**Ordinary worker supervision** - you dispatch and accept from your own session:
-use the loop below. A worker dispatched this way carries no Host obligation, no
-event binding, and no extra gate.
+**Ordinary worker supervision** - you dispatch and accept from your own session
+with the loop below; that worker carries no Host obligation, no event binding and
+no extra gate.
 
 **Orchestrator (ZCode Host)** - you start, or you are, a named ZCode Host session
 that loads this Skill and supervises workers on event-driven beats. Its role,
 authorization and lifecycle boundary come from the project's existing Project
-Plan or already-authorized task plan, never a new schema and never the Host's own
-claim of having loaded this Skill. Startup order, the startup receipt the outer
-Agent checks against that plan, per-beat binding, and keep-versus-stop:
-[references/host-startup.md](references/host-startup.md).
+Plan or already-authorized task plan - never a new schema, never the Host's own
+claim of having loaded this Skill. Startup order, the receipt the outer Agent
+checks against that plan, and keep-versus-stop: [host-startup.md](references/host-startup.md).
 
 ## Consumer-project boundary
 
@@ -81,35 +80,32 @@ platform's default transport is ACP:
 ### Hosts
 
 This Skill is host-neutral. Native skill-directory installs exist for Codex,
-Claude Code, Cursor, Devin, and ZCode (`~/.zcode/skills`; a workspace
-`.zcode/skills` works through `--skills-dir`); there the nine workers are
-sibling Skill directories next to this one, called by their installed
-directory. A ZCode Host session is one named Runner session like any other:
-when it dispatches an inner worker, including another ZCode, the inner session
-is a separate Runner session with its own record root entry and process group —
-an inner stop never reaches the outer Host, and the outer stop sweeps only
-recorded inner sessions. A ZCode Host session's heartbeat is event-driven:
-no Routine, cron, or sleep loop. It owns the full working prompt at the project
-root `.kaola/heartbeat-prompt.json`: after each worker termination or turn-end
-idle it settles the next step, then rewrites that file as the next beat's
-snapshot. It
-exports `KAOLA_ACP_HEARTBEAT_HOST` on each worker start; each worker
-termination or turn-end idle then delivers one full heartbeat pass into this
-session. No worker event, no trigger. A **bridge
-host** (Grok Bot today) reaches this checkout through one thin account Skill
-instead: it binds an execution target first (Local Computer, or the cloud Agent
-Computer), asks that target's device-local locator `kaola-project-runner-locate` for the verified
-repo root ROOT, and loads only `ROOT/skills/kaola-project-runner` and, per dispatch,
-one selected `ROOT/skills/<platform id>-kaola-project-runner`. On a bridge host, before
-each worker dispatch run the locator attestation on the bound target with the
-`kaola-project-runner-locate` command in `references/grok-bot-host.md` and refuse any `refused`
-receipt: the consumer project, the selected worker script under the same ROOT,
-and a session of the exact name must all be on that one target. Local Computer
-and the cloud Agent Computer never reach each other's files, CLIs, tmux, or
-sessions, and nothing clones, installs, or updates Local Computer from the
-cloud. Grok Bot is a host, not a worker and not a tenth
-platform: `--platform grok` is the Grok CLI worker; `--platform grok-bot` is
-invalid.
+Claude Code, Cursor, Devin and ZCode (`~/.zcode/skills`; a workspace
+`.zcode/skills` works through `--skills-dir`), where the nine workers are sibling
+Skill directories called by their installed directory. A ZCode Host session is one named Runner session like any other:
+an inner worker it dispatches, ZCode or not, is a separate session with its own
+record entry and process group - an inner stop never reaches the outer Host, and
+the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop, and it
+cannot discover its own `platform`/`session`/`repo` - give them in its first
+prompt. Each beat: set `KAOLA_ACP_HEARTBEAT_HOST` (a JSON object naming the Host)
+on every worker `start`, verify the receipt's `heartbeat_host`, dispatch with
+`send --no-wait`
+(`in_progress` is accepted, not done) keeping its `dispatch_event_cursor` as the
+reading anchor, update the project's `.kaola/heartbeat-prompt.json`, then **end
+the turn normally** - that is the wait. Never sleep, poll, blocking-`wait`, or
+stop/cancel anything to manufacture a wake-up. A worker turn-end or exit delivers one
+full pass here; read the reply through that worker's own Skill from the dispatch
+anchor, not the event's `event_cursor`, which sits after it. Beat, event and carrier detail:
+[references/zcode-host-dispatch.md](references/zcode-host-dispatch.md). A **bridge host** (Grok Bot today) reaches this checkout through one thin
+account Skill instead: it binds an execution target first (Local Computer, or the
+cloud Agent Computer), asks that target's device-local locator `kaola-project-runner-locate` for
+the verified repo root ROOT, and loads only `ROOT/skills/kaola-project-runner` plus,
+per dispatch, one selected `ROOT/skills/<platform id>-kaola-project-runner`. Re-run that
+attestation before every dispatch and refuse any `refused` receipt: project,
+worker script, and the exact session must all be on that one bound target, which
+never reaches the other's files, CLIs, tmux, or sessions. Grok Bot is a host, not a worker and
+not a tenth platform: `--platform grok` is the Grok CLI worker, `--platform
+grok-bot` is invalid.
 
 On Grok Bot one Routine on this Bot conversation is the only heartbeat carrier:
 never stack it with a Codex heartbeat or blocking sleep. Takeover cancels the
@@ -124,11 +120,10 @@ Local Computer UAT is the boundary. See
 
 This Skill loads on its own. Load one selected worker Skill only at dispatch, a
 reference only when the current step needs it, and never read script source or
-whole files into context: receipts, hashes, counts, and bounded excerpts are the
-evidence. Ordinary `observe`, `status`, and `capture --lines` receipts are
-bounded on both transports: over budget, the newest part is kept and a
-`truncated` block names what was dropped with counts and the sha256 of the whole
-value; `capture --full` is the only explicit, unbounded request.
+whole files into context: receipts, hashes, counts and bounded excerpts are the
+evidence. Ordinary `observe`, `status` and `capture --lines` receipts are bounded
+on both transports, keeping the newest part and naming what a `truncated` block
+dropped; `capture --full` is the only unbounded request.
 
 ### Defaults
 
@@ -145,9 +140,9 @@ value; `capture --full` is the only explicit, unbounded request.
 | Cursor | Never use `/model` as a read-only probe. |
 
 Ordinary Workflow-backed work starts the worker `--repo` at the consuming
-project's canonical Git root and asks that runtime's main conversation to
-invoke its installed workflow-next. Inspect Git and Workflow evidence first.
-Linked-worktree starts, outer bundle preparation, and existing-run recovery are
+project's canonical Git root and asks that runtime's main conversation to invoke
+its installed workflow-next; inspect Git and Workflow evidence first.
+Linked-worktree starts, outer bundle preparation and existing-run recovery are
 Agent decisions on both PTY and ACP, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
 
@@ -167,12 +162,11 @@ plans, and keeping in-flight locators and unfinished duties. A confirmed change
 applies in that beat; a lowered quota alone cancels nothing. A report-only
 request disables execution actions.
 
-Native recurring wake and blocking sleep must not be stacked. On a ZCode Host
-session, worker events are the only heartbeat trigger (see Hosts). After
-close-out, cancel the native heartbeat or stop scheduling the next sleep. No CLI
-allowlist means no heartbeat. Temporarily having no ready task is not project
-completion. On Grok Bot the native recurring carrier is one Routine on this Bot;
-do not hard-code other hosts' scheduler APIs.
+On a ZCode Host session worker events are the only heartbeat trigger (see
+Hosts). After close-out, cancel the native heartbeat or stop scheduling the next
+sleep. No allowlist, no heartbeat. Temporarily having no ready task is not
+project completion. On Grok Bot the native recurring carrier is one Routine on
+this Bot; do not hard-code other hosts' scheduler APIs.
 
 ## Delivery
 
@@ -189,10 +183,12 @@ sink, and write ownership.
 1. **Recover and observe.** Read existing worker/run records, relevant
    Git/Forge state, and fresh Runner evidence. Use exact owned sessions and
    current platform Skills. Observe busy workers without injecting "status?"
-   messages or repeatedly polling raw PTY screens as a human UI. Do not replay
-   a prompt whose acceptance or effects are already known or uncertain;
-   investigate the existing action first. No automatic fallback/resend, raw
-   tmux injection, or global model-picker mutation.
+   messages or repeatedly polling raw PTY screens as a human UI. Do not replay a prompt whose
+   acceptance or effects are known or uncertain; investigate the existing action
+   first. Steering a running turn is an Agent
+   choice, never a Runner policy: pick the mode yourself, read the receipt, and
+   never call a not-consumed or `unknown` steer delivered. No automatic
+   fallback/resend, raw tmux injection, or model-picker mutation.
 2. **Decide and dispatch.** Resolve worker questions within existing
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
@@ -221,15 +217,16 @@ sink, and write ownership.
    repair using existing tools; do not fabricate claim identities or introduce
    a parallel lifecycle system.
 5. **Release and report.** Stop an idle exact session only when no suitable
-   authorized work is executable. ACP and PTY/tmux are the same stop action:
-   exact owned session `stop` via the matching platform Runner Skill,
-   including ACP holders. Idle is not keep-alive. ACP idle left running is
-   not completion and not keep-alive. When the authorized goal is complete,
-   or no suitable authorized work is executable, stop remaining idle owned
-   sessions, including ACP holders. Then cancel heartbeat once no unfinished
-   delivery/sync/cleanup remains. Preserve its existing recovery information
-   and give any remaining delivery/sync/cleanup a named owner. Direct safe cleanup of completed, unreferenced worktrees
-   and branches; protect in-flight work and evidence. Report active workers
+   authorized work is executable; then stop the rest. ACP and PTY/tmux are the
+   same stop action: exact owned session `stop` via the matching platform Skill,
+   including ACP holders. Idle is neither keep-alive nor completion. A Host that
+   ended its turn while workers are in flight, or with delivery, acceptance or
+   close-out open, is not an idle worker: keep it and send it no "continue"; its
+   next beat is a worker event. Cancel the heartbeat once no unfinished
+   delivery/sync/cleanup remains; preserve existing recovery information and give
+   anything remaining a named owner. Direct safe cleanup of completed,
+   unreferenced worktrees and branches; protect in-flight work and evidence.
+   Report active workers
    and outstanding close-out work, then continue the same heartbeat while
    authorized work or unfinished close-out remains. Session stop, candidate
    acceptance, merge, Issue closure and workspace cleanup are different facts,
@@ -241,9 +238,9 @@ When ending a project run, the default is to finish every in-hand authorized
 task and every in-hand issue of this run (already claimed / in flight), then
 merge their worktrees and branches, leave no leftover branch tails, and leave
 the workspace clean, matching Kaola Workflow close-out (finalize/archive/sink
-and unreferenced worktree/branch cleanup already in this Skill). That default
-is not an extra engine. Do not park unfinished branches as the normal end of
-a project run.
+and unreferenced worktree/branch cleanup already in this Skill); that default is
+not an extra engine. Do not park unfinished branches as the normal end of a
+project run.
 
 A human stop boundary such as "run until 5pm", "run until done", or
 "run until CONDITION" means: after that line, do not accept or dispatch new
@@ -258,12 +255,12 @@ and forces no merge or cleanup beyond its stated scope.
 Honor a user stop request within its stated scope; otherwise the heartbeat ends
 on step 5's conditions.
 
-Only new authorized work restarts a session once the idle ones were stopped.
-Resume with `--resume` when a native session id
-is known, otherwise `--continue` or a fresh `start`. Do not keep an idle ACP
-or PTY session running as a holder for future work. Reuse existing Runner
-`stop` / `start` / `--resume` / `--continue`. Do not invent a session state
-machine, quota engine, or extra dashboards.
+Only new authorized work restarts a session once the idle ones were stopped:
+resume with `--resume` when a native session id is known, otherwise `--continue`
+or a fresh `start`. Do not keep an idle ACP or PTY session running as a holder
+for future work; reuse existing Runner `stop` / `start` / `--resume` /
+`--continue`, and do not invent a session state machine, quota engine, or extra
+dashboards.
 
 ## Dispatch notes
 

@@ -1,0 +1,142 @@
+{
+  "id": "opencode",
+  "cmd": "opencode acp",
+  "probed_at": "2026-09-18T10:54:09+0800",
+  "live": true,
+  "agent_info": {
+    "name": "OpenCode",
+    "version": "1.18.17"
+  },
+  "protocol_version": 1,
+  "init_meta": null,
+  "agent_capabilities": {
+    "loadSession": true,
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    },
+    "promptCapabilities": {
+      "embeddedContext": true,
+      "image": true
+    },
+    "sessionCapabilities": {
+      "close": {},
+      "fork": {},
+      "list": {},
+      "resume": {}
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "close": {},
+      "fork": {},
+      "list": {},
+      "resume": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "ses_f4d9070a7ffeWJkcdTUipFEn0b",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steering",
+          "data": {
+            "method": "_session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steer",
+          "data": {
+            "method": "_session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 1.58,
+  "tool_updates_before_steer": 3,
+  "turn_active_at_steer": true,
+  "steer_offset_s": 4.32,
+  "steer_method": "session/prompt (second ordinary prompt)",
+  "second_prompt_sent_s": 4.32,
+  "prompt10_settle": {
+    "at_s": 10.93,
+    "result": {
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 123,
+        "outputTokens": 9,
+        "totalTokens": 8708,
+        "cachedReadTokens": 8576
+      },
+      "_meta": {}
+    },
+    "error": null
+  },
+  "prompt21_settle": {
+    "at_s": 10.93,
+    "result": {
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 123,
+        "outputTokens": 9,
+        "totalTokens": 8708,
+        "cachedReadTokens": 8576
+      },
+      "_meta": {}
+    },
+    "error": null
+  },
+  "sentinel_seen": true,
+  "sentinel_before_prompt10_settled": true,
+  "sentinel_after_steer_and_before_settle": true,
+  "tool_updates_total": 5,
+  "tool_updates_after_steer": 2,
+  "tail_text": "The user wants 12 sequential bash calls, each `sleep 4 && echo step-N`, one at a time, with a one-line comment after each. I must run them one per tool call, waiting for each result. Let me proceed.STEERED-OK-65",
+  "classification": "injected-into-running-turn",
+  "stderr_tail": ""
+}

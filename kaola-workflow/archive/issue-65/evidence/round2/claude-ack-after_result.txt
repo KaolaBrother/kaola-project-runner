@@ -1,0 +1,58 @@
+{
+ "mode": "after_result",
+ "argv": [
+  "claude",
+  "-p",
+  "--input-format",
+  "stream-json",
+  "--output-format",
+  "stream-json",
+  "--verbose",
+  "--permission-mode",
+  "bypassPermissions",
+  "--model",
+  "sonnet"
+ ],
+ "tool_seen_at_s": 8.466,
+ "steer_written_at_s": 82.771,
+ "lines_before_steer": 60,
+ "write_error": null,
+ "result_events": [
+  {
+   "at_s": 82.749,
+   "subtype": "success",
+   "num_turns": 11,
+   "result_head": "All 10 steps completed sequentially."
+  },
+  {
+   "at_s": 84.607,
+   "subtype": "success",
+   "num_turns": 1,
+   "result_head": "ACK-PROBE-65"
+  }
+ ],
+ "event_types_after_steer": [
+  {
+   "at_s": 82.783,
+   "type": "system",
+   "subtype": "init",
+   "head": "{\"type\": \"system\", \"subtype\": \"init\", \"cwd\": \"/private/tmp/kw-i65-ack/scratch\", \"session_id\": \"aa105e16-ed10-47ca-b96d-78b4c29e68cc\", \"tools\": [\"Task\", \"Bash\", \"CronCreate\", \"CronDelete\", \"CronList\", \"DesignSync\", \"Edit\", \"EnterWorktree\", \"ExitWorktree\", \"List"
+  },
+  {
+   "at_s": 84.489,
+   "type": "assistant",
+   "subtype": null,
+   "head": "{\"type\": \"assistant\", \"message\": {\"model\": \"claude-sonnet-5\", \"id\": \"msg_011CfACcuFAZQe8SbggPgnYC\", \"type\": \"message\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"ACK-PROBE-65\"}], \"container\": null, \"stop_reason\": null, \"stop_sequence\": null, \"s"
+  },
+  {
+   "at_s": 84.607,
+   "type": "result",
+   "subtype": "success",
+   "head": "{\"duration_api_ms\": 34611, \"stop_reason\": \"end_turn\", \"session_id\": \"aa105e16-ed10-47ca-b96d-78b4c29e68cc\", \"total_cost_usd\": 0.1323214, \"usage\": {\"input_tokens\": 2, \"cache_creation_input_tokens\": 84, \"cache_read_input_tokens\": 34193, \"output_tokens\": 12, \"out"
+  }
+ ],
+ "steer_text_echoed": false,
+ "any_user_event_after_steer": [],
+ "stderr_tail": "",
+ "raw_line_count": 63
+}

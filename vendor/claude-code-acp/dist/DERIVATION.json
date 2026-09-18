@@ -4,8 +4,8 @@
     "bin/claude-code-acp.js": "3fa961c18fa4538b31d2c6f1ae634ac30f155bf0d307a12b62995ecd9ec584a3",
     "package-lock.json": "f7145b99bdf8b2b60f8fbf78be47f15876edc0e6d5bd592581b59a1122394366",
     "package.json": "00ef476eeb3af012c464018718450d8e79d6a6c108746ae6b4023be51c9e9119",
-    "src/agent.ts": "9cb20cbb2556340ab866e37e373145a7b2bc15abe912a0b87f29b274b8b1d058",
-    "src/claude-runner.ts": "283ce5c1d1f003bf58c1f2c58c74ee1073d4d046db355dc901d76c455bcc5fdf",
+    "src/agent.ts": "a930fd73915c7b6220f1e9326773f2289922d625b0c9aecdae5666c8601343d7",
+    "src/claude-runner.ts": "ec70c4c7e84c3cecb0e045dfc274f2ee418c460152ff43549b35fdc6d8b56944",
     "src/config.ts": "18ccfb00af87f9302d53eea9840b0c97f72aba6b648157452c128b384e031654",
     "src/index.ts": "98d0f733537066b74e7cb265a54f35d45644a43941879fe4e5adbb7956baf654",
     "src/logger.ts": "3347c28e1066988a5c9aac0deac2bf0d7cbaa49e0eb807b0bdc3b34c2601e726",
@@ -16,8 +16,8 @@
   },
   "output": {
     "dist/index.js": {
-      "bytes": 619268,
-      "sha256": "a650cb4646711d02ae46db49649fd2adcc3da521e78b3859705718c9a2ccf0b3"
+      "bytes": 626404,
+      "sha256": "027fab3d8d3587bea3e8754f738cdd9f9f6b60c85ff60fb4614ba2d53c615306"
     }
   },
   "toolchain": {

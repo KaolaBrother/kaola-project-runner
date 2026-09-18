@@ -1,0 +1,67 @@
+{
+ "mode": "close_race",
+ "argv": [
+  "claude",
+  "-p",
+  "--input-format",
+  "stream-json",
+  "--output-format",
+  "stream-json",
+  "--verbose",
+  "--permission-mode",
+  "bypassPermissions",
+  "--model",
+  "sonnet"
+ ],
+ "tool_seen_at_s": 6.824,
+ "steer_written_at_s": 6.824,
+ "lines_before_steer": 7,
+ "write_error": null,
+ "close_error": null,
+ "result_events": [
+  {
+   "at_s": 13.321,
+   "subtype": "success",
+   "num_turns": 2,
+   "result_head": "ACK-PROBE-65"
+  }
+ ],
+ "event_types_after_steer": [
+  {
+   "at_s": 9.857,
+   "type": "system",
+   "subtype": "task_started",
+   "head": "{\"type\": \"system\", \"subtype\": \"task_started\", \"task_id\": \"bsvk67u4p\", \"tool_use_id\": \"toolu_01JPzitkc82XxBsEJSkY6vev\", \"description\": \"Sleep 5 seconds then print step-1\", \"is_backgrounded\": false, \"task_type\": \"local_bash\", \"uuid\": \"d14e17da-8ade-48b7-beb7-6be"
+  },
+  {
+   "at_s": 11.871,
+   "type": "system",
+   "subtype": "task_notification",
+   "head": "{\"type\": \"system\", \"subtype\": \"task_notification\", \"task_id\": \"bsvk67u4p\", \"tool_use_id\": \"toolu_01JPzitkc82XxBsEJSkY6vev\", \"status\": \"completed\", \"output_file\": \"\", \"summary\": \"Sleep 5 seconds then print step-1\", \"uuid\": \"4a5db042-cb2c-4fd4-8535-c92665ab7bb3\""
+  },
+  {
+   "at_s": 11.88,
+   "type": "user",
+   "subtype": null,
+   "head": "{\"type\": \"user\", \"message\": {\"role\": \"user\", \"content\": [{\"tool_use_id\": \"toolu_01JPzitkc82XxBsEJSkY6vev\", \"type\": \"tool_result\", \"content\": \"step-1\", \"is_error\": false}]}, \"parent_tool_use_id\": null, \"session_id\": \"faffde84-d1ee-497e-ab6c-696005e6ccbc\", \"uuid"
+  },
+  {
+   "at_s": 13.099,
+   "type": "assistant",
+   "subtype": null,
+   "head": "{\"type\": \"assistant\", \"message\": {\"model\": \"claude-sonnet-5\", \"id\": \"msg_011CfACdyHnKmgFwUnb5jyg4\", \"type\": \"message\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"ACK-PROBE-65\"}], \"container\": null, \"stop_reason\": null, \"stop_sequence\": null, \"s"
+  },
+  {
+   "at_s": 13.321,
+   "type": "result",
+   "subtype": "success",
+   "head": "{\"duration_api_ms\": 7867, \"stop_reason\": \"end_turn\", \"session_id\": \"faffde84-d1ee-497e-ab6c-696005e6ccbc\", \"total_cost_usd\": 0.0237568, \"usage\": {\"input_tokens\": 4, \"cache_creation_input_tokens\": 1887, \"cache_read_input_tokens\": 62084, \"output_tokens\": 273, \"o"
+  }
+ ],
+ "steer_text_echoed": false,
+ "any_user_event_after_steer": [
+  "{\"type\": \"user\", \"message\": {\"role\": \"user\", \"content\": [{\"tool_use_id\": \"toolu_01JPzitkc82XxBsEJSkY6vev\", \"type\": \"tool_result\", \"content\": \"step-1\", \"is_error\": false}]}, \"parent_tool_use_id\": null, \"session_id\": \"faffde84-d1ee-497e-ab6c-696005e6ccbc\", \"uuid\": \"32322ad5-d1ac-48a7-ae30-5b4b5fda696a\", \"timestamp\": \"2026-09-18T03:33:22.144Z\", \"tool_use_result\": {\"stdout\": \"step-1\", \"stderr\": \"\", \"i"
+ ],
+ "stderr_tail": "",
+ "raw_line_count": 12
+}

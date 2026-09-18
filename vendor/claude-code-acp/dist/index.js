@@ -15601,10 +15601,18 @@ var ClaudeBinaryError = class extends Error {
 var SENSITIVE_FLAGS = /* @__PURE__ */ new Set(["-p", "--print"]);
 var REDACT_FLAGS = /* @__PURE__ */ new Set(["--resume"]);
 var KILL_GRACE_MS = 2e3;
+var STREAM_INPUT_ARGS = ["--input-format", "stream-json"];
+var STEER_FLUSH_TIMEOUT_MS = 2e3;
+function streamUserMessage(text) {
+  return JSON.stringify({
+    type: "user",
+    message: { role: "user", content: [{ type: "text", text }] }
+  }) + "\n";
+}
 function maskArgs(args) {
   const masked = [];
   for (let i = 0; i < args.length; i++) {
-    if (SENSITIVE_FLAGS.has(args[i]) && i + 1 < args.length) {
+    if (SENSITIVE_FLAGS.has(args[i]) && i + 1 < args.length && !args[i + 1].startsWith("-")) {
       masked.push(args[i], `<prompt: ${args[i + 1].length} chars>`);
       i++;
     } else if (REDACT_FLAGS.has(args[i]) && i + 1 < args.length) {
@@ -15672,6 +15680,7 @@ function isRunning(proc) {
 }
 var ClaudeRunner = class {
   runningProcesses = /* @__PURE__ */ new Map();
+  streamingTurns = /* @__PURE__ */ new Map();
   tempDirs = [];
   config;
   constructor(config2) {
@@ -15723,18 +15732,18 @@ var ClaudeRunner = class {
   async startSessionStreaming(cwd, prompt, onEvent, trackingId, options) {
     const args = [
       "-p",
-      prompt,
+      ...STREAM_INPUT_ARGS,
       "--output-format",
       "stream-json",
       "--verbose",
       ...this.buildExtraArgs(options)
     ];
-    return this.runStreaming(args, cwd, onEvent, trackingId);
+    return this.runStreaming(args, cwd, onEvent, trackingId, void 0, prompt);
   }
   async continueSessionStreaming(claudeSessionId, prompt, onEvent, trackingId, options, cwd) {
     const args = [
       "-p",
-      prompt,
+      ...STREAM_INPUT_ARGS,
       "--resume",
       claudeSessionId,
       "--output-format",
@@ -15742,21 +15751,21 @@ var ClaudeRunner = class {
       "--verbose",
       ...this.buildExtraArgs(options)
     ];
-    return this.runStreaming(args, cwd, onEvent, trackingId);
+    return this.runStreaming(args, cwd, onEvent, trackingId, void 0, prompt);
   }
   async startSessionWithMcp(cwd, prompt, mcpServers, onEvent, trackingId, options) {
     const { args: mcpArgs, dir } = this.buildMcpArgs(mcpServers);
     if (onEvent) {
       const args = [
         "-p",
-        prompt,
+        ...STREAM_INPUT_ARGS,
         "--output-format",
         "stream-json",
         "--verbose",
         ...this.buildExtraArgs(options),
         ...mcpArgs
       ];
-      return this.runStreaming(args, cwd, onEvent, trackingId, dir);
+      return this.runStreaming(args, cwd, onEvent, trackingId, dir, prompt);
     } else {
       const args = [
         "-p",
@@ -15811,11 +15820,84 @@ var ClaudeRunner = class {
     return env;
   }
   cancel(trackingId) {
+    const turn = this.streamingTurns.get(trackingId);
+    if (turn) {
+      turn.settled = true;
+      this.streamingTurns.delete(trackingId);
+    }
     const proc = this.runningProcesses.get(trackingId);
     if (proc) {
       this.runningProcesses.delete(trackingId);
       this.terminate(proc);
     }
+  }
+  /**
+   * Kaola fork (Issue #65): deliver one Agent-chosen steering message to the
+   * turn that is running for `trackingId`.
+   *
+   * This is a transport act, not a judgment: `injected` says only that the text
+   * reached the running turn's stdin before that turn reported its result, and
+   * never that the model adopted it. With no running turn — or one whose result
+   * already landed — the text is NOT consumed and nothing is written, so an
+   * idle session can never be steered into an untracked turn.
+   */
+  async steer(trackingId, text) {
+    const turn = this.streamingTurns.get(trackingId);
+    if (!turn) return { outcome: "notConsumed", confirmation: "none", reason: "noRunningTurn" };
+    if (turn.settled) {
+      return { outcome: "notConsumed", confirmation: "none", reason: "turnAlreadySettled" };
+    }
+    const priorError = turn.stdinError;
+    if (priorError) {
+      return {
+        outcome: "notConsumed",
+        confirmation: "none",
+        reason: `stdinError:${priorError.message}`
+      };
+    }
+    const stdin = turn.proc.stdin;
+    if (!stdin || stdin.destroyed || stdin.writableEnded || !isRunning(turn.proc)) {
+      return { outcome: "notConsumed", confirmation: "none", reason: "stdinClosed" };
+    }
+    turn.inFlight += 1;
+    let flush;
+    try {
+      flush = await new Promise((resolve2) => {
+        let done = false;
+        const settle = (value) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve2(value);
+        };
+        const timer = setTimeout(() => settle({ timedOut: true }), STEER_FLUSH_TIMEOUT_MS);
+        timer.unref?.();
+        try {
+          stdin.write(
+            streamUserMessage(text),
+            (err) => settle({ error: err ?? void 0 })
+          );
+        } catch (err) {
+          settle({ error: err instanceof Error ? err : new Error(String(err)) });
+        }
+      });
+    } finally {
+      turn.inFlight -= 1;
+    }
+    if (flush.timedOut) {
+      return { outcome: "unknown", confirmation: "none", reason: "flushTimeout" };
+    }
+    if (flush.error) {
+      return { outcome: "unknown", confirmation: "none", reason: `flushError:${flush.error.message}` };
+    }
+    const lateError = turn.stdinError;
+    if (lateError) {
+      return { outcome: "unknown", confirmation: "none", reason: `stdinError:${lateError.message}` };
+    }
+    if (turn.settled) {
+      return { outcome: "unknown", confirmation: "none", reason: "turnSettledDuringWrite" };
+    }
+    return { outcome: "written", confirmation: "write-only" };
   }
   /** Kaola fork: SIGTERM the child's process group, SIGKILL after a grace period. */
   terminate(proc) {
@@ -15844,12 +15926,12 @@ var ClaudeRunner = class {
     }
     this.cleanup();
   }
-  spawnClaude(args, cwd) {
+  spawnClaude(args, cwd, stdinMode = "ignore") {
     const binary = resolveClaudeBinary(this.config);
     const proc = spawn(binary, args, {
       cwd,
       env: this.sanitizeEnv(),
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [stdinMode, "pipe", "pipe"],
       detached: true
     });
     recordChildSpawn(proc, binary);
@@ -15897,12 +15979,12 @@ var ClaudeRunner = class {
       proc.on("error", reject);
     });
   }
-  runStreaming(args, cwd, onEvent, trackingId, tempDir) {
+  runStreaming(args, cwd, onEvent, trackingId, tempDir, prompt) {
     return new Promise((resolve2, reject) => {
       logger.debug(`spawn streaming: claude ${maskArgs(args)}`);
       let proc;
       try {
-        proc = this.spawnClaude(args, cwd);
+        proc = this.spawnClaude(args, cwd, prompt === void 0 ? "ignore" : "pipe");
       } catch (err) {
         if (tempDir) this.removeTempDir(tempDir);
         reject(err);
@@ -15910,6 +15992,49 @@ var ClaudeRunner = class {
       }
       if (trackingId) {
         this.runningProcesses.set(trackingId, proc);
+      }
+      const turn = prompt === void 0 ? void 0 : { proc, settled: false, inFlight: 0 };
+      if (turn && trackingId) {
+        this.streamingTurns.set(trackingId, turn);
+      }
+      const endStdin = () => {
+        if (turn) turn.settled = true;
+        const close = () => {
+          try {
+            proc.stdin?.end();
+          } catch {
+          }
+        };
+        if (turn && turn.inFlight > 0) {
+          let waited = 0;
+          const drain = setInterval(() => {
+            waited += 25;
+            if (!turn.inFlight || waited >= STEER_FLUSH_TIMEOUT_MS) {
+              clearInterval(drain);
+              close();
+            }
+          }, 25);
+          drain.unref?.();
+          return;
+        }
+        close();
+      };
+      if (prompt !== void 0) {
+        proc.stdin?.on("error", (err) => {
+          if (turn) turn.stdinError = err;
+          logger.debug(`streaming stdin error: ${err.message}`);
+        });
+        try {
+          proc.stdin?.write(streamUserMessage(prompt));
+        } catch (err) {
+          if (trackingId) {
+            this.runningProcesses.delete(trackingId);
+            this.streamingTurns.delete(trackingId);
+          }
+          if (tempDir) this.removeTempDir(tempDir);
+          reject(err);
+          return;
+        }
       }
       let buffer = "";
       let resultText = "";
@@ -15932,14 +16057,17 @@ var ClaudeRunner = class {
             if (parsed.type === "result") {
               sessionId = parsed.session_id ?? sessionId;
               resultText = parsed.result ?? resultText;
+              endStdin();
             }
           } catch {
           }
         }
       });
       proc.on("close", (code) => {
+        if (turn) turn.settled = true;
         if (trackingId) {
           this.runningProcesses.delete(trackingId);
+          this.streamingTurns.delete(trackingId);
         }
         if (tempDir) this.removeTempDir(tempDir);
         if (buffer.trim()) {
@@ -16074,6 +16202,7 @@ function loadMcpAllowedCommands() {
 }
 
 // src/agent.ts
+var STEERING_METHOD = "_session/steering";
 function generateSessionId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -16266,7 +16395,12 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
             resume: {}
           }
         },
-        authMethods: []
+        authMethods: [],
+        // Kaola fork (Issue #65): the ACP steering wire protocol advertises
+        // support at the top-level `_meta.steering`, a sibling of
+        // `agentCapabilities`. Claude Code steers natively through its
+        // stream-json stdin, so this bridge serves `_session/steering`.
+        _meta: { steering: { supported: true } }
       };
     },
     async newSession(params) {
@@ -16623,6 +16757,60 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
           }
         });
         return { stopReason: "end_turn" };
+      }
+    },
+    /**
+     * Kaola fork (Issue #65): the `_session/steering` extension.
+     *
+     * The client delivers one follow-up message to a turn that is still
+     * running. `injected` means the message reached that turn; `promptRequired`
+     * means no running turn owned it, so the message was NOT consumed and the
+     * client must send an ordinary `session/prompt`. This bridge never invents
+     * the legacy detached `startedNewTurn` fallback: an idle session is left
+     * exactly as it was.
+     */
+    async extMethod(method, params) {
+      if (method !== STEERING_METHOD) {
+        throw RequestError.methodNotFound(method);
+      }
+      const sessionId = params.sessionId;
+      if (typeof sessionId !== "string" || !store.has(sessionId)) {
+        throw RequestError.resourceNotFound(`Session ${String(sessionId)} not found`);
+      }
+      const blocks = Array.isArray(params.prompt) ? params.prompt : [];
+      const text = blocks.filter(
+        (block) => !!block && typeof block === "object" && block.type === "text" && typeof block.text === "string"
+      ).map((block) => block.text).join("\n");
+      if (!text.trim()) {
+        throw RequestError.invalidParams("Empty steering text");
+      }
+      if (!runner.steer) {
+        throw RequestError.methodNotFound(method);
+      }
+      const result = await runner.steer(sessionId, text);
+      logger.info(
+        `Steering for session ${sessionId}: ${text.length} chars -> ${result.outcome} (${result.confirmation})`
+      );
+      switch (result.outcome) {
+        case "injected":
+        case "written":
+          return {
+            outcome: result.outcome,
+            confirmation: result.confirmation,
+            ...result.reason ? { reason: result.reason } : {}
+          };
+        case "notConsumed":
+          return {
+            outcome: "promptRequired",
+            reason: result.reason ?? "noRunningTurn",
+            confirmation: result.confirmation
+          };
+        default:
+          return {
+            outcome: "unknown",
+            reason: result.reason ?? "undecided",
+            confirmation: result.confirmation
+          };
       }
     },
     async cancel(params) {

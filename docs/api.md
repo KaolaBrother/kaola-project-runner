@@ -218,7 +218,7 @@ Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
 
 ## Transport selection
 
-Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; an ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded to `capture_receipt_bytes` by dropping its oldest `events`/`tool_calls` and adding `truncated` (`list`, `kept`, `dropped`, `total`, `stream_bytes`, `stream_sha256` of the untruncated one-JSON-line-per-entry stream, `hint`), while `capture --full` is the explicit unbounded request; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. For Claude Code's vendored bridge a `permit` answer settles only the reported `tool_call` status (the `claude -p` child has no stdin and no `--permission-prompt-tool`, so it cannot gate or resume the child). `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin. Each holder process mints an opaque random `holder_instance_id` at construction — immutable for that process, never restored from `record.json` or the native session id, never derived from the PID — and exposes it on `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). `permit`, `cancel`, and the `key escape`→cancel alias accept optional `--expected-holder-instance-id VALUE`; when supplied — including an explicit empty value — the holder compares it against its own id under the settlement lock before any permission settlement, pending-permission cancellation, turn mutation, or outbound cancel, even when no permission/turn is active. A mismatch returns `error.code` `holder-instance-mismatch` with `expected_holder_instance_id` and the actual `holder_instance_id` inside the error object plus top-level `mutation_status` `not_started` and `mutation_performed` `false`; nothing is written to the agent. Omitting the flag keeps legacy unbound behavior. The binding is Runner envelope only and is never forwarded into native ACP method params.
+Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; an ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded to `capture_receipt_bytes` by dropping its oldest `events`/`tool_calls` and adding `truncated` (`list`, `kept`, `dropped`, `total`, `stream_bytes`, `stream_sha256` of the untruncated one-JSON-line-per-entry stream, `hint`), while `capture --full` is the explicit unbounded request; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. For Claude Code's vendored bridge a `permit` answer settles only the reported `tool_call` status (the `claude -p` child takes no `--permission-prompt-tool`, so it cannot gate or resume the child). `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin. Each holder process mints an opaque random `holder_instance_id` at construction — immutable for that process, never restored from `record.json` or the native session id, never derived from the PID — and exposes it on `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). `permit`, `cancel`, and the `key escape`→cancel alias accept optional `--expected-holder-instance-id VALUE`; when supplied — including an explicit empty value — the holder compares it against its own id under the settlement lock before any permission settlement, pending-permission cancellation, turn mutation, or outbound cancel, even when no permission/turn is active. A mismatch returns `error.code` `holder-instance-mismatch` with `expected_holder_instance_id` and the actual `holder_instance_id` inside the error object plus top-level `mutation_status` `not_started` and `mutation_performed` `false`; nothing is written to the agent. Omitting the flag keeps legacy unbound behavior. The binding is Runner envelope only and is never forwarded into native ACP method params.
 
 Codex `--permission-mode` values are the same literal IDs on both transports but not the same semantics. ACP passes the ID through to the upstream adapter's `mode` option: `read-only` is upstream display name "Ask for approval" (workspace-write sandbox + on-request approval — workspace file writes are permitted without a permission request), `agent` is "Approve for me" (auto_review reviewer), `agent-full-access` is "Full access". PTY maps the same IDs to strict `--sandbox read-only|workspace-write|danger-full-access` plus `--ask-for-approval on-request|never`; OS-level read-only exists only via `--transport pty`. ACP does not claim equivalent enforcement. Start receipts surface the adapter's own display names/descriptions as factual evidence in `configured_options[*].option_name` / `option_description` / `value_name` / `value_description` when the adapter returns them.
 
@@ -249,6 +249,88 @@ Only `capture --full` is unbounded. Schema version 3 includes `snapshot_id`,
 relay input/output facts, Git reporting facts, and compatibility editor/activity/approval/decision
 signals. Those compatibility fields are advisory evidence for the controlling agent; generic
 `send`/`stop` never consume them as semantic authority.
+
+### `steer` — Agent-chosen steering of a running turn (Issue #65)
+
+`steer --repo ABS_PATH --session NAME [--text TEXT | --stdin] [--steer-mode native|interrupt]
+[--timeout SECONDS] [--cancel-timeout SECONDS]` delivers one Agent-chosen message to the turn that is
+**already running** on that exact session. It is a tool the controlling Agent decides to use, never a
+Runner policy, and it reuses the same session/repo routing as `send`: no scheduler, no second stdin
+writer, and no second lifecycle. Its scope is the **ACP channel only** — over `pty` it answers
+`steer-unsupported-transport`, since a mid-turn terminal write is an ordinary keystroke stream whose
+meaning only the native UI decides.
+
+Every platform has a usable path inside ACP, and the Agent picks which one:
+
+- `--steer-mode native` uses the platform's own mid-turn entry and exists only where that entry
+  really does. The manifest is the single source of truth: `native_steering` is `supported`,
+  `unsupported` or `unknown` (an uninvestigated surface stays `unknown` and never masquerades as
+  `unsupported`), `acp_steer_method` carries the entry and may be non-empty only when
+  `native_steering` is `supported`, and `steering_summary` records the versioned evidence. Today
+  `claude-code` (the vendored bridge's `claude --input-format stream-json` stdin, exposed as
+  `_session/steering`) and `codex` (`_session/steering`, advertised at `initialize` under
+  `_meta.steering`) qualify; the other seven have no such entry on their ACP surface at the pinned
+  versions.
+- `--steer-mode interrupt` is the composite and works on every platform: cancel the running turn,
+  confirm it actually stopped, then send the text **once** as the next prompt on the same ACP
+  session, so the conversation keeps its context. It is interrupted-then-continued, never injection —
+  the running turn is ended, and work it already did (files written, commands run) is not undone.
+- With no `--steer-mode`, a native platform uses `native`, and a platform without a native entry
+  **refuses** with `steer-mode-required`, `available_steer_modes: ["interrupt"]`, and writes nothing.
+  The Runner never interrupts a worker on its own initiative, and never silently degrades from
+  `native` to `interrupt` after a failure or a timeout.
+- A session whose `start` never negotiated an ACP session id cannot be prompted or
+  steered at all: `send`, `steer` and the composite refuse with `no-acp-session`,
+  `outcome: no_session`, `mutation_performed: false` and nothing written, rather
+  than sending a frame with a null `sessionId` and reporting `in_progress` or
+  `steer_consumed: true` for text no session received.
+
+`steer_outcome` with `steer_consumed` and `steer_confirmation` carries the whole claim:
+
+| `steer_outcome` | `steer_consumed` | `steer_confirmation` | Meaning |
+|---|---|---|---|
+| `injected` | `true` | `agent-confirmed` | the agent acknowledged that the running turn took it |
+| `written` | `null` | `write-only` | flushed into the running turn's input, which this platform acknowledges in no way |
+| `interrupted_and_resent` | `true` | `cancel-confirmed` | composite: the turn was cancelled and confirmed stopped, then this text ran as the next turn |
+| `resent_without_interrupt` | `true` | `no-turn-to-interrupt` | composite: the turn had already ended on its own, so nothing was interrupted |
+| `started_new_turn` | `true` | `agent-confirmed` | the agent opened a separate turn this holder does not track — not injection |
+| `not_consumed` | `false` | `none` | nothing was written |
+| `unsupported` | `false` | `none` | no native entry on this platform or transport |
+| `rejected` | `false` | `none` | the agent refused; `error.detail` carries its reason |
+| `unknown` | `null` | `none` | undecided — the Runner never resends blindly |
+
+`mutation_performed` describes the steer itself, while `mutation_status` stays the running turn's.
+The interrupted or steered turn keeps its own request id, output and terminal state: the native path
+reports `turn_request_id`, `turn_request_id_after` and `turn_request_id_preserved`; the composite
+reports `cancelled_turn_request_id`, `cancelled_turn_stop_reason` and a distinct
+`new_turn_request_id`, plus `side_effects_possible: true`, because interrupting is not undoing. Both
+report `steer_method`, `steer_request_id`, `steer_fingerprint`, `turn_prompt_fingerprint` and the raw
+`steer_response`.
+
+The composite binds to the turn **object** it targeted, not merely to its id: `self.turn` is
+replaced when a prompt is admitted, so the cancel's admission check, its outbound `session/cancel`,
+its wait and its receipt are all taken from that one turn while the lock is held, and nothing
+downstream re-reads `self.turn`. Turns also start from worker events on another connection thread,
+so this matters in ordinary operation. If the targeted turn simply finishes on its own before the cancel goes out, no cancel is sent and
+the receipt is `resent_without_interrupt` with `cancel_sent: false` — an interruption that did not
+happen is never claimed. If the targeted turn is replaced, the outcome is `unknown`
+with `steer-turn-changed` and the steering text is not sent; `cancel_sent` distinguishes "nothing
+was cancelled" (`false`) from "the target was asked to stop and we cannot confirm what followed"
+(`true`), and `side_effects_possible` is reported for both. If the target did stop but another turn
+already owns the session, the answer is the same refusal rather than a dispatch onto a turn nobody
+asked to steer. The new turn's id comes from the send's own admission, never from whatever happens
+to be running afterwards, and a late answer to a finished turn can no longer settle the turn
+running now.
+
+Two refusals protect against a double dispatch. An unconfirmed cancel sends **nothing**
+(`steer-cancel-unconfirmed`, outcome `unknown`): a turn that will not confirm it stopped can never
+receive a second prompt, and the Agent must `observe` before deciding — the Runner does not retry.
+And an idle session is never natively steered: the holder refuses before writing, because some agents
+answer an idle steering call by starting a detached turn (Codex 1.11.0 returns `startedNewTurn` even
+when the request carries `idleBehavior: "promptRequired"`). The steering text is sent at most once in
+either mode. A holder started before this release has no `steer` op and cannot gain one without a
+restart, which answers `steer-holder-outdated` with nothing written.
+
 
 The `relay` object reports relay epoch/process/socket, runtime child PID/PGID/path/start fingerprint,
 child input/output offsets, streaming output digest, resize revision, bracketed-paste mode, and terminal

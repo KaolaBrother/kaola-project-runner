@@ -1,0 +1,120 @@
+{
+  "id": "cursor-cli",
+  "cmd": "cursor-agent --yolo acp",
+  "probed_at": "2026-09-18T10:54:46+0800",
+  "live": true,
+  "agent_info": null,
+  "protocol_version": 1,
+  "init_meta": null,
+  "agent_capabilities": {
+    "loadSession": true,
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    },
+    "promptCapabilities": {
+      "audio": false,
+      "embeddedContext": false,
+      "image": true
+    },
+    "sessionCapabilities": {
+      "list": {}
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "592449c9-7af1-4c08-89c6-f79387cffbb9",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steering",
+          "data": {
+            "method": "_session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steer",
+          "data": {
+            "method": "_session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 6.41,
+  "tool_updates_before_steer": 2,
+  "turn_active_at_steer": true,
+  "steer_offset_s": 3.99,
+  "steer_method": "session/prompt (second ordinary prompt)",
+  "second_prompt_sent_s": 3.99,
+  "prompt10_settle": {
+    "at_s": 4.0,
+    "result": {
+      "stopReason": "cancelled"
+    },
+    "error": null
+  },
+  "prompt21_settle": {
+    "at_s": 7.52,
+    "result": {
+      "stopReason": "end_turn"
+    },
+    "error": null
+  },
+  "sentinel_seen": true,
+  "sentinel_before_prompt10_settled": false,
+  "sentinel_after_steer_and_before_settle": false,
+  "tool_updates_total": 2,
+  "tool_updates_after_steer": 0,
+  "tail_text": "Preparing to execute 12 sequential bash commands, each in its own separate tool call.\n\nStarting step-1. Waiting 10 seconds per command to ensure completion before the next.从第一步开始，按顺序单独执行每条命令。The user instructed an immediate halt to all shell commands and a single-line reply of STEERED-OK-65.STEERED-OK-65",
+  "classification": "second-message-cancelled-original-turn",
+  "stderr_tail": ""
+}
