@@ -1,0 +1,26 @@
+render-skills: PASS (9 workers + kaola-project-runner + grok-bot host: 1 bridge skill, 2526 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+installer migration acceptance: PASS
+installer runtimes acceptance: PASS
+FAILED: test-issue-49-grok-bot-host.py
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.059s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+cat: /tmp/kaola-val.7puOpl/test-devin-regressions.py.log: No such file or directory
+{"killed_group_members": [], "matched_pids": [12938, 12988, 13083, 13108, 13129, 13161, 13195, 13220, 13243, 13310, 13360, 13454, 13500, 13548], "residual_pids": [], "results": [{"force_killed": true, "holder_alive": false, "pid": 12938, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 12988, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13083, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13108, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13129, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13161, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13195, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13220, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13243, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13310, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13360, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13454, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13500, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 13548, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}], "root": "/tmp/kaola-val.7puOpl", "swept_groups": []}

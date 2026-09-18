@@ -847,9 +847,18 @@ class Issue39HolderInstanceTests(AcpSessionFixture, unittest.TestCase):
 
     def test_shell_wrapper_forwards_expected_flag(self) -> None:
         stub = self.root / f"python-stub-{os.getpid()}"
+        # The wrapper reads the platform manifest with Python before it execs
+        # kaola-acp.py. Issue #78 moved that read off `python3 - <<heredoc` and
+        # onto `python3 -c <program>`, because a here-document deadlocks against
+        # its own pipe under load, so the stub recognises both spellings of
+        # "this is the manifest read, not the exec". What the test asserts is
+        # unchanged: only the exec reaches the argv echo below.
         stub.write_text(
             "#!/bin/sh\n"
-            "if [ \"$1\" = \"-\" ]; then cat >/dev/null; printf 'pty\\n'; exit 0; fi\n"
+            "case \"$1\" in\n"
+            "  -) cat >/dev/null; printf 'pty\\n'; exit 0 ;;\n"
+            "  -c) printf 'pty\\n'; exit 0 ;;\n"
+            "esac\n"
             "printf '%s\\n' \"$@\"\n",
             encoding="utf-8",
         )

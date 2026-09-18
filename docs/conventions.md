@@ -79,6 +79,13 @@ bracketed paste. Raw frames, coordinates, captured output, editor/approval/activ
 counts, and later argv text are evidence for the controlling agent, not Runner semantic authority.
 Generic send/stop may not branch on those advisory fields.
 
+`scripts/kaola-tmux.sh` carries no here-document and no here-string. Bash writes a heredoc body up
+to 4096 bytes into a pipe from the forked child before `exec`, so that one process holds both ends
+and nothing drains it; macOS hands out 512-byte pipes under pipe-KVA pressure, and a larger body
+then blocks in `write()` forever, leaving a child that wears the script's argv and outlives a
+SIGKILL aimed at its parent (Issue #78). Pass Python programs with `-c` and feed `read` from a
+process substitution.
+
 Each platform Skill must teach the same measured loop: start, observe/capture, let the Agent decide,
 transfer the chosen prompt or key, observe/capture the response, and stop the exact session when the
 Agent chooses. Workflow/Git/forge verification occurs only when the Agent chose a Workflow task.

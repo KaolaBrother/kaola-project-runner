@@ -17,9 +17,18 @@ MODEL_POLICY_HELPER="$script_dir/kaola-model-policy.py"
 MODEL_POLICY_KEY=KAOLA_PROJECT_RUNNER_MODEL_POLICY
 export OBSERVATION_HELPER
 
+# Issue #78: this file must contain no here-document and no here-string. Bash writes
+# any heredoc body up to HEREDOC_PIPESIZE (4096) into a pipe from the forked child
+# *before* exec, so that one process holds both ends and nothing drains it. macOS hands
+# out 512-byte pipes once system-wide pipe KVA is under pressure - measured on the dev
+# Mac: capacity 65536 idle, 512 at 150 held pipes - so any body over 512 bytes blocks in
+# write() forever. The stuck process has not exec'd yet, so it wears this script's argv,
+# has no children, and survives the SIGKILL a caller's timeout aims at its parent. That
+# is what hung the Issue #73 refusal cases (emit_json, 883 bytes) under load. Feed Python
+# with -c and read with a process substitution instead; both are pipe-free or drained by
+# a separate writer. tests/contract/test-issue-78-heredoc-deadlock.py enforces this.
 usage() {
-  cat <<'EOF'
-Usage:
+  printf '%s\n' 'Usage:
   kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|upgrade] [--model ID --effort LEVEL] [--fast on|off]
   kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
@@ -29,8 +38,7 @@ Usage:
   kaola-tmux.sh PLATFORM steer     --repo ABS_PATH --session NAME --text TEXT [--steer-mode native|interrupt] [--cancel-timeout SECONDS]   # acp transport only
   kaola-tmux.sh PLATFORM key       --repo ABS_PATH --session NAME [--if-snapshot ID] --key NAME
   kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME [--decision-id ID] [--if-snapshot ID] --replace-editor [--text TEXT]
-  kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force]
-EOF
+  kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force]'
 }
 
 die() { printf 'kaola-tmux[%s]: %s\n' "${platform:-unknown}" "$*" >&2; exit 1; }
@@ -38,8 +46,7 @@ resolve_tool() { if [[ "$1" == */* ]]; then [[ -x "$1" ]] || return 1; printf '%
 canonical_dir() { (cd "$1" 2>/dev/null && pwd -P); }
 json_value() { local expression="$1"; JSON_INPUT="$(cat)" "$PYTHON_BIN" -c 'import json,os,sys; d=json.loads(os.environ["JSON_INPUT"]); v=eval(sys.argv[1], {"d":d}); print(json.dumps(v,separators=(",",":")) if isinstance(v,(dict,list,bool)) else ("" if v is None else str(v)))' "$expression"; }
 emit_json() {
-  "$PYTHON_BIN" - "$@" <<'PY'
-import json,os,sys
+  "$PYTHON_BIN" -c 'import json,os,sys
 d={}
 for raw in sys.argv[1:]:
     kind,key,value=raw.split(":",2)
@@ -50,8 +57,7 @@ if d.get("schema_version") == 3 and d.get("platform") and "transport" not in d:
     d["transport"]={"selected":"pty","default":os.environ.get("KPR_DEFAULT_TRANSPORT","pty"),"alternatives":["acp"],"reason":os.environ.get("KPR_TRANSPORT_REASON","caller-override")}
 if "mutation_performed" in d and "mutation_status" not in d:
     d["mutation_status"]="completed" if d["mutation_performed"] is True else "not_started" if d["mutation_performed"] is False else "unknown"
-print(json.dumps(d,ensure_ascii=False,sort_keys=True))
-PY
+print(json.dumps(d,ensure_ascii=False,sort_keys=True))' "$@"
 }
 
 platform="${1:-}"; [[ -n "$platform" ]] || { usage; exit 2; }; shift
@@ -118,13 +124,11 @@ PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable
 manifest_file="$script_dir/platform.yaml"
 [[ -f "$manifest_file" ]] || manifest_file="$(dirname "$script_dir")/platforms/$platform.yaml"
 [[ -f "$manifest_file" ]] || die "platform manifest not found"
-default_transport="$("$PYTHON_BIN" - "$manifest_file" <<'PY'
-import json,sys
+default_transport="$("$PYTHON_BIN" -c 'import json,sys
 for line in open(sys.argv[1], encoding="utf-8"):
     key, separator, value = line.partition(":")
     if separator and key.strip() == "default_transport":
-        print(json.loads(value)); break
-PY
+        print(json.loads(value)); break' "$manifest_file"
 )"
 [[ "$default_transport" == acp || "$default_transport" == pty ]] || die "invalid manifest default_transport"
 if [[ -z "$transport" ]]; then transport="$default_transport"; transport_reason=manifest-default; else transport_reason=caller-override; fi
@@ -256,11 +260,9 @@ fi
 if [[ "$fast_given" == true ]]; then
   case "$fast" in on|off) ;; *) die "--fast must be on or off" ;; esac
 fi
-MODEL_VALUE="$model" "$PYTHON_BIN" - <<'PY' || die "model contains unsupported terminal controls"
-import os
+MODEL_VALUE="$model" "$PYTHON_BIN" -c 'import os
 value = os.environ.get("MODEL_VALUE", "")
-raise SystemExit(1 if any(ord(ch) < 32 or ord(ch) == 127 for ch in value) else 0)
-PY
+raise SystemExit(1 if any(ord(ch) < 32 or ord(ch) == 127 for ch in value) else 0)' || die "model contains unsupported terminal controls"
 if [[ -n "$effort" ]]; then
   case "$effort" in
     low|medium|high|xhigh|max) ;;
@@ -340,9 +342,7 @@ load_session_identity() {
   panes="$("$TMUX_BIN" list-panes -t "$TMUX_SESSION_TARGET" -F '#{pane_id}')"; STATE_PANE_COUNT="$(printf '%s\n' "$panes" | awk 'NF{n++}END{print n+0}')"
   if [[ "$STATE_PANE_COUNT" -eq 1 ]]; then
     STATE_PANE_ID="$(printf '%s\n' "$panes" | awk 'NF{print;exit}')"
-    read -r STATE_PANE_PATH STATE_PANE_COMMAND STATE_PANE_DEAD STATE_PANE_PID STATE_PANE_WIDTH STATE_PANE_HEIGHT STATE_CURSOR_X STATE_CURSOR_Y STATE_HISTORY_SIZE STATE_HISTORY_BYTES <<EOF
-$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{pane_current_path} #{pane_current_command} #{pane_dead} #{pane_pid} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y} #{history_size} #{history_bytes}')
-EOF
+    read -r STATE_PANE_PATH STATE_PANE_COMMAND STATE_PANE_DEAD STATE_PANE_PID STATE_PANE_WIDTH STATE_PANE_HEIGHT STATE_CURSOR_X STATE_CURSOR_Y STATE_HISTORY_SIZE STATE_HISTORY_BYTES < <("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{pane_current_path} #{pane_current_command} #{pane_dead} #{pane_pid} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y} #{history_size} #{history_bytes}') || true
     STATE_PANE_TITLE="$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{pane_title}')"; value="$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{pane_input_off}')"; [[ "$value" == 1 ]] && STATE_PANE_INPUT_OFF=true
     value="$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{cursor_flag}')"; [[ "$value" == 1 ]] && STATE_CURSOR_FLAG=true; value="$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{alternate_on}')"; [[ "$value" == 1 ]] && STATE_ALTERNATE_ON=true
     STATE_CAPTURE_HISTORY="$("$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S -100 2>/dev/null || true)"; STATE_PANE_PROCESS="$("$PS_BIN" -ww -p "$STATE_PANE_PID" -o command= 2>/dev/null || true)"
@@ -371,11 +371,9 @@ debug_relay_reply() {
 }
 
 bootstrap_relay() {
-  "$PYTHON_BIN" - "$STATE_RELAY_SOCKET" "$STATE_RELAY_EPOCH" "$script_dir/kaola-relay-protocol.py" <<'PY'
-import importlib.util,json,secrets,socket,sys
+  "$PYTHON_BIN" -c 'import importlib.util,json,secrets,socket,sys
 spec=importlib.util.spec_from_file_location("kpr_protocol_boot",sys.argv[3]); p=importlib.util.module_from_spec(spec); spec.loader.exec_module(p)
-s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); s.settimeout(5.0); s.connect(sys.argv[1]); h={"protocol_version":1,"request_id":secrets.token_hex(16),"relay_epoch":sys.argv[2],"operation":"bootstrap-hello","expected_child_fingerprint":""}; p.send_frame(s,h); r,_=p.recv_frame(s); s.close(); print(json.dumps(r,sort_keys=True))
-PY
+s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); s.settimeout(5.0); s.connect(sys.argv[1]); h={"protocol_version":1,"request_id":secrets.token_hex(16),"relay_epoch":sys.argv[2],"operation":"bootstrap-hello","expected_child_fingerprint":""}; p.send_frame(s,h); r,_=p.recv_frame(s); s.close(); print(json.dumps(r,sort_keys=True))' "$STATE_RELAY_SOCKET" "$STATE_RELAY_EPOCH" "$script_dir/kaola-relay-protocol.py"
 }
 
 build_sample() {
@@ -447,8 +445,7 @@ emit_existing_session_not_reusable() {
 }
 load_payload() { if [[ "$text_given" == true ]]; then PAYLOAD="$text_value"; else [[ ! -t 0 ]] || die "$command_name needs --text or stdin"; PAYLOAD="$(</dev/stdin)"; fi; [[ -n "$PAYLOAD" ]] || die "prompt must not be empty"; }
 validate_payload_controls() {
-  PAYLOAD_VALUE="$PAYLOAD" "$PYTHON_BIN" - <<'PY'
-import os
+  PAYLOAD_VALUE="$PAYLOAD" "$PYTHON_BIN" -c 'import os
 
 payload = os.environ["PAYLOAD_VALUE"]
 for character in payload:
@@ -461,15 +458,13 @@ for character in payload:
         or 0x80 <= codepoint <= 0x9F
         or 0xDC80 <= codepoint <= 0xDCFF
     ):
-        raise SystemExit(1)
-PY
+        raise SystemExit(1)'
 }
 payload_needs_bracketed_paste() { [[ "$PAYLOAD" == *$'\n'* || "$PAYLOAD" == *$'\t'* ]]; }
 payload_hex() { printf '%s' "$PAYLOAD" | "$PYTHON_BIN" -c 'import sys; print(sys.stdin.buffer.read().hex())'; }
 fingerprint_payload() { printf '%s' "$PAYLOAD" | "$PYTHON_BIN" -c 'import hashlib,sys; print("sha256:"+hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
 journal_pty_prompt() {
-  KAOLA_PLATFORM="$platform" KAOLA_SESSION="$session" KAOLA_REPO="$repo" KAOLA_FINGERPRINT="$1" "$PYTHON_BIN" - <<'PY'
-import hashlib,json,os,pathlib,tempfile,time
+  KAOLA_PLATFORM="$platform" KAOLA_SESSION="$session" KAOLA_REPO="$repo" KAOLA_FINGERPRINT="$1" "$PYTHON_BIN" -c 'import hashlib,json,os,pathlib,tempfile,time
 base=pathlib.Path(os.environ.get("KAOLA_ACP_RECORD_ROOT") or tempfile.gettempdir())
 if "KAOLA_ACP_RECORD_ROOT" not in os.environ:
     base=base/f"kaola-{os.getuid()}"
@@ -479,12 +474,10 @@ directory.mkdir(parents=True,exist_ok=True); path=directory/"record.json"
 try: record=json.loads(path.read_text())
 except (OSError,ValueError): record={"platform":os.environ["KAOLA_PLATFORM"],"session":os.environ["KAOLA_SESSION"],"repo":os.environ["KAOLA_REPO"]}
 record["last_prompt"]={"fingerprint":os.environ["KAOLA_FINGERPRINT"],"written_at":time.time(),"transport":"pty","mutation_status":"accepted","stop_reason":None}
-temporary=path.with_suffix(".tmp"); temporary.write_text(json.dumps(record,sort_keys=True)); os.replace(temporary,path)
-PY
+temporary=path.with_suffix(".tmp"); temporary.write_text(json.dumps(record,sort_keys=True)); os.replace(temporary,path)'
 }
 cleanup_terminal_socket() {
-  "$PYTHON_BIN" - "$1" "$2" <<'PY'
-import os, pathlib, socket, stat, sys, tempfile
+  "$PYTHON_BIN" -c 'import os, pathlib, socket, stat, sys, tempfile
 path = pathlib.Path(sys.argv[1])
 epoch = sys.argv[2]
 expected = pathlib.Path(tempfile.gettempdir()) / f"kpr-{os.getuid()}" / f"{epoch}.sock"
@@ -496,8 +489,7 @@ except FileNotFoundError:
     raise SystemExit(0)
 if path.is_symlink() or not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
     raise SystemExit(1)
-path.unlink()
-PY
+path.unlink()' "$1" "$2"
 }
 DIRECT_CHILD_FP="" DIRECT_RELAY=""
 open_transport_channel() {
@@ -587,12 +579,10 @@ case "$command_name" in
   preflight)
     adapter_preflight; resolve_model_policy || true
     base_json="$(emit_json "s:result:ready" "s:platform:$platform" "s:runtime:$ADAPTER_DISPLAY_NAME" "s:runtime_version:$PREFLIGHT_VERSION" "s:runtime_binary:$RUNTIME_BIN" "s:repo:$repo" "s:session:$session" "b:workflow_next:$PREFLIGHT_WORKFLOW_NEXT" "b:kaola_workflow_finalize:$PREFLIGHT_FINALIZE" "s:recurring_execution:$ADAPTER_RECURRING_EXECUTION" "s:project_materialization:$PREFLIGHT_PROJECT_MATERIALIZATION" "s:detail:$PREFLIGHT_DETAIL")"
-    BASE_JSON="$base_json" POLICY_JSON="$MODEL_POLICY_JSON" GROK_VERSION="$PREFLIGHT_VERSION" GROK_ROOT="${PREFLIGHT_PROJECT_ROOT_JSON:-null}" "$PYTHON_BIN" - "$platform" <<'PY'
-import json,os,sys
+    BASE_JSON="$base_json" POLICY_JSON="$MODEL_POLICY_JSON" GROK_VERSION="$PREFLIGHT_VERSION" GROK_ROOT="${PREFLIGHT_PROJECT_ROOT_JSON:-null}" "$PYTHON_BIN" -c 'import json,os,sys
 d=json.loads(os.environ["BASE_JSON"]); d.update(json.loads(os.environ["POLICY_JSON"]))
 if sys.argv[1] == "grok": d.update(grok_version=os.environ["GROK_VERSION"], project_root=json.loads(os.environ["GROK_ROOT"]))
-print(json.dumps(d,ensure_ascii=False,sort_keys=True))
-PY
+print(json.dumps(d,ensure_ascii=False,sort_keys=True))' "$platform"
     ;;
   observe) observe_managed ;;
   status) load_session_identity; if [[ "$STATE_PRESENT" == true ]]; then emit_status present; else emit_status absent; fi ;;
