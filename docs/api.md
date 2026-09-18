@@ -212,6 +212,18 @@ Asking the CLI to invoke `workflow-next` is an Agent-selected prompt, not a Runn
 operation. Session names match
 `[A-Za-z0-9][A-Za-z0-9_.-]{0,79}`. Without `--text`, `send` reads non-empty stdin.
 
+`KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<abs root>` declares Project Runner Orchestrator context. While
+it is exported, `--repo` may be omitted and is completed from that root, and a `start` naming a
+different root is refused with `{"result":"refused","reason":"canonical-root-mismatch"}` (or
+`canonical-root-invalid` for an unusable binding) and `mutation_performed: false`, before anything
+starts; accepted invocations add `canonical_repo` to the receipt. Other commands keep the `--repo`
+they were given, so an existing session stays observable and exactly stoppable.
+
+`--expected-holder-instance-id ID` binds `permit`, `cancel`, `key`, and `stop` to one ACP holder
+instance. A mismatch returns `{"error":{"code":"holder-instance-mismatch"}}` with
+`mutation_performed: false` and changes nothing, so a same-named session rebuilt by a later holder
+is never stopped in place of the one the Agent verified.
+
 Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
 `CURSOR_AGENT_BIN`, `DEVIN_BIN`, and `DROID_BIN`. Test/embedding overrides are `TMUX_BIN`, `PYTHON_BIN`, `PS_BIN`, and
 `KAOLA_START_TIMEOUT`; `GROK_START_TIMEOUT` remains a Grok-only compatibility alias.

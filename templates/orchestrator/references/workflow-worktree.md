@@ -1,87 +1,89 @@
 # Canonical root and Workflow worktrees
 
-These are decision defaults for ordinary Workflow-backed project work. They are not
-transport gates, security boundaries, or a second lifecycle engine.
+Decision defaults for ordinary Workflow-backed project work, plus the one
+mechanical binding an Orchestrator sets at setup. Not a second lifecycle engine.
 
 ## Facts
 
-The **canonical project root** is the consuming project's main Git checkout: the Git
-top-level the human named as the project, not a Workflow-owned child. A **child
-worktree** is a linked Git worktree that Kaola Workflow created or recovered for one
-claim (often under that project's `.kw/worktrees/`, but path shape is not an
-authorization rule). Each linked worktree is itself a Git top-level. Runner `--repo`
-must name some Git top-level; receipts report that selected path as a bounded fact.
-`KAOLA_PROJECT_RUNNER_REPO` is the realpath of that Agent-selected Git top-level, not
-proof that the path is the canonical project root.
+The **canonical project root** is the consuming project's main Git checkout: the
+Git top-level the human named as the project, not a Workflow-owned child. A
+**child worktree** is a linked Git worktree that Kaola Workflow created or
+recovered for one claim (often under `.kw/worktrees/`, but path shape is not an
+authorization rule). Each linked worktree is itself a Git top-level, so two of
+them can share one remote and still carry different Runner `repo` identities.
+`KAOLA_PROJECT_RUNNER_REPO` is the realpath of the Agent-selected Git top-level,
+not proof that the path is the canonical project root.
 
-Inspect current Git and Workflow evidence before choosing where to start a worker:
-`git worktree list`, `git rev-parse --show-toplevel`, active `kaola-workflow/*/workflow-state.md`
-and `mission-list.md`, and existing exact Runner sessions. Those records remain lifecycle
-evidence. They do not authorize or refuse transport.
+## Orchestrator binding
+
+An Orchestrator binds the root the human chose, once, before any dispatch:
+
+```bash
+export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=/abs/path/to/project
+```
+
+The Runner then checks it mechanically on every `start`, so no dispatch re-proves
+the path by hand. An omitted `--repo` is completed from the binding; an explicit
+`--repo` must resolve to exactly that root; anything else - a child worktree of
+the same repository, an unrelated checkout, or a binding that is not a Git
+top-level - returns `canonical-root-mismatch` or `canonical-root-invalid` with
+`mutation_performed: false` before any process, session, or record exists. An
+accepted dispatch reports `canonical_repo` in its receipt. Name the child
+worktree in the worker's prompt, never in Runner `--repo`.
+
+A session that already exists keeps its own `--repo`, so a legacy worktree-rooted
+session can still be observed and exactly stopped by its verified original
+locator. Pair that stop with `--expected-holder-instance-id` from the session's
+own record, so a same-named session rebuilt by a later holder instance is refused
+rather than stopped. Without the binding exported, none of this section applies.
 
 ## Normal path
 
-1. Start the runtime worker session with Runner `--repo` bound to the canonical project
-   root.
-2. From that runtime's main conversation, ask it to invoke its installed `workflow-next`.
-3. Let that runtime and its Workflow create, resume, recover, or otherwise reconcile the
-   run, branch, Mission List, and child worktree.
-4. Keep Runner responsible only for exact-session transport, model selection, observation,
-   prompt delivery, and exact stop.
-5. Keep `kaola-workflow-finalize` in the worker conversation; the outer Agent verifies
-   evidence and decides whether to direct it.
-
-Example: Claude Code is started with `--repo /path/to/project` (the main checkout). The
-controlling Agent sends a prompt that names issue #52 and asks the CLI to invoke
-`workflow-next`. Workflow claims that one issue and creates `.kw/worktrees/issue-52` (or
-resumes that run). The Runner session identity stays the canonical-root session; the
-child worktree is Workflow's working location, not a second Runner `--repo` unless the
-Agent later chooses otherwise.
+1. Start the worker at the bound canonical project root.
+2. From that runtime's main conversation, ask it to invoke its installed
+   `workflow-next`.
+3. Let that runtime and its Workflow create, resume, recover, or otherwise
+   reconcile the run, branch, Mission List, and child worktree.
+4. Keep Runner responsible only for exact-session transport, model selection,
+   observation, prompt delivery, and exact stop.
+5. Keep `kaola-workflow-finalize` in the worker conversation; the outer Agent
+   verifies evidence and decides whether to direct it.
 
 ## Evidence-backed exception
 
-Linked-worktree starts, outer-created branches and Mission Lists, and existing-run
-recovery are **Agent decisions rather than transport gates**. The controlling Agent may
-choose a different startup or recovery path when current evidence, explicit authorization,
-review-only work, an existing handoff, a damaged run, or another concrete circumstance makes
-that safer. Report the chosen Git root honestly. PTY and ACP retain identical decision
-authority: neither transport classifies Workflow mode or rejects a linked worktree.
-
-Example: Issues #50/#51 already had live bundles and child worktrees. The controlling Agent
-stopped the earlier in-worktree Claude Code sessions and restarted at the canonical
-repository root with instructions to invoke `workflow-next`. That was an Agent-chosen
-correction for those runs, not a machine refusal and not a universal requirement. Starting
-inside a linked worktree for review, diagnosis, recovery, or a non-Workflow task remains
-valid when the Agent selects that Git top-level.
+Outside an Orchestrator binding, linked-worktree starts, outer-created branches
+and Mission Lists, and existing-run recovery are **Agent decisions rather than
+transport gates**. The controlling Agent may choose a different startup or
+recovery path when current evidence, explicit authorization, review-only work, an
+existing handoff, a damaged run, or another concrete circumstance makes that
+safer. Report the chosen Git root honestly. PTY and ACP retain identical decision
+authority: neither transport classifies Workflow mode, and standalone Runner use
+is unchanged.
 
 ## Concurrent sessions
 
-Several exact Runner sessions may share one canonical project root. Each session keeps its
-own session name and transport identity. Their Workflows may own distinct runs,
-branches, and child worktrees. Seeing another run's worktree or Mission List is not write
-authorization. Several workers may share one issue's run and Mission List under distinct
-Runner names and native sessions; the naming and one-issue-per-run rules that make that
-association explicit live in [issue-dispatch.md](issue-dispatch.md).
+Several exact Runner sessions may share one canonical project root, each keeping
+its own name, transport identity, run, branch, and child worktree. Seeing another
+run's worktree or Mission List is not write authorization. Workers sharing one
+issue's run follow [issue-dispatch.md](issue-dispatch.md).
 
 ## Recovery
 
-Preserve existing work by default. After inspecting state, the Agent chooses resume,
-repair, handoff, or a fresh run according to Workflow rules and evidence. Do not
-mechanically rebuild, delete, move, or adopt an existing run. Do not force an
-outer-created worktree onto a worker that can invoke `workflow-next` itself.
+Preserve existing work by default; after inspecting state the Agent chooses
+resume, repair, handoff, or a fresh run. Do not mechanically rebuild, delete,
+move, or adopt an existing run, and do not force an outer-created worktree onto a
+worker that can invoke `workflow-next` itself.
 
 ## Migration
 
-A session already running in a child worktree is advisory, not a defect:
-
-1. Preserve work and inspect Git plus Workflow records.
-2. Then choose whether to continue there, stop and restart at the canonical project root
-   with in-session `workflow-next`, or use another Workflow recovery path.
+A session already running in a child worktree is advisory, not a defect: preserve
+work, read Git plus Workflow records, then choose whether to continue there,
+restart at the canonical project root with in-session `workflow-next`, or use
+another Workflow recovery path.
 
 ## Non-goals
 
-Do not make `runtime-tmux.sh` reject linked worktrees. Do not require the transport to
-classify Workflow mode. Do not turn `.kw/worktrees` into a security or authorization
-boundary. Do not move Workflow lifecycle semantics into platform adapters. Do not prevent
-legitimate review, diagnosis, recovery, or non-Workflow sessions from starting in a linked
-worktree.
+Do not turn `.kw/worktrees` into an authorization boundary, move Workflow
+lifecycle semantics into platform adapters, add a registry, lock, or daemon, or
+stop legitimate review, diagnosis, recovery, and non-Workflow sessions from
+starting in a linked worktree when no binding is set.

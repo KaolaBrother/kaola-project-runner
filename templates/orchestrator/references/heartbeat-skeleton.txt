@@ -4,7 +4,7 @@ PROJECT_RUNNER_HEARTBEAT_V2
 heartbeat 就是交到你手里的这篇工作提示词：Codex 与 Grok Bot 由各自定时系统触发投递，ZCode Host 由每次 Worker 返回或既有 Worker 事件触发投递。载体沿用本宿主现有机制，不要求各平台同路径同 schema，不给 ZCode 加定时器，也不把 Codex/Grok Bot 改成事件触发。
 本篇是「当前有效指令快照」，不是变更日志：只写现在仍然生效的约束，历史留在 Workflow、Issue 和既有运行记录里，需要时用指针引用。
 
-仓库与已授权目标：{repo, goal}
+仓库与已授权目标：{repo, goal；启动时一次 export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<canonical 项目根>，之后派工省略 --repo 由 Runner 补全并拒绝漂移的根；旧会话按原始 --repo 与 --expected-holder-instance-id 收尾}
 本项目短码与仓库身份：{一个稳定的 ASCII 短码，例如 KaolaTerminal 用 KT，与 canonical repository 一起写在本篇；属项目策略，不每次派工另猜}
 CLI、模型、并发、额度及能力限制：{每项取最新一次明确授权的值，保留用户表达的单位与含义；并发数、账户额度、token 预算分别记，不合成一个数；缺失才询问}
 Workflow、自执行、心跳间隔：{用户选择或默认值}

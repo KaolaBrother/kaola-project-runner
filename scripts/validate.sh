@@ -67,6 +67,7 @@ python_suites_all=(
   "test-issue-41-orchestrator.py"
   "test-issue-68-heartbeat-snapshot.py"
   "test-issue-72-session-naming.py"
+  "test-issue-73-canonical-root.py"
   "test-issue-49-grok-bot-host.py"
   "test-progressive-disclosure.py"
   "test-issue-50-claude-acp-bridge.py"
@@ -116,6 +117,7 @@ python_suites_b=(
   "test-issue-65-steer-race.py"
   "test-issue-65-host-contract.py"
   "test-issue-70-binding-fact.py"
+  "test-issue-73-canonical-root.py"
 )
 run_suite_lane() {
   for suite in "$@"; do

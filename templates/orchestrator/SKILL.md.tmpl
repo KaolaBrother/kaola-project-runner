@@ -125,11 +125,12 @@ dropped; `capture --full` is the only unbounded request.
 | Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
 
-Ordinary Workflow-backed work starts the worker `--repo` at the consuming
-project's canonical Git root and asks that runtime's main conversation to invoke
-its installed workflow-next; inspect Git and Workflow evidence first.
-Linked-worktree starts and existing-run recovery are Agent decisions on both
-PTY and ACP, not transport gates. See
+Bind the consuming project's canonical project root once at setup with
+`export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<abs root>`, then omit `--repo`: the
+Runner fills it and refuses a drifted root before anything starts, so no
+dispatch re-proves the path. Ask each worker to invoke its installed
+workflow-next. Without that binding, linked-worktree starts and existing-run
+recovery are Agent decisions on both PTY and ACP, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
 
 `self_hosting_risk` and model mismatches are reported evidence, not automatic
@@ -253,10 +254,9 @@ override unless the human wrote one. One dispatch prompt per ready session. Resu
 "Ending a run".
 
 The worker is not the orchestrator. Its prompt should name the authorized
-scope, whether Workflow is on, whether `--repo` is the canonical project root or
-a Workflow child worktree, write ownership, that it must not self-finalize
-before acceptance, and that irreversible or value choices print
-`HUMAN_DECISION_REQUIRED` and wait.
+scope, whether Workflow is on, its child worktree and write ownership, that it
+must not self-finalize before acceptance, and that irreversible or value choices
+print `HUMAN_DECISION_REQUIRED` and wait.
 
 ### Issue-scoped names, one issue per run
 

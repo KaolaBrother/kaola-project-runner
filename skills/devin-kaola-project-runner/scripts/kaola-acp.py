@@ -762,7 +762,7 @@ def git_facts(repo: str) -> dict[str, Any]:
 
 
 def base_receipt(args: argparse.Namespace, repo: str) -> dict[str, Any]:
-    return {
+    receipt: dict[str, Any] = {
         "schema_version": 3,
         "platform": args.platform,
         "session": args.session,
@@ -775,6 +775,12 @@ def base_receipt(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         },
         "git": git_facts(repo),
     }
+    # Issue #73: set by the shared entrypoint once its canonical-root binding
+    # has accepted this dispatch. Its absence simply means the guard did not run.
+    canonical = os.environ.get("KPR_CANONICAL_REPO")
+    if canonical:
+        receipt["canonical_repo"] = canonical
+    return receipt
 
 
 def holder_lost_receipt(args: argparse.Namespace, repo: str,
@@ -1821,8 +1827,14 @@ def main() -> int:
         receipt["error"] = {"code": "answer-unsupported",
                             "message": "use send; --decision-id maps to permit --request-id"}
     elif args.command == "stop":
+        # Issue #73: a stop is bound to the exact holder instance the Agent
+        # verified, so a same-named session rebuilt by a later instance is
+        # refused instead of stopped.
+        params = {"force": args.force}
+        if args.expected_holder_instance_id is not None:
+            params["expected_holder_instance_id"] = args.expected_holder_instance_id
         receipt = op_or_holder_lost(
-            args, repo, directory, "stop", {"force": args.force}, 30.0
+            args, repo, directory, "stop", params, 30.0
         )
     else:
         die(f"unhandled command {args.command}")

@@ -2776,6 +2776,13 @@ class Holder:
         return {"level": "L0", **self.turn_receipt()}
 
     def op_stop(self, params: dict[str, Any]) -> dict[str, Any]:
+        # Issue #73: check the bound instance before anything is requested,
+        # cancelled, or written, so a refused stop leaves this holder and its
+        # agent exactly as they were.
+        expected = params.get("expected_holder_instance_id")
+        if expected is not None and expected != self.holder_instance_id:
+            with self.lock:
+                return self._holder_instance_mismatch("stop", expected)
         force = bool(params.get("force"))
         self.stop_requested = True
         self.state = "stopping"

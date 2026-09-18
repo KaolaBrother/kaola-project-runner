@@ -225,6 +225,19 @@ top-level; starting there is an Agent decision, not a transport refusal, on both
 `KAOLA_PROJECT_RUNNER_REPO` is the realpath of the Agent-selected `--repo`, not a classifier that
 the path is the canonical project root.
 
+A Project Runner Orchestrator states the root explicitly instead, by exporting
+`KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<abs root>` once at setup. `scripts/kaola-tmux.sh` — the one
+entrypoint both transports and all nine platforms pass through — then resolves that binding and the
+requested `--repo` with `realpath`, requires the binding to be a Git top-level, completes an omitted
+`--repo` from it, and on `start` compares the two exactly. A different root, including a linked
+worktree of the same repository, returns a typed `canonical-root-mismatch` refusal (an unusable
+binding returns `canonical-root-invalid`) with `mutation_performed: false` before any process,
+tmux session, or record exists; an accepted dispatch reports `canonical_repo` in its receipt.
+Without that export nothing changes: standalone starts, existing sessions, and close-out of a
+legacy worktree-rooted session by its own `--repo` behave exactly as before. The binding guards
+against accidental dispatch drift; it is not protection against a hostile controlling host, and it
+adds no registry, lock, or daemon.
+
 Inspect `git worktree list`, Workflow `workflow-state.md` / `mission-list.md`, and existing exact
 sessions before choosing where to start. Then, for ordinary Workflow-backed work, start at the
 canonical project root and ask that runtime's main conversation to invoke `workflow-next` so its

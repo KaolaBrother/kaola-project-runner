@@ -44,6 +44,8 @@ d={}
 for raw in sys.argv[1:]:
     kind,key,value=raw.split(":",2)
     d[key]=(value=="true") if kind=="b" else int(value) if kind=="n" else json.loads(value) if kind=="j" else value
+if d.get("schema_version") == 3 and os.environ.get("KPR_CANONICAL_REPO") and "canonical_repo" not in d:
+    d["canonical_repo"]=os.environ["KPR_CANONICAL_REPO"]
 if d.get("schema_version") == 3 and d.get("platform") and "transport" not in d:
     d["transport"]={"selected":"pty","default":os.environ.get("KPR_DEFAULT_TRANSPORT","pty"),"alternatives":["acp"],"reason":os.environ.get("KPR_TRANSPORT_REASON","caller-override")}
 if "mutation_performed" in d and "mutation_status" not in d:
@@ -128,6 +130,52 @@ PY
 if [[ -z "$transport" ]]; then transport="$default_transport"; transport_reason=manifest-default; else transport_reason=caller-override; fi
 [[ "$transport" == acp || "$transport" == pty ]] || die "--transport must be acp or pty"
 export KPR_DEFAULT_TRANSPORT="$default_transport" KPR_TRANSPORT_REASON="$transport_reason"
+
+# Issue #73: a Project Runner Orchestrator binds one human-selected canonical
+# project root once, and every worker it dispatches afterwards uses that root.
+# The binding is explicit: without KAOLA_PROJECT_RUNNER_CANONICAL_REPO this is an
+# ordinary standalone invocation and nothing here applies. With it, an omitted
+# --repo is completed from the bound root, and a new `start` must name exactly
+# that root - a linked worktree of the same repository is a different Git
+# top-level and is refused here, before any process, tmux session, or record
+# exists. An already-located session keeps its own --repo for close-out, so
+# legacy worktree-rooted work can still be observed and exactly stopped. This
+# guards against accidental dispatch drift; it is not protection against a
+# hostile controlling host, and it is not a second Workflow classifier.
+refuse_canonical_root() {
+  local reason="$1" requested="$2" bound="$3" alternative=acp
+  [[ "$transport" == acp ]] && alternative=pty
+  emit_json "n:schema_version:3" "s:result:refused" "s:reason:$reason" \
+    "s:action:$command_name" "s:platform:$platform" "s:session:$session" \
+    "s:repo:$requested" "s:canonical_repo:$bound" "b:mutation_performed:false" \
+    "j:transport:{\"selected\":\"$transport\",\"default\":\"$default_transport\",\"alternatives\":[\"$alternative\"],\"reason\":\"$transport_reason\"}"
+  exit 1
+}
+canonical_binding="${KAOLA_PROJECT_RUNNER_CANONICAL_REPO:-}"
+if [[ -n "$canonical_binding" && ( -z "$repo" || "$command_name" == start ) ]]; then
+  canonical_repo=""
+  if [[ "$canonical_binding" == /* && -d "$canonical_binding" ]]; then
+    canonical_repo="$(canonical_dir "$canonical_binding" || true)"
+    if [[ -n "$canonical_repo" ]]; then
+      canonical_root="$(git -C "$canonical_repo" rev-parse --show-toplevel 2>/dev/null || true)"
+      canonical_root="$([[ -n "$canonical_root" ]] && canonical_dir "$canonical_root" || true)"
+      [[ "$canonical_root" == "$canonical_repo" ]] || canonical_repo=""
+    fi
+  fi
+  [[ -n "$canonical_repo" ]] || refuse_canonical_root canonical-root-invalid "$repo" "$canonical_binding"
+  if [[ -z "$repo" ]]; then
+    repo="$canonical_repo"
+  else
+    requested_repo="$(canonical_dir "$repo" || true)"
+    [[ -n "$requested_repo" ]] || requested_repo="$repo"
+    [[ "$requested_repo" == "$canonical_repo" ]] \
+      || refuse_canonical_root canonical-root-mismatch "$requested_repo" "$canonical_repo"
+    repo="$canonical_repo"
+  fi
+  # Both transports report the bound root they passed through as one bounded fact.
+  export KPR_CANONICAL_REPO="$canonical_repo"
+fi
+
 if [[ "$transport" == acp ]]; then
   [[ -f "$script_dir/kaola-acp.py" ]] || die "ACP transport is not installed"
   acp_args=("$PYTHON_BIN" "$script_dir/kaola-acp.py" "$platform" "$command_name" --repo "$repo" --transport-reason "$transport_reason")
