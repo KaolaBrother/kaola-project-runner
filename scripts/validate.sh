@@ -93,6 +93,7 @@ python_suites_all=(
   "test-issue-84-zcode-native-resume.py"
   "test-issue-85-zcode-resume-advertised-model.py"
   "test-issue-86-delegator-quota.py"
+  "test-issue-88-permission-defaults.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -112,6 +113,7 @@ python_suites_a=(
   "test-direct-transport-contract.py"
   "test-issue-9-contract.py"
   "test-issue-83-lane-failure-visibility.py"
+  "test-issue-88-permission-defaults.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"

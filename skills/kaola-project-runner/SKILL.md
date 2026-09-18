@@ -119,7 +119,7 @@ dropped; `capture --full` is the only unbounded request.
 | Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
 | Heartbeat | 30 minutes unless specified; zero or "no heartbeat" means one-shot. One host-native carrier, else same-session sleep, never both. |
-| Permissions | Existing Runner default bypass start. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
+| Permissions | Per platform, not one global bypass. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
 | Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
 
@@ -132,8 +132,8 @@ recovery are Agent decisions on both PTY and ACP, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
 
 `self_hosting_risk` and model mismatches are reported evidence, not automatic
-start gates. Bypass is not broader authorization. OpenCode ACP permission
-leftovers are a transport fact: do not force PTY or invent a new skip-all gate.
+start gates. Bypass is not broader authorization. With no verified ACP skip-all,
+permission may still arise: `permit` settles it, never force PTY or add a gate.
 
 ## Heartbeat
 

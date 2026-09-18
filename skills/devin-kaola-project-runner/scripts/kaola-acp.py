@@ -1694,6 +1694,20 @@ def main() -> int:
         # entry gets `unsupported`; an undetermined one stays `unknown`.
         method = (args.manifest.get("acp_steer_method") or "").strip()
         native_steering = args.manifest.get("native_steering") or "unknown"
+        # Issue #88: the codes and outcomes already separate `unknown` from
+        # `unsupported`; the human-readable text must too. An unverified surface
+        # is not a proven absence, so it never reads as one.
+        unverified = native_steering == "unknown"
+        # Each call site keeps its own `unsupported` wording byte-for-byte; only
+        # the `unknown` case is reworded.
+        exposes_no_entry = ("has no verified native mid-turn steering entry" if unverified
+                            else "exposes no native mid-turn steering entry")
+        has_no_entry = ("has no verified native mid-turn steering entry" if unverified
+                        else "has no native mid-turn steering entry")
+        unverified_note = (
+            " No probe has settled this version, so absence is not established."
+            if unverified else ""
+        )
         mode = args.steer_mode or ("native" if method else None)
 
         if mode == "interrupt":
@@ -1727,8 +1741,9 @@ def main() -> int:
                 "error": {
                     "code": "steer-mode-required",
                     "message": (
-                        f"{args.platform} exposes no native mid-turn steering entry on its ACP "
-                        f"surface (native_steering={native_steering}); nothing was written. "
+                        f"{args.platform} {exposes_no_entry} on its ACP "
+                        f"surface (native_steering={native_steering}); nothing was written."
+                        f"{unverified_note} "
                         "The available path is the composite `--steer-mode interrupt`: it "
                         "CANCELS the running turn, confirms it stopped, then sends this text as "
                         "the next turn on the same session, keeping the conversation's context. "
@@ -1754,8 +1769,9 @@ def main() -> int:
                     "code": "steer-capability-unknown" if native_steering == "unknown"
                     else "steer-unsupported",
                     "message": (
-                        f"{args.platform} has no native mid-turn steering entry on the ACP "
-                        f"channel (native_steering={native_steering}); nothing was written. "
+                        f"{args.platform} {has_no_entry} on the ACP "
+                        f"channel (native_steering={native_steering}); nothing was written."
+                        f"{unverified_note} "
                         "Use `--steer-mode interrupt` for the composite path"
                     ),
                 },

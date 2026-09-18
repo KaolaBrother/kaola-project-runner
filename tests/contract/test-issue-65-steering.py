@@ -417,6 +417,14 @@ class SteeringContract(unittest.TestCase):
                 if values["native_steering"] == "supported":
                     self.assertIn("steers natively", body)
                     self.assertNotIn("exposes no native mid-turn entry", body)
+                elif values["native_steering"] == "unknown":
+                    # Issue #88: an unverified surface must not be described as a
+                    # proven absence, and it still only offers the composite.
+                    self.assertIn("No native mid-turn entry has been verified", body)
+                    self.assertNotIn("exposes no native mid-turn entry", body)
+                    self.assertIn("--steer-mode interrupt", body)
+                    self.assertIn("never injection", body)
+                    self.assertIn("side effects", body)
                 else:
                     self.assertIn("exposes no native mid-turn entry", body)
                     self.assertIn("--steer-mode interrupt", body)

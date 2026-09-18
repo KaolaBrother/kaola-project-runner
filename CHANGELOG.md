@@ -52,6 +52,31 @@
   advertises the accepted model exactly once. Fail-closed semantics are
   unchanged — nothing is substituted, the backend still sees no
   `session/setModel`, on 3.12+ and on the pre-3.12 overlay path alike.
+
+- **The permission default is stated per platform, and the OpenCode steering evidence carries its
+  own version (Issue #88).** The main Runner Skill's `Defaults` table said "Existing Runner default
+  bypass start", which reads as a guarantee for all nine platforms. It is not one: Claude Code,
+  Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-all option at start, Cursor and
+  Grok carry only a launch flag with `acp_mode_config_id` empty, and OpenCode's ACP surface
+  advertises no skip-all at all. The row now reads as a per-platform default, and the surrounding
+  paragraph states one general rule -- with no verified ACP skip-all a permission request may still
+  arise -- rather than naming a single platform, so Cursor and Grok are covered too. It surfaces
+  through the existing `permission_required` carrier event and is settled with `permit`; README
+  carries the per-platform roster. Neither `docs/api.md` nor `README.md` pins which platforms steer
+  natively or how many do not; both now send the reader to `native_steering` in
+  `platforms/<id>.yaml`, and the composite `--steer-mode interrupt` stays an explicitly chosen
+  option on every platform. Wording only: no adapter, scheduling or approval-mechanism change, no
+  auto-approval, no new gate. Separately, `platforms/opencode.yaml` declared
+  `acp_verified_versions cli=1.18.29` while its `steering_summary` reported a JSON-RPC `-32601`
+  probe run on 1.18.17. OpenCode's `native_steering` is now `unknown` rather than `unsupported`, so
+  the manifest, the generated Skill and every `steer` receipt agree: the 1.18.17 result stays in the
+  summary as history, the worker Skill says no native entry has been *verified* instead of
+  asserting one does not exist, and `steer` answers `steer_outcome: unknown` with
+  `steer-capability-unknown` and "absence is not established". `unknown` was already a first-class
+  manifest value and receipt outcome; only the wording that contradicted it changed. Behaviour is
+  untouched -- the bare `steer` still refuses with `available_steer_modes: ["interrupt"]`, the
+  composite stays explicitly chosen with no auto-degrade, no probe engine was added, and the eight
+  other platforms' steer receipts are byte-identical.
 - **Native `sess_*` resume keeps the session's own Coding Plan model on ZCode 3.12+ (Issue #84).**
   A faithful `--resume sess_*` failed outright with `resume-failed` / "resumed session reports no
   persisted model", because five things were wrong at once on the 3.12 wire. `session/read` on

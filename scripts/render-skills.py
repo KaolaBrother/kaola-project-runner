@@ -135,13 +135,37 @@ nothing and reports `unknown`. See [references/steering.md](references/steering.
 """
 
 
+STEERING_UNKNOWN = """## Steering a running turn
+
+No native mid-turn entry has been verified on {runtime}'s ACP surface, so a bare
+`steer` refuses and writes nothing. That is an unverified capability, not a
+proven absence: nothing here says the entry does not exist. The available path
+is the composite, which you choose explicitly:
+
+```bash
+"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" \\
+  --steer-mode interrupt --text '<redirection>'
+```
+
+It **cancels** the running turn, confirms it stopped, then sends your text as the
+next turn on the same session, which keeps the conversation's context. That is
+interrupted-then-continued, never injection: work in progress stops and may have
+left partial side effects (`side_effects_possible`). An unconfirmed cancel sends
+nothing and reports `unknown`. See [references/steering.md](references/steering.md).
+"""
+
+
 def steering_block(manifest: dict[str, str]) -> str:
     """Issue #65: every platform documents the steering path it really has on
     its ACP surface. A native tool is advertised only where the native entry
     exists; everywhere else the Skill documents the explicit composite instead
-    of leaving the Agent with nothing."""
-    template = (STEERING_SUPPORTED if manifest["native_steering"] == "supported"
-                else STEERING_COMPOSITE)
+    of leaving the Agent with nothing. Issue #88: `unknown` gets its own block -
+    an unverified surface must not be described as a proven absence, and it
+    still offers only the explicitly chosen composite."""
+    template = {
+        "supported": STEERING_SUPPORTED,
+        "unknown": STEERING_UNKNOWN,
+    }.get(manifest["native_steering"], STEERING_COMPOSITE)
     return template.format(runtime=manifest["runtime_name"]).rstrip()
 
 

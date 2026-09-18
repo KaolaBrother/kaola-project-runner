@@ -390,14 +390,18 @@ SESSION="opencode-example"
 ```
 
 `steer` delivers one Agent-chosen message to a turn that is **already running**, alongside
-`send`. It is an ACP-only tool, and the Agent picks the mode:
+`send`. It is an ACP-only tool, and the Agent picks the mode. Which platforms have a native
+mid-turn entry is read from `native_steering` in `platforms/<id>.yaml` — `supported` means the
+entry exists, `unsupported` means it was investigated and does not, and `unknown` means no probe
+has settled it. No roster is pinned here, because that answer changes as surfaces are investigated:
 
 ```bash
-# Native mid-turn entry, where the platform really has one (today Claude Code and Codex):
+# Native mid-turn entry, on a platform whose manifest says native_steering: supported.
 ./scripts/kaola-tmux.sh codex steer --repo "$REPO" --session "$SESSION" \
   --text 'Stop the current approach and do X instead.'
 
-# Everywhere else, the composite: interrupt the turn, then continue the same session.
+# The composite works on every platform and is always chosen explicitly: interrupt the
+# turn, then continue the same session.
 ./scripts/kaola-tmux.sh droid steer --repo "$REPO" --session "$SESSION" \
   --steer-mode interrupt --text 'Stop the current approach and do X instead.'
 ```
@@ -422,9 +426,15 @@ Droid is the exception to the upgrade policy: both tiers remain Auto Model, and 
 is passed only when explicitly selected. Its `-fast` catalog IDs are explicit `--model` choices,
 not a separate Fast toggle.
 
-**Permission defaults matter:** launches generally request the platform's broad automatic-approval
-mode. OpenCode's default ACP path has no skip-permission launch flag. Use `--permission-mode` where
-supported and check the native semantics: Codex ACP's `read-only` mode can write workspace files;
+**Permission defaults matter:** the default is per platform, not one guarantee across all nine.
+Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-all option at start
+(`mode`, or `autonomy_level` for Droid). Cursor and Grok carry only a launch flag (`--yolo`,
+`--always-approve`) and advertise no ACP option; OpenCode's default ACP path has none at all. On
+any platform with no verified ACP skip-all - Cursor, Grok and OpenCode today - a permission request
+may still arise: it surfaces through the existing `permission_required` carrier event and is
+settled with `permit`. Neither forcing PTY nor adding a gate is the answer. Use
+`--permission-mode` where supported and check the native semantics: Codex ACP's `read-only` mode
+can write workspace files;
 strict Codex read-only execution requires `--transport pty --permission-mode read-only`.
 Droid defaults to full bypass on both transports: PTY uses `--skip-permissions-unsafe` and a
 process-scoped settings overlay, while ACP applies `model=auto` and `autonomy_level=auto-high`.

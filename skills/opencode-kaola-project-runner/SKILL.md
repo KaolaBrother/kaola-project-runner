@@ -95,9 +95,10 @@ After reading current evidence, the controlling Agent chooses what to send:
 
 ## Steering a running turn
 
-OpenCode's ACP surface exposes no native mid-turn entry, so a bare `steer`
-refuses and writes nothing. The available path is the composite, which you
-choose explicitly:
+No native mid-turn entry has been verified on OpenCode's ACP surface, so a bare
+`steer` refuses and writes nothing. That is an unverified capability, not a
+proven absence: nothing here says the entry does not exist. The available path
+is the composite, which you choose explicitly:
 
 ```bash
 "$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" \
