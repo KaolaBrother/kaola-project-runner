@@ -34,10 +34,30 @@ a second store:
 a successful `start` has no `native_session_identity` before the first prompt.
 Do not imply a stopped app-server will auto-restore that id.
 
+## Grok Bot co-location (account bridge only)
+
+When this Skill was loaded from the Grok Bot account bridge (ROOT, bound
+target, and consumer project given as inputs), before every Host `status`,
+`start` (including `--resume`), `send`, and `stop` on that bound target run
+the existing locator with its full attestation parameters. Codex and generic
+Skill-directory hosts skip this. No second locator, ledger, or schema.
+
+```bash
+kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
+  --project "$PROJECT" --worker zcode --session "$HOST"
+```
+
+`$HOST` is the exact session about to be used: the standard name, or a
+uniquely adopted live nonstandard name. Do not attest a different session
+than the Host command that follows. Refuse any `refused` receipt; do not
+operate the Host. Tmux presence on the receipt is evidence, not a start
+gate and not ownership.
+
 ## Recover
 
 1. Bind the same execution target and `$PROJECT`. Derive `$HOST` from the
-   short code. Probe the existing Runner:
+   short code. On the Grok Bot bridge path, attest first. Probe the existing
+   Runner:
 
    ```bash
    "$ZCODE" status --repo "$PROJECT" --session "$HOST"

@@ -39,8 +39,12 @@ name was missing or a pointer file is absent. There is no Delegator
 continuation file. A **stopped** Host may `--resume` an attested native
 `sess_*`; if the backend cannot restore it, a **new** standard-named Host is
 a new ACP session — confirm current authorization first, then start, and
-continue the frontier from existing project records. Commands, identities,
-and the prompt: [handoff.md](references/handoff.md).
+continue the frontier from existing project records. Loaded from the Grok Bot
+account bridge: before each Host `status`, `start` (including `--resume`),
+`send`, and `stop` on that bound target, attest with the existing locator's
+full parameters (`--project`, `--worker zcode`, exact `--session`) and refuse
+`refused`. Codex and generic hosts do not. Commands, identities, and the
+prompt: [handoff.md](references/handoff.md).
 
 Do not pass per-worker notification bindings, per-worker `--repo`, scheduling, or
 heartbeat instructions. Do not rename, restart, or cancel an in-flight Host.

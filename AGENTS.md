@@ -70,7 +70,10 @@ Runner `status` / receipts: `--session`, `acp_session_id`, and native `sess_*` a
 separate facts. A Git worktree is not an ACP id. A live Host is attached in place. If it is
 confirmed stopped and `sess_*` cannot restore, a new standard-named Host is a new ACP
 session: confirm current authorization before `start`, then continue from existing
-project records. Do not open a blank Host.
+project records. Do not open a blank Host. Grok Bot via the account bridge
+attests Host status/start/resume/send/stop with the existing locator
+`--project --worker zcode --session` (exact live name) and refuses `refused`;
+Codex and generic do not.
 
 ## Project-Specific Runner Contract
 

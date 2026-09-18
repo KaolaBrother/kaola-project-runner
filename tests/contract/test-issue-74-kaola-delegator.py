@@ -309,6 +309,16 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "Skill forbids a dedicated continuation file")
     check("even if its recorded name is not the new form" in skill_one,
           "Skill adopts a live Host with a nonstandard name")
+    check("Grok Bot account bridge" in skill_one, "Skill gates locator attestation to the Grok Bot bridge")
+    check("--worker zcode" in handoff_one and "--session \"$HOST\"" in handoff_doc,
+          "Grok Bot Host ops attest with locator --worker zcode and exact session")
+    check("--project \"$PROJECT\"" in handoff_doc, "Grok Bot Host ops attest with locator --project")
+    check("kaola-project-runner-locate" in handoff_doc, "Grok Bot Host ops use the existing locator command")
+    check("Refuse any `refused` receipt" in handoff_one, "Grok Bot path refuses a refused locator receipt")
+    check("Codex and generic" in handoff_one and "skip this" in handoff_one,
+          "Codex and generic hosts are not given the locator")
+    check("uniquely adopted live nonstandard name" in handoff_one,
+          "adopted live Host attests the real exact session")
     check(len((EXTERNAL / "SKILL.md").read_bytes()) <= BUDGETS["external_skill_bytes"],
           "external Skill stays in its small budget")
     check(BUDGETS["main_skill_bytes"] <= 17408, "existing main budget not raised")
@@ -325,6 +335,9 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check(re.search(r"(?m)^name: kaola-delegator$", bridge) is not None, "bridge skill id is kaola-delegator")
     check("ROOT/skills/kaola-delegator/SKILL.md" in bridge, "bridge loads the external Skill")
     check("Do not load Project Runner" in bridge, "bridge does not load Project Runner")
+    check("--worker zcode" not in bridge, "thin bridge does not carry the Host locator worker id")
+    check("Grok Bot co-location attestation" in bridge, "bridge points at the Skill's Grok Bot co-location step")
+    check("refuse `refused`" in bridge.lower(), "bridge refuses a refused locator receipt")
     check("Bind the execution target first" in bridge, "bridge still binds the execution target first")
     check("live Grok Bot adoption" not in bridge.lower() or "does not claim" in (ROOT / "hosts" / "grok-bot" / "INSTALL.md").read_text(encoding="utf-8").lower(),
           "no live Grok Bot UAT claim on the bridge")
@@ -489,6 +502,62 @@ def test_adopt_nonstandard_live_host_without_second_start() -> None:
         sandbox.cleanup()
 
 
+def test_existing_locator_accepts_zcode_host_full_attestation() -> None:
+    """The Grok Bot Host path names this existing locator form.
+
+    This subprocess is not a Grok Bot Agent. Missing-authorization non-start
+    remains a documentation contract.
+    """
+    sandbox = Sandbox("locate")
+    try:
+        host = "zcode-KPR-orchestrator-main"
+        locate = ROOT / "scripts" / "kaola-locate.py"
+        good = subprocess.run(
+            [PYTHON, str(locate), "receipt", "--target", "local",
+             "--project", str(sandbox.repo), "--worker", "zcode", "--session", host],
+            capture_output=True, text=True, timeout=30,
+        )
+        payload = json.loads((good.stdout or "").strip().splitlines()[-1])
+        sandbox.dump("30-locator-zcode-host.json", payload)
+        check((payload.get("worker") or {}).get("id") == "zcode",
+              "existing locator accepts --worker zcode")
+        check((payload.get("session") or {}).get("name") == host,
+              "existing locator attests the exact Host session")
+        check((payload.get("project") or {}).get("on_this_host") is True,
+              "existing locator attests the consumer project on this host")
+        if payload.get("result") == "refused":
+            check(isinstance(payload.get("reasons"), list) and payload["reasons"],
+                  "a refused locator receipt carries reasons the Skill must honor")
+
+        bad = subprocess.run(
+            [PYTHON, str(locate), "receipt", "--target", "local",
+             "--project", str(sandbox.repo), "--worker", "bogus", "--session", host],
+            capture_output=True, text=True, timeout=30,
+        )
+        bad_payload = json.loads((bad.stdout or "").strip().splitlines()[-1])
+        sandbox.dump("31-locator-bogus-worker.json", bad_payload)
+        check(bad_payload.get("result") == "refused", "unknown worker is refused")
+        check("worker-unknown" in (bad_payload.get("reasons") or []),
+              "unknown worker reason is worker-unknown")
+
+        adopted = "zcode-KPR-legacy-live"
+        adopted_run = subprocess.run(
+            [PYTHON, str(locate), "receipt", "--target", "local",
+             "--project", str(sandbox.repo), "--worker", "zcode", "--session", adopted],
+            capture_output=True, text=True, timeout=30,
+        )
+        adopted_payload = json.loads((adopted_run.stdout or "").strip().splitlines()[-1])
+        sandbox.dump("32-locator-adopted-session.json", adopted_payload)
+        check((adopted_payload.get("session") or {}).get("name") == adopted,
+              "locator attests the exact adopted live session, not a synthesized standard name")
+        sandbox.dump("33-locator-not-agent.txt", (
+            "locator subprocess is not a Grok Bot Agent run; "
+            "Skill still requires refuse of a refused receipt\n"
+        ))
+    finally:
+        sandbox.cleanup()
+
+
 def test_new_standard_host_after_confirmed_stop() -> None:
     """Confirmed stop then a new standard Host under complete authorization.
 
@@ -609,6 +678,7 @@ def main() -> int:
         test_generated_entry_matrix_and_no_engine_leak,
         test_two_layer_handoff_worker_end_turn_and_resume,
         test_adopt_nonstandard_live_host_without_second_start,
+        test_existing_locator_accepts_zcode_host_full_attestation,
         test_new_standard_host_after_confirmed_stop,
     )
     failed = 0

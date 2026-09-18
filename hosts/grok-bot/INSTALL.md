@@ -2,7 +2,7 @@
 
 These steps are for the owner and for Grok Bot itself. They are not a Skill. The account
 receives **exactly one** small private Skill, `kaola-delegator` (Kaola-Delegator bridge,
-`hosts/grok-bot/kaola-delegator.md`, 2405 bytes, stage `content`). Every policy,
+`hosts/grok-bot/kaola-delegator.md`, 2536 bytes, stage `content`). Every policy,
 worker, reference, and script stays in the repository and is loaded on demand from a verified
 checkout on the bound execution target. Research on Grok Bot 0.51.0 found no supported automated
 way to create an account Skill (`NO_SUPPORTED_PATH`), so the one native skill write below is the

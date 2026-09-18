@@ -33,7 +33,9 @@ start a new standard-named Host as a new ACP session only after current authoriz
 complete (goal, remaining work, platforms/members, counts/concurrency, quota, priority,
 delivery/stop boundary); missing key values: ask, do not `start`, do not guess a stale
 quota. Continue from Git / Workflow / Issue records. Changing the outer Agent does not
-stop a live Host or re-claim issues.
+stop a live Host or re-claim issues. Grok Bot, after the account bridge, attests each Host
+`status`/`start`/`resume`/`send`/`stop` on that bound target with the existing locator
+`--project` `--worker zcode` `--session` (the exact live name); Codex and generic do not.
 
 Kaola Project Runner also provides nine self-contained **worker** Agent Skills for **Claude Code,
 Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, and Droid CLI**. A

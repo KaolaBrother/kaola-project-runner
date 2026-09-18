@@ -14,7 +14,10 @@
   block start, not only later dispatch. The unproven ZCode.app 3.12.3
   `runtimeModel` create fallback and swallowed `setModel` retry are not
   in this candidate. Fake tests are not a live ZCode model-session proof.
-  Existing budgets were not raised.
+  Grok Bot, after the account bridge, attests each Host
+  status/start/resume/send/stop with the existing locator `--project`
+  `--worker zcode` `--session` (exact live name) and refuses `refused`;
+  Codex and generic do not. Existing budgets were not raised.
 
 - **Kaola-Delegator is the external delegation Skill; Grok Bot is no longer a
   Project Runner host (Issue #74).** The generated Skill `kaola-delegator`

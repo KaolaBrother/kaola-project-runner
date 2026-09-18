@@ -160,7 +160,11 @@ kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
 ```
 
 The last form is the **fail-closed host-target attestation** run before each
-worker dispatch. Its receipt is one JSON line (≤ 4 KB, `locator_receipt_bytes`):
+worker dispatch. Kaola-Delegator on the Grok Bot bound target uses that same
+form before Host `status`/`start`/`resume`/`send`/`stop`, with `--worker zcode`
+and the exact Host session (including an adopted live nonstandard name).
+Codex and generic Delegator entries do not. Its receipt is one JSON line
+(≤ 4 KB, `locator_receipt_bytes`):
 
 | Field | Evidence |
 |---|---|
