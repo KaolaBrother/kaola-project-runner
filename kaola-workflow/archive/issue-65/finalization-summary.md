@@ -85,7 +85,8 @@ docs (`api.md`, `zcode-host.md`, `README.md`, `docs/README.md`, `CHANGELOG.md`).
 ## Validation
 
 - `./scripts/validate.sh` — **exit 0**, every contract suite green, at
-  `57fc091`. Log: `evidence/validate/validate-final-57fc091.log`; the integration
+  `57fc091`. Log: `evidence/validate/validate-final-57fc091.txt` (the repository
+  ignores `*.log`, so the raw run logs are archived as `.txt`); the integration
   and pre-integration runs are kept beside it.
 - `./scripts/render-skills.py --check` — PASS, `budgets OK`, no budget raised
   (`templates/budgets.json` untouched; main Skill 17262 B of 17408).
