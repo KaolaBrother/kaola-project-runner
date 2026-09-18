@@ -1,0 +1,22 @@
+== session/resume ==
+{"error": {"code": -32022, "data": {"timeoutMs": 15000}, "message": "Client request timed out: session/requestRuntimePreferences"}, "id": 1}
+
+== session/subscribe ==
+{"error": {"code": -32004, "message": "Session is not active: sess_c1749222-b2c5-4280-b6ab-b93dd1668655"}, "id": 2}
+
+== session/read ==
+{"error": {"code": -32004, "message": "Session is not active: sess_c1749222-b2c5-4280-b6ab-b93dd1668655"}, "id": 3}
+
+== session/read+workspace ==
+{"error": {"code": -32602, "data": {"name": "ZodError", "message": "[\n  {\n    \"code\": \"unrecognized_keys\",\n    \"keys\": [\n      \"workspace\"\n    ],\n    \"path\": [],\n    \"message\": \"Unrecognized key: \\\"workspace\\\"\"\n  }\n]"}, "message": "Invalid params — (root): Unrecognized key: \"workspace\""}, "id": 4}
+
+== session/messages ==
+{"error": {"code": -32004, "message": "Session is not active: sess_c1749222-b2c5-4280-b6ab-b93dd1668655"}, "id": 5}
+
+== setModel runtimeModel ==
+{"error": {"code": -32602, "data": {"name": "ZodError", "message": "[\n  {\n    \"code\": \"unrecognized_keys\",\n    \"keys\": [\n      \"runtimeModel\"\n    ],\n    \"path\": [],\n    \"message\": \"Unrecognized key: \\\"runtimeModel\\\"\"\n  }\n]"}, "message": "Invalid params — (root): Unrecognized key: \"runtimeModel\""}, "id": 6}
+
+== setModel account+reasoning ==
+{"error": {"code": -32004, "message": "Session is not active: sess_c1749222-b2c5-4280-b6ab-b93dd1668655"}, "id": 7}
+
+== stderr tail ==

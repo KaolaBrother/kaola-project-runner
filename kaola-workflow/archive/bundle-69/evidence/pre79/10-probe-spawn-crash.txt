@@ -1,0 +1,4 @@
+== sending session/create ==
+poll: 1
+== app-server stderr ==
+ERR: b'\xe6\x97\xa0\xe6\xb3\x95\xe5\xae\x9a\xe4\xbd\x8d CLI ZCode Built-in Provider Config\xef\xbc\x9a/Applications/ZCode.app/Contents/Resources/glm/provider/zcode-builtin.json, /config/provider/zcode-builtin.json'

@@ -1,0 +1,2 @@
+SEND: {"op": "worker_event", "request_id": "f91f5ce22e5b4a83", "params": {"kind": "idle", "platform": "zcode", "session": "zcode-kaola-i69c-worker", "repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/verify-69-legs/legC/repo", "reason": "outcome=turn_completed stop_reason=end_turn", "event_cursor": 14, "schema": "kaola-worker-event/1"}}
+RECV: {"count":1,"delivered":true,"event_id":"zcode/zcode-kaola-i69c-worker/idle/14","pending":1,"prompt_fingerprint":"sha256:7f9dec681cc246c43d2bd64c62a6e6ebdc5310bb4d01ef989351fbec70136b5d","staged":true}
