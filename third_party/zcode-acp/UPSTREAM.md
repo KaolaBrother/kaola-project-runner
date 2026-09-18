@@ -66,10 +66,11 @@ verified entry and injects `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` and
 the shipped entry's own probe misses the `.app` layout and exits 1); registers
 the one enabled Coding Plan through `provider/updateAccountConfig` as
 `{revision, basedOnZCodeBuiltinRevision, providers:{<account id>:{builtinModelIds,
-access:{type:"zhipu-account", entitled:true}}}, states:{<account id>:{current:true}}}`;
-creates the session with no model channel; selects the model through
-`session/setModel` on the `account:*` provider with
-`persistAsWorkspaceLastUsed:false`; and answers the server-initiated
+access:{type:"zhipu-account", entitled:true}}}, states:{<account id>:{availability,
+entitled:true, current:true}}}`; creates the session with no model channel; selects
+the model through `session/setModel` on the `account:*` provider as
+`{sessionId, model:{providerId, modelId, options:{reasoningLevel}},
+persistAsWorkspaceLastUsed:false}`; and answers the server-initiated
 `interaction/requestProviderRuntimeHeaders` with
 `{headersApplied:true, requestAuth:{apiKey}}` for that one authorized provider
 only. The credential still never touches disk, ACP output or a log. Upstream
@@ -77,6 +78,18 @@ only. The credential still never touches disk, ACP output or a log. Upstream
 upstream bytes are vendored, and where upstream and the installed build differ
 (upstream keeps `runtimeModel` as a fallback; 3.12.3 has removed it) the
 installed build wins.
+
+Two of those details were established only by running the real 3.12.3 app-server
+(Issue #79 Mission 5), because static reading understated them:
+`states[<id>]` needs `availability` (enum `available|pending|unavailable|unknown`)
+and `entitled` as well as the `current` boolean the snapshot validator reads --
+omitting them is rejected by the wire schema; and `session/setModel` refuses a
+Coding Plan selection carrying no `options.reasoningLevel`
+("Reasoning level is required for <provider>/<model>"). The allowed levels come
+from the bundled table's `modelConfigRules`, whose regex rules are applied in
+order with later matches overriding and are tested as `^(?:<modelMatch>)$`
+case-insensitively; `availability` is reported from the desktop plan cache and
+falls back to `unknown`, never upgraded to `available`.
 
 Tool `input` (Issue #67, measured on CLI 0.16.5): `model.streaming` kind
 `tool_call` carries `input` (`Read` used `file_path`; protocol examples use

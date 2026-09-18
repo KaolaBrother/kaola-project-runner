@@ -1792,18 +1792,36 @@ class ZCodeAcpAgent:
                         ),
                     })
                     return
-                # The overlay re-registers the same provider in the backend's
-                # workspace catalog (desktop parity); runtime-only, not persisted.
-                self.ensure_backend().call(
-                    "session/setModel",
-                    {
-                        "sessionId": backend_id,
-                        "model": {"providerId": provider_id, "modelId": model_id},
-                        "runtimeModel": build_runtime_model(choice, model_id),
-                        "persistAsWorkspaceLastUsed": False,
-                    },
-                )
-                session.model_id = model_id
+                account = self.resolve_account()
+                if account is not None and not self.legacy_overlay:
+                    # 3.12+ has no `runtimeModel` key and requires an explicit
+                    # reasoning level, so a mid-session switch takes the same
+                    # account path as the initial selection (Issue #79).
+                    if model_id not in account["model_ids"]:
+                        self.respond(rid, error={
+                            "code": -32602,
+                            "message": (
+                                f"model {model_id} is not offered by "
+                                f"{account['account_id']} "
+                                f"(available: {', '.join(account['model_ids'])})"
+                            ),
+                        })
+                        return
+                    session.model_id = model_id
+                    self.select_account_model(session, self.ensure_backend(), account)
+                else:
+                    # The overlay re-registers the same provider in the backend's
+                    # workspace catalog (desktop parity); runtime-only, not persisted.
+                    self.ensure_backend().call(
+                        "session/setModel",
+                        {
+                            "sessionId": backend_id,
+                            "model": {"providerId": provider_id, "modelId": model_id},
+                            "runtimeModel": build_runtime_model(choice, model_id),
+                            "persistAsWorkspaceLastUsed": False,
+                        },
+                    )
+                    session.model_id = model_id
                 session.provider_id = provider_id
             elif config_id in ("thought", "thoughtLevel", "thought_level"):
                 session.thought = text

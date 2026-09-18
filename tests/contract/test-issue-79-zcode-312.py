@@ -411,6 +411,40 @@ class TestModernTurn(TempCase):
                         f"headers rejected: {rec.get('headers_problem')}")
         self.assertEqual((res.get("result") or {}).get("stopReason"), "end_turn")
 
+    def test_mid_session_model_switch_uses_the_account_path(self):
+        """An Agent switching model mid-session must not fall back to the
+        pre-3.12 overlay: 3.12+ rejects `runtimeModel` outright and requires an
+        explicit reasoning level."""
+        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
+        sid = self.sid(drv)
+        drv.prompt(sid)
+        drv.request(20, "session/set_config_option", {
+            "sessionId": sid, "configId": "model",
+            "value": f"{CODING_PLAN_ID}\\GLM-5.3-Flash"})
+        res = drv.wait_result(20)
+        self.assertIsNotNone(res, "set_config_option returned nothing")
+        self.assertNotIn("error", res, f"model switch failed: {json.dumps(res)}")
+        sent = drv.record().get("set_model") or {}
+        self.assertNotIn("runtimeModel", sent)
+        self.assertEqual(sent.get("model", {}).get("providerId"), ACCOUNT_ID)
+        self.assertEqual(sent.get("model", {}).get("modelId"), "GLM-5.3-Flash")
+        self.assertIn(sent["model"].get("options", {}).get("reasoningLevel"),
+                      ("low", "high", "max"))
+        self.assertIs(sent.get("persistAsWorkspaceLastUsed"), False)
+
+    def test_mid_session_switch_still_refuses_a_foreign_provider(self):
+        """The one-Coding-Plan boundary is unchanged by the account path."""
+        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
+        sid = self.sid(drv)
+        drv.prompt(sid)
+        drv.request(21, "session/set_config_option", {
+            "sessionId": sid, "configId": "model",
+            "value": "builtin:someone-else\\GLM-5.3"})
+        res = drv.wait_result(21)
+        self.assertIsNotNone(res)
+        self.assertIn("error", res, f"expected a refusal, got {json.dumps(res)}")
+        self.assertNotIn(FIXTURE_SECRET, json.dumps(res))
+
     def test_credential_never_appears_in_acp_or_logs(self):
         drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
         sid = self.sid(drv)

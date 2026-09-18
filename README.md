@@ -83,9 +83,15 @@ overlay, while ZCode 3.12+ dropped `runtimeModel` entirely and instead needs the
 table located next to the verified entry (the shipped 3.12.x entry cannot find its own), the plan
 registered through `provider/updateAccountConfig`, the model selected on the `account:*` provider
 through `session/setModel`, and the credential supplied per model request through
-`interaction/requestProviderRuntimeHeaders`. Default transport is ACP; the live Coding Plan gate
-passed on 2026-09-16 against desktop **3.11.2**, and that receipt does not carry over to 3.12+ —
-see Issue #79 for the current 3.12.3 status. ZCode does not support a PTY transport: the bundled
+`interaction/requestProviderRuntimeHeaders`, which also requires an explicit `options.reasoningLevel`
+on selection. Default transport is ACP. Two live Coding Plan gates have passed, each against the
+desktop build named: **3.11.2** on 2026-09-16 (the `runtimeModel` path), and **3.12.3** on
+2026-09-19 (the account-provider path — start with mode `yolo` applied, explicit selection on
+`account:bigmodel-individual-coding-plan`/`GLM-5.3`, a real model reply, then exact stop reporting
+no residual process). Neither receipt carries over to a build it was not run against, and both were
+taken on one macOS machine with the ZCode desktop App already logged in; a different desktop
+version, plan, or machine is unverified until it is run there. ZCode does not support a PTY
+transport: the bundled
 runtime ships no terminal UI (`Cannot find package '@zcode/tui'`) and headless `--prompt` needs
 `~/.zcode/cli/config.json`, so `--transport pty` remains selectable only as a known-unsupported
 diagnostic entry, and login happens in the ZCode desktop App.
