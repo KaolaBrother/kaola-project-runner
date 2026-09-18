@@ -148,7 +148,7 @@ for suite in "${python_suites_all[@]}"; do
   if [[ -f "$validate_tmp/$suite.log" ]]; then
     cat "$validate_tmp/$suite.log"
   else
-    printf 'SKIPPED: %s (suite never ran; no log)\n' "$suite"
+    printf 'SKIPPED: %s (no log; execution status unknown)\n' "$suite"
     python_status=1
   fi
 done
