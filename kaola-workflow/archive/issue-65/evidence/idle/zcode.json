@@ -1,0 +1,138 @@
+{
+  "id": "zcode",
+  "cmd": "python3 /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/scripts/kaola-zcode-acp.py",
+  "probed_at": "2026-09-18T10:30:59+0800",
+  "live": true,
+  "agent_info": {
+    "name": "kaola-zcode-acp",
+    "version": "0.3.0",
+    "_meta": {
+      "zcode": {
+        "plan": "coding-plan",
+        "providerId": "builtin:bigmodel-coding-plan",
+        "providerLabel": "BigModel - Coding Plan",
+        "kind": "anthropic",
+        "baseURL": "https://open.bigmodel.cn/api/anthropic",
+        "credential": "desktop-registry-inline-memory",
+        "modelIds": [
+          "GLM-5.3",
+          "GLM-5.3-Flash"
+        ],
+        "defaultModelId": "GLM-5.3",
+        "planCacheStatus": "available",
+        "rejectedProviders": {
+          "builtin:bigmodel": "not a coding-plan provider (refused: no pay-as-you-go billing)",
+          "builtin:zai": "not a coding-plan provider (refused: no pay-as-you-go billing)",
+          "builtin:bigmodel-start-plan": "start-plan (headless captcha flow, refused)",
+          "builtin:zai-coding-plan": "not enabled (oauth_provider_inactive)",
+          "builtin:zai-start-plan": "start-plan (headless captcha flow, refused)"
+        }
+      }
+    }
+  },
+  "protocol_version": 1,
+  "init_meta": null,
+  "agent_capabilities": {
+    "loadSession": true,
+    "sessionCapabilities": {
+      "list": true,
+      "resume": true,
+      "close": true
+    },
+    "promptCapabilities": {
+      "embeddedContext": true
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": true,
+      "resume": true,
+      "close": true
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "zcode-1",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "method not found: _session/steering"
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "method not found: session/steering"
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "method not found: session/steer"
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "method not found: _session/steer"
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 0.94,
+  "tool_updates_before_steer": 2,
+  "turn_active_at_steer": true,
+  "steer_offset_s": 7.7,
+  "steer_method": "session/prompt (second ordinary prompt)",
+  "second_prompt_sent_s": 7.7,
+  "prompt10_settle": null,
+  "prompt21_settle": {
+    "at_s": 123.83,
+    "result": {
+      "stopReason": "end_turn",
+      "usage": {
+        "source": "provider",
+        "modelRequestCount": 13,
+        "inputTokens": 210417,
+        "outputTokens": 813,
+        "totalTokens": 211230,
+        "cacheReadTokens": 205760,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 0,
+        "webFetchRequests": 0,
+        "webSearchRequests": 0
+      }
+    },
+    "error": null
+  },
+  "sentinel_seen": false,
+  "sentinel_before_prompt10_settled": false,
+  "sentinel_after_steer_and_before_settle": false,
+  "tool_updates_total": 72,
+  "tool_updates_after_steer": 70,
+  "tail_text": "ine comment after each. I never batched or combined them, and I didn't stop early. Final summary for the user.All 12 steps are done. Each `sleep 4 && echo step-N` command ran in its own separate tool call, one at a time with a one-line comment after each, exactly as requested — no batching, no combining, and no early stop. Every command exited successfully and printed its expected `step-N` output.",
+  "classification": "queued-to-next-turn",
+  "stderr_tail": ""
+}

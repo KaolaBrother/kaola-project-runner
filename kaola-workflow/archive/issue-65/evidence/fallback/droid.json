@@ -1,0 +1,125 @@
+{
+  "id": "droid",
+  "cmd": "droid exec --output-format acp",
+  "probed_at": "2026-09-18T10:49:21+0800",
+  "live": true,
+  "agent_info": {
+    "name": "@factory/cli",
+    "title": "Factory Droid",
+    "version": "0.220.0"
+  },
+  "protocol_version": 1,
+  "init_meta": null,
+  "agent_capabilities": {
+    "loadSession": true,
+    "sessionCapabilities": {
+      "list": {},
+      "resume": {}
+    },
+    "promptCapabilities": {
+      "image": true,
+      "embeddedContext": true
+    },
+    "_meta": {
+      "terminal_output": true,
+      "terminal-auth": true
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": {},
+      "resume": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "1241fb29-d92e-47c4-ba7b-ef5fbf6e8337",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 4.41,
+  "tool_updates_before_steer": 2,
+  "turn_active_at_steer": true,
+  "steer_offset_s": 12.89,
+  "steer_method": "session/prompt (second ordinary prompt)",
+  "second_prompt_sent_s": 12.89,
+  "prompt10_settle": {
+    "at_s": 25.24,
+    "result": {
+      "stopReason": "end_turn"
+    },
+    "error": null
+  },
+  "prompt21_settle": {
+    "at_s": 26.02,
+    "result": {
+      "stopReason": "end_turn"
+    },
+    "error": null
+  },
+  "sentinel_seen": true,
+  "sentinel_before_prompt10_settled": true,
+  "sentinel_after_steer_and_before_settle": true,
+  "tool_updates_total": 4,
+  "tool_updates_after_steer": 2,
+  "tail_text": "d just the latest user reminder. The user didn’t make an explicit request, only a system reminder. I wonder if I should update the to-do list? It seems the previous response likely covered it. I should focus on ensuring that reminders are current and cancel any outdated items. I’ll make sure the final to-do is clear and can stand alone, then reply accordingly.Plan is up-to-date.Plan is up-to-date.",
+  "classification": "injected-into-running-turn",
+  "stderr_tail": ""
+}

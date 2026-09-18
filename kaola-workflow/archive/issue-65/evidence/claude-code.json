@@ -1,0 +1,194 @@
+{
+  "cmd": "node /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-65/vendor/claude-code-acp/dist/index.js",
+  "initialize": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "protocolVersion": 1,
+      "agentInfo": {
+        "name": "claude-code-acp",
+        "title": "Claude Code ACP Bridge",
+        "version": "0.1.0"
+      },
+      "agentCapabilities": {
+        "loadSession": false,
+        "promptCapabilities": {
+          "image": false,
+          "audio": false,
+          "embeddedContext": false
+        },
+        "mcpCapabilities": {
+          "http": false,
+          "sse": false
+        },
+        "sessionCapabilities": {
+          "list": {},
+          "resume": {}
+        }
+      },
+      "authMethods": []
+    }
+  },
+  "session_new": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "result": {
+      "sessionId": "ed1a1197c9400c4a704ff719682692f8",
+      "modes": {
+        "availableModes": [
+          {
+            "id": "bypassPermissions",
+            "name": "Bypass permissions",
+            "description": "Skip every permission prompt (default; matches the PTY launch)"
+          },
+          {
+            "id": "acceptEdits",
+            "name": "Accept edits",
+            "description": "Auto-accept file edits"
+          },
+          {
+            "id": "auto",
+            "name": "Auto",
+            "description": "Claude Code auto permission mode"
+          },
+          {
+            "id": "manual",
+            "name": "Manual",
+            "description": "Ask before every permissioned action"
+          },
+          {
+            "id": "dontAsk",
+            "name": "Don't ask",
+            "description": "Deny anything that would prompt"
+          },
+          {
+            "id": "plan",
+            "name": "Plan",
+            "description": "Plan without making changes"
+          }
+        ],
+        "currentModeId": "bypassPermissions"
+      },
+      "configOptions": [
+        {
+          "id": "mode",
+          "name": "Permission mode",
+          "type": "select",
+          "category": "mode",
+          "description": "Claude Code --permission-mode for every turn",
+          "currentValue": "bypassPermissions",
+          "options": [
+            {
+              "value": "bypassPermissions",
+              "name": "Bypass permissions"
+            },
+            {
+              "value": "acceptEdits",
+              "name": "Accept edits"
+            },
+            {
+              "value": "auto",
+              "name": "Auto"
+            },
+            {
+              "value": "manual",
+              "name": "Manual"
+            },
+            {
+              "value": "dontAsk",
+              "name": "Don't ask"
+            },
+            {
+              "value": "plan",
+              "name": "Plan"
+            }
+          ]
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "type": "select",
+          "category": "model",
+          "description": "Claude Code --model for every turn (alias or full model name)",
+          "currentValue": "default",
+          "options": [
+            {
+              "value": "default",
+              "name": "Native default"
+            },
+            {
+              "value": "fable",
+              "name": "Fable"
+            },
+            {
+              "value": "opus",
+              "name": "Opus"
+            },
+            {
+              "value": "sonnet",
+              "name": "Sonnet"
+            },
+            {
+              "value": "haiku",
+              "name": "Haiku"
+            }
+          ]
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "type": "select",
+          "category": "thought_level",
+          "description": "Claude Code --effort for every turn",
+          "currentValue": "default",
+          "options": [
+            {
+              "value": "default",
+              "name": "Native default"
+            },
+            {
+              "value": "low",
+              "name": "Low"
+            },
+            {
+              "value": "medium",
+              "name": "Medium"
+            },
+            {
+              "value": "high",
+              "name": "High"
+            },
+            {
+              "value": "xhigh",
+              "name": "Extra high"
+            },
+            {
+              "value": "max",
+              "name": "Max"
+            }
+          ]
+        },
+        {
+          "id": "fast",
+          "name": "Fast",
+          "type": "select",
+          "category": "fast",
+          "description": "Process-scoped fastMode settings pin (on => true, otherwise false)",
+          "currentValue": "off",
+          "options": [
+            {
+              "value": "off",
+              "name": "Off"
+            },
+            {
+              "value": "on",
+              "name": "On"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "stderr_tail": "[2026-09-18T01:38:05.519Z] [INFO] [claude-code-acp] Agent started, waiting for connections on stdio...\n[2026-09-18T01:38:05.522Z] [INFO] [claude-code-acp] Initialize request received\n[2026-09-18T01:38:05.634Z] [INFO] [claude-code-acp] Session created: ed1a1197c9400c4a704ff719682692f8 (cwd: /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-65, mcpServers: 0)\n",
+  "raw_lines": 2
+}

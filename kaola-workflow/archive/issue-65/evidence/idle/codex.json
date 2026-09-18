@@ -1,0 +1,141 @@
+{
+  "id": "codex",
+  "cmd": "npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0 codex-acp",
+  "probed_at": "2026-09-18T10:28:38+0800",
+  "live": false,
+  "agent_info": {
+    "name": "@agentclientprotocol/codex-acp",
+    "title": "Codex",
+    "version": "1.11.0"
+  },
+  "protocol_version": 1,
+  "init_meta": {
+    "steering": {
+      "supported": true
+    },
+    "goal": {
+      "version": 1,
+      "controlMethod": "_session/goal",
+      "actions": [
+        "set",
+        "pause",
+        "resume",
+        "clear"
+      ]
+    },
+    "jetbrains": {
+      "air": {
+        "version": 1,
+        "capabilities": [
+          "sessionFailure",
+          "agentFileChangeReport",
+          "nativeSubagentSessions",
+          "asyncTasks",
+          "recommendedValue"
+        ]
+      }
+    }
+  },
+  "agent_capabilities": {
+    "auth": {
+      "logout": {}
+    },
+    "providers": {},
+    "loadSession": true,
+    "promptCapabilities": {
+      "embeddedContext": true,
+      "image": true
+    },
+    "sessionCapabilities": {
+      "resume": {},
+      "list": {},
+      "close": {},
+      "delete": {},
+      "fork": {},
+      "additionalDirectories": {},
+      "subagents": {}
+    },
+    "mcpCapabilities": {
+      "acp": false,
+      "http": true,
+      "sse": false
+    },
+    "_meta": {
+      "authStatus": {}
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": {
+      "supported": true
+    },
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "resume": {},
+      "list": {},
+      "close": {},
+      "delete": {},
+      "fork": {},
+      "additionalDirectories": {},
+      "subagents": {}
+    }
+  },
+  "steering_word_in_initialize": true,
+  "session_id": "01a0b258-3ce5-74f2-b7ec-1f363d7ab426",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "result": {
+          "outcome": "startedNewTurn"
+        }
+      },
+      "verdict": "present"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steer",
+          "data": {
+            "method": "_session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": "_session/steering",
+  "idle_probe_elapsed_s": 4.53,
+  "stderr_tail": ""
+}

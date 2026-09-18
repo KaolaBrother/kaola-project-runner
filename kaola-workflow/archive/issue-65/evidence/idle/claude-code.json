@@ -1,0 +1,100 @@
+{
+  "id": "claude-code",
+  "cmd": "node /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/vendor/claude-code-acp/dist/index.js",
+  "probed_at": "2026-09-18T10:28:37+0800",
+  "live": false,
+  "agent_info": {
+    "name": "claude-code-acp",
+    "title": "Claude Code ACP Bridge",
+    "version": "0.1.0"
+  },
+  "protocol_version": 1,
+  "init_meta": null,
+  "agent_capabilities": {
+    "loadSession": false,
+    "promptCapabilities": {
+      "image": false,
+      "audio": false,
+      "embeddedContext": false
+    },
+    "mcpCapabilities": {
+      "http": false,
+      "sse": false
+    },
+    "sessionCapabilities": {
+      "list": {},
+      "resume": {}
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": {},
+      "resume": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "91458073277c2c36d99022a925bed533",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steering",
+          "data": {
+            "method": "_session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steer",
+          "data": {
+            "method": "_session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 0.96,
+  "stderr_tail": ""
+}

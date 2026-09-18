@@ -1,0 +1,167 @@
+{
+  "cmd": "opencode acp",
+  "initialize": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "protocolVersion": 1,
+      "agentCapabilities": {
+        "loadSession": true,
+        "mcpCapabilities": {
+          "http": true,
+          "sse": true
+        },
+        "promptCapabilities": {
+          "embeddedContext": true,
+          "image": true
+        },
+        "sessionCapabilities": {
+          "close": {},
+          "fork": {},
+          "list": {},
+          "resume": {}
+        }
+      },
+      "authMethods": [
+        {
+          "description": "Run `opencode auth login` in the terminal",
+          "name": "Login with opencode",
+          "id": "opencode-login"
+        }
+      ],
+      "agentInfo": {
+        "name": "OpenCode",
+        "version": "1.18.17"
+      }
+    }
+  },
+  "session_new": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "result": {
+      "sessionId": "ses_f4dd536f5ffePtGhDOgUdXAG0j",
+      "configOptions": [
+        {
+          "id": "model",
+          "name": "Model",
+          "category": "model",
+          "type": "select",
+          "currentValue": "zhipuai-coding-plan/glm-5.3",
+          "options": [
+            {
+              "value": "zhipuai-coding-plan/glm-4.6v",
+              "name": "Zhipu AI Coding Plan/GLM-4.6V"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-4.7",
+              "name": "Zhipu AI Coding Plan/GLM-4.7"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-5-turbo",
+              "name": "Zhipu AI Coding Plan/GLM-5-Turbo"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-5.1",
+              "name": "Zhipu AI Coding Plan/GLM-5.1"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-5.2",
+              "name": "Zhipu AI Coding Plan/GLM-5.2"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-5.2-highspeed",
+              "name": "Zhipu AI Coding Plan/GLM-5.2 Highspeed"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-5.3",
+              "name": "Zhipu AI Coding Plan/GLM-5.3"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-5.3-highspeed",
+              "name": "Zhipu AI Coding Plan/GLM-5.3 Highspeed"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-5.3-flash",
+              "name": "Zhipu AI Coding Plan/GLM-5.3-Flash"
+            },
+            {
+              "value": "zhipuai-coding-plan/glm-5v-turbo",
+              "name": "Zhipu AI Coding Plan/GLM-5V-Turbo"
+            },
+            {
+              "value": "opencode/big-pickle",
+              "name": "OpenCode Zen/Big Pickle"
+            },
+            {
+              "value": "opencode/ling-3.0-flash-fin-free",
+              "name": "OpenCode Zen/Ling 3.0 Flash Fin Free"
+            },
+            {
+              "value": "opencode/mimo-v2.5-free",
+              "name": "OpenCode Zen/MiMo V2.5 Free"
+            },
+            {
+              "value": "opencode/muse-spark-1.2-contributor-free",
+              "name": "OpenCode Zen/Muse Spark 1.2 Free"
+            },
+            {
+              "value": "opencode/muse-spark-1.3-contributor-free",
+              "name": "OpenCode Zen/Muse Spark 1.3 Free"
+            },
+            {
+              "value": "opencode/nemotron-3-ultra-free",
+              "name": "OpenCode Zen/Nemotron 3 Ultra Free"
+            },
+            {
+              "value": "opencode/nemotron-3.5-lightning-free",
+              "name": "OpenCode Zen/Nemotron 3.5 Lightning Free"
+            }
+          ]
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Available effort levels for this model",
+          "category": "thought_level",
+          "type": "select",
+          "currentValue": "low",
+          "options": [
+            {
+              "value": "low",
+              "name": "Low"
+            },
+            {
+              "value": "high",
+              "name": "High"
+            },
+            {
+              "value": "max",
+              "name": "Max"
+            }
+          ]
+        },
+        {
+          "id": "mode",
+          "name": "Session Mode",
+          "category": "mode",
+          "type": "select",
+          "currentValue": "build",
+          "options": [
+            {
+              "value": "build",
+              "name": "build",
+              "description": "The default agent. Executes tools based on configured permissions."
+            },
+            {
+              "value": "plan",
+              "name": "plan",
+              "description": "Plan mode. Disallows all edit tools."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "stderr_tail": "",
+  "raw_lines": 3
+}

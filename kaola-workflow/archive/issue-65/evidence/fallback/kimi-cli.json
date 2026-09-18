@@ -1,0 +1,140 @@
+{
+  "id": "kimi-cli",
+  "cmd": "kimi acp",
+  "probed_at": "2026-09-18T10:51:33+0800",
+  "live": true,
+  "agent_info": {
+    "name": "Kimi Code CLI",
+    "version": "2.0.0"
+  },
+  "protocol_version": 1,
+  "init_meta": null,
+  "agent_capabilities": {
+    "loadSession": true,
+    "promptCapabilities": {
+      "image": true,
+      "audio": false,
+      "embeddedContext": true
+    },
+    "sessionCapabilities": {
+      "list": {},
+      "resume": {},
+      "close": {},
+      "delete": {},
+      "fork": {},
+      "additionalDirectories": {}
+    },
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    },
+    "auth": {
+      "logout": {}
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": {},
+      "resume": {},
+      "close": {},
+      "delete": {},
+      "fork": {},
+      "additionalDirectories": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "session_8b917b67-4487-4807-8596-4f4894eddefe",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steering",
+          "data": {
+            "method": "_session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steer",
+          "data": {
+            "method": "_session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 1.27,
+  "tool_updates_before_steer": 13,
+  "turn_active_at_steer": true,
+  "steer_offset_s": 13.52,
+  "steer_method": "session/prompt (second ordinary prompt)",
+  "second_prompt_sent_s": 13.52,
+  "prompt10_settle": {
+    "at_s": 153.92,
+    "result": {
+      "stopReason": "end_turn"
+    },
+    "error": null
+  },
+  "prompt21_settle": {
+    "at_s": 13.52,
+    "result": null,
+    "error": {
+      "code": -32600,
+      "message": "Invalid request: another turn is already in progress",
+      "data": {
+        "code": "turn.agent_busy"
+      }
+    }
+  },
+  "sentinel_seen": false,
+  "sentinel_before_prompt10_settled": false,
+  "sentinel_after_steer_and_before_settle": false,
+  "tool_updates_total": 168,
+  "tool_updates_after_steer": 155,
+  "tail_text": " left.All 12 done. Final summary.Step 12 finished — that completes the full sequence.\n\nAll twelve commands ran exactly as requested: each `sleep 4 && echo step-N` was executed in its own separate Bash tool call, sequentially, with no batching or combining, and every one returned its expected output (`step-1` through `step-12`). Total elapsed time was roughly 48 seconds of sleep plus call overhead.",
+  "classification": "queued-to-next-turn",
+  "stderr_tail": ""
+}

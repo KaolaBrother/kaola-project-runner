@@ -1,0 +1,94 @@
+{
+  "id": "cursor-cli",
+  "cmd": "cursor-agent --yolo acp",
+  "probed_at": "2026-09-18T10:28:43+0800",
+  "live": false,
+  "agent_info": null,
+  "protocol_version": 1,
+  "init_meta": null,
+  "agent_capabilities": {
+    "loadSession": true,
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    },
+    "promptCapabilities": {
+      "audio": false,
+      "embeddedContext": false,
+      "image": true
+    },
+    "sessionCapabilities": {
+      "list": {}
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "1c5da0f5-41d0-4788-9839-4a2bced35f5a",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steering",
+          "data": {
+            "method": "_session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steer",
+          "data": {
+            "method": "_session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 6.11,
+  "stderr_tail": ""
+}

@@ -1,0 +1,110 @@
+{
+  "id": "kimi-cli",
+  "cmd": "kimi acp",
+  "probed_at": "2026-09-18T10:28:55+0800",
+  "live": false,
+  "agent_info": {
+    "name": "Kimi Code CLI",
+    "version": "2.0.0"
+  },
+  "protocol_version": 1,
+  "init_meta": null,
+  "agent_capabilities": {
+    "loadSession": true,
+    "promptCapabilities": {
+      "image": true,
+      "audio": false,
+      "embeddedContext": true
+    },
+    "sessionCapabilities": {
+      "list": {},
+      "resume": {},
+      "close": {},
+      "delete": {},
+      "fork": {},
+      "additionalDirectories": {}
+    },
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    },
+    "auth": {
+      "logout": {}
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": {},
+      "resume": {},
+      "close": {},
+      "delete": {},
+      "fork": {},
+      "additionalDirectories": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "session_b0e60506-ee95-4873-bf42-c2e5962cf675",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steering",
+          "data": {
+            "method": "_session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steering",
+          "data": {
+            "method": "session/steering"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": session/steer",
+          "data": {
+            "method": "session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "\"Method not found\": _session/steer",
+          "data": {
+            "method": "_session/steer"
+          }
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 1.57,
+  "stderr_tail": ""
+}

@@ -1,0 +1,672 @@
+{
+  "cmd": "droid exec --output-format acp",
+  "initialize": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "protocolVersion": 1,
+      "agentCapabilities": {
+        "loadSession": true,
+        "sessionCapabilities": {
+          "list": {},
+          "resume": {}
+        },
+        "promptCapabilities": {
+          "image": true,
+          "embeddedContext": true
+        },
+        "_meta": {
+          "terminal_output": true,
+          "terminal-auth": true
+        }
+      },
+      "agentInfo": {
+        "name": "@factory/cli",
+        "title": "Factory Droid",
+        "version": "0.220.0"
+      },
+      "authMethods": [
+        {
+          "id": "device-pairing",
+          "name": "Login",
+          "description": "Authenticate with Factory using a device pairing code in your browser."
+        },
+        {
+          "id": "factory-api-key",
+          "name": "Factory API Key",
+          "description": "Authenticate using a Factory API key set in the FACTORY_API_KEY environment variable."
+        }
+      ]
+    }
+  },
+  "session_new": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "result": {
+      "sessionId": "c8adf973-e2d2-4445-b526-042b36762258",
+      "models": {
+        "availableModels": [
+          {
+            "modelId": "auto",
+            "name": "Auto Model",
+            "description": "1x Factory token rate"
+          },
+          {
+            "modelId": "claude-fable-5.1",
+            "name": "Fable 5.1",
+            "description": "4x Factory token rate"
+          },
+          {
+            "modelId": "claude-fable-5",
+            "name": "Fable 5",
+            "description": "4x Factory token rate"
+          },
+          {
+            "modelId": "claude-opus-5",
+            "name": "Opus 5",
+            "description": "2x Factory token rate"
+          },
+          {
+            "modelId": "claude-opus-5-fast",
+            "name": "Opus 5 Fast Mode",
+            "description": "4x Factory token rate"
+          },
+          {
+            "modelId": "claude-opus-4-8",
+            "name": "Opus 4.8",
+            "description": "2x Factory token rate"
+          },
+          {
+            "modelId": "claude-opus-4-8-fast",
+            "name": "Opus 4.8 Fast Mode",
+            "description": "4x Factory token rate"
+          },
+          {
+            "modelId": "claude-opus-4-7",
+            "name": "Opus 4.7",
+            "description": "2x Factory token rate"
+          },
+          {
+            "modelId": "claude-opus-4-6",
+            "name": "Opus 4.6",
+            "description": "2x Factory token rate"
+          },
+          {
+            "modelId": "claude-opus-4-5-20251101",
+            "name": "Opus 4.5",
+            "description": "2x Factory token rate"
+          },
+          {
+            "modelId": "claude-sonnet-5",
+            "name": "Sonnet 5",
+            "description": "0.8x Factory token rate"
+          },
+          {
+            "modelId": "claude-sonnet-4-6",
+            "name": "Sonnet 4.6",
+            "description": "1.2x Factory token rate"
+          },
+          {
+            "modelId": "claude-sonnet-4-5-20250929",
+            "name": "Sonnet 4.5",
+            "description": "1.2x Factory token rate"
+          },
+          {
+            "modelId": "claude-haiku-4-5-20251001",
+            "name": "Haiku 4.5",
+            "description": "0.4x Factory token rate"
+          },
+          {
+            "modelId": "gpt-6-astra",
+            "name": "GPT-6 Astra",
+            "description": "4x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.6-sol",
+            "name": "GPT-5.6 Sol",
+            "description": "1.6x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.6-sol-fast",
+            "name": "GPT-5.6 Sol Fast Mode",
+            "description": "3.2x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.6-terra",
+            "name": "GPT-5.6 Terra",
+            "description": "0.8x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.6-luna",
+            "name": "GPT-5.6 Luna",
+            "description": "0.08x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.5",
+            "name": "GPT-5.5",
+            "description": "2x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.5-fast",
+            "name": "GPT-5.5 Fast Mode",
+            "description": "5x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.5-pro",
+            "name": "GPT-5.5 Pro",
+            "description": "12x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.4",
+            "name": "GPT-5.4",
+            "description": "1x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.4-fast",
+            "name": "GPT-5.4 Fast Mode",
+            "description": "2x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.4-mini",
+            "name": "GPT-5.4 Mini",
+            "description": "0.3x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.4-mini-fast",
+            "name": "GPT-5.4 Mini Fast Mode",
+            "description": "0.6x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.3-codex",
+            "name": "GPT-5.3-Codex",
+            "description": "0.7x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.3-codex-fast",
+            "name": "GPT-5.3-Codex Fast Mode",
+            "description": "1.4x Factory token rate"
+          },
+          {
+            "modelId": "gpt-5.2",
+            "name": "GPT-5.2",
+            "description": "0.7x Factory token rate"
+          },
+          {
+            "modelId": "gemini-3.1-pro-preview",
+            "name": "Gemini 3.1 Pro",
+            "description": "0.8x Factory token rate"
+          },
+          {
+            "modelId": "gemini-3.8-flash",
+            "name": "Gemini 3.8 Flash",
+            "description": "0.3x Factory token rate"
+          },
+          {
+            "modelId": "gemini-3.7-flash",
+            "name": "Gemini 3.7 Flash",
+            "description": "0.3x Factory token rate"
+          },
+          {
+            "modelId": "gemini-3.6-flash",
+            "name": "Gemini 3.6 Flash",
+            "description": "0.6x Factory token rate"
+          },
+          {
+            "modelId": "gemini-3.5-flash",
+            "name": "Gemini 3.5 Flash",
+            "description": "0.6x Factory token rate"
+          },
+          {
+            "modelId": "gemini-3-flash-preview",
+            "name": "Gemini 3 Flash",
+            "description": "0.2x Factory token rate"
+          },
+          {
+            "modelId": "inkling",
+            "name": "Inkling",
+            "description": "0.4x Factory token rate"
+          },
+          {
+            "modelId": "glm-5.3-flash",
+            "name": "GLM-5.3-Flash",
+            "description": "0.06x Factory token rate"
+          },
+          {
+            "modelId": "glm-5.3",
+            "name": "GLM-5.3",
+            "description": "0.56x Factory token rate"
+          },
+          {
+            "modelId": "glm-5.2",
+            "name": "GLM-5.2",
+            "description": "0.56x Factory token rate"
+          },
+          {
+            "modelId": "glm-5.2-fast",
+            "name": "GLM-5.2 Fast",
+            "description": "0.84x Factory token rate"
+          },
+          {
+            "modelId": "kimi-k3",
+            "name": "Kimi K3",
+            "description": "1.2x Factory token rate"
+          },
+          {
+            "modelId": "kimi-k2.7-code",
+            "name": "Kimi K2.7 Code",
+            "description": "0.38x Factory token rate"
+          },
+          {
+            "modelId": "kimi-k2.6",
+            "name": "Kimi K2.6",
+            "description": "0.4x Factory token rate"
+          },
+          {
+            "modelId": "qwen3.8-max",
+            "name": "Qwen3.8 Max",
+            "description": "0.8x Factory token rate"
+          },
+          {
+            "modelId": "nemotron-3-ultra",
+            "name": "Nemotron 3 Ultra",
+            "description": "0.24x Factory token rate"
+          },
+          {
+            "modelId": "deepseek-v4-flash-0731",
+            "name": "DeepSeek V4 Flash 0731",
+            "description": "0.176x Factory token rate"
+          },
+          {
+            "modelId": "deepseek-v4-pro",
+            "name": "DeepSeek V4 Pro",
+            "description": "0.528x Factory token rate"
+          },
+          {
+            "modelId": "minimax-m3",
+            "name": "MiniMax M3",
+            "description": "0.12x Factory token rate"
+          },
+          {
+            "modelId": "grok-4.6",
+            "name": "Grok 4.6",
+            "description": "0.8x Factory token rate"
+          },
+          {
+            "modelId": "grok-4.5",
+            "name": "Grok 4.5",
+            "description": "0.8x Factory token rate"
+          },
+          {
+            "modelId": "minimax-m2.7",
+            "name": "MiniMax M2.7 [Deprecated]",
+            "description": "0.12x Factory token rate"
+          }
+        ],
+        "currentModelId": "gpt-5.6-sol"
+      },
+      "modes": {
+        "availableModes": [
+          {
+            "id": "normal",
+            "name": "Auto (Off)",
+            "description": "Auto-approves only read operations"
+          },
+          {
+            "id": "spec",
+            "name": "Spec",
+            "description": "Build feature specs (read-only)"
+          },
+          {
+            "id": "auto-low",
+            "name": "Auto (Low)",
+            "description": "Auto-approves file edits and low-risk actions during the session"
+          },
+          {
+            "id": "auto-medium",
+            "name": "Auto (Medium)",
+            "description": "Auto-approves medium-risk actions during the session"
+          },
+          {
+            "id": "auto-high",
+            "name": "Auto (High)",
+            "description": "Auto-approves all actions"
+          }
+        ],
+        "currentModeId": "normal"
+      },
+      "configOptions": [
+        {
+          "id": "autonomy_level",
+          "name": "Autonomy Level",
+          "description": "Which tool actions the agent may run without confirmation.",
+          "category": "mode",
+          "type": "select",
+          "currentValue": "normal",
+          "options": [
+            {
+              "value": "normal",
+              "name": "Auto (Off)"
+            },
+            {
+              "value": "spec",
+              "name": "Spec"
+            },
+            {
+              "value": "auto-low",
+              "name": "Auto (Low)"
+            },
+            {
+              "value": "auto-medium",
+              "name": "Auto (Medium)"
+            },
+            {
+              "value": "auto-high",
+              "name": "Auto (High)"
+            }
+          ]
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "The model used for this session. Changing this may also change the available Reasoning Effort options.",
+          "category": "model",
+          "type": "select",
+          "currentValue": "gpt-5.6-sol",
+          "options": [
+            {
+              "value": "auto",
+              "name": "Auto Model",
+              "description": "1x Factory token rate"
+            },
+            {
+              "value": "claude-fable-5.1",
+              "name": "Fable 5.1",
+              "description": "4x Factory token rate"
+            },
+            {
+              "value": "claude-fable-5",
+              "name": "Fable 5",
+              "description": "4x Factory token rate"
+            },
+            {
+              "value": "claude-opus-5",
+              "name": "Opus 5",
+              "description": "2x Factory token rate"
+            },
+            {
+              "value": "claude-opus-5-fast",
+              "name": "Opus 5 Fast Mode",
+              "description": "4x Factory token rate"
+            },
+            {
+              "value": "claude-opus-4-8",
+              "name": "Opus 4.8",
+              "description": "2x Factory token rate"
+            },
+            {
+              "value": "claude-opus-4-8-fast",
+              "name": "Opus 4.8 Fast Mode",
+              "description": "4x Factory token rate"
+            },
+            {
+              "value": "claude-opus-4-7",
+              "name": "Opus 4.7",
+              "description": "2x Factory token rate"
+            },
+            {
+              "value": "claude-opus-4-6",
+              "name": "Opus 4.6",
+              "description": "2x Factory token rate"
+            },
+            {
+              "value": "claude-opus-4-5-20251101",
+              "name": "Opus 4.5",
+              "description": "2x Factory token rate"
+            },
+            {
+              "value": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "description": "0.8x Factory token rate"
+            },
+            {
+              "value": "claude-sonnet-4-6",
+              "name": "Sonnet 4.6",
+              "description": "1.2x Factory token rate"
+            },
+            {
+              "value": "claude-sonnet-4-5-20250929",
+              "name": "Sonnet 4.5",
+              "description": "1.2x Factory token rate"
+            },
+            {
+              "value": "claude-haiku-4-5-20251001",
+              "name": "Haiku 4.5",
+              "description": "0.4x Factory token rate"
+            },
+            {
+              "value": "gpt-6-astra",
+              "name": "GPT-6 Astra",
+              "description": "4x Factory token rate"
+            },
+            {
+              "value": "gpt-5.6-sol",
+              "name": "GPT-5.6 Sol",
+              "description": "1.6x Factory token rate"
+            },
+            {
+              "value": "gpt-5.6-sol-fast",
+              "name": "GPT-5.6 Sol Fast Mode",
+              "description": "3.2x Factory token rate"
+            },
+            {
+              "value": "gpt-5.6-terra",
+              "name": "GPT-5.6 Terra",
+              "description": "0.8x Factory token rate"
+            },
+            {
+              "value": "gpt-5.6-luna",
+              "name": "GPT-5.6 Luna",
+              "description": "0.08x Factory token rate"
+            },
+            {
+              "value": "gpt-5.5",
+              "name": "GPT-5.5",
+              "description": "2x Factory token rate"
+            },
+            {
+              "value": "gpt-5.5-fast",
+              "name": "GPT-5.5 Fast Mode",
+              "description": "5x Factory token rate"
+            },
+            {
+              "value": "gpt-5.5-pro",
+              "name": "GPT-5.5 Pro",
+              "description": "12x Factory token rate"
+            },
+            {
+              "value": "gpt-5.4",
+              "name": "GPT-5.4",
+              "description": "1x Factory token rate"
+            },
+            {
+              "value": "gpt-5.4-fast",
+              "name": "GPT-5.4 Fast Mode",
+              "description": "2x Factory token rate"
+            },
+            {
+              "value": "gpt-5.4-mini",
+              "name": "GPT-5.4 Mini",
+              "description": "0.3x Factory token rate"
+            },
+            {
+              "value": "gpt-5.4-mini-fast",
+              "name": "GPT-5.4 Mini Fast Mode",
+              "description": "0.6x Factory token rate"
+            },
+            {
+              "value": "gpt-5.3-codex",
+              "name": "GPT-5.3-Codex",
+              "description": "0.7x Factory token rate"
+            },
+            {
+              "value": "gpt-5.3-codex-fast",
+              "name": "GPT-5.3-Codex Fast Mode",
+              "description": "1.4x Factory token rate"
+            },
+            {
+              "value": "gpt-5.2",
+              "name": "GPT-5.2",
+              "description": "0.7x Factory token rate"
+            },
+            {
+              "value": "gemini-3.1-pro-preview",
+              "name": "Gemini 3.1 Pro",
+              "description": "0.8x Factory token rate"
+            },
+            {
+              "value": "gemini-3.8-flash",
+              "name": "Gemini 3.8 Flash",
+              "description": "0.3x Factory token rate"
+            },
+            {
+              "value": "gemini-3.7-flash",
+              "name": "Gemini 3.7 Flash",
+              "description": "0.3x Factory token rate"
+            },
+            {
+              "value": "gemini-3.6-flash",
+              "name": "Gemini 3.6 Flash",
+              "description": "0.6x Factory token rate"
+            },
+            {
+              "value": "gemini-3.5-flash",
+              "name": "Gemini 3.5 Flash",
+              "description": "0.6x Factory token rate"
+            },
+            {
+              "value": "gemini-3-flash-preview",
+              "name": "Gemini 3 Flash",
+              "description": "0.2x Factory token rate"
+            },
+            {
+              "value": "inkling",
+              "name": "Inkling",
+              "description": "0.4x Factory token rate"
+            },
+            {
+              "value": "glm-5.3-flash",
+              "name": "GLM-5.3-Flash",
+              "description": "0.06x Factory token rate"
+            },
+            {
+              "value": "glm-5.3",
+              "name": "GLM-5.3",
+              "description": "0.56x Factory token rate"
+            },
+            {
+              "value": "glm-5.2",
+              "name": "GLM-5.2",
+              "description": "0.56x Factory token rate"
+            },
+            {
+              "value": "glm-5.2-fast",
+              "name": "GLM-5.2 Fast",
+              "description": "0.84x Factory token rate"
+            },
+            {
+              "value": "kimi-k3",
+              "name": "Kimi K3",
+              "description": "1.2x Factory token rate"
+            },
+            {
+              "value": "kimi-k2.7-code",
+              "name": "Kimi K2.7 Code",
+              "description": "0.38x Factory token rate"
+            },
+            {
+              "value": "kimi-k2.6",
+              "name": "Kimi K2.6",
+              "description": "0.4x Factory token rate"
+            },
+            {
+              "value": "qwen3.8-max",
+              "name": "Qwen3.8 Max",
+              "description": "0.8x Factory token rate"
+            },
+            {
+              "value": "nemotron-3-ultra",
+              "name": "Nemotron 3 Ultra",
+              "description": "0.24x Factory token rate"
+            },
+            {
+              "value": "deepseek-v4-flash-0731",
+              "name": "DeepSeek V4 Flash 0731",
+              "description": "0.176x Factory token rate"
+            },
+            {
+              "value": "deepseek-v4-pro",
+              "name": "DeepSeek V4 Pro",
+              "description": "0.528x Factory token rate"
+            },
+            {
+              "value": "minimax-m3",
+              "name": "MiniMax M3",
+              "description": "0.12x Factory token rate"
+            },
+            {
+              "value": "grok-4.6",
+              "name": "Grok 4.6",
+              "description": "0.8x Factory token rate"
+            },
+            {
+              "value": "grok-4.5",
+              "name": "Grok 4.5",
+              "description": "0.8x Factory token rate"
+            },
+            {
+              "value": "minimax-m2.7",
+              "name": "MiniMax M2.7 [Deprecated]",
+              "description": "0.12x Factory token rate"
+            }
+          ]
+        },
+        {
+          "id": "reasoning_effort",
+          "name": "Reasoning Effort",
+          "description": "Controls how much thinking the model performs before responding. The available options depend on the selected model.",
+          "category": "thought_level",
+          "type": "select",
+          "currentValue": "high",
+          "options": [
+            {
+              "value": "none",
+              "name": "None"
+            },
+            {
+              "value": "low",
+              "name": "Low"
+            },
+            {
+              "value": "medium",
+              "name": "Medium"
+            },
+            {
+              "value": "high",
+              "name": "High"
+            },
+            {
+              "value": "xhigh",
+              "name": "Extra High"
+            },
+            {
+              "value": "max",
+              "name": "Maximum"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "stderr_tail": "",
+  "raw_lines": 3
+}
