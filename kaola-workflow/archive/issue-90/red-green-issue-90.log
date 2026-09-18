@@ -1,0 +1,49 @@
+# Issue #90 failure-first discrimination, final suite (19 tests)
+# 2026-09-18T22:38:16Z
+# Same suite run against every candidate SHA; each rejected SHA fails exactly its own defects.
+
+## 1f01b3c
+ERROR: test_a_cached_confirmation_that_rotated_away_is_deliverable_again
+ERROR: test_a_confirmation_is_durable_before_it_is_answerable
+ERROR: test_a_confirmation_the_log_no_longer_holds_is_deliverable_again
+ERROR: test_a_confirmed_retry_is_ignored_past_the_hot_cache_bound
+ERROR: test_a_new_event_is_still_delivered_past_the_hot_cache_bound
+ERROR: test_an_unconfirmed_event_past_the_bound_still_resumes
+ERROR: test_the_confirmed_memory_is_bounded_and_keeps_the_newest
+FAIL: test_a_distinct_later_event_is_still_delivered_after_a_confirmed_retry
+FAIL: test_a_failed_notification_turn_leaves_the_event_redeliverable
+FAIL: test_admission_failure_marks_nothing_and_keeps_the_event_deliverable
+FAIL: test_instant_response_confirms_a_full_queue_and_its_overflow_together
+FAIL: test_instant_response_does_not_double_prompt_a_staged_event
+FAIL: test_instant_response_does_not_double_prompt_the_overflow_full_check
+FAIL: test_resume_rebuilds_the_confirmed_memory_from_the_event_log
+FAIL: test_resume_redelivers_unconfirmed_and_never_a_confirmed_event
+FAIL: test_retry_of_a_confirmed_event_id_does_not_prompt_again
+Ran 19 tests in 0.022s
+FAILED (failures=9, errors=7)
+
+## 19c04cc
+FAIL: test_a_cached_confirmation_that_rotated_away_is_deliverable_again
+FAIL: test_a_confirmation_is_durable_before_it_is_answerable
+FAIL: test_a_confirmed_retry_is_ignored_past_the_hot_cache_bound
+FAIL: test_instant_response_does_not_double_prompt_a_staged_event
+FAIL: test_two_deliveries_cannot_be_inside_the_admission_window_together
+Ran 19 tests in 0.099s
+FAILED (failures=5)
+
+## 71173bc
+FAIL: test_a_cached_confirmation_that_rotated_away_is_deliverable_again
+FAIL: test_a_confirmation_is_durable_before_it_is_answerable
+FAIL: test_a_confirmed_retry_is_ignored_past_the_hot_cache_bound
+Ran 19 tests in 8.709s
+FAILED (failures=3)
+
+## 31fb665
+FAIL: test_a_cached_confirmation_that_rotated_away_is_deliverable_again
+FAIL: test_a_confirmation_is_durable_before_it_is_answerable
+Ran 19 tests in 8.717s
+FAILED (failures=2)
+
+## FROZEN c5155e5
+Ran 19 tests in 8.714s
+OK
