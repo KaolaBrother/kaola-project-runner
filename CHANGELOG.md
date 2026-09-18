@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`./scripts/validate.sh` is green on a clean checkout again (Issue #80).**
+  `tests/contract/test-issue-49-grok-bot-host.py` died in `TemporaryDirectory`
+  teardown with `OSError: [Errno 66] Directory not empty: <tmp>/repo/.git`
+  after all 43 assertions passed: git >=2.47's `commit`/`merge`/`rebase` (and
+  `receive-pack` on push) spawn a detached `maintenance run --auto` child that
+  keeps repacking and rewriting `.git` while `rmtree` removes it, and the first
+  failing suite then aborted a whole validation lane, hiding every suite after
+  it. The fixtures now run every git call with `maintenance.auto=false`, and
+  the bare origin carries `receive.autogc=false` because the push transport
+  strips the config environment before `git-receive-pack` starts. No assertion
+  changed, no `ignore_cleanup_errors`, no sleeps.
+
 - **ZCode 3.12+ app-server compatibility, proven by a live model turn (Issue #79).**
   The Runner-owned adapter still spoke the v0.39-era private protocol, and the
   installed ZCode 3.12.3 build contains no `runtimeModel` at all, so a turn could
