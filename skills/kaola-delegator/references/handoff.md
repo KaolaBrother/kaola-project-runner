@@ -56,9 +56,10 @@ Keep only the current pointer.
    ```
 
    Then update `$RECORD` if the holder instance changed. Never use `--continue`
-   to guess a same-directory worker. Exact `stop` may `session/close` the
-   native session: if `--resume` returns session not found, that `sess_*` is
-   spent. Do not start a second Host and call it continuation.
+   to guess a same-directory worker. Exact `stop` issues `session/close`. A
+   listed `sess_*` then disappears from `session/list` (close-deleted, not
+   never-created). `--resume` session not found is cannot-resume. Do not start
+   a second Host and call it continuation.
 4. Missing, mismatched, unattested, or backend-unknown `sess_*` is
    cannot-resume: report and wait. Do not create a new Host and call it
    continuation.
