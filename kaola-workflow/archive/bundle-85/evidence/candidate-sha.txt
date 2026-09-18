@@ -1,0 +1,31 @@
+candidate-base: f39d940dcc138b1561767bce2914c09d1573206a
+branch: workflow/bundle-85
+worktree: /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/bundle-85
+frozen-at: 2026-09-18T19:19:52Z
+
+== diff stat ==
+ scripts/kaola-zcode-acp.py                         | 22 +++++++++++++++++++---
+ scripts/validate.sh                                |  2 ++
+ .../scripts/kaola-zcode-acp.py                     | 22 +++++++++++++++++++---
+ 3 files changed, 40 insertions(+), 6 deletions(-)
+
+== status ==
+ M scripts/kaola-zcode-acp.py
+ M scripts/validate.sh
+ M skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+?? tests/contract/test-issue-85-zcode-resume-advertised-model.py
+== validation ==
+render-skills --check: PASS
+validate.sh: exit 0 (no FAILED, no SKIPPED; issue-85 suite 7/7 OK; issue-84 18/18; issue-79 19/19)
+validate log: validate-full.log
+
+== files ==
+ M scripts/kaola-zcode-acp.py
+ M scripts/validate.sh
+ M skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+?? tests/contract/test-issue-85-zcode-resume-advertised-model.py
+
+== candidate commit ==
+70bfce09522a6eb1750cc7f59959c513d758e7a2
+70bfce0 fix(zcode): never advertise the rejected model on a failed-closed resume (Issue #85)
+worktree-status: 0 dirty paths
