@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **ZCode 3.12+ app-server compatibility, proven by a live model turn (Issue #79).**
+  The Runner-owned adapter still spoke the v0.39-era private protocol, and the
+  installed ZCode 3.12.3 build contains no `runtimeModel` at all, so a turn could
+  not start. Three independent breaks were fixed. The shipped 3.12.x entry cannot
+  locate its own bundled provider table -- it probes `<entryDir>/provider/` and a
+  five-levels-up path that fits the source tree but not the `.app`, where the table
+  sits one level up -- so `app-server` exited 1 before serving anything; the adapter
+  now resolves that table from the already-verified entry and injects both
+  `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` and `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE`
+  (both or neither, derived rather than inherited, so an unowned parent value can
+  never steer the child). The 3.12+ provider registry starts empty because the
+  app-server bootstrap omits its `standalone` option, which is what produced
+  `Select a model before continuing`; the one enabled Coding Plan is now registered
+  through `provider/updateAccountConfig`, the session is created with no model
+  channel, and the model is selected on the `account:*` provider through
+  `session/setModel` with an explicit `options.reasoningLevel` and
+  `persistAsWorkspaceLastUsed` false. And `interaction/requestProviderRuntimeHeaders`
+  was answered with `{}`, which cannot satisfy the strict response union and failed
+  every turn; it now carries the credential for the one authorized provider and
+  refuses any other. The CLI version string is `0.16.5` on both the working 3.11.2
+  baseline and the broken 3.12.3, so no version gate is possible: the protocol is
+  chosen by the backend's own error, and a pre-3.12 app-server keeps the
+  `runtimeModel` path. The one-enabled-Coding-Plan policy, fail-closed refusals and
+  redaction are unchanged, the credential stays in memory, and nothing is written
+  under `~/.zcode`. Verified live against desktop 3.12.3 in an isolated repo: start
+  with mode `yolo` applied, explicit selection, a real model reply, then exact stop
+  with no residual process.
+
 - **The shared tmux entrypoint no longer deadlocks against its own pipe under
   machine load (Issue #78).** Bash writes a here-document body up to 4096 bytes
   into a pipe from the forked child *before* `exec`, so that one process holds

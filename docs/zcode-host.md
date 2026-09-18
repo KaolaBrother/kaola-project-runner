@@ -95,9 +95,16 @@ names, USER, LOGNAME, SHELL, TZ, TERM) plus the explicit
 `KAOLA_ZCODE_ENTRY`/`KAOLA_ZCODE_NODE` runtime facts to the native child. The
 denied credential names (`ANTHROPIC_*`, `OPENAI_API_KEY`, `ZCODE_*`
 credential/remote/hub names) and the child-record write handle never reach any
-ZCode process. The in-memory Coding Plan provider overlay carries the plan
-credential to the app-server only, inside the sandboxed descriptor, and it
-never appears in Runner receipts or records.
+ZCode process. The plan credential reaches the app-server in memory only and
+never appears in Runner receipts or records: on a pre-3.12 app-server it rides
+the in-memory Coding Plan provider overlay inside the sandboxed descriptor, and
+on ZCode 3.12+ it is handed over per model request in the adapter's answer to
+`interaction/requestProviderRuntimeHeaders`, for the one authorized provider
+only. The two provider-config names ZCode 3.12+ needs
+(`ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`, `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE`)
+are derived from the verified entry rather than inherited, so an unowned value
+in the parent environment can never steer the child at a foreign provider
+table.
 
 ## Event-driven heartbeat (Phase 2)
 

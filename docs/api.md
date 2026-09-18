@@ -66,9 +66,19 @@ bridge fail closed (`session/new`, `session/resume`, and `session/prompt` return
 `start` fail closed unless `KAOLA_ZCODE_ENTRY` and `KAOLA_ZCODE_NODE` are both explicit
 absolute files (the adapter then launches `app-server --stdio` with `ELECTRON_RUN_AS_NODE=1`
 and an allowlisted child environment, and hands the desktop App's enabled GLM Coding Plan
-provider to the app-server in memory as the protocol's `runtimeModel` overlay, read from
-`~/.zcode/v2/config.json` read-only; Start Plan and pay-as-you-go providers are refused,
-`~/.zcode/cli/config.json` is never written, and the credential never reaches receipts). The
+provider to the app-server in memory, read from `~/.zcode/v2/config.json` read-only. Which
+in-memory mechanism applies depends on the installed app-server and is chosen by that
+backend's own error, not a version gate: a pre-3.12 app-server takes the protocol's
+`runtimeModel` overlay, while ZCode 3.12+ has removed `runtimeModel` and instead needs the
+bundled provider table resolved next to the verified entry and injected as
+`ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` plus `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE` (both or
+neither, derived from that entry and never inherited), the plan registered through
+`provider/updateAccountConfig`, the model selected on the `account:*` provider through
+`session/setModel` with an explicit `options.reasoningLevel` and
+`persistAsWorkspaceLastUsed: false`, and the credential supplied per model request through
+`interaction/requestProviderRuntimeHeaders`. Start Plan and pay-as-you-go providers are
+refused, `~/.zcode/cli/config.json` is never written, and the credential never reaches
+receipts). The
 `start`/`preflight` receipt's `agent_info._meta.zcode` carries the secret-free provider facts
 (`providerId`, `baseURL`, `planCacheStatus`, `modelIds`, `rejectedProviders`). ZCode's default
 transport is `acp`; `--transport pty` is dispatchable only as a known-unsupported diagnostic
