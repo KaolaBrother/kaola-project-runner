@@ -1193,6 +1193,49 @@ def test_issue_87_idle_full_queue_overflow_delivers_now() -> None:
           "the overflow fact is in the event log")
 
 
+def test_issue_87_restore_seeds_generation_from_confirmed_after_rotation() -> None:
+    """Issue #87: rotated EventLog may keep confirmed generation=2 while older
+    overflow records are gone. Restore must seed current generation at least
+    that confirmed value so the next overflow still delivers a full-check."""
+    module = load_holder_module()
+    holder = bare_holder(module, [
+        {"kind": "worker_event_overflow_confirmed", "generation": 2},
+    ])
+    holder._restore_worker_events()
+    check(holder.overflow_confirmed_generation == 2,
+          f"restore sees confirmed generation 2 ({holder.overflow_confirmed_generation})")
+    check(holder.overflow_generation >= 2,
+          f"restore seeds current generation at least confirmed ({holder.overflow_generation})")
+    check(not any(entry.get("kind") == "worker_event_restored"
+                  for entry in holder.events.entries),
+          "a fully confirmed generation does not redeliver")
+
+    holder.pending_worker_events = [
+        {"event_id": f"codex/work-{index}/idle/{100 + index}",
+         "kind": "idle", "platform": "codex", "session": f"work-{index}",
+         "repo": "/x", "reason": "end_turn", "event_cursor": 100 + index}
+        for index in range(HEARTBEAT_EVENT_CAP)]
+    prompts: list[dict] = []
+
+    def fake_prompt(params):
+        prompts.append(params)
+        return {"outcome": "in_progress", "prompt_fingerprint": "fp-rot"}
+
+    holder.op_prompt = fake_prompt  # type: ignore[method-assign]
+    overflow = holder.op_worker_event({
+        "kind": "terminated", "platform": "codex", "session": "work-rot",
+        "repo": "/x", "reason": "exit_0", "event_cursor": 200,
+    })
+    check((overflow.get("error") or {}).get("code") == "worker-event-queue-full",
+          f"the next event is still queue-full ({overflow})")
+    check(overflow.get("generation") == 3,
+          f"new overflow continues from confirmed generation 2 ({overflow})")
+    check(overflow.get("delivered") is True and overflow.get("overflow_full_check") is True,
+          f"the continued generation still delivers a full-check ({overflow})")
+    check(OVERFLOW_FULL_CHECK_MARK in str(prompts[0].get("text") or "") if prompts else False,
+          "the delivered prompt is the full-check")
+
+
 def test_canonical_heartbeat_spec_stays_one_set() -> None:
     skeleton = ROOT / "templates" / "orchestrator" / "references" / "heartbeat-skeleton.txt"
     text = skeleton.read_text(encoding="utf-8")

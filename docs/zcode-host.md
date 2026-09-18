@@ -244,8 +244,10 @@ worker agent terminated / worker turn ended (one idle episode)
   exact `stop`) rebuilds the pending detailed list from that log
   (at-least-once for those ≤32 events) and restores a full-check when the
   max overflow generation exceeds the max confirmed generation, even if a
-  late gen1 line follows gen2. A later event beyond the cap is not promised
-  as a detailed line after resume.
+  late gen1 line follows gen2. Current generation is seeded at least the
+  confirmed generation so rotation that dropped older overflow facts cannot
+  rewind the counter. A later event beyond the cap is not promised as a
+  detailed line after resume.
 - **The Host must end its turn (Issue #65).** Staging only clears at a turn
   boundary, so a Host that holds its turn open with `sleep`, a poll loop, or a
   blocking `wait` is exactly what keeps its own events undelivered. The

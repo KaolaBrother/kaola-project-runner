@@ -2148,7 +2148,8 @@ class Holder:
         event log (staged without a matching confirmation) and deliver it into
         the resumed session. Detailed events remain at-least-once; pending
         full-check is last overflow generation minus last confirmed
-        generation."""
+        generation. Current generation is at least the confirmed
+        generation, because rotation may drop older overflow records."""
         staged: list[dict[str, Any]] = []
         confirmed: set[str] = set()
         overflow_generation = 0
@@ -2180,6 +2181,9 @@ class Holder:
                 continue
             seen.add(event["event_id"])
             pending.append(event)
+        # Rotated logs may drop older overflow facts while keeping a later
+        # confirmation. Current generation cannot go backwards of confirmed.
+        overflow_generation = max(overflow_generation, overflow_confirmed)
         if len(pending) > HEARTBEAT_EVENT_CAP:
             pending = pending[-HEARTBEAT_EVENT_CAP:]
             overflow_generation += 1
