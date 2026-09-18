@@ -1266,8 +1266,14 @@ class ZCodeAcpAgent:
         session.provider_id = provider_id
         session.model_id = model_id
 
-    def hydrate_settings(self, session: Session) -> None:
-        """Read native mode/model/thought. Never invent a substitute model."""
+    def hydrate_settings(self, session: Session, announce: bool = True) -> None:
+        """Read native mode/model/thought. Never invent a substitute model.
+
+        With ``announce=False`` nothing is advertised: a native resume passes
+        it so the announcement lands only once `reregister_provider` has
+        accepted the recovered selection -- a resume that fails closed then
+        never advertises a model that was refused (Issue #85).
+        """
         if session.hydrated or session.backend_id is None or self.backend is None:
             return
         read_transcript = "session/read"
@@ -1317,6 +1323,13 @@ class ZCodeAcpAgent:
                 session.provider_id = persisted["providerId"]
                 session.model_id = persisted["modelId"]
         session.hydrated = True
+        if announce:
+            self.announce_settings(session)
+
+    def announce_settings(self, session: Session) -> None:
+        """Advertise the session's established mode/model/thought. Kept
+        separate from `hydrate_settings` so the resume path can announce
+        only after the selection is established (Issue #85)."""
         self.update(session, {
             "sessionUpdate": "config_option_update",
             "configOptions": self.config_options(session),
@@ -1731,8 +1744,11 @@ class ZCodeAcpAgent:
         })
         session.subscribed = True
         self.emit_session_identity(session)
-        self.hydrate_settings(session)
+        # Announce only after the selection is established: a resume that
+        # fails closed must never advertise the rejected model (Issue #85).
+        self.hydrate_settings(session, announce=False)
         self.reregister_provider(session)
+        self.announce_settings(session)
 
     def on_session_list(self, rid: Any, params: dict[str, Any]) -> None:
         backend = self.ensure_backend()

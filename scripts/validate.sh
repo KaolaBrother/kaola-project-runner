@@ -91,10 +91,12 @@ python_suites_all=(
   "test-issue-83-lane-failure-visibility.py"
   "test-issue-74-kaola-delegator.py"
   "test-issue-84-zcode-native-resume.py"
+  "test-issue-85-zcode-resume-advertised-model.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
   "test-issue-84-zcode-native-resume.py"
+  "test-issue-85-zcode-resume-advertised-model.py"
   "test-issue-65-steering.py"
   "test-acp-contract.py"
   "test-zcode-heartbeat-contract.py"
