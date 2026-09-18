@@ -32,6 +32,10 @@ Scenarios (argv ``--scenario``):
   resume_missing      session/resume fails 1404 (session unknown)
   resume_needs_overlay session/resume fails without a runtimeModel overlay
   read_fails   session/read fails after a successful resume
+  read_path    Read tool_call with file_path (Issue #67)
+  no_input     tool.updated without cached input (Issue #67)
+  sensitive_extra  Read input mixes a path with secrets and nested blobs
+  huge_nested  Read input with a huge command and deep extra dict
 """
 
 from __future__ import annotations
@@ -527,6 +531,66 @@ class FakeAppServer:
             self.event(session_id, "tool.updated", {
                 "kind": "result", "toolCallId": "call_n1", "toolName": "Read",
                 "output": "opaque",
+            })
+            self.complete(session_id)
+            return
+
+        if scenario == "sensitive_extra":
+            secret = self.last_secret or "no-secret-seen"
+            nested: dict[str, Any] = {
+                "blob": "PAD" * 20000,
+                "secret": secret,
+                "unregistered": "unregistered-secret-value-abc123xyz",
+            }
+            for _ in range(12):
+                nested = {"child": nested, "pad": "Y" * 1000}
+            self.event(session_id, "model.streaming", {
+                "kind": "tool_call", "toolCallId": "call_s1",
+                "toolName": "Read",
+                "input": {
+                    "file_path": "/tmp/kpr-issue-67-fixture/MARKER.txt",
+                    "contents": secret,
+                    "apiKey": secret,
+                    "extra": nested,
+                    "unregistered": "unregistered-secret-value-abc123xyz",
+                    "command": f"echo {secret}",
+                },
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "scheduled", "toolCallId": "call_s1", "toolName": "Read",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "started", "toolCallId": "call_s1", "toolName": "Read",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "result", "toolCallId": "call_s1", "toolName": "Read",
+                "output": secret,
+            })
+            self.complete(session_id)
+            return
+
+        if scenario == "huge_nested":
+            nested = {"leaf": "Z" * 8000}
+            for _ in range(16):
+                nested = {"k": nested, **{f"p{i}": "Q" * 200 for i in range(24)}}
+            self.event(session_id, "model.streaming", {
+                "kind": "tool_call", "toolCallId": "call_h1",
+                "toolName": "Read",
+                "input": {
+                    "file_path": "/tmp/kpr-issue-67-fixture/MARKER.txt",
+                    "command": "x" * 80000,
+                    "extra": nested,
+                },
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "scheduled", "toolCallId": "call_h1", "toolName": "Read",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "started", "toolCallId": "call_h1", "toolName": "Read",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "result", "toolCallId": "call_h1", "toolName": "Read",
+                "output": "ok",
             })
             self.complete(session_id)
             return

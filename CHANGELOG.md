@@ -30,6 +30,11 @@
   byte budget was raised, and running sessions - including names predating the
   rule - are neither renamed nor restarted to adopt it.
 
+- **ZCode ACP tool evidence is a bounded path/command receipt (Issue #67).**
+  `rawInput` copies only top-level path and truncated `command` fields, with a
+  1536-byte / depth-1 cap. Nested blobs and extra keys are dropped. Registered
+  adapter secrets in copied strings are redacted; arbitrary command text is not
+  a full credential scrub. Holder `events.jsonl` is covered by the same bound.
 - **The #49 host-invariance probe no longer spends product budget (Issue #71).**
   It now applies equal-length canonical edits instead of appending 59 B, so
   `templates/budgets.json` `main_skill_bytes` 17408 is the ceiling

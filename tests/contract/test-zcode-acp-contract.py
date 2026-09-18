@@ -20,11 +20,13 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
 from pathlib import Path
 
 
 PROJECT = Path(__file__).resolve().parents[2]
 ADAPTER = PROJECT / "scripts" / "kaola-zcode-acp.py"
+CHECKOUT_CLI = PROJECT / "scripts" / "kaola-acp.py"
 FAKE = PROJECT / "tests" / "contract" / "fake-zcode-app-server.py"
 PROBE = PROJECT / "tests" / "contract" / "hooks" / "zcode-probe"
 UPSTREAM = PROJECT / "third_party" / "zcode-acp" / "UPSTREAM.md"
@@ -304,6 +306,87 @@ class AdapterDriver:
         return code
 
 
+class HolderTurn:
+    """Drive one fake-ZCode turn through the real holder so events.jsonl is the record."""
+
+    def __init__(self, tmp: Path, scenario: str) -> None:
+        self.scenario = scenario
+        self.root = tmp / f"holder-{scenario}-{uuid.uuid4().hex[:8]}"
+        self.home = self.root / "home"
+        self.repo = self.root / "repo"
+        self.record_root = self.root / "records"
+        for path in (self.home, self.repo, self.record_root):
+            path.mkdir(parents=True)
+        (self.home / ".zcode" / "v2").mkdir(parents=True)
+        (self.home / ".zcode" / "cli").mkdir(parents=True)
+        (self.home / ".zcode" / "v2" / "config.json").write_text(
+            DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+        (self.home / ".zcode" / "v2" / "coding-plan-cache.json").write_text(
+            PLAN_CACHE_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+        (self.home / ".zcode" / "cli" / "config.json").write_text('{"hooks":{}}\n', encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        self.fake_record = self.root / "fake-record.json"
+        self.entry = self.root / f"zcode-entry-{scenario}.py"
+        self.entry.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os, runpy, sys\n"
+            f"os.environ['FAKE_ZCODE_SCENARIO'] = {scenario!r}\n"
+            f"os.environ['FAKE_ZCODE_RECORD'] = {str(self.fake_record)!r}\n"
+            f"sys.argv = [{str(FAKE)!r}, *sys.argv[1:]]\n"
+            f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
+            encoding="utf-8",
+        )
+        self.entry.chmod(self.entry.stat().st_mode | stat.S_IXUSR)
+        self.session = f"zcode-i67-{uuid.uuid4().hex[:8]}"
+        self.record_dir = self.record_root / "zcode" / self.session
+
+    def env(self) -> dict[str, str]:
+        return {
+            "PATH": os.environ.get("PATH", "/usr/bin"),
+            "HOME": str(self.home),
+            "LANG": "C",
+            "KAOLA_ACP_RECORD_ROOT": str(self.record_root),
+            "KAOLA_ZCODE_ENTRY": str(self.entry),
+            "KAOLA_ZCODE_NODE": sys.executable,
+            "PYTHONUNBUFFERED": "1",
+            "NO_COLOR": "1",
+        }
+
+    def cli(self, command: str, *args: str, timeout: float = 30) -> dict:
+        argv = [sys.executable, str(CHECKOUT_CLI), "zcode", command,
+                "--repo", str(self.repo), "--session", self.session, *args]
+        result = subprocess.run(
+            argv, capture_output=True, text=True, env=self.env(), timeout=timeout)
+        text = (result.stdout or "").strip()
+        payload = None
+        if text:
+            try:
+                payload = json.loads(text.splitlines()[-1])
+            except ValueError:
+                payload = None
+        if result.returncode != 0 or not isinstance(payload, dict):
+            raise AssertionError(
+                f"{command} exit {result.returncode}: {(result.stderr or '')[-800:]} "
+                f"{(result.stdout or '')[-400:]}")
+        return payload
+
+    def start(self) -> dict:
+        receipt = self.cli("start", "--mode", "yolo")
+        if receipt.get("error") or receipt.get("state") != "ready":
+            raise AssertionError(f"holder start failed: {receipt.get('error') or receipt}")
+        return receipt
+
+    def send(self, text: str) -> dict:
+        return self.cli("send", "--text", text)
+
+    def stop(self) -> None:
+        subprocess.run(
+            [sys.executable, str(CHECKOUT_CLI), "zcode", "stop",
+             "--repo", str(self.repo), "--session", self.session, "--force"],
+            capture_output=True, env=self.env(), timeout=30,
+        )
+
+
 class ZcodeAcpStaticTests(unittest.TestCase):
     def test_pin_and_gate2_attribution(self) -> None:
         text = UPSTREAM.read_text(encoding="utf-8")
@@ -331,23 +414,41 @@ class ZcodeAcpStaticTests(unittest.TestCase):
         for name in DENIED_ENV:
             self.assertIn(name, module.DENIED_ENV)
 
-    def test_bound_tool_input_redacts_and_does_not_invent_paths(self) -> None:
+    def test_extract_tool_evidence_keeps_only_bounded_path_command(self) -> None:
         module = load_adapter_module()
         module.register_secret("super-secret-value-xyz")
-        raw = module.bound_tool_input({
-            "file_path": "/tmp/kpr-issue-67-fixture/MARKER.txt",
-            "command": "echo super-secret-value-xyz",
+        path = "/tmp/kpr-issue-67-fixture/MARKER.txt"
+        nested = {"file_path": path, "blob": "PAD" * 5000}
+        for _ in range(8):
+            nested = {"child": nested}
+        raw = module.extract_tool_evidence({
+            "file_path": path,
+            "command": "echo super-secret-value-xyz " + ("x" * 400),
             "apiKey": "super-secret-value-xyz",
+            "contents": "unregistered-secret-value-abc123xyz",
+            "extra": nested,
         })
-        self.assertEqual(raw.get("file_path"), "/tmp/kpr-issue-67-fixture/MARKER.txt")
-        self.assertEqual(raw.get("command"), "echo <redacted-credential>")
+        assert raw is not None
+        self.assertEqual(raw.get("file_path"), path)
+        self.assertTrue(str(raw.get("command", "")).startswith("echo <redacted-credential>"))
+        self.assertLessEqual(len(str(raw.get("command"))), module.RAW_INPUT_COMMAND_CAP + 1)
         self.assertNotIn("apiKey", raw)
+        self.assertNotIn("contents", raw)
+        self.assertNotIn("extra", raw)
+        self.assertNotIn("unregistered-secret-value-abc123xyz", json.dumps(raw))
+        self.assertLessEqual(
+            len(json.dumps(raw, ensure_ascii=False).encode("utf-8")),
+            module.RAW_INPUT_MAX_BYTES,
+        )
+        self.assertEqual(module.RAW_INPUT_MAX_DEPTH, 1)
+        self.assertIsNone(module.extract_tool_evidence(nested), "nested path is not lifted")
         self.assertEqual(
             module.locations_from_input(raw),
-            [{"path": "/tmp/kpr-issue-67-fixture/MARKER.txt", "line": None}],
+            [{"path": path, "line": None}],
         )
         self.assertEqual(module.locations_from_input({"command": "cat /etc/passwd"}), [])
-        self.assertEqual(module.locations_from_input({}), [])
+        self.assertIsNone(module.extract_tool_evidence({}))
+        self.assertIsNone(module.extract_tool_evidence(None))
 
     def test_resolve_runtime_fails_closed(self) -> None:
         module = load_adapter_module()
@@ -1053,6 +1154,88 @@ class ZcodeAcpContractTests(unittest.TestCase):
             self.assertNotIn("rawInput", update)
             self.assertNotIn("locations", update)
             self.assertEqual(update.get("title"), "Read")
+
+    def test_sensitive_extra_fields_are_not_forwarded(self) -> None:
+        driver = self.start("sensitive_extra")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "read"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
+        self.assertTrue(tools)
+        path = "/tmp/kpr-issue-67-fixture/MARKER.txt"
+        blob = json.dumps(driver.messages)
+        self.assertNotIn(FIXTURE_SECRET, blob)
+        self.assertNotIn("unregistered-secret-value-abc123xyz", blob)
+        self.assertNotIn("PADPAD", blob)
+        for update in tools:
+            raw = update.get("rawInput") or {}
+            self.assertEqual(raw.get("file_path"), path)
+            self.assertNotIn("contents", raw)
+            self.assertNotIn("apiKey", raw)
+            self.assertNotIn("extra", raw)
+            self.assertNotIn("unregistered", raw)
+            self.assertEqual(update.get("locations"), [{"path": path, "line": None}])
+            if "command" in raw:
+                self.assertIn("<redacted-credential>", str(raw["command"]))
+                self.assertNotIn(FIXTURE_SECRET, str(raw["command"]))
+
+    def test_huge_nested_input_stays_within_raw_input_bound(self) -> None:
+        driver = self.start("huge_nested")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "read"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
+        self.assertTrue(tools)
+        module = load_adapter_module()
+        for update in tools:
+            raw = update.get("rawInput") or {}
+            self.assertEqual(raw.get("file_path"), "/tmp/kpr-issue-67-fixture/MARKER.txt")
+            self.assertNotIn("extra", raw)
+            if "command" in raw:
+                self.assertLessEqual(len(str(raw["command"])), module.RAW_INPUT_COMMAND_CAP + 1)
+            encoded = json.dumps(raw, ensure_ascii=False).encode("utf-8")
+            self.assertLessEqual(len(encoded), module.RAW_INPUT_MAX_BYTES)
+            self.assertLess(len(json.dumps(update, ensure_ascii=False)), 4096)
+
+    def test_holder_events_drop_secrets_and_stay_bounded(self) -> None:
+        """Issue #67 comment 5728867515: holder persistence matches the bound."""
+        self._assert_holder_events("sensitive_extra", secret=True)
+        self._assert_holder_events("huge_nested", secret=False)
+
+    def _assert_holder_events(self, scenario: str, *, secret: bool) -> None:
+        turn = HolderTurn(self.tmp, scenario)
+        try:
+            turn.start()
+            turn.send("read")
+            matches = list(turn.record_dir.rglob("events.jsonl"))
+            self.assertEqual(len(matches), 1, f"holder events.jsonl missing under {turn.record_dir}")
+            events_path = matches[0]
+            turn.record_dir = events_path.parent
+            blob = events_path.read_text(encoding="utf-8", errors="replace")
+            self.assertNotIn(FIXTURE_SECRET, blob)
+            self.assertNotIn("unregistered-secret-value-abc123xyz", blob)
+            self.assertNotIn("PADPAD", blob)
+            self.assertLess(events_path.stat().st_size, 256_000)
+            tool_lines = []
+            for line in blob.splitlines():
+                if "tool_call" not in line:
+                    continue
+                self.assertLess(len(line), 8192, "a persisted tool_call event stayed bounded")
+                tool_lines.append(line)
+            self.assertTrue(tool_lines)
+            if secret:
+                self.assertIn("MARKER.txt", blob)
+            record = turn.record_dir / "record.json"
+            if record.is_file():
+                self.assertNotIn(FIXTURE_SECRET, record.read_text(encoding="utf-8", errors="replace"))
+        finally:
+            turn.stop()
 
     def test_failed_load_leaves_no_half_registered_session(self) -> None:
         driver = self.start("resume_missing")

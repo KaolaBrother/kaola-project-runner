@@ -59,7 +59,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 ADAPTER_NAME = "kaola-zcode-acp"
-ADAPTER_VERSION = "0.3.1"
+ADAPTER_VERSION = "0.3.2"
 
 # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
 DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
@@ -594,7 +594,8 @@ TOOL_STATUS = {
 
 # Path-like keys actually observed on ZCode tool `input` (live 0.16.5 Read:
 # `file_path`) plus the same names the protocol examples and sibling tools use.
-# `command` is forwarded as rawInput only — never parsed into a path.
+# `command` is a truncated receipt only — never parsed into a path, never a
+# full-input credential scrub of arbitrary text.
 TOOL_INPUT_PATH_KEYS = (
     "file_path",
     "filePath",
@@ -604,44 +605,54 @@ TOOL_INPUT_PATH_KEYS = (
     "glob",
 )
 TOOL_INPUT_LINE_KEYS = ("line", "offset")
-RAW_INPUT_STRING_CAP = 1024
-_SECRETISH_KEY_SUBSTR = (
-    "apikey",
-    "api_key",
-    "token",
-    "secret",
-    "password",
-    "credential",
-    "authorization",
-)
+RAW_INPUT_PATH_CAP = 1024
+RAW_INPUT_COMMAND_CAP = 160
+RAW_INPUT_MAX_BYTES = 1536
+RAW_INPUT_MAX_DEPTH = 1
 
 
-def _secretish_key(key: str) -> bool:
-    lowered = key.lower().replace("-", "_")
-    return any(marker in lowered for marker in _SECRETISH_KEY_SUBSTR)
+def _cap_str(text: str, cap: int) -> str:
+    return text if len(text) <= cap else text[:cap] + "…"
 
 
-def bound_tool_input(value: Any, *, str_cap: int = RAW_INPUT_STRING_CAP) -> Any:
-    """Redact credentials, drop secret-like keys, and cap strings for ACP."""
-    return _bound_tool_input(redact(value), str_cap)
+def extract_tool_evidence(source: Any) -> dict[str, Any] | None:
+    """Copy only top-level path/command evidence.
 
-
-def _bound_tool_input(value: Any, str_cap: int) -> Any:
-    if isinstance(value, str):
-        return value if len(value) <= str_cap else value[:str_cap] + "…"
-    if isinstance(value, dict):
-        out: dict[str, Any] = {}
-        for key, item in value.items():
-            name = str(key)
-            if _secretish_key(name):
-                continue
-            out[name] = _bound_tool_input(item, str_cap)
-        return out
-    if isinstance(value, list):
-        return [_bound_tool_input(item, str_cap) for item in value[:16]]
-    if isinstance(value, (int, float, bool)) or value is None:
-        return value
-    return str(value)[:str_cap]
+    Nested blobs, extra keys, and secret-like fields are dropped. Registered
+    adapter secrets inside a copied string are redacted; an arbitrary command
+    is truncated and is not claimed fully desensitized. Depth is 1: a path
+    buried in a nested dict is not lifted.
+    """
+    if not isinstance(source, dict):
+        return None
+    # RAW_INPUT_MAX_DEPTH is 1: never walk nested dicts to find a path.
+    evidence: dict[str, Any] = {}
+    for key in TOOL_INPUT_PATH_KEYS:
+        val = source.get(key)
+        if isinstance(val, str) and val:
+            evidence[key] = _cap_str(redact(val), RAW_INPUT_PATH_CAP)
+    command = source.get("command")
+    if isinstance(command, str) and command:
+        evidence["command"] = _cap_str(redact(command), RAW_INPUT_COMMAND_CAP)
+    for key in TOOL_INPUT_LINE_KEYS:
+        val = source.get(key)
+        if isinstance(val, int) and not isinstance(val, bool):
+            evidence[key] = val
+            break
+    if not evidence:
+        return None
+    encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
+    if len(encoded) > RAW_INPUT_MAX_BYTES:
+        evidence.pop("command", None)
+        encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
+    if len(encoded) > RAW_INPUT_MAX_BYTES:
+        for key in list(evidence):
+            if key in TOOL_INPUT_PATH_KEYS and isinstance(evidence[key], str):
+                evidence[key] = _cap_str(evidence[key], 96)
+        encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
+    if len(encoded) > RAW_INPUT_MAX_BYTES:
+        return None
+    return evidence
 
 
 def locations_from_input(raw: Any) -> list[dict[str, Any]]:
@@ -670,8 +681,8 @@ def attach_tool_input(
         source = cached.get("input")
     if source is None:
         return
-    raw = bound_tool_input(source)
-    if raw in (None, {}, [], ""):
+    raw = extract_tool_evidence(source)
+    if not raw:
         return
     update["rawInput"] = raw
     locations = locations_from_input(raw)

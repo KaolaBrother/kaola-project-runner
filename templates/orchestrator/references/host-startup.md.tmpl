@@ -61,7 +61,8 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
    claim of having loaded the Skill is not evidence, and its tool record may show
    only that read and execute calls happened when `locations`/`rawInput` are
    absent; the translator forwards those fields only when the app-server `input`
-   already named a path or command (redacted), and never invents a path - so
+   already named a path or command as a bounded receipt (registered secrets
+   redacted; not a full-input scrub), and never invents a path - so
    check what does not depend on its
    prose: the roles, authorization and lifecycle boundary against the plan file
    you read yourself; quotes it could only produce from that plan and this
