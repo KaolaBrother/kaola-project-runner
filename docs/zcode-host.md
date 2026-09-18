@@ -355,6 +355,16 @@ Host/Skill-layer carrier, verified live on ZCode 3.12.3:
   model re-read the Skill after both `/compact` and `session/compact`. It
   adds a process per prompt and runtime state under `$ZCODE_PLUGIN_DATA`;
   adoption is a boundary decision for outer review, not shipped here.
+- **Durable prefix.** Workspace `AGENTS.md` content is resolved once per
+  session into the per-request context prefix — outside the history
+  compaction rewrites — verified live: an AGENTS-only marker was still
+  quoted after a real `/compact`, and a standing "reload the Skill if its
+  text is gone" instruction drove a real `read` plus the reload marker
+  with no carrier in the prompt. That makes a planted AGENTS block the
+  trigger-agnostic carrier (covers any compaction, including the
+  first post-compact inference); SessionStart/hook `additionalContext`
+  lands in history instead and is not durable. Adoption is a boundary
+  decision for outer review, not shipped here.
 
 ## Verification
 
