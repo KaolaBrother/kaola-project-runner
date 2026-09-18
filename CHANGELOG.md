@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **An unspecified token quota is no longer an extra hard start gate for
+  Kaola-Delegator (Issue #86).** Issue #74 requires a new ZCode Host to hold
+  current authorization before `start` and forbids fusing quota units. The
+  shared Delegator prompt had turned that second rule into "all three quota
+  units are mandatory figures": the Skill collected "quota as separate
+  concurrency, account, and token figures", handoff step 4 demanded "account
+  and token quota as separate figures", and the handoff text said the three
+  "stay three numbers". An outer Agent given worker platforms, counts,
+  concurrency, an account quota, priority, the stop boundary, and the canonical
+  project path therefore still refused to start, for want of a separate token
+  cap. Quota now travels in the units the user actually gave: a unit the user
+  never gave is not a missing key value, it is carried as `unspecified` and
+  does not block the start, and `unspecified` is explicitly not unlimited. Unit
+  non-fusion, no guessing, no stale reuse, no blank Host, still-ask on a
+  genuinely missing or ambiguous value, and no re-ask on a live Host are all
+  unchanged. Prompt-only: no new schema, state file, quota engine, or transport
+  gate. `reference_bytes` had 3 bytes of headroom and the budget is a locked
+  invariant, so the handoff edit is net-negative (8189 -> 8186 B rendered),
+  funded by two lossless rewordings that drop no rule; the fuller statement
+  lives in `SKILL.md` (3824 -> 4010 B of 4096).
 - **A failed-closed native `sess_*` resume no longer advertises the rejected
   model (Issue #85).** `hydrate_settings()` used to emit its
   `session/update {sessionUpdate: config_option_update}` — including a model
