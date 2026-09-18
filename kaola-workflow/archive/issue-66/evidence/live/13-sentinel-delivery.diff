@@ -1,0 +1,30 @@
+diff --git a/docs/project-plan.md b/docs/project-plan.md
+index 696cf03..95f1844 100644
+--- a/docs/project-plan.md
++++ b/docs/project-plan.md
+@@ -22,6 +22,9 @@ authorization and lifecycle boundary for this run. Do not create a second plan.
+ 5. has a docstring naming the empty-result behavior;
+ 6. `python3 -m pytest -q tests/test_text.py` (or a plain `python3 tests/test_text.py`
+    assertion script) passes, and the Host reads that output.
++7. (added by the plan owner after the first delivery) `slugify` accepts an optional
++   `max_length` keyword defaulting to `None`; when an integer is given the returned
++   slug is at most that long and never ends with `-`; tests cover it.
+ 
+ ## Lifecycle boundary
+ One delivery, the Host's acceptance check, any rework rounds it judges necessary,
+diff --git a/src/text.py b/src/text.py
+index ca1184d..1b98957 100644
+--- a/src/text.py
++++ b/src/text.py
+@@ -1,2 +1,9 @@
+-def slugify(value):
+-    return value.lower()
++import re
++
++
++def slugify(value, max_length=None):
++    """Return a lowercase slug, or an empty string when no alphanumerics remain."""
++    slug = re.sub(r"[\W_]+", "-", value.lower()).strip("-")
++    if max_length is not None:
++        slug = slug[:max_length].rstrip("-")
++    return slug
