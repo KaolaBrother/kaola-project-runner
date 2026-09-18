@@ -53,11 +53,16 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
    ```
 
 4. **Read the startup receipt, then verify it against evidence.** The Host's own
-   claim of having loaded the Skill is not evidence. Check its actual tool record
-   — that it read the main Skill and this reference, and read the plan file — and
-   compare the roles, authorization, lifecycle boundary and configuration it
-   reports against that plan. A wrong role, a missing authorization or a
-   contradiction is corrected before any dispatch; unauthorized, it stays idle.
+   claim of having loaded the Skill is not evidence, and its tool record may show
+   only that read and execute calls happened - ZCode's `tool_call` updates carry
+   `kind`, `title` and status, not paths - so check what does not depend on its
+   prose: the roles, authorization and lifecycle boundary against the plan file
+   you read yourself; quotes it could only produce from that plan and this
+   reference; and the artifacts this procedure leaves behind (a
+   `.kaola/heartbeat-prompt.json` with a usable `body`, a start receipt echoing
+   `heartbeat_host`, a `--no-wait` dispatch receipt, a turn that ended with no
+   sleep, poll or stop). A wrong role, a missing authorization or a contradiction
+   is corrected before any dispatch; unauthorized, it stays idle.
 5. **Verify the first real event loop**: a bound worker `start`, a `--no-wait`
    dispatch, the Host's turn ending on its own, and a `kaola-host-notify/1` pass
    arriving from a worker event. A background blocking `send` that returns to a
@@ -82,13 +87,16 @@ prompt — read that line in the notification and fix the file.
 Each beat: export `KAOLA_ACP_HEARTBEAT_HOST` on **every** worker `start` (a JSON
 object naming this Host: `platform` `zcode`, its own `session` and `repo`) and
 check that the start receipt echoes `heartbeat_host`; dispatch with
-`send --no-wait` and keep the receipt's `prompt_fingerprint` and
-`dispatch_event_cursor`; settle the rest of the beat; update the same heartbeat
+`send --no-wait`, keep the receipt's `prompt_fingerprint`, and take your reading
+anchor from an `observe` **before** the dispatch (the send receipt carries no
+cursor); settle the rest of the beat; update the same heartbeat
 body; then end the turn normally. Ending the turn is the wait: no sleep, no poll
 loop, no blocking `wait`, and never `stop`/`cancel` anything to manufacture a
 wake-up. When an event wakes you, read the worker's real output with that
-platform's Skill from an anchor that precedes it — the notification is neither
-the reply nor a verdict.
+platform's Skill from an anchor that precedes it: that pre-dispatch cursor, or a
+bounded `capture --lines`, because the event's own `event_cursor` is where the
+worker's turn *ended* and therefore sits after the reply. The notification is
+neither the reply nor a verdict.
 
 ## D. Which record holds what
 

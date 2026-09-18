@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- **Two startup flows, one startup receipt (Issue #66).** The main Skill now
+  opens with two short entry points: ordinary worker supervision (unchanged —
+  no Host obligation, no event binding, no added gate) and Orchestrator (ZCode
+  Host) supervision, whose startup order, startup receipt, record separation
+  and keep-versus-stop rule live in the new on-demand
+  `references/host-startup.md`. Roles, authorization and the lifecycle
+  boundary are read from the project's existing Project Plan or authorized task
+  plan; no second plan, role parameter, launcher, state machine, config system,
+  scheduler, or approval gate is introduced, and the flows reuse
+  `start`/`send --no-wait`/`observe`/`capture`/`stop`, the existing
+  `KAOLA_ACP_HEARTBEAT_HOST` receipt echo and the worker-event carrier.
+- **A defective heartbeat prompt file is reported, not hidden (Issue #66).**
+  `<repo>/.kaola/heartbeat-prompt.json` present but carrying no usable `body`
+  string (wrong field name, wrong type, empty, unparseable) used to deliver the
+  same "none maintained" text as an absent file, which let a Host believe a
+  prompt written under another field name was in effect. The delivered
+  notification now names the file and the actual defect and the host holder
+  logs `heartbeat_body_error`; delivery itself is unchanged, and the
+  heartbeat-skeleton reference now names the `body` field.
+
 ## 0.3.5 — 2026-09-18
 
 - **validate wall time cut with zero coverage loss.** The 24 contract suites in

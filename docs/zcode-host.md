@@ -135,9 +135,14 @@ worker agent terminated / worker turn ended (one idle episode)
   and updates the file (project info, pace, plans, coordination), so the next
   heartbeat pass carries that refreshed state (fingerprint and byte count are
   supplementary) — and one instruction to perform a single full pass per
-  `PROJECT_RUNNER_HEARTBEAT_V2`. No worker raw output travels with it. A
-  missing or unreadable prompt file delivers an explicit fallback trigger
-  context instead.
+  `PROJECT_RUNNER_HEARTBEAT_V2`. No worker raw output travels with it. An
+  absent prompt file delivers an explicit fallback trigger context instead; a
+  file that exists but carries no usable `body` string (Issue #66: wrong field
+  name, wrong type, empty, or unparseable JSON) delivers the same fallback
+  **plus** the named defect - `heartbeat prompt source: <path> present but
+  UNUSABLE - <defect>` in the prompt and `heartbeat_body_error` in the host
+  holder's `worker_event_delivered` entry - so a Host cannot mistake a
+  mis-written file for a maintained prompt. Delivery is never blocked by it.
 - **Busy host.** While a turn is active the host holder stages events and
   flushes them as one batched prompt at the next completed turn boundary; a
   notification turn that fails or is canceled leaves its events staged for the
@@ -155,6 +160,29 @@ worker agent terminated / worker turn ended (one idle episode)
   `PROJECT_RUNNER_HEARTBEAT_V2` skeleton stay one unchanged set; the only
   Skill change is the minimal ZCode-host override that documents the carrier
   and its prompt file.
+
+## Two startup flows (Issue #66)
+
+The main Skill opens with two short entry points, and only the second involves
+any of the machinery above:
+
+- **Ordinary worker supervision** — the controlling Agent dispatches and accepts
+  from its own session. No Host, no `KAOLA_ACP_HEARTBEAT_HOST`, no heartbeat
+  prompt file, and no added gate; blocking `send` stays a normal way to wait.
+- **Orchestrator (ZCode Host) supervision** — an outer Agent starts a named
+  ZCode Host that loads the main Skill and supervises workers on event-driven
+  beats. `skills/kaola-project-runner/references/host-startup.md` carries the
+  outer startup order (recover, start at the canonical root, hand over the
+  identity/plan/authorization the Host cannot discover, read its startup
+  receipt, verify it against the project's existing Project Plan and the Host's
+  real tool evidence rather than its self-claim, then keep the Host while
+  delivery/acceptance/close-out is open and stop it exactly afterwards), the
+  Host's own beat (prepare a valid `body` before the first dispatch, bind per
+  `start` and check the receipt, dispatch `--no-wait`, end the turn as the
+  wait), and which record holds roles, progress, current state, and facts.
+
+No role parameter, launcher, state machine, config system, scheduler, or
+approval gate was added for either flow.
 
 ## Verification
 
