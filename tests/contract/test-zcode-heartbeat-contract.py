@@ -1121,6 +1121,7 @@ def bare_holder(module, entries: list[dict] | None = None, *,
     holder.overflow_confirmed_generation = 0
     holder.overflow_inflight_generation = None
     holder.overflow_inflight_fingerprint = None
+    holder.confirmed_worker_events = {}
     holder.turn = {"active": False}
 
     class Agent:

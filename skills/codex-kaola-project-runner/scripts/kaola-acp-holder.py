@@ -142,6 +142,19 @@ HEARTBEAT_DEFECT_CHARS = 200
 # cannot dump an arbitrary body into session/prompt.
 HEARTBEAT_PROMPT_MAX_BYTES = 65536
 OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
+# Issue #90: how many recently confirmed worker event ids stay remembered, so a
+# worker retrying the same deterministic event_id after a confirmed Host turn is
+# answered as a duplicate instead of prompting the Host again. A retry follows
+# its own notify timeout, not thousands of events later, and the event log that
+# backs this memory rotates anyway.
+HEARTBEAT_CONFIRMED_MEMORY = 8 * HEARTBEAT_EVENT_CAP
+
+
+def prompt_fingerprint(text: str) -> str:
+    """The one prompt identity. Issue #90: the worker-event carrier claims this
+    for its staged events BEFORE admission, so it must be the very value
+    ``op_prompt`` records for the same text - one definition, not two."""
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def parse_heartbeat_host() -> dict[str, str] | None:
@@ -1186,6 +1199,12 @@ class Holder:
         self.overflow_confirmed_generation = 0
         self.overflow_inflight_generation: int | None = None
         self.overflow_inflight_fingerprint: Any = None
+        # Issue #90: recently confirmed event ids, rebuilt on resume from this
+        # holder's own `worker_event_confirmed` records. Not a second ledger -
+        # the event log stays the only persistence - just the bounded in-memory
+        # view `op_worker_event` needs to recognise a retry of an event that a
+        # completed Host turn already confirmed and removed from the pending list.
+        self.confirmed_worker_events: dict[str, None] = {}
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
         self.heartbeat_host = parse_heartbeat_host()
@@ -1744,7 +1763,7 @@ class Holder:
             # Read before anything is written: every event this turn produces
             # has a cursor strictly greater than this one.
             dispatch_cursor = self.events.cursor
-            fingerprint = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+            fingerprint = prompt_fingerprint(text)
             previous = self.last_prompt or {}
             self.turn = self._empty_turn()
             self.turn.update({
@@ -2000,17 +2019,25 @@ class Holder:
         if self.turn["active"]:
             return {"delivered": False, "reason": "prompt-in-progress"}
         text, meta = self._heartbeat_payload(staged, overflow_ready)
-        prompt = self.op_prompt({"text": text, "wait": False})
-        error = prompt.get("error")
-        if error or prompt.get("outcome") != "in_progress":
-            return {"delivered": False, "error": error or prompt}
-        fingerprint = prompt.get("prompt_fingerprint")
+        # Issue #90: `op_prompt` starts the turn's response thread before it
+        # returns, so a Host that answers at once runs `_worker_event_turn_end`
+        # INSIDE this call. Marking the events afterwards left that callback
+        # looking at an unmarked notification turn: it confirmed nothing and
+        # delivered the same events a second time. Claim the fingerprint first -
+        # it is the identity of the very text being admitted - so the callback
+        # either sees the whole claim or the prompt was never admitted.
+        fingerprint = prompt_fingerprint(text)
         with self.worker_events_lock:
             for item in staged:
                 item["prompt_fingerprint"] = fingerprint
             if overflow_ready:
                 self.overflow_inflight_generation = overflow_generation
                 self.overflow_inflight_fingerprint = fingerprint
+        prompt = self.op_prompt({"text": text, "wait": False})
+        error = prompt.get("error")
+        if error or prompt.get("outcome") != "in_progress":
+            self._release_worker_event_claim(staged, fingerprint, overflow_ready)
+            return {"delivered": False, "error": error or prompt}
         delivered: dict[str, Any] = {
             "kind": "worker_event_delivered",
             "event_ids": [item["event_id"] for item in staged],
@@ -2023,6 +2050,30 @@ class Holder:
         self.events.append(delivered)
         return {"delivered": True, "prompt_fingerprint": fingerprint,
                 "count": len(staged), "overflow_full_check": bool(overflow_ready)}
+
+    def _release_worker_event_claim(self, staged: list[dict[str, Any]],
+                                    fingerprint: str,
+                                    overflow_claimed: bool) -> None:
+        """Undo exactly the claim this delivery made when admission failed
+        (Issue #90). Only our own marks are dropped, so a turn that legitimately
+        owns them keeps its claim; the events stay staged for the next boundary
+        or a resume, which is what a refused or unwritten prompt always did."""
+        with self.worker_events_lock:
+            for item in staged:
+                if item.get("prompt_fingerprint") == fingerprint:
+                    item.pop("prompt_fingerprint", None)
+            if overflow_claimed and self.overflow_inflight_fingerprint == fingerprint:
+                self.overflow_inflight_generation = None
+                self.overflow_inflight_fingerprint = None
+
+    def _remember_confirmed_worker_events(self, event_ids: list[str]) -> None:
+        """Bounded, insertion-ordered memory of confirmed ids (Issue #90). The
+        caller holds ``worker_events_lock``, or is the single-threaded resume."""
+        for event_id in event_ids:
+            self.confirmed_worker_events.pop(event_id, None)
+            self.confirmed_worker_events[event_id] = None
+        while len(self.confirmed_worker_events) > HEARTBEAT_CONFIRMED_MEMORY:
+            self.confirmed_worker_events.pop(next(iter(self.confirmed_worker_events)))
 
     def _worker_event_turn_end(self, fingerprint: Any, outcome: str | None) -> None:
         """At a turn boundary: confirm the events this turn delivered, then
@@ -2049,6 +2100,7 @@ class Holder:
                 for item in hit:
                     self.pending_worker_events.remove(item)
                 confirmed = [item["event_id"] for item in hit]
+                self._remember_confirmed_worker_events(confirmed)
             elif hit:
                 for item in hit:
                     item.pop("prompt_fingerprint", None)
@@ -2105,6 +2157,14 @@ class Holder:
         if request_id is not None:
             event["request_id"] = request_id
         with self.worker_events_lock:
+            if event["event_id"] in self.confirmed_worker_events:
+                # Issue #90: a completed Host turn already confirmed this exact
+                # event and removed it from the pending list. `event_id` is
+                # deterministic, so re-offering it is a retry of the same event,
+                # not a new one; staging it again would prompt the Host twice.
+                return {"event_id": event["event_id"], "duplicate": True,
+                        "confirmed": True,
+                        "pending": len(self.pending_worker_events)}
             if any(item.get("event_id") == event["event_id"]
                    for item in self.pending_worker_events):
                 return {"event_id": event["event_id"], "duplicate": True,
@@ -2151,7 +2211,9 @@ class Holder:
         generation. Current generation is at least the confirmed
         generation, because rotation may drop older overflow records."""
         staged: list[dict[str, Any]] = []
-        confirmed: set[str] = set()
+        # Insertion-ordered so Issue #90's bounded retry memory keeps the most
+        # recently confirmed ids; membership tests read the same as a set.
+        confirmed: dict[str, None] = {}
         overflow_generation = 0
         overflow_confirmed = 0
         for entry in self.events.read_since(0, None):
@@ -2163,7 +2225,8 @@ class Holder:
             elif kind == "worker_event_confirmed":
                 ids = entry.get("event_ids")
                 if isinstance(ids, list):
-                    confirmed.update(item for item in ids if isinstance(item, str))
+                    confirmed.update(
+                        (item, None) for item in ids if isinstance(item, str))
             elif kind == "worker_event_overflow":
                 generation = self._overflow_generation_of(entry)
                 overflow_generation = (max(overflow_generation, generation)
@@ -2190,6 +2253,8 @@ class Holder:
             self.events.append({"kind": "worker_event_overflow",
                                 "generation": overflow_generation})
         self.pending_worker_events = pending
+        self.confirmed_worker_events = {}
+        self._remember_confirmed_worker_events(list(confirmed))
         self.overflow_generation = overflow_generation
         self.overflow_confirmed_generation = overflow_confirmed
         self.overflow_inflight_generation = None

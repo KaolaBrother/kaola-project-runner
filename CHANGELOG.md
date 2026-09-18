@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **ZCode Host confirms the notification it just delivered, and a confirmed worker event
+  is not re-prompted (Issue #90).** The carrier used to mark its staged events and snap
+  the overflow generation only *after* `session/prompt` was admitted, so a Host that
+  answered inside that window ran the turn-end callback against an unmarked turn:
+  it confirmed nothing and delivered the same events — and the same full-check
+  generation — a second time. The delivery now claims that turn's identity under the
+  existing worker-event lock before admission and releases exactly that claim when the
+  prompt is not admitted, so one worker event is one Host prompt and one confirmation.
+  A retry of an already confirmed deterministic `event_id` is answered as a duplicate
+  from the holder's bounded memory of recently confirmed ids instead of being staged
+  and delivered again. Busy-host staging, failed-notification restaging, cap-32
+  overflow, and at-least-once resume of genuinely unconfirmed events are unchanged.
+  No scheduler, no second queue or ledger, no new gate.
+
 - **ZCode Host heartbeat overflow wakes a full check instead of dropping the 33rd event
   (Issue #87).** The carrier still stages at most 32 detailed worker events. A later
   event still returns `worker-event-queue-full` and is not a 33rd detailed line; the

@@ -239,6 +239,15 @@ worker agent terminated / worker turn ended (one idle episode)
 - **Confirmation and resume.** The host turn completing after the
   notification confirms the detailed events and, when present, the
   full-check generation snapped at delivery (`worker_event_overflow_confirmed`).
+  The delivery claims that turn's fingerprint for its staged events and for the
+  overflow generation *before* the prompt is admitted, under the same lock the
+  turn-end callback takes, so a Host that answers immediately still finds a
+  marked notification turn instead of prompting the same events a second time;
+  a prompt that is never admitted releases exactly that claim and leaves the
+  events staged. A confirmed `event_id` offered again is answered
+  `duplicate` (with `confirmed`) from the holder's bounded memory of recently
+  confirmed ids, so a worker retry does not re-prompt the Host; a genuinely
+  unconfirmed event is still redelivered.
   Stage, delivery, and confirmation are recorded in the host holder's
   existing event log. `start --resume` (the `session/load` path, also after
   exact `stop`) rebuilds the pending detailed list from that log
