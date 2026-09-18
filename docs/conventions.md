@@ -19,9 +19,12 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
   fingerprints, install steps — never a second hand-written body and never scheduling, safety, or
   transport semantics. Products are owned by `--write`, rejected on drift by `--check` and the
   host verifier, and updated automatically when a canonical source changes.
+- External Zcode Orchestrator Skill: `templates/zcode-orchestrator/` renders
+  `skills/zcode-orchestrator/` (display name Zcode Orchestrator). It is a thin handoff to one
+  ZCode Host and is not a second control-plane engine.
 - Grok Bot host bundle: `hosts/grok-bot/` rendered by the `grok-bot` host adapter (inputs:
   `GROK_BOT_ADAPTER_INPUTS` = `templates/grok-bot/` only) — one thin bridge Skill
-  `kaola-project-runner.md`, `bridge.json`, and `INSTALL.md`. The bridge carries the accepted
+  `zcode-orchestrator.md`, `bridge.json`, and `INSTALL.md`. The bridge carries the accepted
   revision from `templates/grok-bot/accepted-revision.json` under a two-commit content/pin model
   (stage `content` for the content commit R, whose bridge is not saveable; stage `pinned` for
   the pin commit P that names R with an honest label or release tag; `--check --require-pinned`
@@ -64,8 +67,10 @@ concatenate, eagerly preload, or duplicate canonical Skill bodies for packaging 
 Every platform adapter and host declares measurable byte budgets for discovery, activation,
 selected-worker increment, references, and tool outputs in `templates/budgets.json`;
 `render-skills.py --check` and the contract tests fail when a budget or a loading boundary
-regresses. A bridge host (Grok Bot) binds its execution target first and loads the canonical
-Skills from a verified checkout on that target; nothing is copied into the account.
+regresses. A bridge host (Grok Bot) binds its execution target first and loads
+`skills/zcode-orchestrator` from a verified checkout on that target; nothing is
+copied into the account. Grok Bot does not load Project Runner or a worker Skill
+from the bridge.
 
 ## Shell safety
 

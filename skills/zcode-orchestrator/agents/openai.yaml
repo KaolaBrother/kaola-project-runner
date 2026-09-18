@@ -1,0 +1,6 @@
+interface:
+  display_name: "Zcode Orchestrator"
+  short_description: "Delegate a project run to one ZCode Host through the ZCode Runner"
+  default_prompt: "Use $zcode-orchestrator to extract the authorized task and quota, start or resume one ZCode Host, and relay user changes without dispatching workers."
+policy:
+  allow_implicit_invocation: true

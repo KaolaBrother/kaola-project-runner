@@ -30,8 +30,10 @@ Save `hosts/grok-bot/{{BRIDGE_FILE}}` as the account-private Skill `{{SKILL_NAME
 `description` from its frontmatter (`hosts/grok-bot/{{MANIFEST}}` holds the already-resolved
 values and `"saveable": true`; never save YAML quotes), `body` = everything after the closing
 `---`. If a Skill with the same name exists, update it in place; never create a second one and
-never touch any other Skill. A later pin changes only the accepted-revision line; repeat this
-one write then.
+never touch any other Skill. This repository does not authorize deleting a personal account
+Skill. An older `kaola-project-runner` account Skill is left in place: do not rename, restart,
+or cancel in-flight work to adopt this one. A later pin changes only the accepted-revision
+line; repeat this one write then.
 
 ## 2. First configuration on Local Computer (Mac): read-only, never from the cloud
 
@@ -64,23 +66,21 @@ that host (real local paths, which may include the user's home), normalised orig
 (`{{EXPECTED_ORIGIN}}`), HEAD, clean state. None of it enters the account Skill; link and
 receipt stay device-local.
 
-## 3. Read-only preflight UAT against an existing local project and session
+## 3. Read-only preflight UAT against the bound checkout
 
 ```bash
-{{LOCATOR}} --target local --expect-revision {{ACCEPTED_COMMIT}} \
-  --project /path/of/the/existing/local/project --worker <platform id> --session <existing-session-name>
-"$ROOT/skills/<platform id>-{{SKILL_NAME}}/scripts/runtime-tmux.sh" preflight --repo /path/of/the/existing/local/project --session <existing-session-name>
+{{LOCATOR}} --target local --expect-revision {{ACCEPTED_COMMIT}}
+test -f "$ROOT/skills/{{SKILL_NAME}}/SKILL.md"
 ```
 
-Expected: the attestation is `ok` (project on this host, script under the same ROOT, a tmux
-session of that exact name reported present by the tmux server the locator can reach: presence
-only, not existence elsewhere; ownership is proven by the worker preflight, not by the
-locator), the worker preflight returns its evidence, and nothing was started, sent, stopped,
-cloned, fetched, checked out, or installed. Record that the Bot read only
-`ROOT/skills/{{SKILL_NAME}}/SKILL.md` and `ROOT/skills/<platform id>-{{SKILL_NAME}}/SKILL.md`,
+Expected: the attestation is `ok`, `ROOT/skills/{{SKILL_NAME}}/SKILL.md` is present, and
+nothing was started, sent, stopped, cloned, fetched, checked out, or installed. Do not load
+Project Runner or `ROOT/skills/<platform id>-kaola-project-runner` from this bridge, and do
+not run a worker preflight. Record that the Bot read only `ROOT/skills/{{SKILL_NAME}}/SKILL.md`,
 read no script source, and that the cloud Agent Computer executed nothing and accessed no Mac
 file. This establishes placement only, not live use: a real-use smoke on one session is
-separately authorized and is not part of installation.
+separately authorized and is not part of installation. This repository does not claim live
+Grok Bot adoption.
 After UAT, remove `$BIN/{{LOCATOR}}` and `$BIN/.{{LOCATOR}}.json` or keep them
 registered; the installer-managed link is restored with `./scripts/install-local.sh
 --bin-links` from the normal checkout (it refuses to overwrite a link it does not own, so

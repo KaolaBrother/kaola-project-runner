@@ -1,8 +1,8 @@
 # Grok Bot: one bridge Skill, one device-local locator per execution target
 
 These steps are for the owner and for Grok Bot itself. They are not a Skill. The account
-receives **exactly one** small private Skill, `kaola-project-runner` (Project Runner bridge,
-`hosts/grok-bot/kaola-project-runner.md`, 2526 bytes, stage `content`). Every policy,
+receives **exactly one** small private Skill, `zcode-orchestrator` (Zcode Orchestrator bridge,
+`hosts/grok-bot/zcode-orchestrator.md`, 2408 bytes, stage `content`). Every policy,
 worker, reference, and script stays in the repository and is loaded on demand from a verified
 checkout on the bound execution target. Research on Grok Bot 0.51.0 found no supported automated
 way to create an account Skill (`NO_SUPPORTED_PATH`), so the one native skill write below is the
@@ -26,12 +26,14 @@ names it, nothing is released or tagged.
 
 ## 1. One write on the account (from P only)
 
-Save `hosts/grok-bot/kaola-project-runner.md` as the account-private Skill `kaola-project-runner`: `name` and
+Save `hosts/grok-bot/zcode-orchestrator.md` as the account-private Skill `zcode-orchestrator`: `name` and
 `description` from its frontmatter (`hosts/grok-bot/bridge.json` holds the already-resolved
 values and `"saveable": true`; never save YAML quotes), `body` = everything after the closing
 `---`. If a Skill with the same name exists, update it in place; never create a second one and
-never touch any other Skill. A later pin changes only the accepted-revision line; repeat this
-one write then.
+never touch any other Skill. This repository does not authorize deleting a personal account
+Skill. An older `kaola-project-runner` account Skill is left in place: do not rename, restart,
+or cancel in-flight work to adopt this one. A later pin changes only the accepted-revision
+line; repeat this one write then.
 
 ## 2. First configuration on Local Computer (Mac): read-only, never from the cloud
 
@@ -64,23 +66,21 @@ that host (real local paths, which may include the user's home), normalised orig
 (`github.com/KaolaBrother/kaola-project-runner`), HEAD, clean state. None of it enters the account Skill; link and
 receipt stay device-local.
 
-## 3. Read-only preflight UAT against an existing local project and session
+## 3. Read-only preflight UAT against the bound checkout
 
 ```bash
-kaola-project-runner-locate --target local --expect-revision <accepted commit> \
-  --project /path/of/the/existing/local/project --worker <platform id> --session <existing-session-name>
-"$ROOT/skills/<platform id>-kaola-project-runner/scripts/runtime-tmux.sh" preflight --repo /path/of/the/existing/local/project --session <existing-session-name>
+kaola-project-runner-locate --target local --expect-revision <accepted commit>
+test -f "$ROOT/skills/zcode-orchestrator/SKILL.md"
 ```
 
-Expected: the attestation is `ok` (project on this host, script under the same ROOT, a tmux
-session of that exact name reported present by the tmux server the locator can reach: presence
-only, not existence elsewhere; ownership is proven by the worker preflight, not by the
-locator), the worker preflight returns its evidence, and nothing was started, sent, stopped,
-cloned, fetched, checked out, or installed. Record that the Bot read only
-`ROOT/skills/kaola-project-runner/SKILL.md` and `ROOT/skills/<platform id>-kaola-project-runner/SKILL.md`,
+Expected: the attestation is `ok`, `ROOT/skills/zcode-orchestrator/SKILL.md` is present, and
+nothing was started, sent, stopped, cloned, fetched, checked out, or installed. Do not load
+Project Runner or `ROOT/skills/<platform id>-kaola-project-runner` from this bridge, and do
+not run a worker preflight. Record that the Bot read only `ROOT/skills/zcode-orchestrator/SKILL.md`,
 read no script source, and that the cloud Agent Computer executed nothing and accessed no Mac
 file. This establishes placement only, not live use: a real-use smoke on one session is
-separately authorized and is not part of installation.
+separately authorized and is not part of installation. This repository does not claim live
+Grok Bot adoption.
 After UAT, remove `$BIN/kaola-project-runner-locate` and `$BIN/.kaola-project-runner-locate.json` or keep them
 registered; the installer-managed link is restored with `./scripts/install-local.sh
 --bin-links` from the normal checkout (it refuses to overwrite a link it does not own, so

@@ -31,6 +31,8 @@ ZCODE_PLATFORM = "zcode"
 ZCODE_ADAPTER = "kaola-zcode-acp.py"
 ORCHESTRATOR_NAME = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
+EXTERNAL_NAME = "zcode-orchestrator"
+EXTERNAL_DISPLAY = "Zcode Orchestrator"
 GROK_BOT_HOST = "grok-bot"  # a host packaging adapter (see below), never a platform
 TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 REQUIRED = {
@@ -251,6 +253,51 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
     return result
 
 
+def external_values() -> dict[str, str]:
+    return {
+        "SKILL_NAME": EXTERNAL_NAME,
+        "DISPLAY_NAME": EXTERNAL_DISPLAY,
+        "RUNNER_SKILL": ORCHESTRATOR_NAME,
+        "RUNNER_DISPLAY": ORCHESTRATOR_DISPLAY,
+        "ZCODE_WORKER": f"{ZCODE_PLATFORM}-{ORCHESTRATOR_NAME}",
+        "LOCATOR": LOCATOR_COMMAND,
+        "DESCRIPTION": json.dumps(
+            "Use when an outer Agent (Grok Bot, Codex, or generic) should delegate a "
+            "project run to a ZCode Host: extract the task, progress, authorized "
+            "platforms/quota/priority, and project context, start or resume one ZCode "
+            "Host via the ZCode Runner, and relay user changes without dispatching workers."
+        ),
+        "SHORT_DESCRIPTION": (
+            "Delegate a project run to one ZCode Host through the ZCode Runner"
+        ),
+        "DEFAULT_PROMPT": (
+            f"Use ${EXTERNAL_NAME} to extract the authorized task and quota, start or "
+            "resume one ZCode Host, and relay user changes without dispatching workers."
+        ),
+    }
+
+
+def expected_external_files() -> dict[str, bytes]:
+    src = TEMPLATES / EXTERNAL_NAME
+    skill_template = src / "SKILL.md.tmpl"
+    if not skill_template.is_file():
+        raise ValueError(f"missing external Skill template: {skill_template}")
+    values = external_values()
+    result: dict[str, bytes] = {MARKER: (EXTERNAL_NAME + "\n").encode()}
+    for source in sorted(src.rglob("*")):
+        if not source.is_file():
+            continue
+        relative = source.relative_to(src)
+        if source.suffix == ".tmpl":
+            dest = relative.with_suffix("").as_posix()
+            result[dest] = render_text(
+                source.read_text(encoding="utf-8"), values, source
+            ).encode()
+        else:
+            result[relative.as_posix()] = source.read_bytes()
+    return result
+
+
 def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     result[MARKER] = (manifest["skill_name"] + "\n").encode()
@@ -395,16 +442,17 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
 # ---------------------------------------------------------------------------
 # Host adapter: grok-bot (packaging adapter, not a CLI transport platform)
 #
-# One canonical Skill system exists: the orchestrator template, the worker
-# template, the nine platform manifests, and their canonical references. A
-# host adapter only re-packages that system for one host. Grok Bot receives
-# exactly ONE thin account/cloud Skill -- the bridge -- rendered from
-# templates/grok-bot/ alone: it names the repository, the accepted pinned
-# revision, the device-local locator command, and the two canonical entry paths
-# (ROOT/skills/kaola-project-runner and ROOT/skills/<platform>-kaola-project-
-# runner). It copies NO canonical body, reference, worker text, transport, or
-# path: every policy stays in the repository and is loaded on demand from a
-# verified checkout on the bound execution target (progressive disclosure).
+# One canonical Skill system exists: the orchestrator template, the external
+# Zcode Orchestrator template, the worker template, the nine platform
+# manifests, and their canonical references. A host adapter only re-packages
+# that system for one host. Grok Bot receives exactly ONE thin account/cloud
+# Skill -- the bridge -- rendered from templates/grok-bot/ alone: it names the
+# repository, the accepted pinned revision, the device-local locator command,
+# and the one canonical entry path ROOT/skills/zcode-orchestrator. It copies
+# NO canonical body, reference, worker text, transport, or path: every policy
+# stays in the repository and is loaded on demand from a verified checkout on
+# the bound execution target (progressive disclosure). Grok Bot is not a
+# Project Runner host.
 # Products: the bridge, its fingerprint manifest, and the one-write bootstrap
 # guide. No platform manifest, no transport adapter, no runtime copy, no
 # per-worker account Skills. --write owns every product; --check and
@@ -438,7 +486,7 @@ CONTENT_STAGE_LINE = (
     "account. The pin commit that follows names the content commit."
 )
 GROK_BOT_TEMPLATES = TEMPLATES / "grok-bot"
-BRIDGE_FILE = f"{ORCHESTRATOR_NAME}.md"
+BRIDGE_FILE = f"{EXTERNAL_NAME}.md"
 BRIDGE_MANIFEST = "bridge.json"
 INSTALL_GUIDE = "INSTALL.md"
 ACCEPTED_REVISION_FILE = "accepted-revision.json"
@@ -448,10 +496,9 @@ EXPECTED_ORIGIN = f"github.com/{REPO_SLUG}"
 REVISION = re.compile(r"^[0-9a-f]{40}$")
 RELEASE = re.compile(r"^v\d+\.\d+\.\d+$")
 BRIDGE_DESCRIPTION = (
-    "Use when the controlling Agent should supervise explicitly authorized CLI workers "
-    "through Project Runner on a bound execution target: locate that target's verified "
-    "kaola-project-runner checkout, then load the main Skill and one selected platform "
-    "worker from it."
+    "Use when Grok Bot should delegate a project run through Zcode Orchestrator on a "
+    "bound execution target: locate that target's verified kaola-project-runner "
+    "checkout, then load the Zcode Orchestrator Skill from it."
 )
 
 
@@ -520,8 +567,12 @@ def git_out(*args: str) -> str | None:
 
 
 def required_pin_paths(manifests: list[dict[str, str]]) -> list[str]:
-    """Every path the bridge tells the Agent to load or run from the pinned checkout."""
-    paths = ["scripts/kaola-locate.py", f"skills/{ORCHESTRATOR_NAME}/SKILL.md"]
+    """Every path the bridge or the Host it starts must be able to load from the pin."""
+    paths = [
+        "scripts/kaola-locate.py",
+        f"skills/{EXTERNAL_NAME}/SKILL.md",
+        f"skills/{ORCHESTRATOR_NAME}/SKILL.md",
+    ]
     for manifest in manifests:
         paths.append(f"skills/{manifest['skill_name']}/SKILL.md")
         paths.append(f"skills/{manifest['skill_name']}/scripts/runtime-tmux.sh")
@@ -615,8 +666,8 @@ def pin_delta_findings(commit: str, revision: dict[str, str | None]) -> list[str
 def bridge_values() -> dict[str, str]:
     revision = accepted_revision()
     return {
-        "SKILL_NAME": ORCHESTRATOR_NAME,
-        "DISPLAY_NAME": ORCHESTRATOR_DISPLAY,
+        "SKILL_NAME": EXTERNAL_NAME,
+        "DISPLAY_NAME": EXTERNAL_DISPLAY,
         "DESCRIPTION": json.dumps(BRIDGE_DESCRIPTION),
         "REPO_SLUG": REPO_SLUG,
         "EXPECTED_ORIGIN": EXPECTED_ORIGIN,
@@ -638,8 +689,8 @@ def bridge_document(values: dict[str, str]) -> bytes:
 
 def bridge_manifest(bridge: bytes, revision: dict[str, str | None]) -> bytes:
     meta, body = split_frontmatter(bridge.decode("utf-8"))
-    if meta.get("name") != ORCHESTRATOR_NAME:
-        raise ValueError(f"{BRIDGE_FILE}: frontmatter name must be {ORCHESTRATOR_NAME!r}")
+    if meta.get("name") != EXTERNAL_NAME:
+        raise ValueError(f"{BRIDGE_FILE}: frontmatter name must be {EXTERNAL_NAME!r}")
     payload = {
         "host": GROK_BOT_HOST,
         "adapter": "grok-bot-bridge",
@@ -653,7 +704,7 @@ def bridge_manifest(bridge: bytes, revision: dict[str, str | None]) -> bytes:
         "install_guide": INSTALL_GUIDE,
         "skill_count": 1,
         "skill": {
-            "name": ORCHESTRATOR_NAME,
+            "name": EXTERNAL_NAME,
             "description": meta["description"],
             "source": BRIDGE_FILE,
             "bytes": len(bridge),
@@ -769,7 +820,7 @@ def main() -> int:
         )
 
     findings: list[str] = []
-    expected_names = {m["skill_name"] for m in manifests} | {ORCHESTRATOR_NAME}
+    expected_names = {m["skill_name"] for m in manifests} | {ORCHESTRATOR_NAME, EXTERNAL_NAME}
     if SKILLS.is_dir():
         for path in SKILLS.iterdir():
             if path.is_dir() and path.name not in expected_names:
@@ -783,10 +834,12 @@ def main() -> int:
     revision = accepted_revision()
     worker_expected = {m["skill_name"]: expected_files(m) for m in manifests}
     orch_expected = expected_orchestrator_files(manifests)
+    external_expected = expected_external_files()
     host_expected = expected_grok_bot_host_files()
     for name, expected in worker_expected.items():
         findings.extend(budget_findings(name, expected, "worker_skill_bytes", limits))
     findings.extend(budget_findings(ORCHESTRATOR_NAME, orch_expected, "main_skill_bytes", limits))
+    findings.extend(budget_findings(EXTERNAL_NAME, external_expected, "external_skill_bytes", limits))
     findings.extend(host_budget_findings(host_expected, limits))
     findings.extend(pin_findings(revision, manifests))
     if args.require_pinned and revision["stage"] != "pinned":
@@ -811,6 +864,12 @@ def main() -> int:
     else:
         findings.extend(check_one(orch_target, orch_expected))
 
+    external_target = SKILLS / EXTERNAL_NAME
+    if args.write:
+        write_one(external_target, external_expected)
+    else:
+        findings.extend(check_one(external_target, external_expected))
+
     host_target = HOSTS / GROK_BOT_HOST
     if args.write:
         write_bundle(HOSTS, host_target, host_expected, "host")
@@ -827,7 +886,7 @@ def main() -> int:
     )
     print(
         f"render-skills: {'WROTE' if args.write else 'PASS'} "
-        f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {GROK_BOT_HOST} host: "
+        f"({len(manifests)} workers + {ORCHESTRATOR_NAME} + {EXTERNAL_NAME} + {GROK_BOT_HOST} host: "
         f"1 bridge skill, {len(host_expected[BRIDGE_FILE])} B, {stage}; budgets OK)"
     )
     return 0

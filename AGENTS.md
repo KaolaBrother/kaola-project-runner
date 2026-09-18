@@ -8,9 +8,9 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Project Snapshot
 
-- Purpose: runtime-neutral Agent Skills CLI communication driver for nine AI CLI platforms via tmux, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner); Codex remains a supported consuming runtime; Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/kaola-project-runner.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads the main Skill plus one selected worker from it; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not a ninth worker and has no installer destination.
+- Purpose: runtime-neutral Agent Skills CLI communication driver for nine AI CLI platforms via tmux, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner; Codex, generic, and ZCode entries) and the generated external Skill `zcode-orchestrator` (display name Zcode Orchestrator; Grok Bot, generic, and Codex entries). Codex remains a supported consuming runtime. Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/zcode-orchestrator.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads `zcode-orchestrator`; that Skill starts one ZCode Host which then loads Project Runner; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not a ninth worker, not a Project Runner host, and has no installer destination.
 - Stack: Bash (macOS-compatible), Python 3, tmux.
-- Architecture: shared worker template renders nine self-contained platform Skills from YAML manifests and shell adapters; a separate orchestrator template renders the control-plane Skill (not a tenth platform); relay manages nested PTY.
+- Architecture: shared worker template renders nine self-contained platform Skills from YAML manifests and shell adapters; a separate orchestrator template renders the control-plane Skill (not a tenth platform); `templates/zcode-orchestrator/` renders the external Zcode Orchestrator Skill; relay manages nested PTY.
 
 ## Commands
 
@@ -23,7 +23,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 ## Project Constraints
 
 - Security boundary: prompts via relay literal/bracketed-paste, never shell eval; terminal controls rejected before PTY write.
-- Public contract or compatibility constraints: `templates/grok-golden/` is frozen; worker Skills are generated from `templates/SKILL.md.tmpl`; the main orchestrator Skill is generated from `templates/orchestrator/`.
+- Public contract or compatibility constraints: `templates/grok-golden/` is frozen; worker Skills are generated from `templates/SKILL.md.tmpl`; the main orchestrator Skill is generated from `templates/orchestrator/`; the external Zcode Orchestrator Skill is generated from `templates/zcode-orchestrator/`.
 - Files or generated surfaces requiring special handling: `skills/` and `hosts/grok-bot/` are generated output, never hand-edit.
 
 ## Validation Policy

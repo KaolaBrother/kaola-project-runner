@@ -39,6 +39,7 @@ ACP_CLI = PROJECT / "scripts" / "kaola-acp.py"
 MOCK_ACP_AGENT = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 BUDGETS = json.loads((PROJECT / "templates" / "budgets.json").read_text(encoding="utf-8"))
 ORCHESTRATOR_ID = "kaola-project-runner"
+EXTERNAL_ID = "zcode-orchestrator"
 WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode")
 WORKER_SKILL_IDS = tuple(f"{wid}-{ORCHESTRATOR_ID}" for wid in WORKER_IDS)
 WORKER_BODY_MARKERS = ("## Communication loop", 'runtime-tmux.sh" send', 'runtime-tmux.sh" capture', "mutation_status", "raw_current_frame", "SKILL_DIR=")
@@ -65,7 +66,10 @@ def frontmatter(text: str) -> tuple[dict[str, str], str]:
 
 
 def products() -> dict[str, Path]:
-    result = {ORCHESTRATOR_ID: PROJECT / "skills" / ORCHESTRATOR_ID}
+    result = {
+        ORCHESTRATOR_ID: PROJECT / "skills" / ORCHESTRATOR_ID,
+        EXTERNAL_ID: PROJECT / "skills" / EXTERNAL_ID,
+    }
     for skill_id in WORKER_SKILL_IDS:
         result[skill_id] = PROJECT / "skills" / skill_id
     return result
@@ -82,14 +86,19 @@ def render(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 class BudgetsDeclared(unittest.TestCase):
     def test_budget_table_is_complete_and_positive(self) -> None:
-        for key in ("description_chars", "main_skill_bytes", "worker_skill_bytes", "reference_bytes", "bridge_bytes",
+        for key in ("description_chars", "main_skill_bytes", "worker_skill_bytes", "external_skill_bytes",
+                    "reference_bytes", "bridge_bytes",
                     "bridge_guide_bytes", "locator_receipt_bytes", "capture_receipt_bytes", "state_receipt_bytes"):
             self.assertIsInstance(BUDGETS.get(key), int, key)
             self.assertGreater(BUDGETS[key], 0, key)
-        # Budgets are ordered the way disclosure is: discovery < bridge < worker < main.
-        self.assertLess(BUDGETS["bridge_bytes"], BUDGETS["worker_skill_bytes"])
+        # Budgets are ordered the way disclosure is: discovery < bridge < external < worker < main.
+        self.assertLess(BUDGETS["bridge_bytes"], BUDGETS["external_skill_bytes"])
+        self.assertLess(BUDGETS["external_skill_bytes"], BUDGETS["worker_skill_bytes"])
         self.assertLess(BUDGETS["worker_skill_bytes"], BUDGETS["main_skill_bytes"])
         self.assertLess(BUDGETS["reference_bytes"], BUDGETS["worker_skill_bytes"])
+        self.assertLessEqual(BUDGETS["main_skill_bytes"], 17408)
+        self.assertLessEqual(BUDGETS["worker_skill_bytes"], 12288)
+        self.assertLessEqual(BUDGETS["bridge_bytes"], 2560)
 
     def test_helper_constants_agree_with_the_budget_table(self) -> None:
         observation = OBSERVATION.read_text(encoding="utf-8")
@@ -108,9 +117,9 @@ class DiscoveryIsNameAndShortDescription(unittest.TestCase):
             self.assertEqual(meta["name"], skill_id)
             self.assertLessEqual(len(meta["description"]), BUDGETS["description_chars"], skill_id)
             self.assertNotIn("\n", meta["description"])
-        bridge = PROJECT / "hosts" / "grok-bot" / f"{ORCHESTRATOR_ID}.md"
+        bridge = PROJECT / "hosts" / "grok-bot" / f"{EXTERNAL_ID}.md"
         meta, _ = frontmatter(bridge.read_text(encoding="utf-8"))
-        self.assertEqual(meta["name"], ORCHESTRATOR_ID)
+        self.assertEqual(meta["name"], EXTERNAL_ID)
         self.assertLessEqual(len(meta["description"]), BUDGETS["description_chars"])
 
 
@@ -124,6 +133,9 @@ class ActivationBoundaries(unittest.TestCase):
         self.assertFalse((PROJECT / "skills" / ORCHESTRATOR_ID / "workers").exists())
         self.assertFalse((PROJECT / "skills" / ORCHESTRATOR_ID / "scripts").exists(), "control plane ships no transport scripts")
         self.assertIn("Load one selected worker Skill only at dispatch", text)
+        external = (PROJECT / "skills" / EXTERNAL_ID / "SKILL.md").read_bytes()
+        self.assertLessEqual(len(external), BUDGETS["external_skill_bytes"])
+        self.assertLess(len(external), BUDGETS["worker_skill_bytes"])
 
     def test_each_worker_is_within_budget_separate_and_free_of_orchestrator_policy(self) -> None:
         bodies: dict[str, str] = {}
@@ -158,7 +170,8 @@ class ActivationBoundaries(unittest.TestCase):
     def test_skill_text_never_instructs_reading_script_source(self) -> None:
         surfaces = [path / "SKILL.md" for path in products().values()]
         surfaces += list((PROJECT / "hosts" / "grok-bot").glob("*.md"))
-        surfaces += [PROJECT / "templates" / "SKILL.md.tmpl", PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl"]
+        surfaces += [PROJECT / "templates" / "SKILL.md.tmpl", PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl",
+                     PROJECT / "templates" / EXTERNAL_ID / "SKILL.md.tmpl"]
         for path in surfaces:
             text = path.read_text(encoding="utf-8")
             for raw in re.split(r"(?<=[.!?:])\s+|\n\n+", text):
@@ -170,10 +183,10 @@ class ActivationBoundaries(unittest.TestCase):
                                              f"{path.relative_to(PROJECT)}: {pattern}: {sentence[:100]}")
 
     def test_no_host_product_exceeds_its_canonical_source(self) -> None:
-        bridge = PROJECT / "hosts" / "grok-bot" / f"{ORCHESTRATOR_ID}.md"
+        bridge = PROJECT / "hosts" / "grok-bot" / f"{EXTERNAL_ID}.md"
         self.assertLessEqual(bridge.stat().st_size, BUDGETS["bridge_bytes"])
         self.assertLess(bridge.stat().st_size, (PROJECT / "skills" / ORCHESTRATOR_ID / "SKILL.md").stat().st_size)
-        self.assertEqual(sorted(p.name for p in (PROJECT / "hosts" / "grok-bot").iterdir() if p.suffix == ".md"), ["INSTALL.md", f"{ORCHESTRATOR_ID}.md"])
+        self.assertEqual(sorted(p.name for p in (PROJECT / "hosts" / "grok-bot").iterdir() if p.suffix == ".md"), ["INSTALL.md", f"{EXTERNAL_ID}.md"])
 
 
 class RendererEnforcesBudgets(unittest.TestCase):
@@ -188,6 +201,7 @@ class RendererEnforcesBudgets(unittest.TestCase):
             cases = {
                 "templates/orchestrator/SKILL.md.tmpl": (r"budget: kaola-project-runner/SKILL\.md is \d+ B > \d+ B \(main_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
                 "templates/SKILL.md.tmpl": (r"budget: claude-code-kaola-project-runner/SKILL\.md is \d+ B > \d+ B \(worker_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
+                "templates/zcode-orchestrator/SKILL.md.tmpl": (r"budget: zcode-orchestrator/SKILL\.md is \d+ B > \d+ B \(external_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
                 "templates/references/transport.md.tmpl": (r"budget: codex-kaola-project-runner/references/transport\.md is \d+ B > \d+ B \(reference_bytes\)", "\n" + "padding " * 400 + "\n"),
                 "templates/grok-bot/INSTALL.md.tmpl": (r"budget: grok-bot/INSTALL\.md is \d+ B > \d+ B \(bridge_guide_bytes\)", "\n" + "padding " * 600 + "\n"),
             }

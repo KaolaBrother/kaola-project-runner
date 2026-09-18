@@ -117,26 +117,29 @@ historical evidence, not this Skill's contract.
 The installer provides native skill-directory destinations for **Codex, Claude Code,
 Cursor, Devin, and ZCode** (`--runtime zcode` → `~/.zcode/skills`; a workspace
 `.zcode/skills` works through `--skills-dir` — see [ZCode host](docs/zcode-host.md)).
-**Grok Bot** is a **bridge host**: the account holds exactly one very
-small generated Skill, `hosts/grok-bot/kaola-project-runner.md` (≈ 2 KB), that binds an
+**Grok Bot** is a **bridge host** for **Zcode Orchestrator**, not a Project Runner
+host: the account holds exactly one very small generated Skill,
+`hosts/grok-bot/zcode-orchestrator.md` (≈ 2 KB), that binds an
 execution target first (Local Computer, or the cloud Agent Computer), asks that target's
 device-local locator `kaola-project-runner-locate` for the verified `kaola-project-runner`
-checkout (expected origin, accepted pinned revision, clean tree), and loads only the main
-Skill and, at dispatch, one selected `<platform>-kaola-project-runner` worker from that
-checkout. The bridge carries no policy, transport, reference, path, runtime copy, or
+checkout (expected origin, accepted pinned revision, clean tree), and loads only
+`ROOT/skills/zcode-orchestrator`. That Skill starts or resumes one ZCode Host, which
+loads Project Runner internally. The bridge carries no policy, transport, reference, path, runtime copy, or
 credential; a release changes only its accepted-revision line, and an accepted content/pin
 pair is never rebased or squashed. Nothing on one target reaches
 the other, and the cloud never installs or updates the Mac. Grok Bot is a packaging adapter
 inside the renderer, not a transport platform; still nine worker platforms, and `--platform grok`
 remains the Grok CLI worker. Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
 automated account-Skill creation, so one native skill write is the only account operation and
-the owner's read-only Local Computer UAT is the live boundary — see
+the owner's read-only Local Computer UAT is the live boundary — this repository does not claim
+live Grok Bot adoption. See
 [Grok Bot host](docs/grok-bot-host.md). The bridge is delivered as two commits (content commit R,
 then pin commit P that names R; the bridge is saved from P and every target is checked out clean
 and detached at R). Progressive disclosure is a locked invariant on every
 host (see [conventions](docs/conventions.md#progressive-disclosure)). Other hosts can use `--skills-dir /absolute/path`
 if they can load `SKILL.md` and execute shell commands in an environment with the
-required tools.
+required tools. Codex and generic `--skills-dir` destinations also install
+`zcode-orchestrator` next to Project Runner.
 
 These are portable Agent Skills, with no dependency on a Codex installation. This does not mean
 every host/target combination has been tested. Recorded end-to-end host coverage includes Codex
@@ -289,7 +292,7 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime zcode
 ./scripts/install-local.sh --skills-dir "$PWD/.zcode/skills"
 
-# Grok Bot: no installer destination. Save hosts/grok-bot/kaola-project-runner.md (the bridge) on
+# Grok Bot: no installer destination. Save hosts/grok-bot/zcode-orchestrator.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:
 python3 scripts/kaola-locate.py register --target local --bin-dir <dir on PATH> --expect-revision <accepted commit>   # validates origin/revision/clean, links kaola-project-runner-locate, writes the registration receipt beside it
 kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt; the locator compares host fingerprint and target with its receipt

@@ -2,19 +2,19 @@
 """Offline verifier for the generated Grok Bot host bundle ``hosts/grok-bot``.
 
 Grok Bot is a bridge host: the account holds exactly **one** thin private Skill,
-``kaola-project-runner`` (the bridge), and everything else -- the main Skill, the
-nine platform workers, their references and scripts -- stays in the repository and
-is loaded on demand from a verified checkout on the bound execution target. This
-verifier proves that shape structurally:
+``zcode-orchestrator`` (the bridge), and everything else -- the Zcode Orchestrator
+Skill, Project Runner, the nine platform workers, their references and scripts --
+stays in the repository and is loaded on demand from a verified checkout on the
+bound execution target. This verifier proves that shape structurally:
 
 * the bundle is exactly the marker, the bridge, ``bridge.json``, and ``INSTALL.md``;
 * the bridge stays inside its byte budget (``templates/budgets.json``), names the
-  repository, the expected origin, the device-local locator command, and the two
-  canonical entry paths (``ROOT/skills/kaola-project-runner`` and
-  ``ROOT/skills/<platform>-kaola-project-runner``), binds the execution target before
-  anything else, and names no individual worker; at stage ``pinned`` it carries exactly
-  one 40-hex accepted revision, at stage ``content`` (the content commit of the
-  two-commit content/pin model) it carries none and says it must not be saved;
+  repository, the expected origin, the device-local locator command, and the one
+  canonical entry path (``ROOT/skills/zcode-orchestrator``), binds the execution
+  target before anything else, and names no individual worker; at stage ``pinned``
+  it carries exactly one 40-hex accepted revision, at stage ``content`` (the content
+  commit of the two-commit content/pin model) it carries none and says it must not
+  be saved;
 * the bridge carries **no** canonical body, reference, transport, or orchestrator
   content, no fixed or default path, HOME convention, username, environment
   variable, symlink convention, runtime copy, and no credential handling pattern;
@@ -42,17 +42,18 @@ import sys
 from pathlib import Path
 
 ROOT_SKILL = "kaola-project-runner"
+EXTERNAL_SKILL = "zcode-orchestrator"
 WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode")
 WORKER_SKILL_NAMES = tuple(f"{wid}-{ROOT_SKILL}" for wid in WORKER_IDS)
 MARKER = ".generated-by-kaola-project-runner"
 HOST_MARKER = "grok-bot\n"
-BRIDGE_FILE = f"{ROOT_SKILL}.md"
+BRIDGE_FILE = f"{EXTERNAL_SKILL}.md"
 BRIDGE_MANIFEST = "bridge.json"
 INSTALL_GUIDE = "INSTALL.md"
 LOCATOR_COMMAND = "kaola-project-runner-locate"
 REPO_SLUG = "KaolaBrother/kaola-project-runner"
 EXPECTED_ORIGIN = f"github.com/{REPO_SLUG}"
-MAIN_ENTRY = f"ROOT/skills/{ROOT_SKILL}/SKILL.md"
+MAIN_ENTRY = f"ROOT/skills/{EXTERNAL_SKILL}/SKILL.md"
 WORKER_ENTRY = f"ROOT/skills/<platform>-{ROOT_SKILL}/SKILL.md"
 REVISION = re.compile(r"\b[0-9a-f]{40}\b")
 STAGES = ("content", "pinned")
@@ -150,8 +151,8 @@ def bridge_findings(bundle: Path, repo: Path | None, budgets: dict[str, int], st
         meta, body = parse_frontmatter(text)
     except ValueError as exc:
         return findings + [f"{bridge}: {exc}"]
-    if meta.get("name") != ROOT_SKILL:
-        findings.append(f"{bridge}: frontmatter name must be {ROOT_SKILL!r}, got {meta.get('name')!r}")
+    if meta.get("name") != EXTERNAL_SKILL:
+        findings.append(f"{bridge}: frontmatter name must be {EXTERNAL_SKILL!r}, got {meta.get('name')!r}")
     description = meta.get("description", "")
     if not description:
         findings.append(f"{bridge}: frontmatter description must not be empty")
@@ -174,9 +175,13 @@ def bridge_findings(bundle: Path, repo: Path | None, budgets: dict[str, int], st
             findings.append(f"{bridge}: a pinned bridge must not carry the content-stage placeholder")
     if "`--target` only echoes your declaration" not in text or "host fingerprint" not in text:
         findings.append(f"{bridge}: must say --target is the Agent's declaration and require the host-fingerprint comparison")
-    for needle in (REPO_SLUG, EXPECTED_ORIGIN, f"`{LOCATOR_COMMAND}`", f"`{MAIN_ENTRY}`", f"`{WORKER_ENTRY}`"):
+    for needle in (REPO_SLUG, EXPECTED_ORIGIN, f"`{LOCATOR_COMMAND}`", f"`{MAIN_ENTRY}`"):
         if needle not in text:
             findings.append(f"{bridge}: missing {needle!r}")
+    if f"Load `{MAIN_ENTRY}`" not in text and f"load `{MAIN_ENTRY}`" not in text:
+        findings.append(f"{bridge}: must load {MAIN_ENTRY}")
+    if "Do not load Project Runner" not in text and "do not load Project Runner" not in text.lower():
+        findings.append(f"{bridge}: must refuse loading Project Runner from the bridge")
     lowered = re.sub(r"\s+", " ", body).lower()
     for clause in ("bind the execution target first", "local computer", "cloud", "never clone, install, update, or change anything on local computer",
                    "consumer project root", "same target", "never read script source", "never enter, print, or pass a token"):
@@ -240,8 +245,8 @@ def manifest_findings(bundle: Path) -> list[str]:
             findings.append(f"{manifest}: pinned stage names exactly one of release/label and saveable = true")
     skill = data.get("skill") or {}
     bridge = bundle / BRIDGE_FILE
-    if skill.get("name") != ROOT_SKILL or skill.get("source") != BRIDGE_FILE or not bridge.is_file():
-        return findings + [f"{manifest}: skill.name/source must be {ROOT_SKILL}/{BRIDGE_FILE}"]
+    if skill.get("name") != EXTERNAL_SKILL or skill.get("source") != BRIDGE_FILE or not bridge.is_file():
+        return findings + [f"{manifest}: skill.name/source must be {EXTERNAL_SKILL}/{BRIDGE_FILE}"]
     raw = bridge.read_bytes()
     if skill.get("file_sha256") != hashlib.sha256(raw).hexdigest() or skill.get("bytes") != len(raw):
         findings.append(f"{manifest}: file_sha256/bytes do not match {BRIDGE_FILE}")
@@ -270,7 +275,7 @@ def guide_findings(bundle: Path, budgets: dict[str, int]) -> list[str]:
     if text.startswith("---"):
         findings.append(f"{guide}: must not carry Skill frontmatter (it is not a second Skill)")
     sources = set(re.findall(r"hosts/grok-bot/([a-z0-9-]+)\.md", text))
-    if sources != {ROOT_SKILL}:
+    if sources != {EXTERNAL_SKILL}:
         findings.append(f"{guide}: must name exactly the single source hosts/grok-bot/{BRIDGE_FILE}, got {sorted(sources)}")
     lowered = re.sub(r"\s+", " ", text).lower()
     for clause in GUIDE_CLAUSES:

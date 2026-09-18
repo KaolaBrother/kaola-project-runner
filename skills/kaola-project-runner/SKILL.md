@@ -75,10 +75,10 @@ platform's default transport is ACP:
 
 ### Hosts
 
-This Skill is host-neutral. Native skill-directory installs exist for Codex,
-Claude Code, Cursor, Devin and ZCode (`~/.zcode/skills`; a workspace
-`.zcode/skills` works through `--skills-dir`), where the nine workers are sibling
-Skill directories. A ZCode Host session is one named Runner session like any other:
+This Skill is host-neutral. Consuming entries are Codex, generic
+`--skills-dir`, and ZCode. Native skill-directory installs also exist for
+Claude Code, Cursor and Devin, where the nine workers are sibling Skill
+directories. A ZCode Host session is one named Runner session like any other:
 an inner worker it dispatches, ZCode or not, is a separate session with its own
 record entry and process group - an inner stop never reaches the outer Host, and
 the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop, and it
@@ -92,25 +92,12 @@ the turn normally** - that is the wait. Never sleep, poll, blocking-`wait`, or
 stop/cancel anything to manufacture a wake-up. A worker turn-end or exit delivers one
 full pass here; read the reply through that worker's own Skill from the dispatch
 anchor, not the event's `event_cursor`, which sits after it. Beat, event and carrier detail:
-[references/zcode-host-dispatch.md](references/zcode-host-dispatch.md). A **bridge host** (Grok Bot today) reaches this checkout through one thin
-account Skill instead: it binds an execution target first (Local Computer, or the
-cloud Agent Computer), asks that target's device-local locator `kaola-project-runner-locate` for
-the verified repo root ROOT, and loads only `ROOT/skills/kaola-project-runner` plus,
-per dispatch, one selected `ROOT/skills/<platform id>-kaola-project-runner`. Re-run that
-attestation before every dispatch and refuse any `refused` receipt: project,
-worker script, and the exact session must all be on that one bound target, which
-never reaches the other's files, CLIs, tmux, or sessions. Grok Bot is a host, not a worker and
-not a tenth platform: `--platform grok` is the Grok CLI worker, `--platform
-grok-bot` is invalid.
-
-On Grok Bot one Routine on this Bot conversation is the only heartbeat carrier:
-never stack it with a Codex heartbeat or blocking sleep. Takeover cancels the
-previous host heartbeat without stopping in-flight workers.
-`HUMAN_DECISION_REQUIRED` stays in this Bot conversation (Needs attention / this
-Bot's Notifications). Agent Computer takeover is not CLI decision and not
-exact-session stop. A saved bridge is not live adoption; the owner's read-only
-Local Computer UAT is the boundary. See
-[references/grok-bot-host.md](references/grok-bot-host.md).
+[references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
+Grok Bot is not an entry for this Skill: it loads generated `zcode-orchestrator`,
+which starts one ZCode Host that then loads this Skill. `--platform grok` is the
+Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
+Routine to run this Skill. An in-flight session that still uses the old Grok Bot
+Project Runner entry is not renamed, restarted, or cancelled from here.
 
 ### Progressive disclosure
 
@@ -149,7 +136,7 @@ leftovers are a transport fact: do not force PTY or invent a new skip-all gate.
 
 ## Heartbeat
 
-The heartbeat is the working prompt itself: Codex and Grok Bot run it from their
+The heartbeat is the working prompt itself: Codex runs it from its
 own timer, a ZCode Host from each worker return or event, on host-native
 carriers. Render it from the skeleton in
 [references/heartbeat-skeleton.md](references/heartbeat-skeleton.md),
@@ -161,9 +148,8 @@ request disables execution actions.
 
 On a ZCode Host session worker events are the only heartbeat trigger (see
 Hosts). After close-out, cancel the native heartbeat or stop scheduling the next
-sleep. Temporarily having no ready task is not
-project completion. Do not hard-code other
-hosts' scheduler APIs.
+sleep. No allowlist, no heartbeat. Temporarily having no ready task is not
+project completion. Do not hard-code other hosts' scheduler APIs.
 
 ## Delivery
 

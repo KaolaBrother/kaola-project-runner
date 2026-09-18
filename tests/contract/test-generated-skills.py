@@ -84,6 +84,8 @@ PLATFORMS = {
 REQUIRED = ("SKILL.md", "agents/openai.yaml")
 ORCHESTRATOR_ID = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
+EXTERNAL_ID = "zcode-orchestrator"
+EXTERNAL_DISPLAY = "Zcode Orchestrator"
 ORCHESTRATOR_MARKER = ".generated-by-kaola-project-runner"
 WORKER_TRANSPORT_FILES = (
     "scripts/runtime-tmux.sh",
@@ -525,18 +527,77 @@ def check_orchestrator_package(assertions: Assertions, root: Path) -> None:
     )
 
 
+def check_external_package(assertions: Assertions, root: Path) -> None:
+    package = root / "skills" / EXTERNAL_ID
+    assertions.check(
+        "test_external_package_exists",
+        package.is_dir(),
+        f"missing generated external Skill directory: {package}",
+    )
+    if not package.is_dir():
+        return
+    marker = package / ORCHESTRATOR_MARKER
+    assertions.check(
+        "test_external_generated_marker",
+        marker.is_file() and marker.read_bytes() == f"{EXTERNAL_ID}\n".encode(),
+        f"marker must contain {EXTERNAL_ID!r}",
+    )
+    skill = package / "SKILL.md"
+    if not skill.is_file():
+        assertions.check("test_external_skill_md", False, f"missing {skill}")
+        return
+    try:
+        skill_name, description = frontmatter(skill)
+    except (OSError, ValueError) as exc:
+        assertions.check("test_external_frontmatter", False, str(exc))
+        return
+    assertions.check("test_external_frontmatter_name", skill_name == EXTERNAL_ID, f"YAML name is {skill_name!r}")
+    assertions.check("test_external_frontmatter_description", bool(description), "description is empty")
+    heading = skill.read_text(encoding="utf-8")
+    metadata_path = package / "agents" / "openai.yaml"
+    display = yaml_scalar(metadata_path.read_text(encoding="utf-8"), "display_name") if metadata_path.is_file() else ""
+    assertions.check(
+        "test_external_display_name_zcode_orchestrator",
+        display == EXTERNAL_DISPLAY or re.search(r"(?m)^# Zcode Orchestrator\s*$", heading) is not None,
+        f"display name must be {EXTERNAL_DISPLAY!r}",
+    )
+    relative_files = {path.relative_to(package).as_posix() for path in all_files(package)}
+    for forbidden in WORKER_TRANSPORT_FILES:
+        leaked = [name for name in relative_files if name == forbidden or name.startswith(forbidden + "/")]
+        assertions.check(
+            f"test_external_has_no_{forbidden.replace('/', '_')}",
+            not leaked,
+            f"external Skill must not ship transport/adapter bytes: {leaked!r}",
+        )
+    check_self_contained(assertions, package, EXTERNAL_ID, required=("SKILL.md",))
+    normalized = re.sub(r"\s+", " ", heading)
+    assertions.check(
+        "test_external_does_not_copy_the_runner_engine",
+        "Do not copy that engine" in normalized
+        and "Do not dispatch workers" in normalized
+        and "KAOLA_ACP_HEARTBEAT_HOST" not in heading,
+        "external Skill must stay a thin handoff and not leak per-worker heartbeat binding",
+    )
+    assertions.check(
+        "test_external_names_the_inner_runner",
+        "kaola-project-runner" in normalized and "zcode-kaola-project-runner" in normalized,
+        "external Skill must name Project Runner and the ZCode worker used to start the Host",
+    )
+
+
 def check_generated_tree(assertions: Assertions, root: Path, require_check: bool = True) -> None:
     generated = root / "skills"
     actual_ids = {
         path.name for path in generated.iterdir() if path.is_dir()
     } if generated.is_dir() else set()
-    expected_ids = set(PLATFORMS) | {ORCHESTRATOR_ID}
+    expected_ids = set(PLATFORMS) | {ORCHESTRATOR_ID, EXTERNAL_ID}
     assertions.check(
-        "test_generated_skill_inventory_is_nine_workers_and_orchestrator",
+        "test_generated_skill_inventory_is_nine_workers_orchestrator_and_external",
         actual_ids == expected_ids,
         f"generated Skill directories are {sorted(actual_ids)!r}, expected {sorted(expected_ids)!r}",
     )
     check_orchestrator_package(assertions, root)
+    check_external_package(assertions, root)
     for package_id, details in PLATFORMS.items():
         package = generated / package_id
         check_self_contained(assertions, package, package_id)

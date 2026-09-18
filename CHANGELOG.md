@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Zcode Orchestrator is the external delegation Skill; Grok Bot is no longer a
+  Project Runner host (Issue #74).** The generated Skill `zcode-orchestrator`
+  (display name Zcode Orchestrator) is a thin shared core for Grok Bot, Codex,
+  and generic Skill-directory hosts: it extracts task, progress, authorized
+  platforms, quota (concurrency/account/token kept separate), priority, and
+  project context, then starts or resumes one ZCode Host through the existing
+  ZCode Runner. Project Runner (`kaola-project-runner`) remains the inner
+  engine and is loaded by that Host. The Grok Bot account Skill is now
+  `hosts/grok-bot/zcode-orchestrator.md`; it still binds the execution target
+  and runs the device-local locator, then loads only the external Skill. Grok
+  CLI and the other eight platform workers are unchanged. Existing budgets were
+  not raised; `external_skill_bytes` 4096 is the new small ceiling for this
+  Skill. This repository does not claim live Grok Bot UAT. In-flight sessions
+  that still use the old Grok Bot Project Runner entry are not renamed,
+  restarted, or cancelled.
+
 - **Standalone ACP contract suites now stop the sessions they start (Issue #82).**
   `Issue34ModelSelectionAcpTests` starts codex/cursor-cli/devin holders but the
   shared fixture's `tearDown` always stopped the default grok session, so a
@@ -144,7 +160,6 @@
   native id, which for ZCode is reported in the session's own
   `native_session_identity` event rather than `session_meta`. No new rebind
   operation, scheduler, timer or global gate; no byte budget raised.
-
 - **Issue-backed dispatches are named for their issue, and one run claims one
   issue (Issue #72).** Every new issue-backed ACP worker dispatch now picks its
   real open GitHub issue before starting anything and names the Runner session

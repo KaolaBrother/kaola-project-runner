@@ -9,12 +9,12 @@
   "repository": "github.com/KaolaBrother/kaola-project-runner",
   "saveable": false,
   "skill": {
-    "body_sha256": "61704ee5a2213ffb9e4b4004e02b1aedea11c0b0baf9a152e241094a57f8536a",
-    "bytes": 2526,
-    "description": "Use when the controlling Agent should supervise explicitly authorized CLI workers through Project Runner on a bound execution target: locate that target's verified kaola-project-runner checkout, then load the main Skill and one selected platform worker from it.",
-    "file_sha256": "6834a464788f493d769dff5cf663c7211ca8dd84c91c23d0df43db363a201832",
-    "name": "kaola-project-runner",
-    "source": "kaola-project-runner.md"
+    "body_sha256": "167f39f1ef189ea048aa69066c6e2c792a4f1a73da19b60c2ee7dc1d9fef110c",
+    "bytes": 2408,
+    "description": "Use when Grok Bot should delegate a project run through Zcode Orchestrator on a bound execution target: locate that target's verified kaola-project-runner checkout, then load the Zcode Orchestrator Skill from it.",
+    "file_sha256": "eb3b1d160a8568a56004ed9e96c9fc065ce1e8490ada407c541ea0fbbf357fdf",
+    "name": "zcode-orchestrator",
+    "source": "zcode-orchestrator.md"
   },
   "skill_count": 1,
   "stage": "content"

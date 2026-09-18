@@ -34,12 +34,13 @@ class HeartbeatGuidanceObligation(unittest.TestCase):
         self.skeleton = SKELETON.read_text(encoding="utf-8")
 
     def test_heartbeat_is_defined_per_host_without_a_shared_implementation(self) -> None:
-        # Codex and Grok Bot: their own timer. ZCode Host: worker return / worker event.
-        self.assertRegex(self.skeleton, r"Codex 与 Grok Bot 由各自定时系统触发投递")
+        # Codex: its own timer. ZCode Host: worker return / worker event. Grok Bot does not load this Skill.
+        self.assertRegex(self.skeleton, r"Codex 由其定时系统触发投递")
         self.assertRegex(self.skeleton, r"ZCode Host 由每次 Worker 返回或既有 Worker 事件触发投递")
         self.assertRegex(self.skeleton, r"不要求各平台同路径同 schema")
         self.assertRegex(self.skeleton, r"不给 ZCode 加定时器")
-        self.assertRegex(self.skeleton, r"不把 Codex/Grok Bot 改成事件触发")
+        self.assertRegex(self.skeleton, r"不把 Codex 改成事件触发")
+        self.assertRegex(self.skeleton, r"Grok Bot 不加载本 Skill")
         self.assertRegex(
             self.skill,
             re.compile(
@@ -81,7 +82,7 @@ class HeartbeatGuidanceObligation(unittest.TestCase):
         carrier = self.skeleton.split("载体按本宿主现有机制：", 1)[1].split("\n", 1)[0]
         self.assertIn(".kaola/heartbeat-prompt.json", carrier)
         self.assertIn("`body`", carrier)  # Issue #66 defect reporting survives, scoped to ZCode
-        self.assertIn("Codex 与 Grok Bot 更新各自定时系统已有的提示词载体", carrier)
+        self.assertIn("Codex 更新其定时系统已有的提示词载体", carrier)
         self.assertIn("不新建 schema、额度账本、调度器或清理脚本", carrier)
         for invented in ("cron", "crontab", "Routine 定时器", "配额执行器", "quota ledger"):
             self.assertNotIn(invented, self.skeleton, f"heartbeat skeleton invented {invented!r}")

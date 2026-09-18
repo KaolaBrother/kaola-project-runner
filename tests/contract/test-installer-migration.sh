@@ -42,6 +42,9 @@ make_fixture() {
   mkdir -p "$root/skills/kaola-project-runner"
   printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
+  mkdir -p "$root/skills/zcode-orchestrator"
+  printf '%s\n' 'zcode-orchestrator' >"$root/skills/zcode-orchestrator/.generated-by-kaola-project-runner"
+  printf '%s\n' '# fixture Skill' >"$root/skills/zcode-orchestrator/SKILL.md"
   for id in grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;

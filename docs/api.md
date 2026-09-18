@@ -9,10 +9,11 @@ scripts/render-skills.py --check
 
 `--write` deterministically rebuilds nine managed worker Skill directories plus
 `skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not a tenth
-platform) and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-project-runner.md` (the one
+platform), `skills/zcode-orchestrator/` from `templates/zcode-orchestrator/` (external
+delegation Skill; not a tenth platform), and the Grok Bot host bundle `hosts/grok-bot/`: `zcode-orchestrator.md` (the one
 thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revision.json`; at
 the pinned stage it carries the accepted 40-hex commit and its label or release, the locator
-command, and the two canonical entry paths, and no canonical content), `bridge.json`
+command, and the one canonical entry path `ROOT/skills/zcode-orchestrator`, and no canonical content), `bridge.json`
 (fingerprint manifest: `stage`, `saveable`, name, resolved description, `accepted_commit`,
 `release`, `label`, bytes, file/body sha256; at the content stage `accepted_commit`, `release`,
 and `label` are `null` and `saveable` is `false`), and `INSTALL.md` (from

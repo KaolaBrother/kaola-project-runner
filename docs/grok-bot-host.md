@@ -1,8 +1,9 @@
 # Grok Bot host
 
-Grok Bot is a Project Runner **host**, at the same rank as Codex, Claude Code,
-Cursor, and Devin. It is not a tenth CLI worker, and it is not an installer
-destination: it is a **bridge host**.
+Grok Bot is a **bridge host** for Zcode Orchestrator. It is not a Project Runner
+host, not a tenth CLI worker, and not an installer destination. Project Runner
+consuming entries are Codex, generic `--skills-dir`, and ZCode. Zcode Orchestrator
+consuming entries are Grok Bot, generic `--skills-dir`, and Codex.
 
 | Id | Meaning | Flag |
 |---|---|---|
@@ -26,7 +27,7 @@ delivery to exactly **one** very small account Skill. `./scripts/render-skills.p
 ```text
 hosts/grok-bot/
   .generated-by-kaola-project-runner
-  kaola-project-runner.md   # the bridge: one single-Markdown account Skill (≈ 2.3 KB)
+  zcode-orchestrator.md     # the bridge: one single-Markdown account Skill (≈ 2.4 KB)
   bridge.json               # fingerprint manifest: stage, saveable, name, description, accepted commit, sha256, bytes
   INSTALL.md                # two-commit model, one-write install, first configuration, read-only Mac UAT (not a Skill)
 ```
@@ -35,9 +36,8 @@ The bridge (`templates/grok-bot/bridge.md.tmpl` + `accepted-revision.json`)
 names only: the repository `KaolaBrother/kaola-project-runner`, the expected
 origin, the accepted pinned revision (40-hex commit plus an honest label or
 release tag; the one line that changes on a pin), the device-local locator
-command `kaola-project-runner-locate`, and the two canonical entry paths
-`ROOT/skills/kaola-project-runner/SKILL.md` and
-`ROOT/skills/<platform>-kaola-project-runner/SKILL.md`. It carries **no**
+command `kaola-project-runner-locate`, and the one canonical entry path
+`ROOT/skills/zcode-orchestrator/SKILL.md`. It carries **no**
 canonical policy, transport, reference, worker text, fixed or default path,
 HOME convention, username, environment variable, symlink convention, runtime
 copy, per-worker account Skills, bundled references, credential handling,
@@ -102,9 +102,9 @@ sessions, and vice versa. On every use the bridge:
    `github.com/KaolaBrother/kaola-project-runner`, HEAD equals the accepted
    revision, and the tree is clean;
 4. accepts the consumer project root as a separate path on the same target;
-5. loads `ROOT/skills/kaola-project-runner/SKILL.md`, and at dispatch only the
-   selected `ROOT/skills/<platform>-kaola-project-runner/SKILL.md`, running
-   that directory's scripts on the same target and never reading their source.
+5. loads `ROOT/skills/zcode-orchestrator/SKILL.md` and follows it. That Skill
+   starts or resumes one ZCode Host on the same target. The bridge does not load
+   Project Runner or a worker Skill.
 
 - **Local Computer (Mac):** the Mac already holds the repository. Its `main`
   working tree may carry untracked Workflow records (`kaola-workflow/…`) and
@@ -215,12 +215,13 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
 `hosts/grok-bot/INSTALL.md` is the generated guide. In short:
 
 1. **One write on the account, from P only.** Save the pinned
-   `hosts/grok-bot/kaola-project-runner.md` (`bridge.json` `saveable: true`) as
-   the private Skill `kaola-project-runner` (name/description from the
+   `hosts/grok-bot/zcode-orchestrator.md` (`bridge.json` `saveable: true`) as
+   the private Skill `zcode-orchestrator` (name/description from the
    frontmatter, resolved values in `bridge.json`; body after the closing
    `---`); same-name update in place. This is the only account operation (no
    Marketplace, credential, ZIP import, unofficial Sand or RPC path, or state
-   hack). A content-stage bridge is never saved.
+   hack). A content-stage bridge is never saved. An older `kaola-project-runner`
+   account Skill is left in place.
 2. **First configuration on Local Computer.** On the Mac the owner selects a
    clean checkout or worktree detached at R (the existing `main` checkout may
    hold untracked Workflow records and would be `dirty`) and an owner-selected
@@ -232,28 +233,28 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
    links and writes `$BIN/.kaola-project-runner-locate.json`), then
    `kaola-project-runner-locate --target local --expect-revision R` → `ok`
    (the locator itself checks the fingerprint and target against the receipt).
-3. **Read-only preflight.** Attest with `--project <existing local project>
-   --worker <platform id> --session <existing session>`, then run
-   `ROOT/skills/<platform id>-kaola-project-runner/scripts/runtime-tmux.sh
-   preflight` against that project and session. Expected: `ok` attestation
-   (session presence; ownership comes from the preflight), preflight evidence,
-   and nothing started, sent, stopped, cloned, fetched, checked out, or
-   installed; the Bot read only the main Skill and the one selected worker
-   Skill, no script source; the cloud Agent Computer executed nothing and
-   accessed no Mac file. After UAT, remove `$BIN/kaola-project-runner-locate`
-   and its receipt or keep them registered; the normal installer-managed link
-   is restored with `./scripts/install-local.sh --bin-links` from the normal
-   checkout (it refuses to overwrite a link it does not own, so remove a UAT
-   link placed in its directory first) and then registered from that checkout.
+3. **Read-only preflight.** Run
+   `kaola-project-runner-locate --target local --expect-revision R` and confirm
+   `ROOT/skills/zcode-orchestrator/SKILL.md` is present. Do not load Project
+   Runner or a worker Skill from this bridge, and do not run a worker
+   preflight. Expected: `ok` attestation, the Skill file present, and nothing
+   started, sent, stopped, cloned, fetched, checked out, or installed; the Bot
+   read only the Zcode Orchestrator Skill, no script source; the cloud Agent
+   Computer executed nothing and accessed no Mac file. After UAT, remove
+   `$BIN/kaola-project-runner-locate` and its receipt or keep them registered;
+   the normal installer-managed link is restored with
+   `./scripts/install-local.sh --bin-links` from the normal checkout (it refuses
+   to overwrite a link it does not own, so remove a UAT link placed in its
+   directory first) and then registered from that checkout.
 
 A saved bridge is not live adoption; this read-only UAT is the boundary. Three
 kinds of evidence stay distinct and none substitutes for another: Grok Bot's
 accepted `SKILL_EXPOSURE: PASS` at `bc8592d` settles that the account holds the
-loadable bridge; the locator attestation and the worker `preflight` establish
-**placement** on the bound target (ROOT, registration, consumer project,
-selected worker script, session presence); and **actual runtime use** is a
-separately authorized scoped real-use smoke against one existing project and
-session, never part of installation.
+loadable bridge; the locator attestation and the presence of
+`ROOT/skills/zcode-orchestrator/SKILL.md` establish **placement** on the bound
+target; and **actual runtime use** is a separately authorized scoped real-use
+smoke, never part of installation. This repository does not claim live Grok Bot
+adoption.
 
 Historical note (Issue #56, recorded here only). The guide and the shared host
 reference must never tell the Agent to confirm the write in Settings → Plugins →
@@ -265,9 +266,11 @@ reference now carry no account-UI discussion at all, because the Agent needs onl
 the one save, the target binding, the locator, the read-only preflight, and the
 real-use boundary.
 
-Routine-only heartbeat, takeover, `HUMAN_DECISION_REQUIRED` in this Bot
-conversation, and acceptance-before-finalize stay as stated in the main Skill
-and `skills/kaola-project-runner/references/grok-bot-host.md`.
+Heartbeat, worker dispatch, notification binding, and acceptance-before-finalize
+belong to Project Runner inside the ZCode Host. The outer Zcode Orchestrator Skill
+does not copy that engine, does not create a Routine, and does not dispatch
+workers. An older in-flight Grok Bot Project Runner account Skill is not renamed,
+restarted, or cancelled from this repository.
 
 ## Update and rollback
 

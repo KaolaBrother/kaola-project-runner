@@ -33,7 +33,7 @@ export TMPDIR="$validate_tmp"
 unset CODEX_HOME CLAUDE_CONFIG_DIR DEVIN_CONFIG_DIR
 
 python3 "$repo_root/scripts/render-skills.py" --check
-for skill_dir in "$repo_root"/skills/*kaola-project-runner; do
+for skill_dir in "$repo_root"/skills/*kaola-project-runner "$repo_root"/skills/zcode-orchestrator; do
   python3 "$repo_root/scripts/validate-skill.py" "$skill_dir"
 done
 bash -n "$repo_root/scripts/kaola-tmux.sh" "$repo_root"/scripts/adapters/*.sh \
@@ -89,6 +89,7 @@ python_suites_all=(
   "test-issue-76-permission-wake.py"
   "test-issue-79-zcode-312.py"
   "test-issue-83-lane-failure-visibility.py"
+  "test-issue-74-zcode-orchestrator.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -128,6 +129,7 @@ python_suites_b=(
   "test-issue-65-host-contract.py"
   "test-issue-70-binding-fact.py"
   "test-issue-73-canonical-root.py"
+  "test-issue-74-zcode-orchestrator.py"
 )
 run_suite_lane() {
   local status=0

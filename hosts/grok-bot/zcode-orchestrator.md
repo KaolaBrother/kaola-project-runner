@@ -1,11 +1,11 @@
 ---
-name: kaola-project-runner
-description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through Project Runner on a bound execution target: locate that target's verified kaola-project-runner checkout, then load the main Skill and one selected platform worker from it."
+name: zcode-orchestrator
+description: "Use when Grok Bot should delegate a project run through Zcode Orchestrator on a bound execution target: locate that target's verified kaola-project-runner checkout, then load the Zcode Orchestrator Skill from it."
 ---
 
-# Project Runner bridge
+# Zcode Orchestrator bridge
 
-Project Runner is the Git repository `KaolaBrother/kaola-project-runner`. This Skill holds no policy, transport,
+Zcode Orchestrator is the Git repository `KaolaBrother/kaola-project-runner`. This Skill holds no policy, transport,
 path, or credential: everything is loaded from a verified checkout on the execution target you
 bind.
 Accepted revision: none yet. This is the unpinned content-stage render; do not save it to any account. The pin commit that follows names the content commit.
@@ -27,7 +27,6 @@ Accepted revision: none yet. This is the unpinned content-stage render; do not s
    accepted revision, the tree must be clean, and the registration must match. Only on the
    cloud target may you fetch and `checkout --detach` the accepted revision in ROOT,
    re-register, and repeat step 2.
-4. Load `ROOT/skills/kaola-project-runner/SKILL.md` and follow it with ROOT, the target, and the consumer
-   project root (a separate path on the same target) as inputs. When it selects worker
-   `<platform>`, load only `ROOT/skills/<platform>-kaola-project-runner/SKILL.md` and run that
-   directory's `scripts/runtime-tmux.sh` on the same target; never read script source.
+4. Load `ROOT/skills/zcode-orchestrator/SKILL.md` and follow it with ROOT, the target, and the consumer
+   project root (a separate path on the same target) as inputs. Do not load Project Runner or
+   `ROOT/skills/<platform>-kaola-project-runner/SKILL.md` from this bridge; never read script source.

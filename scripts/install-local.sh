@@ -12,6 +12,7 @@ selection=()
 platform_given=false
 install_orchestrator=true
 orchestrator_skill_name="kaola-project-runner"
+external_skill_name="zcode-orchestrator"
 installer_python="${PYTHON_BIN:-python3}"
 
 command -v "$installer_python" >/dev/null 2>&1 || {
@@ -36,9 +37,9 @@ Consuming runtimes (verified native skill directories):
                --skills-dir covers; the user-level directory follows the
                same layout, see docs/zcode-host.md)
 Grok Bot is a bridge host, not an installer destination: the account holds one
-thin generated Skill (hosts/grok-bot/kaola-project-runner.md) that loads the
-main and one selected worker Skill from this checkout on the bound execution
-target through the device-local locator kaola-project-runner-locate
+thin generated Skill (hosts/grok-bot/zcode-orchestrator.md) that loads the
+Zcode Orchestrator Skill from this checkout on the bound execution target
+through the device-local locator kaola-project-runner-locate
 (scripts/kaola-locate.py register --target local|cloud, which validates the
 checkout, links the command, and writes its registration receipt beside the
 link; a bare --bin-links link carries no receipt). See docs/grok-bot-host.md.
@@ -57,10 +58,12 @@ or --method copy reinstall.
 Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex, zcode, droid
 --platform filters worker Skills only. The main Skill kaola-project-runner
 (display name Project Runner) is installed for every destination unless
---no-orchestrator is passed. It is not a platform ID.
-With no --platform, installs all nine worker Skills plus the orchestrator
-(unless skipped). With no destination flags the legacy Codex destination is
-used. Existing foreign paths are never replaced.
+--no-orchestrator is passed. Codex and generic --skills-dir destinations also
+install zcode-orchestrator (display name Zcode Orchestrator) unless that flag
+is passed. Neither control-plane Skill is a platform ID.
+With no --platform, installs all nine worker Skills plus the control-plane
+Skills for that destination (unless skipped). With no destination flags the
+legacy Codex destination is used. Existing foreign paths are never replaced.
 --bin-links also manages the $HOME/.local/bin/kaola-acp* helper links and the
 kaola-project-runner-locate locator link; it is on by default only for the
 Codex runtime destination. Uninstall never removes bin
@@ -121,7 +124,7 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       if [[ "$2" == grok-bot || "$2" == grokbot ]]; then
-        printf 'unknown runtime: %s\nGrok Bot is a bridge host, not an installer destination: save hosts/grok-bot/kaola-project-runner.md on the account and register the locator with scripts/kaola-locate.py register on the execution target (see docs/grok-bot-host.md). --platform grok is the Grok CLI worker.\n' "$2" >&2
+        printf 'unknown runtime: %s\nGrok Bot is a bridge host, not an installer destination: save hosts/grok-bot/zcode-orchestrator.md on the account and register the locator with scripts/kaola-locate.py register on the execution target (see docs/grok-bot-host.md). --platform grok is the Grok CLI worker.\n' "$2" >&2
         exit 2
       fi
       runtime_skills_dir "$2" >/dev/null || { printf 'unknown runtime: %s\n' "$2" >&2; exit 2; }
@@ -435,6 +438,9 @@ for platform in "${selection[@]}"; do
 done
 if [[ "$install_orchestrator" == true ]]; then
   plan_skill "$orchestrator_skill_name"
+  if [[ "$resolved_runtime" == "codex" || "$resolved_runtime" == "generic" ]]; then
+    plan_skill "$external_skill_name"
+  fi
 fi
 
 bin_dir="$HOME/.local/bin"

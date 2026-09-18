@@ -1,26 +1,27 @@
 #!/usr/bin/env python3
 """Issue #49 acceptance: Grok Bot is a bridge host with ONE thin account Skill.
 
-Owner corrections of 2026-09-16 (Issue #49): progressive disclosure is a locked,
-platform-neutral invariant, and Grok Bot receives exactly one very small
-account/cloud Skill named ``kaola-project-runner`` (the bridge) generated into
-``hosts/grok-bot/``. The bridge names the repository, the accepted pinned
-revision, the device-local locator command ``kaola-project-runner-locate``, and
-the two canonical entry paths; it binds the execution target first (Local
+Owner corrections of 2026-09-16 (Issue #49) plus the Issue #74 entry migration:
+progressive disclosure is a locked, platform-neutral invariant, and Grok Bot
+receives exactly one very small account/cloud Skill named ``zcode-orchestrator``
+(the bridge) generated into ``hosts/grok-bot/``. The bridge names the
+repository, the accepted pinned revision, the device-local locator command
+``kaola-project-runner-locate``, and the one canonical entry path
+``ROOT/skills/zcode-orchestrator``; it binds the execution target first (Local
 Computer or the cloud Agent Computer), never assumes one target can reach the
-other, never installs on Local Computer from the cloud, and loads only the main
-Skill and, at dispatch, one selected worker from the verified checkout on that
-target. It carries no canonical body, reference, transport, path convention,
-runtime copy, per-worker account Skills, or credential handling. The locator
-(``scripts/kaola-locate.py``, registered as a bin link the way ``--bin-links``
-already does) produces the fail-closed host-target attestation; ``--target`` is
-the Agent's declaration (the script cannot prove physical host kind), so the
-real safety is device-local execution, the host fingerprint compared with the
-value recorded at registration, and root/project/script co-location on the
-executing host. Mission 8 (review FAIL of ``fb65c51``): the bridge follows an
-honest two-commit content/pin model (content commit R at stage ``content``,
-pin commit P naming R at stage ``pinned``) whose pin is proven by ``--check``,
-the verifier, and ``Issue49PinModel``. Grok Bot is a host, not a worker;
+other, never installs on Local Computer from the cloud, and does not load
+Project Runner or a worker from the bridge. It carries no canonical body,
+reference, transport, path convention, runtime copy, per-worker account Skills,
+or credential handling. The locator (``scripts/kaola-locate.py``, registered as
+a bin link the way ``--bin-links`` already does) produces the fail-closed
+host-target attestation; ``--target`` is the Agent's declaration (the script
+cannot prove physical host kind), so the real safety is device-local execution,
+the host fingerprint compared with the value recorded at registration, and
+root/project/script co-location on the executing host. Mission 8 (review FAIL
+of ``fb65c51``): the bridge follows an honest two-commit content/pin model
+(content commit R at stage ``content``, pin commit P naming R at stage
+``pinned``) whose pin is proven by ``--check``, the verifier, and
+``Issue49PinModel``. Grok Bot is not a Project Runner host and not a worker;
 ``templates/grok-golden/`` frozen; nothing here claims live Grok Bot adoption --
 the owner's read-only Local Computer UAT is the boundary.
 """
@@ -47,9 +48,10 @@ INSTALLER = PROJECT / "scripts" / "install-local.sh"
 VERIFIER = PROJECT / "scripts" / "kaola-grok-bot-verify.py"
 LOCATOR = PROJECT / "scripts" / "kaola-locate.py"
 ORCHESTRATOR_ID = "kaola-project-runner"
+EXTERNAL_ID = "zcode-orchestrator"
 HOST_ID = "grok-bot"
 HOST_BUNDLE = PROJECT / "hosts" / HOST_ID
-BRIDGE = HOST_BUNDLE / f"{ORCHESTRATOR_ID}.md"
+BRIDGE = HOST_BUNDLE / f"{EXTERNAL_ID}.md"
 MANIFEST = HOST_BUNDLE / "bridge.json"
 INSTALL_GUIDE = HOST_BUNDLE / "INSTALL.md"
 GROK_BOT_TEMPLATES = PROJECT / "templates" / HOST_ID
@@ -186,7 +188,7 @@ def set_stage(root: Path, stage: str, commit: str | None = None, label: str | No
 
 def host_products(root: Path) -> dict[str, bytes]:
     bundle = root / "hosts" / HOST_ID
-    return {name: (bundle / name).read_bytes() for name in (f"{ORCHESTRATOR_ID}.md", "bridge.json", "INSTALL.md")}
+    return {name: (bundle / name).read_bytes() for name in (f"{EXTERNAL_ID}.md", "bridge.json", "INSTALL.md")}
 
 
 # Issue #71: prove pin/host invariance with a real canonical edit that cannot spend budget.
@@ -195,7 +197,7 @@ CANONICAL_INVARIANCE_EDITS = (
     ("templates/orchestrator/SKILL.md.tmpl", "It is not a platform Runner and has", "It is not a platform InvTst and has"),
     ("templates/SKILL.md.tmpl", "It gives the controlling Agent a", "It gives the controlling InvTs a"),
     ("templates/references/transport.md.tmpl", "The Runner starts the runtime as", "The InvTst starts the runtime as"),
-    ("templates/orchestrator/references/grok-bot-host.md", "Grok Bot is a host for this Skill", "Grok Bot is a InvT for this Skill"),
+    ("templates/zcode-orchestrator/SKILL.md.tmpl", "This Skill is the external delegation Skill", "This Skill is the external delegatIon Skill"),
 )
 
 
@@ -348,15 +350,16 @@ class Issue49SingleBridge(unittest.TestCase):
 
     def test_bundle_is_exactly_one_bridge_manifest_and_guide(self) -> None:
         self.assertEqual(sorted(p.name for p in HOST_BUNDLE.iterdir()),
-                         sorted([".generated-by-kaola-project-runner", f"{ORCHESTRATOR_ID}.md", "bridge.json", "INSTALL.md"]))
+                         sorted([".generated-by-kaola-project-runner", f"{EXTERNAL_ID}.md", "bridge.json", "INSTALL.md"]))
         self.assertFalse((HOST_BUNDLE / "private-skills").exists())
-        self.assertFalse((HOST_BUNDLE / ORCHESTRATOR_ID).exists(), "no runtime copy")
+        self.assertFalse((HOST_BUNDLE / EXTERNAL_ID).exists(), "no runtime copy")
+        self.assertFalse((HOST_BUNDLE / f"{ORCHESTRATOR_ID}.md").exists(), "old Project Runner bridge is withdrawn")
         self.assertEqual(list(HOST_BUNDLE.rglob("SKILL.md")), [])
         self.assertEqual(list(HOST_BUNDLE.rglob("WORKER.md")), [])
         self.assertFalse((PROJECT / "scripts" / "kaola-grok-bot-package.py").exists())
 
     def test_bridge_identity_budget_and_revision(self) -> None:
-        self.assertEqual(self.meta["name"], ORCHESTRATOR_ID)
+        self.assertEqual(self.meta["name"], EXTERNAL_ID)
         self.assertLessEqual(len(self.meta["description"]), BUDGETS["description_chars"])
         self.assertLessEqual(len(self.text.encode("utf-8")), BUDGETS["bridge_bytes"])
         revisions = re.findall(r"\b[0-9a-f]{40}\b", self.text)
@@ -379,14 +382,15 @@ class Issue49SingleBridge(unittest.TestCase):
         self.assertIn("KaolaBrother/kaola-project-runner", self.text)
         self.assertIn(EXPECTED_ORIGIN, self.text)
         self.assertIn(f"`{LOCATOR_COMMAND}`", self.text)
-        self.assertIn(f"`ROOT/skills/{ORCHESTRATOR_ID}/SKILL.md`", self.text)
+        self.assertIn(f"`ROOT/skills/{EXTERNAL_ID}/SKILL.md`", self.text)
         self.assertIn(f"`ROOT/skills/<platform>-{ORCHESTRATOR_ID}/SKILL.md`", self.text)
+        self.assertIn("Do not load Project Runner", self.text)
 
     def test_bridge_binds_target_first_and_never_crosses_hosts(self) -> None:
         lowered = normalize(self.body).lower()
         bind = lowered.find("bind the execution target first")
         locate = lowered.find(f"`{LOCATOR_COMMAND}`")
-        load = lowered.find(f"load `root/skills/{ORCHESTRATOR_ID}/skill.md`")
+        load = lowered.find(f"load `root/skills/{EXTERNAL_ID}/skill.md`")
         self.assertTrue(0 <= bind < locate < load, "target binding must precede the locator, which precedes loading")
         self.assertIn("local computer", lowered)
         self.assertIn("cloud agent computer", lowered)
@@ -394,7 +398,7 @@ class Issue49SingleBridge(unittest.TestCase):
         self.assertIn("never clone, install, update, or change anything on local computer", lowered)
         self.assertIn("only on the cloud target may you fetch", lowered)
         self.assertIn("consumer project root (a separate path on the same target)", lowered)
-        self.assertIn("on the same target; never read script source", lowered)
+        self.assertIn("never read script source", lowered)
         self.assertIn("never enter, print, or pass a token", lowered)
         wrong = authorizes_wrong_move(self.body, (r"clone .{0,40}on local computer", r"install .{0,40}on the mac", r"search the filesystem"))
         self.assertIsNone(wrong, wrong)
@@ -427,7 +431,7 @@ class Issue49SingleBridge(unittest.TestCase):
         self.assertEqual(data["label"], accepted.get("label"))
         self.assertEqual(data["saveable"], accepted["stage"] == "pinned")
         skill = data["skill"]
-        self.assertEqual(skill["name"], ORCHESTRATOR_ID)
+        self.assertEqual(skill["name"], EXTERNAL_ID)
         self.assertEqual(skill["description"], self.meta["description"])
         self.assertFalse(skill["description"].startswith('"'))
         self.assertEqual(skill["bytes"], len(raw))
@@ -438,7 +442,7 @@ class Issue49SingleBridge(unittest.TestCase):
         text = INSTALL_GUIDE.read_text(encoding="utf-8")
         self.assertFalse(text.startswith("---"))
         self.assertLessEqual(len(text.encode("utf-8")), BUDGETS["bridge_guide_bytes"])
-        self.assertEqual(set(re.findall(r"hosts/grok-bot/([a-z0-9-]+)\.md", text)), {ORCHESTRATOR_ID})
+        self.assertEqual(set(re.findall(r"hosts/grok-bot/([a-z0-9-]+)\.md", text)), {EXTERNAL_ID})
         lowered = normalize(text).lower()
         for clause in ("exactly one", "one write", "update it in place", "no_supported_path", "execution on local computer",
                        "never clones, installs, updates, or manages anything on the mac",
@@ -448,7 +452,7 @@ class Issue49SingleBridge(unittest.TestCase):
                        "register --target cloud --bin-dir", "registration receipt", f"$bin/.{LOCATOR_COMMAND}.json",
                        "owner-selected persistent directory on path", "installer-managed `--bin-links` link is left alone",
                        "install-local.sh --bin-links", "fresh conversation needs no memory", "link and receipt stay device-local",
-                       "presence only, not existence elsewhere",
+                       "do not load project runner",
                        # Mission 9: never rewrite an accepted pair; release and rollback shape.
                        "never rebase, squash, or amend an accepted r/p pair", "create a fresh r and p", "a release is a tag at r",
                        "rollback is a new p naming an older r", "one-line bridge diff",
@@ -458,9 +462,10 @@ class Issue49SingleBridge(unittest.TestCase):
                        "two commits", "content commit r", "pin commit p", "--check --require-pinned", "save the bridge **from p**",
                        "untracked workflow records", "git worktree add --detach <owner-chosen path>", "do not assume any fixed path",
                        "must not be saved",
-                       # Target kind, fingerprint, session presence, path evidence (security cut).
-                       "`--target` is the agent's declaration", "host.fingerprint", "ownership is proven by the worker preflight",
-                       "may include the user's home", "none of it enters the account skill", "refused registration leaves an existing locator unchanged"):
+                       # Target kind, fingerprint, path evidence (security cut).
+                       "`--target` is the agent's declaration", "host.fingerprint",
+                       "may include the user's home", "none of it enters the account skill", "refused registration leaves an existing locator unchanged",
+                       "do not rename, restart, or cancel in-flight work"):
             self.assertIn(clause, lowered, clause)
         for stale in REMOVED_SURFACES:
             self.assertNotIn(stale, text, stale)
@@ -469,7 +474,10 @@ class Issue49SingleBridge(unittest.TestCase):
             self.assertNotIn(f"{wid}-{ORCHESTRATOR_ID}", text, f"guide names worker Skill {wid}; use the <platform id> placeholder")
             self.assertIsNone(re.search(rf"--worker {re.escape(wid)}\b", text), wid)
             if wid != "grok":  # "grok" is a substring of the host name grok-bot
-                self.assertNotIn(wid, text, wid)
+                self.assertIsNone(
+                    re.search(rf"(?<![a-z0-9-]){re.escape(wid)}(?![a-z0-9-])", text),
+                    f"guide names worker id {wid!r} outside the <platform id> placeholder",
+                )
         for runtime in ("Claude Code", "Codex", "Cursor", "Devin", "Kimi", "OpenCode", "Grok CLI"):
             self.assertNotIn(runtime, text, runtime)
         self.assertIn("<platform id>", text)
@@ -483,7 +491,7 @@ class Issue49SingleBridge(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = copy_repo(temporary)
             bundle = root / "hosts" / HOST_ID
-            bridge = bundle / f"{ORCHESTRATOR_ID}.md"
+            bridge = bundle / f"{EXTERNAL_ID}.md"
             cases = {
                 "extra-doc": lambda: (bundle / "claude-code-kaola-project-runner.md").write_text("---\nname: x\n---\nx\n", encoding="utf-8"),
                 "hand-edit": lambda: bridge.write_text(bridge.read_text(encoding="utf-8") + "\nextra sentence.\n", encoding="utf-8"),
@@ -492,7 +500,7 @@ class Issue49SingleBridge(unittest.TestCase):
                 "credential": lambda: bridge.write_text(bridge.read_text(encoding="utf-8") + "\nexport GH_TOKEN=... before cloning.\n", encoding="utf-8"),
                 "canonical-copy": lambda: bridge.write_text(bridge.read_text(encoding="utf-8") + "\n## Communication loop\n", encoding="utf-8"),
                 "worker-named": lambda: bridge.write_text(bridge.read_text(encoding="utf-8").replace("<platform>-", "claude-code-", 1), encoding="utf-8"),
-                "runtime-copy": lambda: ((bundle / ORCHESTRATOR_ID).mkdir(), (bundle / ORCHESTRATOR_ID / "SKILL.md").write_text("x", encoding="utf-8")),
+                "runtime-copy": lambda: ((bundle / EXTERNAL_ID).mkdir(), (bundle / EXTERNAL_ID / "SKILL.md").write_text("x", encoding="utf-8")),
                 "manifest-stale": lambda: (bundle / "bridge.json").write_text((bundle / "bridge.json").read_text(encoding="utf-8").replace('"bytes": ', '"bytes": 1'), encoding="utf-8"),
             }
             cases["content-stage-revision"] = lambda: bridge.write_text(
@@ -500,7 +508,7 @@ class Issue49SingleBridge(unittest.TestCase):
             original = bridge.read_bytes()
             for label, mutate in cases.items():
                 bridge.write_bytes(original)
-                shutil.rmtree(bundle / ORCHESTRATOR_ID, ignore_errors=True)
+                shutil.rmtree(bundle / EXTERNAL_ID, ignore_errors=True)
                 (bundle / "claude-code-kaola-project-runner.md").unlink(missing_ok=True)
                 written = render(root, "--write")
                 self.assertEqual(written.returncode, 0, f"{label}: baseline write must succeed: {written.stderr}")
@@ -515,7 +523,7 @@ class Issue49BridgeInvariance(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root, content = git_repo(temporary)
             set_stage(root, "content")
-            bridge = root / "hosts" / HOST_ID / f"{ORCHESTRATOR_ID}.md"
+            bridge = root / "hosts" / HOST_ID / f"{EXTERNAL_ID}.md"
             self.assertEqual(render(root, "--write").returncode, 0)
             before_products = host_products(root)
             before = bridge.read_text(encoding="utf-8").splitlines()
@@ -534,10 +542,10 @@ class Issue49BridgeInvariance(unittest.TestCase):
             self.assertIn("platform InvTst and has", after_main.decode("utf-8"))
             self.assertIn("controlling InvTs a", (root / "skills" / "claude-code-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8"))
             self.assertIn("The InvTst starts the runtime as", (root / "skills" / "claude-code-kaola-project-runner" / "references" / "transport.md").read_text(encoding="utf-8"))
-            self.assertIn("Grok Bot is a InvT for this Skill", (root / "skills" / ORCHESTRATOR_ID / "references" / "grok-bot-host.md").read_text(encoding="utf-8"))
+            self.assertIn("external delegatIon Skill", (root / "skills" / EXTERNAL_ID / "SKILL.md").read_text(encoding="utf-8"))
             self.assertIn("Renamed Runtime", (root / "skills" / "claude-code-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8"))
             host_blob = b"".join(before_products.values())
-            for needle in (b"platform InvTst", b"controlling InvTs a", b"The InvTst starts", b"is a InvT for this Skill"):
+            for needle in (b"platform InvTst", b"controlling InvTs a", b"The InvTst starts", b"external delegatIon Skill"):
                 self.assertNotIn(needle, host_blob)
             # Positive control: a real host-template edit is visible in the host products.
             bridge_tmpl = root / "templates" / HOST_ID / "bridge.md.tmpl"
@@ -637,7 +645,7 @@ class Issue49BridgeInvariance(unittest.TestCase):
             template.write_text(template.read_text(encoding="utf-8") + "\n" + ("padding " * 400) + "\n", encoding="utf-8")
             result = render(root, "--write")
             self.assertNotEqual(result.returncode, 0)
-            self.assertRegex(result.stderr, r"budget: grok-bot/kaola-project-runner\.md is \d+ B > \d+ B \(bridge_bytes\)")
+            self.assertRegex(result.stderr, r"budget: grok-bot/zcode-orchestrator\.md is \d+ B > \d+ B \(bridge_bytes\)")
 
 
 class Issue49PinModel(unittest.TestCase):
@@ -714,7 +722,7 @@ class Issue49PinModel(unittest.TestCase):
             git(root, "tag", "-d", "v9.9.9")
             git(root, "tag", "v9.9.9", content)
             self.assertEqual(render(root, "--write").returncode, 0)
-            self.assertIn(f"(release v9.9.9).", (root / "hosts" / HOST_ID / f"{ORCHESTRATOR_ID}.md").read_text(encoding="utf-8"))
+            self.assertIn(f"(release v9.9.9).", (root / "hosts" / HOST_ID / f"{EXTERNAL_ID}.md").read_text(encoding="utf-8"))
             self.assertEqual(verify(root, "--repo", ".", "--require-pinned").returncode, 0)
 
     def test_pinned_stage_cannot_be_verified_outside_a_git_checkout(self) -> None:
@@ -735,7 +743,7 @@ class Issue49PinModel(unittest.TestCase):
             self.assertEqual(render(root, "--write").returncode, 0)
             self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
             self.assertEqual(sorted(line.split(None, 1)[1] for line in git(root, "status", "--porcelain").splitlines()),
-                             sorted(["hosts/grok-bot/INSTALL.md", "hosts/grok-bot/bridge.json", f"hosts/grok-bot/{ORCHESTRATOR_ID}.md",
+                             sorted(["hosts/grok-bot/INSTALL.md", "hosts/grok-bot/bridge.json", f"hosts/grok-bot/{EXTERNAL_ID}.md",
                                      "templates/grok-bot/accepted-revision.json"]))
             git(root, "add", "-A")
             git(root, "commit", "-q", "-m", "pin")
@@ -776,7 +784,7 @@ class Issue49PinModel(unittest.TestCase):
             # whose committed bridge is stale (hand-edited) cannot be pinned.
             set_stage(root, "content")
             self.assertEqual(render(root, "--write").returncode, 0)
-            bridge = bundle / f"{ORCHESTRATOR_ID}.md"
+            bridge = bundle / f"{EXTERNAL_ID}.md"
             bridge.write_text(bridge.read_text(encoding="utf-8") + "\nhand-edited line\n", encoding="utf-8")
             git(root, "add", "-A")
             git(root, "commit", "-q", "-m", "content with a stale bridge")
@@ -796,13 +804,15 @@ class Issue49PinModel(unittest.TestCase):
             self.assertEqual(render(PROJECT, "--check", "--require-pinned").returncode, 0)
             self.assertEqual(git(PROJECT, "merge-base", "--is-ancestor", accepted["commit"], "HEAD"), "")
             tree = git(PROJECT, "ls-tree", "-r", "--name-only", accepted["commit"]).splitlines()
-            for path in ("scripts/kaola-locate.py", f"skills/{ORCHESTRATOR_ID}/SKILL.md", *(f"skills/{sid}/SKILL.md" for sid in WORKER_SKILL_IDS),
+            for path in ("scripts/kaola-locate.py", f"skills/{ORCHESTRATOR_ID}/SKILL.md",
+                         f"skills/{EXTERNAL_ID}/SKILL.md",
+                         *(f"skills/{sid}/SKILL.md" for sid in WORKER_SKILL_IDS),
                          *(f"skills/{sid}/scripts/runtime-tmux.sh" for sid in WORKER_SKILL_IDS)):
                 self.assertIn(path, tree, path)
             pinned = json.loads(git(PROJECT, "show", f"{accepted['commit']}:templates/grok-bot/accepted-revision.json"))
             self.assertEqual(pinned["stage"], "content", "the pinned commit is a content commit, never a self-pin")
             delta = set(git(PROJECT, "diff", "--name-only", accepted["commit"], "HEAD").splitlines())
-            self.assertTrue(delta <= {"templates/grok-bot/accepted-revision.json", f"hosts/grok-bot/{ORCHESTRATOR_ID}.md",
+            self.assertTrue(delta <= {"templates/grok-bot/accepted-revision.json", f"hosts/grok-bot/{EXTERNAL_ID}.md",
                                       "hosts/grok-bot/bridge.json", "hosts/grok-bot/INSTALL.md"}, delta)
         else:
             self.assertIn("content stage, unpinned", check.stdout)
@@ -1151,43 +1161,30 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
         self.assertTrue(text.strip())
         return text
 
-    def test_main_skill_names_bridge_hosts_target_binding_and_attestation(self) -> None:
+    def test_main_skill_withdraws_grok_bot_as_a_direct_host(self) -> None:
         text = self.orchestrator_text()
-        self.assertIsNotNone(clause_present(text, (r"Grok Bot is a host", r"Grok Bot.{0,60}host, not a worker")))
-        self.assertIsNotNone(clause_present(text, (r"not a tenth platform",)))
+        self.assertIsNotNone(clause_present(text, (r"Grok Bot is not an entry", r"Grok Bot is not an entry for this Skill")))
+        self.assertIsNotNone(clause_present(text, (r"loads generated `zcode-orchestrator`",)))
         self.assertIsNotNone(clause_present(text, (r"--platform grok.{0,40}Grok CLI worker",)))
-        self.assertIsNotNone(clause_present(text, (r"binds an execution target first",)))
-        self.assertIsNotNone(clause_present(text, (rf"`{LOCATOR_COMMAND}`",)))
-        self.assertIsNotNone(clause_present(text, (rf"--target local\|cloud --expect-revision",)))
-        self.assertIsNotNone(clause_present(text, (r"never reach each other's files, CLIs, tmux, or sessions",)))
-        self.assertIsNotNone(clause_present(text, (r"nothing clones, installs, or updates Local Computer from the cloud",)))
-        self.assertIsNotNone(clause_present(text, (rf"one selected `ROOT/skills/<platform id>-{ORCHESTRATOR_ID}`",)))
-        reference = (PROJECT / "skills" / ORCHESTRATOR_ID / "references" / "grok-bot-host.md").read_text(encoding="utf-8")
-        self.assertIsNotNone(clause_present(reference, (r"project-not-on-this-host",)))
-        self.assertIsNotNone(clause_present(reference, (r"`--target` is the Agent's declaration",)))
-        self.assertIsNotNone(clause_present(reference, (r"host\.fingerprint.{0,80}recorded (?:at|when).{0,40}regist",)))
-        self.assertIsNotNone(clause_present(reference, (r"presence only",)))
-        self.assertIsNotNone(clause_present(reference, (r"may include the user's home",)))
-        self.assertIsNotNone(clause_present(reference, (r"content commit R\*?\*?.{0,240}pin commit P",)))
-        for overclaim in (r"rejects? cloud paths for a Local Computer dispatch", r"proves? (?:the )?physical host", r"no hostname, no user",
-                          r"exact owned session(?: name)?[^.]{0,40}(?:proven|proves|attests)"):
-            self.assertIsNone(re.search(overclaim, text + "\n" + reference, flags=re.IGNORECASE), overclaim)
+        self.assertIsNotNone(clause_present(text, (r"--platform grok-bot` is invalid",)))
+        self.assertIsNotNone(clause_present(text, (r"Do not create a Grok Bot\s+Routine",)))
+        self.assertIsNotNone(clause_present(text, (r"not renamed, restarted, or cancelled",)))
         for stale in REMOVED_SURFACES + ("eight account-private Skills", "one single Markdown"):
             self.assertNotIn(stale, text, stale)
 
-    def test_grok_bot_routine_is_the_only_heartbeat_on_that_host(self) -> None:
+    def test_project_runner_does_not_run_a_grok_bot_routine(self) -> None:
         text = self.orchestrator_text()
-        self.assertIsNotNone(clause_present(text, (r"one Grok Bot Routine.{0,80}only heartbeat", r"Routine.{0,60}only heartbeat carrier")))
         heartbeat = (PROJECT / "skills" / ORCHESTRATOR_ID / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
-        self.assertRegex(heartbeat, r"Grok Bot")
-        self.assertRegex(heartbeat, r"Routine")
-        wrong = authorizes_wrong_move(text + "\n" + heartbeat, (r"stack (?:a )?Grok Bot Routine with (?:a )?Codex heartbeat", r"use both a Routine and (?:blocking )?sleep"))
+        self.assertRegex(heartbeat, r"Grok Bot 不加载本 Skill")
+        self.assertNotIn("Routine", heartbeat)
+        wrong = authorizes_wrong_move(text + "\n" + heartbeat, (r"create a Grok Bot Routine", r"stack (?:a )?Grok Bot Routine with (?:a )?Codex heartbeat"))
         self.assertIsNone(wrong, wrong)
+        external = (PROJECT / "skills" / EXTERNAL_ID / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("Do not dispatch workers", external)
+        self.assertIn("create a Routine", external)
 
-    def test_human_decision_takeover_acceptance_and_stop(self) -> None:
+    def test_human_decision_acceptance_and_stop_stay_on_project_runner(self) -> None:
         text = self.orchestrator_text()
-        self.assertIsNotNone(clause_present(text, (r"HUMAN_DECISION_REQUIRED.{0,120}this Bot conversation", r"Needs attention")))
-        self.assertIsNotNone(clause_present(text, (r"takeover.{0,80}cancel.{0,60}heartbeat.{0,80}without.{0,40}stop", r"do not stop in-flight.{0,40}worker")))
         self.assertIsNotNone(clause_present(text, (r"not automatic finalize",)))
         self.assertIsNotNone(clause_present(text, (r"exact owned session `stop` via the matching platform Runner Skill", r"ACP and PTY/tmux are the same stop action")))
         self.assertIsNotNone(clause_present(text, (r"recover existing explicit authorization and live work",)))
@@ -1202,8 +1199,11 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
         self.assertIsNone(wrong, wrong)
 
     def test_no_unofficial_sand_api_in_host_surfaces(self) -> None:
-        surfaces = [BRIDGE, INSTALL_GUIDE, PROJECT / "skills" / ORCHESTRATOR_ID / "SKILL.md", PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl",
-                    PROJECT / "templates" / "orchestrator" / "references" / "grok-bot-host.md", PROJECT / "docs" / "grok-bot-host.md", INSTALLER, RENDERER, LOCATOR]
+        surfaces = [BRIDGE, INSTALL_GUIDE, PROJECT / "skills" / ORCHESTRATOR_ID / "SKILL.md",
+                    PROJECT / "skills" / EXTERNAL_ID / "SKILL.md",
+                    PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl",
+                    PROJECT / "templates" / EXTERNAL_ID / "SKILL.md.tmpl",
+                    PROJECT / "docs" / "grok-bot-host.md", INSTALLER, RENDERER, LOCATOR]
         for path in surfaces:
             text = path.read_text(encoding="utf-8")
             for token in UNOFFICIAL_API:
@@ -1261,7 +1261,7 @@ class Issue49WorkerIsolation(unittest.TestCase):
         templates = PROJECT / "templates"
         surfaces: list[tuple[str, str]] = []
         for path in sorted(templates.rglob("*")):
-            if path.is_file() and path.relative_to(templates).parts[0] not in {"grok-golden", "orchestrator", "grok-bot"} and path.suffix in {".tmpl", ".md"}:
+            if path.is_file() and path.relative_to(templates).parts[0] not in {"grok-golden", "orchestrator", "grok-bot", "zcode-orchestrator"} and path.suffix in {".tmpl", ".md"}:
                 surfaces.append((path.relative_to(templates).as_posix(), path.read_text(encoding="utf-8")))
         for skill_id in WORKER_SKILL_IDS:
             surfaces.append((f"skills/{skill_id}/SKILL.md", (PROJECT / "skills" / skill_id / "SKILL.md").read_text(encoding="utf-8")))
@@ -1304,9 +1304,9 @@ class Issue56NoAccountUiOnAgentSurfaces(unittest.TestCase):
                       "and `/` offers", "enabled, and `/`", "delete the Skill under Settings")
     # Everything the Grok Bot agent reads: the bridge it is saved as, and what it loads from ROOT.
     AGENT_FACING = ("hosts/grok-bot/INSTALL.md", "templates/grok-bot/INSTALL.md.tmpl",
-                    "templates/grok-bot/bridge.md.tmpl", f"hosts/grok-bot/{ORCHESTRATOR_ID}.md",
-                    "templates/orchestrator/references/grok-bot-host.md",
-                    f"skills/{ORCHESTRATOR_ID}/references/grok-bot-host.md")
+                    "templates/grok-bot/bridge.md.tmpl", f"hosts/grok-bot/{EXTERNAL_ID}.md",
+                    f"templates/{EXTERNAL_ID}/SKILL.md.tmpl",
+                    f"skills/{EXTERNAL_ID}/SKILL.md")
 
     def read(self, relative: str) -> str:
         return (PROJECT / relative).read_text(encoding="utf-8")
@@ -1342,9 +1342,9 @@ class Issue56NoAccountUiOnAgentSurfaces(unittest.TestCase):
         guide = normalize(self.read("hosts/grok-bot/INSTALL.md")).lower()
         self.assertIn("establishes placement only, not live use", guide)
         self.assertIn("separately authorized and is not part of installation", guide)
-        reference = normalize(self.read(f"skills/{ORCHESTRATOR_ID}/references/grok-bot-host.md")).lower()
-        self.assertIn("establishes placement on the bound target, not live use", reference)
-        self.assertIn("separately authorized and is never part of installation", reference)
+        skill = normalize(self.read(f"skills/{EXTERNAL_ID}/SKILL.md")).lower()
+        self.assertIn("do not dispatch workers", skill)
+        self.assertIn("create a routine", skill)
 
     def test_docs_record_the_reason_once_and_keep_the_three_evidence_kinds_distinct(self) -> None:
         text = self.read("docs/grok-bot-host.md")
@@ -1363,7 +1363,8 @@ class Issue56NoAccountUiOnAgentSurfaces(unittest.TestCase):
         guide, docs = self.read("hosts/grok-bot/INSTALL.md"), self.read("docs/grok-bot-host.md")
         lowered = normalize(guide).lower()
         # The whole Agent-facing spine and nothing more: one save, binding, locator, preflight, boundary.
-        for clause in ("one write", "--target local", "--target cloud", LOCATOR_COMMAND.lower(), "read-only preflight"):
+        for clause in ("one write", "--target local", "--target cloud", LOCATOR_COMMAND.lower(), "read-only preflight",
+                       "zcode-orchestrator"):
             self.assertIn(clause, lowered, clause)
         self.assertEqual(len(re.findall(r"(?m)^## \d+\. ", guide)), 6, "no new installation step was added")
         self.assertIn("never create a second one", guide)
