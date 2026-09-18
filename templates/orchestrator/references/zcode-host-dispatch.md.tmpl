@@ -1,25 +1,19 @@
 # ZCode Host: dispatch, end the turn, wake on worker events
 
 Read this when a ZCode Host supervises workers: the exact flags and receipt
-fields the scripts really use. Entry points, starting a Host and the startup
-receipt an outer Agent checks are in [host-startup.md](host-startup.md); this
-file is the beat itself.
+fields the scripts really use. Entry points and startup are in
+[host-startup.md](host-startup.md); this file is the beat itself.
 
 ## Three identities, never interchangeable
 
-| Name | What it is | Where it comes from |
-|---|---|---|
-| Runner session | what every `--session` takes | you choose it at `start` |
-| ACP session id | the bridge's id for this thread | `acp_session_id` in receipts |
-| native session id | the CLI's own id (`sess_…`) | `session_meta`, for `--resume` |
-
-A `sess_…` value is never a Runner session name. Never guess a session name.
+Runner session — what every `--session` takes, chosen by you at `start`. ACP
+session id — the bridge's id for this thread, `acp_session_id` in receipts.
+native session id — the CLI's own id (`sess_…`), from `session_meta`, for
+`--resume`. A `sess_…` value is never a Runner session name. Never guess a
+session name.
 
 Each installed Skill's `scripts/runtime-tmux.sh` is pinned to its own platform,
 so the commands below take **no** platform argument.
-
-The outer Agent's part — starting a Host, the handover, and keeping a Host whose
-turn ended with work in flight — is in [host-startup.md](host-startup.md).
 
 ## 2. ZCode Host Agent — one beat
 
@@ -66,15 +60,18 @@ reused and adopted workers too, not just the first start.
 Repeating `start` or `send` never rebinds a live holder. Recover along the
 boundary you already have:
 
-1. **Keep the in-flight work** — it still runs and its result is still readable
-   with `observe` and `capture` from your dispatch anchor. Cancel nothing.
-2. **Carry the duty**: this worker will not wake you, so record in your
-   heartbeat body that you must come back and read it yourself.
+1. **Keep the in-flight work** — it still runs and is still readable with
+   `observe` and `capture` from your dispatch anchor. Cancel nothing.
+2. **Hand the duty over before you end the turn.** Recording it in your
+   heartbeat body wakes nobody: with no bound worker, nothing starts your next
+   beat. Tell the outer controlling Agent, in this reply, which session to read,
+   from which anchor, and that this beat's continuation depends on it. With no
+   outer Agent and no other confirmed wake source you are **blocked** — say so,
+   with the entry point for resuming, not a wait you do not have.
 3. **Rebind only at a safe idle point** — turn ended, nothing in flight, result
    read: exact `stop` of that one session, `start` again with the variable, and
    verify the new receipt. `--resume <native session id>` from `session_meta`
-   continues the thread where supported; otherwise a restart carries no history
-   — put what the worker needs into the next prompt.
+   continues the thread where supported; otherwise a restart carries no history.
 4. **Never** auto-cancel, re-send work you cannot show was dropped, switch
    platform, or stop the Host to force a wake-up.
 
@@ -92,12 +89,12 @@ boundary you already have:
 fact with `observe` before re-sending anything.
 
 **Keep two values**: `prompt_fingerprint`, the turn you dispatched, and
-`dispatch_event_cursor`, the worker's cursor *before* that turn produced
-anything — your anchor for reading the reply.
+`dispatch_event_cursor`, the cursor *before* that turn produced anything — your
+anchor for reading the reply.
 
 ### Finish the beat, then end your turn
 
-Do this beat's remaining work, update the project heartbeat prompt at
+Do this beat's remaining work, update the heartbeat prompt at
 `<project>/.kaola/heartbeat-prompt.json` (the `body` string: project facts,
 pace, plans, coordination), report, and **end your reply normally**.
 
@@ -142,7 +139,7 @@ Confirm you are reading the turn you dispatched: `observe`'s
 `prompt_fingerprint`, and `turn_outcome`/`stop_reason` must show it finished. A
 capture with no assistant text means your window was wrong — widen it and read
 again before judging. Then accept, ask for a fix, dispatch more work, update the
-same heartbeat prompt, and end the turn again.
+heartbeat prompt, and end the turn again.
 
 `kind` is `idle` when the worker's turn ended and `terminated` when its process
 exited; a finished turn is a full trigger, and you never kill a worker to be
@@ -166,8 +163,8 @@ Delivery rules you can rely on:
 - Confirmation follows the notification turn *completing*; after a resume,
   unconfirmed events are redelivered at least once — keep each pass idempotent.
 - Dispatch failure, unknown acceptance, or an unverified binding means you are
-  **not** reliably event-driven: handle it this beat or record the recovery duty
-  before ending the turn.
+  **not** reliably event-driven: fix it this beat, or hand the duty to the outer
+  Agent and report it, before ending the turn.
 
 Human or Agent steering (`steer`, where supported) is a separate tool; it does
 not replace or alter this wake path.

@@ -130,7 +130,11 @@ worker agent terminated / worker turn ended (one idle episode)
   its start: a later environment change, a `send`, or a repeat `start` (which
   returns `session-exists` together with the binding in force) cannot alter it,
   and there is no rebind operation — recovery is the existing exact
-  `stop`/`start` at a safe idle point.
+  `stop`/`start` at a safe idle point. Because an unbound worker wakes nobody,
+  the guidance also requires the Host to hand the read-back and rebind duty to
+  its outer controlling Agent before ending the turn, and to report itself
+  blocked when there is no outer Agent and no other confirmed wake source:
+  recording the duty in the heartbeat body is bookkeeping, not a trigger.
 - **Events.** `terminated` fires once from the worker holder's existing
   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
   out the send; `idle` fires once per ended turn with the agent still alive

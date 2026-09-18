@@ -184,6 +184,43 @@ def test_rebinding_runs_through_the_existing_exact_stop_and_start() -> None:
         sandbox.cleanup()
 
 
+def test_recovery_hands_the_wake_duty_over_instead_of_only_recording_it() -> None:
+    """A Host whose only worker is unbound cannot wake itself, so "write it in
+    the heartbeat body and end the turn" is a stall, not a wait. The generated
+    guidance must hand the duty to the outer Agent - and say *blocked* when
+    there is no one to hand it to - and the startup reference must state that
+    the outer Agent takes it back."""
+    import re
+
+    ref = (ROOT / "skills" / "kaola-project-runner" / "references"
+           / "zcode-host-dispatch.md").read_text(encoding="utf-8")
+    startup = (ROOT / "skills" / "kaola-project-runner" / "references"
+               / "host-startup.md").read_text(encoding="utf-8")
+    flat_ref = re.sub(r"\s+", " ", ref)
+    flat_startup = re.sub(r"\s+", " ", startup)
+
+    check("Recording it in your heartbeat body wakes nobody" in flat_ref,
+          "the reference denies that a recorded duty is a wake-up")
+    check("Tell the outer controlling Agent, in this reply, which session to read"
+          in flat_ref,
+          "the reference hands the read-back duty to the outer Agent in the reply")
+    check("no other confirmed wake source you are **blocked**" in flat_ref,
+          "the reference calls the no-wake-source case blocked")
+    check("hand the duty to the outer Agent and report it, before ending the turn"
+          in flat_ref,
+          "an unverified binding is handed over, not merely recorded")
+    check("Take back what the Host hands you" in flat_startup
+          and "that duty is yours" in flat_startup,
+          "startup tells the outer Agent it owns the handed-back duty")
+    check("A Host that reports itself blocked for want of a wake source stays blocked"
+          in flat_startup,
+          "startup says a blocked Host stays blocked until the outer Agent acts")
+    # and the old, insufficient instruction is gone
+    check("record in your heartbeat body that you must come back and read it yourself"
+          not in flat_ref,
+          "the record-only recovery step no longer stands alone")
+
+
 def main() -> int:
     tests = [value for name, value in sorted(globals().items())
              if name.startswith("test_") and callable(value)]
