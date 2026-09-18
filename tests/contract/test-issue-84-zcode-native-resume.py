@@ -105,16 +105,33 @@ class ResumeCase(I79.TempCase):
         return sent
 
     def assert_no_substitution(self, drv, loaded) -> None:
-        """A refused resume must not quietly land on some other model."""
+        """A refused resume must not reach `session/setModel` at all.
+
+        Asserting only that no *plan* model was attempted is too weak: a
+        regression that forwarded the unusable persisted value verbatim would
+        be refused by the backend, and the test would still pass while the
+        adapter had in fact tried to select an off-plan or foreign-account
+        model. Unusable metadata must fail closed before the wire, so the
+        honest assertion is that the backend saw no selection whatsoever.
+        """
         self.assertIn(
             "error", loaded,
             "expected a fail-closed refusal, got " + json.dumps(loaded))
         message = (loaded.get("error") or {}).get("message") or ""
         self.assertNotIn(FIXTURE_SECRET, message)
-        for attempt in drv.record().get("set_model_attempts") or []:
-            model = (attempt.get("model") or {})
+        attempts = drv.record().get("set_model_attempts") or []
+        self.assertEqual(
+            attempts, [],
+            "unusable persisted metadata still reached session/setModel: "
+            + json.dumps(attempts))
+        self.assertNotIn(
+            "session/setModel", drv.record().get("calls") or [],
+            "the backend saw a selection for a resume that fails closed: "
+            + json.dumps(drv.record().get("calls") or []))
+        # Belt and braces: whatever was (not) attempted, no plan model leaked.
+        for attempt in attempts:
             self.assertNotIn(
-                model.get("modelId"), PLAN_MODELS,
+                (attempt.get("model") or {}).get("modelId"), PLAN_MODELS,
                 "a plan model was substituted for unusable persisted metadata: "
                 + json.dumps(attempt))
 
@@ -252,6 +269,60 @@ class TestResumeFailureIsReported(ResumeCase):
         self.assertEqual(len(resumes), 1,
                          "a 3.12+ backend must not be retried with the overlay: "
                          + json.dumps(drv.record().get("calls") or []))
+
+
+class TestResumedConfigOptionRoundTrips(ResumeCase):
+    """Whatever `config_options` advertises as the model `currentValue` must be
+    accepted back by `session/set_config_option`. After a resume that value
+    names the `account:*` provider, so a client that simply echoes the option it
+    was just given must not be provider-refused."""
+
+    def advertised_model(self, loaded):
+        options = {o["id"]: o for o in
+                   (loaded.get("result") or {}).get("configOptions", [])}
+        model = options.get("model") or {}
+        value = model.get("currentValue")
+        self.assertTrue(value, "the resumed session advertised no model value: "
+                        + json.dumps(model))
+        return value, model
+
+    def test_advertised_model_value_is_accepted_back(self):
+        drv, loaded = self.resume_ok("resume_nested")
+        value, model = self.advertised_model(loaded)
+        self.assertTrue(value.startswith(ACCOUNT_ID + "\\"),
+                        "expected the account-qualified value, got " + value)
+        self.assertIn(value, [o.get("value") for o in model.get("options", [])],
+                      "the advertised currentValue is not among its own options: "
+                      + json.dumps(model))
+        drv.request(40, "session/set_config_option", {
+            "sessionId": NATIVE_ID, "configId": "model", "value": value})
+        res = drv.wait_result(40)
+        self.assertIsNotNone(res, "set_config_option returned nothing")
+        self.assertNotIn(
+            "error", res,
+            "the session was refused the very model value it advertised: "
+            + json.dumps(res))
+        sent = (drv.record().get("set_model_attempts") or [])[-1]
+        self.assertEqual((sent.get("model") or {}).get("providerId"), ACCOUNT_ID)
+        self.assertNotIn("runtimeModel", sent)
+        self.assertIs(sent.get("persistAsWorkspaceLastUsed"), False)
+
+    def test_round_trip_still_refuses_a_foreign_account(self):
+        """Accepting the account id must not widen the one-Coding-Plan
+        boundary: another account is still a different billing path."""
+        drv, _ = self.resume_ok("resume_nested")
+        before = len(drv.record().get("set_model_attempts") or [])
+        drv.request(41, "session/set_config_option", {
+            "sessionId": NATIVE_ID, "configId": "model",
+            "value": "account:someone-else\\GLM-5.3"})
+        res = drv.wait_result(41)
+        self.assertIsNotNone(res, "set_config_option returned nothing")
+        self.assertIn("error", res, "a foreign account was accepted: " + json.dumps(res))
+        self.assertNotIn(FIXTURE_SECRET, json.dumps(res))
+        after = drv.record().get("set_model_attempts") or []
+        self.assertEqual(len(after), before,
+                         "a foreign account still reached session/setModel: "
+                         + json.dumps(after[before:]))
 
 
 class TestResumeFailsClosed(ResumeCase):

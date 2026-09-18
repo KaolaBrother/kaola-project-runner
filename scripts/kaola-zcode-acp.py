@@ -1887,15 +1887,24 @@ class ZCodeAcpAgent:
             elif config_id == "model":
                 model = self.parse_model_value(text)
                 choice = self.resolve_provider()
+                account = self.resolve_account()
+                # Both ids name the one enabled Coding Plan: the desktop
+                # registry calls it `builtin:*`, and a 3.12+ session runs it as
+                # the `account:*` provider, which is what `config_options`
+                # advertises as `currentValue` once a session has a selection.
+                # Accept either, or a client that simply echoes the option we
+                # just advertised would be refused. Never switch billing paths
+                # silently: any other provider still fails closed.
+                enabled = {choice["provider_id"]}
+                if account is not None:
+                    enabled.add(account["account_id"])
                 provider_id = model.get("providerId") or choice["provider_id"]
-                if provider_id != choice["provider_id"]:
-                    # Never switch billing paths silently: only the eligible
-                    # Coding Plan provider may be selected.
+                if provider_id not in enabled:
                     self.respond(rid, error={
                         "code": -32602,
                         "message": (
                             f"provider {provider_id} is not the enabled GLM Coding Plan "
-                            f"provider {choice['provider_id']}; refusing"
+                            f"provider ({', '.join(sorted(enabled))}); refusing"
                         ),
                     })
                     return
@@ -1909,7 +1918,6 @@ class ZCodeAcpAgent:
                         ),
                     })
                     return
-                account = self.resolve_account()
                 if account is not None and not self.legacy_overlay:
                     # 3.12+ has no `runtimeModel` key and requires an explicit
                     # reasoning level, so a mid-session switch takes the same
@@ -1924,6 +1932,9 @@ class ZCodeAcpAgent:
                             ),
                         })
                         return
+                    # Commits both model and provider only on acceptance, and
+                    # the provider it commits is the account the turn actually
+                    # runs on -- not whichever of the two ids the client typed.
                     self.select_account_model(
                         session, self.ensure_backend(), account, model_id)
                 else:
@@ -1939,7 +1950,7 @@ class ZCodeAcpAgent:
                         },
                     )
                     session.model_id = model_id
-                session.provider_id = provider_id
+                    session.provider_id = provider_id
             elif config_id in ("thought", "thoughtLevel", "thought_level"):
                 session.thought = text
                 self.ensure_backend().call(

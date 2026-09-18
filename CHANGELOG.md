@@ -26,7 +26,14 @@
   calling `setModel`, and the plan default is never selected on the user's behalf.
   `reregister_provider()`'s pre-3.12 overlay branch is unchanged; the only pre-3.12 behaviour that
   narrows is that a backend asking for the resume overlay must now say so with the same
-  `Model config is missing` signal `session/create` already required. Verified on real ZCode.app 3.12.3 / CLI 0.16.5 over ACP in an
+  `Model config is missing` signal `session/create` already required.
+  One consequence of a resumed session reporting its real provider is that the model option it
+  advertises as `currentValue` is now account-qualified, and `session/set_config_option` only
+  accepted the desktop-registry `builtin:*` id — so a client that echoed back the very value it
+  had just been handed was provider-refused. Either id for the one enabled Coding Plan now
+  round-trips, and the account path records the provider the turn actually runs on rather than
+  whichever of the two ids the client typed. The one-Coding-Plan boundary is unchanged: any other
+  provider, including another account, still fails closed without reaching `session/setModel`. Verified on real ZCode.app 3.12.3 / CLI 0.16.5 over ACP in an
   isolated repo: one native session, a real turn, an exact holder stop
   (`residual_pids: []`), `--resume sess_6fe8bc2d-...`, then a second real turn that answered on
   `account:bigmodel-individual-coding-plan\GLM-5.3` and quoted its own first reply back. Resuming
