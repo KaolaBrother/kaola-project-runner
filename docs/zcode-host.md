@@ -331,8 +331,12 @@ Host/Skill-layer carrier, verified live on ZCode 3.12.3:
   runtime's normal turn-command path into a real manual compaction, persisted
   as `compaction` and `context_compaction` rows in `db.sqlite`'s `part` table
   with `trigger:"manual"`, `auto:false` — verified against a live session.
-  Auto-compaction writes the same record family per static analysis but was
-  not exercised live.
+  The runtime also exposes a programmatic `session/compact` RPC that produces
+  the identical record family mid-run (verified live); it is not reachable
+  through the adapter's fixed method dispatch today. Auto-compaction writes
+  the same record family per static analysis but was not exercised live —
+  both catalog models report a 1M context window, putting the auto threshold
+  beyond bounded experiment cost.
 - **Carrier.** The controlling Agent puts the recovery carrier —
   `references/zcode-compact-recovery.md` inside the installed main Skill —
   once at the head of the next prompt to the compacted Host. Verified:
@@ -344,10 +348,13 @@ Host/Skill-layer carrier, verified live on ZCode 3.12.3:
   cursor on `db.sqlite` confirms it (verified live: the rows are committed
   synchronously) but stays a diagnostic the Agent may run — never a per-send
   transport gate, a cursor ledger, or a hooks/config change. A
-  `UserPromptSubmit` hook could carry recovery too, at the cost of a
-  user-global `hooks.enabled` write plus a process per prompt for coverage
-  the Runner does not need; it remains the documented fallback, not the
-  mechanism.
+  `UserPromptSubmit` hook could carry recovery too — live-verified in
+  isolated scope (project `plugins.dirs` + plugin `hooks/hooks.json`, zero
+  user-global writes): the hook fires on every prompt, a read-only `part`
+  cursor detects the episode, and the injected `additionalContext` made the
+  model re-read the Skill after both `/compact` and `session/compact`. It
+  adds a process per prompt and runtime state under `$ZCODE_PLUGIN_DATA`;
+  adoption is a boundary decision for outer review, not shipped here.
 
 ## Verification
 
