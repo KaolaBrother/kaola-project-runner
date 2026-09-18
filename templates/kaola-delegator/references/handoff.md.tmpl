@@ -56,9 +56,12 @@ Keep only the current pointer.
    ```
 
    Then update `$RECORD` if the holder instance changed. Never use `--continue`
-   to guess a same-directory worker.
-4. Missing, mismatched, or unattested `sess_*` is cannot-resume: report and
-   wait. Do not create a new Host and call it continuation.
+   to guess a same-directory worker. Exact `stop` may `session/close` the
+   native session: if `--resume` returns session not found, that `sess_*` is
+   spent. Do not start a second Host and call it continuation.
+4. Missing, mismatched, unattested, or backend-unknown `sess_*` is
+   cannot-resume: report and wait. Do not create a new Host and call it
+   continuation.
 5. No Host yet: start once at the canonical root under `$HOST`. Confirm
    `session`/`repo`/`acp_session_id` and holder instance, then write `$RECORD`
    immediately. Native `sess_*` may be absent. Send the first handoff, then

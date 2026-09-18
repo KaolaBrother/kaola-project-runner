@@ -30,8 +30,9 @@ that this Skill is not executable. Do not claim a Host started.
 
 Recover the project's continuation pointer first. A **live** Host is attached in
 place — do not `start` again, even if its name is not the new Host form. A
-**stopped** Host restores only with the attested native `sess_*`. Missing native
-id is cannot-resume, not `--continue`. Name a new Host only when none exists:
+**stopped** Host restores only with an attested native `sess_*` the backend
+still has. Missing, spent, or unknown native id is cannot-resume, not
+`--continue`. Name a new Host only when none exists:
 `zcode-<PROJECT_CODE>-orchestrator-<purpose>`. Write the current pointer right
 after a successful start; native `sess_*` may be absent. Commands, identities,
 and the prompt:

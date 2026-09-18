@@ -275,6 +275,10 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "trusted locator wins over the new Host name")
     check("Do not start a second Host because `$HOST` was not found" in handoff_one,
           "missing new HOST name does not start a second orchestrator")
+    check("session not found" in handoff_one,
+          "spent native id after stop-close is cannot-resume")
+    check("spent, or unknown native id is cannot-resume" in skill_one,
+          "Skill treats a backend-unknown sess_* as cannot-resume")
     check("even if its name is not the new Host form" in skill_one,
           "Skill adopts a live Host with a nonstandard name")
     check("native `sess_*` may be absent" in skill_one,
