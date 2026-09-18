@@ -1,0 +1,91 @@
+test_binding_spelled_through_a_symlink_accepts_the_real_root (__main__.TestBindingCompletesAndAccepts.test_binding_spelled_through_a_symlink_accepts_the_real_root) ... ok
+test_dotted_path_spelling_resolving_to_the_binding_is_accepted (__main__.TestBindingCompletesAndAccepts.test_dotted_path_spelling_resolving_to_the_binding_is_accepted) ... ok
+test_explicit_repo_equal_to_the_binding_is_accepted (__main__.TestBindingCompletesAndAccepts.test_explicit_repo_equal_to_the_binding_is_accepted) ... ok
+test_omitted_repo_is_completed_from_the_binding (__main__.TestBindingCompletesAndAccepts.test_omitted_repo_is_completed_from_the_binding)
+No --repo at all: the bound root is used, not the current directory. ... ok
+test_symlink_spelling_resolving_to_the_binding_is_accepted (__main__.TestBindingCompletesAndAccepts.test_symlink_spelling_resolving_to_the_binding_is_accepted) ... ok
+test_acp_transport_is_refused_by_the_same_shared_guard (__main__.TestBindingRefusesDrift.test_acp_transport_is_refused_by_the_same_shared_guard) ... ERROR
+test_child_worktree_of_the_same_repository_is_refused (__main__.TestBindingRefusesDrift.test_child_worktree_of_the_same_repository_is_refused) ... ERROR
+test_refusal_happens_before_the_acp_agent_is_launched (__main__.TestBindingRefusesDrift.test_refusal_happens_before_the_acp_agent_is_launched) ... ok
+test_second_child_worktree_is_refused_too (__main__.TestBindingRefusesDrift.test_second_child_worktree_is_refused_too) ... ok
+test_unrelated_repository_is_refused (__main__.TestBindingRefusesDrift.test_unrelated_repository_is_refused) ... ok
+test_dispatch_into_a_child_worktree_creates_no_worker_record (__main__.TestBoundRootReachesTheWorkerRecord.test_dispatch_into_a_child_worktree_creates_no_worker_record) ... ok
+test_started_worker_record_carries_the_bound_root (__main__.TestBoundRootReachesTheWorkerRecord.test_started_worker_record_carries_the_bound_root) ... ok
+test_binding_outside_any_repository_is_refused (__main__.TestInvalidBinding.test_binding_outside_any_repository_is_refused) ... ok
+test_binding_that_is_not_a_git_root_is_refused (__main__.TestInvalidBinding.test_binding_that_is_not_a_git_root_is_refused) ... ok
+test_invalid_binding_is_refused_even_when_repo_is_omitted (__main__.TestInvalidBinding.test_invalid_binding_is_refused_even_when_repo_is_omitted) ... ok
+test_missing_binding_path_is_refused (__main__.TestInvalidBinding.test_missing_binding_path_is_refused) ... ok
+test_relative_binding_is_refused (__main__.TestInvalidBinding.test_relative_binding_is_refused) ... ok
+test_empty_binding_is_not_orchestrator_context (__main__.TestPreservedBehavior.test_empty_binding_is_not_orchestrator_context) ... ok
+test_legacy_acp_session_can_still_be_captured (__main__.TestPreservedBehavior.test_legacy_acp_session_can_still_be_captured) ... ok
+test_legacy_worktree_rooted_session_can_still_be_observed (__main__.TestPreservedBehavior.test_legacy_worktree_rooted_session_can_still_be_observed) ... ok
+test_legacy_worktree_rooted_session_can_still_be_stopped (__main__.TestPreservedBehavior.test_legacy_worktree_rooted_session_can_still_be_stopped)
+Close-out by the verified original locator survives the binding. ... ok
+test_standalone_acp_start_in_a_child_worktree_is_not_refused (__main__.TestPreservedBehavior.test_standalone_acp_start_in_a_child_worktree_is_not_refused) ... ok
+test_standalone_omitted_repo_still_fails_as_before (__main__.TestPreservedBehavior.test_standalone_omitted_repo_still_fails_as_before)
+Without a binding there is nothing to complete from: unchanged error. ... ok
+test_standalone_start_in_a_child_worktree_is_not_refused (__main__.TestPreservedBehavior.test_standalone_start_in_a_child_worktree_is_not_refused) ... ok
+test_force_stop_also_honors_the_instance_check (__main__.TestStopInstanceProtection.test_force_stop_also_honors_the_instance_check) ... ok
+test_shared_entrypoint_forwards_the_expected_instance_to_stop (__main__.TestStopInstanceProtection.test_shared_entrypoint_forwards_the_expected_instance_to_stop) ... ok
+test_stop_with_a_foreign_instance_id_is_refused_with_no_side_effect (__main__.TestStopInstanceProtection.test_stop_with_a_foreign_instance_id_is_refused_with_no_side_effect) ... ok
+test_stop_with_the_verified_instance_id_stops (__main__.TestStopInstanceProtection.test_stop_with_the_verified_instance_id_stops) ... ok
+test_stop_without_an_expected_instance_keeps_todays_behavior (__main__.TestStopInstanceProtection.test_stop_without_an_expected_instance_keeps_todays_behavior) ... ok
+
+======================================================================
+ERROR: test_acp_transport_is_refused_by_the_same_shared_guard (__main__.TestBindingRefusesDrift.test_acp_transport_is_refused_by_the_same_shared_guard)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-77/tests/contract/test-issue-73-canonical-root.py", line 224, in test_acp_transport_is_refused_by_the_same_shared_guard
+    result = self.run_cli(ACP_PLATFORM, "start", "--repo", str(self.child_a),
+                          bound=str(self.main_repo), transport="acp")
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-77/tests/contract/test-issue-73-canonical-root.py", line 131, in run_cli
+    return subprocess.run(argv, capture_output=True, text=True, env=env,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          timeout=timeout)
+                          ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 556, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1220, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1267, in _check_timeout
+    raise TimeoutExpired(
+    ...<2 lines>...
+            stderr=b''.join(stderr_seq) if stderr_seq else None)
+subprocess.TimeoutExpired: Command '['/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-77/scripts/kaola-tmux.sh', 'grok', 'start', '--session', 'i73-test-acp-transport-is-refused-by-the-same-shared-guard', '--transport', 'acp', '--repo', '/private/tmp/kaola-i77-rep2/kaola-i73-c3vk2ii4/project/.kw/worktrees/issue-73-tests']' timed out after 60 seconds
+
+======================================================================
+ERROR: test_child_worktree_of_the_same_repository_is_refused (__main__.TestBindingRefusesDrift.test_child_worktree_of_the_same_repository_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-77/tests/contract/test-issue-73-canonical-root.py", line 207, in test_child_worktree_of_the_same_repository_is_refused
+    result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.child_a),
+                          bound=str(self.main_repo))
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-77/tests/contract/test-issue-73-canonical-root.py", line 131, in run_cli
+    return subprocess.run(argv, capture_output=True, text=True, env=env,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          timeout=timeout)
+                          ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 556, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1220, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1267, in _check_timeout
+    raise TimeoutExpired(
+    ...<2 lines>...
+            stderr=b''.join(stderr_seq) if stderr_seq else None)
+subprocess.TimeoutExpired: Command '['/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-77/scripts/kaola-tmux.sh', 'codex', 'start', '--session', 'i73-test-child-worktree-of-the-same-repository-is-refused', '--transport', 'pty', '--repo', '/private/tmp/kaola-i77-rep2/kaola-i73-c3vk2ii4/project/.kw/worktrees/issue-73-tests']' timed out after 60 seconds
+
+----------------------------------------------------------------------
+Ran 29 tests in 145.317s
+
+FAILED (errors=2)
