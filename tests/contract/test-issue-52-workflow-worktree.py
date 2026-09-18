@@ -205,7 +205,7 @@ class Issue52GuidanceConsistency(unittest.TestCase):
         """Issue #56 owns Grok Bot host install/UAT; this issue must not rewrite them."""
         for path in GROK_BOT_OWNED:
             self.assertTrue(path.exists(), path)
-        bridge = PROJECT / "hosts" / "grok-bot" / "zcode-orchestrator.md"
+        bridge = PROJECT / "hosts" / "grok-bot" / "kaola-delegator.md"
         guide = PROJECT / "hosts" / "grok-bot" / "INSTALL.md"
         for path in (bridge, guide):
             text = path.read_text(encoding="utf-8")

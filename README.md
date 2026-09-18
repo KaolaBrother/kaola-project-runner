@@ -2,18 +2,42 @@
 
 **Let one agent work through another agent's CLI.**
 
-Kaola Project Runner provides nine self-contained **worker** Agent Skills for **Claude Code,
-Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, and Droid CLI**, plus one generated **main
-orchestrator** Skill (`kaola-project-runner`, display name **Project Runner**). A controlling
-agent can start a session in a Git repository, send instructions, read replies and runtime
-evidence, and stop that exact owned session. Communication uses structured ACP (Agent Client
-Protocol) or a tmux terminal.
+Pick the most direct entry for how much you want to control. Do not force every task through
+every layer. Each layer finishes its own job and does not repeat the next.
 
-Use a worker Skill to delegate implementation, request a second review, or continue work in
-another runtime. Use the main Skill when the host Agent should supervise explicitly authorized
-CLI workers through those nine transport Skills. Pair either with
-[Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow) to give that work a recoverable
-path from issue to verified delivery.
+| If you want | Use | What it does | What it does not do |
+|---|---|---|---|
+| Hands-off: delegate the whole project | **Kaola-Delegator** (`kaola-delegator`) | Extract goal, progress, authorized platforms/quota/priority, and stop boundary; start or resume **one** ZCode Host that must load Project Runner | Dispatch workers, copy a Mission List, maintain the inner heartbeat, or bind per-worker variables |
+| Control the orchestration | **Project Runner** (`kaola-project-runner`) | Recover authorization, plan, dispatch, heartbeat, accept before finalize, and own close-out | Run as a second orchestrator on the same project |
+| Coordinate one or a few issues yourself | **Platform Runner** (`<platform>-kaola-project-runner`) | Exact-session start, send, read, and stop | Task planning or completion judgment |
+| Do one issue in this Agent | **Workflow Next** | Claim or resume that issue and advance it | Finalize, archive, and sink — those are Workflow finalize |
+
+**Status.** Kaola-Delegator is **in development** on this candidate. It is not a released
+install, and this repository does not claim it is already available on your machine. The only
+orchestration backend it opens today is a **ZCode ACP Host**. Grok Bot live UAT has not been
+run. Nine Platform Runners and Project Runner remain the shipped communication and control-plane
+Skills.
+
+**One project, one Project Runner Agent.** Several workers on one project are not several
+orchestrators, and several issues are not a bundle. Start and stop use the bound canonical
+project root and an exact session. Do not add a registry, lock, or second scheduler.
+
+**When the outer Agent changes (A→B).** B continues the same Host from the project's
+continuation record, not from A's chat memory. Store three distinct facts from real receipts:
+the caller-chosen Runner `--session` (for example `zcode-KPR-orchestrator-main`), the ACP
+`acp_session_id` from `session/new`, and the ZCode native `sess_*` from
+`native_session_identity`. Never synthesize one from another. A live Host is attached in place.
+A stopped Host resumes only with the attested `sess_*`. Missing native id is cannot-resume, not
+`--continue`. Changing the outer Agent does not stop the Host, start a second Host, or re-claim
+issues.
+
+Kaola Project Runner also provides nine self-contained **worker** Agent Skills for **Claude Code,
+Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, and Droid CLI**. A
+controlling agent can start a session in a Git repository, send instructions, read replies and
+runtime evidence, and stop that exact owned session. Communication uses structured ACP (Agent
+Client Protocol) or a tmux terminal. Pair a chosen entry with
+[Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow) when that work needs a
+recoverable path from issue to verified delivery.
 
 ## Agent runtime support
 
@@ -117,13 +141,14 @@ historical evidence, not this Skill's contract.
 The installer provides native skill-directory destinations for **Codex, Claude Code,
 Cursor, Devin, and ZCode** (`--runtime zcode` → `~/.zcode/skills`; a workspace
 `.zcode/skills` works through `--skills-dir` — see [ZCode host](docs/zcode-host.md)).
-**Grok Bot** is a **bridge host** for **Zcode Orchestrator**, not a Project Runner
-host: the account holds exactly one very small generated Skill,
-`hosts/grok-bot/zcode-orchestrator.md` (≈ 2 KB), that binds an
+**Grok Bot** is a **bridge host** for **Kaola-Delegator**, not a Project Runner
+host (in development on this candidate; not a released account Skill). The account
+holds exactly one very small generated Skill,
+`hosts/grok-bot/kaola-delegator.md` (≈ 2 KB), that binds an
 execution target first (Local Computer, or the cloud Agent Computer), asks that target's
 device-local locator `kaola-project-runner-locate` for the verified `kaola-project-runner`
 checkout (expected origin, accepted pinned revision, clean tree), and loads only
-`ROOT/skills/zcode-orchestrator`. That Skill starts or resumes one ZCode Host, which
+`ROOT/skills/kaola-delegator`. That Skill starts or resumes one ZCode Host, which
 loads Project Runner internally. The bridge carries no policy, transport, reference, path, runtime copy, or
 credential; a release changes only its accepted-revision line, and an accepted content/pin
 pair is never rebased or squashed. Nothing on one target reaches
@@ -139,7 +164,7 @@ and detached at R). Progressive disclosure is a locked invariant on every
 host (see [conventions](docs/conventions.md#progressive-disclosure)). Other hosts can use `--skills-dir /absolute/path`
 if they can load `SKILL.md` and execute shell commands in an environment with the
 required tools. Codex and generic `--skills-dir` destinations also install
-`zcode-orchestrator` next to Project Runner.
+`kaola-delegator` next to Project Runner.
 
 These are portable Agent Skills, with no dependency on a Codex installation. This does not mean
 every host/target combination has been tested. Recorded end-to-end host coverage includes Codex
@@ -292,7 +317,7 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime zcode
 ./scripts/install-local.sh --skills-dir "$PWD/.zcode/skills"
 
-# Grok Bot: no installer destination. Save hosts/grok-bot/zcode-orchestrator.md (the bridge) on
+# Grok Bot: no installer destination. Save hosts/grok-bot/kaola-delegator.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:
 python3 scripts/kaola-locate.py register --target local --bin-dir <dir on PATH> --expect-revision <accepted commit>   # validates origin/revision/clean, links kaola-project-runner-locate, writes the registration receipt beside it
 kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt; the locator compares host fingerprint and target with its receipt

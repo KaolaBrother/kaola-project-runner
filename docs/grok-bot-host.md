@@ -1,8 +1,8 @@
 # Grok Bot host
 
-Grok Bot is a **bridge host** for Zcode Orchestrator. It is not a Project Runner
+Grok Bot is a **bridge host** for Kaola-Delegator. It is not a Project Runner
 host, not a tenth CLI worker, and not an installer destination. Project Runner
-consuming entries are Codex, generic `--skills-dir`, and ZCode. Zcode Orchestrator
+consuming entries are Codex, generic `--skills-dir`, and ZCode. Kaola-Delegator
 consuming entries are Grok Bot, generic `--skills-dir`, and Codex.
 
 | Id | Meaning | Flag |
@@ -27,7 +27,7 @@ delivery to exactly **one** very small account Skill. `./scripts/render-skills.p
 ```text
 hosts/grok-bot/
   .generated-by-kaola-project-runner
-  zcode-orchestrator.md     # the bridge: one single-Markdown account Skill (≈ 2.4 KB)
+  kaola-delegator.md     # the bridge: one single-Markdown account Skill (≈ 2.4 KB)
   bridge.json               # fingerprint manifest: stage, saveable, name, description, accepted commit, sha256, bytes
   INSTALL.md                # two-commit model, one-write install, first configuration, read-only Mac UAT (not a Skill)
 ```
@@ -37,7 +37,7 @@ names only: the repository `KaolaBrother/kaola-project-runner`, the expected
 origin, the accepted pinned revision (40-hex commit plus an honest label or
 release tag; the one line that changes on a pin), the device-local locator
 command `kaola-project-runner-locate`, and the one canonical entry path
-`ROOT/skills/zcode-orchestrator/SKILL.md`. It carries **no**
+`ROOT/skills/kaola-delegator/SKILL.md`. It carries **no**
 canonical policy, transport, reference, worker text, fixed or default path,
 HOME convention, username, environment variable, symlink convention, runtime
 copy, per-worker account Skills, bundled references, credential handling,
@@ -102,7 +102,7 @@ sessions, and vice versa. On every use the bridge:
    `github.com/KaolaBrother/kaola-project-runner`, HEAD equals the accepted
    revision, and the tree is clean;
 4. accepts the consumer project root as a separate path on the same target;
-5. loads `ROOT/skills/zcode-orchestrator/SKILL.md` and follows it. That Skill
+5. loads `ROOT/skills/kaola-delegator/SKILL.md` and follows it. That Skill
    starts or resumes one ZCode Host on the same target. The bridge does not load
    Project Runner or a worker Skill.
 
@@ -215,8 +215,8 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
 `hosts/grok-bot/INSTALL.md` is the generated guide. In short:
 
 1. **One write on the account, from P only.** Save the pinned
-   `hosts/grok-bot/zcode-orchestrator.md` (`bridge.json` `saveable: true`) as
-   the private Skill `zcode-orchestrator` (name/description from the
+   `hosts/grok-bot/kaola-delegator.md` (`bridge.json` `saveable: true`) as
+   the private Skill `kaola-delegator` (name/description from the
    frontmatter, resolved values in `bridge.json`; body after the closing
    `---`); same-name update in place. This is the only account operation (no
    Marketplace, credential, ZIP import, unofficial Sand or RPC path, or state
@@ -235,11 +235,11 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
    (the locator itself checks the fingerprint and target against the receipt).
 3. **Read-only preflight.** Run
    `kaola-project-runner-locate --target local --expect-revision R` and confirm
-   `ROOT/skills/zcode-orchestrator/SKILL.md` is present. Do not load Project
+   `ROOT/skills/kaola-delegator/SKILL.md` is present. Do not load Project
    Runner or a worker Skill from this bridge, and do not run a worker
    preflight. Expected: `ok` attestation, the Skill file present, and nothing
    started, sent, stopped, cloned, fetched, checked out, or installed; the Bot
-   read only the Zcode Orchestrator Skill, no script source; the cloud Agent
+   read only the Kaola-Delegator Skill, no script source; the cloud Agent
    Computer executed nothing and accessed no Mac file. After UAT, remove
    `$BIN/kaola-project-runner-locate` and its receipt or keep them registered;
    the normal installer-managed link is restored with
@@ -251,7 +251,7 @@ A saved bridge is not live adoption; this read-only UAT is the boundary. Three
 kinds of evidence stay distinct and none substitutes for another: Grok Bot's
 accepted `SKILL_EXPOSURE: PASS` at `bc8592d` settles that the account holds the
 loadable bridge; the locator attestation and the presence of
-`ROOT/skills/zcode-orchestrator/SKILL.md` establish **placement** on the bound
+`ROOT/skills/kaola-delegator/SKILL.md` establish **placement** on the bound
 target; and **actual runtime use** is a separately authorized scoped real-use
 smoke, never part of installation. This repository does not claim live Grok Bot
 adoption.
@@ -267,7 +267,7 @@ the one save, the target binding, the locator, the read-only preflight, and the
 real-use boundary.
 
 Heartbeat, worker dispatch, notification binding, and acceptance-before-finalize
-belong to Project Runner inside the ZCode Host. The outer Zcode Orchestrator Skill
+belong to Project Runner inside the ZCode Host. The outer Kaola-Delegator Skill
 does not copy that engine, does not create a Routine, and does not dispatch
 workers. An older in-flight Grok Bot Project Runner account Skill is not renamed,
 restarted, or cancelled from this repository.

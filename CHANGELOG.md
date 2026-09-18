@@ -2,21 +2,23 @@
 
 ## Unreleased
 
-- **Zcode Orchestrator is the external delegation Skill; Grok Bot is no longer a
-  Project Runner host (Issue #74).** The generated Skill `zcode-orchestrator`
-  (display name Zcode Orchestrator) is a thin shared core for Grok Bot, Codex,
+- **Kaola-Delegator is the external delegation Skill; Grok Bot is no longer a
+  Project Runner host (Issue #74).** The generated Skill `kaola-delegator`
+  (display name Kaola-Delegator) is a thin shared core for Grok Bot, Codex,
   and generic Skill-directory hosts: it extracts task, progress, authorized
   platforms, quota (concurrency/account/token kept separate), priority, and
   project context, then starts or resumes one ZCode Host through the existing
   ZCode Runner. Project Runner (`kaola-project-runner`) remains the inner
   engine and is loaded by that Host. The Grok Bot account Skill is now
-  `hosts/grok-bot/zcode-orchestrator.md`; it still binds the execution target
+  `hosts/grok-bot/kaola-delegator.md`; it still binds the execution target
   and runs the device-local locator, then loads only the external Skill. Grok
   CLI and the other eight platform workers are unchanged. Existing budgets were
   not raised; `external_skill_bytes` 4096 is the new small ceiling for this
   Skill. This repository does not claim live Grok Bot UAT. In-flight sessions
   that still use the old Grok Bot Project Runner entry are not renamed,
-  restarted, or cancelled.
+  restarted, or cancelled. README opens with four entry tiers (Kaola-Delegator,
+  Project Runner, Platform Runner, Workflow Next); AGENTS.md keeps the short
+  principles and points at README.
 
 - **Standalone ACP contract suites now stop the sessions they start (Issue #82).**
   `Issue34ModelSelectionAcpTests` starts codex/cursor-cli/devin holders but the

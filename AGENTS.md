@@ -8,9 +8,9 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Project Snapshot
 
-- Purpose: runtime-neutral Agent Skills CLI communication driver for nine AI CLI platforms via tmux, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner; Codex, generic, and ZCode entries) and the generated external Skill `zcode-orchestrator` (display name Zcode Orchestrator; Grok Bot, generic, and Codex entries). Codex remains a supported consuming runtime. Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/zcode-orchestrator.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads `zcode-orchestrator`; that Skill starts one ZCode Host which then loads Project Runner; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not a ninth worker, not a Project Runner host, and has no installer destination.
+- Purpose: runtime-neutral Agent Skills CLI communication driver for nine AI CLI platforms via tmux, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner; Codex, generic, and ZCode entries) and the generated external Skill `kaola-delegator` (display name Kaola-Delegator; Grok Bot, generic, and Codex entries). Codex remains a supported consuming runtime. Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/kaola-delegator.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads `kaola-delegator`; that Skill starts one ZCode Host which then loads Project Runner; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not a ninth worker, not a Project Runner host, and has no installer destination.
 - Stack: Bash (macOS-compatible), Python 3, tmux.
-- Architecture: shared worker template renders nine self-contained platform Skills from YAML manifests and shell adapters; a separate orchestrator template renders the control-plane Skill (not a tenth platform); `templates/zcode-orchestrator/` renders the external Zcode Orchestrator Skill; relay manages nested PTY.
+- Architecture: shared worker template renders nine self-contained platform Skills from YAML manifests and shell adapters; a separate orchestrator template renders the control-plane Skill (not a tenth platform); `templates/kaola-delegator/` renders the external Kaola-Delegator Skill; relay manages nested PTY.
 
 ## Commands
 
@@ -23,7 +23,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 ## Project Constraints
 
 - Security boundary: prompts via relay literal/bracketed-paste, never shell eval; terminal controls rejected before PTY write.
-- Public contract or compatibility constraints: `templates/grok-golden/` is frozen; worker Skills are generated from `templates/SKILL.md.tmpl`; the main orchestrator Skill is generated from `templates/orchestrator/`; the external Zcode Orchestrator Skill is generated from `templates/zcode-orchestrator/`.
+- Public contract or compatibility constraints: `templates/grok-golden/` is frozen; worker Skills are generated from `templates/SKILL.md.tmpl`; the main orchestrator Skill is generated from `templates/orchestrator/`; the external Kaola-Delegator Skill is generated from `templates/kaola-delegator/`.
 - Files or generated surfaces requiring special handling: `skills/` and `hosts/grok-bot/` are generated output, never hand-edit.
 
 ## Validation Policy
@@ -34,7 +34,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Documentation Map
 
-- `README.md` — project overview and usage.
+- `README.md` — four-tier entry (Kaola-Delegator / Project Runner / Platform Runner / Workflow Next), overview, and usage.
 - `CHANGELOG.md` — user-visible changes when present.
 - `docs/` — architecture, APIs, conventions, and decisions when present.
 
@@ -43,6 +43,31 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 - Project-only precedence or exception: `none`
 - Local development gotcha: `unknown`
 <!-- KW-AGENTS-MANAGED-END -->
+
+## Layered entry
+
+Pick the most direct entry for the control you want. Do not force every task through every
+layer. Each layer finishes its own job and does not repeat the next. Detail: `README.md`.
+
+- **Kaola-Delegator** (`kaola-delegator`): external delegation (Grok Bot / generic / Codex).
+  Hand off goal, progress, authorized platforms/quota/priority, and stop boundary to **one**
+  ZCode ACP Host that must load Project Runner. The outer Agent does not bind workers or run
+  the inner heartbeat. In development on this candidate; not a released install; Grok Bot live
+  UAT has not been run.
+- **Project Runner** (`kaola-project-runner`): project control plane (Codex / generic / ZCode).
+  Recover authorization, plan, dispatch, heartbeat, accept before finalize, close-out. **One
+  project has only one Agent running this Skill.**
+- **Platform Runner**: exact-session transport and lifecycle facts for one or a few issues. No
+  task planning or completion judgment.
+- **Workflow Next**: this Agent claims or resumes and advances one issue. Finalize/archive/sink
+  belong to Workflow finalize. One issue is one run; several issues are not a bundle.
+
+Start and stop use the bound canonical project root and an exact session. Do not add a
+multi-Host registry, lock, or second scheduler. Control-plane limits do not change standalone
+Platform Runner transport. When the outer Agent changes, continue the same Host from the
+project continuation record: Runner session name, `acp_session_id`, and native `sess_*` as
+three separate facts from real receipts. A live Host is attached in place; a stopped Host
+resumes only with the attested `sess_*`. Missing native id is cannot-resume, not `--continue`.
 
 ## Project-Specific Runner Contract
 
@@ -62,12 +87,14 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
   reduce it to direct start, send, read, connection, and exact-stop proof instead of adding harnesses,
   classifiers, retries, or waiting layers.
 - Keep `templates/grok-golden/` frozen. Change worker Skills through shared templates, platform facts,
-  and adapters, and the main Skill through `templates/orchestrator/`, then run
-  `./scripts/render-skills.py --write` and `--check`.
+  and adapters, the main Skill through `templates/orchestrator/`, and Kaola-Delegator through
+  `templates/kaola-delegator/`, then run `./scripts/render-skills.py --write` and `--check`.
 - Validate with `./scripts/validate.sh` and record exact outcomes. Live Cursor experiments use
   `cursor-grok-4.6-xhigh` with Fast disabled and never use `/model` as a read-only probe. A model
   mismatch remains evidence and must not disable communication.
 - Ordinary Workflow-backed work starts the worker session at the consuming project's canonical
   project root and asks that runtime to invoke workflow-next in-session; the worker's Workflow
-  owns the child worktree. Linked-worktree starts and existing-run recovery are Agent
-  decisions, not transport gates.
+  owns the child worktree. Linked-worktree starts and existing-run recovery remain Agent
+  decisions for standalone Platform Runner use and legacy in-flight sessions, not transport
+  gates. Project Runner orchestrator mode (Issue #73) binds new dispatch to that canonical
+  root without rewriting or globally forbidding those exceptions.

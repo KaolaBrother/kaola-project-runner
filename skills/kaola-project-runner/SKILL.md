@@ -93,7 +93,7 @@ stop/cancel anything to manufacture a wake-up. A worker turn-end or exit deliver
 full pass here; read the reply through that worker's own Skill from the dispatch
 anchor, not the event's `event_cursor`, which sits after it. Beat, event and carrier detail:
 [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
-Grok Bot is not an entry for this Skill: it loads generated `zcode-orchestrator`,
+Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
 which starts one ZCode Host that then loads this Skill. `--platform grok` is the
 Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
 Routine to run this Skill. An in-flight session that still uses the old Grok Bot

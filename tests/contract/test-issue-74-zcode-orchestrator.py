@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Issue #74: thin Zcode Orchestrator entry and two-layer isolation.
+"""Issue #74: thin Kaola-Delegator entry and two-layer isolation.
 
-Contract: generated ``zcode-orchestrator`` is the external Skill (Grok Bot /
+Contract: generated ``kaola-delegator`` is the external Skill (Grok Bot /
 Codex / generic). Project Runner remains the inner engine. The Grok Bot bridge
 loads only the external Skill after bind+locator. This suite does not claim
 live Grok Bot UAT.
@@ -31,9 +31,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CHECKOUT_CLI = ROOT / "scripts" / "kaola-acp.py"
 FAKE = ROOT / "tests" / "contract" / "fake-zcode-app-server.py"
 PYTHON = sys.executable
-EXTERNAL = ROOT / "skills" / "zcode-orchestrator"
+EXTERNAL = ROOT / "skills" / "kaola-delegator"
 RUNNER = ROOT / "skills" / "kaola-project-runner"
-BRIDGE = ROOT / "hosts" / "grok-bot" / "zcode-orchestrator.md"
+BRIDGE = ROOT / "hosts" / "grok-bot" / "kaola-delegator.md"
 BUDGETS = json.loads((ROOT / "templates" / "budgets.json").read_text(encoding="utf-8"))
 DESKTOP_CONFIG_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-desktop-config.json"
 PLAN_CACHE_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-coding-plan-cache.json"
@@ -216,8 +216,8 @@ class Sandbox:
 
 def test_generated_entry_matrix_and_no_engine_leak() -> None:
     skill = (EXTERNAL / "SKILL.md").read_text(encoding="utf-8")
-    check(re.search(r"(?m)^name: zcode-orchestrator$", skill) is not None, "skill id is zcode-orchestrator")
-    check("# Zcode Orchestrator" in skill, "display name is Zcode Orchestrator")
+    check(re.search(r"(?m)^name: kaola-delegator$", skill) is not None, "skill id is kaola-delegator")
+    check("# Kaola-Delegator" in skill, "display name is Kaola-Delegator")
     check("Grok Bot" in skill and "Codex" in skill and "generic" in skill, "external entries named")
     check("kaola-project-runner" in skill, "inner Project Runner named")
     check("zcode-kaola-project-runner" in skill, "Host is started through the ZCode worker")
@@ -237,8 +237,8 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "Project Runner no longer ships a Grok Bot host reference")
 
     bridge = BRIDGE.read_text(encoding="utf-8")
-    check(re.search(r"(?m)^name: zcode-orchestrator$", bridge) is not None, "bridge skill id is zcode-orchestrator")
-    check("ROOT/skills/zcode-orchestrator/SKILL.md" in bridge, "bridge loads the external Skill")
+    check(re.search(r"(?m)^name: kaola-delegator$", bridge) is not None, "bridge skill id is kaola-delegator")
+    check("ROOT/skills/kaola-delegator/SKILL.md" in bridge, "bridge loads the external Skill")
     check("Do not load Project Runner" in bridge, "bridge does not load Project Runner")
     check("Bind the execution target first" in bridge, "bridge still binds the execution target first")
     check("live Grok Bot adoption" not in bridge.lower() or "does not claim" in (ROOT / "hosts" / "grok-bot" / "INSTALL.md").read_text(encoding="utf-8").lower(),

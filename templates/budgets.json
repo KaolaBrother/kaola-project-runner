@@ -1,5 +1,5 @@
 {
-  "_comment": "Progressive-disclosure byte budgets, enforced by scripts/render-skills.py --check, scripts/kaola-grok-bot-verify.py, and tests/contract/test-progressive-disclosure.py. Bytes on disk (UTF-8); descriptions in characters. Ordinary receipts are bounded — ACP observe/status on the larger state_receipt_bytes (Issue #64) — and an explicit `capture --full` is exempt by design. external_skill_bytes (Issue #74) is the thin Zcode Orchestrator Skill: smaller than a worker, larger than the Grok Bot bridge; existing ceilings are not raised.",
+  "_comment": "Progressive-disclosure byte budgets, enforced by scripts/render-skills.py --check, scripts/kaola-grok-bot-verify.py, and tests/contract/test-progressive-disclosure.py. Bytes on disk (UTF-8); descriptions in characters. Ordinary receipts are bounded — ACP observe/status on the larger state_receipt_bytes (Issue #64) — and an explicit `capture --full` is exempt by design. external_skill_bytes (Issue #74) is the thin Kaola-Delegator Skill: smaller than a worker, larger than the Grok Bot bridge; existing ceilings are not raised.",
   "description_chars": 320,
   "main_skill_bytes": 17408,
   "worker_skill_bytes": 12288,

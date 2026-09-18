@@ -2,7 +2,7 @@
 """Offline verifier for the generated Grok Bot host bundle ``hosts/grok-bot``.
 
 Grok Bot is a bridge host: the account holds exactly **one** thin private Skill,
-``zcode-orchestrator`` (the bridge), and everything else -- the Zcode Orchestrator
+``kaola-delegator`` (the bridge), and everything else -- the Kaola-Delegator
 Skill, Project Runner, the nine platform workers, their references and scripts --
 stays in the repository and is loaded on demand from a verified checkout on the
 bound execution target. This verifier proves that shape structurally:
@@ -10,7 +10,7 @@ bound execution target. This verifier proves that shape structurally:
 * the bundle is exactly the marker, the bridge, ``bridge.json``, and ``INSTALL.md``;
 * the bridge stays inside its byte budget (``templates/budgets.json``), names the
   repository, the expected origin, the device-local locator command, and the one
-  canonical entry path (``ROOT/skills/zcode-orchestrator``), binds the execution
+  canonical entry path (``ROOT/skills/kaola-delegator``), binds the execution
   target before anything else, and names no individual worker; at stage ``pinned``
   it carries exactly one 40-hex accepted revision, at stage ``content`` (the content
   commit of the two-commit content/pin model) it carries none and says it must not
@@ -42,7 +42,7 @@ import sys
 from pathlib import Path
 
 ROOT_SKILL = "kaola-project-runner"
-EXTERNAL_SKILL = "zcode-orchestrator"
+EXTERNAL_SKILL = "kaola-delegator"
 WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode")
 WORKER_SKILL_NAMES = tuple(f"{wid}-{ROOT_SKILL}" for wid in WORKER_IDS)
 MARKER = ".generated-by-kaola-project-runner"

@@ -9,12 +9,12 @@
   "repository": "github.com/KaolaBrother/kaola-project-runner",
   "saveable": false,
   "skill": {
-    "body_sha256": "167f39f1ef189ea048aa69066c6e2c792a4f1a73da19b60c2ee7dc1d9fef110c",
-    "bytes": 2408,
-    "description": "Use when Grok Bot should delegate a project run through Zcode Orchestrator on a bound execution target: locate that target's verified kaola-project-runner checkout, then load the Zcode Orchestrator Skill from it.",
-    "file_sha256": "eb3b1d160a8568a56004ed9e96c9fc065ce1e8490ada407c541ea0fbbf357fdf",
-    "name": "zcode-orchestrator",
-    "source": "zcode-orchestrator.md"
+    "body_sha256": "48b24f2387bc25b1b1f494bec348871c272ab0e85c5cf4e498d5412bcf0a7e32",
+    "bytes": 2405,
+    "description": "Use when Grok Bot should delegate a project run through Kaola-Delegator on a bound execution target: locate that target's verified kaola-project-runner checkout, then load the Kaola-Delegator Skill from it.",
+    "file_sha256": "89b6da576887a71de80df7ef08b3bc618a64fcc3ded53cfbfe94a9d0a4dc1e3e",
+    "name": "kaola-delegator",
+    "source": "kaola-delegator.md"
   },
   "skill_count": 1,
   "stage": "content"

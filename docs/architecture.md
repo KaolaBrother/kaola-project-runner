@@ -77,9 +77,9 @@ worker directories under `skills/`, and renders the fixed orchestrator directory
 `skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
 derived from the nine manifests (no orchestrator platform manifest or adapter). It also emits
 the Grok Bot host bundle `hosts/grok-bot/`: one thin bridge Skill
-`zcode-orchestrator.md`, its fingerprint manifest `bridge.json`, and the install guide
-`INSTALL.md`. It also renders `skills/zcode-orchestrator/` from
-`templates/zcode-orchestrator/`. Every managed
+`kaola-delegator.md`, its fingerprint manifest `bridge.json`, and the install guide
+`INSTALL.md`. It also renders `skills/kaola-delegator/` from
+`templates/kaola-delegator/`. Every managed
 directory has a `.generated-by-kaola-project-runner` marker. A published Skill never follows a path
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
 byte inventories, including the orchestrator package and `hosts/grok-bot/`.
@@ -88,16 +88,16 @@ The nine-worker inventory includes Claude Code, Codex, Cursor CLI, Devin, Droid,
 Kimi CLI, OpenCode, and ZCode. Droid uses the native ACP agent `droid exec --output-format acp`
 as its default transport and keeps PTY as an explicit fallback.
 
-Grok Bot is a **bridge host** for Zcode Orchestrator, not a Project Runner host.
+Grok Bot is a **bridge host** for Kaola-Delegator, not a Project Runner host.
 Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
 automated account-Skill creation, so the account receives exactly **one** very small Skill
-(`hosts/grok-bot/zcode-orchestrator.md`): it names the repository, the expected origin, the
+(`hosts/grok-bot/kaola-delegator.md`): it names the repository, the expected origin, the
 accepted pinned revision, the device-local locator command `kaola-project-runner-locate`, and
-the one canonical entry path `ROOT/skills/zcode-orchestrator`. It binds the execution target first (Local
+the one canonical entry path `ROOT/skills/kaola-delegator`. It binds the execution target first (Local
 Computer or the cloud Agent Computer; neither reaches the other's files, CLIs, tmux, or
 sessions, and the cloud never installs or updates the Mac), asks that target's locator for the
 verified ROOT, accepts the consumer project root separately on the same target, and loads
-only the Zcode Orchestrator Skill from that checkout. That Skill starts one ZCode Host which
+only the Kaola-Delegator Skill from that checkout. That Skill starts one ZCode Host which
 loads Project Runner internally. `scripts/
 kaola-locate.py` is the locator and the fail-closed host-target attestation (bounded receipt:
 target kind as declared, host fingerprint to compare with the registered one, ROOT identity,

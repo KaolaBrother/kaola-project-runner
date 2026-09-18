@@ -31,8 +31,8 @@ ZCODE_PLATFORM = "zcode"
 ZCODE_ADAPTER = "kaola-zcode-acp.py"
 ORCHESTRATOR_NAME = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
-EXTERNAL_NAME = "zcode-orchestrator"
-EXTERNAL_DISPLAY = "Zcode Orchestrator"
+EXTERNAL_NAME = "kaola-delegator"
+EXTERNAL_DISPLAY = "Kaola-Delegator"
 GROK_BOT_HOST = "grok-bot"  # a host packaging adapter (see below), never a platform
 TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 REQUIRED = {
@@ -263,9 +263,10 @@ def external_values() -> dict[str, str]:
         "LOCATOR": LOCATOR_COMMAND,
         "DESCRIPTION": json.dumps(
             "Use when an outer Agent (Grok Bot, Codex, or generic) should delegate a "
-            "project run to a ZCode Host: extract the task, progress, authorized "
-            "platforms/quota/priority, and project context, start or resume one ZCode "
-            "Host via the ZCode Runner, and relay user changes without dispatching workers."
+            "project run through Kaola-Delegator to one ZCode Host: extract the task, "
+            "progress, authorized platforms/quota/priority, and project context, start "
+            "or resume that Host via the ZCode Runner, and relay user changes without "
+            "dispatching workers."
         ),
         "SHORT_DESCRIPTION": (
             "Delegate a project run to one ZCode Host through the ZCode Runner"
@@ -443,12 +444,12 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
 # Host adapter: grok-bot (packaging adapter, not a CLI transport platform)
 #
 # One canonical Skill system exists: the orchestrator template, the external
-# Zcode Orchestrator template, the worker template, the nine platform
+# Kaola-Delegator template, the worker template, the nine platform
 # manifests, and their canonical references. A host adapter only re-packages
 # that system for one host. Grok Bot receives exactly ONE thin account/cloud
 # Skill -- the bridge -- rendered from templates/grok-bot/ alone: it names the
 # repository, the accepted pinned revision, the device-local locator command,
-# and the one canonical entry path ROOT/skills/zcode-orchestrator. It copies
+# and the one canonical entry path ROOT/skills/kaola-delegator. It copies
 # NO canonical body, reference, worker text, transport, or path: every policy
 # stays in the repository and is loaded on demand from a verified checkout on
 # the bound execution target (progressive disclosure). Grok Bot is not a
@@ -496,9 +497,9 @@ EXPECTED_ORIGIN = f"github.com/{REPO_SLUG}"
 REVISION = re.compile(r"^[0-9a-f]{40}$")
 RELEASE = re.compile(r"^v\d+\.\d+\.\d+$")
 BRIDGE_DESCRIPTION = (
-    "Use when Grok Bot should delegate a project run through Zcode Orchestrator on a "
+    "Use when Grok Bot should delegate a project run through Kaola-Delegator on a "
     "bound execution target: locate that target's verified kaola-project-runner "
-    "checkout, then load the Zcode Orchestrator Skill from it."
+    "checkout, then load the Kaola-Delegator Skill from it."
 )
 
 

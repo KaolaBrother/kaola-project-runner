@@ -84,8 +84,8 @@ PLATFORMS = {
 REQUIRED = ("SKILL.md", "agents/openai.yaml")
 ORCHESTRATOR_ID = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
-EXTERNAL_ID = "zcode-orchestrator"
-EXTERNAL_DISPLAY = "Zcode Orchestrator"
+EXTERNAL_ID = "kaola-delegator"
+EXTERNAL_DISPLAY = "Kaola-Delegator"
 ORCHESTRATOR_MARKER = ".generated-by-kaola-project-runner"
 WORKER_TRANSPORT_FILES = (
     "scripts/runtime-tmux.sh",
@@ -558,7 +558,7 @@ def check_external_package(assertions: Assertions, root: Path) -> None:
     display = yaml_scalar(metadata_path.read_text(encoding="utf-8"), "display_name") if metadata_path.is_file() else ""
     assertions.check(
         "test_external_display_name_zcode_orchestrator",
-        display == EXTERNAL_DISPLAY or re.search(r"(?m)^# Zcode Orchestrator\s*$", heading) is not None,
+        display == EXTERNAL_DISPLAY or re.search(r"(?m)^# Kaola-Delegator\s*$", heading) is not None,
         f"display name must be {EXTERNAL_DISPLAY!r}",
     )
     relative_files = {path.relative_to(package).as_posix() for path in all_files(package)}

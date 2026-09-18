@@ -39,7 +39,7 @@ ACP_CLI = PROJECT / "scripts" / "kaola-acp.py"
 MOCK_ACP_AGENT = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 BUDGETS = json.loads((PROJECT / "templates" / "budgets.json").read_text(encoding="utf-8"))
 ORCHESTRATOR_ID = "kaola-project-runner"
-EXTERNAL_ID = "zcode-orchestrator"
+EXTERNAL_ID = "kaola-delegator"
 WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode")
 WORKER_SKILL_IDS = tuple(f"{wid}-{ORCHESTRATOR_ID}" for wid in WORKER_IDS)
 WORKER_BODY_MARKERS = ("## Communication loop", 'runtime-tmux.sh" send', 'runtime-tmux.sh" capture', "mutation_status", "raw_current_frame", "SKILL_DIR=")
@@ -201,7 +201,7 @@ class RendererEnforcesBudgets(unittest.TestCase):
             cases = {
                 "templates/orchestrator/SKILL.md.tmpl": (r"budget: kaola-project-runner/SKILL\.md is \d+ B > \d+ B \(main_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
                 "templates/SKILL.md.tmpl": (r"budget: claude-code-kaola-project-runner/SKILL\.md is \d+ B > \d+ B \(worker_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
-                "templates/zcode-orchestrator/SKILL.md.tmpl": (r"budget: zcode-orchestrator/SKILL\.md is \d+ B > \d+ B \(external_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
+                "templates/kaola-delegator/SKILL.md.tmpl": (r"budget: kaola-delegator/SKILL\.md is \d+ B > \d+ B \(external_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
                 "templates/references/transport.md.tmpl": (r"budget: codex-kaola-project-runner/references/transport\.md is \d+ B > \d+ B \(reference_bytes\)", "\n" + "padding " * 400 + "\n"),
                 "templates/grok-bot/INSTALL.md.tmpl": (r"budget: grok-bot/INSTALL\.md is \d+ B > \d+ B \(bridge_guide_bytes\)", "\n" + "padding " * 600 + "\n"),
             }

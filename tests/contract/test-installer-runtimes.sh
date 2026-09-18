@@ -56,9 +56,9 @@ make_fixture() {
   mkdir -p "$root/skills/kaola-project-runner"
   printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
-  mkdir -p "$root/skills/zcode-orchestrator"
-  printf '%s\n' 'zcode-orchestrator' >"$root/skills/zcode-orchestrator/.generated-by-kaola-project-runner"
-  printf '%s\n' '# fixture Skill' >"$root/skills/zcode-orchestrator/SKILL.md"
+  mkdir -p "$root/skills/kaola-delegator"
+  printf '%s\n' 'kaola-delegator' >"$root/skills/kaola-delegator/.generated-by-kaola-project-runner"
+  printf '%s\n' '# fixture Skill' >"$root/skills/kaola-delegator/SKILL.md"
   for id in grok claude-code opencode kimi-cli cursor-cli devin droid codex zcode; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;
@@ -99,7 +99,7 @@ output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --
   || fail "test_runtime_claude_code_install" "install failed: $output"
 assert_link "test_runtime_claude_code_install" "$home/.claude/skills/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
-assert_absent "test_runtime_claude_code_no_external" "$home/.claude/skills/zcode-orchestrator"
+assert_absent "test_runtime_claude_code_no_external" "$home/.claude/skills/kaola-delegator"
 assert_absent "test_runtime_claude_code_no_bin_links" "$home/.local/bin/kaola-acp"
 
 output="$(run_installer "$repo" "$home" --runtime cursor --platform grok --method link 2>&1)" \
@@ -119,7 +119,7 @@ output="$(run_installer "$repo" "$home" --runtime zcode --platform grok --method
   || fail "test_runtime_zcode_install" "install failed: $output"
 assert_link "test_runtime_zcode_install" "$home/.zcode/skills/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
-assert_absent "test_runtime_zcode_no_external" "$home/.zcode/skills/zcode-orchestrator"
+assert_absent "test_runtime_zcode_no_external" "$home/.zcode/skills/kaola-delegator"
 assert_absent "test_runtime_zcode_no_bin_links" "$home/.local/bin/kaola-acp"
 
 # --- argument validation -----------------------------------------------------
@@ -181,8 +181,8 @@ assert_link "test_workspace_zcode_skills_dir" "$ws/zcode-kaola-project-runner" \
 assert_orch="$tmp_root/workspace-zcode/.zcode/skills/kaola-project-runner"
 assert_link "test_workspace_zcode_orchestrator" "$assert_orch" \
   "$(source_for "$repo" kaola-project-runner)"
-assert_link "test_workspace_zcode_external" "$tmp_root/workspace-zcode/.zcode/skills/zcode-orchestrator" \
-  "$(source_for "$repo" zcode-orchestrator)"
+assert_link "test_workspace_zcode_external" "$tmp_root/workspace-zcode/.zcode/skills/kaola-delegator" \
+  "$(source_for "$repo" kaola-delegator)"
 
 # --- copy method: payload identical, receipt outside the payload -------------
 repo="$tmp_root/repo-copy"
@@ -470,7 +470,7 @@ assert_orchestrator_link() {
 output="$(run_installer "$repo" "$home" --runtime claude-code --method link 2>&1)" \
   || fail "test_orchestrator_runtime_claude_code" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_runtime_claude_code" "$home/.claude/skills"
-assert_absent "test_orchestrator_runtime_claude_code_no_external" "$home/.claude/skills/zcode-orchestrator"
+assert_absent "test_orchestrator_runtime_claude_code_no_external" "$home/.claude/skills/kaola-delegator"
 assert_link "test_orchestrator_runtime_claude_code_still_installs_workers" \
   "$home/.claude/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
 assert_link "test_default_install_includes_zcode" \
@@ -492,14 +492,14 @@ codex_home="$tmp_root/orch-codex"
 output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok --method link 2>&1)" \
   || fail "test_orchestrator_runtime_codex" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_runtime_codex" "$codex_home/skills"
-assert_link "test_external_runtime_codex" "$codex_home/skills/zcode-orchestrator" \
-  "$(source_for "$repo" zcode-orchestrator)"
+assert_link "test_external_runtime_codex" "$codex_home/skills/kaola-delegator" \
+  "$(source_for "$repo" kaola-delegator)"
 
 dest="$tmp_root/orch-skills-dir/skills"
 output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method link --platform grok,codex 2>&1)" \
   || fail "test_orchestrator_skills_dir" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_skills_dir" "$dest"
-assert_link "test_external_skills_dir" "$dest/zcode-orchestrator" "$(source_for "$repo" zcode-orchestrator)"
+assert_link "test_external_skills_dir" "$dest/kaola-delegator" "$(source_for "$repo" kaola-delegator)"
 assert_link "test_orchestrator_skills_dir_workers_filtered" \
   "$dest/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
 assert_link "test_orchestrator_skills_dir_codex_worker" \
@@ -524,7 +524,7 @@ else
   assert_link "test_no_orchestrator_skips_main_skill_worker" \
     "$home_skip/.cursor/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
   assert_absent "test_no_orchestrator_skips_main_skill" "$home_skip/.cursor/skills/kaola-project-runner"
-  assert_absent "test_no_orchestrator_skips_external" "$home_skip/.cursor/skills/zcode-orchestrator"
+  assert_absent "test_no_orchestrator_skips_external" "$home_skip/.cursor/skills/kaola-delegator"
 fi
 
 dest_skip="$tmp_root/no-orch-skills/skills"
@@ -536,7 +536,7 @@ if [[ "$rc" -ne 0 ]]; then
   fail "test_no_orchestrator_skills_dir" "install failed: $output"
 else
   assert_absent "test_no_orchestrator_skills_dir" "$dest_skip/kaola-project-runner"
-  assert_absent "test_no_orchestrator_skills_dir_external" "$dest_skip/zcode-orchestrator"
+  assert_absent "test_no_orchestrator_skills_dir_external" "$dest_skip/kaola-delegator"
   assert_link "test_no_orchestrator_skills_dir_worker" \
     "$dest_skip/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
 fi
@@ -695,7 +695,7 @@ for alias in grok-bot grokbot; do
   set -e
   [[ "$rc" -ne 0 ]] || fail "test_runtime_grok_bot_refused_$alias" "unexpected success"
   [[ "$output" == *"unknown runtime: $alias"* ]] || fail "test_runtime_grok_bot_refused_$alias" "expected unknown runtime, got: $output"
-  [[ "$output" == *"bridge host"* && "$output" == *"hosts/grok-bot/zcode-orchestrator.md"* && "$output" == *"kaola-locate.py register"* ]] \
+  [[ "$output" == *"bridge host"* && "$output" == *"hosts/grok-bot/kaola-delegator.md"* && "$output" == *"kaola-locate.py register"* ]] \
     || fail "test_runtime_grok_bot_refused_${alias}_hint" "expected bridge/locator hint, got: $output"
 done
 assert_absent "test_runtime_grok_bot_writes_nothing" "$home/.kaola"
@@ -713,7 +713,7 @@ output="$(run_installer "$repo" "$home" --runtime codex --platform grok --uninst
 assert_absent "test_locator_bin_link_uninstall" "$home/.local/bin/kaola-project-runner-locate"
 
 # --- generated payload stays valid under the neutral validator ----------------
-for skill_dir in "$project_root"/skills/*kaola-project-runner "$project_root"/skills/zcode-orchestrator; do
+for skill_dir in "$project_root"/skills/*kaola-project-runner "$project_root"/skills/kaola-delegator; do
   python3 "$validator_source" "$skill_dir" >/dev/null \
     || fail "test_validator_generated_$(basename "$skill_dir")" "generated Skill failed neutral validation"
 done

@@ -1,9 +1,9 @@
 ---
-name: zcode-orchestrator
-description: "Use when an outer Agent (Grok Bot, Codex, or generic) should delegate a project run to a ZCode Host: extract the task, progress, authorized platforms/quota/priority, and project context, start or resume one ZCode Host via the ZCode Runner, and relay user changes without dispatching workers."
+name: kaola-delegator
+description: "Use when an outer Agent (Grok Bot, Codex, or generic) should delegate a project run through Kaola-Delegator to one ZCode Host: extract the task, progress, authorized platforms/quota/priority, and project context, start or resume that Host via the ZCode Runner, and relay user changes without dispatching workers."
 ---
 
-# Zcode Orchestrator
+# Kaola-Delegator
 
 This Skill is the external delegation Skill. It is not Project Runner and not a
 platform worker. Shared core for Grok Bot (after the account bridge), Codex, and

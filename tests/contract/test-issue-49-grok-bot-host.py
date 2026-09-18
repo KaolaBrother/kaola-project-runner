@@ -3,11 +3,11 @@
 
 Owner corrections of 2026-09-16 (Issue #49) plus the Issue #74 entry migration:
 progressive disclosure is a locked, platform-neutral invariant, and Grok Bot
-receives exactly one very small account/cloud Skill named ``zcode-orchestrator``
+receives exactly one very small account/cloud Skill named ``kaola-delegator``
 (the bridge) generated into ``hosts/grok-bot/``. The bridge names the
 repository, the accepted pinned revision, the device-local locator command
 ``kaola-project-runner-locate``, and the one canonical entry path
-``ROOT/skills/zcode-orchestrator``; it binds the execution target first (Local
+``ROOT/skills/kaola-delegator``; it binds the execution target first (Local
 Computer or the cloud Agent Computer), never assumes one target can reach the
 other, never installs on Local Computer from the cloud, and does not load
 Project Runner or a worker from the bridge. It carries no canonical body,
@@ -48,7 +48,7 @@ INSTALLER = PROJECT / "scripts" / "install-local.sh"
 VERIFIER = PROJECT / "scripts" / "kaola-grok-bot-verify.py"
 LOCATOR = PROJECT / "scripts" / "kaola-locate.py"
 ORCHESTRATOR_ID = "kaola-project-runner"
-EXTERNAL_ID = "zcode-orchestrator"
+EXTERNAL_ID = "kaola-delegator"
 HOST_ID = "grok-bot"
 HOST_BUNDLE = PROJECT / "hosts" / HOST_ID
 BRIDGE = HOST_BUNDLE / f"{EXTERNAL_ID}.md"
@@ -197,7 +197,7 @@ CANONICAL_INVARIANCE_EDITS = (
     ("templates/orchestrator/SKILL.md.tmpl", "It is not a platform Runner and has", "It is not a platform InvTst and has"),
     ("templates/SKILL.md.tmpl", "It gives the controlling Agent a", "It gives the controlling InvTs a"),
     ("templates/references/transport.md.tmpl", "The Runner starts the runtime as", "The InvTst starts the runtime as"),
-    ("templates/zcode-orchestrator/SKILL.md.tmpl", "This Skill is the external delegation Skill", "This Skill is the external delegatIon Skill"),
+    ("templates/kaola-delegator/SKILL.md.tmpl", "This Skill is the external delegation Skill", "This Skill is the external delegatIon Skill"),
 )
 
 
@@ -645,7 +645,7 @@ class Issue49BridgeInvariance(unittest.TestCase):
             template.write_text(template.read_text(encoding="utf-8") + "\n" + ("padding " * 400) + "\n", encoding="utf-8")
             result = render(root, "--write")
             self.assertNotEqual(result.returncode, 0)
-            self.assertRegex(result.stderr, r"budget: grok-bot/zcode-orchestrator\.md is \d+ B > \d+ B \(bridge_bytes\)")
+            self.assertRegex(result.stderr, r"budget: grok-bot/kaola-delegator\.md is \d+ B > \d+ B \(bridge_bytes\)")
 
 
 class Issue49PinModel(unittest.TestCase):
@@ -1164,7 +1164,7 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
     def test_main_skill_withdraws_grok_bot_as_a_direct_host(self) -> None:
         text = self.orchestrator_text()
         self.assertIsNotNone(clause_present(text, (r"Grok Bot is not an entry", r"Grok Bot is not an entry for this Skill")))
-        self.assertIsNotNone(clause_present(text, (r"loads generated `zcode-orchestrator`",)))
+        self.assertIsNotNone(clause_present(text, (r"loads generated `kaola-delegator`",)))
         self.assertIsNotNone(clause_present(text, (r"--platform grok.{0,40}Grok CLI worker",)))
         self.assertIsNotNone(clause_present(text, (r"--platform grok-bot` is invalid",)))
         self.assertIsNotNone(clause_present(text, (r"Do not create a Grok Bot\s+Routine",)))
@@ -1261,7 +1261,7 @@ class Issue49WorkerIsolation(unittest.TestCase):
         templates = PROJECT / "templates"
         surfaces: list[tuple[str, str]] = []
         for path in sorted(templates.rglob("*")):
-            if path.is_file() and path.relative_to(templates).parts[0] not in {"grok-golden", "orchestrator", "grok-bot", "zcode-orchestrator"} and path.suffix in {".tmpl", ".md"}:
+            if path.is_file() and path.relative_to(templates).parts[0] not in {"grok-golden", "orchestrator", "grok-bot", "kaola-delegator"} and path.suffix in {".tmpl", ".md"}:
                 surfaces.append((path.relative_to(templates).as_posix(), path.read_text(encoding="utf-8")))
         for skill_id in WORKER_SKILL_IDS:
             surfaces.append((f"skills/{skill_id}/SKILL.md", (PROJECT / "skills" / skill_id / "SKILL.md").read_text(encoding="utf-8")))
@@ -1364,7 +1364,7 @@ class Issue56NoAccountUiOnAgentSurfaces(unittest.TestCase):
         lowered = normalize(guide).lower()
         # The whole Agent-facing spine and nothing more: one save, binding, locator, preflight, boundary.
         for clause in ("one write", "--target local", "--target cloud", LOCATOR_COMMAND.lower(), "read-only preflight",
-                       "zcode-orchestrator"):
+                       "kaola-delegator"):
             self.assertIn(clause, lowered, clause)
         self.assertEqual(len(re.findall(r"(?m)^## \d+\. ", guide)), 6, "no new installation step was added")
         self.assertIn("never create a second one", guide)

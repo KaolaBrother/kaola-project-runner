@@ -1,8 +1,8 @@
 # Grok Bot: one bridge Skill, one device-local locator per execution target
 
 These steps are for the owner and for Grok Bot itself. They are not a Skill. The account
-receives **exactly one** small private Skill, `zcode-orchestrator` (Zcode Orchestrator bridge,
-`hosts/grok-bot/zcode-orchestrator.md`, 2408 bytes, stage `content`). Every policy,
+receives **exactly one** small private Skill, `kaola-delegator` (Kaola-Delegator bridge,
+`hosts/grok-bot/kaola-delegator.md`, 2405 bytes, stage `content`). Every policy,
 worker, reference, and script stays in the repository and is loaded on demand from a verified
 checkout on the bound execution target. Research on Grok Bot 0.51.0 found no supported automated
 way to create an account Skill (`NO_SUPPORTED_PATH`), so the one native skill write below is the
@@ -26,7 +26,7 @@ names it, nothing is released or tagged.
 
 ## 1. One write on the account (from P only)
 
-Save `hosts/grok-bot/zcode-orchestrator.md` as the account-private Skill `zcode-orchestrator`: `name` and
+Save `hosts/grok-bot/kaola-delegator.md` as the account-private Skill `kaola-delegator`: `name` and
 `description` from its frontmatter (`hosts/grok-bot/bridge.json` holds the already-resolved
 values and `"saveable": true`; never save YAML quotes), `body` = everything after the closing
 `---`. If a Skill with the same name exists, update it in place; never create a second one and
@@ -70,13 +70,13 @@ receipt stay device-local.
 
 ```bash
 kaola-project-runner-locate --target local --expect-revision <accepted commit>
-test -f "$ROOT/skills/zcode-orchestrator/SKILL.md"
+test -f "$ROOT/skills/kaola-delegator/SKILL.md"
 ```
 
-Expected: the attestation is `ok`, `ROOT/skills/zcode-orchestrator/SKILL.md` is present, and
+Expected: the attestation is `ok`, `ROOT/skills/kaola-delegator/SKILL.md` is present, and
 nothing was started, sent, stopped, cloned, fetched, checked out, or installed. Do not load
 Project Runner or `ROOT/skills/<platform id>-kaola-project-runner` from this bridge, and do
-not run a worker preflight. Record that the Bot read only `ROOT/skills/zcode-orchestrator/SKILL.md`,
+not run a worker preflight. Record that the Bot read only `ROOT/skills/kaola-delegator/SKILL.md`,
 read no script source, and that the cloud Agent Computer executed nothing and accessed no Mac
 file. This establishes placement only, not live use: a real-use smoke on one session is
 separately authorized and is not part of installation. This repository does not claim live

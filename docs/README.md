@@ -3,7 +3,7 @@
 - [Architecture](architecture.md): golden contract, worker vs main Skill, generated Skills, boundaries, ownership, and canonical-root versus Workflow child worktree guidance
 - [API](api.md): renderer, installer, tmux core, status, adapter contracts, and the `steer`
   operation (native and composite modes, receipt vocabulary)
-- [Grok Bot host](grok-bot-host.md): one thin Zcode Orchestrator bridge Skill, execution-target binding (Local Computer vs cloud), device-local locator and fail-closed attestation, one-write install, read-only Mac UAT boundary, token-cost comparison; Grok Bot is not a Project Runner host
+- [Grok Bot host](grok-bot-host.md): one thin Kaola-Delegator bridge Skill, execution-target binding (Local Computer vs cloud), device-local locator and fail-closed attestation, one-write install, read-only Mac UAT boundary, token-cost comparison; Grok Bot is not a Project Runner host
 - [ZCode Host](zcode-host.md): ZCode as worker platform and as native skill-directory host, the
   generic ACP entry, the event-driven heartbeat carrier and its prompt-file defect receipt, and
   the two startup flows (ordinary worker supervision vs Orchestrator/Host supervision)
