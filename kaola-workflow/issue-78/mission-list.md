@@ -32,7 +32,7 @@ item: Reproduce the >60 s refusal-path hang in an isolated bounded harness and c
   Must also record the orphan's real identity: pid, ppid, argv, `pgrep -P`, open files, and whether
   it is the top-level script or a forked subshell. Bound the induced load; never touch processes or
   TMPDIRs that are not this harness's own.
-status: in-flight
+status: done
 dispatched: subagent `investigator`, brief "Issue #78 reproduce the refusal-path hang under bounded
   induced load". Output lands at `/tmp/i78-repro/FINDINGS.md`, with raw artifacts under
   `/tmp/i78-repro/` (`trace/`, `stuck/`, `runs/`). Pre-seeded by me: fixture `/tmp/i78-repro/fix`,
@@ -106,7 +106,6 @@ result: `scripts/kaola-tmux.sh` - all ten here-documents removed. Nine quoted bo
 item: Review the exact frozen candidate SHA for correctness, for whether it truly removes the cause
   rather than masking the symptom, and for test custody (the Issue #73 guard assertions and the
   Issue #77 holder-stop fix must survive unweakened).
-status: in-flight
 dispatched: subagent `code-reviewer`, on the frozen candidate `9632571` (branch workflow/issue-78,
   parent f6be8a3). Findings land inline in its handback; verdict is mine.
 status: done
