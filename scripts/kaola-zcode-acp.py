@@ -78,8 +78,8 @@ PROVIDER_SOURCES = ("builtin", "models-dev", "custom", "user", "workspace", "eph
 # ZCode 3.12+ bundled provider-config resolution (Issue #79).
 #
 # 3.12.3's own bootstrap probes only two paths from the entry's directory --
-# `<entryDir>/provider/zcode-builtin.json` and a five-level-up
-# `../../../../../config/provider/zcode-builtin.json` that fits the source tree
+# `<entryDir>/provider/zcode-builtin.json` and a five-levels-up
+# `config/provider/zcode-builtin.json` that fits the source tree
 # (`apps/zcode-cli/packages/cli/dist/zcode.cjs`) but not the shipped .app, where
 # the table sits ONE level up at `<Resources>/config/provider/zcode-builtin.json`.
 # In the .app layout the probe therefore fails and `app-server` exits 1 before it
