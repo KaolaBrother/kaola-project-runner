@@ -56,6 +56,28 @@ Start Plan and pay-as-you-go providers are refused; unknown models and other
 providers fail closed; the adapter never substitutes a model or a provider,
 never writes `~/.zcode/cli/config.json`, and never logs the credential.
 
+ZCode 3.12+ (Issue #79, measured on desktop 3.12.3 / CLI 0.16.5). The installed
+3.12.3 bundle contains no `runtimeModel` at all, so the overlay above applies
+only to pre-3.12 app-servers; the CLI version string is 0.16.5 on both and
+cannot discriminate, so the adapter chooses by the backend's own error. On
+3.12+ the adapter instead: resolves the bundled provider table next to the
+verified entry and injects `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` and
+`ZCODE_PERSONAL_PROVIDER_CONFIG_FILE` (both or neither, never inherited --
+the shipped entry's own probe misses the `.app` layout and exits 1); registers
+the one enabled Coding Plan through `provider/updateAccountConfig` as
+`{revision, basedOnZCodeBuiltinRevision, providers:{<account id>:{builtinModelIds,
+access:{type:"zhipu-account", entitled:true}}}, states:{<account id>:{current:true}}}`;
+creates the session with no model channel; selects the model through
+`session/setModel` on the `account:*` provider with
+`persistAsWorkspaceLastUsed:false`; and answers the server-initiated
+`interaction/requestProviderRuntimeHeaders` with
+`{headersApplied:true, requestAuth:{apiKey}}` for that one authorized provider
+only. The credential still never touches disk, ACP output or a log. Upstream
+`william0wang/zcode-acp` v0.42.2-0.42.5 fixed the same chain independently; no
+upstream bytes are vendored, and where upstream and the installed build differ
+(upstream keeps `runtimeModel` as a fallback; 3.12.3 has removed it) the
+installed build wins.
+
 Tool `input` (Issue #67, measured on CLI 0.16.5): `model.streaming` kind
 `tool_call` carries `input` (`Read` used `file_path`; protocol examples use
 `command` for `Bash`). `tool.updated` `scheduled` may omit `input` and set

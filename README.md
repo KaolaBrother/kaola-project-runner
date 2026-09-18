@@ -74,10 +74,18 @@ inside the ZCode App; the adapter's child environment is an allowlist, so `ANTHR
 and other billing levers are not forwarded. Because headless CLI 0.16.5 cannot see the desktop
 login, the adapter reads the App's provider registry (`~/.zcode/v2/config.json`) read-only,
 selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go providers are
-refused, never fallen back to) and hands it to the app-server in memory as the protocol's
-`runtimeModel` overlay, the same mechanism the desktop App uses; nothing is written under
-`~/.zcode`, and the credential never reaches receipts or logs. Default transport is ACP (the
-live Coding Plan gate passed on 2026-09-16). ZCode does not support a PTY transport: the bundled
+refused, never fallen back to) and hands it to the app-server in memory, the same mechanism the
+desktop App uses; nothing is written under `~/.zcode`, and the credential never reaches receipts
+or logs. Which in-memory mechanism applies depends on the installed app-server, and the CLI
+version string cannot tell them apart (0.16.5 ships with both), so the adapter picks by the
+backend's own error rather than a version gate: a pre-3.12 app-server takes the `runtimeModel`
+overlay, while ZCode 3.12+ dropped `runtimeModel` entirely and instead needs the bundled provider
+table located next to the verified entry (the shipped 3.12.x entry cannot find its own), the plan
+registered through `provider/updateAccountConfig`, the model selected on the `account:*` provider
+through `session/setModel`, and the credential supplied per model request through
+`interaction/requestProviderRuntimeHeaders`. Default transport is ACP; the live Coding Plan gate
+passed on 2026-09-16 against desktop **3.11.2**, and that receipt does not carry over to 3.12+ —
+see Issue #79 for the current 3.12.3 status. ZCode does not support a PTY transport: the bundled
 runtime ships no terminal UI (`Cannot find package '@zcode/tui'`) and headless `--prompt` needs
 `~/.zcode/cli/config.json`, so `--transport pty` remains selectable only as a known-unsupported
 diagnostic entry, and login happens in the ZCode desktop App.
