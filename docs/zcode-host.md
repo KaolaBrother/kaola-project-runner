@@ -249,16 +249,21 @@ worker agent terminated / worker turn ended (one idle episode)
   prompt that is refused or never written leaves nothing to undo and its events
   stay staged. A confirmed `event_id` offered again is answered `duplicate`
   (with `confirmed`) and does not re-prompt the Host. A bounded in-memory index
-  of recently confirmed ids answers that outright; once it has evicted anything
-  a miss is resolved against the `worker_event_confirmed` records themselves, so
-  the answer holds for as long as the event log still retains the confirmation —
-  the same horizon that already bounds resume redelivery, not a fixed number of
-  ids. Only confirmed ids are suppressed: a genuinely unconfirmed event is
+  of recently confirmed ids answers that, but only as a cache over those
+  records: each entry carries the cursor its confirmation was written at, and an
+  entry whose record rotation has dropped stops being evidence, because the
+  holder can no longer show it. A miss, or an entry that has aged out of the
+  retained log, is resolved against the `worker_event_confirmed` records
+  themselves. The answer therefore holds for as long as the event log still
+  retains the confirmation — the same horizon that already bounds resume
+  redelivery, not a fixed number of ids. Only confirmed ids are suppressed: a genuinely unconfirmed event is
   redelivered as before, and once rotation has dropped a confirmation the holder
   has no record of it anywhere and that event is deliverable again, which keeps
   the carrier at-least-once rather than silently dropping it.
   Stage, delivery, and confirmation are recorded in the host holder's
-  existing event log. `start --resume` (the `session/load` path, also after
+  existing event log, and the confirmation is written before the events leave
+  the pending list — the log is the only persistence, so nothing observes an
+  event as confirmed before the record that proves it exists. `start --resume` (the `session/load` path, also after
   exact `stop`) rebuilds the pending detailed list from that log
   (at-least-once for those ≤32 events) and restores a full-check when the
   max overflow generation exceeds the max confirmed generation, even if a

@@ -381,7 +381,7 @@ class EventConfirmationRace(unittest.TestCase):
     def test_the_confirmed_memory_is_bounded_and_keeps_the_newest(self) -> None:
         bound = holder_module.HEARTBEAT_CONFIRMED_MEMORY
         self.holder._remember_confirmed_worker_events(
-            [f"codex/w/idle/{index}" for index in range(bound + 50)])
+            {f"codex/w/idle/{index}": index + 1 for index in range(bound + 50)})
 
         self.assertEqual(len(self.holder.confirmed_worker_events), bound,
                          "an unbounded memory would grow with every confirmed turn")
@@ -580,6 +580,99 @@ class EventConfirmationRace(unittest.TestCase):
         self.assertIs(forgotten.get("delivered"), True, forgotten)
         self.assertNotEqual(forgotten.get("duplicate"), True, forgotten)
         self.assertEqual(len(self.notification_prompts()), 1)
+
+    def rotate_log_past(self, keep_writing: int = 2) -> None:
+        """Rotate the live event log until the currently retained oldest file is
+        dropped, writing between rotations so the surviving files are real."""
+        for _ in range(holder_module.EVENT_LOG_KEEP + 1):
+            for index in range(keep_writing):
+                self.holder.events.append({"kind": "filler", "index": index})
+            with self.holder.events.lock:
+                self.holder.events._rotate()
+
+    def test_a_cached_confirmation_that_rotated_away_is_deliverable_again(self) -> None:
+        """The promise is the RETAINED log - including for an id sitting in the
+        in-memory cache.
+
+        The cache answers from memory, so without a retention check it keeps
+        saying `duplicate` for a confirmation the holder can no longer produce.
+        That is the fixed-id horizon again, just hidden in the cache: the same
+        running Holder must notice its evidence is gone and let the event
+        through, while an id whose confirmation IS still retained stays a
+        duplicate.
+        """
+        state = self.arm_instant_host()
+        self.stage(101)                       # confirmed, now in the cache
+        rotated_id = "codex/w-1/idle/101"
+        self.assertIn(rotated_id, self.holder.confirmed_worker_events)
+
+        self.rotate_log_past()                # its confirmation leaves the log
+
+        state["answered"] = 0                 # the Host answers this one too
+        self.stage(102)                       # confirmed AFTER rotation: retained
+        retained_id = "codex/w-1/idle/102"
+        self.assertIn(rotated_id, self.holder.confirmed_worker_events,
+                      "precondition: the cache still holds the rotated-away id")
+        self.assertFalse(
+            any(rotated_id in (entry.get("event_ids") or [])
+                for entry in self.log_kinds("worker_event_confirmed")),
+            "precondition: its confirmation is no longer in the retained log")
+        self.assertTrue(
+            any(retained_id in (entry.get("event_ids") or [])
+                for entry in self.log_kinds("worker_event_confirmed")),
+            "precondition: the newer confirmation IS retained")
+        before = len(self.notification_prompts())
+
+        gone = self.stage(101)
+        still_there = self.stage(102)
+
+        self.assertNotEqual(gone.get("duplicate"), True,
+                            "a confirmation the holder can no longer show is not evidence")
+        self.assertIs(gone.get("delivered"), True, gone)
+        self.assertEqual(len(self.notification_prompts()), before + 1)
+        self.assertIs(still_there.get("duplicate"), True,
+                      "a retained confirmation is still a duplicate")
+        self.assertIs(still_there.get("confirmed"), True, still_there)
+        self.assertEqual(len(self.notification_prompts()), before + 1,
+                         "the retained duplicate must not prompt")
+
+    def test_a_confirmation_is_durable_before_it_is_answerable(self) -> None:
+        """The event log is the only persistence, so nothing may observe an
+        event as confirmed before the record exists.
+
+        If the in-memory state is updated first and the append follows, a retry
+        in between is answered `confirmed` against a fact that is not written
+        yet, and a crash there loses the only durable truth while the event has
+        already been dropped from the pending list.
+        """
+        seen: dict = {}
+        real_remember = self.holder._remember_confirmed_worker_events
+
+        def remember_then_look(*args, **kwargs):
+            # the moment the confirmation becomes visible in memory
+            event_ids = args[0] if args else kwargs.get("event_ids")
+            ids = list(event_ids) if not isinstance(event_ids, dict) else list(event_ids)
+            seen["durable"] = {
+                recorded
+                for entry in self.holder.events.read_since(0, None)
+                if entry.get("kind") == "worker_event_confirmed"
+                for recorded in (entry.get("event_ids") or [])
+            }
+            seen["ids"] = set(ids)
+            seen["pending"] = [item["event_id"]
+                               for item in self.holder.pending_worker_events]
+            return real_remember(*args, **kwargs)
+
+        self.holder._remember_confirmed_worker_events = remember_then_look
+        self.arm_instant_host()
+        self.stage(111)
+
+        self.assertEqual(seen.get("ids"), {"codex/w-1/idle/111"}, seen)
+        self.assertTrue(seen["ids"] <= seen["durable"],
+                        "the confirmation must already be in the event log "
+                        f"when it becomes answerable (durable={seen['durable']})")
+        self.assertNotIn("codex/w-1/idle/111", seen["pending"],
+                         "and the event is removed only once that record exists")
 
     def test_the_carrier_op_stays_a_zcode_host_capability(self) -> None:
         self.holder.args.platform = "codex"

@@ -1194,13 +1194,17 @@ class Holder:
         self.overflow_inflight_generation: int | None = None
         self.overflow_inflight_fingerprint: Any = None
         # Issue #90: a bounded in-memory CACHE over this holder's own
-        # `worker_event_confirmed` records, so `op_worker_event` can recognise a
-        # retry of an event a completed Host turn already confirmed and removed
-        # from the pending list. Not a second ledger - the event log stays the
-        # only persistence, and once this cache has evicted anything a miss is
-        # resolved against those records instead of being taken as a no.
-        self.confirmed_worker_events: dict[str, None] = {}
-        self.confirmed_worker_events_evicted = False
+        # `worker_event_confirmed` records, mapping each confirmed id to the
+        # event-log cursor its newest confirmation was recorded at, so
+        # `op_worker_event` can recognise a retry of an event a completed Host
+        # turn already confirmed and removed from the pending list. Not a second
+        # ledger - the event log stays the only persistence. The cursor is what
+        # keeps a cache hit honest: once rotation has dropped that record the
+        # holder can no longer show the confirmation, so the cache must stop
+        # claiming it. A miss is resolved against the records themselves
+        # whenever this cache is no longer their complete summary.
+        self.confirmed_worker_events: dict[str, int] = {}
+        self.confirmed_worker_events_partial = False
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
         self.heartbeat_host = parse_heartbeat_host()
@@ -2055,17 +2059,18 @@ class Holder:
         return {"delivered": True, "prompt_fingerprint": fingerprint,
                 "count": len(staged), "overflow_full_check": bool(overflow_ready)}
 
-    def _remember_confirmed_worker_events(self, event_ids: list[str]) -> None:
-        """Bounded, insertion-ordered memory of confirmed ids (Issue #90). The
-        caller holds ``worker_events_lock``, or is the single-threaded resume."""
-        for event_id in event_ids:
+    def _remember_confirmed_worker_events(self, confirmations: dict[str, int]) -> None:
+        """Bounded, insertion-ordered cache of confirmed ids and the event-log
+        cursor each confirmation was recorded at (Issue #90). The caller holds
+        ``worker_events_lock``, or is the single-threaded resume."""
+        for event_id, cursor in confirmations.items():
             self.confirmed_worker_events.pop(event_id, None)
-            self.confirmed_worker_events[event_id] = None
+            self.confirmed_worker_events[event_id] = cursor
         while len(self.confirmed_worker_events) > HEARTBEAT_CONFIRMED_MEMORY:
             self.confirmed_worker_events.pop(next(iter(self.confirmed_worker_events)))
             # From here on this cache is no longer the whole confirmed truth,
             # so a miss has to be checked against the records it was built from.
-            self.confirmed_worker_events_evicted = True
+            self.confirmed_worker_events_partial = True
 
     def _was_worker_event_confirmed(self, event_id: str) -> bool:
         """Has a completed Host turn already confirmed this event (Issue #90)?
@@ -2079,16 +2084,25 @@ class Holder:
         found id is cached so a repeated retry costs one lookup, not one scan.
         Caller holds ``worker_events_lock``.
         """
-        if event_id in self.confirmed_worker_events:
-            return True
-        if not self.confirmed_worker_events_evicted:
+        cursor = self.confirmed_worker_events.get(event_id)
+        if cursor is not None:
+            oldest = self.events.oldest_cursor()
+            if oldest is not None and cursor >= oldest:
+                return True
+            # Rotation dropped the record this entry summarised. The holder can
+            # no longer show that confirmation, so the cache must not keep
+            # answering from it - and it is no longer a complete summary.
+            self.confirmed_worker_events.pop(event_id, None)
+            self.confirmed_worker_events_partial = True
+        if not self.confirmed_worker_events_partial:
             return False
         for entry in self.events.read_since(0, None):
             if entry.get("kind") != "worker_event_confirmed":
                 continue
             ids = entry.get("event_ids")
             if isinstance(ids, list) and event_id in ids:
-                self._remember_confirmed_worker_events([event_id])
+                self._remember_confirmed_worker_events(
+                    {event_id: entry.get("cursor") or 0})
                 return True
         return False
 
@@ -2114,10 +2128,18 @@ class Holder:
                 and self.overflow_inflight_fingerprint == fingerprint)
             was_notification = bool(hit) or overflow_hit
             if hit and outcome == "turn_completed":
+                confirmed = [item["event_id"] for item in hit]
+                # Issue #90: durable first. The event log is the only place this
+                # holder persists anything, so the confirmation is recorded
+                # before the events leave the pending list and before a retry
+                # can be answered `confirmed` - never the other way round, where
+                # a crash in between would drop the event and the proof with it.
+                cursor = self.events.append({"kind": "worker_event_confirmed",
+                                             "event_ids": confirmed})
                 for item in hit:
                     self.pending_worker_events.remove(item)
-                confirmed = [item["event_id"] for item in hit]
-                self._remember_confirmed_worker_events(confirmed)
+                self._remember_confirmed_worker_events(
+                    {event_id: cursor for event_id in confirmed})
             elif hit:
                 for item in hit:
                     item.pop("prompt_fingerprint", None)
@@ -2125,15 +2147,12 @@ class Holder:
                 if outcome == "turn_completed":
                     overflow_confirmed_generation = self.overflow_inflight_generation
                     if overflow_confirmed_generation is not None:
+                        self.events.append(
+                            {"kind": "worker_event_overflow_confirmed",
+                             "generation": overflow_confirmed_generation})
                         self.overflow_confirmed_generation = overflow_confirmed_generation
                 self.overflow_inflight_generation = None
                 self.overflow_inflight_fingerprint = None
-        if confirmed:
-            self.events.append({"kind": "worker_event_confirmed",
-                                "event_ids": confirmed})
-        if overflow_confirmed_generation is not None:
-            self.events.append({"kind": "worker_event_overflow_confirmed",
-                                "generation": overflow_confirmed_generation})
         if not was_notification or outcome == "turn_completed":
             if self.agent.proc is not None and not self.agent.exited.is_set():
                 self._deliver_worker_events()
@@ -2228,9 +2247,10 @@ class Holder:
         generation. Current generation is at least the confirmed
         generation, because rotation may drop older overflow records."""
         staged: list[dict[str, Any]] = []
-        # Insertion-ordered so Issue #90's bounded retry memory keeps the most
-        # recently confirmed ids; membership tests read the same as a set.
-        confirmed: dict[str, None] = {}
+        # Insertion-ordered so Issue #90's bounded retry cache keeps the most
+        # recently confirmed ids, mapped to the cursor of the record that
+        # confirmed them; membership tests read the same as a set.
+        confirmed: dict[str, int] = {}
         overflow_generation = 0
         overflow_confirmed = 0
         for entry in self.events.read_since(0, None):
@@ -2245,9 +2265,10 @@ class Holder:
                     for event_id in ids:
                         if isinstance(event_id, str):
                             # re-insert so a re-confirmed id keeps the NEWEST
-                            # position; plain `update` would keep its oldest.
+                            # position and cursor; plain `update` would keep the
+                            # oldest of each.
                             confirmed.pop(event_id, None)
-                            confirmed[event_id] = None
+                            confirmed[event_id] = entry.get("cursor") or 0
             elif kind == "worker_event_overflow":
                 generation = self._overflow_generation_of(entry)
                 overflow_generation = (max(overflow_generation, generation)
@@ -2275,8 +2296,8 @@ class Holder:
                                 "generation": overflow_generation})
         self.pending_worker_events = pending
         self.confirmed_worker_events = {}
-        self.confirmed_worker_events_evicted = False
-        self._remember_confirmed_worker_events(list(confirmed))
+        self.confirmed_worker_events_partial = False
+        self._remember_confirmed_worker_events(confirmed)
         self.overflow_generation = overflow_generation
         self.overflow_confirmed_generation = overflow_confirmed
         self.overflow_inflight_generation = None

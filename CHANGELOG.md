@@ -14,9 +14,13 @@
   event is one Host prompt and one confirmation.
   A retry of an already confirmed deterministic `event_id` is answered as a duplicate
   instead of being staged and delivered again: a bounded in-memory index answers the
-  ordinary case, and past that index the holder consults the `worker_event_confirmed`
-  records it was built from, so the answer holds for as long as the event log retains
-  the confirmation rather than for a fixed number of ids. Busy-host staging, failed-notification restaging, cap-32
+  ordinary case — as a cache, not as truth: each entry carries the cursor its
+  confirmation was recorded at, so an entry whose record rotation has dropped stops
+  answering and falls back with every other miss to the `worker_event_confirmed`
+  records themselves. The answer holds for as long as the event log retains the
+  confirmation rather than for a fixed number of ids. That confirmation is now
+  written before the events leave the pending list, so a retry is never answered
+  against a fact that is not durable yet. Busy-host staging, failed-notification restaging, cap-32
   overflow, and at-least-once resume of genuinely unconfirmed events are unchanged.
   No scheduler, no second queue or ledger, no new gate.
 
