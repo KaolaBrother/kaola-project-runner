@@ -138,7 +138,11 @@ worker agent terminated / worker turn ended (one idle episode)
   rebinds by exact `stop`/`start`. Recording the duty in the heartbeat body is
   bookkeeping, not a trigger; per-worker reading and rebinding is not delegated
   outward, and only a recovery that cannot be completed is reported as an
-  exception with the decision it needs.
+  exception with the decision it needs. The rebinding `start --resume` needs a
+  real native id: for ZCode that `sess_*` is reported in the session's own
+  `native_session_identity` update (lazily, at materialisation) and is never
+  copied into `session_meta`, so the guidance sources it from that event and
+  forbids substituting `acp_session_id` or `--continue`.
 - **Events.** `terminated` fires once from the worker holder's existing
   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
   out the send; `idle` fires once per ended turn with the agent still alive

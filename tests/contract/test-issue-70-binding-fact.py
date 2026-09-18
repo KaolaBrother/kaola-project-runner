@@ -226,6 +226,69 @@ def test_recovery_is_internal_bounded_and_only_exceptions_go_outward() -> None:
           "startup no longer tells the outer Agent to take over the worker")
 
 
+def test_zcode_native_resume_id_comes_from_the_identity_event() -> None:
+    """``--resume`` is only honest with a real native id, and for ZCode that id
+    is not in ``session_meta``: the translator reports ``sess_…`` in the
+    session's own ``native_session_identity`` update once it materialises. The
+    value is taken from the raw event here and then actually used to resume, so
+    this is the behaviour, not the wording."""
+    import re
+
+    sandbox = Sandbox("issue70-native-id")
+    try:
+        worker = sandbox.session()
+        start = sandbox.start(worker, "basic")
+        check(str(start.get("acp_session_id") or "").startswith("zcode-"),
+              f"a new ZCode session holds the bridge id ({start.get('acp_session_id')})")
+        sandbox.cli("send", "--text", "materialise the native session", session=worker)
+
+        events = hb.read_events(sandbox.record_dir(worker))
+        identities = [entry for entry in events
+                      if (entry.get("update") or {}).get("sessionUpdate")
+                      == "native_session_identity"]
+        check(bool(identities), "the holder's event log carries the identity update")
+        native = (identities[-1].get("update") or {}).get("nativeSessionId") or ""
+        check(native.startswith("sess_"),
+              f"the identity event names the native session id ({native})")
+
+        observed = sandbox.cli("observe", session=worker)
+        meta = json.dumps(observed.get("session_meta") or {})
+        check(native not in meta,
+              f"the native id is absent from session_meta, as documented ({meta[:120]})")
+        check(observed.get("acp_session_id") != native,
+              "the ACP session id is not the native id and cannot stand in for it")
+
+        # capture is the operation the guidance names for reading that event.
+        captured = sandbox.cli("capture", "--since", "0", session=worker)
+        check(native in json.dumps(captured),
+              "capture surfaces the identity event a Host must read")
+
+        stop = sandbox.cli("stop", session=worker)
+        check(stop.get("stopped") is True, "the session stops before the resume")
+        resumed = sandbox.cli("start", "--mode", "yolo", "--resume", native,
+                              session=worker, scenario="basic")
+        check(resumed.get("error") is None and resumed.get("state") == "ready",
+              f"the id taken from the event really resumes ({resumed.get('error')})")
+        sandbox.cli("stop", session=worker)
+
+        ref = (ROOT / "skills" / "kaola-project-runner" / "references"
+               / "zcode-host-dispatch.md").read_text(encoding="utf-8")
+        startup = (ROOT / "skills" / "kaola-project-runner" / "references"
+                   / "host-startup.md").read_text(encoding="utf-8")
+        flat_ref = re.sub(r"\s+", " ", ref)
+        flat_startup = re.sub(r"\s+", " ", startup)
+        check("ZCode reports `sess_…` in that session's `native_session_identity` event"
+              in flat_ref and "not `session_meta`" in flat_ref,
+              "the recovery step sources the native id from the identity event")
+        check("never `acp_session_id` or `--continue` instead" in flat_ref,
+              "the recovery step forbids substituting another id")
+        check("only once the session has run a turn" in flat_startup
+              and "No verified id means no `--resume`" in flat_startup,
+              "startup carries the platform sourcing rule")
+    finally:
+        sandbox.cleanup()
+
+
 def main() -> int:
     tests = [value for name, value in sorted(globals().items())
              if name.startswith("test_") and callable(value)]

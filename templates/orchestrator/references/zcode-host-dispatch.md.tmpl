@@ -1,38 +1,38 @@
 # ZCode Host: dispatch, end the turn, wake on worker events
 
 Read this when a ZCode Host supervises workers: the flags and receipt fields the
-scripts really use. Entry points and startup are in
-[host-startup.md](host-startup.md); this file is the beat.
+scripts really use. Entry points and startup: [host-startup.md](host-startup.md).
+This file is the beat.
 
 ## Three identities, never interchangeable
 
 Runner session (what `--session` takes, chosen at `start`), ACP session id
-(`acp_session_id` in receipts) and native session id (`sess_…`, in
-`session_meta`, for `--resume`) are different things. A `sess_…` value is never
-a Runner session name. Never guess a session name.
+(`acp_session_id` in receipts) and native session id (`sess_…`, for `--resume`)
+are different things. A `sess_…` value is never a Runner session name. Never
+guess a session name.
 
-Each installed Skill's `scripts/runtime-tmux.sh` is pinned to its own platform,
-so the commands below take **no** platform argument.
+Each installed Skill's `scripts/runtime-tmux.sh` is platform-pinned, so the
+commands below take **no** platform argument.
 
 ## 2. ZCode Host Agent — one beat
 
 ### Bind the notification target on every worker `start`
 
 `KAOLA_ACP_HEARTBEAT_HOST` is read by the **worker's** `start` command, and only
-there. It is a JSON object naming *you*, the Host; set it on that one command:
+there: a JSON object naming *you*, the Host, set on that one command:
 
 ```bash
 W="/abs/path/to/codex-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
 WORK_REPO="/abs/path/to/project"      # the worker's repo
-HOST_REPO="/abs/path/to/project"      # the Host's own --repo
+HOST_REPO="/abs/path/to/project"      # the Host's own
 KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-kaola-host","repo":"'"$HOST_REPO"'"}' \
   "$W" start --repo "$WORK_REPO" --session codex-kaola-feature-a
 ```
 
 `platform` must be `zcode`, `session`/`repo` the Host's own, and it may not name
 the worker's own session; anything else fails the start closed rather than
-dropping the carrier silently. Exporting the variable, or setting it on a later
-`send`, binds nothing.
+dropping the carrier silently. Exporting it, or setting it on a later `send`,
+binds nothing.
 
 ### Verify the binding in force, new worker or reused
 
@@ -44,12 +44,12 @@ dropping the carrier silently. Exporting the variable, or setting it on a later
 `heartbeat_host` is the running holder's own binding; a receipt's
 `heartbeat_host_requested` is only the request. Check the fact's `session`/`repo`
 are **yours**; `observe` reports it any time, so verify reused and adopted
-workers too, not just the first start.
+workers too.
 
 - `heartbeat_host: null` (known) — an ordinary unbound worker: legitimate, never
   wakes you; another Host's `session`/`repo` wakes that Host, not you.
 - `heartbeat_host_known: false` — a holder or record older than the field:
-  unknown; treat it as unbound rather than assume.
+  unknown; treat it as unbound, do not assume.
 - `"error": {"code": "session-exists"}` — you reused a live holder and bound
   nothing; the `heartbeat_host` beside it is what is in force.
 
@@ -60,7 +60,7 @@ along the boundary you already have — not work to push onto the Agent that
 delegated to you:
 
 1. **Keep the in-flight work** — it runs on, readable with `observe` and
-   `capture` from your dispatch anchor. Cancel nothing.
+   `capture` from your anchor. Cancel nothing.
 2. **Recover in this beat.** Another bound worker or confirmed wake source: end
    the turn and read this one on the beat it gives you. The unbound worker is
    your only wake source: ending the turn waits on nothing and a heartbeat note
@@ -70,8 +70,10 @@ delegated to you:
    undelivered — never the ordinary wait, never a poll loop.
 3. **Rebind at that safe idle point** — turn ended, nothing in flight, result
    read: exact `stop` of that one session, `start` again with the variable, and
-   verify the new receipt; `--resume <native session id>` from `session_meta`
-   continues the thread where supported. The normal loop is back: dispatch, end
+   verify the new receipt. `--resume` needs the real native id — ZCode reports
+   `sess_…` in that session's `native_session_identity` event (via `capture`),
+   not `session_meta`. No verified id: restart without history and say so, never
+   `acp_session_id` or `--continue` instead. The loop is then back: dispatch, end
    the turn, wake on the event.
 4. **Never** auto-cancel, re-send work you cannot show was dropped, switch
    platform, or stop the Host to force a wake-up.
@@ -93,14 +95,13 @@ nothing; a `prompt_timeout` or missing receipt leaves consumption unknown —
 establish the fact with `observe` before re-sending.
 
 **Keep two values**: `prompt_fingerprint`, the turn you dispatched, and
-`dispatch_event_cursor`, the cursor *before* it produced anything — your reading
-anchor.
+`dispatch_event_cursor`, the cursor *before* it produced anything — your anchor.
 
 ### Finish the beat, then end your turn
 
 Do this beat's remaining work, update the heartbeat prompt at
 `<project>/.kaola/heartbeat-prompt.json` (`body`: project facts, pace, plans),
-report, and **end your reply normally**.
+report, then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
 `sleep`, poll in a loop, or call a blocking `wait` to hold this turn open — a
@@ -109,24 +110,23 @@ Host turn that stays active is exactly what keeps events undelivered. Do not
 
 ### When an event wakes you
 
-The next beat arrives as an ordinary prompt beginning `kaola-host-notify/1`,
-with one JSON object per event —
+The next beat is an ordinary prompt beginning `kaola-host-notify/1`, one JSON
+object per event —
 
 ```json
 {"event_cursor":19,"event_id":"codex/codex-kaola-feature-a/idle/19","kind":"idle",
  "platform":"codex","repo":"/abs/path/to/project","reason":"turn-end","session":"codex-kaola-feature-a"}
 ```
 
-— followed by your own heartbeat prompt body verbatim between
-`<<<heartbeat-prompt` and `heartbeat-prompt>>>`.
+— then your heartbeat body verbatim between `<<<heartbeat-prompt` and
+`heartbeat-prompt>>>`.
 
 **The notification is not the worker's reply and is not a success verdict.** Read
 what happened with the event's own `platform`/`session`/`repo` and that Skill.
 
 **`event_cursor` is the end of the turn, not the start** — `19` is where that
 turn ended, so the reply sits *below* it and `capture --since <event_cursor>`
-returns only carrier and title updates. Read from an anchor that precedes the
-output:
+returns only carrier and title updates. Read from an earlier anchor:
 
 ```bash
 # the dispatch receipt's cursor, from before the reply existed
@@ -140,7 +140,7 @@ Confirm you are reading the turn you dispatched: `observe`'s
 `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
 and `turn_outcome`/`stop_reason` must show it finished. A capture with no
 assistant text means your window was wrong — widen it before judging. Then
-accept, ask for a fix, dispatch more, update the heartbeat prompt, and end the
+accept, ask for a fix or dispatch more, update the heartbeat prompt, and end the
 turn again.
 
 `kind` is `idle` when the worker's turn ended and `terminated` when its process
@@ -150,8 +150,8 @@ notified.
 ## 3. Workers and the notification carrier
 
 The worker Agent owns its delivery; it never fabricates events and never writes
-to your stdin — its holder sends the event over the Host holder's existing admin
-socket. Do not ask a worker to notify you or duplicate the carrier.
+to your stdin — its holder sends the event over the Host holder's admin socket.
+Do not ask a worker to notify you or duplicate the carrier.
 
 Delivery rules you can rely on:
 

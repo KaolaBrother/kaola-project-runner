@@ -103,6 +103,14 @@ named exactly `body` (see `references/heartbeat-skeleton.md`). Any other field
 name leaves the delivered notification carrying a reported defect instead of your
 prompt — read that line in the notification and fix the file.
 
+Where a session's native id comes from differs by platform, and `--resume` is
+only honest with a verified one. ZCode reports its `sess_…` in that session's own
+`native_session_identity` event - readable with `capture` - and only once the
+session has run a turn; a freshly created one carries the bridge `zcode-N` id in
+`session_meta` and no native id at all. Other platforms may publish theirs in
+`session_meta`. No verified id means no `--resume`: start the session without
+history and say so, rather than passing `acp_session_id` or `--continue`.
+
 The beat itself - per-worker `KAOLA_ACP_HEARTBEAT_HOST` binding and its receipt
 check, non-blocking dispatch, the `dispatch_event_cursor` reading anchor, ending
 the turn as the wait, and reading the worker's real reply when an event wakes you
