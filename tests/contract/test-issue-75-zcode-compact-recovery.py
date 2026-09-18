@@ -60,6 +60,15 @@ class TestDurableBlock(unittest.TestCase):
         self.assertIn("kaola-project-runner", TEXT)
         self.assertIn("kaola-delegator", TEXT)
 
+    def test_role_contrast_scopes_to_host(self):
+        # one Runner per project: the block names the designated Host and
+        # explicitly tells ordinary Workers to pass over it
+        block = durable_block()
+        self.assertIn("designated", block)
+        self.assertRegex(block, r"(?i)ordinary workers?.*(ignore|pass over)")
+        self.assertRegex(block, r"(?i)never makes a worker into a runner")
+        self.assertNotIn("every agent", block.lower())
+
     def test_reload_proof_stays_inside_skill_payload(self):
         # the proof marker is Skill-internal, so any project can adopt the
         # same block without registering a marker
@@ -72,6 +81,11 @@ class TestPerSendCarrier(unittest.TestCase):
         self.assertIn("KPR-ZCODE-RECOVERY-V1", TEXT)
         self.assertIn("never re-intake, re-claim, restart sessions, "
                       "or re-dispatch", TEXT)
+
+    def test_per_send_carrier_scoped_to_host(self):
+        # the prompt carrier targets the designated Host session only
+        self.assertIn("designated ZCode Project", TEXT)
+        self.assertRegex(TEXT, r"(?i)never an ordinary worker")
 
     def test_send_alone_is_not_durable(self):
         self.assertRegex(TEXT, r"cannot prove the automatic same-turn")

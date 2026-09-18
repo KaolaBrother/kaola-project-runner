@@ -33,15 +33,23 @@ never writes a consuming project's `AGENTS.md` itself.
 ## The durable carrier — reusable block
 
 Owner-authorized, placed in the consuming project's `AGENTS.md` (or
-`.zcode/AGENTS.md`) before the Host session starts. Fill in only the Skill
-path — the installed payload actually in use (`kaola-project-runner` or
+`.zcode/AGENTS.md`) before the Host session starts. Every Agent in the
+workspace reads that file, so the block is explicitly role-scoped: it
+applies only to the designated Host — one project has only one Runner
+Agent — and ordinary Workers pass over it. Fill in only the Skill path —
+the installed payload actually in use (`kaola-project-runner` or
 `kaola-delegator`). There is no fixed cross-project marker or schema to
 adopt; the proof marker stays inside the Skill payload itself.
 
 ```text
-## Compact recovery
+## Compact recovery (designated Project Runner Host only)
 
-This workspace is driven by the installed Skill at
+This block applies only if you are the Agent designated as this project's
+ZCode Project Runner Host, or an outer host genuinely running
+kaola-delegator. Ordinary Workers and single-issue Workflow Agents ignore
+it entirely — it never makes a worker into a runner.
+
+Your Host work is driven by the installed Skill at
 <installed SKILL.md path>. If your context was compacted and that Skill's
 full text is no longer present, completely re-read the file before any
 runner work, then recover the live scene from current authorization, the
@@ -71,12 +79,13 @@ work and never makes decisions — it only restores footing.
 
 ## The per-send carrier
 
-Put this text at the head of the next prompt to the compacted Host, with the
-Skill path actually installed:
+Put this text at the head of the next prompt to the compacted **Host** — the
+designated ZCode Project Runner session only, never an ordinary Worker —
+with the Skill path actually installed:
 
 ```text
-Recovery marker: KPR-ZCODE-RECOVERY-V1. You are a ZCode host Agent running
-Project Runner. After context compaction, completely re-read the installed
+Recovery marker: KPR-ZCODE-RECOVERY-V1. You are the designated ZCode Project
+Runner Host. After context compaction, completely re-read the installed
 Skill at <installed kaola-project-runner SKILL.md path>, then recover the
 live scene from current authorization, the effective-now heartbeat, and the
 run records — never re-intake, re-claim, restart sessions, or re-dispatch
