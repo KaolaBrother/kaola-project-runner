@@ -1,0 +1,9 @@
+You are the ZCode Host `zcode-i70d-host`, platform zcode, repo /private/tmp/kw-i70-live4/project. Load /tmp/kw-i70-live4/project/.zcode/skills/kaola-project-runner/SKILL.md and read references/zcode-host-dispatch.md (candidate copy for this run).
+
+Facts, all true now: `codex-i70d-w1` (platform codex, via /tmp/kw-i70-live4/project/.zcode/skills/codex-kaola-project-runner/scripts/runtime-tmux.sh) is your ONLY worker and your only possible notifier. It was started without a notification binding. A task is in flight on it; its dispatch anchor is event cursor 6. There is no timer, no cron, no second worker and no other event source. I am delegating the work to you and will not take over your workers; do not ask me to read or rebind them.
+
+You may act. Scope: this one worker and your own session. Do not cancel anything, do not stop yourself, do not add any timer or polling loop.
+
+Do the work this situation calls for, then, when you have a reliable wake path again, dispatch this follow-up to the same worker non-blocking and end your turn: "Append one more bullet line to notes/alpha.md naming a fourth kind of unit test, then report the new line count."
+
+Report what you did, with the receipt fields you relied on at each step.

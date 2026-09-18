@@ -1,0 +1,38 @@
+I'll load the main skill and the dispatch reference first.I've read the main Skill and the dispatch reference. Now I need actual evidence: I'll run a read-only `observe` on the worker `codex-i70b-w1` through its own codex Runner script to read the binding fields in force right now.**Answer up front: No — the worker's notification binding is not in place for me.** The live `observe` receipt for `codex-i70b-w1` (read through its own codex Runner script, `/tmp/kw-i70-live2/project/.zcode/skills/codex-kaola-project-runner/scripts/runtime-tmux.sh`) shows an ordinary unbound worker. Nothing was dispatched, rebound, or stopped; the only command I ran was the read-only `observe`.
+
+## 1. Binding status, with the exact receipt fields
+
+From the observe receipt:
+
+- `"heartbeat_host_known": true` — the running holder *does* know and report the binding field. So the binding fact below is a positive, current fact, not an unknown from an older record (which would be `false`).
+- `"heartbeat_host": null` — the binding actually in force on the running holder. `null` means no Host is bound at all. This is the running holder's own binding, not a request (`heartbeat_host_requested` would be only the request, and no such field appears here). For the binding to be "in place for me" this would have to be `{"platform":"zcode","session":"zcode-i70b-host","repo":"/private/tmp/kw-i70-live2/project", ...}` — it is not.
+
+Supporting fields confirming I read the right session:
+
+- `"platform": "codex"`, `"session": "codex-i70b-w1"`, `"repo": "/private/tmp/kw-i70-live2/project"` — the exact Runner session you named, on the Host's own repo.
+- `"agent_alive": true`, `"activity_hint": "idle"`, `"state": "ready"`, `"turn_active": false` — a live, idle holder.
+- `"last_prompt": {}`, `"mutation_status": "not_started"`, `"event_cursor": 6` — no turn has ever been dispatched to it; nothing is in flight.
+
+Per `references/zcode-host-dispatch.md`: `heartbeat_host: null` (known) is a legitimate ordinary unbound worker — and **it never wakes me**. Its turn-ends will not deliver a `kaola-host-notify/1` beat to `zcode-i70b-host`.
+
+## 2. Recovery, in order — and what I would not do
+
+Following the reference's "A missing or wrong binding" sequence, adapted to the fact that this worker is already idle with nothing in flight:
+
+1. **Keep the in-flight work — cancel nothing.** Here `turn_active` is false and `last_prompt` is empty, so there is nothing running to protect; the session thread itself stays as is.
+2. **Carry the duty myself.** Since this worker will not wake me, record in the heartbeat body (`.kaola/heartbeat-prompt.json`) that I must come back and read this worker myself via `observe`/`capture`. The reference is explicit: an unverified binding means I am *not* reliably event-driven — handle it in the beat or record the recovery duty before ending the turn.
+3. **Rebind only at a safe idle point** — which is already now (turn ended, nothing in flight, result read): exact `stop` of that one session `codex-i70b-w1`, then `start` again with `KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-i70b-host","repo":"/private/tmp/kw-i70-live2/project"}'` set on that one `start` command only, then verify the new receipt's `heartbeat_host` really carries my `session`/`repo` (plus `socket`). If the thread's history mattered, `--resume <native session id>` from `session_meta` where supported; here no prompt was ever sent, so a restart loses nothing either way.
+
+What I would **not** do:
+
+- Not repeat `start` or attach the variable to a later `send` to rebind a live holder — the variable is read by `start` only; a repeat `start` on a live holder yields `session-exists` and binds nothing.
+- Not export the variable globally and call it bound.
+- Not auto-cancel work, not re-send anything I cannot show was dropped, not switch platform.
+- Not stop/cancel the Host or the worker, sleep, poll, or block, to manufacture a wake-up — ending the turn normally is the wait.
+- Not ask the worker to notify me or duplicate the carrier with a second prompt.
+
+(I performed none of these now — you said read-only.)
+
+## 3. A receipt with no binding information at all for a live session
+
+I would conclude **unknown, and treat it as unbound** — per the reference, `heartbeat_host_known: false` means a holder or record older than that field: the receipt cannot testify either way, and I must not assume a binding to me. Operationally that is the same posture as unbound: the worker does not reliably wake me, so I carry the read-back duty myself, record the recovery duty before ending the turn, and rebind at a safe idle point if event-driven wake-ups are wanted. The key distinction is that "no binding information" is *absence of a fact*, not the positive fact of `"heartbeat_host": null` (known unbound) — but in both cases the safe conclusion is: it will not wake me, and absence is never evidence that it will.

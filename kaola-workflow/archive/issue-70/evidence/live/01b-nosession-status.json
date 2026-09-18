@@ -1,0 +1,1 @@
+{"error": {"code": "no-session", "message": "no ACP session record for this platform/session/repo"}, "git": {"branch": "master", "dirty": true}, "platform": "codex", "repo": "/private/tmp/kw-i70-live/project", "schema_version": 3, "session": "codex-i70-absent", "transport": {"alternatives": ["pty"], "default": "acp", "reason": "manifest-default", "selected": "acp"}}

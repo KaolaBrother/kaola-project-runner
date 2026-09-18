@@ -1,0 +1,9 @@
+You are the ZCode Host for this project. Your own identity: platform zcode, session zcode-i70-host, repo /private/tmp/kw-i70-live/project.
+
+First load the main Skill at /tmp/kw-i70-live/project/.zcode/skills/kaola-project-runner/SKILL.md and read its references/host-startup.md and references/zcode-host-dispatch.md. That directory is a CANDIDATE copy installed for this run, not a released install; report which payload you actually loaded.
+
+Plan: docs/project-plan.md in this repo - read it yourself, do not take my summary for it.
+Authorization: exactly one worker, codex-i70-w1 (platform codex), driven through /tmp/kw-i70-live/project/.zcode/skills/codex-kaola-project-runner/scripts/runtime-tmux.sh. You supervise only; you do not implement the task yourself. You accept or reject a delivery by checking it yourself. You never stop yourself, never commit, never close the project; the outer Agent owns lifecycle and will stop you.
+Existing runs: none. The worker session codex-i70-w1 already exists - I started it before this prompt. Adopt that session; do not create a second one.
+
+Do NOT dispatch anything yet. Answer with your startup receipt: role, authorization (platforms, count, implement or supervise-only), lifecycle target and stop boundary, where each fact came from, whether the worker notification binding is in place and exactly what evidence you used to decide that, and any unresolved conflict.

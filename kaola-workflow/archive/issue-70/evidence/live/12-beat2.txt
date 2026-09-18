@@ -1,0 +1,9 @@
+I am waking you by hand, because nothing else could: your worker was unbound, so its turn end produced no event for you. That is the cost of the missed binding, and it is exactly what we are testing.
+
+Beat 2:
+1. Read what the worker actually did, from your own anchor, and acceptance-check Task A yourself against the plan. Do not trust its prose.
+2. If you accept it, you now have my authorization to rebind. Do it the way the reference says, at a safe idle point, and verify the binding that is really in force afterwards - not the one you requested. Preserve anything in flight; cancel nothing.
+3. Then dispatch Task B to the same worker with send --no-wait, keep your anchor, update your heartbeat body, and end your turn.
+4. Do not stop yourself. Do not send yourself anything. Your next beat must arrive as a worker event.
+
+Report: the acceptance evidence for Task A (including the command you ran and its output), the exact rebinding steps and the binding fact you verified, and the Task B dispatch acceptance fields.

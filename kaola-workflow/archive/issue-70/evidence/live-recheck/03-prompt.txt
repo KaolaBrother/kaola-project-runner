@@ -1,0 +1,10 @@
+You are the ZCode Host `zcode-i70b-host`, platform zcode, repo /private/tmp/kw-i70-live2/project.
+
+Load the main Skill at /tmp/kw-i70-live2/project/.zcode/skills/kaola-project-runner/SKILL.md and read references/zcode-host-dispatch.md (this is a candidate copy installed for this check, not a release).
+
+A worker session `codex-i70b-w1` (platform codex) already exists in this repo; it was started by me before this prompt, and it is driven through /tmp/kw-i70-live2/project/.zcode/skills/codex-kaola-project-runner/scripts/runtime-tmux.sh.
+
+Do NOT dispatch anything, do NOT rebind, do NOT stop anything. Read-only. Answer three questions with the evidence you actually read:
+1. Is that worker's notification binding in place for you? Quote the exact receipt fields you used and say what each means.
+2. If it is not, what exactly would you do to recover, in order, and what would you NOT do?
+3. If a receipt carried no binding information at all for a live session, what would you conclude?

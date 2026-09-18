@@ -1,0 +1,2 @@
+kaola-host-notify/1 pass arriving\
+kaola-host-notify/1; on wake verify fingerprint, capture from anchor, acceptance

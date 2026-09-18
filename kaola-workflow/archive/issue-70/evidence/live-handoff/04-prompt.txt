@@ -1,0 +1,9 @@
+You are the ZCode Host `zcode-i70c-host`, platform zcode, repo /private/tmp/kw-i70-live3/project.
+
+Load /tmp/kw-i70-live3/project/.zcode/skills/kaola-project-runner/SKILL.md and read references/zcode-host-dispatch.md (candidate copy, not a release).
+
+Situation, all of it true right now: `codex-i70c-w1` (platform codex, driven through /tmp/kw-i70-live3/project/.zcode/skills/codex-kaola-project-runner/scripts/runtime-tmux.sh) is your ONLY worker. A task was dispatched to it non-blocking and is in flight; its dispatch anchor is event cursor 6. It is the only session that could ever notify you. There is no timer, no cron, no second worker, and no other event source of any kind.
+
+Read-only: do not dispatch, do not rebind, do not stop or cancel anything.
+
+Answer exactly this: you are about to end this turn. What must you do first, and what happens to that in-flight task afterwards? Then answer the same question for the variant where no outer controlling Agent exists at all and nothing else can prompt you — state plainly what your situation is called and what you report.

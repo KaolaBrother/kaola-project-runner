@@ -1,0 +1,5 @@
+New situation, right now: I started a second worker `codex-i70d-w2` (platform codex, same repo, same codex runner script) WITHOUT a notification binding, and dispatched a task to it that is running at this moment. Its dispatch anchor is event cursor 6. It is again your only worker and your only possible notifier — no timer, no other worker, no other event source. I will not read or rebind it for you.
+
+You may act, on that worker and your own session only. Cancel nothing, add no timer and no polling loop, do not stop yourself.
+
+Recover the situation the way the reference tells you to, then report exactly which commands you used, in order, and the receipt fields you relied on — especially how you obtained the running task's result and how you verified the binding afterwards. Do not dispatch any new task afterwards; just end your turn.

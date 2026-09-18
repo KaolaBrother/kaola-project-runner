@@ -1,0 +1,8 @@
+Go, with one constraint that comes from me, not from you: do NOT rebind yet. Task A is time-critical and the worker is idle now, so dispatch Task A to the existing unbound session codex-i70-w1 as it stands.
+
+Beat 1:
+1. Dispatch Task A to codex-i70-w1 with send --no-wait, and keep the values you will need to read the reply later.
+2. Record, in your heartbeat prompt body, the duty this leaves you with, given that this worker cannot wake you.
+3. End your turn. Do not sleep, poll, or hold the turn open, and do not stop or cancel the worker.
+
+Report briefly: what you dispatched, the acceptance fields from the dispatch receipt, the reading anchor you kept, and what you recorded as the outstanding duty.
