@@ -52,6 +52,36 @@ The identity update is credential-free and emitted once per materialize and
 once per faithful resume, so an external client and the holder's event log can
 map the Runner session to the resumable native id.
 
+### Resuming a native session's model (3.12+)
+
+A faithful `--resume sess_*` keeps the session's own Coding Plan selection. On
+3.12+ that selection is not reachable as settings: `session/read` answers with a
+message list and no top-level `settings` at all, so the adapter reads the model
+off the transcript itself — `messages[i].info.model = {providerId, modelId}` on
+`session/read`, or the same pair flattened to `info.modelId` / `info.providerId`
+on `session/messages` — and takes the newest entry carrying a complete pair, by
+`info.time.created` rather than array position. A resumed app-server also starts
+with an empty provider registry, so the plan is re-registered through the same
+`provider/updateAccountConfig` push and `account:*` `session/setModel` selection
+a fresh session uses; there is no `runtimeModel` key on that path, which 3.12+
+rejects outright.
+
+Nothing is substituted. A transcript with no usable model, a model the enabled
+plan does not offer, or a model belonging to another account fails the resume
+closed without reaching `session/setModel` — the plan default is never selected
+on the user's behalf and the account is never switched. A resume that fails for
+an ordinary reason reports that reason: an unknown or already-deleted native
+session answers `-32004 Session not found`, and the pre-3.12 `runtimeModel`
+overlay is retried only when the backend actually asks for it with
+`Model config is missing`.
+
+Because a resumed session reports its real provider, the model option it
+advertises as `currentValue` is account-qualified
+(`account:<plan>\<model>`). Both that id and the desktop-registry
+`builtin:*` id name the one enabled Coding Plan and both round-trip through
+`session/set_config_option`; any other provider, including a different account,
+is still refused.
+
 ## Nested Host → Worker isolation (contract)
 
 Phase 1 establishes the isolation **contract** and verifies it with an offline
