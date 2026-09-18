@@ -1,0 +1,2 @@
+6ad5fcccf425d8da1c2d1e5713d4245d1ce31c5738c8c80e70f189f33884ba60  /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/kaola-workflow/issue-86/evidence/fixed/SKILL.md
+a132b8a1035686dd34aa7e5f85c64f1ad7f5f981d9112d7aa670971f276c38c9  /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/kaola-workflow/issue-86/evidence/fixed/handoff.md

@@ -1,0 +1,6 @@
+[scenario C1 — no live Host exists for this project; Runner `status` returns no session]
+User says:
+"帮我把 Issue #91 做完，修 relay 的 bracketed-paste 截断。优先级 P1。
+交付边界：冻结候选后停下等我审。
+项目路径 /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner。"
+(The user never says which worker platforms are authorized, how many, or any quota at all.)

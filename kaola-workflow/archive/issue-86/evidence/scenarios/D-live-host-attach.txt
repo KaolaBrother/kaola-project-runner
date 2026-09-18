@@ -1,0 +1,9 @@
+[scenario D — you are outer Agent B; A ran before you and you have none of A's chat memory]
+Runner probe result for this project:
+  "$ZCODE" status --repo "$PROJECT" --session "zcode-KPR-orchestrator-main"
+  -> {"session":"zcode-KPR-orchestrator-main","repo":"/Volumes/.../kaola-project-runner",
+      "state":"live","acp_session_id":"acp_7f31","holder_instance_id":"hold_a91c",
+      "prompt_state":"idle"}
+Existing start receipt records the same acp_session_id acp_7f31 and holder_instance_id hold_a91c.
+User says to you (Agent B):
+"我回来了。把优先级从 P1 提到 P0，其它不变，继续。"

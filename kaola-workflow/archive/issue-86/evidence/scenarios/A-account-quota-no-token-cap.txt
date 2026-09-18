@@ -1,0 +1,8 @@
+[scenario A — no live Host exists for this project; Runner `status` returns no session]
+User says:
+"帮我把 kaola-project-runner 的 Issue #91 做完。目标：修好 relay 的 bracketed-paste 截断。
+已完成：问题已定位在 kaola-pane-relay.py。剩余：改实现 + 加回归测试。
+可用 Worker：zcode 1 个、codex 1 个，最多同时跑 2 个。
+我的 GLM coding plan 账户额度这个月还剩 40 次对话，都可以用掉。
+优先级 P1。交付边界：候选提交冻结后停下等我审，不要 finalize、不要关 Issue。
+项目路径 /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner。"

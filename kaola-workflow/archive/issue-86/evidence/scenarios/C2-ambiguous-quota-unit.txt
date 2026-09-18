@@ -1,0 +1,7 @@
+[scenario C2 — no live Host exists for this project; Runner `status` returns no session]
+User says:
+"帮我把 Issue #91 做完，修 relay 的 bracketed-paste 截断。
+可用 Worker：zcode 1 个，最多同时 1 个。额度就 3，别超。
+优先级 P1。交付边界：冻结候选后停下等我审。
+项目路径 /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner。"
+(The user says "额度就 3" — 3 what? conversations, tokens, tasks? The unit is not stated.)

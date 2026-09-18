@@ -1,0 +1,7 @@
+[scenario B — no live Host exists for this project; Runner `status` returns no session]
+User says:
+"同样的项目和目标（Issue #91，修 relay bracketed-paste 截断，已定位、剩余改实现+回归测试）。
+可用 Worker：zcode 1 个，最多同时 1 个。
+这次我给你 200000 tokens 的上限，用完就停。账户额度另外还剩 40 次对话。
+优先级 P1。交付边界：冻结候选后停下等我审。
+项目路径 /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner。"
