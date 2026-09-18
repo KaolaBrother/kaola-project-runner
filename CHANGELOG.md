@@ -15,12 +15,14 @@
   `KAOLA_ACP_HEARTBEAT_HOST` receipt echo and the worker-event carrier.
 - **A defective heartbeat prompt file is reported, not hidden (Issue #66).**
   `<repo>/.kaola/heartbeat-prompt.json` present but carrying no usable `body`
-  string (wrong field name, wrong type, empty, unparseable) used to deliver the
-  same "none maintained" text as an absent file, which let a Host believe a
-  prompt written under another field name was in effect. The delivered
-  notification now names the file and the actual defect and the host holder
-  logs `heartbeat_body_error`; delivery itself is unchanged, and the
-  heartbeat-skeleton reference now names the `body` field.
+  string (wrong field name, wrong type, empty, unparseable, or bytes that are
+  not UTF-8) used to deliver the same "none maintained" text as an absent file,
+  which let a Host believe a prompt written under another field name was in
+  effect. The delivered notification now names the file and the actual defect
+  and the host holder logs `heartbeat_body_error`. One read supplies both the
+  verdict and the body, so the body that passed the checks is the body
+  delivered; delivery itself is unchanged, and the heartbeat-skeleton reference
+  now names the `body` field.
 
 ## 0.3.5 — 2026-09-18
 

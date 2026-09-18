@@ -726,26 +726,58 @@ def test_issue_66_defective_prompt_file_reports_its_defect() -> None:
     ``prompt``; "none maintained" hid that, so the Host believed its full
     prompt was in effect. Visibility only: the event is still delivered."""
     module = load_holder_module()
-    defect_of = module.heartbeat_body_defect
+    read_body = module.heartbeat_prompt_body
     sandbox = Sandbox("defect-unit")
     try:
         path = sandbox.repo.joinpath(*PROMPT_FILE_RELPATH)
         path.parent.mkdir(parents=True, exist_ok=True)
-        check(defect_of(path) is None, "an absent file is the honest fallback, not a defect")
+        check(read_body(path) == (None, None),
+              "an absent file is the honest fallback, not a defect")
         path.write_text("{not json", encoding="utf-8")
-        check("not valid JSON" in (defect_of(path) or ""), "unparseable JSON is named")
+        body, defect = read_body(path)
+        check(body is None and "not valid JSON" in (defect or ""),
+              f"unparseable JSON is named ({defect})")
         path.write_text('["body"]', encoding="utf-8")
-        check("not an object" in (defect_of(path) or ""), "a non-object payload is named")
+        check("not an object" in (read_body(path)[1] or ""), "a non-object payload is named")
         path.write_text('{"body": 7}', encoding="utf-8")
-        check("not a string" in (defect_of(path) or ""), "a non-string body is named")
+        check("not a string" in (read_body(path)[1] or ""), "a non-string body is named")
         path.write_text('{"body": ""}', encoding="utf-8")
-        check("empty string" in (defect_of(path) or ""), "an empty body is named")
+        check("empty string" in (read_body(path)[1] or ""), "an empty body is named")
         path.write_text('{"prompt": "x", "schema": "s"}', encoding="utf-8")
-        wrong_field = defect_of(path) or ""
+        wrong_field = read_body(path)[1] or ""
         check('no "body" field' in wrong_field and "prompt" in wrong_field,
               f"a wrong field name is named with the fields present ({wrong_field})")
+        # Hostile bytes: not valid UTF-8 at all. Reported, never raised.
+        path.write_bytes(b'{"body": "\xff\xfe broken"}')
+        body, defect = read_body(path)
+        check(body is None and defect is not None and "unreadable" in defect,
+              f"undecodable bytes are reported, not raised ({defect})")
+        # A directory in the file's place is an OSError, not a crash.
+        alt = sandbox.repo / ".kaola" / "as-a-dir.json"
+        alt.mkdir(parents=True, exist_ok=True)
+        body, defect = read_body(alt)
+        check(body is None and defect is not None,
+              f"an unreadable path is reported, not raised ({defect})")
         path.write_text('{"body": "real"}', encoding="utf-8")
-        check(defect_of(path) is None, "a usable body is no defect")
+        check(read_body(path) == ("real", None), "a usable body comes back with no defect")
+
+        # One read, not check-then-reread: the body that passed the checks is
+        # the body returned, so a rewrite cannot slip between the two.
+        reads: list[str] = []
+        original = type(path).read_bytes
+
+        def counting(self, *args, **kwargs):
+            reads.append(str(self))
+            return original(self, *args, **kwargs)
+
+        type(path).read_bytes = counting
+        try:
+            body, defect = read_body(path)
+        finally:
+            type(path).read_bytes = original
+        check(len(reads) == 1 and reads[0] == str(path),
+              f"the helper reads the prompt file exactly once ({reads})")
+        check((body, defect) == ("real", None), "that single read supplies the body itself")
     finally:
         sandbox.cleanup()
 

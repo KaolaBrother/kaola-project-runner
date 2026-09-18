@@ -87,15 +87,16 @@ prompt — read that line in the notification and fix the file.
 Each beat: export `KAOLA_ACP_HEARTBEAT_HOST` on **every** worker `start` (a JSON
 object naming this Host: `platform` `zcode`, its own `session` and `repo`) and
 check that the start receipt echoes `heartbeat_host`; dispatch with
-`send --no-wait`, keep the receipt's `prompt_fingerprint`, and take your reading
-anchor from an `observe` **before** the dispatch (the send receipt carries no
-cursor); settle the rest of the beat; update the same heartbeat
+`send --no-wait`, keep the receipt's `prompt_fingerprint`, and keep a reading
+anchor: prefer the dispatch receipt's own `dispatch_event_cursor`, and where a
+Runner build does not return one, take the cursor from an `observe` **before**
+the dispatch; settle the rest of the beat; update the same heartbeat
 body; then end the turn normally. Ending the turn is the wait: no sleep, no poll
 loop, no blocking `wait`, and never `stop`/`cancel` anything to manufacture a
 wake-up. When an event wakes you, read the worker's real output with that
-platform's Skill from an anchor that precedes it: that pre-dispatch cursor, or a
-bounded `capture --lines`, because the event's own `event_cursor` is where the
-worker's turn *ended* and therefore sits after the reply. The notification is
+platform's Skill from an anchor that precedes it: the dispatch cursor you kept,
+or a bounded `capture --lines`, because the event's own `event_cursor` is where
+the worker's turn *ended* and therefore sits after the reply. The notification is
 neither the reply nor a verdict.
 
 ## D. Which record holds what

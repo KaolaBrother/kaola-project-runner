@@ -156,36 +156,39 @@ def parse_heartbeat_host() -> dict[str, str] | None:
             "repo": target["repo"], "socket": socket_path}
 
 
-def heartbeat_body_defect(source: Path) -> str | None:
-    """Why this heartbeat prompt file cannot supply a body, or None.
+def heartbeat_prompt_body(source: Path) -> tuple[str | None, str | None]:
+    """``(body, defect)`` from exactly ONE read of the heartbeat prompt file.
 
-    Issue #66: an absent file is not a defect - it is the honest fallback. A
-    file that exists and still cannot supply a prompt is reported by its real
-    defect, so the Host fixes the file instead of assuming its own prompt is
-    in effect. Read-only and bounded; never fatal.
+    Issue #66: one read, so the body that was checked is the body that is
+    delivered - a check-then-reread would let a rewrite between the two ship
+    something the checks never saw. An absent file is not a defect, it is the
+    honest fallback; anything else that cannot supply a prompt comes back as
+    its real defect so the Host fixes the file instead of assuming its own
+    prompt is in effect. Read-only, bounded, never fatal.
     """
     try:
-        raw = source.read_text(encoding="utf-8")
+        raw = source.read_bytes().decode("utf-8")
     except FileNotFoundError:
-        return None
-    except OSError as exc:
-        return f"unreadable: {exc.strerror or exc}"[:HEARTBEAT_DEFECT_CHARS]
+        return None, None
+    except (OSError, UnicodeError) as exc:
+        return None, f"unreadable: {getattr(exc, 'strerror', None) or exc}"[
+            :HEARTBEAT_DEFECT_CHARS]
     try:
         data = json.loads(raw)
     except ValueError as exc:
-        return f"not valid JSON: {exc}"[:HEARTBEAT_DEFECT_CHARS]
+        return None, f"not valid JSON: {exc}"[:HEARTBEAT_DEFECT_CHARS]
     if not isinstance(data, dict):
-        return f'JSON {type(data).__name__}, not an object with a "body" field'
+        return None, f'JSON {type(data).__name__}, not an object with a "body" field'
     if "body" not in data:
         present = ", ".join(sorted(key for key in data if isinstance(key, str))[:8])
-        return (f'no "body" field (top-level fields present: {present or "none"})'
-                )[:HEARTBEAT_DEFECT_CHARS]
+        return None, (f'no "body" field (top-level fields present: {present or "none"})'
+                      )[:HEARTBEAT_DEFECT_CHARS]
     value = data["body"]
     if not isinstance(value, str):
-        return f'"body" is {type(value).__name__}, not a string'
+        return None, f'"body" is {type(value).__name__}, not a string'
     if not value:
-        return '"body" is an empty string'
-    return None
+        return None, '"body" is an empty string'
+    return value, None
 # ``ps lstart`` is truncated to the second and the agent records ``Date.now()``
 # only after ``spawn`` returned, so a genuine child's start time is at or
 # before its recorded time, by under a second plus the spawn latency. The
@@ -1794,17 +1797,12 @@ class Holder:
         file the ZCode Host agent maintains in the consuming project, and the
         one-pass instruction. No worker raw output, no shell execution."""
         source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
-        body: str | None = None
         # Issue #66: a file that exists but carries no usable `body` is a
         # different fact from no file at all, and silently reporting "none
         # maintained" let a Host believe a prompt it had written under another
         # field name was in effect. Name the defect; still deliver the event.
-        defect = heartbeat_body_defect(source)
-        if defect is None:
-            try:
-                body = json.loads(source.read_text(encoding="utf-8"))["body"]
-            except (OSError, ValueError, KeyError, TypeError):
-                body = None
+        # One read returns both, so the checked body is the delivered body.
+        body, defect = heartbeat_prompt_body(source)
         maintained = body is not None
         if not maintained:
             if defect is not None:

@@ -47,13 +47,14 @@ questions. A Skill update or resumed conversation must not restart intake,
 workers, claims or assignments already established. Ask only for missing or
 conflicting information.
 
-Allowed CLIs: none without human authorization; all nine supported platforms,
-including Codex, are eligible when named.
+Allowed CLIs: none without human authorization. On a fresh invocation with no
+allowlist, ask which CLIs; do not start workers or register a heartbeat. All
+nine supported platforms, including Codex, are eligible when named.
 
 Record the human's CLI, model/effort, count, and capability restrictions in the
-consuming project's run records, not in this Skill. Respect explicitly authorized
-multiple model assignments or open-ended concurrency; do not invent a quota
-system.
+consuming project's run records, not in this Skill. A named CLI without a count
+defaults to one. Respect explicitly authorized multiple model assignments or
+open-ended concurrency; do not invent a quota system.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. A serial build, GPU, port, or cache constraint must not block
@@ -162,8 +163,7 @@ authorization, and project instructions. Keep stable policy in this Skill,
 project constraints in the consuming project's instructions, and changing
 facts in that project's run records. Update the **same** heartbeat when
 instructions materially change; replace obsolete text rather than append
-conflicting versions. Do not hard-code host tool names into this Skill. A
-report-only request disables execution actions.
+conflicting versions. A report-only request disables execution actions.
 
 Native recurring wake and blocking sleep must not be stacked. On a ZCode Host
 session, worker events are the only heartbeat trigger (see Hosts). After
@@ -174,8 +174,8 @@ do not hard-code other hosts' scheduler APIs.
 
 ## Delivery
 
-Prefer the selected, authorized Workflow sync/merge when a PR is not
-required. A PR is not opened merely for handoff when that sink is suitable.
+Prefer the selected, authorized Workflow sync/merge when a PR is not required:
+a PR is not opened merely for handoff when that sink is suitable.
 If PRs exist, advance actionable ones first on contested suitable
 capacity; other authorized work continues in parallel across permitted CLIs.
 A blocked PR keeps an owner and next action without a global hold. Honor
@@ -253,10 +253,8 @@ Only an explicit "stop here and continue later" (stated scope) is a scoped
 pause: it skips that cleanup, may leave recovery-preserving unfinished branches,
 and forces no merge or cleanup beyond its stated scope.
 
-Honor a user stop request within its stated scope. Otherwise cancel the
-heartbeat when the authorized goal is complete, no unfinished
-delivery/sync/cleanup remains, and remaining idle owned sessions have been
-stopped.
+Honor a user stop request within its stated scope; otherwise the heartbeat ends
+on step 5's conditions.
 
 Only new authorized work restarts a session once the idle ones were stopped.
 Resume with `--resume` when a native session id
