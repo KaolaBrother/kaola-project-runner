@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **The shared tmux entrypoint no longer deadlocks against its own pipe under
+  machine load (Issue #78).** Bash writes a here-document body up to 4096 bytes
+  into a pipe from the forked child *before* `exec`, so that one process holds
+  both ends and nothing drains it; macOS hands out 512-byte pipes once
+  system-wide pipe memory is under pressure, and a larger body then blocks in
+  `write()` forever. The stuck process has not `exec`ed yet, so it wears
+  `kaola-tmux.sh`'s own argv, owns no children, and survives the SIGKILL a
+  caller's timeout aims at its parent -- which is why a refused `start` could
+  consume a whole 60 s budget and leave an orphan behind, while an accepted one
+  passed. `scripts/kaola-tmux.sh` now carries no here-document and no
+  here-string at all: Python programs go in with `-c`, and `read` is fed by a
+  process substitution whose writer drains concurrently. Receipts, usage text,
+  and every refusal reason are unchanged, and a contract test keeps the rule
+  from regressing.
+
 - **A bound worker's pending permission now wakes the ZCode Host mid-turn
   (Issue #76).** A worker whose agent raises `session/request_permission`
   records the pending request and wakes only its own wait - the turn stays
