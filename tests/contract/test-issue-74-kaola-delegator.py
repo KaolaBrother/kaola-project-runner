@@ -41,7 +41,7 @@ DESKTOP_CONFIG_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-deskt
 PLAN_CACHE_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-coding-plan-cache.json"
 ORIGINAL_TASK = (
     "ISSUE74-TASK: land the delegated entry; remaining=handoff isolation; "
-    "quota_concurrency=1; quota_account=GLM-coding-plan; quota_token=1-short-task; "
+    "quota_concurrency=1; quota_account=1 job; quota_token=10000 tokens; "
     "priority=P1; authorized_platforms=zcode:1; "
     "delivery_stop_boundary=test-receipts-only; stop this Host at end"
 )
@@ -293,8 +293,14 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "Afterward warns the outer Agent is not auto-woken by inner Host activity")
     check("quota_token=unspecified" not in ORIGINAL_TASK,
           "fixture token quota is explicit, not unspecified")
-    check("quota_token=1-short-task" in ORIGINAL_TASK,
-          "fixture names a bounded token quota")
+    check("quota_account=GLM-coding-plan" not in ORIGINAL_TASK,
+          "fixture account quota is a figure, not an account name")
+    check("quota_token=1-short-task" not in ORIGINAL_TASK,
+          "fixture token quota is a token figure, not a task count")
+    check("quota_account=1 job" in ORIGINAL_TASK,
+          "fixture names a numeric account quota")
+    check("quota_token=10000 tokens" in ORIGINAL_TASK,
+          "fixture names a numeric token budget")
     check("delivery_stop_boundary=" in ORIGINAL_TASK,
           "fixture names a delivery/stop boundary")
     check("Do not guess and do not reuse a stale quota" in handoff_one,
