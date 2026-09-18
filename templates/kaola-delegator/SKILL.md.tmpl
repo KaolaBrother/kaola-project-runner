@@ -29,10 +29,12 @@ If the installed ZCode Runner (`{{ZCODE_WORKER}}`) is missing, stop and report
 that this Skill is not executable. Do not claim a Host started.
 
 Recover the project's continuation pointer first. A **live** Host is attached in
-place — do not `start` again. A **stopped** Host restores only with the attested
-native `sess_*`. Missing native id is cannot-resume, not `--continue`. Name a new
-Host `zcode-<PROJECT_CODE>-orchestrator-<purpose>`. Commands, the three identity
-fields, and the prompt:
+place — do not `start` again, even if its name is not the new Host form. A
+**stopped** Host restores only with the attested native `sess_*`. Missing native
+id is cannot-resume, not `--continue`. Name a new Host only when none exists:
+`zcode-<PROJECT_CODE>-orchestrator-<purpose>`. Write the current pointer right
+after a successful start; native `sess_*` may be absent. Commands, identities,
+and the prompt:
 [handoff.md](references/handoff.md).
 
 Do not pass per-worker notification bindings, per-worker `--repo`, scheduling, or
@@ -43,7 +45,7 @@ heartbeat instructions. Do not rename, restart, or cancel an in-flight Host.
 Relay later user changes to that same Host using idle `send` or, when busy, the
 Runner's existing `steer` / a held undelivered update. A `--no-wait` admission or
 a Host `end_turn` is not project delivery. Read results with `observe` /
-`capture`. Escalate only an unrecoverable human decision. Do not dispatch
-workers, copy a Mission List, maintain a heartbeat, create a Routine, operate on
-inner sessions, or `stop` the Host before close-out. Changing the outer Agent
-does not stop the Host.
+`capture`. Escalate only an unrecoverable human decision. Do not dispatch workers,
+copy a Mission List, maintain a heartbeat, create a Routine, operate on inner
+sessions, or `stop` the Host before close-out. Changing the outer Agent does not
+stop the Host.

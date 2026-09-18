@@ -27,19 +27,27 @@ Three identities stay separate, from real receipts, never synthesized:
 | `acp_session_id` | ACP `session/new` on the start receipt | ACP bridge id |
 | native `sess_*` | `session/update` `native_session_identity.nativeSessionId` | `start --resume` after the holder stopped |
 
-`session_meta` does not automatically hold `sess_*`. Read the Host event log or
-observe output for `native_session_identity`. After a successful start or
-restore, write `$RECORD` with those three fields plus target, `$PROJECT`,
-`platform=zcode`, and any holder-instance facts the start receipt already
-named. Keep only the current pointer.
+`session_meta` does not automatically hold `sess_*`. Native `sess_*` is lazy:
+a successful `start` has no `native_session_identity` before the first prompt.
+Write `$RECORD` immediately after a successful start or restore as a
+provisional current pointer: execution target, `$PROJECT`, `platform=zcode`,
+Runner `--session`, `acp_session_id`, and holder-instance facts from the start
+receipt. Native `sess_*` may be absent. After the first handoff, read the Host
+event log or observe output for `native_session_identity` and fill `sess_*`.
+Keep only the current pointer.
 
 ## Recover
 
-1. Bind the same execution target and `$PROJECT`. Read `$RECORD` and live
-   Runner sessions for `$HOST`.
+1. Bind the same execution target and `$PROJECT`. Read `$RECORD`. If it names
+   an exact platform/repo/session (and holder instance when present), that
+   locator wins even if the session name is not `$HOST`. A live Runner session
+   that matches that locator is the same Host. Do not start a second Host
+   because `$HOST` was not found.
 2. **Live Host** (exact platform/repo/session still serves): do not `start`.
-   Continue communication on that locator. Changing the outer Agent does not
-   stop the Host, start a second Host, or replay the first handoff.
+   Continue communication on that locator. A missing native `sess_*` on a live
+   Host is still a live attach; fill it when the identity event appears.
+   Changing the outer Agent does not stop the Host, start a second Host, or
+   replay the first handoff.
 3. **Stopped Host** with an attested native `sess_*` in `$RECORD`: restore
    only that context:
 
@@ -52,8 +60,9 @@ named. Keep only the current pointer.
 4. Missing, mismatched, or unattested `sess_*` is cannot-resume: report and
    wait. Do not create a new Host and call it continuation.
 5. No Host yet: start once at the canonical root under `$HOST`. Confirm
-   `session`/`repo`/`acp_session_id`, then wait for `native_session_identity`
-   before writing `$RECORD`.
+   `session`/`repo`/`acp_session_id` and holder instance, then write `$RECORD`
+   immediately. Native `sess_*` may be absent. Send the first handoff, then
+   fill `sess_*` from `native_session_identity` if it arrives.
 
 Do not rename, restart, or cancel an in-flight Host to adopt this Skill.
 

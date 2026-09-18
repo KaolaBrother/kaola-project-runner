@@ -71,6 +71,37 @@ def wait_until(predicate, timeout: float, label: str) -> None:
     raise AssertionError(f"timeout: {label}")
 
 
+def native_session_id_from_events(record_dir: Path) -> str | None:
+    path = record_dir / "events.jsonl"
+    if not path.is_file():
+        return None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        blob = json.dumps(entry)
+        if "nativeSessionId" not in blob and "native_session_identity" not in blob:
+            continue
+        update = (
+            (entry.get("event") or {}).get("update")
+            or entry.get("update")
+            or entry.get("event")
+            or {}
+        )
+        native_id = (
+            (update.get("nativeSessionId") if isinstance(update, dict) else None)
+            or entry.get("nativeSessionId")
+        )
+        if not native_id:
+            match = re.search(r"sess_[A-Za-z0-9_-]+", blob)
+            if match:
+                native_id = match.group(0)
+        if native_id:
+            return str(native_id)
+    return None
+
+
 def events_of_kind(record_dir: Path, kind: str) -> list[dict]:
     path = record_dir / "events.jsonl"
     if not path.is_file():
@@ -228,6 +259,7 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("not executable" in skill, "missing ZCode Runner is a hard stop")
     check("`sess_*`" in skill, "Skill names native sess_* resume")
     handoff_doc = (EXTERNAL / "references" / "handoff.md").read_text(encoding="utf-8")
+    handoff_one = re.sub(r"\s+", " ", handoff_doc)
     check("Never use `--continue`" in handoff_doc, "handoff forbids --continue guessing")
     check("else `--continue`" not in handoff_doc, "handoff does not recommend --continue as fallback")
     check("zcode-<PROJECT_CODE>-orchestrator-" in handoff_doc, "standard Host session name")
@@ -235,6 +267,18 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "three identities are sourced separately")
     check("delegator-host.json" in handoff_doc, "current continuation pointer is named")
     check("prompt-in-progress" in handoff_doc, "busy send is not claimed delivered")
+    check("wait for `native_session_identity` before writing" not in handoff_doc,
+          "pointer is not blocked on lazy native id")
+    check("provisional current pointer" in handoff_one, "start writes a provisional pointer")
+    check("Native `sess_*` may be absent" in handoff_one, "provisional pointer may omit native id")
+    check("even if the session name is not `$HOST`" in handoff_one,
+          "trusted locator wins over the new Host name")
+    check("Do not start a second Host because `$HOST` was not found" in handoff_one,
+          "missing new HOST name does not start a second orchestrator")
+    check("even if its name is not the new Host form" in skill_one,
+          "Skill adopts a live Host with a nonstandard name")
+    check("native `sess_*` may be absent" in skill_one,
+          "Skill writes the pointer before native id exists")
     check(len((EXTERNAL / "SKILL.md").read_bytes()) <= BUDGETS["external_skill_bytes"],
           "external Skill stays in its small budget")
     check(BUDGETS["main_skill_bytes"] <= 17408, "existing main budget not raised")
@@ -269,39 +313,33 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
         host_start = sandbox.cli("start", "--mode", "yolo", session=host)
         check(host_start.get("state") == "ready", f"Host start ready ({host_start.get('error')})")
         sandbox.dump("01-host-start.json", host_start)
-        native_id = None
-        events_path = sandbox.record_dir(host) / "events.jsonl"
-        if events_path.is_file():
-            for line in events_path.read_text(encoding="utf-8").splitlines():
-                try:
-                    entry = json.loads(line)
-                except ValueError:
-                    continue
-                blob = json.dumps(entry)
-                if "nativeSessionId" in blob or "native_session_identity" in blob:
-                    native_id = (
-                        ((entry.get("event") or {}).get("nativeSessionId"))
-                        or ((entry.get("update") or {}).get("nativeSessionId"))
-                        or entry.get("nativeSessionId")
-                    )
-                    if not native_id:
-                        match = re.search(r"sess_[A-Za-z0-9_-]+", blob)
-                        if match:
-                            native_id = match.group(0)
+        # Provisional pointer from the start receipt only. Do not harvest
+        # native sess_* from events here: real ZCode creates it lazily on the
+        # first prompt. Fake may emit earlier; that is not the Skill contract.
         continuation = {
             "schema": "kaola-delegator-host/1",
             "canonical_repo": str(sandbox.repo),
             "platform": "zcode",
             "session": host,
             "acp_session_id": host_start.get("acp_session_id"),
-            "native_session_id": native_id,
+            "native_session_id": None,
+            "holder_instance_id": host_start.get("holder_instance_id"),
             "session_meta": host_start.get("session_meta"),
         }
         sandbox.dump("01b-continuation.json", continuation)
         check(continuation["session"] == host, "continuation stores the Runner session name")
         check(continuation["acp_session_id"], "continuation stores acp_session_id from the start receipt")
+        check(continuation["holder_instance_id"], "provisional pointer stores holder instance from start")
+        check(continuation["native_session_id"] is None,
+              "provisional pointer omits native id until the identity event is read after first handoff")
         check(continuation.get("session_meta") != continuation["acp_session_id"],
               "session_meta is not used as a stand-in for acp_session_id")
+
+        live_before_prompt = sandbox.cli("status", session=host)
+        sandbox.dump("01c-live-attach-before-prompt.json", live_before_prompt)
+        check(live_before_prompt.get("error") is None,
+              f"Agent B live-attaches before native id ({live_before_prompt.get('error')})")
+        check(live_before_prompt.get("session") == host, "live attach names the original Host")
 
         handoff = (
             f"Load {RUNNER / 'SKILL.md'} (Project Runner) and follow it.\n"
@@ -321,6 +359,13 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
         sandbox.dump("04-host-rpc-prompts.json", prompts)
         check(any(ORIGINAL_TASK in text for text in prompts),
               "original user task/quota reached the Host; not substituted by a grep of the Skill")
+
+        filled_native = native_session_id_from_events(sandbox.record_dir(host))
+        continuation["native_session_id"] = filled_native
+        sandbox.dump("01d-continuation-after-handoff.json", continuation)
+        # Fake may already have emitted identity at start (setMode materialize).
+        # Recording it after the first prompt follows the Skill fill step; it
+        # is not proof of real-ZCode lazy timing or of start --resume.
 
         runner_text = (RUNNER / "SKILL.md").read_text(encoding="utf-8")
         check("Main execution loop" in runner_text, "inner Host loads Project Runner")
@@ -363,9 +408,54 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
         sandbox.dump("11-sessions.json", listed)
         check(listed == sorted({host, worker}), f"external path started only the Host; inner worker is Host-owned ({listed})")
 
+        sandbox.dump("12-resume-boundary.txt", (
+            "fake-zcode-app-server is not a production ZCode backend.\n"
+            "This suite does not claim start -> first prompt -> "
+            "native_session_identity -> A/B live attach -> exact stop -> "
+            "start --resume sess_*.\n"
+            "That path needs a real ZCode app-server. After exact stop, a "
+            "missing or unattested native sess_* remains cannot-resume.\n"
+        ))
+
         for session in (worker, host):
             stop = sandbox.cli("stop", "--force", session=session)
             check(stop.get("error") is None, f"{session} exact stop")
+    finally:
+        sandbox.cleanup()
+
+
+def test_adopt_nonstandard_live_host_without_second_start() -> None:
+    sandbox = Sandbox("adopt")
+    try:
+        old = f"zcode-KPR-legacy-{uuid.uuid4().hex[:6]}"
+        check(re.match(r"zcode-[A-Za-z0-9]+-orchestrator-", old) is None,
+              "legacy name is not the new Host form")
+        start = sandbox.cli("start", "--mode", "yolo", session=old)
+        check(start.get("state") == "ready", f"legacy Host start ready ({start.get('error')})")
+        pointer = {
+            "schema": "kaola-delegator-host/1",
+            "canonical_repo": str(sandbox.repo),
+            "platform": "zcode",
+            "session": old,
+            "acp_session_id": start.get("acp_session_id"),
+            "native_session_id": None,
+            "holder_instance_id": start.get("holder_instance_id"),
+        }
+        sandbox.dump("13-old-host-pointer.json", pointer)
+        status = sandbox.cli("status", session=old)
+        sandbox.dump("14-old-host-status.json", status)
+        check(status.get("error") is None, f"live attach on nonstandard name ({status.get('error')})")
+        check(status.get("session") == old, "adopted locator keeps the recorded session name")
+        listed = sorted({*sandbox.sessions})
+        sandbox.dump("15-old-host-sessions.json", listed)
+        check(listed == [old], "no second Host started because the new HOST name was missing")
+        stop = sandbox.cli("stop", "--force", session=old)
+        check(stop.get("error") is None, "exact stop of adopted Host")
+        sandbox.dump("16-cannot-resume-after-stop.txt", (
+            "stopped Host; native_session_id absent; cannot-resume; "
+            "do not start a new orchestrator session and call it continuation; "
+            "fake backend is not production start --resume evidence\n"
+        ))
     finally:
         sandbox.cleanup()
 
@@ -374,6 +464,7 @@ def main() -> int:
     tests = (
         test_generated_entry_matrix_and_no_engine_leak,
         test_two_layer_handoff_worker_end_turn_and_resume,
+        test_adopt_nonstandard_live_host_without_second_start,
     )
     failed = 0
     for test in tests:
