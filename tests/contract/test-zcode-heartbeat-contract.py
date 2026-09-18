@@ -852,8 +852,16 @@ def test_canonical_heartbeat_spec_stays_one_set() -> None:
     skeleton = ROOT / "templates" / "orchestrator" / "references" / "heartbeat-skeleton.txt"
     text = skeleton.read_text(encoding="utf-8")
     check("PROJECT_RUNNER_HEARTBEAT_V2" in text, "the canonical skeleton keeps its version marker")
-    check("ZCode" not in text and "zcode" not in text,
-          "the shared skeleton gains no ZCode-specific carrier wording (one set)")
+    # Issue #68: the skeleton now names which host's trigger delivers the heartbeat
+    # (Codex/Grok Bot timer vs ZCode Host worker events), so the host name itself is
+    # no longer the tell. The one-set invariant is that the carrier is still specified
+    # once: the event-carrier mechanism only in the Skill, the prompt path only here.
+    check("KAOLA_ACP_HEARTBEAT_HOST" not in text,
+          "the ZCode event-carrier mechanism is specified in the Skill, not re-specified in the skeleton")
+    check(text.count(".kaola/heartbeat-prompt.json") == 1,
+          "the ZCode prompt carrier is named exactly once in the skeleton (one set)")
+    check("ZCode Host 更新项目根 `.kaola/heartbeat-prompt.json`" in text,
+          "the skeleton scopes that carrier to the ZCode Host and leaves other hosts their own")
     rendered = sorted((ROOT / "skills" / "kaola-project-runner").glob("**/heartbeat-skeleton*"))
     check(len(rendered) == 1, f"the orchestrator package carries exactly one skeleton ({rendered})")
 

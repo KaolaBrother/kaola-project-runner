@@ -91,8 +91,8 @@ an inner stop never reaches the outer Host, and the outer stop sweeps only
 recorded inner sessions. A ZCode Host session's heartbeat is event-driven:
 no Routine, cron, or sleep loop. It owns the full working prompt at the project
 root `.kaola/heartbeat-prompt.json`: after each worker termination or turn-end
-idle it settles the next step, then updates the file (project info, pace,
-plans, coordination) so the next heartbeat pass carries fresh state. It
+idle it settles the next step, then rewrites that file as the next beat's
+snapshot. It
 exports `KAOLA_ACP_HEARTBEAT_HOST` on each worker start; each worker
 termination or turn-end idle then delivers one full heartbeat pass into this
 session. No worker event, no trigger. A **bridge
@@ -139,7 +139,7 @@ value; `capture --full` is the only explicit, unbounded request.
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
 | Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
 | Workflow | On; start at the canonical project root; the worker's Workflow creates its worktree. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
-| Heartbeat | 30 minutes unless specified; zero or "no heartbeat" means one-shot. Prefer one host-native recurring task, otherwise same-session blocking sleep. Never use both. |
+| Heartbeat | 30 minutes unless specified; zero or "no heartbeat" means one-shot. One host-native carrier, else same-session sleep, never both. |
 | Permissions | Existing Runner default bypass start. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
 | Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
@@ -157,13 +157,15 @@ leftovers are a transport fact: do not force PTY or invent a new skip-all gate.
 
 ## Heartbeat
 
-Render a project-specific heartbeat from the short skeleton in
-[references/heartbeat-skeleton.md](references/heartbeat-skeleton.md), current
-authorization, and project instructions. Keep stable policy in this Skill,
-project constraints in the consuming project's instructions, and changing
-facts in that project's run records. Update the **same** heartbeat when
-instructions materially change; replace obsolete text rather than append
-conflicting versions. A report-only request disables execution actions.
+The heartbeat is the working prompt itself: Codex and Grok Bot run it from their
+own timer, a ZCode Host from each worker return or event, on host-native
+carriers. Render it from the skeleton in
+[references/heartbeat-skeleton.md](references/heartbeat-skeleton.md),
+authorization, and project instructions. It is the effective-now snapshot, not a
+log: update the **same** heartbeat, replacing superseded quota, priority and
+plans, and keeping in-flight locators and unfinished duties. A confirmed change
+applies in that beat; a lowered quota alone cancels nothing. A report-only
+request disables execution actions.
 
 Native recurring wake and blocking sleep must not be stacked. On a ZCode Host
 session, worker events are the only heartbeat trigger (see Hosts). After
