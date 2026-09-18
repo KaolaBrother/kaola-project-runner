@@ -52,6 +52,7 @@ PLAN_CACHE_FIXTURE = FIXTURES / "zcode-coding-plan-cache.json"
 DESKTOP_CONFIG = json.loads(DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"))
 CODING_PLAN_ID = "builtin:bigmodel-coding-plan"
 FIXTURE_SECRET = DESKTOP_CONFIG["provider"][CODING_PLAN_ID]["options"]["apiKey"]
+UNREGISTERED_COMMAND_TOKEN = "unreg-i67-token-9f3a7c2e"
 START_PLAN_SECRET = DESKTOP_CONFIG["provider"]["builtin:bigmodel-start-plan"]["options"]["apiKey"]
 DENIED_ENV = (
     "ANTHROPIC_API_KEY",
@@ -414,7 +415,7 @@ class ZcodeAcpStaticTests(unittest.TestCase):
         for name in DENIED_ENV:
             self.assertIn(name, module.DENIED_ENV)
 
-    def test_extract_tool_evidence_keeps_only_bounded_path_command(self) -> None:
+    def test_extract_tool_evidence_keeps_only_bounded_path_and_line(self) -> None:
         module = load_adapter_module()
         module.register_secret("super-secret-value-xyz")
         path = "/tmp/kpr-issue-67-fixture/MARKER.txt"
@@ -423,19 +424,23 @@ class ZcodeAcpStaticTests(unittest.TestCase):
             nested = {"child": nested}
         raw = module.extract_tool_evidence({
             "file_path": path,
-            "command": "echo super-secret-value-xyz " + ("x" * 400),
+            "offset": 12,
+            "command": "echo super-secret-value-xyz " + UNREGISTERED_COMMAND_TOKEN,
             "apiKey": "super-secret-value-xyz",
             "contents": "unregistered-secret-value-abc123xyz",
             "extra": nested,
         })
         assert raw is not None
         self.assertEqual(raw.get("file_path"), path)
-        self.assertTrue(str(raw.get("command", "")).startswith("echo <redacted-credential>"))
-        self.assertLessEqual(len(str(raw.get("command"))), module.RAW_INPUT_COMMAND_CAP + 1)
+        self.assertEqual(raw.get("offset"), 12)
+        self.assertNotIn("command", raw)
         self.assertNotIn("apiKey", raw)
         self.assertNotIn("contents", raw)
         self.assertNotIn("extra", raw)
-        self.assertNotIn("unregistered-secret-value-abc123xyz", json.dumps(raw))
+        blob = json.dumps(raw)
+        self.assertNotIn("unregistered-secret-value-abc123xyz", blob)
+        self.assertNotIn(UNREGISTERED_COMMAND_TOKEN, blob)
+        self.assertNotIn("super-secret-value-xyz", blob)
         self.assertLessEqual(
             len(json.dumps(raw, ensure_ascii=False).encode("utf-8")),
             module.RAW_INPUT_MAX_BYTES,
@@ -444,9 +449,10 @@ class ZcodeAcpStaticTests(unittest.TestCase):
         self.assertIsNone(module.extract_tool_evidence(nested), "nested path is not lifted")
         self.assertEqual(
             module.locations_from_input(raw),
-            [{"path": path, "line": None}],
+            [{"path": path, "line": 12}],
         )
         self.assertEqual(module.locations_from_input({"command": "cat /etc/passwd"}), [])
+        self.assertIsNone(module.extract_tool_evidence({"command": "echo hi"}))
         self.assertIsNone(module.extract_tool_evidence({}))
         self.assertIsNone(module.extract_tool_evidence(None))
 
@@ -576,7 +582,9 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertTrue(any(u.get("kind") == "execute" and u.get("status") == "completed" for u in tools))
         completed = [u for u in tools if u.get("status") == "completed"]
         self.assertTrue(completed)
-        self.assertEqual(completed[-1].get("rawInput"), {"command": "echo hi"})
+        self.assertEqual(completed[-1].get("kind"), "execute")
+        self.assertEqual(completed[-1].get("title"), "Bash")
+        self.assertNotIn("rawInput", completed[-1])
         self.assertNotIn("locations", completed[-1])
         record = wait_for(lambda: driver.record() or None, 3)
         self.assertIsNotNone(record)
@@ -671,7 +679,9 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertIsNotNone(permit)
         assert permit is not None
         tool_call = (permit.get("params") or {}).get("toolCall") or {}
-        self.assertEqual(tool_call.get("rawInput"), {"command": "ls -la"})
+        self.assertEqual(tool_call.get("title"), "Bash")
+        self.assertEqual(tool_call.get("kind"), "execute")
+        self.assertNotIn("rawInput", tool_call)
         self.assertNotIn("locations", tool_call)
         driver.send({
             "jsonrpc": "2.0",
@@ -1117,9 +1127,9 @@ class ZcodeAcpContractTests(unittest.TestCase):
         tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") in ("tool_call", "tool_call_update")]
         self.assertTrue(tools)
         self.assertNotIn(FIXTURE_SECRET, json.dumps(tools))
-        raw_inputs = [u.get("rawInput") for u in tools if u.get("rawInput") is not None]
-        self.assertTrue(raw_inputs)
-        self.assertTrue(all("<redacted-credential>" in json.dumps(raw) for raw in raw_inputs))
+        for update in tools:
+            self.assertNotIn("rawInput", update)
+            self.assertNotIn("command", json.dumps(update))
         self.assert_registry_read_only_and_secret_contained(driver)
 
     def test_read_file_path_is_forwarded_as_locations(self) -> None:
@@ -1177,10 +1187,8 @@ class ZcodeAcpContractTests(unittest.TestCase):
             self.assertNotIn("apiKey", raw)
             self.assertNotIn("extra", raw)
             self.assertNotIn("unregistered", raw)
+            self.assertNotIn("command", raw)
             self.assertEqual(update.get("locations"), [{"path": path, "line": None}])
-            if "command" in raw:
-                self.assertIn("<redacted-credential>", str(raw["command"]))
-                self.assertNotIn(FIXTURE_SECRET, str(raw["command"]))
 
     def test_huge_nested_input_stays_within_raw_input_bound(self) -> None:
         driver = self.start("huge_nested")
@@ -1197,8 +1205,7 @@ class ZcodeAcpContractTests(unittest.TestCase):
             raw = update.get("rawInput") or {}
             self.assertEqual(raw.get("file_path"), "/tmp/kpr-issue-67-fixture/MARKER.txt")
             self.assertNotIn("extra", raw)
-            if "command" in raw:
-                self.assertLessEqual(len(str(raw["command"])), module.RAW_INPUT_COMMAND_CAP + 1)
+            self.assertNotIn("command", raw)
             encoded = json.dumps(raw, ensure_ascii=False).encode("utf-8")
             self.assertLessEqual(len(encoded), module.RAW_INPUT_MAX_BYTES)
             self.assertLess(len(json.dumps(update, ensure_ascii=False)), 4096)
@@ -1207,6 +1214,49 @@ class ZcodeAcpContractTests(unittest.TestCase):
         """Issue #67 comment 5728867515: holder persistence matches the bound."""
         self._assert_holder_events("sensitive_extra", secret=True)
         self._assert_holder_events("huge_nested", secret=False)
+        self._assert_holder_events("command_token", secret=False)
+
+    def test_holder_events_omit_unregistered_command_token(self) -> None:
+        """Execute cards keep kind/title/status; plaintext command is not persisted."""
+        driver = self.start("command_token")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "run"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
+        self.assertTrue(any(u.get("kind") == "execute" and u.get("title") == "Bash" for u in tools))
+        for update in tools:
+            self.assertNotIn("rawInput", update)
+            self.assertNotIn("locations", update)
+            self.assertNotIn(UNREGISTERED_COMMAND_TOKEN, json.dumps(update))
+        self.stop_driver()
+
+        turn = HolderTurn(self.tmp, "command_token")
+        try:
+            turn.start()
+            turn.send("run")
+            matches = list(turn.record_dir.rglob("events.jsonl"))
+            self.assertEqual(len(matches), 1)
+            blob = matches[0].read_text(encoding="utf-8", errors="replace")
+            self.assertNotIn(UNREGISTERED_COMMAND_TOKEN, blob)
+            saw_execute = False
+            for line in blob.splitlines():
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                update = (entry.get("update") or {})
+                if update.get("sessionUpdate") != "tool_call":
+                    continue
+                self.assertNotIn("rawInput", update)
+                self.assertNotIn("command", update)
+                if update.get("kind") == "execute" and update.get("title") == "Bash":
+                    saw_execute = True
+            self.assertTrue(saw_execute)
+        finally:
+            turn.stop()
 
     def _assert_holder_events(self, scenario: str, *, secret: bool) -> None:
         turn = HolderTurn(self.tmp, scenario)

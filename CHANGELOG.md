@@ -30,6 +30,11 @@
   byte budget was raised, and running sessions - including names predating the
   rule - are neither renamed nor restarted to adopt it.
 
+- **ZCode ACP tool cards persist path/line only, never a command (Issue #67).**
+  `rawInput`/`locations` copy top-level path and line fields the app-server
+  already named. Plaintext `command` is not forwarded; execute cards keep
+  kind/title/status without claiming a command transcript. No generic
+  sanitizer was added.
 - **ZCode ACP tool evidence is a bounded path/command receipt (Issue #67).**
   `rawInput` copies only top-level path and truncated `command` fields, with a
   1536-byte / depth-1 cap. Nested blobs and extra keys are dropped. Registered

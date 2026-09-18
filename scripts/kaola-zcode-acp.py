@@ -59,7 +59,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 ADAPTER_NAME = "kaola-zcode-acp"
-ADAPTER_VERSION = "0.3.2"
+ADAPTER_VERSION = "0.3.3"
 
 # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
 DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
@@ -593,9 +593,8 @@ TOOL_STATUS = {
 }
 
 # Path-like keys actually observed on ZCode tool `input` (live 0.16.5 Read:
-# `file_path`) plus the same names the protocol examples and sibling tools use.
-# `command` is a truncated receipt only — never parsed into a path, never a
-# full-input credential scrub of arbitrary text.
+# `file_path`) plus the same names sibling file tools use. `command` is never
+# copied: an execute card keeps kind/title/status only.
 TOOL_INPUT_PATH_KEYS = (
     "file_path",
     "filePath",
@@ -606,7 +605,6 @@ TOOL_INPUT_PATH_KEYS = (
 )
 TOOL_INPUT_LINE_KEYS = ("line", "offset")
 RAW_INPUT_PATH_CAP = 1024
-RAW_INPUT_COMMAND_CAP = 160
 RAW_INPUT_MAX_BYTES = 1536
 RAW_INPUT_MAX_DEPTH = 1
 
@@ -616,12 +614,11 @@ def _cap_str(text: str, cap: int) -> str:
 
 
 def extract_tool_evidence(source: Any) -> dict[str, Any] | None:
-    """Copy only top-level path/command evidence.
+    """Copy only top-level path and line evidence.
 
-    Nested blobs, extra keys, and secret-like fields are dropped. Registered
-    adapter secrets inside a copied string are redacted; an arbitrary command
-    is truncated and is not claimed fully desensitized. Depth is 1: a path
-    buried in a nested dict is not lifted.
+    `command` and every other key are dropped. Depth is 1: a path buried in a
+    nested dict is not lifted. Registered adapter secrets in a copied path
+    string are still redacted.
     """
     if not isinstance(source, dict):
         return None
@@ -631,9 +628,6 @@ def extract_tool_evidence(source: Any) -> dict[str, Any] | None:
         val = source.get(key)
         if isinstance(val, str) and val:
             evidence[key] = _cap_str(redact(val), RAW_INPUT_PATH_CAP)
-    command = source.get("command")
-    if isinstance(command, str) and command:
-        evidence["command"] = _cap_str(redact(command), RAW_INPUT_COMMAND_CAP)
     for key in TOOL_INPUT_LINE_KEYS:
         val = source.get(key)
         if isinstance(val, int) and not isinstance(val, bool):
@@ -642,9 +636,6 @@ def extract_tool_evidence(source: Any) -> dict[str, Any] | None:
     if not evidence:
         return None
     encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
-    if len(encoded) > RAW_INPUT_MAX_BYTES:
-        evidence.pop("command", None)
-        encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
     if len(encoded) > RAW_INPUT_MAX_BYTES:
         for key in list(evidence):
             if key in TOOL_INPUT_PATH_KEYS and isinstance(evidence[key], str):

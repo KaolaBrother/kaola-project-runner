@@ -60,11 +60,10 @@ Tool `input` (Issue #67, measured on CLI 0.16.5): `model.streaming` kind
 `tool_call` carries `input` (`Read` used `file_path`; protocol examples use
 `command` for `Bash`). `tool.updated` `scheduled` may omit `input` and set
 `inputOmitted`/`inputRef` instead. The adapter caches the streaming `input`
-and forwards only top-level path/command evidence as a bounded ACP `rawInput`
-plus `locations` for path-like keys; extra and nested fields are dropped. It
-does not follow `inputRef`, does not invent a path, and does not claim an
-arbitrary command string is fully credential-scrubbed (registered adapter
-secrets in copied strings are redacted; command is truncated).
+and forwards only top-level path and line fields as a bounded ACP `rawInput`
+plus `locations`. Extra, nested, and `command` fields are dropped — execute
+cards keep kind/title/status without a command transcript. It does not follow
+`inputRef` and does not invent a path.
 
 ## Removed / never implemented
 

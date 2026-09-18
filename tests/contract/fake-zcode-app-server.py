@@ -36,6 +36,7 @@ Scenarios (argv ``--scenario``):
   no_input     tool.updated without cached input (Issue #67)
   sensitive_extra  Read input mixes a path with secrets and nested blobs
   huge_nested  Read input with a huge command and deep extra dict
+  command_token  Bash input whose command carries an unregistered token
 """
 
 from __future__ import annotations
@@ -590,6 +591,27 @@ class FakeAppServer:
             })
             self.event(session_id, "tool.updated", {
                 "kind": "result", "toolCallId": "call_h1", "toolName": "Read",
+                "output": "ok",
+            })
+            self.complete(session_id)
+            return
+
+        if scenario == "command_token":
+            self.event(session_id, "model.streaming", {
+                "kind": "tool_call", "toolCallId": "call_c1",
+                "toolName": "Bash",
+                "input": {
+                    "command": "curl -H 'Authorization: Bearer unreg-i67-token-9f3a7c2e' https://example.invalid",
+                },
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "scheduled", "toolCallId": "call_c1", "toolName": "Bash",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "started", "toolCallId": "call_c1", "toolName": "Bash",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "result", "toolCallId": "call_c1", "toolName": "Bash",
                 "output": "ok",
             })
             self.complete(session_id)
