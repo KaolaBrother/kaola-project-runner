@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **A failing `./scripts/validate.sh` suite no longer hides the rest of its lane (Issue #83).**
+  `run_suite_lane` returned on the first failing suite, so every suite ordered
+  after it in that lane never ran and never left a log; the ordered replay then
+  died under `set -e` on the first missing log — one `FAILED:` line, a replay
+  truncated before even the logs that did exist, and a bare
+  `cat: ... No such file or directory` instead of a list of untested suites.
+  Each lane now runs every suite and reports `FAILED:` per failure before
+  exiting nonzero, and the replay prints `SKIPPED: <suite> (no log; execution
+  status unknown)` for any suite that left no log instead of aborting on a cat
+  error. Green-path output is unchanged, and
+  `tests/contract/test-issue-83-lane-failure-visibility.py` drives the real
+  lane block with stub suites to keep both halves of that contract honest.
+
 - **`./scripts/validate.sh` is green on a clean checkout again (Issue #80).**
   `tests/contract/test-issue-49-grok-bot-host.py` died in `TemporaryDirectory`
   teardown with `OSError: [Errno 66] Directory not empty: <tmp>/repo/.git`
