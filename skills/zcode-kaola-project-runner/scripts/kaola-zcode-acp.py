@@ -49,6 +49,7 @@ import argparse
 import atexit
 import hashlib
 import json
+import math
 import os
 import re
 import signal
@@ -56,11 +57,36 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 ADAPTER_NAME = "kaola-zcode-acp"
 ADAPTER_VERSION = "0.3.3"
+# Issue #81: how long a `_session/steering` waits for the drain evidence after
+# an accepted v4 sendText. Must stay under the holder's 30 s steer timeout; a
+# guide input whose boundary lands later is reported `written`, never guessed.
+STEER_DRAIN_WINDOW = 20.0
+# Issue #81: hard cap on the whole steer exchange (subscribe + send + evidence
+# wait), kept under the holder's 30 s steer timeout so a slow or lost v4 ack
+# can never push the reply past the holder's own deadline. The env override
+# exists so contract tests can exercise the deadline without a 26 s wait.
+def _steer_budget_seconds(raw: str | None) -> float:
+    """Resolve the test-only steer-budget override fail-safe: invalid,
+    non-finite, or non-positive input yields the 26 s default and any value
+    is capped at 26 s, so no env content can crash startup or push the steer
+    deadline past the holder's 30 s timeout."""
+    try:
+        value = float(raw) if raw is not None else 26.0
+    except (TypeError, ValueError):
+        return 26.0
+    if not math.isfinite(value) or value <= 0:
+        return 26.0
+    return min(value, 26.0)
+
+
+STEER_TOTAL_BUDGET = _steer_budget_seconds(
+    os.environ.get("KAOLA_ZCODE_STEER_BUDGET"))
 
 # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
 DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
@@ -665,6 +691,12 @@ def persisted_model_from_messages(payload: Any) -> dict[str, str] | None:
 # --------------------------------------------------------------------------
 
 
+class BackendTransportError(RuntimeError_):
+    """A backend call failed without a server answer — timeout, app-server
+    exit, or a write failure. The request may already have been processed
+    server-side, so it must never be read as a business rejection."""
+
+
 class ZCodeBackend:
     """Talks the private ZCode Protocol to an `app-server --stdio` child."""
 
@@ -711,6 +743,7 @@ class ZCodeBackend:
             self._pending.clear()
         for slot in pending:
             slot["error"] = {"code": -32000, "message": "zcode app-server exited"}
+            slot["transport"] = True
             slot["event"].set()
 
     def _dispatch(self, msg: dict[str, Any]) -> None:
@@ -747,8 +780,14 @@ class ZCodeBackend:
         if not slot["event"].wait(timeout):
             with self._lock:
                 self._pending.pop(rid, None)
-            raise RuntimeError_(f"zcode call timed out: {method}")
+            raise BackendTransportError(f"zcode call timed out: {method}")
         if slot.get("error"):
+            if slot.get("transport"):
+                # The backend died mid-call: the request may already have
+                # been processed server-side — transport-uncertain, not a
+                # business rejection.
+                raise BackendTransportError(
+                    f"zcode transport failed for {method}: {slot['error']}")
             raise RuntimeError_(f"zcode error for {method}: {slot['error']}")
         return slot.get("result")
 
@@ -935,6 +974,14 @@ class Session:
         self.turn_request_id: Any = None
         self.cancelled = False
         self.tools: dict[str, dict[str, Any]] = {}
+        # Issue #81: v4 steering ledger. `v4_subscribed` marks the lazy
+        # conversation subscribe that unlocks the publisher whose steer events
+        # ride session/event; `steer` is the single in-flight steer receipt;
+        # `active_turn_id` is the backend turnId from the running turn's own
+        # `turn.started` event, used for the sendText expectedTurnId CAS.
+        self.v4_subscribed = False
+        self.steer: dict[str, Any] | None = None
+        self.active_turn_id: str | None = None
 
 
 class ZCodeAcpAgent:
@@ -1399,11 +1446,12 @@ class ZCodeAcpAgent:
         etype = params.get("type")
         payload = params.get("payload") or {}
         try:
-            self.translate_event(session, etype, payload)
+            self.translate_event(session, etype, payload, params.get("turnId"))
         except Exception as exc:  # never let one event kill the stream
             log(f"event translation failed ({etype}): {exc}")
 
-    def translate_event(self, session: Session, etype: str, payload: dict[str, Any]) -> None:
+    def translate_event(self, session: Session, etype: str, payload: dict[str, Any],
+                        params_turn_id: str | None = None) -> None:
         if etype == "model.streaming":
             kind = payload.get("kind")
             delta = payload.get("delta") or ""
@@ -1436,6 +1484,25 @@ class ZCodeAcpAgent:
             usage = payload.get("usage")
             if usage:
                 self.update(session, {"sessionUpdate": "usage_update", "usage": usage})
+            return
+
+        # Issue #81: bind the running turn's backend id for the steer ledger.
+        # `turn.started` carries the platform's own `turnId` at params level;
+        # `turn.completed` and friends clear it in finish_turn.
+        if etype == "turn.started":
+            with self.lock:
+                session.active_turn_id = params_turn_id
+            return
+
+        # Issue #81: the steer ledger. These events are the ONLY truthful
+        # injected-vs-queued evidence — the v4 sendText ack reports
+        # `delivery:"queue"` even for an admitted guide input.
+        if etype == "turn.steerQueued":
+            self.record_steer_queued(session, payload)
+            return
+
+        if etype == "turn.steerDrained":
+            self.record_steer_drained(session, payload)
             return
 
         if etype == "turn.completed":
@@ -1502,6 +1569,13 @@ class ZCodeAcpAgent:
         with self.lock:
             rid = session.turn_request_id
             session.turn_request_id = None
+            session.active_turn_id = None
+            steer = session.steer
+            if steer is not None:
+                # A turn boundary decides a pending steer: a guide input that
+                # never drained stays queued, and silence becomes `unknown`.
+                steer["turn_ended"] = True
+                steer["done"].set()
         if rid is None:
             return
         result: dict[str, Any] = {"stopReason": stop}
@@ -1509,6 +1583,415 @@ class ZCodeAcpAgent:
             result["usage"] = usage
         session.cancelled = False
         self.respond(rid, result)
+
+    # -- Issue #81: v4 native steering -------------------------------------
+    #
+    # ZCode 3.12+ (app-server 0.16+) removed `session/steer`; mid-turn steering
+    # moved to the v4 command surface. The proven path (live evidence, Issue
+    # #81): `v4/command sendText{requestedDelivery:"guide"}` is admitted as a
+    # guide input and injected at the next tool/message boundary INSIDE the
+    # running turn, observed as `turn.steerQueued{delivery:"guide"}` then
+    # `turn.steerDrained{injectedMessageIds}` on the same `targetTurnId`. The
+    # sendText ack alone cannot prove it — its `result.delivery` reads "queue"
+    # even for admitted guide input — so the outcome ladder below keys off the
+    # events only. No second lifecycle, scheduler, or stdin writer is added:
+    # the events already ride the `session/event` stream this adapter holds.
+
+    def record_steer_queued(self, session: Session, payload: dict[str, Any]) -> None:
+        with self.lock:
+            steer = session.steer
+            if steer is None:
+                return
+            command_id = steer["command_id"]
+            intent = payload.get("intent") or {}
+            ours = (
+                payload.get("inputId") == command_id
+                or payload.get("queryId") == command_id
+                or intent.get("sourceCommandId") == command_id
+            )
+            if not ours:
+                return
+            steer["queued"] = payload
+            steer["pending_input_id"] = payload.get("pendingInputId")
+            steer["done"].set()
+
+    def record_steer_drained(self, session: Session, payload: dict[str, Any]) -> None:
+        with self.lock:
+            steer = session.steer
+            if steer is None:
+                return
+            pending_id = steer.get("pending_input_id")
+            drained = payload.get("drainedInputs") or []
+            # Issue #81 review: `pending_id` can be unknown (the admission
+            # event omitted `pendingInputId`), and a `None == None` match
+            # against an unrelated drained item that also omits the field must
+            # never count as ours. Only a nonempty known pending id or the
+            # exact sourceCommandId proves this drain consumed our input.
+            ours_items = [
+                item for item in drained
+                if (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
+                or (pending_id and item.get("pendingInputId") == pending_id)
+            ]
+            payload_level = bool(pending_id) and pending_id in (
+                payload.get("pendingInputIds") or [])
+            if not ours_items and not payload_level:
+                return
+            injected = payload.get("injectedMessageIds") or []
+            steer["drained"] = payload
+            # Issue #81 review: `injected` further needs OUR drained item's own
+            # messageId inside injectedMessageIds — a batch that contains our
+            # input but injected someone else's message is not our injection.
+            steer["our_injected_ids"] = [
+                item.get("messageId") for item in ours_items
+                if item.get("messageId") in injected
+            ]
+            steer["done"].set()
+
+    def on_session_steering(self, rid: Any, params: dict[str, Any]) -> None:
+        """One native mid-turn steer through the v4 command surface.
+
+        Returns `{outcome, confirmation, reason, ...}` for the holder's #65
+        receipt mapping: `injected` only after `turn.steerDrained` carries this
+        command's pending input into the targeted turn; `queued` when the
+        admission stayed in the follow-up queue (delivery `queue`, or the turn
+        ended before the guide boundary); `written` when a guide admission is
+        still pending at the wait window; `promptRequired` when no turn runs;
+        `unknown` when the ack was accepted but no steer evidence arrived.
+        """
+        acp_id = params.get("sessionId") or ""
+        with self.lock:
+            session = self.sessions.get(acp_id)
+        if session is None:
+            self.respond(rid, error={"code": -32602, "message": f"unknown session {acp_id}"})
+            return
+        text = self._prompt_text(params.get("prompt"))
+        if not text.strip():
+            self.respond(rid, error={"code": -32602, "message": "steer requires non-empty text"})
+            return
+        with self.lock:
+            if session.backend_id is None or session.turn_request_id is None:
+                # A settled turn must never make this call invent a detached
+                # one — the holder asked for `idleBehavior:"promptRequired"`.
+                self.respond(rid, {
+                    "outcome": "promptRequired",
+                    "reason": "no running turn for this session",
+                })
+                return
+            if session.steer is not None:
+                self.respond(rid, error={
+                    "code": -32000,
+                    "message": "a steer is already in flight for this session",
+                })
+                return
+            steer = {
+                "command_id": f"kpr-steer-{uuid.uuid4().hex[:12]}",
+                "done": threading.Event(),
+                "queued": None,
+                "drained": None,
+                "pending_input_id": None,
+                "expected_turn_id": None,
+                "turn_ended": False,
+            }
+            session.steer = steer
+            # The turn this steer is FOR: the running turn at request entry.
+            # A later recheck must find this same request id still running —
+            # otherwise the original turn ended (or a successor replaced it)
+            # and a CAS learned from `active_turn_id` would steer whoever
+            # happens to run now instead of the intended turn.
+            target_request_id = session.turn_request_id
+        backend_id = session.backend_id
+        send_uncertain = False
+        ack: dict[str, Any] | None = None
+        # One deadline for the whole steer exchange — subscribe, the
+        # expected-id wait, the send, and the drain wait each get only what is
+        # left of it, so a slow phase can never push the reply past the
+        # holder's own 30 s steer timeout.
+        deadline_total = time.monotonic() + STEER_TOTAL_BUDGET
+        try:
+            backend = self.ensure_backend()
+            if not session.v4_subscribed:
+                # The live-proven configuration: the conversation subscription
+                # creates the publisher whose steer events ride session/event.
+                backend.call("v4/conversation/subscribe", {
+                    "topic": f"conversation/{backend_id}",
+                    "connectionId": f"kpr-{uuid.uuid4()}",
+                    "clientMode": "desktop-continuous",
+                }, timeout=max(0.1, min(15.0, deadline_total - time.monotonic())))
+                session.v4_subscribed = True
+            # `turn.started` (params-level `turnId`) can lag the prompt
+            # acknowledgement slightly on the backend reader thread; a short
+            # bounded wait lets the expectedTurnId CAS protect the common
+            # early-steer case. A build that never reports it just skips the
+            # CAS — the same-turn event check still guards the result.
+            expected_deadline = min(time.monotonic() + 2.0, deadline_total)
+            while time.monotonic() < expected_deadline:
+                with self.lock:
+                    if session.turn_request_id != target_request_id:
+                        # The targeted turn ended (or a successor replaced it)
+                        # mid-wait — never learn a successor's turnId as the
+                        # CAS for a steer meant for the dead turn.
+                        break
+                    steer["expected_turn_id"] = session.active_turn_id
+                if steer["expected_turn_id"] is not None:
+                    break
+                time.sleep(0.05)
+            # Recheck the captured target immediately before the send: the
+            # original turn can end and a successor start during subscribe +
+            # the expected-id wait — a CAS learned from the successor would
+            # inject this steer into the wrong turn. If the target is gone,
+            # do not send any text.
+            with self.lock:
+                target_alive = session.turn_request_id == target_request_id
+                # A successor can arrive two ways: a new ACP prompt (rebinding
+                # turn_request_id) or a server-side follow-up turn (only
+                # active_turn_id moves — no request of ours is pending).
+                successor_running = (
+                    not target_alive
+                    and (session.turn_request_id is not None
+                         or session.active_turn_id is not None)
+                )
+            if not target_alive:
+                with self.lock:
+                    session.steer = None
+                if successor_running:
+                    self.respond(rid, {
+                        "outcome": "unknown",
+                        "confirmation": "none",
+                        "reason": "the turn this steer targeted ended and a "
+                                  "successor started before the command could "
+                                  "be sent; no text was sent — re-issue "
+                                  "against the running turn if still wanted",
+                    })
+                else:
+                    self.respond(rid, {
+                        "outcome": "promptRequired",
+                        "reason": "the turn this steer targeted ended before "
+                                  "the command could be sent; nothing was sent",
+                    })
+                return
+            remaining = deadline_total - time.monotonic()
+            if remaining <= 0:
+                # The budget expired before the send could go out — never
+                # send after the deadline; nothing was sent, so this is
+                # undecided, never a rejection.
+                with self.lock:
+                    session.steer = None
+                self.respond(rid, {
+                    "outcome": "unknown",
+                    "confirmation": "none",
+                    "reason": "the steer budget expired before the command "
+                              "could be sent; no text was sent",
+                })
+                return
+            command_payload: dict[str, Any] = {
+                "text": text,
+                "requestedDelivery": "guide",
+            }
+            if steer["expected_turn_id"]:
+                # Per-turn CAS (Issue #81): if the targeted turn changed before
+                # admission the platform rejects `expected_turn_mismatch`
+                # instead of silently steering whoever runs next.
+                command_payload["expectedTurnId"] = steer["expected_turn_id"]
+            ack = backend.call("v4/command", {
+                "commandId": steer["command_id"],
+                "clientId": ADAPTER_NAME,
+                "sessionId": backend_id,
+                "type": "sendText",
+                "payload": command_payload,
+                "issuedAt": int(time.time() * 1000),
+            }, timeout=min(15.0, remaining))
+        except (RuntimeError_, OSError) as exc:
+            # A pre-0.16 backend has no v4 surface at all: preserve the real
+            # -32601 so the holder reports `unsupported`, not `rejected`.
+            if "-32601" in str(exc) or "method not found" in str(exc):
+                with self.lock:
+                    session.steer = None
+                self.respond(rid, error={
+                    "code": -32601,
+                    "message": "this ZCode backend exposes no v4 command surface",
+                })
+                return
+            if (not isinstance(exc, BackendTransportError)
+                    and "zcode error for" in str(exc)):
+                # A definitive server-side refusal: the request was evaluated
+                # and rejected, so an error here is honest.
+                with self.lock:
+                    session.steer = None
+                self.respond(rid, error={"code": -32000, "message": str(exc)})
+                return
+            # Transport-uncertain (timeout, app-server exit, write failure):
+            # the request may already have been staged server-side — a staged
+            # turn.steerQueued can still arrive — so an error would lie about
+            # a possibly-consumed steer. Fall through and let the remaining
+            # event window decide; never resend blindly.
+            send_uncertain = True
+
+        if not send_uncertain:
+            status = (ack or {}).get("status")
+            if status != "accepted":
+                with self.lock:
+                    session.steer = None
+                reason_code = (ack or {}).get("reasonCode")
+                self.respond(rid, error={
+                    "code": -32000,
+                    "message": f"v4 sendText {status or 'failed'}: "
+                               f"{reason_code or (ack or {}).get('message') or 'no reason given'}",
+                    "data": {"status": status, "reasonCode": reason_code},
+                })
+                return
+
+        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW, deadline_total)
+        try:
+            while True:
+                with self.lock:
+                    drained = steer["drained"]
+                    queued = steer["queued"]
+                    ended = steer["turn_ended"]
+                if drained is not None or ended:
+                    break
+                if queued is not None:
+                    admitted = (queued.get("intent") or {}).get("admittedDelivery") \
+                        or queued.get("delivery")
+                    if admitted == "queue":
+                        # A queue admission can never drain into this turn.
+                        break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                steer["done"].wait(min(remaining, 0.5))
+                steer["done"].clear()
+        finally:
+            with self.lock:
+                session.steer = None
+
+        with self.lock:
+            drained = steer["drained"]
+            queued = steer["queued"]
+            ended = steer["turn_ended"]
+            expected = steer.get("expected_turn_id")
+            our_injected_ids = steer.get("our_injected_ids") or []
+        extra = {"sendUncertain": True} if send_uncertain else {}
+
+        if drained is not None:
+            # `injected` needs the full same-turn chain (Issue #81): the guide
+            # admission AND the drain must name one targetTurnId, that id must
+            # equal the turn this steer targeted, the admission itself must be
+            # `guide` (a queue-admitted input cannot be this turn's guide
+            # injection even when a drain batch names it), and a messageId
+            # provably belonging to THIS input — not just any batch item —
+            # must appear in injectedMessageIds. When the backend never named
+            # the running turn (expected is None), a self-consistent pair
+            # still cannot prove it hit the targeted turn — the steer may
+            # have landed in a successor.
+            injected_ids = our_injected_ids
+            queued_turn = (queued or {}).get("targetTurnId")
+            drained_turn = drained.get("targetTurnId")
+            admitted = ((queued or {}).get("intent") or {}).get("admittedDelivery") \
+                or (queued or {}).get("delivery")
+            same_turn = (
+                queued is not None
+                and queued_turn is not None
+                and queued_turn == drained_turn
+                and expected is not None
+                and drained_turn == expected
+            )
+            if same_turn and injected_ids and admitted == "guide":
+                self.respond(rid, {
+                    "outcome": "injected",
+                    "confirmation": "agent-confirmed",
+                    "reason": "the backend drained this input into the running "
+                              "turn it targeted",
+                    "pendingInputId": steer.get("pending_input_id"),
+                    "targetTurnId": drained_turn,
+                    "injectedMessageIds": injected_ids,
+                    **extra,
+                })
+            else:
+                gaps = []
+                if queued is None:
+                    gaps.append("no matching steerQueued admission")
+                elif queued_turn != drained_turn:
+                    gaps.append(
+                        f"admission targeted {queued_turn} but drained into "
+                        f"{drained_turn}")
+                elif admitted != "guide":
+                    gaps.append(
+                        f"admission reported delivery {admitted!r}, not "
+                        "'guide' — a queue-admitted input cannot be this "
+                        "turn's guide injection")
+                if expected is None:
+                    gaps.append(
+                        "the backend never named the turn running when the "
+                        "steer was sent, so the drain cannot be proven to "
+                        "belong to the targeted turn")
+                elif drained_turn != expected:
+                    gaps.append(f"drained turn {drained_turn} is not the "
+                                f"steered turn {expected}")
+                if not injected_ids:
+                    if drained.get("injectedMessageIds"):
+                        gaps.append(
+                            "injectedMessageIds name other inputs; no drained "
+                            "item's messageId is provably this input's")
+                    else:
+                        gaps.append("drain carried no injectedMessageIds")
+                if send_uncertain:
+                    gaps.append(
+                        "the v4 sendText ack timed out — the request may "
+                        "still have reached the server")
+                self.respond(rid, {
+                    "outcome": "unknown",
+                    "confirmation": "none",
+                    "reason": "drain evidence cannot prove a same-turn "
+                              "injection: " + "; ".join(gaps),
+                    "pendingInputId": steer.get("pending_input_id"),
+                    "targetTurnId": drained_turn,
+                    **extra,
+                })
+            return
+
+        if queued is not None:
+            admitted = (queued.get("intent") or {}).get("admittedDelivery") \
+                or queued.get("delivery")
+            base = {
+                "pendingInputId": steer.get("pending_input_id"),
+                "targetTurnId": queued.get("targetTurnId"),
+            }
+            if admitted == "queue" or ended:
+                reason = (
+                    "admitted to the follow-up queue; it surfaces on a later turn"
+                    if admitted == "queue"
+                    else "admitted as a guide input but the turn ended before the "
+                         "injection boundary; the input stays queued"
+                )
+                self.respond(rid, {
+                    **base, "outcome": "queued",
+                    "confirmation": "agent-confirmed", "reason": reason,
+                    **extra,
+                })
+            else:
+                self.respond(rid, {
+                    **base, "outcome": "written",
+                    "confirmation": "agent-confirmed",
+                    "reason": "admitted as a guide input for the running turn; "
+                              "the drain was not observed within the wait window "
+                              "- the turn may still consume it, do not resend",
+                    **extra,
+                })
+            return
+
+        reason = (
+            "the v4 sendText ack timed out or transport failed; the request "
+            "may still have reached the server — do not resend blindly"
+            if send_uncertain else
+            "v4 sendText was accepted but no steerQueued evidence arrived"
+        )
+        self.respond(rid, {
+            "outcome": "unknown",
+            "confirmation": "none",
+            "reason": reason + ("; the turn ended first" if ended else
+                                " within the wait window"),
+            **extra,
+        })
 
     def on_backend_request(self, msg: dict[str, Any]) -> None:
         """Backend asks us something: bridge it to the ACP client."""
@@ -2009,6 +2492,7 @@ class ZCodeAcpAgent:
             "session/prompt": self.on_session_prompt,
             "session/cancel": self.on_session_cancel,
             "session/close": self.on_session_close,
+            "_session/steering": self.on_session_steering,
             "session/set_mode": self.on_set_mode,
             "session/setMode": self.on_set_mode,
             "session/set_config_option": self.on_set_config_option,

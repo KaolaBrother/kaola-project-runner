@@ -327,12 +327,14 @@ class HolderTurn:
         (self.home / ".zcode" / "cli" / "config.json").write_text('{"hooks":{}}\n', encoding="utf-8")
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         self.fake_record = self.root / "fake-record.json"
+        self.rpc_log = self.root / "fake-rpc.jsonl"
         self.entry = self.root / f"zcode-entry-{scenario}.py"
         self.entry.write_text(
             "#!/usr/bin/env python3\n"
             "import os, runpy, sys\n"
             f"os.environ['FAKE_ZCODE_SCENARIO'] = {scenario!r}\n"
             f"os.environ['FAKE_ZCODE_RECORD'] = {str(self.fake_record)!r}\n"
+            f"os.environ['FAKE_ZCODE_RPC_LOG'] = {str(self.rpc_log)!r}\n"
             f"sys.argv = [{str(FAKE)!r}, *sys.argv[1:]]\n"
             f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
             encoding="utf-8",
@@ -465,6 +467,32 @@ class ZcodeAcpStaticTests(unittest.TestCase):
         missing = "/tmp/kaola-zcode-missing-entry-does-not-exist.cjs"
         with self.assertRaises(module.RuntimeError_):
             module.resolve_runtime(missing, sys.executable)
+
+    def test_steer_budget_env_is_fail_safe_and_bounded(self) -> None:
+        # Outer-review knob leg: KAOLA_ZCODE_STEER_BUDGET is a test-only
+        # override. No value may crash the module or push the steer deadline
+        # past the 26 s cap (holder timeout is 30 s): invalid, non-finite,
+        # and non-positive input yields the safe default, valid input clamps.
+        module = load_adapter_module()
+        for raw in ("invalid", "", " ", "nan", "-nan", "NaN", "inf", "-inf",
+                    "1e309", "-1e309", "-5", "0", "-0.0", "0x10", "null",
+                    "1,5", "26extra", "100", "1e9", "27", "26.0001", "26",
+                    "25.9", "5.5", " 10 ", None):
+            value = module._steer_budget_seconds(raw)
+            self.assertTrue(0 < value <= 26.0, f"{raw!r} -> {value}")
+            self.assertTrue(value == value, f"{raw!r} -> NaN")
+        # The safe default must apply to invalid/non-positive input and the
+        # cap must apply to oversized valid input.
+        for raw in ("invalid", "", " ", "nan", "-nan", "NaN", "inf", "-inf",
+                    "1e309", "-1e309", "-5", "0", "-0.0", "0x10", "null",
+                    "1,5", "26extra", None):
+            self.assertEqual(module._steer_budget_seconds(raw), 26.0, raw)
+        for raw, expected in (("100", 26.0), ("1e9", 26.0), ("27", 26.0),
+                              ("26.0001", 26.0), ("26", 26.0),
+                              ("25.9", 25.9), ("5.5", 5.5), (" 10 ", 10.0)):
+            self.assertEqual(module._steer_budget_seconds(raw), expected,
+                             raw)
+        self.assertEqual(module.STEER_TOTAL_BUDGET, 26.0)
 
 
 class ZcodeAcpContractTests(unittest.TestCase):
@@ -1426,6 +1454,575 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertEqual(resumed[-1].get("nativeSessionId"), "sess_persisted1")
         self.assertNotIn(FIXTURE_SECRET, json.dumps(driver.messages))
         self.assert_registry_read_only_and_secret_contained(driver)
+
+
+class ZcodeAcpSteerContractTests(unittest.TestCase):
+    """Issue #81: native v4 guide steering, adapter level.
+
+    The fake app-server answers ``v4/command sendText`` with the verbatim 3.12.3
+    ack (whose ``result.delivery`` always says ``"queue"``) and then emits — or
+    pointedly does not emit — the ``turn.steerQueued`` / ``turn.steerDrained``
+    legs that actually decide injected vs queued. Every assertion keys off the
+    adapter's ``_session/steering`` result, never the ack's delivery field.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="kaola-zcode-steer-")
+        self.tmp = Path(self._tmp.name)
+        self.driver: AdapterDriver | None = None
+
+    def tearDown(self) -> None:
+        if self.driver is not None:
+            self.driver.close()
+            self.driver = None
+        self._tmp.cleanup()
+
+    def _session(self, scenario: str) -> tuple[AdapterDriver, str]:
+        driver = AdapterDriver(self.tmp, scenario=scenario)
+        self.driver = driver
+        driver.request(1, "initialize", {"protocolVersion": 1})
+        self.assertIsNotNone(driver.wait_result(1))
+        driver.request(2, "session/new", {"cwd": str(driver.cwd), "mcpServers": []})
+        created = driver.wait_result(2)
+        self.assertIsNotNone(created)
+        assert created is not None
+        session_id = (created.get("result") or {}).get("sessionId")
+        self.assertTrue(session_id)
+        return driver, session_id
+
+    def _prompt_running(self, driver: AdapterDriver, session_id: str) -> None:
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id,
+            "prompt": [{"type": "text", "text": "count slowly"}],
+        })
+        # The scripted turn streams "working" almost immediately; the steer
+        # must land while rid 3 is still unanswered.
+        self.assertIsNotNone(driver.wait_for(
+            lambda m: m.get("method") == "session/update", timeout=8))
+
+    def _steer(self, driver: AdapterDriver, session_id: str, rid: int = 4,
+               wait: float = 10):
+        driver.request(rid, "_session/steering", {
+            "sessionId": session_id,
+            "prompt": [{"type": "text", "text": "reply with exactly STEERED"}],
+            "_meta": {"steering": {"idleBehavior": "promptRequired"}},
+        })
+        result = driver.wait_result(rid, timeout=wait)
+        self.assertIsNotNone(result, f"no _session/steering reply under {driver.scenario}")
+        return result
+
+    def _v4_send_texts(self, driver: AdapterDriver) -> list[dict]:
+        return [
+            call for call in driver.rpc_calls("v4/command")
+            if (call.get("params") or {}).get("type") == "sendText"
+        ]
+
+    def test_guide_drain_reports_injected(self) -> None:
+        driver, session_id = self._session("steer_guide")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "injected")
+        self.assertEqual(result.get("confirmation"), "agent-confirmed")
+        self.assertTrue(result.get("injectedMessageIds"))
+        self.assertTrue(result.get("targetTurnId"))
+        self.assertTrue(result.get("pendingInputId"))
+        # The wire shape the live 3.12.3 evidence proved.
+        calls = self._v4_send_texts(driver)
+        self.assertEqual(len(calls), 1)
+        params = calls[0].get("params") or {}
+        self.assertEqual(params.get("type"), "sendText")
+        payload = params.get("payload") or {}
+        self.assertEqual(payload.get("text"), "reply with exactly STEERED")
+        self.assertEqual(payload.get("requestedDelivery"), "guide")
+        # Per-turn CAS: the adapter binds the steer to the turn it saw running,
+        # and the drain must prove that same turn consumed it.
+        self.assertTrue(payload.get("expectedTurnId"))
+        self.assertEqual(result.get("targetTurnId"), payload.get("expectedTurnId"))
+        self.assertTrue(params.get("commandId"))
+        self.assertTrue(params.get("clientId"))
+        self.assertEqual(len(driver.rpc_calls("v4/conversation/subscribe")), 1)
+        # The original turn kept its own request id and completed normally.
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        self.assertEqual((done.get("result") or {}).get("stopReason"), "end_turn")
+
+    def test_queue_admission_is_never_injected(self) -> None:
+        driver, session_id = self._session("steer_queue")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "queued")
+        self.assertFalse(result.get("injectedMessageIds"))
+        self.assertTrue(result.get("pendingInputId"))
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+
+    def test_turn_end_before_drain_reports_queued_not_injected(self) -> None:
+        driver, session_id = self._session("steer_turnend")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        # Admitted as guide but the turn settled first: the pending input stays
+        # queued for a later turn — consumed is false either way.
+        self.assertEqual(result.get("outcome"), "queued")
+        self.assertFalse(result.get("injectedMessageIds"))
+
+    def test_rejected_ack_is_an_error_not_an_outcome(self) -> None:
+        driver, session_id = self._session("steer_reject")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        error = reply.get("error") or {}
+        self.assertEqual(error.get("code"), -32000)
+        detail = error.get("data") or {}
+        self.assertEqual(detail.get("reasonCode"), "fault.command.inputRejected")
+        self.assertNotIn("result", reply)
+
+    def test_drain_into_another_turn_is_never_injected(self) -> None:
+        driver, session_id = self._session("steer_xturn")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        # queued targeted turn A, the drain named turn B: no same-turn chain,
+        # so injected would be a lie even though injectedMessageIds exist.
+        self.assertEqual(result.get("outcome"), "unknown")
+        self.assertNotEqual(result.get("targetTurnId"), None)
+
+    def test_unrelated_drain_without_pending_ids_is_never_injected(self) -> None:
+        # Outer-review adversarial leg: our steerQueued omitted pendingInputId,
+        # so the ledger holds pending_input_id=None; an unrelated drain item
+        # that also omits it must NOT match on `None == None` — even with our
+        # targetTurnId and nonempty injectedMessageIds.
+        driver, session_id = self._session("steer_phantom")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertNotEqual(result.get("outcome"), "injected")
+        # Our own admission stayed guide-queued when the turn ended — the
+        # unrelated drain was ignored, so this is the honest queued outcome.
+        self.assertEqual(result.get("outcome"), "queued")
+
+    def test_source_command_match_still_injects_without_pending_ids(self) -> None:
+        # The other half of the fix: pending-id-free events must still report
+        # injected when intent.sourceCommandId proves the drain is ours.
+        driver, session_id = self._session("steer_guide_nopid")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "injected")
+        self.assertTrue(result.get("injectedMessageIds"))
+
+    def test_unknown_turn_identity_never_reports_injected(self) -> None:
+        # Outer-review adversarial leg: turn.started never carried turnId, so
+        # the expected-turn CAS stayed unlearned and the sendText went out
+        # without it. Queue/drain then agreed on a successor-turn id — a
+        # self-consistent pair still cannot prove it hit the steered turn.
+        driver, session_id = self._session("steer_noexpect")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "unknown")
+        self.assertNotEqual(result.get("outcome"), "injected")
+        # The successor-turn id the drain named is still disclosed honestly.
+        self.assertTrue((result.get("targetTurnId") or "").endswith("_later"))
+        # The CAS-less send is the adversarial condition under test: prove the
+        # command really left without expectedTurnId.
+        sends = self._v4_send_texts(driver)
+        self.assertEqual(len(sends), 1)
+        payload = (sends[0].get("params") or {}).get("payload") or {}
+        self.assertIsNone(payload.get("expectedTurnId"))
+
+    def test_mixed_drain_injected_ids_must_be_ours(self) -> None:
+        # Outer-review adversarial leg: the drain batch contains OUR input
+        # (p1 -> m1) AND an unrelated input (p2 -> m2), but injectedMessageIds
+        # names only m2. A batch-level correlation must never report injected
+        # — someone else's injection is not ours.
+        driver, session_id = self._session("steer_mixed")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "unknown")
+        self.assertNotEqual(result.get("outcome"), "injected")
+        self.assertIn("provably this input", result.get("reason") or "")
+
+    def test_queue_admission_with_same_turn_drain_is_never_injected(self) -> None:
+        # Outer-review adversarial leg: a queue admission (delivery /
+        # admittedDelivery `queue`) followed by a same-turn drain whose
+        # injectedMessageIds include our messageId — both staged before the
+        # ack so the wait loop evaluates them together. A queue-admitted
+        # input can never be this turn's guide injection.
+        driver, session_id = self._session("steer_qdrain")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertNotEqual(result.get("outcome"), "injected")
+        self.assertEqual(result.get("outcome"), "unknown")
+        self.assertIn("queue", result.get("reason") or "")
+
+    def test_ack_timeout_with_staged_queue_is_never_rejected(self) -> None:
+        # Outer-review leg: the v4/command ack is lost entirely (client-side
+        # timeout) but the server had already staged the steerQueued
+        # admission. An error here would lie about a staged steer — the staged
+        # event evidence must decide instead, never `rejected`.
+        driver, session_id = self._session("steer_timeout_staged")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id, wait=45)
+        self.assertNotIn("error", reply)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "queued")
+        self.assertIs(result.get("sendUncertain"), True)
+
+    def test_ack_timeout_without_evidence_reports_unknown(self) -> None:
+        # Outer-review leg: the v4/command ack is lost and no steer evidence
+        # arrives at all — the request may or may not have reached the server.
+        # The honest outcome is unknown/undecided, never a definite rejection
+        # and never an invitation to resend blindly.
+        driver, session_id = self._session("steer_timeout_silent")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id, wait=45)
+        self.assertNotIn("error", reply)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "unknown")
+        self.assertIs(result.get("sendUncertain"), True)
+        self.assertIn("do not resend blindly", result.get("reason") or "")
+
+    def test_target_turn_ended_aborts_before_send(self) -> None:
+        # Outer-review race leg: the turn the steer targeted COMPLETES inside
+        # the subscribe call, before v4/command can be sent. The adapter must
+        # never send the text — nothing was staged, so this is non-consumed.
+        driver, session_id = self._session("steer_race_end")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertNotEqual(result.get("outcome"), "injected")
+        self.assertIn(result.get("outcome"), ("promptRequired", "unknown"))
+        # The decisive assertion: no sendText ever went out.
+        self.assertEqual(self._v4_send_texts(driver), [])
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+
+    def test_target_turn_replaced_aborts_before_send(self) -> None:
+        # Outer-review race leg: the targeted turn ends inside subscribe and a
+        # SUCCESSOR turn starts server-side before v4/command (the realistic
+        # succession — a second ACP prompt could not even dispatch while the
+        # steer holds the request loop). The adapter must not learn the
+        # successor's turnId nor send — a CAS bound to turn B would inject
+        # this steer into the wrong turn.
+        driver, session_id = self._session("steer_race_replaced")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertNotEqual(result.get("outcome"), "injected")
+        # A successor turn IS running, so this is undecided — the steer
+        # provably did not reach its target but B is live for a re-issue.
+        self.assertEqual(result.get("outcome"), "unknown")
+        # The decisive assertion: no sendText went out — and certainly none
+        # with a CAS bound to the successor turn B.
+        sends = self._v4_send_texts(driver)
+        self.assertEqual(sends, [])
+        done_a = driver.wait_result(3, timeout=10)
+        self.assertIsNotNone(done_a)
+
+    def test_process_death_staged_queue_is_never_rejected(self) -> None:
+        # Outer-review leg: the app-server process dies inside v4/command
+        # after a steerQueued{queue} admission was already emitted. Transport
+        # loss is not a business rejection — the staged admission decides
+        # (queued), and a blind resend is still forbidden.
+        driver, session_id = self._session("steer_exit_staged")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id, wait=45)
+        self.assertNotIn("error", reply)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "queued")
+        self.assertIs(result.get("sendUncertain"), True)
+
+    def test_process_death_silent_reports_unknown(self) -> None:
+        # Outer-review leg: the app-server process dies inside v4/command
+        # with no steer evidence — the request may or may not have been
+        # processed. The honest outcome is unknown/undecided, never a
+        # -32000 business rejection, and never an invitation to resend.
+        driver, session_id = self._session("steer_exit_silent")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id, wait=45)
+        self.assertNotIn("error", reply)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "unknown")
+        self.assertIs(result.get("sendUncertain"), True)
+        self.assertIn("do not resend blindly", result.get("reason") or "")
+
+    def test_steer_deadline_blocks_command_after_budget(self) -> None:
+        # Outer-review budget leg: subscribe eats most of a short budget and
+        # the turn never names its id — the GLOBAL deadline must fire before
+        # v4/command is sent. No text may go out past the deadline.
+        driver = AdapterDriver(
+            self.tmp, scenario="steer_slow_subscribe",
+            extra_env={"KAOLA_ZCODE_STEER_BUDGET": "5"})
+        self.driver = driver
+        driver.request(1, "initialize", {"protocolVersion": 1})
+        self.assertIsNotNone(driver.wait_result(1))
+        driver.request(2, "session/new", {
+            "cwd": str(driver.cwd), "mcpServers": []})
+        created = driver.wait_result(2)
+        self.assertIsNotNone(created)
+        assert created is not None
+        session_id = (created.get("result") or {}).get("sessionId")
+        self.assertTrue(session_id)
+        self._prompt_running(driver, session_id)
+        t0 = time.monotonic()
+        reply = self._steer(driver, session_id, wait=20)
+        elapsed = time.monotonic() - t0
+        result = reply.get("result") or {}
+        self.assertNotIn("error", reply)
+        self.assertEqual(result.get("outcome"), "unknown")
+        self.assertLess(elapsed, 12.0)
+        # The deadline fired before the send — nothing may have gone out.
+        self.assertEqual(self._v4_send_texts(driver), [])
+
+    def test_steer_deadline_bounds_slow_exchange(self) -> None:
+        # Outer-review budget leg: a ~14 s subscribe + a v4/command that never
+        # answers must stay bounded by the ONE global deadline (26 s), not by
+        # stacked per-phase timeouts that could exceed the holder's 30 s.
+        driver, session_id = self._session("steer_slow_exchange")
+        self._prompt_running(driver, session_id)
+        t0 = time.monotonic()
+        reply = self._steer(driver, session_id, wait=45)
+        elapsed = time.monotonic() - t0
+        self.assertNotIn("error", reply)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "unknown")
+        self.assertIs(result.get("sendUncertain"), True)
+        self.assertLess(elapsed, 30.0)
+
+    def test_invalid_budget_env_still_starts_and_steers(self) -> None:
+        # Outer-review knob leg: a garbage KAOLA_ZCODE_STEER_BUDGET must not
+        # kill module load — the adapter starts, answers ACP, and steers on
+        # the safe 26 s default. Previously `float()` at import crashed the
+        # process outright (exit 1) for exactly this input.
+        driver = AdapterDriver(
+            self.tmp, scenario="steer_guide",
+            extra_env={"KAOLA_ZCODE_STEER_BUDGET": "invalid"})
+        self.driver = driver
+        driver.request(1, "initialize", {"protocolVersion": 1})
+        self.assertIsNotNone(driver.wait_result(1))
+        driver.request(2, "session/new", {
+            "cwd": str(driver.cwd), "mcpServers": []})
+        created = driver.wait_result(2)
+        self.assertIsNotNone(created)
+        assert created is not None
+        session_id = (created.get("result") or {}).get("sessionId")
+        self.assertTrue(session_id)
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "injected")
+
+    def test_accepted_then_silence_reports_unknown(self) -> None:
+        driver, session_id = self._session("steer_silent")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "unknown")
+
+    def test_missing_v4_surface_is_unsupported(self) -> None:
+        driver, session_id = self._session("steer_unsupported")
+        self._prompt_running(driver, session_id)
+        reply = self._steer(driver, session_id)
+        error = reply.get("error") or {}
+        self.assertEqual(error.get("code"), -32601)
+
+    def test_idle_session_answers_prompt_required(self) -> None:
+        driver, session_id = self._session("steer_guide")
+        reply = self._steer(driver, session_id)
+        result = reply.get("result") or {}
+        self.assertEqual(result.get("outcome"), "promptRequired")
+        # An idle steer must not have touched the backend at all.
+        self.assertEqual(self._v4_send_texts(driver), [])
+
+
+class ZcodeAcpSteerHolderTests(unittest.TestCase):
+    """Issue #81: the full `steer` receipt through kaola-acp.py + the holder.
+
+    `send` blocks until the turn settles, so it runs in a background process;
+    the steer CLI then exercises op_steer end to end.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="kaola-zcode-steer-holder-")
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _rpc_calls(self, turn: HolderTurn, method: str) -> list[dict]:
+        if not turn.rpc_log.is_file():
+            return []
+        calls = []
+        for line in turn.rpc_log.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            msg = row.get("msg") or {}
+            if row.get("direction") == "in" and msg.get("method") == method:
+                calls.append(msg)
+        return calls
+
+    def _steer_receipt(self, scenario: str) -> tuple[HolderTurn, dict]:
+        turn = HolderTurn(self.tmp, scenario)
+        try:
+            turn.start()
+            send = subprocess.Popen(
+                [
+                    sys.executable, str(CHECKOUT_CLI), "zcode", "send",
+                    "--repo", str(turn.repo), "--session", turn.session,
+                    "--text", "count slowly",
+                ],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                env=turn.env(), text=True,
+            )
+            try:
+                saw_prompt = wait_for(
+                    lambda: self._rpc_calls(turn, "session/send"), 15)
+                self.assertTrue(
+                    saw_prompt, "the prompt never reached the fake backend")
+                receipt = turn.cli("steer", "--text", "reply with exactly STEERED")
+            finally:
+                try:
+                    send.communicate(timeout=30)
+                except subprocess.TimeoutExpired:
+                    send.kill()
+                    send.communicate(timeout=5)
+            return turn, receipt
+        finally:
+            turn.stop()
+
+    def test_guide_drain_receipt_is_injected(self) -> None:
+        turn, receipt = self._steer_receipt("steer_guide")
+        self.assertEqual(receipt.get("steer_outcome"), "injected")
+        self.assertIs(receipt.get("steer_consumed"), True)
+        self.assertEqual(receipt.get("steer_confirmation"), "agent-confirmed")
+        self.assertEqual(receipt.get("steer_native_outcome"), "injected")
+        self.assertIs(receipt.get("turn_request_id_preserved"), True)
+        result = (receipt.get("steer_response") or {}).get("result") or {}
+        self.assertTrue(result.get("injectedMessageIds"))
+        self.assertTrue(result.get("targetTurnId"))
+
+    def test_queue_receipt_is_not_consumed(self) -> None:
+        turn, receipt = self._steer_receipt("steer_queue")
+        self.assertEqual(receipt.get("steer_outcome"), "not_consumed")
+        self.assertIs(receipt.get("steer_consumed"), False)
+        self.assertEqual(receipt.get("steer_native_outcome"), "queued")
+        self.assertEqual((receipt.get("error") or {}).get("code"), "steer-queued")
+        # The queue admission is durable — it will surface on a later turn.
+        self.assertIs(receipt.get("mutation_performed"), True)
+
+    def test_turn_end_race_receipt_is_not_consumed(self) -> None:
+        turn, receipt = self._steer_receipt("steer_turnend")
+        self.assertEqual(receipt.get("steer_outcome"), "not_consumed")
+        self.assertEqual(receipt.get("steer_native_outcome"), "queued")
+        self.assertIs(receipt.get("steer_consumed"), False)
+
+    def test_reject_receipt(self) -> None:
+        turn, receipt = self._steer_receipt("steer_reject")
+        self.assertEqual(receipt.get("steer_outcome"), "rejected")
+        self.assertIs(receipt.get("steer_consumed"), False)
+        self.assertEqual((receipt.get("error") or {}).get("code"), "steer-rejected")
+
+    def test_silent_receipt_is_unknown(self) -> None:
+        turn, receipt = self._steer_receipt("steer_silent")
+        self.assertEqual(receipt.get("steer_outcome"), "unknown")
+        self.assertIsNone(receipt.get("steer_consumed"))
+        self.assertEqual((receipt.get("error") or {}).get("code"), "steer-undecided")
+
+    def test_cross_turn_drain_receipt_is_never_injected(self) -> None:
+        turn, receipt = self._steer_receipt("steer_xturn")
+        self.assertEqual(receipt.get("steer_outcome"), "unknown")
+        self.assertIsNot(receipt.get("steer_outcome"), "injected")
+        self.assertIs(receipt.get("steer_consumed"), None)
+        self.assertNotEqual(receipt.get("steer_native_outcome"), "injected")
+
+    def test_unrelated_drain_receipt_is_not_consumed(self) -> None:
+        # The adversarial None==None pending-id match must never reach the
+        # receipt: the unrelated drain is ignored, our admission stayed queued.
+        turn, receipt = self._steer_receipt("steer_phantom")
+        self.assertEqual(receipt.get("steer_outcome"), "not_consumed")
+        self.assertEqual(receipt.get("steer_native_outcome"), "queued")
+        self.assertIs(receipt.get("steer_consumed"), False)
+        self.assertIs(receipt.get("mutation_performed"), True)
+
+    def test_unknown_turn_identity_receipt_is_never_injected(self) -> None:
+        # Second outer-review leg: no turnId was ever learned, so a matched
+        # queue/drain pair on a successor turn must reach the receipt as
+        # undecided — never as injected, and never as an invitation to resend.
+        turn, receipt = self._steer_receipt("steer_noexpect")
+        self.assertEqual(receipt.get("steer_outcome"), "unknown")
+        self.assertIsNot(receipt.get("steer_outcome"), "injected")
+        self.assertIs(receipt.get("steer_consumed"), None)
+        self.assertEqual(receipt.get("steer_native_outcome"), "unknown")
+        self.assertEqual((receipt.get("error") or {}).get("code"),
+                         "steer-undecided")
+
+    def test_mixed_drain_receipt_is_never_injected(self) -> None:
+        # Outer-review leg: the drain injected someone else's message while
+        # our input sat in the same batch — the receipt must be undecided,
+        # never injected.
+        turn, receipt = self._steer_receipt("steer_mixed")
+        self.assertEqual(receipt.get("steer_outcome"), "unknown")
+        self.assertIsNot(receipt.get("steer_outcome"), "injected")
+        self.assertIs(receipt.get("steer_consumed"), None)
+        self.assertEqual(receipt.get("steer_native_outcome"), "unknown")
+        self.assertEqual((receipt.get("error") or {}).get("code"),
+                         "steer-undecided")
+
+    def test_queue_admission_drain_receipt_is_never_injected(self) -> None:
+        # Outer-review leg: a queue-admitted input with a later same-turn
+        # drain must reach the receipt as undecided — never as this turn's
+        # guide injection.
+        turn, receipt = self._steer_receipt("steer_qdrain")
+        self.assertEqual(receipt.get("steer_outcome"), "unknown")
+        self.assertIsNot(receipt.get("steer_outcome"), "injected")
+        self.assertIs(receipt.get("steer_consumed"), None)
+
+    def test_ack_timeout_receipt_is_undecided_not_rejected(self) -> None:
+        # Outer-review leg: a lost v4/command ack must never reach the holder
+        # as `rejected` / steer_consumed=False — the request may have been
+        # staged server-side, so the honest receipt is undecided and forbids
+        # a blind resend.
+        turn, receipt = self._steer_receipt("steer_timeout_silent")
+        self.assertEqual(receipt.get("steer_outcome"), "unknown")
+        self.assertIs(receipt.get("steer_consumed"), None)
+        self.assertEqual((receipt.get("error") or {}).get("code"),
+                         "steer-undecided")
+        self.assertNotEqual(receipt.get("steer_outcome"), "rejected")
+        self.assertIsNot(receipt.get("steer_consumed"), False)
+
+    def test_process_death_receipt_is_undecided_not_rejected(self) -> None:
+        # Outer-review leg: an app-server exit inside v4/command is transport
+        # loss — the request may already have been staged server-side — so
+        # the receipt must be undecided (steer_consumed None) and forbid a
+        # blind resend, never `rejected` / steer_consumed False.
+        turn, receipt = self._steer_receipt("steer_exit_silent")
+        self.assertEqual(receipt.get("steer_outcome"), "unknown")
+        self.assertNotEqual(receipt.get("steer_outcome"), "rejected")
+        self.assertIs(receipt.get("steer_consumed"), None)
+        self.assertIsNot(receipt.get("steer_consumed"), False)
+        self.assertEqual((receipt.get("error") or {}).get("code"),
+                         "steer-undecided")
+
+    def test_unsupported_backend_receipt(self) -> None:
+        turn, receipt = self._steer_receipt("steer_unsupported")
+        self.assertEqual(receipt.get("steer_outcome"), "unsupported")
+        self.assertIs(receipt.get("steer_consumed"), False)
+        self.assertEqual((receipt.get("error") or {}).get("code"), "steer-unsupported")
+
+    def test_idle_steer_is_no_active_turn(self) -> None:
+        turn = HolderTurn(self.tmp, "steer_guide")
+        try:
+            turn.start()
+            receipt = turn.cli("steer", "--text", "hello")
+            self.assertEqual(receipt.get("steer_outcome"), "not_consumed")
+            self.assertEqual(receipt.get("outcome"), "no-active-turn")
+        finally:
+            turn.stop()
 
 
 if __name__ == "__main__":

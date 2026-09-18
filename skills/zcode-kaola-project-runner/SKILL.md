@@ -95,20 +95,18 @@ After reading current evidence, the controlling Agent chooses what to send:
 
 ## Steering a running turn
 
-ZCode's ACP surface exposes no native mid-turn entry, so a bare `steer`
-refuses and writes nothing. The available path is the composite, which you
-choose explicitly:
+ZCode's ACP surface steers natively, so `steer` is an Agent choice for a
+turn already running — not a Runner policy:
 
 ```bash
-"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" \
-  --steer-mode interrupt --text '<redirection>'
+"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" --text '<redirection>'
 ```
 
-It **cancels** the running turn, confirms it stopped, then sends your text as the
-next turn on the same session, which keeps the conversation's context. That is
-interrupted-then-continued, never injection: work in progress stops and may have
-left partial side effects (`side_effects_possible`). An unconfirmed cancel sends
-nothing and reports `unknown`. See [references/steering.md](references/steering.md).
+Read `steer_outcome` with `steer_confirmation`: only `injected` means the agent
+acknowledged consumption, `written` means the text reached the running turn but
+this platform confirms nothing, and `not_consumed`/`unknown` mean do not resend
+blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
+cancels the turn first. See [references/steering.md](references/steering.md).
 
 ## Native keys
 

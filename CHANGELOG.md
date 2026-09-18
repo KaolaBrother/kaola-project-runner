@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- **Native mid-turn steering on ZCode 3.12+ through the v4 command surface,
+  event-proven on the installed 3.12.3 (Issue #81).** The retired `session/steer`
+  surface was correctly declared unsupported (Issue #65), but 3.12+ moved the
+  capability rather than removing it: `v4/command sendText` with
+  `requestedDelivery:"guide"` is admitted as a guide input and injected at the
+  next tool/message boundary *inside the running turn*. The adapter now answers
+  the existing `_session/steering` ACP method through that path: it primes
+  `v4/conversation/subscribe` lazily on first steer (the publisher whose steer
+  events ride the existing `session/event` stream), sends `sendText` with a
+  per-turn `expectedTurnId` CAS learned from `turn.started`, and waits a bounded
+  window for the evidence. The outcome is decided by the events alone — the
+  sendText ack is a measured trap (`result.delivery` reads `"queue"` even for an
+  admitted guide input) — so `injected` is reported only when
+  `turn.steerQueued{delivery:"guide"}` and `turn.steerDrained{injectedMessageIds}`
+  name the same `targetTurnId`, and that turn is provably the one the steer
+  targeted (when the backend never names the running turn, an otherwise-matching
+  pair reports `unknown`, not `injected`). Queue-only admission maps to
+  `not_consumed` with `mutation_performed` true (the text is durably queued for
+  a later turn), a turn-end race or silence maps to `unknown`, a platform
+  rejection surfaces its `reasonCode`, and a pre-0.16 backend's `-32601` reports
+  `unsupported`. No second lifecycle, scheduler, or stdin writer is added;
+  `--steer-mode interrupt` remains the explicit fallback. Hermetic contract
+  tests cover guide/drain, queue-only, rejection, silence, turn-end race,
+  cross-turn and unattributable drains that must never claim `injected`, and
+  the missing-v4-surface build.
+
 - **ZCode Host confirms the notification it just delivered, and a confirmed worker event
   is not re-prompted (Issue #90).** The carrier used to mark its staged events and snap
   the overflow generation only *after* `session/prompt` was admitted, so a Host that
@@ -62,6 +88,7 @@
   invariant, so the handoff edit is net-negative (8189 -> 8186 B rendered),
   funded by two lossless rewordings that drop no rule; the fuller statement
   lives in `SKILL.md` (3824 -> 4010 B of 4096).
+
 - **A failed-closed native `sess_*` resume no longer advertises the rejected
   model (Issue #85).** `hydrate_settings()` used to emit its
   `session/update {sessionUpdate: config_option_update}` — including a model

@@ -2509,6 +2509,17 @@ class Holder:
                                     "the write was flushed without error, but this platform "
                                     "acknowledges no consumption - read the turn's own output "
                                     "to judge, and do not resend blindly"}
+            elif native == "queued":
+                # Issue #81: the platform admitted the text to its follow-up
+                # queue - it surfaces on a LATER turn. The running turn did not
+                # consume it, but the admission is durable (a real mutation),
+                # so this is neither `injected` nor a clean nothing-happened.
+                outcome, consumed = "not_consumed", False
+                confirmation = confirmation or "agent-confirmed"
+                error = {"code": "steer-queued",
+                         "message": "the text was admitted to the session's follow-up "
+                                    "queue and will surface on a later turn; the running "
+                                    "turn did not consume it"}
             elif native == "startedNewTurn":
                 # Honest naming: this is NOT injection into the running turn.
                 outcome, consumed = "started_new_turn", True
@@ -2553,9 +2564,12 @@ class Holder:
                 # This steer's own effect on the agent. `written` did reach the
                 # running turn's input even though consumption is unconfirmed,
                 # so it is not a clean "nothing happened".
-                "mutation_performed": True if outcome in ("injected", "written",
-                                                          "started_new_turn")
-                else False if consumed is False else None,
+                "mutation_performed": True if (
+                    outcome in ("injected", "written", "started_new_turn")
+                    # Issue #81: a queue admission is durable - the text will
+                    # reach a later turn even though this turn never consumed it.
+                    or base.get("steer_native_outcome") == "queued"
+                ) else False if consumed is False else None,
             }
             if error:
                 receipt["error"] = error

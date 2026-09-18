@@ -332,6 +332,11 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
 | `rejected` | `false` | `none` | the agent refused; `error.detail` carries its reason |
 | `unknown` | `null` | `none` | undecided — the Runner never resends blindly |
 
+A `not_consumed` receipt can still carry `steer_confirmation: agent-confirmed` with
+`error.code: steer-queued` and `mutation_performed: true` when the platform admitted the
+text to its own follow-up queue — durable for a later turn, but not consumed by the
+running one (Issue #81).
+
 `mutation_performed` describes the steer itself, while `mutation_status` stays the running turn's.
 The interrupted or steered turn keeps its own request id, output and terminal state: the native path
 reports `turn_request_id`, `turn_request_id_after` and `turn_request_id_preserved`; the composite
