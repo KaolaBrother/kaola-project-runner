@@ -2,13 +2,14 @@
 
 Outer Agents start, continue, or restore the project's one ZCode Host here.
 Project Runner inside that Host owns workers, heartbeat, and close-out. No new
-tool, queue, registry, or scheduler.
+tool, queue, registry, scheduler, or Delegator pointer file. Git worktree,
+Workflow run / Mission List, Issues, and Runner session records already hold
+durable facts. A Git worktree is not an ACP session id.
 
 ```bash
 ZCODE="<skills>/zcode-kaola-project-runner/scripts/runtime-tmux.sh"
 PROJECT="/abs/path/to/consumer-project"          # bound canonical Git root
 HOST="zcode-<PROJECT_CODE>-orchestrator-main"    # e.g. zcode-KPR-orchestrator-main
-RECORD="$PROJECT/.kaola/delegator-host.json"     # current pointer only
 ```
 
 `<skills>` is the sibling Skill directory, or `ROOT/skills` after the Grok Bot
@@ -19,56 +20,68 @@ without the ZCode Runner. Never search the filesystem for it.
 recorded. Inner workers keep `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>`
 (#72). The Host name is not an Issue worker and does not use `i0`.
 
-Three identities stay separate, from real receipts, never synthesized:
+Three identities stay separate. Read them from existing Runner `status`, start
+receipts, and Host events — never synthesize one from another, and do not write
+a second store:
 
 | Field | Source | Use |
 |---|---|---|
-| Runner `--session` | you choose it (`$HOST`) | live attach, observe, send, stop |
-| `acp_session_id` | ACP `session/new` on the start receipt | ACP bridge id |
-| native `sess_*` | `session/update` `native_session_identity.nativeSessionId` | `start --resume` after the holder stopped |
+| Runner `--session` | `$HOST` (or a uniquely recorded live name) | live attach, observe, send, stop |
+| `acp_session_id` | start / `status` receipt | ACP bridge id |
+| native `sess_*` | `native_session_identity.nativeSessionId` | `start --resume` after the holder stopped |
 
 `session_meta` does not automatically hold `sess_*`. Native `sess_*` is lazy:
 a successful `start` has no `native_session_identity` before the first prompt.
-Write `$RECORD` immediately after a successful start or restore as a
-provisional current pointer: execution target, `$PROJECT`, `platform=zcode`,
-Runner `--session`, `acp_session_id`, and holder-instance facts from the start
-receipt. Native `sess_*` may be absent. After the first handoff, read the Host
-event log or observe output for `native_session_identity` and fill `sess_*`.
-Keep only the current pointer.
+Do not imply a stopped app-server will auto-restore that id.
 
 ## Recover
 
-1. Bind the same execution target and `$PROJECT`. Read `$RECORD`. If it names
-   an exact platform/repo/session (and holder instance when present), that
-   locator wins even if the session name is not `$HOST`. A live Runner session
-   that matches that locator is the same Host. Do not start a second Host
-   because `$HOST` was not found.
-2. **Live Host** (exact platform/repo/session still serves): do not `start`.
-   Continue communication on that locator. A missing native `sess_*` on a live
-   Host is still a live attach; fill it when the identity event appears.
-   Changing the outer Agent does not stop the Host, start a second Host, or
-   replay the first handoff.
-3. **Stopped Host** with an attested native `sess_*` in `$RECORD`: restore
-   only that context:
+1. Bind the same execution target and `$PROJECT`. Derive `$HOST` from the
+   short code. Probe the existing Runner:
+
+   ```bash
+   "$ZCODE" status --repo "$PROJECT" --session "$HOST"
+   ```
+
+   Also read existing Runner records/receipts for this `$PROJECT`. If they
+   uniquely name a live Host whose session is not `$HOST`, adopt that locator
+   — do not rename it and do not start a second Host. Missing `$HOST` is not
+   proof that no Host exists. Ambiguous location: report and do not start.
+2. **Live Host** (exact platform/repo/session still serves; holder and
+   `acp_session_id` match the receipts): do not `start`. Continue on that
+   locator. Do not replay the first handoff. Changing the outer Agent does not
+   stop the Host or re-ask the full authorization set; apply only the user's
+   latest change.
+3. **Confirmed stopped** and no other live orchestrator on this `$PROJECT`:
+   if existing receipts attest a native `sess_*`, try only:
 
    ```bash
    "$ZCODE" start --repo "$PROJECT" --session "$HOST" --resume "$NATIVE_SESS"
    ```
 
-   Then update `$RECORD` if the holder instance changed. Never use `--continue`
-   to guess a same-directory worker. Exact `stop` issues `session/close`. A
-   listed `sess_*` then disappears from `session/list` (close-deleted, not
-   never-created). Exiting the app-server without that close also leaves the
-   id unlistable and `--resume` Session not found, so omitting close is not a
-   resume path. `--resume` session not found is cannot-resume. Do not start
-   a second Host and call it continuation.
-4. Missing, mismatched, unattested, or backend-unknown `sess_*` is
-   cannot-resume: report and wait. Do not create a new Host and call it
-   continuation.
-5. No Host yet: start once at the canonical root under `$HOST`. Confirm
-   `session`/`repo`/`acp_session_id` and holder instance, then write `$RECORD`
-   immediately. Native `sess_*` may be absent. Send the first handoff, then
-   fill `sess_*` from `native_session_identity` if it arrives.
+   Never use `--continue` to guess a same-directory worker. Exact `stop`
+   issues `session/close`; on installed ZCode 3.12.3 that id then disappears
+   from `session/list` and process-exit without close is also Session not
+   found. Do not imply a stopped backend will restore that id in the
+   background. If `--resume` fails or no attested `sess_*` exists, a **new**
+   `$HOST` is allowed. That is a new ACP session and a new holder — say so.
+   Rebuild the frontier from Git, Workflow claim / Mission List, Issues, and
+   existing run receipts. Do not re-claim Issues, re-dispatch in-flight
+   workers, or redo done work. Do not `start` that new Host until step 4 is
+   complete.
+4. A new Host (first start, or after failed `--resume`) needs current
+   authorization **before** `start`: goal and remaining work; allowed worker
+   platforms/members; counts and concurrency; account and token quota as
+   separate figures; priority; delivery and stop boundary. Restore those from
+   the latest valid project facts when they are complete. Missing,
+   conflicting, or expired key values: ask the user; do not `start`. Do not
+   guess and do not reuse a stale quota. Do not open a blank Host. A live
+   Host A→B attach is not a new session: do not re-ask the full set.
+5. With step 4 complete and no live Host: start once under `$HOST` at
+   `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/holder from the
+   start receipt, then send the first handoff. Exact `start` and `stop` use
+   the same canonical `$PROJECT` and the exact `$HOST` (or uniquely adopted
+   locator) and holder.
 
 Do not rename, restart, or cancel an in-flight Host to adopt this Skill.
 

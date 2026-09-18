@@ -265,24 +265,32 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("zcode-<PROJECT_CODE>-orchestrator-" in handoff_doc, "standard Host session name")
     check("acp_session_id" in handoff_doc and "native_session_identity" in handoff_doc,
           "three identities are sourced separately")
-    check("delegator-host.json" in handoff_doc, "current continuation pointer is named")
+    check("delegator-host.json" not in handoff_doc and "delegator-host.json" not in skill,
+          "no Delegator continuation pointer file")
     check("prompt-in-progress" in handoff_doc, "busy send is not claimed delivered")
-    check("wait for `native_session_identity` before writing" not in handoff_doc,
-          "pointer is not blocked on lazy native id")
-    check("provisional current pointer" in handoff_one, "start writes a provisional pointer")
-    check("Native `sess_*` may be absent" in handoff_one, "provisional pointer may omit native id")
-    check("even if the session name is not `$HOST`" in handoff_one,
-          "trusted locator wins over the new Host name")
-    check("Do not start a second Host because `$HOST` was not found" in handoff_one,
-          "missing new HOST name does not start a second orchestrator")
-    check("session not found" in handoff_one,
-          "spent native id after stop-close is cannot-resume")
-    check("spent, or unknown native id is cannot-resume" in skill_one,
-          "Skill treats a backend-unknown sess_* as cannot-resume")
-    check("even if its name is not the new Host form" in skill_one,
+    check("status --repo" in handoff_one, "live recover uses existing Runner status")
+    check("A Git worktree is not an ACP session id" in handoff_one
+          or "A Git worktree is not an ACP id" in skill_one,
+          "worktree is not treated as an ACP id")
+    check("uniquely name a live Host" in handoff_one, "recorded nonstandard live name is adopted")
+    check("Ambiguous location: report and do not start" in handoff_one,
+          "ambiguous location does not start a second Host")
+    check("That is a new ACP session" in handoff_one, "failed resume starts a new ACP session")
+    check("Do not guess and do not reuse a stale quota" in handoff_one,
+          "new Host does not guess stale quota")
+    check("authorization **before** `start`" in handoff_one
+          or "authorization before `start`" in handoff_one,
+          "new Host authorization is required before start")
+    check("Do not open a blank Host" in handoff_one or "Do not open a blank Host" in skill_one,
+          "new Host is not started blank then filled later")
+    check("already-started empty Host" not in handoff_one,
+          "handoff no longer allows starting a blank Host first")
+    check("apply only the user's latest change" in handoff_one,
+          "live Host does not re-ask the full authorization set")
+    check("There is no Delegator continuation file" in skill_one,
+          "Skill forbids a dedicated continuation file")
+    check("even if its recorded name is not the new form" in skill_one,
           "Skill adopts a live Host with a nonstandard name")
-    check("native `sess_*` may be absent" in skill_one,
-          "Skill writes the pointer before native id exists")
     check(len((EXTERNAL / "SKILL.md").read_bytes()) <= BUDGETS["external_skill_bytes"],
           "external Skill stays in its small budget")
     check(BUDGETS["main_skill_bytes"] <= 17408, "existing main budget not raised")
@@ -317,11 +325,9 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
         host_start = sandbox.cli("start", "--mode", "yolo", session=host)
         check(host_start.get("state") == "ready", f"Host start ready ({host_start.get('error')})")
         sandbox.dump("01-host-start.json", host_start)
-        # Provisional pointer from the start receipt only. Do not harvest
-        # native sess_* from events here: real ZCode creates it lazily on the
-        # first prompt. Fake may emit earlier; that is not the Skill contract.
-        continuation = {
-            "schema": "kaola-delegator-host/1",
+        # Recover facts from the start receipt / later status — not a project
+        # pointer file. Do not harvest native sess_* from events here.
+        receipt_ids = {
             "canonical_repo": str(sandbox.repo),
             "platform": "zcode",
             "session": host,
@@ -330,14 +336,16 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
             "holder_instance_id": host_start.get("holder_instance_id"),
             "session_meta": host_start.get("session_meta"),
         }
-        sandbox.dump("01b-continuation.json", continuation)
-        check(continuation["session"] == host, "continuation stores the Runner session name")
-        check(continuation["acp_session_id"], "continuation stores acp_session_id from the start receipt")
-        check(continuation["holder_instance_id"], "provisional pointer stores holder instance from start")
-        check(continuation["native_session_id"] is None,
-              "provisional pointer omits native id until the identity event is read after first handoff")
-        check(continuation.get("session_meta") != continuation["acp_session_id"],
+        sandbox.dump("01b-start-receipt-ids.json", receipt_ids)
+        check(receipt_ids["session"] == host, "start receipt stores the Runner session name")
+        check(receipt_ids["acp_session_id"], "start receipt stores acp_session_id")
+        check(receipt_ids["holder_instance_id"], "start receipt stores holder instance")
+        check(receipt_ids["native_session_id"] is None,
+              "start receipt does not invent native sess_*")
+        check(receipt_ids.get("session_meta") != receipt_ids["acp_session_id"],
               "session_meta is not used as a stand-in for acp_session_id")
+        check(not (sandbox.repo / ".kaola" / "delegator-host.json").exists(),
+              "isolation does not write a Delegator pointer file")
 
         live_before_prompt = sandbox.cli("status", session=host)
         sandbox.dump("01c-live-attach-before-prompt.json", live_before_prompt)
@@ -365,10 +373,9 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
               "original user task/quota reached the Host; not substituted by a grep of the Skill")
 
         filled_native = native_session_id_from_events(sandbox.record_dir(host))
-        continuation["native_session_id"] = filled_native
-        sandbox.dump("01d-continuation-after-handoff.json", continuation)
-        # Fake may already have emitted identity at start (setMode materialize).
-        # Recording it after the first prompt follows the Skill fill step; it
+        receipt_ids["native_session_id"] = filled_native
+        sandbox.dump("01d-ids-after-handoff.json", receipt_ids)
+        # Fake may emit identity at start. Recording it after the first prompt
         # is not proof of real-ZCode lazy timing or of start --resume.
 
         runner_text = (RUNNER / "SKILL.md").read_text(encoding="utf-8")
@@ -414,11 +421,13 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
 
         sandbox.dump("12-resume-boundary.txt", (
             "fake-zcode-app-server is not a production ZCode backend.\n"
-            "This suite does not claim start -> first prompt -> "
-            "native_session_identity -> A/B live attach -> exact stop -> "
-            "start --resume sess_*.\n"
-            "That path needs a real ZCode app-server. After exact stop, a "
-            "missing or unattested native sess_* remains cannot-resume.\n"
+            "This suite proves live attach via Runner status on the original "
+            "Host and that a second Host name is not started while it lives.\n"
+            "It does not claim real ZCode first-prompt model reply or "
+            "stop-then-start --resume sess_* restoring the same native "
+            "session. Measured live ZCode 3.12.3: after exact stop, sess_* is "
+            "Session not found; Skill then allows a new standard-named Host "
+            "as a new ACP session, which this fake must not impersonate.\n"
         ))
 
         for session in (worker, host):
@@ -436,16 +445,14 @@ def test_adopt_nonstandard_live_host_without_second_start() -> None:
               "legacy name is not the new Host form")
         start = sandbox.cli("start", "--mode", "yolo", session=old)
         check(start.get("state") == "ready", f"legacy Host start ready ({start.get('error')})")
-        pointer = {
-            "schema": "kaola-delegator-host/1",
+        recorded = {
             "canonical_repo": str(sandbox.repo),
             "platform": "zcode",
             "session": old,
             "acp_session_id": start.get("acp_session_id"),
-            "native_session_id": None,
             "holder_instance_id": start.get("holder_instance_id"),
         }
-        sandbox.dump("13-old-host-pointer.json", pointer)
+        sandbox.dump("13-old-host-receipt.json", recorded)
         status = sandbox.cli("status", session=old)
         sandbox.dump("14-old-host-status.json", status)
         check(status.get("error") is None, f"live attach on nonstandard name ({status.get('error')})")
@@ -455,10 +462,10 @@ def test_adopt_nonstandard_live_host_without_second_start() -> None:
         check(listed == [old], "no second Host started because the new HOST name was missing")
         stop = sandbox.cli("stop", "--force", session=old)
         check(stop.get("error") is None, "exact stop of adopted Host")
-        sandbox.dump("16-cannot-resume-after-stop.txt", (
-            "stopped Host; native_session_id absent; cannot-resume; "
-            "do not start a new orchestrator session and call it continuation; "
-            "fake backend is not production start --resume evidence\n"
+        sandbox.dump("16-stopped-new-host-boundary.txt", (
+            "stopped Host; fake backend is not production --resume evidence; "
+            "Skill allows a new standard-named Host as a new ACP session "
+            "once stop is confirmed and no other live orchestrator remains\n"
         ))
     finally:
         sandbox.cleanup()

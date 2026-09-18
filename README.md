@@ -22,14 +22,18 @@ Skills.
 orchestrators, and several issues are not a bundle. Start and stop use the bound canonical
 project root and an exact session. Do not add a registry, lock, or second scheduler.
 
-**When the outer Agent changes (A→B).** B continues the same Host from the project's
-continuation record, not from A's chat memory. Store three distinct facts from real receipts:
-the caller-chosen Runner `--session` (for example `zcode-KPR-orchestrator-main`), the ACP
-`acp_session_id` from `session/new`, and the ZCode native `sess_*` from
-`native_session_identity`. Never synthesize one from another. A live Host is attached in place.
-A stopped Host resumes only with the attested `sess_*`. Missing native id is cannot-resume, not
-`--continue`. Changing the outer Agent does not stop the Host, start a second Host, or re-claim
-issues.
+**When the outer Agent changes (A→B).** B recovers the same live Host from the canonical Git
+root plus the standard Runner session (`zcode-<PROJECT>-orchestrator-main`) and existing Runner
+`status` / receipts — not from A's chat memory and not from a Delegator pointer file. A Git
+worktree is not an ACP id. Three facts stay separate on those receipts: Runner `--session`,
+ACP `acp_session_id`, and native `sess_*`. Never synthesize one from another. A live Host is
+attached in place; a uniquely recorded nonstandard live name is adopted. Ambiguous location
+does not start a second Host. If the Host is confirmed stopped and `sess_*` cannot restore,
+start a new standard-named Host as a new ACP session only after current authorization is
+complete (goal, remaining work, platforms/members, counts/concurrency, quota, priority,
+delivery/stop boundary); missing key values: ask, do not `start`, do not guess a stale
+quota. Continue from Git / Workflow / Issue records. Changing the outer Agent does not
+stop a live Host or re-claim issues.
 
 Kaola Project Runner also provides nine self-contained **worker** Agent Skills for **Claude Code,
 Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, and Droid CLI**. A

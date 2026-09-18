@@ -16,27 +16,31 @@ engine. One project has only one Agent running Project Runner.
 
 ## Extract once
 
-From the user and existing records collect only: goal; already-done and remaining
-work; authorized worker platforms and counts; quota as separate concurrency,
-account, and token figures; priority; delivery and stop boundary; the explicit
-project path and authorization already given. Ask only for a missing or
-conflicting item that blocks the one handoff. Do not invent platforms, fuse
-quota units, raise quota, or expand authorization.
+From the user and existing Git, Workflow, Issue, and Runner records collect:
+goal; already-done and remaining work; authorized worker platforms and counts;
+quota as separate concurrency, account, and token figures; priority; delivery
+and stop boundary; the explicit project path. On a **live** Host, apply only the
+user's latest change — do not re-ask the full set. On a **new** Host, missing,
+conflicting, or expired key values must be confirmed before `start`. Do not
+open a blank Host. Do not invent platforms, fuse quota units, raise quota,
+reuse a stale quota, or expand authorization.
 
 ## One Host
 
 If the installed ZCode Runner (`zcode-kaola-project-runner`) is missing, stop and report
 that this Skill is not executable. Do not claim a Host started.
 
-Recover the project's continuation pointer first. A **live** Host is attached in
-place — do not `start` again, even if its name is not the new Host form. A
-**stopped** Host restores only with an attested native `sess_*` the backend
-still has. Missing, spent, or unknown native id is cannot-resume, not
-`--continue`. Name a new Host only when none exists:
-`zcode-<PROJECT_CODE>-orchestrator-<purpose>`. Write the current pointer right
-after a successful start; native `sess_*` may be absent. Commands, identities,
-and the prompt:
-[handoff.md](references/handoff.md).
+Recover from the canonical Git root plus the standard Host name
+`zcode-<PROJECT_CODE>-orchestrator-<purpose>` and existing Runner `status` /
+receipts. A Git worktree is not an ACP id. A **live** Host is attached in
+place — do not `start` again, even if its recorded name is not the new form,
+when that locator is unique. Do not start a second Host because the standard
+name was missing or a pointer file is absent. There is no Delegator
+continuation file. A **stopped** Host may `--resume` an attested native
+`sess_*`; if the backend cannot restore it, a **new** standard-named Host is
+a new ACP session — confirm current authorization first, then start, and
+continue the frontier from existing project records. Commands, identities,
+and the prompt: [handoff.md](references/handoff.md).
 
 Do not pass per-worker notification bindings, per-worker `--repo`, scheduling, or
 heartbeat instructions. Do not rename, restart, or cancel an in-flight Host.

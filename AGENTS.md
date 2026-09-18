@@ -63,11 +63,14 @@ layer. Each layer finishes its own job and does not repeat the next. Detail: `RE
   belong to Workflow finalize. One issue is one run; several issues are not a bundle.
 
 Start and stop use the bound canonical project root and an exact session. Do not add a
-multi-Host registry, lock, or second scheduler. Control-plane limits do not change standalone
-Platform Runner transport. When the outer Agent changes, continue the same Host from the
-project continuation record: Runner session name, `acp_session_id`, and native `sess_*` as
-three separate facts from real receipts. A live Host is attached in place; a stopped Host
-resumes only with the attested `sess_*`. Missing native id is cannot-resume, not `--continue`.
+multi-Host registry, lock, second scheduler, or Delegator pointer file. Control-plane limits
+do not change standalone Platform Runner transport. When the outer Agent changes, recover the
+same live Host from the canonical Git root, the standard Runner session name, and existing
+Runner `status` / receipts: `--session`, `acp_session_id`, and native `sess_*` as three
+separate facts. A Git worktree is not an ACP id. A live Host is attached in place. If it is
+confirmed stopped and `sess_*` cannot restore, a new standard-named Host is a new ACP
+session: confirm current authorization before `start`, then continue from existing
+project records. Do not open a blank Host.
 
 ## Project-Specific Runner Contract
 

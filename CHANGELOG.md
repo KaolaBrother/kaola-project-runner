@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Kaola-Delegator recovers a live Host from canonical repo, standard Runner
+  session name, and existing status/receipts (Issue #74).** There is no
+  required `.kaola/delegator-host.json`. Agent B attaches the same ACP Host in
+  place; a uniquely recorded nonstandard live name is adopted; ambiguous
+  location does not start a second Host. A Git worktree is not an ACP id. If
+  the Host is confirmed stopped, an attested `sess_*` may be `--resume`d; if
+  the backend cannot restore it, a new standard-named Host is a new ACP
+  session continued from Git / Workflow / Issue records. Current
+  authorization must be complete before that `start`; missing key values
+  block start, not only later dispatch. Fake tests are not a live ZCode
+  model-session proof. Existing budgets were not raised.
+
 - **Kaola-Delegator is the external delegation Skill; Grok Bot is no longer a
   Project Runner host (Issue #74).** The generated Skill `kaola-delegator`
   (display name Kaola-Delegator) is a thin shared core for Grok Bot, Codex,
