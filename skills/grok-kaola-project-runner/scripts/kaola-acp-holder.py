@@ -1902,8 +1902,8 @@ class Holder:
         with self.worker_events_lock:
             self.overflow_generation += 1
             generation = self.overflow_generation
-        self.events.append({"kind": "worker_event_overflow",
-                            "generation": generation})
+            self.events.append({"kind": "worker_event_overflow",
+                                "generation": generation})
         return generation
 
     def _heartbeat_payload(self, events: list[dict[str, Any]],
@@ -2117,13 +2117,17 @@ class Holder:
                 pending = len(self.pending_worker_events)
         if queue_full:
             generation = self._record_overflow_full_check()
-            return {"error": {"code": "worker-event-queue-full",
-                              "capacity": HEARTBEAT_EVENT_CAP,
-                              "message": f"{HEARTBEAT_EVENT_CAP} worker events are "
-                                         "already waiting for this host turn boundary"},
-                    "overflow_full_check": True,
-                    "generation": generation,
-                    "pending": HEARTBEAT_EVENT_CAP}
+            receipt = {"error": {"code": "worker-event-queue-full",
+                                 "capacity": HEARTBEAT_EVENT_CAP,
+                                 "message": f"{HEARTBEAT_EVENT_CAP} worker events are "
+                                            "already waiting for this host turn boundary"},
+                       "overflow_full_check": True,
+                       "generation": generation,
+                       "pending": HEARTBEAT_EVENT_CAP}
+            if (not self.turn["active"] and self.agent.proc is not None
+                    and not self.agent.exited.is_set()):
+                receipt.update(self._deliver_worker_events())
+            return receipt
         self.events.append({"kind": "worker_event", "event": event})
         receipt: dict[str, Any] = {"event_id": event["event_id"], "staged": True,
                                    "pending": pending}
@@ -2161,12 +2165,14 @@ class Holder:
                     confirmed.update(item for item in ids if isinstance(item, str))
             elif kind == "worker_event_overflow":
                 generation = self._overflow_generation_of(entry)
-                overflow_generation = (
-                    generation if generation is not None else overflow_generation + 1)
+                overflow_generation = (max(overflow_generation, generation)
+                                       if generation is not None
+                                       else overflow_generation + 1)
             elif kind == "worker_event_overflow_confirmed":
                 generation = self._overflow_generation_of(entry)
-                overflow_confirmed = (
-                    generation if generation is not None else overflow_confirmed + 1)
+                overflow_confirmed = (max(overflow_confirmed, generation)
+                                      if generation is not None
+                                      else overflow_confirmed + 1)
         pending: list[dict[str, Any]] = []
         seen: set[str] = set()
         for event in staged:

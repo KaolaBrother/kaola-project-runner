@@ -34,6 +34,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -1092,6 +1093,104 @@ def test_issue_87_oversized_heartbeat_prompt_is_not_injected() -> None:
         check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
     finally:
         sandbox.cleanup()
+
+
+class MemoryEventLog:
+    """In-memory EventLog stand-in for restore-order tests. ``read_since``
+    returns the recorded list as-is, including out-of-order generations."""
+
+    def __init__(self, entries: list[dict] | None = None):
+        self.entries = list(entries or [])
+
+    def read_since(self, cursor, limit):  # noqa: ARG002 - EventLog signature
+        return list(self.entries)
+
+    def append(self, event: dict) -> int:
+        self.entries.append(dict(event))
+        return len(self.entries)
+
+
+def bare_holder(module, entries: list[dict] | None = None, *,
+                pending: list[dict] | None = None):
+    """Real ``Holder`` restore/overflow methods, no agent process."""
+    holder = object.__new__(module.Holder)
+    holder.worker_events_lock = threading.Lock()
+    holder.events = MemoryEventLog(entries)
+    holder.pending_worker_events = list(pending or [])
+    holder.overflow_generation = 0
+    holder.overflow_confirmed_generation = 0
+    holder.overflow_inflight_generation = None
+    holder.overflow_inflight_fingerprint = None
+    holder.turn = {"active": False}
+
+    class Agent:
+        proc = object()
+        exited = threading.Event()
+
+    holder.agent = Agent()
+    holder.args = type("Args", (), {"platform": "zcode", "repo": "/nonexistent",
+                                    "session": "host"})()
+    return holder
+
+
+def test_issue_87_restore_takes_max_generation_when_log_is_reordered() -> None:
+    """Issue #87 P1: overflow gen2 can land in the log before a late gen1.
+    Restore must keep generation 2 pending after gen1 was already confirmed."""
+    module = load_holder_module()
+    holder = bare_holder(module, [
+        {"kind": "worker_event_delivered", "event_ids": [],
+         "overflow_full_check": True, "overflow_generation": 1},
+        {"kind": "worker_event_overflow_confirmed", "generation": 1},
+        {"kind": "worker_event_overflow", "generation": 2},
+        {"kind": "worker_event_overflow", "generation": 1},
+    ])
+    delivered: list[dict] = []
+    holder._deliver_worker_events = (  # type: ignore[method-assign]
+        lambda: delivered.append({"overflow_full_check": True}) or {
+            "delivered": True, "overflow_full_check": True})
+    holder._restore_worker_events()
+    check(holder.overflow_generation == 2,
+          f"restore keeps the max overflow generation ({holder.overflow_generation})")
+    check(holder.overflow_confirmed_generation == 1,
+          f"restore keeps confirmed generation 1 ({holder.overflow_confirmed_generation})")
+    check(holder.overflow_generation > holder.overflow_confirmed_generation,
+          "unconfirmed gen2 full-check remains pending")
+    check(delivered == [{"overflow_full_check": True}],
+          f"restore delivers the pending full-check ({delivered})")
+
+
+def test_issue_87_idle_full_queue_overflow_delivers_now() -> None:
+    """Issue #87: a full detailed queue on an idle Host must not wait for a
+    later worker event; the overflow itself triggers full-check delivery."""
+    module = load_holder_module()
+    pending = [{"event_id": f"codex/work-{index}/idle/{100 + index}",
+                "kind": "idle", "platform": "codex", "session": f"work-{index}",
+                "repo": "/x", "reason": "end_turn", "event_cursor": 100 + index}
+               for index in range(HEARTBEAT_EVENT_CAP)]
+    holder = bare_holder(module, pending=pending)
+    prompts: list[dict] = []
+
+    def fake_prompt(params):
+        prompts.append(params)
+        return {"outcome": "in_progress", "prompt_fingerprint": "fp-idle-full"}
+
+    holder.op_prompt = fake_prompt  # type: ignore[method-assign]
+    overflow = holder.op_worker_event({
+        "kind": "terminated", "platform": "codex", "session": "work-33",
+        "repo": "/x", "reason": "exit_0", "event_cursor": 133,
+    })
+    check((overflow.get("error") or {}).get("code") == "worker-event-queue-full",
+          f"the 33rd event is still queue-full ({overflow})")
+    check(overflow.get("overflow_full_check") is True,
+          f"the idle overflow records a full-check ({overflow})")
+    check(overflow.get("delivered") is True,
+          f"idle overflow delivers the full-check immediately ({overflow})")
+    check(len(prompts) == 1, f"one prompt is admitted now, not later ({prompts})")
+    check(OVERFLOW_FULL_CHECK_MARK in str(prompts[0].get("text") or ""),
+          "the immediate prompt is the full-check")
+    check(len(holder.events.entries) >= 1 and any(
+        entry.get("kind") == "worker_event_overflow" for entry in holder.events.entries),
+          "the overflow fact is in the event log")
 
 
 def test_canonical_heartbeat_spec_stays_one_set() -> None:

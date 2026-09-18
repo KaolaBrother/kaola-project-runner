@@ -228,12 +228,14 @@ worker agent terminated / worker turn ended (one idle episode)
   retry loop and no raw send. The 33rd detailed event is still
   `worker-event-queue-full` and is not staged as a 33rd line; the holder
   records one monotonic full-check generation (`worker_event_overflow`) in
-  the existing event log and includes `kaola-host-notify/overflow-full-check`
-  in the next heartbeat so the Host inspects every authorized worker's real
-  status and pending approvals. That signal reminds only: it does not
-  approve or refuse permissions. Overflow during a notification is a later
-  generation and still needs the following wake. There is no lossless 33rd
-  detailed replay and no second queue.
+  the existing event log — increment and append under the same lock — and
+  includes `kaola-host-notify/overflow-full-check` in the next heartbeat so
+  the Host inspects every authorized worker's real status and pending
+  approvals. If the detailed queue is already full and the Host is idle,
+  that overflow delivers the full-check immediately. That signal reminds
+  only: it does not approve or refuse permissions. Overflow during a
+  notification is a later generation and still needs the following wake.
+  There is no lossless 33rd detailed replay and no second queue.
 - **Confirmation and resume.** The host turn completing after the
   notification confirms the detailed events and, when present, the
   full-check generation snapped at delivery (`worker_event_overflow_confirmed`).
@@ -241,8 +243,9 @@ worker agent terminated / worker turn ended (one idle episode)
   existing event log. `start --resume` (the `session/load` path, also after
   exact `stop`) rebuilds the pending detailed list from that log
   (at-least-once for those ≤32 events) and restores a full-check when the
-  last overflow generation exceeds the last confirmed generation. A later
-  event beyond the cap is not promised as a detailed line after resume.
+  max overflow generation exceeds the max confirmed generation, even if a
+  late gen1 line follows gen2. A later event beyond the cap is not promised
+  as a detailed line after resume.
 - **The Host must end its turn (Issue #65).** Staging only clears at a turn
   boundary, so a Host that holds its turn open with `sleep`, a poll loop, or a
   blocking `wait` is exactly what keeps its own events undelivered. The
@@ -306,9 +309,9 @@ approval gate was added for either flow.
 - `python3 tests/contract/test-zcode-heartbeat-contract.py` — the Phase 2
   carrier: terminated/idle delivery with the full current prompt body, busy
   staging and boundary flush, bounded deduped queue, 33rd-event full-check
-  (later overflow still wakes, exact-stop resume, remind-only), 64KiB
-  prompt-file bound, ZCode-only gates, and no periodic trigger without
-  worker events.
+  (later overflow still wakes, idle-full delivers now, restore takes max
+  generation, exact-stop resume, remind-only), 64KiB prompt-file bound,
+  ZCode-only gates, and no periodic trigger without worker events.
 - `bash tests/contract/test-installer-runtimes.sh` — `--runtime zcode` and
   workspace `.zcode/skills` installs.
 - `python3 tests/contract/test-issue-51-runner-integration.py` — ZCode worker

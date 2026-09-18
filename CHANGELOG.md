@@ -8,9 +8,12 @@
   host holder records one monotonic full-check generation in the existing event log
   and puts it on the next heartbeat so the Host inspects authorized workers' real
   status and pending approvals. A notification confirms only the generation it
-  delivered; overflow during that turn still needs the next wake. The signal reminds
-  only and does not approve permissions. Exact `stop` then `start --resume` restores
-  an unconfirmed generation. Reading `.kaola/heartbeat-prompt.json` is capped at
+  delivered; overflow during that turn still needs the next wake. If the Host is
+  already idle with a full detailed queue, the overflow delivers that full-check
+  immediately. Restore takes the max overflow and confirmed generations so a late
+  gen1 line cannot hide an unconfirmed gen2. The signal reminds only and does not
+  approve permissions. Exact `stop` then `start --resume` restores an unconfirmed
+  generation. Reading `.kaola/heartbeat-prompt.json` is capped at
   65536 bytes: an oversized file is a named defect, is never injected as a
   truncated-looking body, and still delivers the worker wake. No new queue,
   scheduler, timed heartbeat, or quota system.
