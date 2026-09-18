@@ -94,8 +94,10 @@ class HostDispatchContract(unittest.TestCase):
         self.assertNotIn('"$ZC" zcode ', self.ref)
         self.assertIn("take **no** platform argument", self.ref)
         self.assertIn('"heartbeat_host"', self.ref)
-        self.assertIn("No `heartbeat_host` key means this worker will never wake you",
-                      self.ref)
+        # Issue #70 superseded "a missing key means unbound": the key is always
+        # present, so the reference must teach the fact and its unknown case.
+        self.assertIn("`heartbeat_host` is the running holder's own binding", self.ref)
+        self.assertIn("heartbeat_host_known", self.ref)
 
     def test_reference_reads_the_dispatch_receipt_honestly(self) -> None:
         self.assertIn("--no-wait", self.ref)
@@ -137,7 +139,10 @@ class HostDispatchContract(unittest.TestCase):
         holder = HOLDER.read_text(encoding="utf-8")
         acp = ACP.read_text(encoding="utf-8")
         self.assertIn('HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"', acp)
-        self.assertIn('receipt["heartbeat_host"] = heartbeat_host', acp)
+        # Issue #70: the start receipt separates what was asked for from the
+        # binding the holder really adopted, which is read back from its state.
+        self.assertIn('receipt["heartbeat_host_requested"] = heartbeat_host', acp)
+        self.assertIn("attach_binding_fact(receipt, state)", acp)
         self.assertIn('"kaola-host-notify/1', holder)
         self.assertIn('".kaola" / "heartbeat-prompt.json"', holder.replace('"', '"'))
         self.assertIn("<<<heartbeat-prompt", holder)

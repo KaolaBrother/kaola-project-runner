@@ -10,16 +10,6 @@ HOSTRUN="$HOME/.zcode/skills/zcode-kaola-project-runner/scripts/runtime-tmux.sh"
 PROJECT="/abs/path/to/project"     # the consuming project's canonical Git root
 ```
 
-## Three identities, never interchangeable
-
-| Name | What it is | Where it comes from |
-|---|---|---|
-| Runner session | what every `--session` takes | you choose it at `start` |
-| ACP session id | the bridge's id for this thread | `acp_session_id` in receipts |
-| native session id | the CLI's own id (`sess_…`) | `session_meta`, for `--resume` |
-
-A `sess_…` value is never a Runner session name. Never guess a session name.
-
 ## A. Ordinary worker supervision
 
 You keep authorization, dispatch, acceptance and close-out in your own session.
@@ -61,7 +51,8 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
    that is the installed release or a candidate checkout; the path of the existing
    Project Plan or already-authorized task plan; the authorized platforms and
    count; whether it may implement itself; the acceptance and finalize boundary;
-   and the existing runs and worker session names.
+   and the existing runs and worker session names; tell it to read
+   [zcode-host-dispatch.md](zcode-host-dispatch.md) before its first dispatch.
 
    ```bash
    "$HOSTRUN" send --repo "$PROJECT" --session zcode-kaola-host --no-wait --text '<handover>'
@@ -88,9 +79,10 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
    dispatch, the Host's turn ending on its own, and a `kaola-host-notify/1` pass
    arriving from a worker event. A background blocking `send` that returns to a
    human or outer Agent is not that loop and does not prove it.
-6. **Keep, then stop.** A Host that ended its turn with workers in flight or with
-   delivery, acceptance or close-out open is not idle: keep it and send no
-   "continue" — its next beat is a worker event. Stop it exactly, by name, once
+6. **Keep, then stop.** A Host that returns `end_turn` has finished that beat,
+   not the project: with workers in flight or delivery, acceptance or close-out
+   open it is not idle. Keep it and send no "continue" — its next beat is a
+   worker event. Stop it exactly, by name, once
    delivery, acceptance, Workflow finalize/archive/sink and cleanup are verified.
 
 ## C. The Host's own startup and beat
