@@ -89,13 +89,16 @@ def thought_chunk(session_id: str, text: str, message_id: str | None = None) -> 
 
 class MockAgent:
     def __init__(self, scenario: str, caps: set[str], turn_ms: int, flood_bytes: int,
-                 steering: str = "none",
+                 steering: str = "none", ignore_cancel: bool = False,
                  caps_objects: bool = False):
         self.scenario = scenario
         # Issue #65: native mid-turn steering. "none" leaves `_session/steering`
         # unimplemented (JSON-RPC -32601), exactly like a platform without the
         # entry; every other value advertises `_meta.steering` and answers.
         self.steering = steering
+        # Issue #65: a turn that does NOT stop when cancelled, so the composite
+        # steering path can be proven to send nothing on an unconfirmed cancel.
+        self.ignore_cancel = ignore_cancel
         self.steer_texts: list[str] = []
         self.caps = caps
         self.caps_objects = caps_objects
@@ -723,7 +726,10 @@ class MockAgent:
         respond(request_id, {"outcome": "injected"})
 
     def on_cancel_notification(self, params: dict[str, Any]) -> None:
-        log_event({"event": "session_cancel", "params": params})
+        log_event({"event": "session_cancel", "params": params,
+                   "ignored": self.ignore_cancel})
+        if self.ignore_cancel:
+            return
         self.finish_active_turn("cancelled")
 
     # -- inbound dispatch -----------------------------------------------------
@@ -843,13 +849,15 @@ def main() -> int:
     parser.add_argument("--caps-objects", action="store_true")
     parser.add_argument("--turn-ms", type=int, default=0)
     parser.add_argument("--flood-bytes", type=int, default=1024 * 1024)
+    parser.add_argument("--ignore-cancel", action="store_true")
     parser.add_argument("--steering", default="none",
                         choices=("none", "injected", "promptRequired", "startedNewTurn",
                                  "error", "silent", "weird"))
     args, _unknown = parser.parse_known_args()
     caps = {item for item in args.caps.split(",") if item}
     agent = MockAgent(args.scenario, caps, args.turn_ms, args.flood_bytes,
-                      steering=args.steering, caps_objects=args.caps_objects)
+                      steering=args.steering, ignore_cancel=args.ignore_cancel,
+                      caps_objects=args.caps_objects)
     return agent.serve()
 
 

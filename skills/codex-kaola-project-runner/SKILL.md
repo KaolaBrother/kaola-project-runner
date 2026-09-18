@@ -95,16 +95,18 @@ After reading current evidence, the controlling Agent chooses what to send:
 
 ## Steering a running turn
 
-Codex CLI steers natively, so `steer` is an Agent choice for a turn already
-running — not a Runner policy and not a second lifecycle:
+Codex CLI's ACP surface steers natively, so `steer` is an Agent choice for a
+turn already running — not a Runner policy:
 
 ```bash
 "$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" --text '<redirection>'
 ```
 
-`steer_outcome` is the whole claim: `injected`, `not_consumed` (nothing was
-written — decide whether to `send`), `unsupported`, or `unknown` (never resend
-blindly). Acceptance is not adoption; see [references/acp.md](references/acp.md).
+Read `steer_outcome` with `steer_confirmation`: only `injected` means the agent
+acknowledged consumption, `written` means the text reached the running turn but
+this platform confirms nothing, and `not_consumed`/`unknown` mean do not resend
+blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
+cancels the turn first. See [references/steering.md](references/steering.md).
 
 ## Native keys
 

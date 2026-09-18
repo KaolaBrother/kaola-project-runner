@@ -15602,6 +15602,7 @@ var SENSITIVE_FLAGS = /* @__PURE__ */ new Set(["-p", "--print"]);
 var REDACT_FLAGS = /* @__PURE__ */ new Set(["--resume"]);
 var KILL_GRACE_MS = 2e3;
 var STREAM_INPUT_ARGS = ["--input-format", "stream-json"];
+var STEER_FLUSH_TIMEOUT_MS = 2e3;
 function streamUserMessage(text) {
   return JSON.stringify({
     type: "user",
@@ -15840,19 +15841,63 @@ var ClaudeRunner = class {
    * already landed — the text is NOT consumed and nothing is written, so an
    * idle session can never be steered into an untracked turn.
    */
-  steer(trackingId, text) {
+  async steer(trackingId, text) {
     const turn = this.streamingTurns.get(trackingId);
-    if (!turn || turn.settled) return "notConsumed";
+    if (!turn) return { outcome: "notConsumed", confirmation: "none", reason: "noRunningTurn" };
+    if (turn.settled) {
+      return { outcome: "notConsumed", confirmation: "none", reason: "turnAlreadySettled" };
+    }
+    const priorError = turn.stdinError;
+    if (priorError) {
+      return {
+        outcome: "notConsumed",
+        confirmation: "none",
+        reason: `stdinError:${priorError.message}`
+      };
+    }
     const stdin = turn.proc.stdin;
     if (!stdin || stdin.destroyed || stdin.writableEnded || !isRunning(turn.proc)) {
-      return "notConsumed";
+      return { outcome: "notConsumed", confirmation: "none", reason: "stdinClosed" };
     }
+    turn.inFlight += 1;
+    let flush;
     try {
-      stdin.write(streamUserMessage(text));
-    } catch {
-      return "notConsumed";
+      flush = await new Promise((resolve2) => {
+        let done = false;
+        const settle = (value) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve2(value);
+        };
+        const timer = setTimeout(() => settle({ timedOut: true }), STEER_FLUSH_TIMEOUT_MS);
+        timer.unref?.();
+        try {
+          stdin.write(
+            streamUserMessage(text),
+            (err) => settle({ error: err ?? void 0 })
+          );
+        } catch (err) {
+          settle({ error: err instanceof Error ? err : new Error(String(err)) });
+        }
+      });
+    } finally {
+      turn.inFlight -= 1;
     }
-    return "injected";
+    if (flush.timedOut) {
+      return { outcome: "unknown", confirmation: "none", reason: "flushTimeout" };
+    }
+    if (flush.error) {
+      return { outcome: "unknown", confirmation: "none", reason: `flushError:${flush.error.message}` };
+    }
+    const lateError = turn.stdinError;
+    if (lateError) {
+      return { outcome: "unknown", confirmation: "none", reason: `stdinError:${lateError.message}` };
+    }
+    if (turn.settled) {
+      return { outcome: "unknown", confirmation: "none", reason: "turnSettledDuringWrite" };
+    }
+    return { outcome: "written", confirmation: "write-only" };
   }
   /** Kaola fork: SIGTERM the child's process group, SIGKILL after a grace period. */
   terminate(proc) {
@@ -15948,19 +15993,36 @@ var ClaudeRunner = class {
       if (trackingId) {
         this.runningProcesses.set(trackingId, proc);
       }
-      const turn = prompt === void 0 ? void 0 : { proc, settled: false };
+      const turn = prompt === void 0 ? void 0 : { proc, settled: false, inFlight: 0 };
       if (turn && trackingId) {
         this.streamingTurns.set(trackingId, turn);
       }
       const endStdin = () => {
         if (turn) turn.settled = true;
-        try {
-          proc.stdin?.end();
-        } catch {
+        const close = () => {
+          try {
+            proc.stdin?.end();
+          } catch {
+          }
+        };
+        if (turn && turn.inFlight > 0) {
+          let waited = 0;
+          const drain = setInterval(() => {
+            waited += 25;
+            if (!turn.inFlight || waited >= STEER_FLUSH_TIMEOUT_MS) {
+              clearInterval(drain);
+              close();
+            }
+          }, 25);
+          drain.unref?.();
+          return;
         }
+        close();
       };
       if (prompt !== void 0) {
-        proc.stdin?.on("error", () => {
+        proc.stdin?.on("error", (err) => {
+          if (turn) turn.stdinError = err;
+          logger.debug(`streaming stdin error: ${err.message}`);
         });
         try {
           proc.stdin?.write(streamUserMessage(prompt));
@@ -16725,11 +16787,31 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
       if (!runner.steer) {
         throw RequestError.methodNotFound(method);
       }
-      const outcome = runner.steer(sessionId, text);
+      const result = await runner.steer(sessionId, text);
       logger.info(
-        `Steering for session ${sessionId}: ${text.length} chars -> ${outcome}`
+        `Steering for session ${sessionId}: ${text.length} chars -> ${result.outcome} (${result.confirmation})`
       );
-      return outcome === "injected" ? { outcome: "injected" } : { outcome: "promptRequired", reason: "noRunningTurn" };
+      switch (result.outcome) {
+        case "injected":
+        case "written":
+          return {
+            outcome: result.outcome,
+            confirmation: result.confirmation,
+            ...result.reason ? { reason: result.reason } : {}
+          };
+        case "notConsumed":
+          return {
+            outcome: "promptRequired",
+            reason: result.reason ?? "noRunningTurn",
+            confirmation: result.confirmation
+          };
+        default:
+          return {
+            outcome: "unknown",
+            reason: result.reason ?? "undecided",
+            confirmation: result.confirmation
+          };
+      }
     },
     async cancel(params) {
       logger.info(`Cancel request for session ${params.sessionId}`);

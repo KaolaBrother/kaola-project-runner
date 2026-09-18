@@ -250,39 +250,66 @@ relay input/output facts, Git reporting facts, and compatibility editor/activity
 signals. Those compatibility fields are advisory evidence for the controlling agent; generic
 `send`/`stop` never consume them as semantic authority.
 
-### `steer` — one native mid-turn message (Issue #65)
+### `steer` — Agent-chosen steering of a running turn (Issue #65)
 
-`steer --repo ABS_PATH --session NAME [--text TEXT | --stdin] [--timeout SECONDS]` delivers one
-Agent-chosen message to the turn that is **already running** on that exact session. It is a tool the
-controlling Agent decides to use, never a Runner policy, and it reuses the same session/repo/transport
-routing as `send`: no scheduler, no second stdin writer, and no second lifecycle.
+`steer --repo ABS_PATH --session NAME [--text TEXT | --stdin] [--steer-mode native|interrupt]
+[--timeout SECONDS] [--cancel-timeout SECONDS]` delivers one Agent-chosen message to the turn that is
+**already running** on that exact session. It is a tool the controlling Agent decides to use, never a
+Runner policy, and it reuses the same session/repo routing as `send`: no scheduler, no second stdin
+writer, and no second lifecycle. Its scope is the **ACP channel only** — over `pty` it answers
+`steer-unsupported-transport`, since a mid-turn terminal write is an ordinary keystroke stream whose
+meaning only the native UI decides.
 
-The platform manifest is the single source of truth. `native_steering` is `supported`, `unsupported`,
-or `unknown`; `acp_steer_method` carries the native entry and may be non-empty only when
-`native_steering` is `supported`; `steering_summary` records the versioned evidence. Today
-`claude-code` (`claude --input-format stream-json` stdin, bridged as `_session/steering`) and `codex`
-(`_session/steering`, advertised at `initialize` under `_meta.steering`) are supported; the other
-seven platforms are `unsupported` with recorded, version-bound evidence. A generated worker Skill
-lists a runnable `steer` command only where the entry exists; everywhere else it states that no tool
-is offered, and the shared route still answers.
+Every platform has a usable path inside ACP, and the Agent picks which one:
 
-`steer_outcome` and `steer_consumed` carry the whole consumption claim: `injected` / `true`,
-`started_new_turn` / `true` (a separate turn this holder does not track — never reported as
-injection), `not_consumed` / `false` (no active turn, or the turn had already settled),
-`unsupported` / `false`, `rejected` / `false`, and `unknown` / `null` (no reply or an unrecognised
-outcome — consumption is undecided and the Runner never resends). `mutation_performed` describes the
-steer itself, while `mutation_status` stays the running turn's. The original prompt keeps its own
-request id, output, and terminal state; the receipt reports `turn_request_id`,
-`turn_request_id_after`, and `turn_request_id_preserved` so that is checkable, alongside
-`steer_method`, `steer_request_id`, `steer_fingerprint`, `turn_prompt_fingerprint`, and the raw
+- `--steer-mode native` uses the platform's own mid-turn entry and exists only where that entry
+  really does. The manifest is the single source of truth: `native_steering` is `supported`,
+  `unsupported` or `unknown` (an uninvestigated surface stays `unknown` and never masquerades as
+  `unsupported`), `acp_steer_method` carries the entry and may be non-empty only when
+  `native_steering` is `supported`, and `steering_summary` records the versioned evidence. Today
+  `claude-code` (the vendored bridge's `claude --input-format stream-json` stdin, exposed as
+  `_session/steering`) and `codex` (`_session/steering`, advertised at `initialize` under
+  `_meta.steering`) qualify; the other seven have no such entry on their ACP surface at the pinned
+  versions.
+- `--steer-mode interrupt` is the composite and works on every platform: cancel the running turn,
+  confirm it actually stopped, then send the text **once** as the next prompt on the same ACP
+  session, so the conversation keeps its context. It is interrupted-then-continued, never injection —
+  the running turn is ended, and work it already did (files written, commands run) is not undone.
+- With no `--steer-mode`, a native platform uses `native`, and a platform without a native entry
+  **refuses** with `steer-mode-required`, `available_steer_modes: ["interrupt"]`, and writes nothing.
+  The Runner never interrupts a worker on its own initiative, and never silently degrades from
+  `native` to `interrupt` after a failure or a timeout.
+
+`steer_outcome` with `steer_consumed` and `steer_confirmation` carries the whole claim:
+
+| `steer_outcome` | `steer_consumed` | `steer_confirmation` | Meaning |
+|---|---|---|---|
+| `injected` | `true` | `agent-confirmed` | the agent acknowledged that the running turn took it |
+| `written` | `null` | `write-only` | flushed into the running turn's input, which this platform acknowledges in no way |
+| `interrupted_and_resent` | `true` | `cancel-confirmed` | composite: the turn was cancelled and confirmed stopped, then this text ran as the next turn |
+| `resent_without_interrupt` | `true` | `no-turn-to-interrupt` | composite: the turn had already ended on its own, so nothing was interrupted |
+| `started_new_turn` | `true` | `agent-confirmed` | the agent opened a separate turn this holder does not track — not injection |
+| `not_consumed` | `false` | `none` | nothing was written |
+| `unsupported` | `false` | `none` | no native entry on this platform or transport |
+| `rejected` | `false` | `none` | the agent refused; `error.detail` carries its reason |
+| `unknown` | `null` | `none` | undecided — the Runner never resends blindly |
+
+`mutation_performed` describes the steer itself, while `mutation_status` stays the running turn's.
+The interrupted or steered turn keeps its own request id, output and terminal state: the native path
+reports `turn_request_id`, `turn_request_id_after` and `turn_request_id_preserved`; the composite
+reports `cancelled_turn_request_id`, `cancelled_turn_stop_reason` and a distinct
+`new_turn_request_id`, plus `side_effects_possible: true`, because interrupting is not undoing. Both
+report `steer_method`, `steer_request_id`, `steer_fingerprint`, `turn_prompt_fingerprint` and the raw
 `steer_response`.
 
-An idle session is never steered: the holder refuses before writing anything, because some agents
+Two refusals protect against a double dispatch. An unconfirmed cancel sends **nothing**
+(`steer-cancel-unconfirmed`, outcome `unknown`): a turn that will not confirm it stopped can never
+receive a second prompt, and the Agent must `observe` before deciding — the Runner does not retry.
+And an idle session is never natively steered: the holder refuses before writing, because some agents
 answer an idle steering call by starting a detached turn (Codex 1.11.0 returns `startedNewTurn` even
-when the request carries `idleBehavior: "promptRequired"`). `steer` is an `acp` operation — over
-`pty` it answers `steer-unsupported-transport`, since a mid-turn terminal write is an ordinary
-keystroke stream whose meaning only the native UI decides. The Runner never converts a `steer` into
-`cancel`+`send`, a transport fallback, or a worker event.
+when the request carries `idleBehavior: "promptRequired"`). The steering text is sent at most once in
+either mode. A holder started before this release has no `steer` op and cannot gain one without a
+restart, which answers `steer-holder-outdated` with nothing written.
 
 
 The `relay` object reports relay epoch/process/socket, runtime child PID/PGID/path/start fingerprint,

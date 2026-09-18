@@ -100,31 +100,46 @@ def parse_manifest(path: Path) -> dict[str, str]:
 
 STEERING_SUPPORTED = """## Steering a running turn
 
-{runtime} steers natively, so `steer` is an Agent choice for a turn already
-running — not a Runner policy and not a second lifecycle:
+{runtime}'s ACP surface steers natively, so `steer` is an Agent choice for a
+turn already running — not a Runner policy:
 
 ```bash
 "$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" --text '<redirection>'
 ```
 
-`steer_outcome` is the whole claim: `injected`, `not_consumed` (nothing was
-written — decide whether to `send`), `unsupported`, or `unknown` (never resend
-blindly). Acceptance is not adoption; see [references/acp.md](references/acp.md).
+Read `steer_outcome` with `steer_confirmation`: only `injected` means the agent
+acknowledged consumption, `written` means the text reached the running turn but
+this platform confirms nothing, and `not_consumed`/`unknown` mean do not resend
+blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
+cancels the turn first. See [references/steering.md](references/steering.md).
 """
 
-STEERING_UNSUPPORTED = """## Steering a running turn
+STEERING_COMPOSITE = """## Steering a running turn
 
-{runtime} exposes no native mid-turn steering here, so this Skill offers no
-`steer` tool; the shared route answers `steer_outcome: unsupported` with the
-text unconsumed. Use `send` for the next turn.
+{runtime}'s ACP surface exposes no native mid-turn entry, so a bare `steer`
+refuses and writes nothing. The available path is the composite, which you
+choose explicitly:
+
+```bash
+"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" \\
+  --steer-mode interrupt --text '<redirection>'
+```
+
+It **cancels** the running turn, confirms it stopped, then sends your text as the
+next turn on the same session, which keeps the conversation's context. That is
+interrupted-then-continued, never injection: work in progress stops and may have
+left partial side effects (`side_effects_possible`). An unconfirmed cancel sends
+nothing and reports `unknown`. See [references/steering.md](references/steering.md).
 """
 
 
 def steering_block(manifest: dict[str, str]) -> str:
-    """Issue #65: a platform advertises a steering tool only where the native
-    entry actually exists. Unsupported and unknown never advertise one."""
+    """Issue #65: every platform documents the steering path it really has on
+    its ACP surface. A native tool is advertised only where the native entry
+    exists; everywhere else the Skill documents the explicit composite instead
+    of leaving the Agent with nothing."""
     template = (STEERING_SUPPORTED if manifest["native_steering"] == "supported"
-                else STEERING_UNSUPPORTED)
+                else STEERING_COMPOSITE)
     return template.format(runtime=manifest["runtime_name"]).rstrip()
 
 
@@ -259,6 +274,12 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
     acp = TEMPLATES / "references" / "acp.md.tmpl"
     result["references/acp.md"] = render(
         acp.read_text(encoding="utf-8"), manifest, acp
+    ).encode()
+    # Issue #65: steering is its own on-demand reference, so the ACP surface
+    # reference stays about the ordinary command surface.
+    steering = TEMPLATES / "references" / "steering.md.tmpl"
+    result["references/steering.md"] = render(
+        steering.read_text(encoding="utf-8"), manifest, steering
     ).encode()
 
     core = ROOT / "scripts" / "kaola-tmux.sh"

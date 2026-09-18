@@ -2,21 +2,35 @@
 
 ## Unreleased
 
-- **Native mid-turn steering is now a real tool, where the platform really has
-  one (Issue #65).** A unified `steer` operation joins `send`/`wait`/`cancel`/
-  `stop` on the same exact session/repo/transport routing — no scheduler, no
-  second stdin writer, no second lifecycle. All nine platforms were probed on
-  the real installed CLIs (four candidate entries each, plus a live mid-turn
-  observation): **Claude Code** and **Codex** steer natively and are connected;
-  the other seven answer JSON-RPC `-32601` on every entry and are recorded
-  `unsupported` with versioned evidence, so their Skills never advertise a tool
-  they do not have. `steer_outcome`/`steer_consumed` keep `injected`,
-  `started_new_turn`, `not_consumed`, `unsupported`, `rejected`, and `unknown`
-  apart — a queued or detached turn is never called injection — and the running
-  turn keeps its own request id, output, and terminal state
-  (`turn_request_id_preserved`). An idle session is never steered, and `steer`
-  over `pty` is an honest `steer-unsupported-transport` rather than an unproven
-  injection claim.
+- **Every platform can now be steered mid-run, and the receipt says exactly how
+  (Issue #65).** A unified `steer` operation joins `send`/`wait`/`cancel`/`stop`
+  on the same exact session/repo routing — no scheduler, no second stdin writer,
+  no second lifecycle. Its scope is the ACP channel; over `pty` it is an honest
+  `steer-unsupported-transport` rather than an unproven injection claim. The
+  Agent chooses between two modes. `--steer-mode native` uses the platform's own
+  mid-turn entry and exists where that entry really does: **Claude Code** and
+  **Codex**. `--steer-mode interrupt` is the composite available everywhere — it
+  cancels the running turn, confirms it actually stopped, and sends the text
+  once as the next prompt on the same ACP session, so the conversation keeps its
+  context. All nine platforms were verified live on the real installed CLIs
+  through the generated Skill's own script: the steering instruction asked for a
+  codeword planted in the first prompt, and the reply carried it back.
+- **Steering never overstates what happened (Issue #65).** `steer_outcome`,
+  `steer_consumed`, and `steer_confirmation` keep `injected` (the agent
+  acknowledged consumption), `written` (flushed into a running turn on a
+  platform that acknowledges nothing), `interrupted_and_resent`,
+  `resent_without_interrupt`, `started_new_turn`, `not_consumed`, `unsupported`,
+  `rejected`, and `unknown` apart. The composite is reported as
+  interrupted-then-continued with `side_effects_possible`, never as injection,
+  and the interrupted turn keeps its own request id, output, and terminal state
+  next to a distinct `new_turn_request_id`. Nothing degrades silently: a
+  platform without a native entry refuses a bare `steer` with
+  `steer-mode-required` instead of interrupting on its own, an unconfirmed
+  cancel sends nothing at all (`steer-cancel-unconfirmed`, outcome `unknown`, no
+  blind retry), an idle session is never natively steered, and a holder started
+  before this release answers `steer-holder-outdated` having written nothing.
+  `native_steering` also distinguishes `unknown` from `unsupported`, so an
+  uninvestigated surface is never recorded as a proven absence.
 - **The Claude Code bridge gained the native channel it was missing
   (Issue #65).** The vendored bridge now drives every streaming turn with
   `claude -p --input-format stream-json` and writes the prompt to an open
@@ -25,11 +39,12 @@
   `_meta.steering`. The turn still ends on the CLI's `result`, which closes
   stdin, so the one-subprocess-per-turn lifetime is unchanged; as a side effect
   the prompt text no longer appears in the process argument list at all.
-- **ZCode: engine-capable, protocol-surface unsupported — and one real bug
-  fixed (Issue #65).** ZCode 0.16.5 has a turn-steer queue internally but does
-  not expose it on the `app-server --stdio` protocol the Runner drives (no steer
-  method, a `.strict()` `session/send` schema with no delivery field, and a hard
-  `-32010` while a turn is active). Probing that surface also exposed a defect in
+- **ZCode: engine-capable, protocol-surface unsupported — steered by the
+  composite, and one real bug fixed (Issue #65).** ZCode 0.16.5 has a turn-steer
+  queue internally but does not expose it on the `app-server --stdio` protocol
+  the Runner drives (no steer method, a `.strict()` `session/send` schema with no
+  delivery field, and a hard `-32010` while a turn is active), so it is steered
+  through `--steer-mode interrupt` like the other six. Probing that surface also exposed a defect in
   our own adapter: `kaola-zcode-acp.py` overwrote the active turn's request id
   when a second prompt arrived, orphaning the original request and handing its
   completion to the newcomer. It now refuses the concurrent prompt with the same

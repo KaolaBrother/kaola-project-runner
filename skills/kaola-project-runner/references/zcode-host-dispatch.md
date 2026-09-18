@@ -1,28 +1,27 @@
 # ZCode Host: dispatch, end the turn, wake on worker events
 
 Read this when a ZCode Host session supervises workers, or when an outer Agent
-starts one. It is operating instructions for three roles, with the exact flags
-and receipt fields the scripts really use. Nobody has to read Python to use it.
+starts one: operating instructions for three roles, with the exact flags and
+receipt fields the scripts really use. No Python reading required.
 
 ## Three identities, never interchangeable
 
 | Name | What it is | Where it comes from |
 |---|---|---|
-| Runner session | the name you pass to every `--session` | you choose it at `start` |
-| ACP session id | the bridge's id for this conversation | `acp_session_id` in receipts |
-| native session id | the CLI's own conversation id (`sess_…`) | `session_meta`, for `--resume` |
+| Runner session | what every `--session` takes | you choose it at `start` |
+| ACP session id | the bridge's id for this thread | `acp_session_id` in receipts |
+| native session id | the CLI's own id (`sess_…`) | `session_meta`, for `--resume` |
 
 A `sess_…` value is never a Runner session name. Never guess a session name.
 
-Each installed Skill's `scripts/runtime-tmux.sh` is already pinned to its own
-platform, so the commands below take **no** platform argument — the repository's
-`scripts/kaola-tmux.sh PLATFORM ...` form is the development entry, not this one.
+Each installed Skill's `scripts/runtime-tmux.sh` is pinned to its own platform,
+so the commands below take **no** platform argument; the repository's
+`scripts/kaola-tmux.sh PLATFORM ...` form is the development entry, not this.
 
 ## 1. Outer controlling Agent — starting the Host
 
 Start the Host like any worker, then hand it its own identity in the first
-prompt. A Host cannot discover its Runner name, and no environment variable
-carries it in:
+prompt: a Host cannot discover its Runner name, and no variable carries it in.
 
 ```bash
 ZC="/abs/path/to/zcode-kaola-project-runner/scripts/runtime-tmux.sh"
@@ -39,10 +38,10 @@ worker events. Read references/zcode-host-dispatch.md before dispatching.'
 The Host is itself an ACP thread; being an orchestrator changes none of that.
 
 **A Host that returns `end_turn` has finished this beat, not the project.** While
-it has in-flight workers or undelivered acceptance and close-out duties, it is
-not an idle worker: keep its holder running and do not `stop` it. The next beat
-is triggered by a worker event — do not send "continue"; a manual nudge
-duplicates work. You still own supervision and the final lifecycle decision.
+it has in-flight workers or open acceptance and close-out duties it is not an
+idle worker: keep its holder and do not `stop` it. The next beat comes from a
+worker event — do not send "continue", which duplicates work. You still own
+supervision and the final lifecycle decision.
 
 ## 2. ZCode Host Agent — one beat
 
@@ -88,6 +87,11 @@ outcomes instead of assuming success: an `error` (for example
 `prompt_timeout` or missing receipt leaves consumption unknown — establish the
 fact with `observe` before re-sending anything.
 
+**Keep two values from this receipt**: `prompt_fingerprint`, which identifies
+the turn you dispatched, and `dispatch_event_cursor`, which is the worker's
+event cursor *before* that turn produced anything. You need the cursor to read
+the reply later.
+
 ### Finish the beat, then end your turn
 
 Do the rest of this beat's executable work, update the one project heartbeat
@@ -109,42 +113,59 @@ The next beat arrives as an ordinary prompt beginning
  "platform":"codex","repo":"/abs/path/to/project","reason":"turn-end","session":"codex-kaola-feature-a"}
 ```
 
+Here `19` is where that worker's turn **ended**; the reply is below it.
+
 — followed by your own heartbeat prompt body verbatim between
 `<<<heartbeat-prompt` and `heartbeat-prompt>>>`.
 
 **The notification is not the worker's reply and is not a success verdict.** Use
 the event's own `platform`, `session`, and `repo` with that platform's Runner
-Skill to read what actually happened:
+Skill to read what actually happened.
+
+**`event_cursor` is the end of the turn, not the start.** It is the worker's
+cursor when the turn ended, so it sits *after* the reply: `capture --since
+<event_cursor>` returns carrier and title updates and skips the very reply you
+are accepting. Read from an anchor that precedes the output:
 
 ```bash
+# the cursor your own dispatch receipt returned, from before the reply existed
 "$W" observe --repo "$WORK_REPO" --session codex-kaola-feature-a
-"$W" capture --repo "$WORK_REPO" --session codex-kaola-feature-a --since 19
+"$W" capture --repo "$WORK_REPO" --session codex-kaola-feature-a --since "$DISPATCH_EVENT_CURSOR"
+
+# no anchor kept (resumed/adopted Host): bounded recent slice, never --since <event_cursor>
+"$W" capture --repo "$WORK_REPO" --session codex-kaola-feature-a --lines 200
 ```
+
+Confirm you are reading the turn you dispatched: `observe`'s
+`last_prompt.fingerprint` must equal your dispatch receipt's
+`prompt_fingerprint`, and `turn_outcome`/`stop_reason` must show it finished. A
+capture with no assistant text means your window was wrong, not that the worker
+said nothing — widen it and read again before judging.
 
 Then accept, ask for a fix, dispatch more work, update the same heartbeat
 prompt, and end the turn again.
 
 `kind` is `idle` when the worker's turn ended and `terminated` when its process
-exited. A finished turn is a full trigger — never kill a worker to be notified.
+exited. A finished turn is a full trigger; never kill a worker to be notified.
 
 ## 3. Workers and the notification carrier
 
 The worker Agent owns its delivery; it never fabricates events and never writes
-to your stdin. The worker's own holder sends the event over the Host holder's
-existing admin socket. Do not ask a worker to notify you, and do not send a
-second prompt that duplicates the carrier.
+to your stdin. Its own holder sends the event over the Host holder's existing
+admin socket. Do not ask a worker to notify you, and do not send a second prompt
+that duplicates the carrier.
 
 Delivery rules you can rely on:
 
 - Busy Host: the event is staged and delivered at your next turn boundary. It is
   never injected mid-turn, and a worker event is never turned into steering.
-- A worker that finished before your turn ended is handled by the same staging,
-  so the race cannot skip or double-dispatch it.
+- A worker that finished before your turn ended uses the same staging, so the
+  race cannot skip or double-dispatch it.
 - Duplicate `event_id`s collapse; several events pending at one boundary arrive
   in one prompt, each carrying the full current body.
-- Confirmation follows the notification turn *completing*. After a resume,
-  unconfirmed events are redelivered at least once — make each pass idempotent
-  rather than assuming exactly-once.
+- Confirmation follows the notification turn *completing*; after a resume,
+  unconfirmed events are redelivered at least once, so make each pass
+  idempotent rather than assuming exactly-once.
 - Dispatch failure, unknown acceptance, or a missing `heartbeat_host` binding
   means you are **not** reliably event-driven: handle it in this beat or record
   the recovery duty explicitly before ending the turn.

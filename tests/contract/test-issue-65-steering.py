@@ -82,16 +82,21 @@ class SteeringContract(unittest.TestCase):
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         return env
 
-    def mock_command(self, steering: str, turn_ms: int, scenario: str = "slow") -> str:
-        return " ".join([sys.executable, str(MOCK), "--scenario", scenario,
-                         "--steering", steering, "--turn-ms", str(turn_ms)])
+    def mock_command(self, steering: str, turn_ms: int, scenario: str = "slow",
+                     ignore_cancel: bool = False) -> str:
+        parts = [sys.executable, str(MOCK), "--scenario", scenario,
+                 "--steering", steering, "--turn-ms", str(turn_ms)]
+        if ignore_cancel:
+            parts.append("--ignore-cancel")
+        return " ".join(parts)
 
     def cli(self, platform: str, command: str, *args: str, session: str | None = None,
             steering: str = "none", turn_ms: int = 0, scenario: str = "slow",
-            check: bool = True, timeout: float = 45) -> dict:
+            ignore_cancel: bool = False, check: bool = True, timeout: float = 45) -> dict:
         argv = [sys.executable, str(CLI), platform, command,
                 "--repo", str(self.repo), "--session", session or self.session,
-                "--command", self.mock_command(steering, turn_ms, scenario), *args]
+                "--command", self.mock_command(steering, turn_ms, scenario, ignore_cancel),
+                *args]
         result = subprocess.run(argv, capture_output=True, text=True,
                                 env=self.env(), timeout=timeout)
         try:
@@ -104,18 +109,20 @@ class SteeringContract(unittest.TestCase):
         return receipt
 
     def start_running_turn(self, platform: str, steering: str, turn_ms: int = 9000,
-                           session: str | None = None) -> dict:
+                           session: str | None = None, ignore_cancel: bool = False) -> dict:
         """Start a session and leave one genuinely running turn behind."""
         session = session or self.session
-        self.cli(platform, "start", session=session, steering=steering, turn_ms=turn_ms)
+        self.cli(platform, "start", session=session, steering=steering, turn_ms=turn_ms,
+                 ignore_cancel=ignore_cancel)
         self._started.append((platform, session))
         sent = self.cli(platform, "send", "--no-wait", "--text", "run the long loop",
-                        session=session, steering=steering, turn_ms=turn_ms)
+                        session=session, steering=steering, turn_ms=turn_ms,
+                        ignore_cancel=ignore_cancel)
         self.assertEqual(sent.get("outcome"), "in_progress")
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             state = self.cli(platform, "observe", session=session, steering=steering,
-                             turn_ms=turn_ms)
+                             turn_ms=turn_ms, ignore_cancel=ignore_cancel)
             if state.get("turn_active"):
                 return state
             time.sleep(0.2)
@@ -137,14 +144,14 @@ class SteeringContract(unittest.TestCase):
                     self.assertEqual(values["acp_steer_method"], "")
 
     def test_unsupported_platform_never_consumes(self) -> None:
-        receipt = self.cli(UNSUPPORTED_PLATFORM, "steer", "--text", STEER_TEXT, check=False)
+        """An explicit native request on a platform without the entry."""
+        receipt = self.cli(UNSUPPORTED_PLATFORM, "steer", "--steer-mode", "native",
+                           "--text", STEER_TEXT, check=False)
         self.assertEqual(receipt["steer_outcome"], "unsupported")
         self.assertIs(receipt["steer_consumed"], False)
         self.assertIsNone(receipt["steer_method"])
         self.assertEqual(receipt["error"]["code"], "steer-unsupported")
         self.assertEqual(receipt["mutation_status"], "not_started")
-        # No session existed: an unsupported steer must not have started one.
-        self.assertFalse((self.record_root / UNSUPPORTED_PLATFORM).exists())
 
     def test_pty_transport_is_honest_unsupported(self) -> None:
         result = subprocess.run(
@@ -285,24 +292,158 @@ class SteeringContract(unittest.TestCase):
         state = self.cli(SUPPORTED_PLATFORM, "observe", steering="injected")
         self.assertIs(state["turn_active"], False)
 
+
+    # -- composite steering (no native entry) --------------------------------
+
+    def test_no_native_entry_refuses_until_the_agent_picks_a_mode(self) -> None:
+        """The Runner never chooses to interrupt on the Agent's behalf."""
+        receipt = self.cli(UNSUPPORTED_PLATFORM, "steer", "--text", STEER_TEXT, check=False)
+        self.assertEqual(receipt["error"]["code"], "steer-mode-required")
+        self.assertEqual(receipt["available_steer_modes"], ["interrupt"])
+        self.assertIs(receipt["steer_consumed"], False)
+        self.assertEqual(receipt["mutation_status"], "not_started")
+        # the message must say what the composite actually does
+        message = receipt["error"]["message"]
+        self.assertIn("CANCELS the running turn", message)
+        self.assertIn("side effects", message)
+        # a refused steer starts nothing: this session has no holder record
+        self.assertFalse(
+            any(p.name == "record.json"
+                for p in (self.record_root / UNSUPPORTED_PLATFORM / self.session).rglob("*"))
+            if (self.record_root / UNSUPPORTED_PLATFORM / self.session).exists() else False)
+
+    def test_interrupt_cancels_the_turn_then_resends_once(self) -> None:
+        self.start_running_turn(UNSUPPORTED_PLATFORM, "none", turn_ms=20000)
+        receipt = self.cli(UNSUPPORTED_PLATFORM, "steer", "--steer-mode", "interrupt",
+                           "--text", STEER_TEXT, turn_ms=20000, check=False)
+        self.assertEqual(receipt["steer_outcome"], "interrupted_and_resent")
+        self.assertEqual(receipt["steer_mode"], "interrupt")
+        self.assertEqual(receipt["steer_method"], "cancel+prompt")
+        self.assertIs(receipt["interrupted"], True)
+        self.assertIs(receipt["turn_was_active"], True)
+        self.assertEqual(receipt["steer_confirmation"], "cancel-confirmed")
+        # the interrupted turn keeps its own identity and terminal state
+        self.assertEqual(receipt["cancelled_turn_stop_reason"], "cancelled")
+        self.assertNotEqual(receipt["cancelled_turn_request_id"],
+                            receipt["new_turn_request_id"])
+        self.assertIs(receipt["turn_request_id_preserved"], True)
+        # partial work is disclosed, not hidden
+        self.assertIs(receipt["side_effects_possible"], True)
+        # it is a NEW turn, never an injection into the old one
+        self.assertNotEqual(receipt["steer_outcome"], "injected")
+        self.assertIn("dispatch_event_cursor", receipt)
+        # exactly one new prompt, and the old turn is no longer active
+        state = self.cli(UNSUPPORTED_PLATFORM, "observe", turn_ms=20000)
+        self.assertEqual((state.get("last_prompt") or {}).get("fingerprint"),
+                         receipt["steer_fingerprint"])
+
+    def test_interrupt_on_an_idle_session_does_not_pretend_to_interrupt(self) -> None:
+        self.cli(UNSUPPORTED_PLATFORM, "start")
+        self._started.append((UNSUPPORTED_PLATFORM, self.session))
+        receipt = self.cli(UNSUPPORTED_PLATFORM, "steer", "--steer-mode", "interrupt",
+                           "--text", STEER_TEXT, check=False)
+        self.assertEqual(receipt["steer_outcome"], "resent_without_interrupt")
+        self.assertIs(receipt["interrupted"], False)
+        self.assertIs(receipt["turn_was_active"], False)
+        self.assertIs(receipt["side_effects_possible"], False)
+        self.assertEqual(receipt["steer_confirmation"], "no-turn-to-interrupt")
+        self.assertIsNone(receipt["cancelled_turn_request_id"])
+
+    def test_unconfirmed_cancel_sends_nothing(self) -> None:
+        """A turn that will not stop must never receive a second dispatch."""
+        self.start_running_turn(UNSUPPORTED_PLATFORM, "none", turn_ms=25000,
+                                ignore_cancel=True)
+        receipt = self.cli(UNSUPPORTED_PLATFORM, "steer", "--steer-mode", "interrupt",
+                           "--cancel-timeout", "2", "--text", STEER_TEXT,
+                           turn_ms=25000, ignore_cancel=True, check=False, timeout=90)
+        self.assertEqual(receipt["steer_outcome"], "unknown")
+        self.assertIsNone(receipt["steer_consumed"])
+        self.assertEqual(receipt["error"]["code"], "steer-cancel-unconfirmed")
+        self.assertIn("NOT sent", receipt["error"]["message"])
+        self.assertNotIn("new_turn_request_id", receipt)
+        # the original turn is still the active one: nothing was dispatched over it
+        state = self.cli(UNSUPPORTED_PLATFORM, "observe", turn_ms=25000, ignore_cancel=True)
+        self.assertIs(state["turn_active"], True)
+
+    def test_repeated_interrupt_steers_the_steer(self) -> None:
+        self.start_running_turn(UNSUPPORTED_PLATFORM, "none", turn_ms=20000)
+        first = self.cli(UNSUPPORTED_PLATFORM, "steer", "--steer-mode", "interrupt",
+                         "--text", "first redirection", turn_ms=20000, check=False)
+        self.assertEqual(first["steer_outcome"], "interrupted_and_resent")
+        second = self.cli(UNSUPPORTED_PLATFORM, "steer", "--steer-mode", "interrupt",
+                          "--text", "second redirection", turn_ms=20000, check=False)
+        self.assertEqual(second["steer_outcome"], "interrupted_and_resent")
+        # the second call interrupts the turn the first one started
+        self.assertEqual(second["cancelled_turn_request_id"], first["new_turn_request_id"])
+        self.assertNotEqual(second["new_turn_request_id"], first["new_turn_request_id"])
+        self.assertNotEqual(first["steer_fingerprint"], second["steer_fingerprint"])
+
+    def test_a_native_platform_can_still_be_asked_to_interrupt(self) -> None:
+        self.start_running_turn(SUPPORTED_PLATFORM, "injected", turn_ms=20000)
+        receipt = self.cli(SUPPORTED_PLATFORM, "steer", "--steer-mode", "interrupt",
+                           "--text", STEER_TEXT, steering="injected", turn_ms=20000,
+                           check=False)
+        self.assertEqual(receipt["steer_outcome"], "interrupted_and_resent")
+        self.assertEqual(receipt["steer_mode"], "interrupt")
+        # asking for the composite must not silently use the native entry
+        self.assertNotIn("steer_native_outcome", receipt)
+
+    def test_native_mode_on_an_unsupported_platform_writes_nothing(self) -> None:
+        receipt = self.cli(UNSUPPORTED_PLATFORM, "steer", "--steer-mode", "native",
+                           "--text", STEER_TEXT, check=False)
+        self.assertEqual(receipt["steer_outcome"], "unsupported")
+        self.assertEqual(receipt["steer_mode"], "native")
+        self.assertIs(receipt["steer_consumed"], False)
+        self.assertEqual(receipt["available_steer_modes"], ["interrupt"])
+
     # -- generated surface ---------------------------------------------------
 
     def test_generated_skills_advertise_only_real_tools(self) -> None:
+        """Every platform documents a usable path; only a real native entry is
+        advertised as native."""
         for path in sorted(PLATFORMS.glob("*.yaml")):
             values = manifest(path.stem)
-            skill = SKILLS / values["skill_name"] / "SKILL.md"
-            acp_ref = SKILLS / values["skill_name"] / "references" / "acp.md"
-            body = skill.read_text(encoding="utf-8")
-            reference = acp_ref.read_text(encoding="utf-8")
+            skill_dir = SKILLS / values["skill_name"]
+            body = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+            reference = (skill_dir / "references" / "steering.md").read_text(encoding="utf-8")
             with self.subTest(platform=path.stem):
-                runnable = re.search(r'runtime-tmux\.sh" steer ', body)
+                # a runnable steer command exists everywhere: nobody is left
+                # with "unsupported" and no path
+                self.assertRegex(body, r'runtime-tmux\.sh" steer ')
+                self.assertIn("## Steering a running turn", body)
                 if values["native_steering"] == "supported":
-                    self.assertIsNotNone(runnable, "a supported platform lists the tool")
+                    self.assertIn("steers natively", body)
+                    self.assertNotIn("exposes no native mid-turn entry", body)
                 else:
-                    self.assertIsNone(runnable, "an unsupported platform never lists it")
-                    self.assertIn("offers no", body)
+                    self.assertIn("exposes no native mid-turn entry", body)
+                    self.assertIn("--steer-mode interrupt", body)
+                    # the composite must never be sold as injection
+                    self.assertIn("never injection", body)
+                    self.assertIn("side effects", body)
+                # the reference carries the investigated ACP fact and its scope
                 self.assertIn(values["native_steering"], reference)
                 self.assertIn(values["steering_summary"].split(".")[0], reference)
+                self.assertIn("ACP channel only", reference)
+                self.assertIn("steer-mode-required", reference)
+
+    def test_every_platform_has_a_documented_usable_path(self) -> None:
+        """The deliverable: nine platforms, nine usable steering paths."""
+        native, composite = [], []
+        for path in sorted(PLATFORMS.glob("*.yaml")):
+            values = manifest(path.stem)
+            (native if values["native_steering"] == "supported" else composite).append(path.stem)
+        self.assertEqual(len(native) + len(composite), 9)
+        self.assertTrue(native, "at least one platform steers natively")
+        for platform in composite:
+            values = manifest(platform)
+            # no native tool is invented for it ...
+            self.assertEqual(values["acp_steer_method"], "")
+            # ... and the composite really is reachable through the shared route
+            receipt = self.cli(platform, "steer", "--steer-mode", "interrupt",
+                               "--text", STEER_TEXT, check=False)
+            self.assertNotIn(receipt.get("error", {}).get("code"),
+                             ("steer-unsupported", "steer-mode-required"),
+                             f"{platform} must accept the composite mode")
 
 
 if __name__ == "__main__":

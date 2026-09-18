@@ -636,7 +636,8 @@ FOLLOW_QUEUE_CAP = 256
 FOLLOW_HEARTBEAT_SECONDS = 5.0
 FOLLOW_SNDBUF = 4096
 FOLLOW_DROP_GRACE = 2.0
-FOLLOW_WRITE_OPS = frozenset({"prompt", "steer", "permit", "cancel", "stop"})
+FOLLOW_WRITE_OPS = frozenset({"prompt", "steer", "steer_interrupt", "permit",
+                              "cancel", "stop"})
 
 
 def _as_text(value: Any) -> str:
@@ -1628,6 +1629,9 @@ class Holder:
                                   "message": "a prompt turn is already active"},
                         "outcome": "in_progress", "mutation_status": self.turn["mutation_status"]}
             text = params.get("text") or ""
+            # Read before anything is written: every event this turn produces
+            # has a cursor strictly greater than this one.
+            dispatch_cursor = self.events.cursor
             fingerprint = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
             previous = self.last_prompt or {}
             self.turn = self._empty_turn()
@@ -1687,9 +1691,16 @@ class Holder:
         timeout = params.get("timeout")
         max_chars = params.get("max_final_chars", 4000)
         if not wait:
+            # Issue #65: `dispatch_event_cursor` is the anchor a non-blocking
+            # caller needs later. A worker event carries the cursor at TURN END,
+            # which is after the reply, so `capture --since <event_cursor>` would
+            # skip the very reply being accepted. This cursor precedes the
+            # turn's own output and is the correct `--since` value.
             return {"outcome": "in_progress", "mutation_status": "in_progress",
                     "mutation_performed": True, "prompt_fingerprint": fingerprint,
-                    "duplicate_warning": duplicate, "acp_session_id": self.acp_session_id}
+                    "duplicate_warning": duplicate, "acp_session_id": self.acp_session_id,
+                    "dispatch_event_cursor": dispatch_cursor,
+                    "event_cursor": self.events.cursor}
         deadline = time.monotonic() + timeout if timeout else None
         with self.turn_cond:
             while self.turn["active"]:
@@ -1702,9 +1713,11 @@ class Holder:
         if self.turn["active"]:
             return {**self.turn_receipt(max_final_chars=max_chars),
                     "outcome": "prompt_timeout",
+                    "dispatch_event_cursor": dispatch_cursor,
                     "duplicate_warning": duplicate}
         receipt = self.turn_receipt(max_final_chars=max_chars)
         receipt["duplicate_warning"] = duplicate
+        receipt["dispatch_event_cursor"] = dispatch_cursor
         return receipt
 
     def _await_prompt(self, request_id: int) -> None:
@@ -2046,17 +2059,19 @@ class Holder:
                     "outcome": "steer_unsupported",
                     "mutation_status": self.turn.get("mutation_status"),
                     "mutation_performed": False,
+                    "steer_confirmation": "none",
                     "error": {"code": "steer-unsupported",
                               "message": "this platform exposes no native steering entry; "
                                          "the text was not consumed"}}
         if not text.strip():
             return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
-                    "outcome": "steer_rejected",
+                    "outcome": "steer_rejected", "steer_confirmation": "none",
                     "error": {"code": "steer-empty", "message": "steer requires non-empty text"}}
         if self.agent.exited.is_set() or self.agent.proc is None:
             return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
                     "outcome": "process_exited", "mutation_status": "unknown",
                     "mutation_performed": False,
+                    "steer_confirmation": "none",
                     "error": {"code": "agent-not-running",
                               "message": "agent process is not running"}}
 
@@ -2068,6 +2083,7 @@ class Holder:
                 # honest not-consumed and decides whether to send a normal prompt.
                 return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
                         "steer_reason": "no-active-turn", "outcome": "no-active-turn",
+                        "steer_confirmation": "none",
                         "mutation_status": self.turn.get("mutation_status"),
                         "mutation_performed": False}
             turn_request_id_before = self.turn["request_id"]
@@ -2095,12 +2111,13 @@ class Holder:
         response = self.agent.wait_response(steer_request_id, timeout)
 
         if response is None:
-            outcome, consumed, error = "unknown", None, {
+            outcome, consumed, confirmation, error = "unknown", None, "none", {
                 "code": "steer-no-response",
                 "message": "no reply to the steering request before the timeout; "
                            "consumption is unknown — do not resend blindly"}
         elif "error" in response:
             detail = response.get("error") or {}
+            confirmation = "none"
             if detail.get("code") == -32601:
                 outcome, consumed = "unsupported", False
                 error = {"code": "steer-unsupported",
@@ -2113,21 +2130,47 @@ class Holder:
             result = response.get("result") or {}
             native = result.get("outcome")
             base["steer_native_outcome"] = native
+            # What actually backs the claim. An agent that acknowledges
+            # consumption reports `agent-confirmed`; a channel that can only
+            # confirm the write says so, and the Runner must not upgrade it.
+            confirmation = result.get("confirmation")
+            base["steer_native_reason"] = result.get("reason")
             error = None
             if native == "injected":
                 outcome, consumed = "injected", True
+                confirmation = confirmation or "agent-confirmed"
+            elif native == "written":
+                # The text reached the running turn's input, but this platform
+                # acknowledges nothing, so consumption stays undetermined.
+                outcome, consumed = "written", None
+                confirmation = confirmation or "write-only"
+                error = {"code": "steer-write-only-confirmation",
+                         "message": "the text was written into the running turn's input and "
+                                    "the write was flushed without error, but this platform "
+                                    "acknowledges no consumption - read the turn's own output "
+                                    "to judge, and do not resend blindly"}
             elif native == "startedNewTurn":
                 # Honest naming: this is NOT injection into the running turn.
                 outcome, consumed = "started_new_turn", True
+                confirmation = confirmation or "agent-confirmed"
                 error = {"code": "steer-started-new-turn",
                          "message": "the agent started a separate turn this holder does not "
                                     "track; the running turn did not absorb the text"}
             elif native == "promptRequired":
                 outcome, consumed = "not_consumed", False
+                confirmation = confirmation or "none"
                 error = {"code": "steer-prompt-required",
-                         "message": "the turn had already settled; send a normal prompt instead"}
+                         "message": "the turn had already settled or no turn was running; "
+                                    "nothing was written - send a normal prompt instead"}
+            elif native == "unknown":
+                outcome, consumed = "unknown", None
+                confirmation = confirmation or "none"
+                error = {"code": "steer-undecided",
+                         "message": "the write was issued but its fate is undecided; "
+                                    "consumption is unknown - do not resend blindly"}
             else:
                 outcome, consumed = "unknown", None
+                confirmation = confirmation or "none"
                 error = {"code": "steer-unrecognized-outcome",
                          "message": f"unrecognized steering outcome {native!r}"}
 
@@ -2137,6 +2180,7 @@ class Holder:
                 **base,
                 "steer_outcome": outcome,
                 "steer_consumed": consumed,
+                "steer_confirmation": confirmation,
                 "steer_response": response,
                 "turn_request_id_after": turn_request_id_after,
                 "turn_request_id_preserved": (
@@ -2146,10 +2190,12 @@ class Holder:
                 "turn_active": self.turn["active"],
                 "outcome": f"steer_{outcome}",
                 "mutation_status": self.turn.get("mutation_status"),
-                # This steer's own effect: `injected` wrote into the running
-                # turn, anything else wrote nothing. The turn's own progress
-                # stays in `mutation_status`.
-                "mutation_performed": consumed,
+                # This steer's own effect on the agent. `written` did reach the
+                # running turn's input even though consumption is unconfirmed,
+                # so it is not a clean "nothing happened".
+                "mutation_performed": True if outcome in ("injected", "written",
+                                                          "started_new_turn")
+                else False if consumed is False else None,
             }
             if error:
                 receipt["error"] = error
@@ -2158,6 +2204,147 @@ class Holder:
                                 "steer_outcome": outcome,
                                 "steer_consumed": consumed,
                                 "turn_request_id_preserved": receipt["turn_request_id_preserved"]})
+        return receipt
+
+    def op_steer_interrupt(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Issue #65: the composite steering path, for an ACP session whose agent
+        has no native mid-turn entry.
+
+        This is **interrupted-then-continued**, never injection: cancel the
+        running turn, confirm it really ended, then send the Agent's steering
+        text once as the next turn on the same session, so the conversation
+        keeps its context. It reuses the existing cancel and prompt operations -
+        no scheduler, no second lifecycle, no retry loop.
+
+        The Agent asks for this explicitly. It is never a fallback the Runner
+        selects after a native attempt failed or timed out.
+
+        Honesty rules this enforces:
+        * the cancelled turn keeps its own request id and terminal state;
+        * a turn that was already idle is not cancelled, and the receipt says so
+          rather than pretending an interruption happened;
+        * if the cancel is not confirmed, NOTHING is sent and the outcome is
+          `unknown` - the Agent verifies before deciding;
+        * the steering text is sent at most once, whatever the send returns.
+        """
+        text = params.get("text") or ""
+        base: dict[str, Any] = {
+            "steer_mode": "interrupt",
+            "steer_method": "cancel+prompt",
+            "steer_text_chars": len(text),
+            "steer_fingerprint": "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        }
+        if not text.strip():
+            return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
+                    "steer_confirmation": "none", "outcome": "steer_rejected",
+                    "mutation_performed": False,
+                    "error": {"code": "steer-empty", "message": "steer requires non-empty text"}}
+        if self.agent.exited.is_set() or self.agent.proc is None:
+            return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
+                    "steer_confirmation": "none", "outcome": "process_exited",
+                    "mutation_status": "unknown", "mutation_performed": False,
+                    "error": {"code": "agent-not-running",
+                              "message": "agent process is not running"}}
+
+        with self.lock:
+            was_active = bool(self.turn["active"])
+            cancelled_request_id = self.turn["request_id"] if was_active else None
+            mutation_before = self.turn.get("mutation_status")
+        base.update({
+            "turn_was_active": was_active,
+            "cancelled_turn_request_id": cancelled_request_id,
+            "cancelled_turn_mutation_status_before": mutation_before,
+        })
+
+        if was_active:
+            timeout = params.get("cancel_timeout")
+            if timeout is None:
+                timeout = params.get("timeout")
+            cancel = self.op_cancel({"timeout": timeout})
+            base["cancel_receipt"] = {
+                key: cancel.get(key) for key in
+                ("outcome", "stop_reason", "mutation_status", "request_id")
+                if key in cancel
+            }
+            with self.lock:
+                still_active = bool(self.turn["active"])
+                stop_reason = self.turn.get("stop_reason")
+                mutation_after = self.turn.get("mutation_status")
+            base.update({
+                "cancelled_turn_stop_reason": stop_reason,
+                "cancelled_turn_mutation_status": mutation_after,
+                # A cancelled turn may already have written files, run commands,
+                # or half-applied an edit. The Agent is told, not reassured.
+                "side_effects_possible": mutation_after in ("in_progress", "unknown", "completed")
+                or mutation_before in ("in_progress", "unknown"),
+            })
+            if still_active or cancel.get("outcome") == "cancel-unconfirmed":
+                # Nothing is sent onto a session whose previous turn may still be
+                # running: that is how a duplicate dispatch happens.
+                return {**base, "interrupted": None,
+                        "steer_outcome": "unknown", "steer_consumed": None,
+                        "steer_confirmation": "none", "outcome": "steer_cancel_unconfirmed",
+                        "mutation_status": mutation_after, "mutation_performed": None,
+                        "error": {"code": "steer-cancel-unconfirmed",
+                                  "message": "the running turn did not confirm it stopped, so "
+                                             "the steering text was NOT sent; verify the turn "
+                                             "with observe before deciding - do not resend blindly"}}
+            base["interrupted"] = True
+            base["steer_confirmation"] = "cancel-confirmed"
+        else:
+            # The turn ended on its own between the Agent's decision and this
+            # call. Nothing is interrupted; this is an ordinary next prompt.
+            base.update({"interrupted": False, "side_effects_possible": False,
+                         "steer_confirmation": "no-turn-to-interrupt",
+                         "cancelled_turn_stop_reason": None,
+                         "cancelled_turn_mutation_status": None})
+
+        # Exactly one send, through the ordinary admission path.
+        prompt = self.op_prompt({"text": text, "wait": False})
+        base["send_receipt"] = {
+            key: prompt.get(key) for key in
+            ("outcome", "mutation_status", "prompt_fingerprint",
+             "dispatch_event_cursor", "event_cursor", "duplicate_warning")
+            if key in prompt
+        }
+        send_error = prompt.get("error")
+        if send_error or prompt.get("outcome") != "in_progress":
+            failed_cleanly = prompt.get("mutation_status") == "not_started"
+            return {**base,
+                    "steer_outcome": "not_consumed" if failed_cleanly else "unknown",
+                    "steer_consumed": False if failed_cleanly else None,
+                    "outcome": "steer_send_failed",
+                    "mutation_status": prompt.get("mutation_status"),
+                    "mutation_performed": False if failed_cleanly else None,
+                    "error": {"code": "steer-send-failed",
+                              "message": "the turn was stopped but the steering text was not "
+                                         "accepted as the next turn; it was sent once and is "
+                                         "not resent here",
+                              "detail": send_error or {"outcome": prompt.get("outcome")}}}
+
+        with self.lock:
+            new_request_id = self.turn["request_id"]
+        receipt = {
+            **base,
+            "steer_outcome": "interrupted_and_resent" if base["interrupted"]
+            else "resent_without_interrupt",
+            # The text is running as its own turn. It was not injected into the
+            # previous one, and this flag must not be read as injection.
+            "steer_consumed": True,
+            "new_turn_request_id": new_request_id,
+            "new_prompt_fingerprint": prompt.get("prompt_fingerprint"),
+            "dispatch_event_cursor": prompt.get("dispatch_event_cursor"),
+            "turn_request_id_preserved": cancelled_request_id != new_request_id,
+            "outcome": "steer_interrupted_and_resent" if base["interrupted"]
+            else "steer_resent_without_interrupt",
+            "mutation_status": prompt.get("mutation_status"),
+            "mutation_performed": True,
+        }
+        self.events.append({"kind": "steer_interrupt",
+                            "interrupted": base["interrupted"],
+                            "cancelled_turn_request_id": cancelled_request_id,
+                            "new_turn_request_id": new_request_id,
+                            "fingerprint": base["steer_fingerprint"]})
         return receipt
 
     def op_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -2529,6 +2716,8 @@ class Holder:
             return self.op_prompt(params)
         if op == "steer":
             return self.op_steer(params)
+        if op == "steer_interrupt":
+            return self.op_steer_interrupt(params)
         if op == "wait":
             return self.op_wait(params)
         if op == "permit":

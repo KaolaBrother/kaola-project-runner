@@ -18,31 +18,7 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 
 ## Steering (`steer`)
 
-Native steering on this platform: **unsupported** (entry ``). No steering entry on the ACP surface: all four candidate methods answer JSON-RPC -32601 on Kimi Code CLI 2.0.0 (cli 0.41.0) and `initialize` advertises no steering `_meta`.
-
-`steer` delivers one Agent-chosen message to the turn **already running** on this exact session,
-over the same routing as `send`: no scheduler, no second writer, no second lifecycle. The original
-prompt keeps its request id, output, and terminal state, and the receipt's `turn_request_id`,
-`turn_request_id_after`, and `turn_request_id_preserved` make that checkable. Content is literal
-transport under the same identity, redaction, and bounded-receipt rules as `send`.
-
-`steer_outcome` and `steer_consumed` are the only consumption claims:
-
-| `steer_outcome` | `steer_consumed` | Meaning |
-|---|---|---|
-| `injected` | `true` | the running turn took the text; adoption by the model is a separate question |
-| `started_new_turn` | `true` | the agent opened a separate turn instead — not injection, and this holder does not track it |
-| `not_consumed` | `false` | nothing was written (no active turn, or the turn had already settled); `send` a normal prompt if you still want it |
-| `unsupported` | `false` | no native entry on this platform or transport; nothing was written |
-| `rejected` | `false` | the agent refused the request; `error.detail` carries its reason |
-| `unknown` | `null` | no reply or an unrecognized outcome — consumption is undecided; do not resend blindly |
-
-An idle session is never steered: the Runner refuses before writing, since some agents answer an
-idle steering call by starting a detached turn. A turn ending in the same instant returns
-`not_consumed`, never a silent resend. `steer` is an `acp` operation; over `pty` it answers
-`steer-unsupported-transport`, because a mid-turn terminal write is an ordinary keystroke stream
-whose meaning only the native UI decides. The Runner never turns a `steer` into `cancel`+`send`,
-a transport fallback, or a worker event.
+This platform's ACP steering facts, both modes, the receipt vocabulary and the races: [steering.md](steering.md).
 
 `start` resolves the same tier/model/effort/Fast selection as PTY and applies it through the
 agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using

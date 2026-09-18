@@ -763,13 +763,36 @@ export function createClaudeCodeAgent(
       if (!runner.steer) {
         throw RequestError.methodNotFound(method);
       }
-      const outcome = runner.steer(sessionId, text);
+      const result = await runner.steer(sessionId, text);
       logger.info(
-        `Steering for session ${sessionId}: ${text.length} chars -> ${outcome}`
+        `Steering for session ${sessionId}: ${text.length} chars -> ` +
+          `${result.outcome} (${result.confirmation})`
       );
-      return outcome === "injected"
-        ? { outcome: "injected" }
-        : { outcome: "promptRequired", reason: "noRunningTurn" };
+      // Claude Code acknowledges nothing when a message joins a running turn,
+      // so `injected` - which asserts consumption - is not emitted here. The
+      // honest states travel with the confirmation basis attached, and a client
+      // that only understands the base protocol still sees a valid outcome.
+      switch (result.outcome) {
+        case "injected":
+        case "written":
+          return {
+            outcome: result.outcome,
+            confirmation: result.confirmation,
+            ...(result.reason ? { reason: result.reason } : {}),
+          };
+        case "notConsumed":
+          return {
+            outcome: "promptRequired",
+            reason: result.reason ?? "noRunningTurn",
+            confirmation: result.confirmation,
+          };
+        default:
+          return {
+            outcome: "unknown",
+            reason: result.reason ?? "undecided",
+            confirmation: result.confirmation,
+          };
+      }
     },
 
     async cancel(params: CancelNotification): Promise<void> {

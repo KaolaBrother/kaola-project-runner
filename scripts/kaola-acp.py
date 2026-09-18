@@ -1217,6 +1217,27 @@ def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     return receipt
 
 
+def holder_predates_steer(method: str, error: dict[str, Any]) -> dict[str, Any]:
+    """A holder started before this release has no steer op and cannot gain one:
+    the running process does not reload its dispatch table. Nothing was written,
+    and the caller needs the real remedy rather than a misleading `unsupported`."""
+    return {
+        "steer_outcome": "not_consumed",
+        "steer_consumed": False,
+        "steer_confirmation": "none",
+        "steer_method": method,
+        "mutation_status": "not_started",
+        "mutation_performed": False,
+        "error": {
+            "code": "steer-holder-outdated",
+            "message": ("this session's running holder predates the steer operation and cannot "
+                        "gain it without being restarted; nothing was written. Stop and start "
+                        "the session to steer it"),
+            "detail": error,
+        },
+    }
+
+
 def heartbeat_host_target(args: argparse.Namespace, repo: str) -> dict[str, Any] | None:
     """Validate the declared heartbeat host (ZCode Host only) and resolve its
     holder socket. Fails closed: a malformed, non-ZCode, or self-referential
@@ -1574,6 +1595,8 @@ def main() -> int:
     parser.add_argument("--tier", choices=("default", "upgrade"))
     parser.add_argument("--fast", choices=("on", "off"), default="off")
     parser.add_argument("--mode")
+    parser.add_argument("--steer-mode", choices=("native", "interrupt"))
+    parser.add_argument("--cancel-timeout", type=float)
     parser.add_argument("--transport-reason", choices=("manifest-default", "caller-override"), default="manifest-default")
     args = parser.parse_args()
 
@@ -1633,25 +1656,75 @@ def main() -> int:
             text = sys.stdin.read()
         if not text:
             die("steer requires --text or --stdin")
-        # Issue #65: the manifest is the single source of truth for the native
-        # steering entry, so a holder started before this release still answers
-        # correctly without a restart.
+        # Issue #65: the manifest carries the platform's investigated ACP
+        # capability and its entry. `unsupported` and `unknown` are different
+        # answers and must not collapse: only a platform investigated to have no
+        # entry gets `unsupported`; an undetermined one stays `unknown`.
         method = (args.manifest.get("acp_steer_method") or "").strip()
         native_steering = args.manifest.get("native_steering") or "unknown"
-        if not method:
+        mode = args.steer_mode or ("native" if method else None)
+
+        if mode == "interrupt":
+            # Composite: cancel the running turn, confirm it stopped, then send
+            # the text once as the next turn on the SAME session. The Agent asked
+            # for this by name; the Runner never selects it on its own.
+            receipt = op_or_holder_lost(
+                args, repo, directory, "steer_interrupt",
+                {"text": text, "timeout": timeout, "cancel_timeout": args.cancel_timeout},
+                sock_timeout,
+            )
+            receipt.setdefault("native_steering", native_steering)
+            receipt.setdefault("steer_mode", "interrupt")
+            error = receipt.get("error") or {}
+            if error.get("code") == "unknown-op":
+                receipt.update(holder_predates_steer(method or "cancel+prompt", error))
+        elif mode is None:
+            # No native entry here, and no explicit choice: refuse rather than
+            # degrade. Nothing is written; the Agent picks the semantics.
             receipt = base_receipt(args, repo)
             receipt.update({
-                "steer_outcome": "unsupported",
+                "steer_outcome": "unknown" if native_steering == "unknown" else "unsupported",
                 "steer_consumed": False,
+                "steer_confirmation": "none",
                 "steer_method": None,
+                "steer_mode": None,
                 "native_steering": native_steering,
+                "available_steer_modes": ["interrupt"],
                 "mutation_status": "not_started",
                 "mutation_performed": False,
                 "error": {
-                    "code": "steer-unsupported",
+                    "code": "steer-mode-required",
                     "message": (
-                        f"{args.platform} exposes no native mid-turn steering entry "
-                        f"(native_steering={native_steering}); the text was not consumed"
+                        f"{args.platform} exposes no native mid-turn steering entry on its ACP "
+                        f"surface (native_steering={native_steering}); nothing was written. "
+                        "The available path is the composite `--steer-mode interrupt`: it "
+                        "CANCELS the running turn, confirms it stopped, then sends this text as "
+                        "the next turn on the same session, keeping the conversation's context. "
+                        "That interrupts work in progress and can leave partial side effects, so "
+                        "the Runner will not choose it for you"
+                    ),
+                },
+            })
+        elif not method:
+            # `--steer-mode native` on a platform that has no native entry.
+            receipt = base_receipt(args, repo)
+            receipt.update({
+                "steer_outcome": "unknown" if native_steering == "unknown" else "unsupported",
+                "steer_consumed": False,
+                "steer_confirmation": "none",
+                "steer_method": None,
+                "steer_mode": "native",
+                "native_steering": native_steering,
+                "available_steer_modes": ["interrupt"],
+                "mutation_status": "not_started",
+                "mutation_performed": False,
+                "error": {
+                    "code": "steer-capability-unknown" if native_steering == "unknown"
+                    else "steer-unsupported",
+                    "message": (
+                        f"{args.platform} has no native mid-turn steering entry on the ACP "
+                        f"channel (native_steering={native_steering}); nothing was written. "
+                        "Use `--steer-mode interrupt` for the composite path"
                     ),
                 },
             })
@@ -1662,6 +1735,10 @@ def main() -> int:
                 sock_timeout,
             )
             receipt.setdefault("native_steering", native_steering)
+            receipt.setdefault("steer_mode", "native")
+            error = receipt.get("error") or {}
+            if error.get("code") == "unknown-op":
+                receipt.update(holder_predates_steer(method, error))
     elif args.command == "wait":
         receipt = op_or_holder_lost(
             args, repo, directory, "wait", {"timeout": timeout}, sock_timeout

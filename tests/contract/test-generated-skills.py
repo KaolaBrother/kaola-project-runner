@@ -322,7 +322,7 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
     }
     assertions.check(
         "test_grok_active_package_has_only_communication_references",
-        generated_references == {"acp.md", "platform.md", "transport.md"},
+        generated_references == {"acp.md", "platform.md", "steering.md", "transport.md"},
         f"active package carries orchestration references: {sorted(generated_references)!r}",
     )
 

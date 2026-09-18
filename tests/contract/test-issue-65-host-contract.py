@@ -14,7 +14,12 @@ template edit cannot quietly drop it.
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import sys
+import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -26,6 +31,8 @@ REF = ORCH / "references" / "zcode-host-dispatch.md"
 HOLDER = PROJECT / "scripts" / "kaola-acp-holder.py"
 ACP = PROJECT / "scripts" / "kaola-acp.py"
 BUDGETS = json.loads((PROJECT / "templates" / "budgets.json").read_text(encoding="utf-8"))
+ACP_CLI = PROJECT / "scripts" / "kaola-acp.py"
+MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 
 
 class HostDispatchContract(unittest.TestCase):
@@ -106,8 +113,9 @@ class HostDispatchContract(unittest.TestCase):
         self.assertIn("kaola-host-notify/1", self.ref)
         self.assertIn('"event_cursor"', self.ref)
         self.assertIn("The notification is not the worker's reply", self.ref)
-        self.assertIn("--since 19", self.ref)
         self.assertIn("observe --repo", self.ref)
+        # the anchor must precede the output; the turn-end cursor never does
+        self.assertIn('--since "$DISPATCH_EVENT_CURSOR"', self.ref)
 
     def test_reference_explains_the_carrier_semantics(self) -> None:
         for fragment in ("staged and delivered at your next turn boundary",
@@ -138,6 +146,103 @@ class HostDispatchContract(unittest.TestCase):
         self.assertIn('WORKER_EVENT_KINDS = ("terminated", "idle")', holder)
         # and a worker event is never converted into a steer
         self.assertNotIn('op_steer(self._heartbeat', holder)
+
+
+class CursorAnchorBehaviour(unittest.TestCase):
+    """Issue #65 round 2: the cursor a Host must read a reply from.
+
+    A worker event carries the cursor at TURN END, which is *after* the reply.
+    `capture --since <event_cursor>` therefore skips the very reply being
+    accepted. This runs a real holder against the mock agent and proves both
+    halves: the turn-end cursor loses the reply, and the dispatch receipt's
+    `dispatch_event_cursor` keeps it.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory(prefix="kaola-i65-cursor-")
+        cls.root = Path(cls._tmp.name)
+        cls.repo = cls.root / "repo"
+        cls.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
+        cls.record_root = cls.root / "records"
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def setUp(self) -> None:
+        self.session = f"s-i65-cursor-{os.getpid()}"
+        self._started = False
+
+    def tearDown(self) -> None:
+        if self._started:
+            self.cli("stop", "--force", check=False, timeout=25)
+
+    def cli(self, command: str, *args: str, check: bool = True, timeout: float = 45) -> dict:
+        argv = [sys.executable, str(ACP_CLI), "grok", command,
+                "--repo", str(self.repo), "--session", self.session,
+                "--command", " ".join([sys.executable, str(MOCK), "--scenario", "normal"]),
+                *args]
+        env = dict(os.environ)
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
+        result = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=timeout)
+        receipt = json.loads(result.stdout)
+        if check and "error" in receipt:
+            self.fail(f"{command} failed: {receipt['error']}")
+        return receipt
+
+    @staticmethod
+    def assistant_text(capture: dict) -> str:
+        """Every assistant chunk the capture receipt carries, in one string."""
+        blob = json.dumps(capture, ensure_ascii=False)
+        return blob
+
+    def test_turn_end_cursor_loses_the_reply_and_dispatch_cursor_keeps_it(self) -> None:
+        self.cli("start")
+        self._started = True
+        dispatched = self.cli("send", "--no-wait", "--text", "say the codeword")
+        self.assertEqual(dispatched["outcome"], "in_progress")
+        # the anchor a Host must keep, and the fingerprint that identifies the turn
+        self.assertIn("dispatch_event_cursor", dispatched)
+        dispatch_cursor = dispatched["dispatch_event_cursor"]
+        fingerprint = dispatched["prompt_fingerprint"]
+        self.assertIsInstance(dispatch_cursor, int)
+
+        done = self.cli("wait", "--timeout", "30")
+        self.assertEqual(done.get("outcome"), "turn_completed")
+        reply = done.get("final_text") or ""
+        self.assertIn("MOCK-REPLY", reply)
+
+        state = self.cli("observe")
+        # what a worker event would carry: the cursor at turn end
+        turn_end_cursor = state["event_cursor"]
+        self.assertGreater(turn_end_cursor, dispatch_cursor)
+        self.assertEqual((state.get("last_prompt") or {}).get("fingerprint"), fingerprint)
+
+        from_turn_end = self.cli("capture", "--since", str(turn_end_cursor))
+        from_dispatch = self.cli("capture", "--since", str(dispatch_cursor))
+
+        # the documented-correct anchor keeps the reply ...
+        self.assertIn("MOCK-REPLY", self.assistant_text(from_dispatch),
+                      "the dispatch cursor must still contain the reply")
+        # ... and the turn-end cursor does not: that is the defect the Host
+        # guidance must never reproduce.
+        self.assertNotIn("MOCK-REPLY", self.assistant_text(from_turn_end),
+                         "a turn-end cursor cannot be used as a --since anchor")
+
+        # the bounded fallback for a Host with no anchor still finds it
+        recent = self.cli("capture", "--lines", "200")
+        self.assertIn("MOCK-REPLY", self.assistant_text(recent))
+
+    def test_reference_never_uses_the_event_cursor_as_a_since_anchor(self) -> None:
+        ref = REF.read_text(encoding="utf-8")
+        self.assertNotIn("--since 19", ref, "the event cursor is not a --since value")
+        self.assertIn("DISPATCH_EVENT_CURSOR", ref)
+        self.assertIn("--lines 200", ref, "a Host with no anchor needs the bounded fallback")
+        flat = re.sub(r"\s+", " ", ref)
+        self.assertIn("event_cursor` is the end of the turn, not the start", flat)
+        self.assertIn("last_prompt.fingerprint", flat)
 
 
 if __name__ == "__main__":
