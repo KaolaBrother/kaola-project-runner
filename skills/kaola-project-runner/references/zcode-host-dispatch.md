@@ -1,7 +1,7 @@
 # ZCode Host: dispatch, end the turn, wake on worker events
 
-Read this when a ZCode Host supervises workers: the flags and receipt fields the
-scripts use. Entry points and startup: [host-startup.md](host-startup.md).
+Read this when a ZCode Host supervises workers: the flags and receipt fields it
+uses. Entry points and startup: [host-startup.md](host-startup.md).
 This file is the beat.
 
 ## Three identities, never interchangeable
@@ -26,7 +26,7 @@ W="/abs/path/to/codex-kaola-project-runner/scripts/runtime-tmux.sh"
 WORK_REPO="/abs/path/to/project"      # the worker's repo
 HOST_REPO="/abs/path/to/project"      # the Host's own
 KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-kaola-host","repo":"'"$HOST_REPO"'"}' \
-  "$W" start --repo "$WORK_REPO" --session codex-KPR-i77-api
+  "$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser
 ```
 
 `platform` must be `zcode`, `session`/`repo` the Host's own, and it may not name
@@ -63,7 +63,7 @@ delegated to you:
 1. **Keep the in-flight work** — it runs on, readable with `observe` and
    `capture` from your anchor. Cancel nothing.
 2. **Recover in this beat.** Another bound worker or confirmed wake source: end
-   the turn and read this one on the beat it gives you. The unbound worker is
+   the turn and read this one on that beat. The unbound worker is
    your only wake source: ending the turn waits on nothing and a heartbeat note
    wakes nobody, so read its result here with the bounded `wait --timeout
    <seconds>` (`observe`/`capture` once its turn ended). That bounded read is
@@ -86,7 +86,7 @@ decision you need. A heartbeat note claiming a wait you lack is no report.
 ### Dispatch without blocking
 
 ```bash
-"$W" send --repo "$WORK_REPO" --session codex-KPR-i77-api --no-wait --text '<the task>'
+"$W" send --repo "$WORK_REPO" --session codex-KT-i274-parser --no-wait --text '<the task>'
 ```
 
 `--no-wait` returns once the prompt is admitted: `"outcome": "in_progress"`,
@@ -115,8 +115,8 @@ The next beat is an ordinary prompt beginning `kaola-host-notify/1`, one JSON
 object per event —
 
 ```json
-{"event_cursor":19,"event_id":"codex/codex-KPR-i77-api/idle/19","kind":"idle",
- "platform":"codex","repo":"/abs/path/to/project","reason":"turn-end","session":"codex-KPR-i77-api"}
+{"event_cursor":19,"event_id":"codex/codex-KT-i274-parser/idle/19","kind":"idle",
+ "platform":"codex","repo":"/abs/path/to/project","reason":"turn-end","session":"codex-KT-i274-parser"}
 ```
 
 — then your heartbeat body verbatim between `<<<heartbeat-prompt` and
@@ -131,10 +131,10 @@ returns only carrier and title updates. Read from an earlier anchor:
 
 ```bash
 # the dispatch receipt's cursor, from before the reply existed
-"$W" observe --repo "$WORK_REPO" --session codex-KPR-i77-api
-"$W" capture --repo "$WORK_REPO" --session codex-KPR-i77-api --since "$DISPATCH_EVENT_CURSOR"
+"$W" observe --repo "$WORK_REPO" --session codex-KT-i274-parser
+"$W" capture --repo "$WORK_REPO" --session codex-KT-i274-parser --since "$DISPATCH_EVENT_CURSOR"
 # no anchor (resumed/adopted Host): never --since <event_cursor>
-"$W" capture --repo "$WORK_REPO" --session codex-KPR-i77-api --lines 200
+"$W" capture --repo "$WORK_REPO" --session codex-KT-i274-parser --lines 200
 ```
 
 Confirm you are reading the turn you dispatched: `observe`'s
