@@ -1,0 +1,8 @@
+Startup receipt accepted: role, authorization, lifecycle boundary and payload match the plan, and you correctly held before dispatch.
+
+Proceed now exactly as the Orchestrator flow says, in this beat:
+1. write the working heartbeat prompt to .kaola/heartbeat-prompt.json before the first dispatch;
+2. start codex-i66-w1 with the notification binding exported on that one start command, and check the start receipt echoes it;
+3. dispatch the plan's work to it without blocking;
+4. finish the beat, then end your turn normally. Do not sleep, poll, block, or stop/cancel anything to wait -- ending the turn is the wait, and a worker event will bring you the next beat.
+Report in that reply what the binding receipt actually said and what you dispatched.

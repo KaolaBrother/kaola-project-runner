@@ -1,0 +1,10 @@
+PASS test_bounded_queue_dedup_and_single_batch_flush (47 checks)
+PASS test_busy_host_stages_then_flushes_after_turn_completed (14 checks)
+PASS test_canonical_heartbeat_spec_stays_one_set (9 checks)
+PASS test_carrier_is_zcode_host_only (9 checks)
+PASS test_idle_episode_reads_prompt_body_at_delivery_time (23 checks)
+PASS test_issue_66_defective_prompt_file_reports_its_defect (17 checks)
+PASS test_issue_66_unarmed_worker_stays_ungated (5 checks)
+PASS test_resume_redelivers_unconfirmed_events (12 checks)
+PASS test_terminated_event_delivers_full_body_and_confirms (24 checks)
+test-zcode-heartbeat-contract: 9/9 tests, 160 checks

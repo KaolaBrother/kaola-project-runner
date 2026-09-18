@@ -4,6 +4,10 @@ Read this when a ZCode Host session supervises workers, or when an outer Agent
 starts one: operating instructions for three roles, with the exact flags and
 receipt fields the scripts really use. No Python reading required.
 
+Choosing between the two entry points, starting a Host, and the startup receipt an
+outer Agent checks against the project's plan: [host-startup.md](host-startup.md).
+This file is the beat itself.
+
 ## Three identities, never interchangeable
 
 | Name | What it is | Where it comes from |
@@ -20,20 +24,11 @@ so the commands below take **no** platform argument; the repository's
 
 ## 1. Outer controlling Agent — starting the Host
 
-Start the Host like any worker, then hand it its own identity in the first
-prompt: a Host cannot discover its Runner name, and no variable carries it in.
-
-```bash
-ZC="/abs/path/to/zcode-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
-HOST_REPO="/abs/path/to/project"
-"$ZC" start --repo "$HOST_REPO" --session zcode-kaola-host
-"$ZC" send --repo "$HOST_REPO" --session zcode-kaola-host --text \
-'You are the Project Runner Host for this project. Load the installed
-kaola-project-runner Skill. Your own Runner identity is exactly:
-platform=zcode session=zcode-kaola-host repo='"$HOST_REPO"'
-Authorized workers: <list>. Dispatch them, then end your turn and wait for
-worker events. Read references/zcode-host-dispatch.md before dispatching.'
-```
+Starting a Host, the identity handover it cannot discover, and the startup
+receipt to check against the project's plan are in
+[host-startup.md](host-startup.md); they are not repeated here. What matters for
+the beat: the Host's own `platform`/`session`/`repo` must reach it in that first
+prompt, and it must be told to read this file before dispatching.
 
 The Host is itself an ACP thread; being an orchestrator changes none of that.
 
@@ -54,6 +49,7 @@ explicitly for that one command:
 ```bash
 W="/abs/path/to/codex-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
 WORK_REPO="/abs/path/to/project"
+HOST_REPO="/abs/path/to/project"      # the Host's own --repo
 KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-kaola-host","repo":"'"$HOST_REPO"'"}' \
   "$W" start --repo "$WORK_REPO" --session codex-kaola-feature-a
 ```
