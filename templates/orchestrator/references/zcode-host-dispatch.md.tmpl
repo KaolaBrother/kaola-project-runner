@@ -1,7 +1,7 @@
 # ZCode Host: dispatch, end the turn, wake on worker events
 
 Read this when a ZCode Host supervises workers: the flags and receipt fields the
-scripts really use. Entry points and startup: [host-startup.md](host-startup.md).
+scripts use. Entry points and startup: [host-startup.md](host-startup.md).
 This file is the beat.
 
 ## Three identities, never interchangeable
@@ -26,13 +26,14 @@ W="/abs/path/to/codex-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
 WORK_REPO="/abs/path/to/project"      # the worker's repo
 HOST_REPO="/abs/path/to/project"      # the Host's own
 KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-kaola-host","repo":"'"$HOST_REPO"'"}' \
-  "$W" start --repo "$WORK_REPO" --session codex-kaola-feature-a
+  "$W" start --repo "$WORK_REPO" --session codex-KPR-i77-api
 ```
 
 `platform` must be `zcode`, `session`/`repo` the Host's own, and it may not name
 the worker's own session; anything else fails the start closed rather than
 dropping the carrier silently. Exporting it, or setting it on a later `send`,
-binds nothing.
+binds nothing. Worker names are issue-scoped:
+`<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
 ### Verify the binding in force, new worker or reused
 
@@ -47,9 +48,9 @@ are **yours**; `observe` reports it any time, so verify reused and adopted
 workers too.
 
 - `heartbeat_host: null` (known) — an ordinary unbound worker: legitimate, never
-  wakes you; another Host's `session`/`repo` wakes that Host, not you.
+  wakes you; another Host's `session`/`repo` wakes that Host.
 - `heartbeat_host_known: false` — a holder or record older than the field:
-  unknown; treat it as unbound, do not assume.
+  unknown; treat it as unbound.
 - `"error": {"code": "session-exists"}` — you reused a live holder and bound
   nothing; the `heartbeat_host` beside it is what is in force.
 
@@ -85,7 +86,7 @@ decision you need. A heartbeat note claiming a wait you lack is no report.
 ### Dispatch without blocking
 
 ```bash
-"$W" send --repo "$WORK_REPO" --session codex-kaola-feature-a --no-wait --text '<the task>'
+"$W" send --repo "$WORK_REPO" --session codex-KPR-i77-api --no-wait --text '<the task>'
 ```
 
 `--no-wait` returns once the prompt is admitted: `"outcome": "in_progress"`,
@@ -95,11 +96,11 @@ nothing; a `prompt_timeout` or missing receipt leaves consumption unknown —
 establish the fact with `observe` before re-sending.
 
 **Keep two values**: `prompt_fingerprint`, the turn you dispatched, and
-`dispatch_event_cursor`, the cursor *before* it produced anything — your anchor.
+`dispatch_event_cursor`, the cursor *before* it produced anything.
 
 ### Finish the beat, then end your turn
 
-Do this beat's remaining work, update the heartbeat prompt at
+Do the rest of this beat, update the heartbeat prompt at
 `<project>/.kaola/heartbeat-prompt.json` (`body`: project facts, pace, plans),
 report, then **end your reply normally**.
 
@@ -114,8 +115,8 @@ The next beat is an ordinary prompt beginning `kaola-host-notify/1`, one JSON
 object per event —
 
 ```json
-{"event_cursor":19,"event_id":"codex/codex-kaola-feature-a/idle/19","kind":"idle",
- "platform":"codex","repo":"/abs/path/to/project","reason":"turn-end","session":"codex-kaola-feature-a"}
+{"event_cursor":19,"event_id":"codex/codex-KPR-i77-api/idle/19","kind":"idle",
+ "platform":"codex","repo":"/abs/path/to/project","reason":"turn-end","session":"codex-KPR-i77-api"}
 ```
 
 — then your heartbeat body verbatim between `<<<heartbeat-prompt` and
@@ -130,10 +131,10 @@ returns only carrier and title updates. Read from an earlier anchor:
 
 ```bash
 # the dispatch receipt's cursor, from before the reply existed
-"$W" observe --repo "$WORK_REPO" --session codex-kaola-feature-a
-"$W" capture --repo "$WORK_REPO" --session codex-kaola-feature-a --since "$DISPATCH_EVENT_CURSOR"
+"$W" observe --repo "$WORK_REPO" --session codex-KPR-i77-api
+"$W" capture --repo "$WORK_REPO" --session codex-KPR-i77-api --since "$DISPATCH_EVENT_CURSOR"
 # no anchor (resumed/adopted Host): never --since <event_cursor>
-"$W" capture --repo "$WORK_REPO" --session codex-kaola-feature-a --lines 200
+"$W" capture --repo "$WORK_REPO" --session codex-KPR-i77-api --lines 200
 ```
 
 Confirm you are reading the turn you dispatched: `observe`'s
@@ -151,7 +152,7 @@ notified.
 
 The worker Agent owns its delivery; it never fabricates events and never writes
 to your stdin — its holder sends the event over the Host holder's admin socket.
-Do not ask a worker to notify you or duplicate the carrier.
+Never ask a worker to notify you or duplicate the carrier.
 
 Delivery rules you can rely on:
 

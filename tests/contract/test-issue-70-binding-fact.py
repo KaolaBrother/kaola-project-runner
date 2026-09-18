@@ -289,6 +289,35 @@ def test_zcode_native_resume_id_comes_from_the_identity_event() -> None:
         sandbox.cleanup()
 
 
+def test_worker_examples_use_issue_scoped_names() -> None:
+    """Issue #72's contract: an issue-backed worker session is named
+    ``<platform>-<CODE>-i<ISSUE>-<purpose>``. This reference is copied
+    literally by Hosts, so every worker example in it must obey the rule; the
+    Host's own name stays project-level until Issue #74 settles it."""
+    import re
+
+    ref_path = (ROOT / "skills" / "kaola-project-runner" / "references"
+                / "zcode-host-dispatch.md")
+    ref = ref_path.read_text(encoding="utf-8")
+    pattern = re.compile(r"^[a-z0-9-]+-[A-Z]{2,6}-i\d+-[a-z0-9-]+$")
+
+    sessions = re.findall(r"--session (\S+)", ref)
+    check(bool(sessions), "the reference shows worker commands with --session")
+    bad = [name for name in sessions if not pattern.match(name)]
+    check(not bad, f"every --session example is issue-scoped (offenders: {bad})")
+
+    check("codex-kaola-feature-a" not in ref,
+          "the pre-Issue #72 worker example name is gone")
+    worker = sessions[0]
+    check(f'"session":"{worker}"' in ref and f'"event_id":"codex/{worker}/idle/19"' in ref,
+          f"the event example names the same issue-scoped worker ({worker})")
+    check("`<platform>-<CODE>-i<ISSUE>-<purpose>`" in ref,
+          "the reference states the rule, so the example reads as a pattern")
+    # Deliberate, recorded exception: the Host example is project-level for now.
+    check('"session":"zcode-kaola-host"' in ref and not pattern.match("zcode-kaola-host"),
+          "the Host example stays project-level pending Issue #74")
+
+
 def main() -> int:
     tests = [value for name, value in sorted(globals().items())
              if name.startswith("test_") and callable(value)]
