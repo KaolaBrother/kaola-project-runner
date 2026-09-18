@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Kaola-Delegator treats native resume after exact stop as
+  backend-dependent (Issue #74).** After `stop`, try attested `--resume` of
+  that `sess_*` first. Do not assume `session/close` always spends the id.
+  A new Host is allowed only after proven resume failure and complete
+  authorization. Issue #84's live resume proof is a separate issue and is
+  not merged here.
+
 - **Kaola-Delegator Host stop and live attach bind the receipt holder
   (Issue #74).** Exact `stop` passes the existing Runner
   `--expected-holder-instance-id` from the start/`status` receipt. A
@@ -26,13 +33,14 @@
   required `.kaola/delegator-host.json`. Agent B attaches the same ACP Host in
   place; a uniquely recorded nonstandard live name is adopted; ambiguous
   location does not start a second Host. A Git worktree is not an ACP id. If
-  the Host is confirmed stopped, an attested `sess_*` may be `--resume`d; if
-  the backend cannot restore it, a new standard-named Host is a new ACP
-  session continued from Git / Workflow / Issue records. Current
-  authorization must be complete before that `start`; missing key values
-  block start, not only later dispatch. The unproven ZCode.app 3.12.3
-  `runtimeModel` create fallback and swallowed `setModel` retry are not
-  in this candidate. Fake tests are not a live ZCode model-session proof.
+  the Host is confirmed stopped, try attested `--resume` of that `sess_*`
+  first; native resume after `session/close` is backend-dependent. On proven
+  failure, a new standard-named Host is a new ACP session continued from
+  Git / Workflow / Issue records, only after current authorization is
+  complete; missing key values block start, not only later dispatch. The
+  unproven ZCode.app 3.12.3 `runtimeModel` create fallback and swallowed
+  `setModel` retry are not in this candidate. Fake tests are not a live
+  ZCode model-session proof. Issue #84 is not merged here.
   Grok Bot, after the account bridge, attests each Host
   status/start/resume/send/stop with the existing locator `--project`
   `--worker zcode` `--session` (exact live name) and refuses `refused`;

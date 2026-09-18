@@ -41,8 +41,9 @@ DESKTOP_CONFIG_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-deskt
 PLAN_CACHE_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-coding-plan-cache.json"
 ORIGINAL_TASK = (
     "ISSUE74-TASK: land the delegated entry; remaining=handoff isolation; "
-    "quota_concurrency=1; quota_account=GLM-coding-plan; quota_token=unspecified; "
-    "priority=P1; authorized_platforms=zcode:1"
+    "quota_concurrency=1; quota_account=GLM-coding-plan; quota_token=1-short-task; "
+    "priority=P1; authorized_platforms=zcode:1; "
+    "delivery_stop_boundary=test-receipts-only; stop this Host at end"
 )
 
 CHECKS: list[str] = []
@@ -280,6 +281,22 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("Ambiguous location: report and do not start" in handoff_one,
           "ambiguous location does not start a second Host")
     check("That is a new ACP session" in handoff_one, "failed resume starts a new ACP session")
+    check("try attested `--resume`" in handoff_one or "try attested --resume" in handoff_one,
+          "handoff tries attested native resume first after exact stop")
+    check("backend-dependent" in handoff_one,
+          "native sess_* after stop is capability-dependent, not an absolute spend")
+    check("that id then disappears" not in handoff_one,
+          "handoff does not claim exact stop always spends sess_*")
+    check("Issue #84" not in handoff_doc and "issue-84" not in handoff_doc,
+          "handoff does not treat Issue #84 as merged here")
+    check("not automatically awakened by inner Host activity" in handoff_one,
+          "Afterward warns the outer Agent is not auto-woken by inner Host activity")
+    check("quota_token=unspecified" not in ORIGINAL_TASK,
+          "fixture token quota is explicit, not unspecified")
+    check("quota_token=1-short-task" in ORIGINAL_TASK,
+          "fixture names a bounded token quota")
+    check("delivery_stop_boundary=" in ORIGINAL_TASK,
+          "fixture names a delivery/stop boundary")
     check("Do not guess and do not reuse a stale quota" in handoff_one,
           "new Host does not guess stale quota")
     check("authorization **before** `start`" in handoff_one

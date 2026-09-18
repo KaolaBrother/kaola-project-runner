@@ -81,12 +81,12 @@ gate and not ownership.
    "$ZCODE" start --repo "$PROJECT" --session "$HOST" --resume "$NATIVE_SESS"
    ```
 
-   Never use `--continue` to guess a same-directory worker. Exact `stop`
-   issues `session/close`; on installed ZCode 3.12.3 that id then disappears
-   from `session/list` and process-exit without close is also Session not
-   found. Do not imply a stopped backend will restore that id in the
-   background. If `--resume` fails or no attested `sess_*` exists, a **new**
-   `$HOST` is allowed. That is a new ACP session and a new holder — say so.
+   Never use `--continue` to guess a same-directory worker. After exact
+   `stop`, try attested `--resume` of that `sess_*` first. Native resume
+   is backend-dependent; do not assume `session/close` always spends it.
+   On proven failure (`Session not found` or no attested id), a **new**
+   `$HOST` is allowed after step 4. That is a new ACP session and a new
+   holder — say so.
    Rebuild the frontier from Git, Workflow claim / Mission List, Issues, and
    existing run receipts. Do not re-claim Issues, re-dispatch in-flight
    workers, or redo done work. Do not `start` that new Host until step 4 is
@@ -158,10 +158,11 @@ on this Host; do not accept completion. No new script, gate, ledger, or store.
 
 ## Afterward
 
-Read delivery with `observe` / `capture`. Escalate only an unrecoverable
-decision. Do not `stop` while workers, acceptance, or Workflow close-out
-remain. Then stop the exact holder from the existing start/`status` receipt —
-not inner workers or name-only:
+Read delivery with `observe` / `capture`. The outer Agent is not
+automatically awakened by inner Host activity. Escalate only an
+unrecoverable decision. Do not `stop` while workers, acceptance, or
+Workflow close-out remain. Then stop the exact holder from the existing
+start/`status` receipt — not inner workers or name-only:
 
 ```bash
 "$ZCODE" stop --repo "$PROJECT" --session "$HOST" \
