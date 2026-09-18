@@ -69,10 +69,14 @@ alter what the hook executes. ``--project-root`` must name an existing
 directory and explicit global/ancestor danger paths are refused -- the
 filesystem root, the user home directory, and the effective CODEX_HOME
 layer (so a mistaken ``$HOME`` can never write ``~/.codex/hooks.json``).
-``install``/``bind`` refuse a missing or blank ``--session-id``, and
-``status`` reports only safe metadata -- it never echoes a matched entry's
-command or arbitrary config, which could carry a credential. Nothing here
-reads, prints, or forwards a credential, and ``status`` never writes.
+Before any read, write, or delete, the real paths of ``.codex`` and the
+Runner-owned asset parents are resolved; a symlink that escapes the
+canonical project root is refused (a project-local ``.codex`` symlink
+remains legal). ``install``/``bind`` refuse a missing or blank
+``--session-id``, and ``status`` reports only safe metadata -- it never
+echoes a matched entry's command or arbitrary config, which could carry a
+credential. Nothing here reads, prints, or forwards a credential, and
+``status`` never writes.
 """
 
 from __future__ import annotations
@@ -134,6 +138,26 @@ def resolve_root(raw: str | None) -> tuple[Path | None, str | None]:
 
 def hooks_path_for(root: Path) -> Path:
     return root / ".codex" / "hooks.json"
+
+
+def assets_dir_for(root: Path) -> Path:
+    return root / ASSETS_REL
+
+
+def containment_reason(root: Path) -> str | None:
+    """Refuse when a managed path would escape the canonical project root.
+
+    ``os.path.realpath`` resolves every symlink component, so a ``.codex``
+    symlinked to the effective CODEX_HOME (or anywhere outside the project)
+    is caught before any read, write, or delete -- otherwise prepare would
+    append to the user-global hooks.json and uninstall could delete global
+    assets. A symlink that stays inside the project remains legal.
+    """
+    for path in (hooks_path_for(root), assets_dir_for(root)):
+        real = Path(os.path.realpath(path))
+        if real != root and root not in real.parents:
+            return f"{path}: resolves outside --project-root ({real})"
+    return None
 
 
 def payload_path_for(root: Path) -> Path:
@@ -608,6 +632,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_emit()
     root, reason = resolve_root(args.project_root)
     if root is None:
+        receipt(args.action, "refused", reasons=[reason])
+        return 1
+    reason = containment_reason(root)
+    if reason:
         receipt(args.action, "refused", reasons=[reason])
         return 1
     if args.action == "prepare":

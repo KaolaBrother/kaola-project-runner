@@ -281,7 +281,11 @@
   root, the user home directory, and the effective `CODEX_HOME` layer are
   refused before any write, so a mistaken `--project-root $HOME` can never
   write `~/.codex/hooks.json`; `install`/`bind` refuse a missing or blank
-  `--session-id`. The short payload only
+  `--session-id`. The same containment is enforced inside the project:
+  before any read, write, or delete the real paths of `.codex` and the
+  Runner-owned asset parents are resolved, and a symlink escaping the
+  canonical project root (such as `.codex` pointing into `CODEX_HOME`) is
+  refused — a project-local `.codex` symlink remains legal. The short payload only
   re-points the host: confirm role, fully re-read the installed Skill, recover
   authorization/heartbeat/run records - never re-intake, re-claim, or
   re-dispatch. Verified in an isolated real `/compact`: the injected context

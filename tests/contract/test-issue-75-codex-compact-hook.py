@@ -612,6 +612,51 @@ class CodexCompactHookContract(unittest.TestCase):
         self.assertFalse((codex_home / "hooks.json").exists())
         self.assertFalse((codex_home / ".codex").exists())
 
+    def test_codex_symlink_cannot_escape_project_root(self) -> None:
+        """A .codex symlink to CODEX_HOME must never write/delete globally."""
+        home = Path(self.tmp.name) / "home"
+        home.mkdir()
+        home = Path(os.path.realpath(home))
+        codex_home = home / ".codex"
+        codex_home.mkdir()
+        foreign_doc = {"hooks": {"SessionStart": [FOREIGN_OTHER]}}
+        (codex_home / "hooks.json").write_text(
+            json.dumps(foreign_doc), encoding="utf-8"
+        )
+        env = {"HOME": str(home), "CODEX_HOME": str(codex_home)}
+        (self.repo / ".codex").symlink_to(codex_home, target_is_directory=True)
+
+        for action in ("prepare", "install", "bind", "uninstall", "status"):
+            cli = [action, "--project-root", str(self.repo)]
+            if action in ("install", "bind"):
+                cli += ["--session-id", HOST_SESSION_ID]
+            receipt = run_hook(*cli, env=env)
+            self.assertEqual(receipt["result"], "refused", action)
+            self.assertNotEqual(receipt["_rc"], 0, action)
+            # the fake global is never written, appended to, or deleted
+            self.assertEqual(
+                json.loads((codex_home / "hooks.json").read_text()),
+                foreign_doc,
+                action,
+            )
+            self.assertFalse(
+                (codex_home / "kaola-project-runner").exists(), action
+            )
+
+        # a .codex symlink that stays INSIDE the project remains legal
+        (self.repo / ".codex").unlink()
+        real_dir = self.repo / "real-codex"
+        real_dir.mkdir()
+        (self.repo / ".codex").symlink_to(real_dir, target_is_directory=True)
+        receipt = run_hook(
+            "prepare", "--project-root", str(self.repo), env=env
+        )
+        self.assertEqual(receipt["result"], "ok")
+        receipt = run_hook("status", "--project-root", str(self.repo), env=env)
+        self.assertEqual(receipt["result"], "ok")
+        self.assertTrue(receipt["installed"])
+        self.assertFalse((codex_home / "kaola-project-runner").exists())
+
     def test_project_root_must_exist(self) -> None:
         missing = Path(self.tmp.name) / "no-such-dir"
         receipt = run_hook("prepare", "--project-root", str(missing))

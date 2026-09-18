@@ -69,6 +69,11 @@ are never bound.
   global/ancestor danger paths are refused before any write — the filesystem
   root, the user home directory, and the effective `CODEX_HOME` layer — so a
   mistaken `--project-root $HOME` can never write `~/.codex/hooks.json`.
+  Containment is enforced inside the project too: before any read, write, or
+  delete, the real paths of `.codex` and the Runner-owned asset parents are
+  resolved, and a symlink that escapes the canonical project root (for
+  example `.codex` pointing into `CODEX_HOME`) is refused; a `.codex` symlink
+  that stays inside the project remains legal.
 - `status` is read-only **and echo-safe**: it reports safe metadata
   (installed/bound presence, counts, paths) but never a matched entry's
   `command` or arbitrary config, which could carry a credential. `bound` is
