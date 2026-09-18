@@ -657,6 +657,63 @@ class CodexCompactHookContract(unittest.TestCase):
         self.assertTrue(receipt["installed"])
         self.assertFalse((codex_home / "kaola-project-runner").exists())
 
+    def test_leaf_symlink_cannot_escape_project_root(self) -> None:
+        """Each owned leaf symlinked outside is refused before any read.
+
+        Writes are atomic-replace (safe), but read_bytes/read_text follow a
+        leaf symlink — compact-recovery.md, the emitter, or binding.json
+        pointing outside the project must refuse before touching it.
+        """
+        home = Path(self.tmp.name) / "home"
+        home.mkdir()
+        home = Path(os.path.realpath(home))
+        codex_home = home / ".codex"
+        codex_home.mkdir()
+        env = {"HOME": str(home), "CODEX_HOME": str(codex_home)}
+
+        outside = Path(self.tmp.name) / "outside"
+        outside.mkdir()
+        secret = "sk-fake-leaf-secret-0000"
+        outside_file = outside / "leaf.md"
+        outside_file.write_text(secret, encoding="utf-8")
+
+        assets = hooks_dir(self.repo)
+        assets.mkdir(parents=True)
+        for leaf in (
+            "compact-recovery.md",
+            "kaola-codex-compact-hook.py",
+            "binding.json",
+        ):
+            (assets / leaf).symlink_to(outside_file)
+            for action in (
+                "prepare", "install", "bind", "uninstall", "status"
+            ):
+                cli = [action, "--project-root", str(self.repo)]
+                if action in ("install", "bind"):
+                    cli += ["--session-id", HOST_SESSION_ID]
+                receipt = run_hook(*cli, env=env)
+                self.assertEqual(
+                    receipt["result"], "refused", (leaf, action)
+                )
+                self.assertNotEqual(receipt["_rc"], 0, (leaf, action))
+                self.assertEqual(
+                    outside_file.read_text(encoding="utf-8"),
+                    secret,
+                    (leaf, action),
+                )
+            (assets / leaf).unlink()
+
+        # a leaf symlink staying inside the project remains legal
+        inner = self.repo / "inner-payload.md"
+        inner.write_text("inner\n", encoding="utf-8")
+        (assets / "compact-recovery.md").symlink_to(inner)
+        receipt = run_hook("status", "--project-root", str(self.repo), env=env)
+        self.assertEqual(receipt["result"], "ok")
+        receipt = run_hook(
+            "prepare", "--project-root", str(self.repo), env=env
+        )
+        self.assertEqual(receipt["result"], "ok")
+
     def test_project_root_must_exist(self) -> None:
         missing = Path(self.tmp.name) / "no-such-dir"
         receipt = run_hook("prepare", "--project-root", str(missing))

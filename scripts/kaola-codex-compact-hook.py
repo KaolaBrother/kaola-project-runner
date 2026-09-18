@@ -151,9 +151,18 @@ def containment_reason(root: Path) -> str | None:
     symlinked to the effective CODEX_HOME (or anywhere outside the project)
     is caught before any read, write, or delete -- otherwise prepare would
     append to the user-global hooks.json and uninstall could delete global
-    assets. A symlink that stays inside the project remains legal.
+    assets. The owned leaves are checked too: writes are atomic-replace,
+    but ``read_bytes``/``read_text`` follow a symlink, so a leaf pointing
+    outside the project would read foreign content. A symlink that stays
+    inside the project remains legal.
     """
-    for path in (hooks_path_for(root), assets_dir_for(root)):
+    for path in (
+        hooks_path_for(root),
+        assets_dir_for(root),
+        payload_path_for(root),
+        emitter_path_for(root),
+        binding_path_for(root),
+    ):
         real = Path(os.path.realpath(path))
         if real != root and root not in real.parents:
             return f"{path}: resolves outside --project-root ({real})"

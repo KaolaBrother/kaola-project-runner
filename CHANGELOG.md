@@ -282,10 +282,13 @@
   refused before any write, so a mistaken `--project-root $HOME` can never
   write `~/.codex/hooks.json`; `install`/`bind` refuse a missing or blank
   `--session-id`. The same containment is enforced inside the project:
-  before any read, write, or delete the real paths of `.codex` and the
-  Runner-owned asset parents are resolved, and a symlink escaping the
-  canonical project root (such as `.codex` pointing into `CODEX_HOME`) is
-  refused — a project-local `.codex` symlink remains legal. The short payload only
+  before any read, write, or delete the real paths of `.codex`, the
+  Runner-owned asset parents, and each owned leaf (`hooks.json`,
+  `compact-recovery.md`, the emitter copy, `binding.json`) are resolved,
+  and a symlink escaping the canonical project root (such as `.codex` or a
+  `binding.json` pointing into `CODEX_HOME`) is refused — writes are
+  atomic-replace but reads follow symlinks, so leaf links are checked too;
+  symlinks staying inside the project remain legal. The short payload only
   re-points the host: confirm role, fully re-read the installed Skill, recover
   authorization/heartbeat/run records - never re-intake, re-claim, or
   re-dispatch. Verified in an isolated real `/compact`: the injected context

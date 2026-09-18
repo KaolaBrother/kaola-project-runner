@@ -70,10 +70,12 @@ are never bound.
   root, the user home directory, and the effective `CODEX_HOME` layer — so a
   mistaken `--project-root $HOME` can never write `~/.codex/hooks.json`.
   Containment is enforced inside the project too: before any read, write, or
-  delete, the real paths of `.codex` and the Runner-owned asset parents are
-  resolved, and a symlink that escapes the canonical project root (for
-  example `.codex` pointing into `CODEX_HOME`) is refused; a `.codex` symlink
-  that stays inside the project remains legal.
+  delete, the real paths of `.codex`, the Runner-owned asset parents, and
+  each owned leaf (`hooks.json`, `compact-recovery.md`, the emitter copy,
+  `binding.json`) are resolved, and a symlink that escapes the canonical
+  project root (for example `.codex` or a `binding.json` pointing into
+  `CODEX_HOME`) is refused; symlinks that stay inside the project remain
+  legal.
 - `status` is read-only **and echo-safe**: it reports safe metadata
   (installed/bound presence, counts, paths) but never a matched entry's
   `command` or arbitrary config, which could carry a credential. `bound` is
