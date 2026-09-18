@@ -205,22 +205,73 @@ class SteerRaceContract(unittest.TestCase):
         self.assertTrue(self.holder.turn["active"], "B must still be running")
 
     def test_composite_new_turn_id_is_its_own_send(self) -> None:
-        """The ordinary success path still attributes the new turn correctly."""
+        """B takes over immediately after our steering prompt is admitted.
+
+        The wrapper lets the REAL `op_prompt` run to completion, then settles the
+        turn it just started and admits B, before handing the original receipt
+        back to the composite. So by the time the composite builds its receipt,
+        `self.turn` is B - and the reported id must still be our own.
+        """
         first, _turn_a = self.start_turn("A")
         self.agent.on_cancel = lambda: self.settle(first["turn_request_id"], "cancelled")
+        real_op_prompt = self.holder.op_prompt
+        takeover: dict = {}
+
+        def op_prompt_then_takeover(params):
+            receipt = real_op_prompt(params)
+            if receipt.get("outcome") == "in_progress" and not takeover:
+                # our steering turn is admitted and running; end it and let B in
+                self.settle(receipt["turn_request_id"], "end_turn")
+                takeover["b"] = real_op_prompt({"text": "B", "wait": False})
+            return receipt
+
+        self.holder.op_prompt = op_prompt_then_takeover
         receipt = self.holder.op_steer_interrupt(
             {"text": "stop and do X instead", "cancel_timeout": 5})
+
         self.assertEqual(receipt.get("steer_outcome"), "interrupted_and_resent")
         self.assertIs(receipt.get("cancel_sent"), True)
         self.assertEqual(receipt.get("cancelled_turn_request_id"), first["turn_request_id"])
         self.assertEqual(receipt.get("cancelled_turn_stop_reason"), "cancelled")
         new_id = receipt.get("new_turn_request_id")
-        self.assertIsNotNone(new_id)
+        # our own send's id - NOT B's, which is what `self.turn` holds by now
+        self.assertEqual(new_id, self.agent.prompts_sent()[1]["id"])
+        self.assertEqual(takeover["b"]["turn_request_id"], self.holder.turn["request_id"])
+        self.assertNotEqual(new_id, self.holder.turn["request_id"])
         self.assertNotEqual(new_id, first["turn_request_id"])
-        # it is the id this send was admitted with, and it is the running turn
-        self.assertEqual(self.holder.turn["request_id"], new_id)
-        self.assertEqual(self.agent.prompts_sent()[-1]["id"], new_id)
 
+    def test_composite_does_not_claim_an_interruption_it_never_made(self) -> None:
+        """A finishes on its own after the snapshot, while still being our turn.
+
+        No cancel is sent, so this is an ordinary next turn: it must not be
+        dressed up as `interrupted_and_resent` / `cancel-confirmed`.
+        """
+        first, turn_a = self.start_turn("A")
+        real_cancel_turn = self.holder.cancel_turn
+
+        def end_a_then_cancel(target, timeout):
+            # exactly the window: after the composite's snapshot, before cancel
+            self.settle(first["turn_request_id"], "end_turn")
+            return real_cancel_turn(target, timeout)
+
+        self.holder.cancel_turn = end_a_then_cancel
+        receipt = self.holder.op_steer_interrupt(
+            {"text": "stop and do X instead", "cancel_timeout": 5})
+
+        self.assertEqual(receipt.get("steer_outcome"), "resent_without_interrupt")
+        self.assertIs(receipt.get("steer_consumed"), True)
+        self.assertEqual(receipt.get("steer_confirmation"), "no-turn-to-interrupt")
+        self.assertIs(receipt.get("interrupted"), False)
+        self.assertIs(receipt.get("cancel_sent"), False)
+        self.assertIs(receipt.get("side_effects_possible"), False)
+        # no cancel ever went out, and the steering text ran as the next turn
+        self.assertEqual(self.agent.cancels_sent(), [])
+        self.assertEqual(receipt.get("new_turn_request_id"),
+                         self.holder.turn["request_id"])
+        # the turn we targeted is still reported truthfully
+        self.assertEqual(receipt.get("cancelled_turn_request_id"), first["turn_request_id"])
+        self.assertEqual(receipt.get("cancelled_turn_stop_reason"), "end_turn")
+        self.assertFalse(turn_a["active"])
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

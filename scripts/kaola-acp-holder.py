@@ -2374,8 +2374,20 @@ class Holder:
                                   "message": "the running turn did not confirm it stopped, so "
                                              "the steering text was NOT sent; verify the turn "
                                              "with observe before deciding - do not resend blindly"}}
-            base["interrupted"] = True
-            base["steer_confirmation"] = "cancel-confirmed"
+            if not cancel_sent and cancel.get("outcome") == "no-active-turn":
+                # Still our turn, but it finished on its own between the snapshot
+                # and the cancel, so no cancel was ever sent. Claiming an
+                # interruption here would be inventing one.
+                base.update({
+                    "interrupted": False,
+                    "steer_confirmation": "no-turn-to-interrupt",
+                    # Nothing was interrupted, so there is no partial work of
+                    # ours to warn about; the turn's own end is reported above.
+                    "side_effects_possible": False,
+                })
+            else:
+                base["interrupted"] = True
+                base["steer_confirmation"] = "cancel-confirmed"
         else:
             # The turn ended on its own between the Agent's decision and this
             # call. Nothing is interrupted; this is an ordinary next prompt.

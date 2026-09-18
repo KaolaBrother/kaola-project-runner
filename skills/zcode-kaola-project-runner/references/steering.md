@@ -57,8 +57,9 @@ the whole conversation.
 - If the cancel is **not** confirmed, nothing is sent: the outcome is `unknown` with
   `steer-cancel-unconfirmed`, so a turn that refuses to stop can never receive a second dispatch.
   Verify with `observe` before deciding; the Runner does not retry.
-- If the turn had already ended, nothing is cancelled and the receipt says
-  `resent_without_interrupt` rather than claiming an interruption.
+- If the turn had already ended - before the call, or on its own in the moment between the decision
+  and the cancel - no cancel is sent, and the receipt says `resent_without_interrupt` with
+  `cancel_sent: false` rather than claiming an interruption that never happened.
 - The cancel is bound to the exact turn this steer targeted, and every fact reported about that
   turn is read while it is still held - turns also start from worker events, on another thread, so
   `the turn running now` is not the same question as `the turn we cancelled`. If the target is

@@ -311,7 +311,9 @@ The composite binds to the turn **object** it targeted, not merely to its id: `s
 replaced when a prompt is admitted, so the cancel's admission check, its outbound `session/cancel`,
 its wait and its receipt are all taken from that one turn while the lock is held, and nothing
 downstream re-reads `self.turn`. Turns also start from worker events on another connection thread,
-so this matters in ordinary operation. If the targeted turn is replaced, the outcome is `unknown`
+so this matters in ordinary operation. If the targeted turn simply finishes on its own before the cancel goes out, no cancel is sent and
+the receipt is `resent_without_interrupt` with `cancel_sent: false` — an interruption that did not
+happen is never claimed. If the targeted turn is replaced, the outcome is `unknown`
 with `steer-turn-changed` and the steering text is not sent; `cancel_sent` distinguishes "nothing
 was cancelled" (`false`) from "the target was asked to stop and we cannot confirm what followed"
 (`true`), and `side_effects_possible` is reported for both. If the target did stop but another turn
