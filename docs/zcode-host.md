@@ -107,7 +107,9 @@ writer anywhere in the chain. Worker events are the only trigger:
 
 ```text
 worker agent terminated / worker turn ended (one idle episode)
-  -> worker holder's existing on_agent_exit / turn-end path
+  / new pending session/request_permission (one permission_required)
+  -> worker holder's existing on_agent_exit / turn-end /
+     request-permission paths
      -> one socket op `worker_event` to the ZCode Host holder
         -> bounded in-memory staging list (cap 32, deduped by event id)
            -> one ordinary session/prompt through op_prompt
@@ -147,10 +149,18 @@ worker agent terminated / worker turn ended (one idle episode)
   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
   out the send; `idle` fires once per ended turn with the agent still alive
   (`outcome` `turn_completed`/`turn_failed`), so the next idle episode needs a
-  new worker turn. The 600s `idle_watcher` stays a non-business exit timer and
-  is never a heartbeat event.
+  new worker turn. `permission_required` (Issue #76) fires once per *new*
+  `session/request_permission` pending key — a wake, not an idle and not the
+  turn's end: the request's `request_id` is the only locator the event
+  carries (title, options, and tool input never travel; the Host reads them
+  from the worker's own `pending_permissions` receipt and decides inside
+  existing authorization or escalates), a re-sent request id stays one wake,
+  and the ordinary turn-end `idle` still arrives after the request settles.
+  The 600s `idle_watcher` stays a non-business exit timer and is never a
+  heartbeat event.
 - **Payload.** One literal prompt: fixed structured event metadata (one JSON
-  object per event: id, kind, platform, session, repo, reason, event cursor),
+  object per event: id, kind, platform, session, repo, reason, event cursor,
+  and `request_id` when the kind carries one),
   the current **full** heartbeat prompt body read at delivery time from
   `<repo>/.kaola/heartbeat-prompt.json` — the single file the ZCode Host agent
   owns; after each worker terminated/idle notification it settles the next step

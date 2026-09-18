@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
 HEARTBEAT_NOTIFY_TIMEOUT = 5.0
 HEARTBEAT_NOTIFY_GRACE = 6.0
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
-WORKER_EVENT_KINDS = ("terminated", "idle")
+WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
 HEARTBEAT_DEFECT_CHARS = 200
 
 
@@ -1432,7 +1432,9 @@ class Holder:
                     for opt in params.get("options") or []
                 ],
             }
-            self.pending_permissions[normalize_id(request_id)] = entry
+            key = normalize_id(request_id)
+            is_new = key not in self.pending_permissions
+            self.pending_permissions[key] = entry
             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
                 self.turn["mutation_status"] = "accepted"
                 self.note_agent_children()
@@ -1441,6 +1443,15 @@ class Holder:
             self.fanout_follow_delta()
             with self.turn_cond:
                 self.turn_cond.notify_all()
+            if is_new:
+                # Issue #76: a bound worker blocked on approval cannot wait for
+                # a turn-end idle that may never come. One wake per new pending
+                # request; ``request_id`` is the only locator - title, options
+                # and tool input stay in this worker's own receipts, and the
+                # event approves nothing.
+                self._notify_heartbeat_host_now(
+                    "permission_required", "session/request_permission pending",
+                    extra={"request_id": key})
             return
         self.agent.send_message(
             {"jsonrpc": "2.0", "id": request_id,
@@ -1803,13 +1814,16 @@ class Holder:
 
     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
 
-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
+    def _notify_heartbeat_host_now(self, kind: str, reason: str,
+                                   extra: dict[str, Any] | None = None) -> None:
         """One carrier send from this worker holder to the ZCode Host holder.
 
         Synchronous and bounded: the caller is an existing agent-exit or
         turn-end path, and ``op_stop`` waits out this lock before exiting, so
         an exact stop never kills a half-delivered event. The receipt (staged,
         delivered, or an honest error) is evidence in this holder's event log.
+        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
+        never request titles, options, tool input, or credentials.
         """
         target = self.heartbeat_host
         if target is None:
@@ -1818,6 +1832,8 @@ class Holder:
                   "platform": self.args.platform, "session": self.args.session,
                   "repo": self.args.repo, "reason": reason,
                   "event_cursor": self.events.cursor}
+        if extra:
+            params.update(extra)
         receipt: dict[str, Any] = {}
         with self.heartbeat_notify_lock:
             try:
@@ -1880,9 +1896,10 @@ class Holder:
         ]
         for event in events:
             lines.append(json.dumps(
-                {key: event.get(key) for key in
+                {key: event[key] for key in
                  ("event_id", "kind", "platform", "session", "repo", "reason",
-                  "event_cursor")},
+                  "event_cursor", "request_id")
+                 if event.get(key) is not None},
                 ensure_ascii=False, sort_keys=True))
         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
         if maintained:
@@ -1981,13 +1998,18 @@ class Holder:
         repo = params.get("repo")
         reason = params.get("reason")
         cursor = params.get("event_cursor")
+        request_id = params.get("request_id")
         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
                 or not platform or not isinstance(session, str) or not session
                 or not isinstance(repo, str) or not repo
                 or not isinstance(reason, str)
-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
+                or not isinstance(cursor, int) or isinstance(cursor, bool)
+                or (request_id is not None
+                    and (not isinstance(request_id, (str, int))
+                         or isinstance(request_id, bool)))):
             return {"error": {"code": "worker-event-invalid",
-                              "message": "worker_event needs kind terminated|idle plus "
+                              "message": "worker_event needs kind "
+                                         "terminated|idle|permission_required plus "
                                          "platform, session, repo, reason, and an integer "
                                          "event_cursor"}}
         event = {"schema": WORKER_EVENT_SCHEMA,
@@ -1995,6 +2017,8 @@ class Holder:
                  "kind": kind, "platform": platform, "session": session,
                  "repo": repo, "reason": reason, "event_cursor": cursor,
                  "staged_at": round(time.time(), 3)}
+        if request_id is not None:
+            event["request_id"] = request_id
         with self.worker_events_lock:
             if any(item.get("event_id") == event["event_id"]
                    for item in self.pending_worker_events):

@@ -1,8 +1,7 @@
 # ZCode Host: dispatch, end the turn, wake on worker events
 
-Read this when a ZCode Host supervises workers: the flags and receipt fields it
-uses. Entry points and startup: [host-startup.md](host-startup.md).
-This file is the beat.
+The ZCode Host beat: flags and receipt fields. Entry points:
+[host-startup.md](host-startup.md).
 
 ## Three identities, never interchangeable
 
@@ -29,9 +28,8 @@ KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-kaola-host","repo
   "$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser
 ```
 
-`platform` must be `zcode`, `session`/`repo` the Host's own, and it may not name
-the worker's own session; anything else fails the start closed rather than
-dropping the carrier silently. Exporting it, or setting it on a later `send`,
+`platform` must be `zcode`, `session`/`repo` the Host's own, never the worker's;
+anything else fails the start closed rather than dropping the carrier silently. Exporting it, or setting it on a later `send`,
 binds nothing. Worker names are issue-scoped:
 `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
@@ -42,13 +40,12 @@ binds nothing. Worker names are issue-scoped:
 "heartbeat_host": {"platform":"zcode","session":"zcode-kaola-host","repo":"…","socket":"…"}
 ```
 
-`heartbeat_host` is the running holder's own binding; a receipt's
-`heartbeat_host_requested` is only the request. Check the fact's `session`/`repo`
-are **yours**; `observe` reports it any time, so verify reused and adopted
-workers too.
+`heartbeat_host` is the running holder's own binding; `heartbeat_host_requested`
+is only the request. Check the fact's `session`/`repo` are **yours**; `observe`
+reports it any time, so verify reused workers too.
 
 - `heartbeat_host: null` (known) — an ordinary unbound worker: legitimate, never
-  wakes you; another Host's `session`/`repo` wakes that Host.
+  wakes you; another Host's binding wakes that Host.
 - `heartbeat_host_known: false` — a holder or record older than the field:
   unknown; treat it as unbound.
 - `"error": {"code": "session-exists"}` — you reused a live holder and bound
@@ -63,12 +60,11 @@ delegated to you:
 1. **Keep the in-flight work** — it runs on, readable with `observe` and
    `capture` from your anchor. Cancel nothing.
 2. **Recover in this beat.** Another bound worker or confirmed wake source: end
-   the turn and read this one on that beat. The unbound worker is
-   your only wake source: ending the turn waits on nothing and a heartbeat note
-   wakes nobody, so read its result here with the bounded `wait --timeout
+   the turn and read this one on that beat. The unbound worker is your only
+   wake source — ending the turn waits on nothing, a heartbeat note wakes
+   nobody — so read its result here with the bounded `wait --timeout
    <seconds>` (`observe`/`capture` once its turn ended). That bounded read is
-   the recovery exception — nothing is bound, so no event can be kept
-   undelivered — never the ordinary wait, never a poll loop.
+   the recovery exception — never the ordinary wait, never a poll loop.
 3. **Rebind at that safe idle point** — turn ended, nothing in flight, result
    read: exact `stop` of that one session, `start` again with the variable, and
    verify the new receipt. `--resume` needs the real native id — ZCode reports
@@ -93,7 +89,7 @@ decision you need. A heartbeat note claiming a wait you lack is no report.
 `"mutation_status": "in_progress"` — **accepted and running — not finished, and
 not correct**. An `error` (`prompt-in-progress`, `agent-not-running`) dispatched
 nothing; a `prompt_timeout` or missing receipt leaves consumption unknown —
-establish the fact with `observe` before re-sending.
+establish it with `observe` before re-sending.
 
 **Keep two values**: `prompt_fingerprint`, the turn you dispatched, and
 `dispatch_event_cursor`, the cursor *before* it produced anything.
@@ -105,9 +101,9 @@ Do the rest of this beat, update the heartbeat prompt at
 report, then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
-`sleep`, poll in a loop, or call a blocking `wait` to hold this turn open — a
-Host turn that stays active is exactly what keeps events undelivered. Do not
-`stop` or `cancel` yourself or an in-flight worker to manufacture a wake-up.
+`sleep`, poll in a loop, or hold this turn open with a blocking `wait` — an
+active Host turn is exactly what keeps events undelivered. Do not `stop` or
+`cancel` yourself or an in-flight worker to manufacture a wake-up.
 
 ### When an event wakes you
 
@@ -126,8 +122,8 @@ object per event —
 what happened with the event's own `platform`/`session`/`repo` and that Skill.
 
 **`event_cursor` is the end of the turn, not the start** — `19` is where that
-turn ended, so the reply sits *below* it and `capture --since <event_cursor>`
-returns only carrier and title updates. Read from an earlier anchor:
+turn ended, so `capture --since <event_cursor>` sees only carrier and title
+updates. Read from an earlier anchor:
 
 ```bash
 # the dispatch receipt's cursor, from before the reply existed
@@ -137,36 +133,38 @@ returns only carrier and title updates. Read from an earlier anchor:
 "$W" capture --repo "$WORK_REPO" --session codex-KT-i274-parser --lines 200
 ```
 
-Confirm you are reading the turn you dispatched: `observe`'s
+Confirm you read the turn you dispatched: `observe`'s
 `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
 and `turn_outcome`/`stop_reason` must show it finished. A capture with no
-assistant text means your window was wrong — widen it before judging. Then
-accept, ask for a fix or dispatch more, update the heartbeat prompt, and end the
-turn again.
+assistant text means the window was wrong — widen it. Then accept, fix, or
+dispatch more, update the heartbeat prompt, and end the turn.
 
-`kind` is `idle` when the worker's turn ended and `terminated` when its process
-exited; a finished turn is a full trigger, and you never kill a worker to be
-notified.
+`kind` is `idle` when the worker's turn ended and `terminated` when its
+process exited; a finished turn is a full trigger, and you never kill a
+worker to be notified. `permission_required` is a bound worker's agent raising
+`session/request_permission` mid-turn — a wake, not an idle; the ordinary
+`idle` still arrives at turn end. The event carries only `request_id`:
+decide it from the worker's live `pending_permissions` — inside existing
+authorization or escalated to the user.
 
 ## 3. Workers and the notification carrier
 
 The worker Agent owns its delivery; it never fabricates events and never writes
-to your stdin — its holder sends the event over the Host holder's admin socket.
+to your stdin — its holder sends the event over your holder's admin socket.
 Never ask a worker to notify you or duplicate the carrier.
 
 Delivery rules you can rely on:
 
 - Busy Host: the event is staged and delivered at your next turn boundary, never
   injected mid-turn, and a worker event is never turned into steering. One that
-  finished before your turn ended is staged the same way, so that race can
-  neither skip nor double-dispatch.
-- Duplicate `event_id`s collapse; several pending events arrive in one prompt,
-  each with the full current body.
+  finished before your turn ended stages the same way: the race can neither
+  skip nor double-dispatch.
+- Duplicate `event_id`s collapse; several pending events arrive in one prompt
+  with the full current body.
 - Confirmation follows the notification turn *completing*; after a resume,
   unconfirmed events are redelivered at least once — keep each pass idempotent.
 - Dispatch failure, unknown acceptance, or an unverified binding means you are
-  **not** reliably event-driven: recover it this beat, or report the exception,
-  before ending the turn.
+  **not** reliably event-driven: recover it this beat, or report the exception.
 
 Steering (`steer`, where supported) is a separate tool and does not alter this
 wake path.

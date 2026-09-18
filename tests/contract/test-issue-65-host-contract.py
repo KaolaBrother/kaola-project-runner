@@ -148,7 +148,8 @@ class HostDispatchContract(unittest.TestCase):
         self.assertIn("<<<heartbeat-prompt", holder)
         # events only reach an idle host, through the ordinary prompt path
         self.assertIn('return {"delivered": False, "reason": "prompt-in-progress"}', holder)
-        self.assertIn('WORKER_EVENT_KINDS = ("terminated", "idle")', holder)
+        self.assertIn('WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")',
+                      holder)
         # and a worker event is never converted into a steer
         self.assertNotIn('op_steer(self._heartbeat', holder)
 

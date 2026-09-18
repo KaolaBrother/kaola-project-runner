@@ -83,11 +83,13 @@ python_suites_all=(
   "test-issue-65-steer-race.py"
   "test-issue-65-host-contract.py"
   "test-issue-70-binding-fact.py"
+  "test-issue-76-permission-wake.py"
 )
 python_suites_a=(
   "test-issue-65-steering.py"
   "test-acp-contract.py"
   "test-zcode-heartbeat-contract.py"
+  "test-issue-76-permission-wake.py"
   "test-acp-follow-contract.py"
   "test-progressive-disclosure.py"
   "test-droid-acp-contract.py"
