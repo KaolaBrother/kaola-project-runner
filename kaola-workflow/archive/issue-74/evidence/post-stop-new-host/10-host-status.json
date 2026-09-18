@@ -1,0 +1,424 @@
+{
+  "acp_session_id": "zcode-1",
+  "activity_hint": "idle",
+  "agent_alive": true,
+  "agent_exit_code": null,
+  "agent_info": {
+    "_meta": {
+      "zcode": {
+        "baseURL": "https://open.bigmodel.cn/api/anthropic",
+        "credential": "desktop-registry-inline-memory",
+        "defaultModelId": "GLM-5.3",
+        "kind": "anthropic",
+        "modelIds": [
+          "GLM-5.3",
+          "GLM-5.3-Flash"
+        ],
+        "plan": "coding-plan",
+        "planCacheStatus": "available",
+        "providerId": "builtin:bigmodel-coding-plan",
+        "providerLabel": "BigModel - Coding Plan",
+        "rejectedProviders": {
+          "builtin:bigmodel": "not a coding-plan provider (refused: no pay-as-you-go billing)",
+          "builtin:bigmodel-start-plan": "start-plan (headless captcha flow, refused)",
+          "builtin:zai-coding-plan": "not enabled (oauth_provider_inactive)"
+        }
+      }
+    },
+    "name": "kaola-zcode-acp",
+    "version": "0.3.3"
+  },
+  "agent_pgid": 82694,
+  "agent_pid": 82694,
+  "capabilities": {
+    "loadSession": true,
+    "promptCapabilities": {
+      "embeddedContext": true
+    },
+    "sessionCapabilities": {
+      "close": true,
+      "list": true,
+      "resume": true
+    }
+  },
+  "context_usage": {
+    "size": null,
+    "used": null
+  },
+  "event_cursor": 27,
+  "fatal_error": null,
+  "git": {
+    "branch": null,
+    "dirty": false
+  },
+  "heartbeat_host": null,
+  "heartbeat_host_known": true,
+  "holder_instance_id": "12c97a4bfcac5e73ea96cc76e8c181a4",
+  "holder_pid": 82693,
+  "initial_config_options": [
+    {
+      "currentValue": "yolo",
+      "id": "mode",
+      "name": "Mode",
+      "options": [
+        {
+          "name": "Plan",
+          "value": "plan"
+        },
+        {
+          "name": "Build",
+          "value": "build"
+        },
+        {
+          "name": "Edit",
+          "value": "edit"
+        },
+        {
+          "name": "Yolo",
+          "value": "yolo"
+        },
+        {
+          "name": "Auto",
+          "value": "auto"
+        }
+      ],
+      "type": "select"
+    },
+    {
+      "id": "model",
+      "name": "Model",
+      "options": [
+        {
+          "name": "GLM-5.3 (BigModel - Coding Plan)",
+          "value": "builtin:bigmodel-coding-plan\\GLM-5.3"
+        },
+        {
+          "name": "GLM-5.3-Flash (BigModel - Coding Plan)",
+          "value": "builtin:bigmodel-coding-plan\\GLM-5.3-Flash"
+        }
+      ],
+      "type": "select"
+    },
+    {
+      "id": "thoughtLevel",
+      "name": "Thought level",
+      "options": [
+        {
+          "name": "Low",
+          "value": "low"
+        },
+        {
+          "name": "High",
+          "value": "high"
+        },
+        {
+          "name": "Max",
+          "value": "max"
+        }
+      ],
+      "type": "select"
+    }
+  ],
+  "last_prompt": {
+    "fingerprint": "sha256:e73dddb2a04b87ec173e61ad20325c3a91979e6d54a6990414169d4ecea27599",
+    "mutation_status": "completed",
+    "stop_reason": "end_turn",
+    "transport": "acp",
+    "written_at": 1789741978.377
+  },
+  "malformed_stdout_lines": 0,
+  "mutation_status": "completed",
+  "pending_permissions": [],
+  "platform": "zcode",
+  "protocol_version": 1,
+  "record": {
+    "acp_session_id": "zcode-1",
+    "agent_alive": true,
+    "agent_child_groups": {
+      "82697": {
+        "82697": "Fri Sep 18 22:32:57 2026"
+      }
+    },
+    "agent_child_pgids": [
+      82697
+    ],
+    "agent_info": {
+      "_meta": {
+        "zcode": {
+          "baseURL": "https://open.bigmodel.cn/api/anthropic",
+          "credential": "desktop-registry-inline-memory",
+          "defaultModelId": "GLM-5.3",
+          "kind": "anthropic",
+          "modelIds": [
+            "GLM-5.3",
+            "GLM-5.3-Flash"
+          ],
+          "plan": "coding-plan",
+          "planCacheStatus": "available",
+          "providerId": "builtin:bigmodel-coding-plan",
+          "providerLabel": "BigModel - Coding Plan",
+          "rejectedProviders": {
+            "builtin:bigmodel": "not a coding-plan provider (refused: no pay-as-you-go billing)",
+            "builtin:bigmodel-start-plan": "start-plan (headless captcha flow, refused)",
+            "builtin:zai-coding-plan": "not enabled (oauth_provider_inactive)"
+          }
+        }
+      },
+      "name": "kaola-zcode-acp",
+      "version": "0.3.3"
+    },
+    "agent_pgid": 82694,
+    "agent_pid": 82694,
+    "capabilities": {
+      "loadSession": true,
+      "promptCapabilities": {
+        "embeddedContext": true
+      },
+      "sessionCapabilities": {
+        "close": true,
+        "list": true,
+        "resume": true
+      }
+    },
+    "created_at": 1789741977.789,
+    "event_cursor": 26,
+    "fatal_error": null,
+    "heartbeat_host": null,
+    "holder_instance_id": "12c97a4bfcac5e73ea96cc76e8c181a4",
+    "holder_pid": 82693,
+    "initial_config_options": [
+      {
+        "currentValue": "yolo",
+        "id": "mode",
+        "name": "Mode",
+        "options": [
+          {
+            "name": "Plan",
+            "value": "plan"
+          },
+          {
+            "name": "Build",
+            "value": "build"
+          },
+          {
+            "name": "Edit",
+            "value": "edit"
+          },
+          {
+            "name": "Yolo",
+            "value": "yolo"
+          },
+          {
+            "name": "Auto",
+            "value": "auto"
+          }
+        ],
+        "type": "select"
+      },
+      {
+        "id": "model",
+        "name": "Model",
+        "options": [
+          {
+            "name": "GLM-5.3 (BigModel - Coding Plan)",
+            "value": "builtin:bigmodel-coding-plan\\GLM-5.3"
+          },
+          {
+            "name": "GLM-5.3-Flash (BigModel - Coding Plan)",
+            "value": "builtin:bigmodel-coding-plan\\GLM-5.3-Flash"
+          }
+        ],
+        "type": "select"
+      },
+      {
+        "id": "thoughtLevel",
+        "name": "Thought level",
+        "options": [
+          {
+            "name": "Low",
+            "value": "low"
+          },
+          {
+            "name": "High",
+            "value": "high"
+          },
+          {
+            "name": "Max",
+            "value": "max"
+          }
+        ],
+        "type": "select"
+      }
+    ],
+    "last_prompt": {
+      "fingerprint": "sha256:e73dddb2a04b87ec173e61ad20325c3a91979e6d54a6990414169d4ecea27599",
+      "mutation_status": "completed",
+      "stop_reason": "end_turn",
+      "transport": "acp",
+      "written_at": 1789741978.377
+    },
+    "malformed_stdout_lines": 0,
+    "pending_permissions": [],
+    "platform": "zcode",
+    "protocol_version": 1,
+    "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-layer-zulysijk/repo",
+    "session": "zcode-KPR-orchestrator-eebe5a",
+    "session_meta": {
+      "configOptions": [
+        {
+          "currentValue": "yolo",
+          "id": "mode",
+          "name": "Mode",
+          "options": [
+            {
+              "name": "Plan",
+              "value": "plan"
+            },
+            {
+              "name": "Build",
+              "value": "build"
+            },
+            {
+              "name": "Edit",
+              "value": "edit"
+            },
+            {
+              "name": "Yolo",
+              "value": "yolo"
+            },
+            {
+              "name": "Auto",
+              "value": "auto"
+            }
+          ],
+          "type": "select"
+        },
+        {
+          "currentValue": "builtin:bigmodel-coding-plan\\GLM-5.3",
+          "id": "model",
+          "name": "Model",
+          "options": [
+            {
+              "name": "GLM-5.3 (BigModel - Coding Plan)",
+              "value": "builtin:bigmodel-coding-plan\\GLM-5.3"
+            },
+            {
+              "name": "GLM-5.3-Flash (BigModel - Coding Plan)",
+              "value": "builtin:bigmodel-coding-plan\\GLM-5.3-Flash"
+            }
+          ],
+          "type": "select"
+        },
+        {
+          "currentValue": "high",
+          "id": "thoughtLevel",
+          "name": "Thought level",
+          "options": [
+            {
+              "name": "Low",
+              "value": "low"
+            },
+            {
+              "name": "High",
+              "value": "high"
+            },
+            {
+              "name": "Max",
+              "value": "max"
+            }
+          ],
+          "type": "select"
+        }
+      ],
+      "sessionId": "zcode-1"
+    },
+    "state": "ready",
+    "transport": "acp",
+    "updated_at": 1789741978.391
+  },
+  "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-layer-zulysijk/repo",
+  "schema_version": 3,
+  "session": "zcode-KPR-orchestrator-eebe5a",
+  "session_meta": {
+    "configOptions": [
+      {
+        "currentValue": "yolo",
+        "id": "mode",
+        "name": "Mode",
+        "options": [
+          {
+            "name": "Plan",
+            "value": "plan"
+          },
+          {
+            "name": "Build",
+            "value": "build"
+          },
+          {
+            "name": "Edit",
+            "value": "edit"
+          },
+          {
+            "name": "Yolo",
+            "value": "yolo"
+          },
+          {
+            "name": "Auto",
+            "value": "auto"
+          }
+        ],
+        "type": "select"
+      },
+      {
+        "currentValue": "builtin:bigmodel-coding-plan\\GLM-5.3",
+        "id": "model",
+        "name": "Model",
+        "options": [
+          {
+            "name": "GLM-5.3 (BigModel - Coding Plan)",
+            "value": "builtin:bigmodel-coding-plan\\GLM-5.3"
+          },
+          {
+            "name": "GLM-5.3-Flash (BigModel - Coding Plan)",
+            "value": "builtin:bigmodel-coding-plan\\GLM-5.3-Flash"
+          }
+        ],
+        "type": "select"
+      },
+      {
+        "currentValue": "high",
+        "id": "thoughtLevel",
+        "name": "Thought level",
+        "options": [
+          {
+            "name": "Low",
+            "value": "low"
+          },
+          {
+            "name": "High",
+            "value": "high"
+          },
+          {
+            "name": "Max",
+            "value": "max"
+          }
+        ],
+        "type": "select"
+      }
+    ],
+    "sessionId": "zcode-1"
+  },
+  "state": "ready",
+  "stop_reason": "end_turn",
+  "transport": {
+    "alternatives": [
+      "pty"
+    ],
+    "default": "acp",
+    "reason": "manifest-default",
+    "selected": "acp"
+  },
+  "turn_active": false,
+  "turn_outcome": "turn_completed",
+  "unknown_update_variants": 1
+}

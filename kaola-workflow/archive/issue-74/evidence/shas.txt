@@ -1,0 +1,10 @@
+candidate: eb9585208d40da0c9f21add3596278833b0ba3bb
+branch: workflow/issue-74
+worktree: /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74
+origin/main: 513e8e1f82172fce3145c893c6db3072759ea457
+includes: #79, #80, #83, #69, #82
+prior freeze 536c6bd19c309bcf51d0224a1206926fd7b18639 superseded (not ACCEPT)
+this-round evidence: kaola-workflow/issue-74/evidence/validate-quota-figures/
+adapter matches origin/main sha256 cb029a22a2337e5ff54898e4a315d372ee3f8939d72f0ebbbd3f23210bd63919
+live A-B: kaola-workflow/issue-74/evidence/live-ab-44a17b9/
+push/merge/finalize/close: not done; waiting outer ACCEPT

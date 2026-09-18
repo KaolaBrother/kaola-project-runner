@@ -1,0 +1,27 @@
+{
+  "acp_session_id": "zcode-1",
+  "dispatch_event_cursor": 21,
+  "duplicate_warning": null,
+  "event_cursor": 21,
+  "git": {
+    "branch": null,
+    "dirty": true
+  },
+  "mutation_performed": true,
+  "mutation_status": "in_progress",
+  "outcome": "in_progress",
+  "platform": "zcode",
+  "prompt_fingerprint": "sha256:d29159c5699586ae094c5e7d0767399e6a24cc5e7528727d99906ceae9d84e1f",
+  "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-newhost-dw0ourvp/repo",
+  "schema_version": 3,
+  "session": "zcode-KPR-orchestrator-30388a",
+  "transport": {
+    "alternatives": [
+      "pty"
+    ],
+    "default": "acp",
+    "reason": "manifest-default",
+    "selected": "acp"
+  },
+  "turn_request_id": 4
+}

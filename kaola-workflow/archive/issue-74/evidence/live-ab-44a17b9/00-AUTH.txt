@@ -1,0 +1,7 @@
+objective=validate Delegator A-B lifecycle without production changes
+allowed_worker=devin swe-2-max
+concurrency=1
+max_tasks=1 short
+priority=highest
+delivery=test receipts only
+stop=all test sessions at end

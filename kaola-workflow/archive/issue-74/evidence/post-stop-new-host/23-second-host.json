@@ -1,0 +1,167 @@
+{
+  "acp_session_id": "zcode-1",
+  "actual_parameters": null,
+  "actual_runtime_model_id": null,
+  "agent_pid": 82840,
+  "bridge": {
+    "layout": "skill",
+    "path": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74/scripts/kaola-zcode-acp.py",
+    "present": true,
+    "relative": "kaola-zcode-acp.py",
+    "sha256": "60c51bce66728ea51a0f907d213f18d5df700b9a59ccac6e41a2b75b9e8a8e24",
+    "upstream_pin": "80aa4e2c39909f91145dfdf6428a3867b5c61701",
+    "verified_versions": "cli=0.16.5;adapter=kaola-zcode-acp;protocol=1"
+  },
+  "config_application": {
+    "effort": {
+      "applied": false,
+      "reason": "no-resolved-value"
+    },
+    "fast": {
+      "applied": false,
+      "reason": "no-advertised-config-option"
+    },
+    "mode": {
+      "applied": true,
+      "config_id": "mode",
+      "value": "yolo"
+    },
+    "model": {
+      "applied": false,
+      "reason": "no-resolved-value"
+    }
+  },
+  "configured_options": [
+    {
+      "config_id": "mode",
+      "configured": true,
+      "current_value": "yolo",
+      "option_name": "Mode",
+      "value": "yolo",
+      "value_name": "Yolo"
+    }
+  ],
+  "fast": {
+    "applied": false,
+    "applied_via": "none",
+    "detail": "no native Fast mechanism; nothing to enable",
+    "effective": "off",
+    "requested": "off",
+    "support": "none"
+  },
+  "git": {
+    "branch": null,
+    "dirty": true
+  },
+  "heartbeat_host": null,
+  "heartbeat_host_known": true,
+  "heartbeat_host_requested": null,
+  "holder_instance_id": "c7c209e669b3ba2e22cdc47a7c15e74c",
+  "holder_pid": 82839,
+  "model_evidence_provenance": {
+    "catalog_probe": {
+      "available_model_count": 2,
+      "candidate_present": false,
+      "probes": [
+        {
+          "command": [
+            "python3.14",
+            "--help"
+          ],
+          "output_digest": "sha256:37900168505c5a6585b6ca9da88f7e449426d064e7f4a0abc92daafb393a790f",
+          "returncode": 0
+        }
+      ],
+      "state": "readable"
+    },
+    "fast": {
+      "detail": "no native Fast mechanism; nothing to enable",
+      "mechanism": "none",
+      "requested": "off",
+      "support": "none"
+    },
+    "requested": {
+      "name": "enabled Coding Plan, first listed model",
+      "source": "runner-default"
+    },
+    "resolution": {
+      "candidate_id": null,
+      "display_name": "enabled Coding Plan, first listed model",
+      "resolved_id": null,
+      "state": "native-default",
+      "supported_options": []
+    },
+    "selection": {
+      "source": "runner-default",
+      "tier": "default"
+    }
+  },
+  "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+  "model_selection": {
+    "preserved": false,
+    "requested_name": "enabled Coding Plan, first listed model",
+    "resolved_effort": null,
+    "resolved_model": null,
+    "source": "runner-default",
+    "tier": "default"
+  },
+  "model_verified": "unknown",
+  "platform": "zcode",
+  "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-newhost-dw0ourvp/repo",
+  "requested_fast": "off",
+  "requested_model_name": "enabled Coding Plan, first listed model",
+  "requested_model_source": "runner-default",
+  "requested_tier": "default",
+  "resolved_fast": "off",
+  "resolved_parameters": {},
+  "resolved_runtime_model_display": "enabled Coding Plan, first listed model",
+  "resolved_runtime_model_id": "",
+  "schema_version": 3,
+  "session": "zcode-KPR-orchestrator-30388a",
+  "state": "ready",
+  "transport": {
+    "agent_info": {
+      "_meta": {
+        "zcode": {
+          "baseURL": "https://open.bigmodel.cn/api/anthropic",
+          "credential": "desktop-registry-inline-memory",
+          "defaultModelId": "GLM-5.3",
+          "kind": "anthropic",
+          "modelIds": [
+            "GLM-5.3",
+            "GLM-5.3-Flash"
+          ],
+          "plan": "coding-plan",
+          "planCacheStatus": "available",
+          "providerId": "builtin:bigmodel-coding-plan",
+          "providerLabel": "BigModel - Coding Plan",
+          "rejectedProviders": {
+            "builtin:bigmodel": "not a coding-plan provider (refused: no pay-as-you-go billing)",
+            "builtin:bigmodel-start-plan": "start-plan (headless captcha flow, refused)",
+            "builtin:zai-coding-plan": "not enabled (oauth_provider_inactive)"
+          }
+        }
+      },
+      "name": "kaola-zcode-acp",
+      "version": "0.3.3"
+    },
+    "alternatives": [
+      "pty"
+    ],
+    "capabilities": {
+      "loadSession": true,
+      "promptCapabilities": {
+        "embeddedContext": true
+      },
+      "sessionCapabilities": {
+        "close": true,
+        "list": true,
+        "resume": true
+      }
+    },
+    "default": "acp",
+    "protocol_version": 1,
+    "reason": "manifest-default",
+    "selected": "acp"
+  }
+}

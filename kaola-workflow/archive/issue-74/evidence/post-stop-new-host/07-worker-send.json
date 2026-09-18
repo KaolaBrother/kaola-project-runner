@@ -1,0 +1,50 @@
+{
+  "acp_session_id": "zcode-1",
+  "context_usage": {
+    "size": null,
+    "used": null
+  },
+  "dispatch_event_cursor": 10,
+  "duplicate_warning": null,
+  "duration_ms": 15,
+  "event_cursor": 18,
+  "event_log_bytes": 5563,
+  "event_log_path": null,
+  "failed_tools": [],
+  "final_text": "hello from zcode",
+  "final_text_truncated": false,
+  "git": {
+    "branch": null,
+    "dirty": false
+  },
+  "mutation_performed": true,
+  "mutation_status": "completed",
+  "outcome": "turn_completed",
+  "pending_permissions": [],
+  "platform": "zcode",
+  "prompt_fingerprint": "sha256:42c8a1f3a1b47f89f0faab30cb489d38b3712c642d526338bf50847706c99adc",
+  "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-layer-zulysijk/repo",
+  "schema_version": 3,
+  "session": "zcode-KPR-i74-c740fa",
+  "side_effects": {
+    "commands_run": 1,
+    "files_changed": 0
+  },
+  "stop_reason": "end_turn",
+  "thinking_chars": 17,
+  "tool_calls": {
+    "count": 1,
+    "failed": 0,
+    "kinds": {
+      "execute": 1
+    }
+  },
+  "transport": {
+    "alternatives": [
+      "pty"
+    ],
+    "default": "acp",
+    "reason": "manifest-default",
+    "selected": "acp"
+  }
+}

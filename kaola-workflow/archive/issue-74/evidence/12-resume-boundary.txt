@@ -1,0 +1,3 @@
+fake-zcode-app-server is not a production ZCode backend.
+This suite does not claim start -> first prompt -> native_session_identity -> A/B live attach -> exact stop -> start --resume sess_*.
+That path needs a real ZCode app-server. After exact stop, a missing or unattested native sess_* remains cannot-resume.

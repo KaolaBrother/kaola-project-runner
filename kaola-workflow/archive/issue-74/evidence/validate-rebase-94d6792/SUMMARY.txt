@@ -1,0 +1,28 @@
+Issue #74 rebase onto origin/main after #83 sunk.
+
+candidate: 337f805add1a773ea14a91078aed9be8c48dd3de
+branch: workflow/issue-74
+origin/main: 94d6792c297e725e3f46d7e820f01a48728f2fa8
+#83: remotely CLOSED 2026-09-18T17:39:13Z, sink archive on origin/main
+prior freeze 942c4c8b6332533e106835b603f6ab823ebb78f5 superseded (content ACCEPT; this is the rebased SHA)
+
+Preserved:
+- Kaola-Delegator + first-beat check (942c4c8)
+- #83 validate lane: run every suite, FAILED per failure, SKIPPED missing logs
+- test-issue-74-kaola-delegator.py in python_suites_all + lane b
+- test-issue-83-lane-failure-visibility.py in python_suites_all + lane a
+- CHANGELOG both #74 and #83 bullets
+- adapter byte-identical to origin/main
+
+Validation (this worktree):
+- render-skills.py --check PASS
+- kaola-grok-bot-verify PASS (2536 B)
+- git diff --check PASS
+- ./scripts/validate.sh exit 0
+- issue-74 124 assertions inside that run
+- issue-83 3/3 inside that run
+- no FAILED:/SKIPPED: lines
+
+Not done:
+- live A→B not re-run (guidance-only since 942c4c8)
+- finalize/archive/sink/merge/push withheld until outer confirms this SHA

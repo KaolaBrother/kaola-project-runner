@@ -1,0 +1,21 @@
+{
+  "id": 2,
+  "result": {
+    "sessions": [
+      {
+        "createdAt": 1789736159926,
+        "mode": "yolo",
+        "sessionId": "sess_a6e34e32-3b38-4e2b-a398-cf47832c1387",
+        "sessionKind": "interactive",
+        "status": "idle",
+        "title": "",
+        "traceId": "1b7872ff-4f1a-438c-8ef9-9e09ca66e447",
+        "updatedAt": 1789736159926,
+        "workspace": {
+          "workspaceKey": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab",
+          "workspacePath": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+        }
+      }
+    ]
+  }
+}

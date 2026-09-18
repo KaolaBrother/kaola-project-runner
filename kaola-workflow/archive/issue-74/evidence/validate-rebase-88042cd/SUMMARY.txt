@@ -1,0 +1,26 @@
+Issue #74 on released main after #83 CLOSED.
+
+candidate: 337f805add1a773ea14a91078aed9be8c48dd3de
+branch: workflow/issue-74
+origin/main: 88042cd36d506c8fac9a621906cd4be89336bf89
+#83 sink: 94d6792c297e725e3f46d7e820f01a48728f2fa8 (ancestor of origin/main)
+HEAD~13 == origin/main (0 behind / 13 ahead)
+#83 archive follow-on 88042cd is already on main; this run did not edit kaola-workflow/archive/issue-83
+
+Preserved:
+- Kaola-Delegator first-beat check (content ACCEPT 942c4c8)
+- test-issue-74-kaola-delegator.py (lane B)
+- test-issue-83-lane-failure-visibility.py (lane A)
+- #83 run_suite_lane continues after FAILED; SKIPPED for missing logs
+- CHANGELOG both #74 and #83 bullets
+- adapter identical to origin/main
+
+This-round validation (worktree):
+- render-skills.py --check PASS
+- kaola-grok-bot-verify PASS (2536 B)
+- git diff --check PASS
+- ./scripts/validate.sh exit 0
+- issue-74 124 assertions
+- no FAILED:/SKIPPED: lines
+
+Not done: live A→B not re-run; finalize/archive/sink/merge/push withheld until outer confirms this SHA.

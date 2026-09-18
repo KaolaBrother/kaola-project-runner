@@ -1,0 +1,24 @@
+Issue #74 outer-review fixes after 337f805 (not ACCEPT).
+
+candidate: 4c76a1533a24bcceccdd5484303d98c519b7f8bc
+branch: workflow/issue-74
+origin/main: 513e8e1f82172fce3145c893c6db3072759ea457 (#82 sink; includes #69)
+left-right: 0 14
+prior freeze 337f805 superseded (not ACCEPT)
+
+Fixes:
+1. Host stop uses receipt holder_instance_id via --expected-holder-instance-id; mismatch refused; live attach compares holder not name-only.
+2. Fake ACP test renamed test_fake_acp_host_worker_event_and_live_status; cites live-ab-44a17b9; not called outer A→B.
+3. New Host start only after authorization is on disk; missing-auth non-start is a dedicated documentation-only test (measured=false, coverage=untested).
+4. Codex/generic: already-installed Delegator stays in the plan on filtered reinstall/uninstall.
+
+Preserved: live A→B evidence live-ab-44a17b9/; #83 SKIPPED/run-all lanes and both suites.
+Budgets: Skill 3824/4096, handoff 8183/8192; no raise.
+
+Validation (same tree as this commit):
+- render --check PASS
+- grok-bot-verify PASS
+- git diff --check PASS
+- ./scripts/validate.sh exit 0 (issue-74 140 assertions; installer runtimes PASS)
+
+Not done: finalize/archive/sink/merge/push. Waiting outer ACCEPT of this SHA.

@@ -1,0 +1,10 @@
+{
+  "acp_session_id": "zcode-1",
+  "canonical_repo": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-layer-_juriwhc/repo",
+  "holder_instance_id": "43d0c984761f4f88f72c2123179d74a9",
+  "native_session_id": "sess_fake1",
+  "platform": "zcode",
+  "schema": "kaola-delegator-host/1",
+  "session": "zcode-KPR-orchestrator-92cce2",
+  "session_meta": null
+}

@@ -1,0 +1,22 @@
+docs freeze (README four-tier + AGENTS principles + kaola-delegator rename):
+380ca2b25fef708bf038dc8fb010c146718dcf95
+
+follow-up (handoff recover / busy send / A→B pointer / Host naming / installer skip):
+f78ddf31e3730f1ffa91d370896e70482b43a4b3
+
+follow-up (provisional pointer + old-Host adoption; outer review of f78ddf3):
+6e5c33380c29ddab0e0859a8898ae7043947936b
+
+current candidate (skip-close A/B: process-exit also unresumable; live chain still not ACCEPT):
+d316c5093d54c3c54a5cc0ca393cc2c9db648bab
+
+parent of freeze: cfe5802732c59f093499354928614a5fd2388819
+branch: workflow/issue-74
+render-skills.py --check: PASS (kaola-delegator 2732 B, handoff 5565 B, bridge 2405 B)
+targeted: test-issue-74-kaola-delegator (67 assertions), test-issue-72, test-zcode-acp-contract,
+          test-generated-skills, test-progressive-disclosure, test-issue-49 PASS
+validate.sh: PASS (exit 0 on fdfa3cf)
+live Grok Bot UAT: not executed
+live ZCode A→B: B live-attached from project pointer; first prompt refused Select a model;
+exact stop spent native sess_* (Session not found on --resume). Fake is not a pass.
+finalize/sink: not done

@@ -1,0 +1,11 @@
+head=44a17b97e5d9fee90352efd00d74b72832f1e5c9
+scratch=/tmp/kpr-i74-ab-KNdEO4/repo
+host=zcode-I74AB-orchestrator-main
+adapter_sha256=cb029a22a2337e5ff54898e4a315d372ee3f8939d72f0ebbbd3f23210bd63919
+origin_main_adapter_sha256=cb029a22a2337e5ff54898e4a315d372ee3f8939d72f0ebbbd3f23210bd63919
+adapter_matches_main=yes
+zcode_entry=/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs
+zcode_node=/opt/homebrew/bin/node
+zcode_app=3.12.3
+no_global_install=true
+started_utc=2026-09-18T17:17:02Z

@@ -1,0 +1,3 @@
+fake-zcode-app-server is not a production ZCode backend.
+This suite proves live attach via Runner status on the original Host and that a second Host name is not started while it lives.
+It does not claim real ZCode first-prompt model reply or stop-then-start --resume sess_* restoring the same native session. Measured live ZCode 3.12.3: after exact stop, sess_* is Session not found; Skill then allows a new standard-named Host as a new ACP session, which this fake must not impersonate.

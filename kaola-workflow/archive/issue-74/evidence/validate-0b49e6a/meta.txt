@@ -1,0 +1,7 @@
+cwd=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74
+HEAD=0b49e6a8d70d6360bfcd659e33c819d1ffd69728
+branch=workflow/issue-74
+porcelain=0
+start_utc=2026-09-18T15:02:04Z
+end_utc=2026-09-18T15:04:34Z
+exit=1

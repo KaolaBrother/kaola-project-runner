@@ -1,0 +1,14 @@
+Load /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74/skills/kaola-project-runner/SKILL.md (Project Runner) and follow it.
+You are the ZCode Host for this run.
+platform=zcode session=zcode-ISO74-orchestrator-ab repo=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab
+goal=ISSUE74-LIVE-AB: remember token KPR74-ORANGE-LANTERN and prove A-to-B continuation on this isolated git repo only
+done=none
+remaining=reply with a short startup receipt that quotes KPR74-ORANGE-LANTERN verbatim, then end the turn; do not dispatch workers; do not start any other session; do not edit files outside /Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab; do not stop yourself
+authorized_platforms=
+quota_concurrency=0
+quota_account=GLM-coding-plan
+quota_token=unspecified
+priority=P1
+delivery_stop_boundary=isolation Host only; never stop or address zcode-kaola-vrpcadcore-worker, zcode-host-local-1, or any non-ISO74 session
+project_context=canonical root /Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab; this is a throwaway isolation project for Kaola-Delegator A-B continuation; Project Runner checkout is /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74 (read-only)
+Finish planning internally. Missing authorization stays missing: do not expand it. Do not wait for the outer Agent to bind workers, paths, scheduling, or heartbeat.

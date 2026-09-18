@@ -1,0 +1,106 @@
+{
+  "id": 1,
+  "result": {
+    "messages": [],
+    "projection": {
+      "activeToolCalls": [],
+      "backgroundJobs": [],
+      "contextUsed": 0,
+      "contextWindow": 200000,
+      "mode": "build",
+      "pendingPermissions": [],
+      "sessionId": "unknown",
+      "status": "idle",
+      "target": null,
+      "totalTokenCount": 0,
+      "turnCount": 0
+    },
+    "protocol": {
+      "name": "ZCode Protocol",
+      "version": 1
+    },
+    "runtime": {
+      "eventSeq": 0,
+      "goalVerificationTimeline": [],
+      "goalVerifications": [],
+      "pendingRequestIds": [],
+      "stateRevision": 0
+    },
+    "session": {
+      "createdAt": 1789735063096,
+      "mode": "build",
+      "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+      "sessionKind": "interactive",
+      "status": "idle",
+      "target": null,
+      "title": "",
+      "traceId": "23724030-8a98-46c9-82bb-a22898f83548",
+      "updatedAt": 1789735063096,
+      "workspace": {
+        "workspaceKey": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab",
+        "workspacePath": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+      }
+    },
+    "settings": {
+      "mode": {
+        "current": "yolo"
+      },
+      "model": {
+        "available": []
+      },
+      "permission": {
+        "mode": "yolo"
+      },
+      "thoughtLevel": {
+        "available": [],
+        "enabled": false
+      }
+    },
+    "slashCommands": [
+      {
+        "description": "Show or set the current session goal.",
+        "inputHint": "/goal [pause|resume|clear|replace <objective>|<objective>]",
+        "name": "goal",
+        "source": "builtin"
+      },
+      {
+        "description": "Compact the current conversation with optional instructions.",
+        "inputHint": "/compact [instructions]",
+        "name": "compact",
+        "source": "builtin"
+      },
+      {
+        "description": "Create or update workspace AGENTS.md instructions.",
+        "inputHint": "/init [notes]",
+        "name": "init",
+        "source": "builtin"
+      },
+      {
+        "description": "Switch to Plan mode and optionally send a task.",
+        "inputHint": "/plan [task]",
+        "name": "plan",
+        "source": "builtin"
+      },
+      {
+        "description": "Kaola-Workflow Finalization. Final validation, documentation docking, closure, archive, commit, and sink.",
+        "inputHint": "/kaola-workflow-finalize <project name>",
+        "name": "kaola-workflow-finalize",
+        "source": "custom"
+      },
+      {
+        "description": "Initialize a project for Kaola-Workflow with CLAUDE.md guidance, docs structure, and Git/GitHub issue conventions.",
+        "inputHint": "/workflow-init (optional project context)",
+        "name": "workflow-init",
+        "source": "custom"
+      },
+      {
+        "description": "Workflow Next. Claims the work, writes the run's mission list, and runs it. Resumable from that one file.",
+        "inputHint": "/workflow-next (optional project name, issue number, or task description)",
+        "name": "workflow-next",
+        "source": "custom"
+      }
+    ],
+    "todoGroups": [],
+    "todos": []
+  }
+}

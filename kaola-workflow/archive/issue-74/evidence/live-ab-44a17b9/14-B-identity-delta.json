@@ -1,0 +1,12 @@
+{
+  "same_session": true,
+  "same_acp": true,
+  "same_holder": true,
+  "b_alive": true,
+  "b_state": "ready",
+  "b_error": null,
+  "a_holder": "7efadb013f774648bb5e4c281cc613ea",
+  "b_holder": "7efadb013f774648bb5e4c281cc613ea",
+  "a_acp": "zcode-1",
+  "b_acp": "zcode-1"
+}

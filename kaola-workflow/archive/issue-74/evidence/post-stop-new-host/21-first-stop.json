@@ -1,0 +1,24 @@
+{
+  "agent_exit_code": null,
+  "agent_exit_signal": 15,
+  "git": {
+    "branch": null,
+    "dirty": true
+  },
+  "mutation_status": "not_started",
+  "platform": "zcode",
+  "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-newhost-dw0ourvp/repo",
+  "residual_pids": [],
+  "schema_version": 3,
+  "session": "zcode-KPR-orchestrator-30388a",
+  "stopped": true,
+  "swept_child_pgids": [],
+  "transport": {
+    "alternatives": [
+      "pty"
+    ],
+    "default": "acp",
+    "reason": "manifest-default",
+    "selected": "acp"
+  }
+}

@@ -1,0 +1,13 @@
+iso=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab
+session=zcode-ISO74-orchestrator-ab
+worktree=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74
+do_not_touch_sessions:
+  zcode-kaola-vrpcadcore-worker
+  zcode-host-local-1
+  claude-code-kaola-vrpcadcore*
+  grok-kaola-vrpcadcore*
+  kimi-cli-kaola-vrpcadcore
+  claude-code-kaola-issue70-0918
+  claude-code-KPR-i72-naming
+entry=/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs
+node=/opt/homebrew/bin/node

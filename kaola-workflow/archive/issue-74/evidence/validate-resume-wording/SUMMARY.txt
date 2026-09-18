@@ -1,0 +1,22 @@
+Issue #74 targeted corrections after 4c76a15 (not ACCEPT).
+
+candidate: 536c6bd19c309bcf51d0224a1206926fd7b18639
+branch: workflow/issue-74
+origin/main: 513e8e1f82172fce3145c893c6db3072759ea457
+left-right: 0 15
+prior freeze 4c76a1533a24bcceccdd5484303d98c519b7f8bc superseded (not ACCEPT)
+
+Corrections:
+1. Handoff: after exact stop, try attested sess_* --resume first. Native resume is backend-dependent; do not assume session/close always spends the id. New Host only after proven failure and step-4 authorization. Issue #84 is not named as merged (not mentioned in the Skill).
+2. ORIGINAL_TASK: quota_token=1-short-task and delivery_stop_boundary=test-receipts-only; stop this Host at end. quota_token=unspecified is gone.
+3. Afterward: "The outer Agent is not automatically awakened by inner Host activity."
+
+Preserved: fake test labeled fake; missing-auth labeled untested; live-ab-44a17b9; #83 suites; no #81/#84 adapter edits.
+
+Validation (same tree as this commit):
+- render --check PASS
+- grok-bot-verify PASS
+- git diff --check PASS
+- ./scripts/validate.sh exit 0 (issue-74 148 assertions)
+
+Not done: finalize/archive/sink/merge/push/close. Waiting outer ACCEPT.

@@ -1,0 +1,18 @@
+freeze: 0b49e6a8d70d6360bfcd659e33c819d1ffd69728
+worktree: .kw/worktrees/issue-74
+git: clean (porcelain=0)
+render-skills.py --check: PASS
+adapter vs origin/main: empty (scripts/kaola-zcode-acp.py and generated copy)
+#79 adapter: not touched (issue-79 worktree still has its own dirty scripts/kaola-zcode-acp.py)
+
+validate.sh run 1: exit=1  2026-09-18T15:02:04Z .. 15:04:34Z  log=validate.sh.log
+validate.sh run 2: exit=1  2026-09-18T15:08:58Z .. 15:11:24Z  log=validate.sh.rerun.log
+failed item both runs: test-issue-49-grok-bot-host.py
+original traceback: test-issue-49-grok-bot-host.standalone.log
+same method on origin/main: issue-49-single-main.log also OSError errno 66
+verdict: not a #74-introduced regression; issue-49 test body assertions ran; error is TemporaryDirectory __exit__ rmtree of repo/.git on Python 3.14
+no product fix applied
+
+issue-74 suite standalone: 91 assertions, EXIT:0  log=test-issue-74-kaola-delegator.standalone.log
+missing-auth non-start: documentation contract only; no live Agent execution evidence
+no finalize

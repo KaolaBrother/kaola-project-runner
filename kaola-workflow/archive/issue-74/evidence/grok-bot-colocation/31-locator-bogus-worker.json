@@ -1,0 +1,46 @@
+{
+  "host": {
+    "fingerprint": "3fbd60d4ff11",
+    "kernel": "Darwin"
+  },
+  "project": {
+    "on_this_host": true,
+    "origin": null,
+    "path": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-locate-4t76hnb2/repo",
+    "toplevel": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-locate-4t76hnb2/repo"
+  },
+  "reasons": [
+    "dirty",
+    "worker-unknown",
+    "registration-root-mismatch",
+    "registration-stale"
+  ],
+  "registration": {
+    "accepted_revision": "bb6d74022bd187e86307a00b93ea8c869caf078f",
+    "fingerprint_match": true,
+    "path": "/Users/ylminiserver/.local/bin/.kaola-project-runner-locate.json",
+    "present": true,
+    "revision_current": false,
+    "root_match": false,
+    "target": "local",
+    "target_match": true
+  },
+  "result": "refused",
+  "root": {
+    "clean": false,
+    "expected_origin": "github.com/KaolaBrother/kaola-project-runner",
+    "head": "0b49e6a8d70d6360bfcd659e33c819d1ffd69728",
+    "origin": "github.com/KaolaBrother/kaola-project-runner",
+    "path": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74",
+    "revision_match": null
+  },
+  "schema": "kaola-project-runner-locator/1",
+  "session": {
+    "name": "zcode-KPR-orchestrator-main",
+    "present": false
+  },
+  "target": "local",
+  "worker": {
+    "id": "bogus"
+  }
+}

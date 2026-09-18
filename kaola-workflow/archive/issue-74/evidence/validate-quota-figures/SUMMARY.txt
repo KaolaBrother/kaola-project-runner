@@ -1,0 +1,21 @@
+Issue #74 fixture quota figures after 536c6bd (not ACCEPT).
+
+candidate: eb9585208d40da0c9f21add3596278833b0ba3bb
+branch: workflow/issue-74
+origin/main: 513e8e1f82172fce3145c893c6db3072759ea457
+left-right: 0 16
+prior freeze 536c6bd19c309bcf51d0224a1206926fd7b18639 superseded (not ACCEPT)
+
+ORIGINAL_TASK now:
+quota_concurrency=1; quota_account=1 job; quota_token=10000 tokens
+plus delivery_stop_boundary. Not GLM-coding-plan (account name) and not
+1-short-task (task count). No production policy/schema change.
+
+Validation (same tree as this commit):
+- render --check PASS
+- grok-bot-verify PASS
+- git diff --check PASS
+- focused issue-74 151 assertions PASS
+- ./scripts/validate.sh exit 0
+
+Not done: finalize/sink/close/release. Waiting outer ACCEPT.

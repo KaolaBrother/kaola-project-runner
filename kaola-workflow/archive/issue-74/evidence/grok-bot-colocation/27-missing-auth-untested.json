@@ -1,0 +1,7 @@
+{
+  "contract": "missing, conflicting, or expired key authorization: ask the user; do not start; do not open a blank Host",
+  "issue_comment": "5730908734",
+  "measured": false,
+  "not_claimed": "this suite does not prove an outer Agent withheld start",
+  "reason": "no harness executes an outer Agent's Skill judgment; a handwritten skip-start script would impersonate that Agent"
+}

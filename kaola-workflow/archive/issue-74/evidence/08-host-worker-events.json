@@ -1,0 +1,18 @@
+[
+  {
+    "cursor": 18,
+    "event": {
+      "event_cursor": 17,
+      "event_id": "zcode/zcode-KPR-i74-afc58a/idle/17",
+      "kind": "idle",
+      "platform": "zcode",
+      "reason": "outcome=turn_completed stop_reason=end_turn",
+      "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-layer-_juriwhc/repo",
+      "schema": "kaola-worker-event/1",
+      "session": "zcode-KPR-i74-afc58a",
+      "staged_at": 1789730578.915
+    },
+    "kind": "worker_event",
+    "ts": 1789730578.915
+  }
+]

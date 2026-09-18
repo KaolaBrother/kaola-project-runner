@@ -1,0 +1,336 @@
+[
+  {
+    "method": "startup/storageState",
+    "params": {
+      "attemptId": "2aef86d5-ec27-4748-931a-d8c49d0800d0",
+      "databaseId": "50ed822af92d8beae6db3e229f6ef2f41e90818f1df5661b08793801ff2f2f92",
+      "databaseKind": "session",
+      "elapsedMs": 0,
+      "phase": "checking",
+      "schemaVersion": 1,
+      "sequence": 1
+    }
+  },
+  {
+    "method": "startup/storageState",
+    "params": {
+      "attemptId": "2aef86d5-ec27-4748-931a-d8c49d0800d0",
+      "databaseId": "50ed822af92d8beae6db3e229f6ef2f41e90818f1df5661b08793801ff2f2f92",
+      "databaseKind": "session",
+      "elapsedMs": 0,
+      "phase": "checking",
+      "schemaVersion": 1,
+      "sequence": 2
+    }
+  },
+  {
+    "method": "startup/storageState",
+    "params": {
+      "attemptId": "2aef86d5-ec27-4748-931a-d8c49d0800d0",
+      "databaseId": "50ed822af92d8beae6db3e229f6ef2f41e90818f1df5661b08793801ff2f2f92",
+      "databaseKind": "session",
+      "elapsedMs": 1,
+      "migration": {
+        "committedCount": 0,
+        "executedCount": 0,
+        "kind": "none"
+      },
+      "phase": "checking",
+      "schemaVersion": 1,
+      "sequence": 3
+    }
+  },
+  {
+    "method": "startup/storageState",
+    "params": {
+      "attemptId": "2aef86d5-ec27-4748-931a-d8c49d0800d0",
+      "databaseId": "50ed822af92d8beae6db3e229f6ef2f41e90818f1df5661b08793801ff2f2f92",
+      "databaseKind": "session",
+      "elapsedMs": 2,
+      "migration": {
+        "committedCount": 0,
+        "executedCount": 0,
+        "kind": "none",
+        "lastAppliedMigrationId": "0022_backfilled_session_reasoning"
+      },
+      "phase": "committing",
+      "schemaVersion": 1,
+      "sequence": 4
+    }
+  },
+  {
+    "method": "startup/storageState",
+    "params": {
+      "attemptId": "2aef86d5-ec27-4748-931a-d8c49d0800d0",
+      "databaseId": "50ed822af92d8beae6db3e229f6ef2f41e90818f1df5661b08793801ff2f2f92",
+      "databaseKind": "session",
+      "elapsedMs": 2,
+      "migration": {
+        "committedCount": 0,
+        "executedCount": 0,
+        "kind": "none",
+        "lastAppliedMigrationId": "0022_backfilled_session_reasoning"
+      },
+      "phase": "ready",
+      "schemaVersion": 1,
+      "sequence": 5
+    }
+  },
+  {
+    "id": "server-1",
+    "method": "session/requestRuntimePreferences",
+    "params": {
+      "scope": "runtime-materialization",
+      "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703"
+    }
+  },
+  {
+    "id": 1,
+    "result": {
+      "messages": [],
+      "projection": {
+        "activeToolCalls": [],
+        "backgroundJobs": [],
+        "contextUsed": 0,
+        "contextWindow": 200000,
+        "mode": "build",
+        "pendingPermissions": [],
+        "sessionId": "unknown",
+        "status": "idle",
+        "target": null,
+        "totalTokenCount": 0,
+        "turnCount": 0
+      },
+      "protocol": {
+        "name": "ZCode Protocol",
+        "version": 1
+      },
+      "runtime": {
+        "eventSeq": 0,
+        "goalVerificationTimeline": [],
+        "goalVerifications": [],
+        "pendingRequestIds": [],
+        "stateRevision": 0
+      },
+      "session": {
+        "createdAt": 1789735063096,
+        "mode": "build",
+        "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+        "sessionKind": "interactive",
+        "status": "idle",
+        "target": null,
+        "title": "",
+        "traceId": "23724030-8a98-46c9-82bb-a22898f83548",
+        "updatedAt": 1789735063096,
+        "workspace": {
+          "workspaceKey": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab",
+          "workspacePath": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+        }
+      },
+      "settings": {
+        "mode": {
+          "current": "yolo"
+        },
+        "model": {
+          "available": []
+        },
+        "permission": {
+          "mode": "yolo"
+        },
+        "thoughtLevel": {
+          "available": [],
+          "enabled": false
+        }
+      },
+      "slashCommands": [
+        {
+          "description": "Show or set the current session goal.",
+          "inputHint": "/goal [pause|resume|clear|replace <objective>|<objective>]",
+          "name": "goal",
+          "source": "builtin"
+        },
+        {
+          "description": "Compact the current conversation with optional instructions.",
+          "inputHint": "/compact [instructions]",
+          "name": "compact",
+          "source": "builtin"
+        },
+        {
+          "description": "Create or update workspace AGENTS.md instructions.",
+          "inputHint": "/init [notes]",
+          "name": "init",
+          "source": "builtin"
+        },
+        {
+          "description": "Switch to Plan mode and optionally send a task.",
+          "inputHint": "/plan [task]",
+          "name": "plan",
+          "source": "builtin"
+        },
+        {
+          "description": "Kaola-Workflow Finalization. Final validation, documentation docking, closure, archive, commit, and sink.",
+          "inputHint": "/kaola-workflow-finalize <project name>",
+          "name": "kaola-workflow-finalize",
+          "source": "custom"
+        },
+        {
+          "description": "Initialize a project for Kaola-Workflow with CLAUDE.md guidance, docs structure, and Git/GitHub issue conventions.",
+          "inputHint": "/workflow-init (optional project context)",
+          "name": "workflow-init",
+          "source": "custom"
+        },
+        {
+          "description": "Workflow Next. Claims the work, writes the run's mission list, and runs it. Resumable from that one file.",
+          "inputHint": "/workflow-next (optional project name, issue number, or task description)",
+          "name": "workflow-next",
+          "source": "custom"
+        }
+      ],
+      "todoGroups": [],
+      "todos": []
+    }
+  },
+  {
+    "id": 2,
+    "result": {
+      "sessions": [
+        {
+          "createdAt": 1789735063191,
+          "mode": "yolo",
+          "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+          "sessionKind": "interactive",
+          "status": "idle",
+          "title": "",
+          "traceId": "23724030-8a98-46c9-82bb-a22898f83548",
+          "updatedAt": 1789735063191,
+          "workspace": {
+            "workspaceKey": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab",
+            "workspacePath": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "server-2",
+    "method": "session/requestRuntimePreferences",
+    "params": {
+      "scope": "user-execution",
+      "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703"
+    }
+  },
+  {
+    "method": "state.updated",
+    "params": {
+      "patch": {
+        "status": "running"
+      },
+      "reason": "prompt_started",
+      "revision": 1,
+      "scope": "session",
+      "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+      "type": "state.updated",
+      "workspace": {
+        "workspaceKey": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab",
+        "workspacePath": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+      }
+    }
+  },
+  {
+    "id": 3,
+    "result": {
+      "accepted": true,
+      "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+      "stateRevision": 1
+    }
+  },
+  {
+    "method": "computer-use/operation-event",
+    "params": {
+      "eventId": "8d51fb56-9f9a-4ef0-b198-214d500aa6fc",
+      "kind": "turn-failed",
+      "sequenceNumber": 1,
+      "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+      "timestamp": 1789735063210,
+      "turnId": "turn_f612fe9e-644e-4aa1-9add-4c032bc05c15"
+    }
+  },
+  {
+    "method": "v4/telemetry/event",
+    "params": {
+      "errorCode": "CONFIGURATION_ERROR",
+      "errorMessage": "Select a model before continuing",
+      "eventId": "8d51fb56-9f9a-4ef0-b198-214d500aa6fc",
+      "eventSeq": 1,
+      "kind": "turn.terminal",
+      "occurredAt": 1789735063210,
+      "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+      "status": "failed",
+      "turnId": "turn_f612fe9e-644e-4aa1-9add-4c032bc05c15",
+      "turnPhase": "model_creation",
+      "version": 1
+    }
+  },
+  {
+    "id": 4,
+    "result": {
+      "sessions": [
+        {
+          "createdAt": 1789735063261,
+          "mode": "yolo",
+          "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+          "sessionKind": "interactive",
+          "status": "idle",
+          "title": "",
+          "traceId": "23724030-8a98-46c9-82bb-a22898f83548",
+          "updatedAt": 1789735063261,
+          "workspace": {
+            "workspaceKey": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab",
+            "workspacePath": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": 5,
+    "result": {
+      "closed": true
+    }
+  },
+  {
+    "id": 6,
+    "result": {
+      "sessions": []
+    }
+  },
+  {
+    "method": "state.updated",
+    "params": {
+      "patch": {
+        "mode": {
+          "current": "yolo"
+        },
+        "model": {
+          "available": []
+        },
+        "permission": {
+          "mode": "yolo"
+        },
+        "thoughtLevel": {
+          "available": [],
+          "enabled": false
+        }
+      },
+      "reason": "prompt_failed",
+      "revision": 2,
+      "scope": "session",
+      "sessionId": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+      "type": "state.updated",
+      "workspace": {
+        "workspaceKey": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab",
+        "workspacePath": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+      }
+    }
+  }
+]

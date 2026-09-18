@@ -1,0 +1,1 @@
+stopped Host; fake backend is not production --resume evidence; post-stop new Host identity is measured in test_new_standard_host_after_confirmed_stop

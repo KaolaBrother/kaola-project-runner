@@ -1,0 +1,8 @@
+head=337f805add1a773ea14a91078aed9be8c48dd3de
+origin_main=88042cd36d506c8fac9a621906cd4be89336bf89
+head_tilde13=88042cd36d506c8fac9a621906cd4be89336bf89
+left_right=0	13
+sink_94d6792=94d6792c297e725e3f46d7e820f01a48728f2fa8
+date=2026-09-18T17:51:18Z
+worktree=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74
+did_not_edit_issue83_archive=true

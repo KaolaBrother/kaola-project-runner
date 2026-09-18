@@ -1,0 +1,225 @@
+{
+  "git": {
+    "branch": null,
+    "dirty": true
+  },
+  "heartbeat_host": null,
+  "heartbeat_host_known": true,
+  "mutation_performed": false,
+  "mutation_status": null,
+  "outcome": "stopped",
+  "platform": "zcode",
+  "record": {
+    "acp_session_id": "zcode-1",
+    "agent_alive": false,
+    "agent_child_groups": {
+      "86157": {
+        "86157": "Fri Sep 18 23:47:09 2026"
+      }
+    },
+    "agent_child_pgids": [
+      86157
+    ],
+    "agent_info": {
+      "_meta": {
+        "zcode": {
+          "baseURL": "https://open.bigmodel.cn/api/anthropic",
+          "credential": "desktop-registry-inline-memory",
+          "defaultModelId": "GLM-5.3",
+          "kind": "anthropic",
+          "modelIds": [
+            "GLM-5.3",
+            "GLM-5.3-Flash"
+          ],
+          "plan": "coding-plan",
+          "planCacheStatus": "available",
+          "providerId": "builtin:bigmodel-coding-plan",
+          "providerLabel": "BigModel - Coding Plan",
+          "rejectedProviders": {
+            "builtin:bigmodel": "not a coding-plan provider (refused: no pay-as-you-go billing)",
+            "builtin:bigmodel-start-plan": "start-plan (headless captcha flow, refused)",
+            "builtin:zai-coding-plan": "not enabled (oauth_provider_inactive)"
+          }
+        }
+      },
+      "name": "kaola-zcode-acp",
+      "version": "0.3.3"
+    },
+    "agent_pgid": 86154,
+    "agent_pid": 86154,
+    "capabilities": {
+      "loadSession": true,
+      "promptCapabilities": {
+        "embeddedContext": true
+      },
+      "sessionCapabilities": {
+        "close": true,
+        "list": true,
+        "resume": true
+      }
+    },
+    "created_at": 1789746429.629,
+    "event_cursor": 11,
+    "fatal_error": null,
+    "heartbeat_host": null,
+    "holder_instance_id": "0891cd384a6c564c353187b5ad38f308",
+    "holder_pid": 86153,
+    "initial_config_options": [
+      {
+        "currentValue": "yolo",
+        "id": "mode",
+        "name": "Mode",
+        "options": [
+          {
+            "name": "Plan",
+            "value": "plan"
+          },
+          {
+            "name": "Build",
+            "value": "build"
+          },
+          {
+            "name": "Edit",
+            "value": "edit"
+          },
+          {
+            "name": "Yolo",
+            "value": "yolo"
+          },
+          {
+            "name": "Auto",
+            "value": "auto"
+          }
+        ],
+        "type": "select"
+      },
+      {
+        "id": "model",
+        "name": "Model",
+        "options": [
+          {
+            "name": "GLM-5.3 (BigModel - Coding Plan)",
+            "value": "builtin:bigmodel-coding-plan\\GLM-5.3"
+          },
+          {
+            "name": "GLM-5.3-Flash (BigModel - Coding Plan)",
+            "value": "builtin:bigmodel-coding-plan\\GLM-5.3-Flash"
+          }
+        ],
+        "type": "select"
+      },
+      {
+        "id": "thoughtLevel",
+        "name": "Thought level",
+        "options": [
+          {
+            "name": "Low",
+            "value": "low"
+          },
+          {
+            "name": "High",
+            "value": "high"
+          },
+          {
+            "name": "Max",
+            "value": "max"
+          }
+        ],
+        "type": "select"
+      }
+    ],
+    "last_prompt": {},
+    "malformed_stdout_lines": 0,
+    "pending_permissions": [],
+    "platform": "zcode",
+    "protocol_version": 1,
+    "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-newhost-hbnbrius/repo",
+    "session": "zcode-KPR-orchestrator-2443a7",
+    "session_meta": {
+      "configOptions": [
+        {
+          "currentValue": "yolo",
+          "id": "mode",
+          "name": "Mode",
+          "options": [
+            {
+              "name": "Plan",
+              "value": "plan"
+            },
+            {
+              "name": "Build",
+              "value": "build"
+            },
+            {
+              "name": "Edit",
+              "value": "edit"
+            },
+            {
+              "name": "Yolo",
+              "value": "yolo"
+            },
+            {
+              "name": "Auto",
+              "value": "auto"
+            }
+          ],
+          "type": "select"
+        },
+        {
+          "currentValue": "builtin:bigmodel-coding-plan\\GLM-5.3",
+          "id": "model",
+          "name": "Model",
+          "options": [
+            {
+              "name": "GLM-5.3 (BigModel - Coding Plan)",
+              "value": "builtin:bigmodel-coding-plan\\GLM-5.3"
+            },
+            {
+              "name": "GLM-5.3-Flash (BigModel - Coding Plan)",
+              "value": "builtin:bigmodel-coding-plan\\GLM-5.3-Flash"
+            }
+          ],
+          "type": "select"
+        },
+        {
+          "currentValue": "high",
+          "id": "thoughtLevel",
+          "name": "Thought level",
+          "options": [
+            {
+              "name": "Low",
+              "value": "low"
+            },
+            {
+              "name": "High",
+              "value": "high"
+            },
+            {
+              "name": "Max",
+              "value": "max"
+            }
+          ],
+          "type": "select"
+        }
+      ],
+      "sessionId": "zcode-1"
+    },
+    "state": "stopped",
+    "transport": "acp",
+    "updated_at": 1789746429.974
+  },
+  "repo": "/private/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-newhost-hbnbrius/repo",
+  "residual_pids": [],
+  "schema_version": 3,
+  "session": "zcode-KPR-orchestrator-2443a7",
+  "state": "stopped",
+  "stopped": true,
+  "transport": {
+    "alternatives": [
+      "pty"
+    ],
+    "default": "acp",
+    "reason": "manifest-default",
+    "selected": "acp"
+  }
+}

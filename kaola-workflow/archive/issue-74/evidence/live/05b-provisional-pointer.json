@@ -1,0 +1,10 @@
+{
+  "acp_session_id": "zcode-1",
+  "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab",
+  "holder_instance_id": "bd73cec0cc4082bd0b49269be715afaa",
+  "native_session_id": null,
+  "platform": "zcode",
+  "schema": "kaola-delegator-host/1",
+  "session": "zcode-ISO74-orchestrator-ab",
+  "session_meta": null
+}

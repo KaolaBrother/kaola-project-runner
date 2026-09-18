@@ -1,0 +1,27 @@
+{
+  "leg_a": {
+    "fresh_ids": [],
+    "listed_before_close": true,
+    "listed_fresh_after_close": false,
+    "native": "sess_a6e34e32-3b38-4e2b-a398-cf47832c1387",
+    "resume_error": {
+      "code": -32004,
+      "message": "Session not found: sess_a6e34e32-3b38-4e2b-a398-cf47832c1387"
+    }
+  },
+  "leg_b": {
+    "fresh_ids": [],
+    "listed_before_kill": true,
+    "listed_fresh_after_kill_no_close": false,
+    "native": "sess_946ab28f-9b04-428b-848f-96352d80ce79",
+    "resume_error": {
+      "code": -32004,
+      "message": "Session not found: sess_946ab28f-9b04-428b-848f-96352d80ce79"
+    },
+    "resume_session": null
+  },
+  "leg_b_listed_before_kill": true,
+  "leg_b_native": "sess_946ab28f-9b04-428b-848f-96352d80ce79",
+  "verdict": "process-exit-and-close-both-unresumable",
+  "workspace": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+}

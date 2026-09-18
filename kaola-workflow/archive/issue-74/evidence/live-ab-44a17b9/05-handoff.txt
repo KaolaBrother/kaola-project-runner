@@ -1,0 +1,14 @@
+Load /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74/skills/kaola-project-runner/SKILL.md (Project Runner) and follow it.
+You are the ZCode Host for this run.
+platform=zcode session=zcode-I74AB-orchestrator-main repo=/tmp/kpr-i74-ab-KNdEO4/repo
+goal=ISSUE74-LIVE-AB: prove Kaola-Delegator A-to-B lifecycle on this isolated git repo only. Remember token KAOLA74-AB-TOKEN.
+done=none
+remaining=Dispatch exactly one Devin worker, then end this Host turn. Worker constraints: platform=devin, model=swe-2-max (Devin SWE-2 Max), session name=devin-I74AB-i74-receipt, repo=/tmp/kpr-i74-ab-KNdEO4/repo, Runner=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74/skills/devin-kaola-project-runner/scripts/runtime-tmux.sh. That worker must write /tmp/kpr-i74-ab-KNdEO4/repo/RECEIPT.txt containing only the line KAOLA74-AB-TOKEN and then stop itself. After the worker result is known, quote KAOLA74-AB-TOKEN. Do not edit any path outside /tmp/kpr-i74-ab-KNdEO4/repo. Do not start a second Host. Do not touch any session whose name does not contain I74AB.
+authorized_platforms=devin:1 (Devin SWE-2 Max / swe-2-max only)
+quota_concurrency=1
+quota_account=this-test-only
+quota_token=at most one short task
+priority=highest
+delivery_stop_boundary=test receipts only in this scratch repo; stop all I74AB test sessions at end; never stop or address zcode-host-local-1, zcode-kaola-vrpcadcore-orchestrator, grok-KPR-i74-livefinal, any devin-KPR-*, claude-code-KPR-*, or any non-I74AB session
+project_context=canonical root /tmp/kpr-i74-ab-KNdEO4/repo; throwaway isolation for Issue #74; Project Runner and platform Runners live at /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74 (read-only). Objective: validate lifecycle without production changes. No user project files.
+Finish planning, worker dispatch, notification binding, heartbeat, acceptance, and close-out internally. Do not wait for the outer Agent to bind workers, paths, scheduling, or heartbeat. Missing authorization stays missing: do not expand it.

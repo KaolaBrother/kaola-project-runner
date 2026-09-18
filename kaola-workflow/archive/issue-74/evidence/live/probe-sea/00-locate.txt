@@ -1,0 +1,19 @@
+ZCode_app=/Applications/ZCode.app/Contents/MacOS/ZCode
+zcode_cjs=/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs
+electron_node_version=v24.14.0
+doctor: version 0.16.5; process zcode-cli; node v24.14.0; platform darwin/arm64
+doctor_sea=no (optional)
+doctor_default_artifact=node-bundle
+no_standalone_zcode-cli_macho=true
+desktop_zcode-cli_pid_10078=/Applications/ZCode.app/Contents/Frameworks/ZCode Helper.app/Contents/MacOS/ZCode Helper
+standalone_SEA_app-server=ELECTRON_RUN_AS_NODE=1 ZCode app-server --stdio
+standalone_SEA_error=Cannot find module '.../kaola-i74-iso-ab/app-server' (node treats app-server as a JS file; not a SEA entry)
+equivalent_entry=ELECTRON_RUN_AS_NODE=1 /Applications/ZCode.app/Contents/MacOS/ZCode /Applications/ZCode.app/Contents/Resources/glm/zcode.cjs app-server --stdio
+equivalent_cwd=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab
+equivalent_exit=1
+equivalent_stderr=无法定位 CLI ZCode Built-in Provider Config：/Applications/ZCode.app/Contents/Resources/glm/provider/zcode-builtin.json, /config/provider/zcode-builtin.json
+provider_registry_test=not_reached
+first_model_reply_test=not_reached
+stop_resume_test=not_reached
+leftover_iso_processes=none
+foreign_sessions_untouched=zcode-kaola-vrpcadcore-worker still running; zcode-host-local-1 untouched

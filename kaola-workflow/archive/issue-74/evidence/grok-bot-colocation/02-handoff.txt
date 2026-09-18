@@ -1,0 +1,5 @@
+Load /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-74/skills/kaola-project-runner/SKILL.md (Project Runner) and follow it.
+You are the ZCode Host for this run.
+platform=zcode session=zcode-KPR-orchestrator-4462d2 repo=/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-issue-74-layer-36f7zkuo/repo
+ISSUE74-TASK: land the delegated entry; remaining=handoff isolation; quota_concurrency=1; quota_account=GLM-coding-plan; quota_token=unspecified; priority=P1; authorized_platforms=zcode:1
+Finish planning, worker dispatch, notification binding, heartbeat, acceptance, and Workflow close-out internally.

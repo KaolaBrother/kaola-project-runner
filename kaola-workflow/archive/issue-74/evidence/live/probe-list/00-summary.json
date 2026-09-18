@@ -1,0 +1,20 @@
+{
+  "entry": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab/.zcode-runtime/zcode.cjs",
+  "list_after_close_fresh_process": [],
+  "list_after_close_same_process": [],
+  "list_after_create": [
+    "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703"
+  ],
+  "list_after_prompt": [
+    "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703"
+  ],
+  "native_session_id": "sess_906aa4d5-75c0-445b-9b69-ba3a693e5703",
+  "node": "/opt/homebrew/bin/node",
+  "present_after_close_fresh_process": false,
+  "present_after_close_same_process": false,
+  "present_after_create": true,
+  "present_after_prompt": true,
+  "send_error": null,
+  "verdict": "close-deleted",
+  "workspace": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-i74-iso-ab"
+}

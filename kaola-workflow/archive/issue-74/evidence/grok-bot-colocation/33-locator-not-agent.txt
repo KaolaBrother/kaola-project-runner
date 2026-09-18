@@ -1,0 +1,1 @@
+locator subprocess is not a Grok Bot Agent run; Skill still requires refuse of a refused receipt

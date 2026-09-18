@@ -1,0 +1,17 @@
+{
+  "acp_session_id_string_reused": true,
+  "first": {
+    "acp_session_id": "zcode-1",
+    "holder_instance_id": "3f85fa0f06ce708c249970989d2fca7b",
+    "pid": null,
+    "session": "zcode-KPR-orchestrator-30388a"
+  },
+  "note": "zcode-N is per holder process. Reused acp_session_id string plus a new holder_instance_id is a new ACP session, not the stopped one.",
+  "same_acp_session": false,
+  "second": {
+    "acp_session_id": "zcode-1",
+    "holder_instance_id": "c7c209e669b3ba2e22cdc47a7c15e74c",
+    "pid": null,
+    "session": "zcode-KPR-orchestrator-30388a"
+  }
+}
