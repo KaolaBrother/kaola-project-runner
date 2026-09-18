@@ -42,11 +42,14 @@ and its `references/handoff.md`. This section exists only so a Host that loaded
 this Skill does not copy a second outer procedure. Exceptions reach you; worker
 handling does not. Do not take that over session by session.
 
-   A Host whose own context was compacted mid-run cannot re-read this Skill by
-   itself — ZCode has no compact hook, so recovery rides your next `send`: put
-   the carrier from
-   [zcode-compact-recovery.md](zcode-compact-recovery.md) at its head once,
-   then continue the same frontier.
+   A Host whose own context was compacted mid-run cannot re-read this Skill
+   itself — ZCode has no compact hook. The only carrier verified through a
+   real `trigger:"auto"` is an owner-authorized `AGENTS.md` instruction
+   planted before session start; adopted, recovery is already durable.
+   Otherwise it rides your next `send`: the carrier in
+   [zcode-compact-recovery.md](zcode-compact-recovery.md) once at its head —
+   covers a known compaction, never the automatic same-turn case — then
+   continue the same frontier.
 
 ## C. The Host's own startup and beat
 
