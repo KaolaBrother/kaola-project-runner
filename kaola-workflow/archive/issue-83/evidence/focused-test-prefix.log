@@ -1,0 +1,33 @@
+test_failing_suite_does_not_hide_downstream_suites (__main__.TestLaneFailureVisibility.test_failing_suite_does_not_hide_downstream_suites)
+Both lanes finish every suite; nothing unmeasured, nothing hidden. ... FAIL
+test_green_path_is_unchanged (__main__.TestLaneFailureVisibility.test_green_path_is_unchanged)
+All suites pass: zero exit, every log replayed in order. ... ok
+test_missing_log_is_reported_skipped_not_a_cat_error (__main__.TestLaneFailureVisibility.test_missing_log_is_reported_skipped_not_a_cat_error)
+A suite that left no log is reported SKIPPED; replay continues. ... FAIL
+
+======================================================================
+FAIL: test_failing_suite_does_not_hide_downstream_suites (__main__.TestLaneFailureVisibility.test_failing_suite_does_not_hide_downstream_suites)
+Both lanes finish every suite; nothing unmeasured, nothing hidden.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-83/tests/contract/test-issue-83-lane-failure-visibility.py", line 131, in test_failing_suite_does_not_hide_downstream_suites
+    self.assertNotIn("No such file or directory", output,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "a missing log must never surface as a cat error")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'No such file or directory' unexpectedly found in 'FAILED: s-fb.py\nFAILED: s-fa.py\nSUITE-LOG-s-a1.py\nSUITE-LOG-s-fa.py\ncat: /var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-i83-lane-av98trt1/valtmp/s-a2.py.log: No such file or directory\n' : a missing log must never surface as a cat error
+
+======================================================================
+FAIL: test_missing_log_is_reported_skipped_not_a_cat_error (__main__.TestLaneFailureVisibility.test_missing_log_is_reported_skipped_not_a_cat_error)
+A suite that left no log is reported SKIPPED; replay continues.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-83/tests/contract/test-issue-83-lane-failure-visibility.py", line 151, in test_missing_log_is_reported_skipped_not_a_cat_error
+    self.assertIn("SKIPPED: s-eater.py", output)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'SKIPPED: s-eater.py' not found in 'SUITE-LOG-s-a1.py\ncat: /var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-i83-lane-dtmae7i9/valtmp/s-eater.py.log: No such file or directory\n'
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.159s
+
+FAILED (failures=2)

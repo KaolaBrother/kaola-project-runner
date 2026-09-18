@@ -1,0 +1,11 @@
+test_failing_suite_does_not_hide_downstream_suites (__main__.TestLaneFailureVisibility.test_failing_suite_does_not_hide_downstream_suites)
+Both lanes finish every suite; nothing unmeasured, nothing hidden. ... ok
+test_green_path_is_unchanged (__main__.TestLaneFailureVisibility.test_green_path_is_unchanged)
+All suites pass: zero exit, every log replayed in order. ... ok
+test_missing_log_is_reported_skipped_not_a_cat_error (__main__.TestLaneFailureVisibility.test_missing_log_is_reported_skipped_not_a_cat_error)
+A suite that left no log is reported SKIPPED; replay continues. ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.187s
+
+OK
