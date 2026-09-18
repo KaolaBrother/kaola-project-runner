@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **A bound worker's pending permission now wakes the ZCode Host mid-turn
+  (Issue #76).** A worker whose agent raises `session/request_permission`
+  records the pending request and wakes only its own wait - the turn stays
+  active, so a Host notified only at turn end could wait on an idle that never
+  comes. The worker holder now sends one `permission_required` worker event
+  per new pending permission key over the existing carrier: an idle Host is
+  delivered immediately, a busy one at its next completed turn boundary, and a
+  retransmitted request id stays one wake. The event carries only the
+  normalized `request_id` locator - title, options, tool input and
+  credentials never travel; the Host reads the request from the worker's own
+  `pending_permissions` receipt, treats an already-settled request as nothing
+  to do, and `permit`s only inside existing authorization, escalating anything
+  else to the user. The event approves nothing; the ordinary turn-end `idle`
+  still arrives after the request settles. Unbound and standalone workers are
+  unchanged, and no scheduler, second queue, or automatic decision exists.
+
 - **An Orchestrator binds one canonical project root, and an exact stop is bound to
   the holder instance it verified (Issue #73).** Dispatching a worker with `--repo`
   pointing at a Workflow child worktree made one project look like several
