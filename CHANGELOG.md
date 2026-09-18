@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **The heartbeat carries only the constraints that are still in force (Issue
+  #68).** The heartbeat is the working prompt itself, and the main Skill now
+  states which trigger delivers it on which host: Codex and Grok Bot from their
+  own timer system, a ZCode Host from each worker return or existing worker
+  event. No shared path or schema is imposed, no timer is added to ZCode, and no
+  event mechanism is forced on Codex or Grok Bot. The prompt is an
+  effective-now snapshot rather than a change log: a user-confirmed quota,
+  priority, platform, model or concurrency change replaces the old value and is
+  re-planned in the **same** beat instead of the next one, and concurrency,
+  account quota and token budget stay three separate numbers. Each beat rewrites
+  the prompt through an explicit subtraction rule - superseded values, void
+  plans, repeated narration, inert completed items and transient failures are
+  dropped, while in-flight locators (session, worktree, Issue/PR), unfinished
+  delivery, acceptance, sync and cleanup duties with their owners, open
+  decisions and the minimum recovery pointer are kept - so no two contradictory
+  quotas can coexist. Removing a line from the heartbeat is not deleting
+  evidence and never rewrites a completed Mission's result. A lowered quota is
+  not by itself a cancellation of in-flight work, and a platform failure or
+  measured exhaustion is evidence, not authorization to switch platforms. No
+  schema, quota ledger, scheduler, cleanup script, retry or auto-cancel
+  mechanism was added, and no byte budget was raised.
 - **Two startup flows, one startup receipt (Issue #66).** The main Skill now
   opens with two short entry points: ordinary worker supervision (unchanged —
   no Host obligation, no event binding, no added gate) and Orchestrator (ZCode
