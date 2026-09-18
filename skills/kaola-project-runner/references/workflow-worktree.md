@@ -25,7 +25,7 @@ evidence. They do not authorize or refuse transport.
    root.
 2. From that runtime's main conversation, ask it to invoke its installed `workflow-next`.
 3. Let that runtime and its Workflow create, resume, recover, or otherwise reconcile the
-   bundle, branch, Mission List, and child worktree.
+   run, branch, Mission List, and child worktree.
 4. Keep Runner responsible only for exact-session transport, model selection, observation,
    prompt delivery, and exact stop.
 5. Keep `kaola-workflow-finalize` in the worker conversation; the outer Agent verifies
@@ -33,14 +33,14 @@ evidence. They do not authorize or refuse transport.
 
 Example: Claude Code is started with `--repo /path/to/project` (the main checkout). The
 controlling Agent sends a prompt that names issue #52 and asks the CLI to invoke
-`workflow-next`. Workflow claims the issue and creates `.kw/worktrees/bundle-52` (or
+`workflow-next`. Workflow claims that one issue and creates `.kw/worktrees/issue-52` (or
 resumes that run). The Runner session identity stays the canonical-root session; the
 child worktree is Workflow's working location, not a second Runner `--repo` unless the
 Agent later chooses otherwise.
 
 ## Evidence-backed exception
 
-Linked-worktree starts, outer-created branches/bundles/Mission Lists, and existing-run
+Linked-worktree starts, outer-created branches and Mission Lists, and existing-run
 recovery are **Agent decisions rather than transport gates**. The controlling Agent may
 choose a different startup or recovery path when current evidence, explicit authorization,
 review-only work, an existing handoff, a damaged run, or another concrete circumstance makes
@@ -57,15 +57,17 @@ valid when the Agent selects that Git top-level.
 ## Concurrent sessions
 
 Several exact Runner sessions may share one canonical project root. Each session keeps its
-own session name and transport identity. Their Workflows may own distinct bundles,
+own session name and transport identity. Their Workflows may own distinct runs,
 branches, and child worktrees. Seeing another run's worktree or Mission List is not write
-authorization.
+authorization. Several workers may share one issue's run and Mission List under distinct
+Runner names and native sessions; the naming and one-issue-per-run rules that make that
+association explicit live in [issue-dispatch.md](issue-dispatch.md).
 
 ## Recovery
 
 Preserve existing work by default. After inspecting state, the Agent chooses resume,
 repair, handoff, or a fresh run according to Workflow rules and evidence. Do not
-mechanically rebuild, delete, move, or adopt an existing bundle. Do not force an
+mechanically rebuild, delete, move, or adopt an existing run. Do not force an
 outer-created worktree onto a worker that can invoke `workflow-next` itself.
 
 ## Migration

@@ -33,11 +33,10 @@ checks against that plan, and keep-versus-stop: [host-startup.md](references/hos
 
 ## Consumer-project boundary
 
-For consumer-project work, the Project Runner checkout, templates, generated
-files, and installed Skill payload are read-only. Store project-specific
-authorization, heartbeat, and run facts in the consuming project. Do not edit
-this repository, its templates, generated files, or an installed Skill payload
-unless a human explicitly assigned Project Runner development.
+For consumer-project work this repository, its templates, generated files, and
+any installed Skill payload are read-only unless a human explicitly assigned
+Project Runner development. Store project-specific authorization, heartbeat,
+and run facts in the consuming project.
 
 ## Authorization
 
@@ -45,10 +44,6 @@ Recover existing explicit authorization and live work before asking intake
 questions. A Skill update or resumed conversation must not restart intake,
 workers, claims or assignments already established. Ask only for missing or
 conflicting information.
-
-Allowed CLIs: none without human authorization. On a fresh invocation with no
-allowlist, ask which CLIs; do not start workers or register a heartbeat. All
-nine supported platforms, including Codex, are eligible when named.
 
 Record the human's CLI, model/effort, count, and capability restrictions in the
 consuming project's run records, not in this Skill. A named CLI without a count
@@ -82,7 +77,7 @@ platform's default transport is ACP:
 This Skill is host-neutral. Native skill-directory installs exist for Codex,
 Claude Code, Cursor, Devin and ZCode (`~/.zcode/skills`; a workspace
 `.zcode/skills` works through `--skills-dir`), where the nine workers are sibling
-Skill directories called by their installed directory. A ZCode Host session is one named Runner session like any other:
+Skill directories. A ZCode Host session is one named Runner session like any other:
 an inner worker it dispatches, ZCode or not, is a separate session with its own
 record entry and process group - an inner stop never reaches the outer Host, and
 the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop, and it
@@ -129,11 +124,11 @@ dropped; `capture --full` is the only unbounded request.
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | None until named. Fresh invocation with no allowlist: ask; do not start. |
+| Allowed CLIs | None until named; all nine platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
 | Count | Named CLI without a count: one. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
 | Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
-| Workflow | On; start at the canonical project root; the worker's Workflow creates its worktree. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
+| Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
 | Heartbeat | 30 minutes unless specified; zero or "no heartbeat" means one-shot. One host-native carrier, else same-session sleep, never both. |
 | Permissions | Existing Runner default bypass start. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
 | Self-execute | Off unless the human explicitly allows it. |
@@ -142,8 +137,8 @@ dropped; `capture --full` is the only unbounded request.
 Ordinary Workflow-backed work starts the worker `--repo` at the consuming
 project's canonical Git root and asks that runtime's main conversation to invoke
 its installed workflow-next; inspect Git and Workflow evidence first.
-Linked-worktree starts, outer bundle preparation and existing-run recovery are
-Agent decisions on both PTY and ACP, not transport gates. See
+Linked-worktree starts and existing-run recovery are Agent decisions on both
+PTY and ACP, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
 
 `self_hosting_risk` and model mismatches are reported evidence, not automatic
@@ -164,9 +159,9 @@ request disables execution actions.
 
 On a ZCode Host session worker events are the only heartbeat trigger (see
 Hosts). After close-out, cancel the native heartbeat or stop scheduling the next
-sleep. No allowlist, no heartbeat. Temporarily having no ready task is not
-project completion. On Grok Bot the native recurring carrier is one Routine on
-this Bot; do not hard-code other hosts' scheduler APIs.
+sleep. Temporarily having no ready task is not
+project completion. Do not hard-code other
+hosts' scheduler APIs.
 
 ## Delivery
 
@@ -226,9 +221,8 @@ sink, and write ownership.
    delivery/sync/cleanup remains; preserve existing recovery information and give
    anything remaining a named owner. Direct safe cleanup of completed,
    unreferenced worktrees and branches; protect in-flight work and evidence.
-   Report active workers
-   and outstanding close-out work, then continue the same heartbeat while
-   authorized work or unfinished close-out remains. Session stop, candidate
+   Continue the same heartbeat
+   while authorized work or unfinished close-out remains. Session stop, candidate
    acceptance, merge, Issue closure and workspace cleanup are different facts,
    not interchangeable completion labels.
 
@@ -237,9 +231,8 @@ sink, and write ownership.
 When ending a project run, the default is to finish every in-hand authorized
 task and every in-hand issue of this run (already claimed / in flight), then
 merge their worktrees and branches, leave no leftover branch tails, and leave
-the workspace clean, matching Kaola Workflow close-out (finalize/archive/sink
-and unreferenced worktree/branch cleanup already in this Skill); that default is
-not an extra engine. Do not park unfinished branches as the normal end of a
+the workspace clean, matching Kaola Workflow close-out; that default
+is not an extra engine. Do not park unfinished branches as the normal end of a
 project run.
 
 A human stop boundary such as "run until 5pm", "run until done", or
@@ -257,8 +250,7 @@ on step 5's conditions.
 
 Only new authorized work restarts a session once the idle ones were stopped:
 resume with `--resume` when a native session id is known, otherwise `--continue`
-or a fresh `start`. Do not keep an idle ACP or PTY session running as a holder
-for future work; reuse existing Runner `stop` / `start` / `--resume` /
+or a fresh `start`. Reuse existing Runner `stop` / `start` / `--resume` /
 `--continue`, and do not invent a session state machine, quota engine, or extra
 dashboards.
 
@@ -266,8 +258,7 @@ dashboards.
 
 Call the matching platform Runner Skill by its installed directory. Use Runner
 default start (including measured bypass). Do not pass a permission-mode
-override unless the human wrote one. One dispatch prompt per ready session; do
-not replay a prompt whose effects are known or uncertain. Resume as under
+override unless the human wrote one. One dispatch prompt per ready session. Resume as under
 "Ending a run".
 
 The worker is not the orchestrator. Its prompt should name the authorized
@@ -276,11 +267,22 @@ a Workflow child worktree, write ownership, that it must not self-finalize
 before acceptance, and that irreversible or value choices print
 `HUMAN_DECISION_REQUIRED` and wait.
 
+### Issue-scoped names, one issue per run
+
+One run claims one real issue: never a bundle claim, worktree, Mission List or
+session spanning several, and collaborating workers share that issue's run under
+distinct names. Choose the real open issue before start, name the session
+`<platform>-<CODE>-i<ISSUE>-<purpose>` (`droid-KT-i274-parser`) with `CODE` the
+heartbeat's declared project short code, verify it in the start receipt, and
+keep the rule on later dispatches and restarts. Hosts, diagnostics and
+issue-less tasks carry no issue number and never an invented one. Detail and
+negatives: [references/issue-dispatch.md](references/issue-dispatch.md).
+
 ## Report
 
 Use the user's report format. Otherwise one compact current-work table plus
 outstanding close-out items is sufficient. Include task/progress, meaningful
 model mismatches, blockers, and next action. Mention newly stopped sessions
-once; do not keep stale stopped rows in every report. Do not require separate
-acceptance, finalize, rebase, or close-out dashboards. Keep duties traceable
-in existing records without a new state machine or ledger.
+once; do not keep stale stopped rows in every report. Keep duties traceable in
+existing records; no separate acceptance, finalize, rebase or close-out
+dashboard, state machine or ledger.
