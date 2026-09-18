@@ -1618,11 +1618,33 @@ class Holder:
                 receipt["error"]["stderr_tail"] = self.agent.stderr_pump.tail()
         return receipt
 
+    def _no_acp_session(self) -> dict[str, Any] | None:
+        """Issue #65: a session that never negotiated an ACP session id cannot be
+        prompted, steered or cancelled.
+
+        A failed `start` leaves `acp_session_id` None while the agent process is
+        still alive, so the frame would be written with `"sessionId": null` and
+        the caller would read `in_progress` - a dispatch that never happened.
+        Worse, the composite steer would then report `steer_consumed: true` for
+        text no session ever received. Refuse before writing anything.
+        """
+        if self.acp_session_id:
+            return None
+        return {"outcome": "no_session", "mutation_status": "not_started",
+                "mutation_performed": False, "acp_session_id": None,
+                "error": {"code": "no-acp-session",
+                          "message": "this session has no ACP session id - `start` did not "
+                                     "negotiate one, so nothing was written; read the start "
+                                     "receipt's error and start the session again"}}
+
     def op_prompt(self, params: dict[str, Any]) -> dict[str, Any]:
         if self.agent.exited.is_set() or self.agent.proc is None:
             return {"outcome": "process_exited", "mutation_status": "not_started",
                     "mutation_performed": False,
                     "error": {"code": "agent-not-running", "message": "agent process is not running"}}
+        refusal = self._no_acp_session()
+        if refusal is not None:
+            return refusal
         with self.lock:
             if self.turn["active"]:
                 return {"error": {"code": "prompt-in-progress",
@@ -2074,6 +2096,10 @@ class Holder:
                     "steer_confirmation": "none",
                     "error": {"code": "agent-not-running",
                               "message": "agent process is not running"}}
+        refusal = self._no_acp_session()
+        if refusal is not None:
+            return {**base, **refusal, "steer_outcome": "not_consumed",
+                    "steer_consumed": False, "steer_confirmation": "none"}
 
         with self.lock:
             if not self.turn["active"]:
@@ -2245,6 +2271,14 @@ class Holder:
                     "mutation_status": "unknown", "mutation_performed": False,
                     "error": {"code": "agent-not-running",
                               "message": "agent process is not running"}}
+        refusal = self._no_acp_session()
+        if refusal is not None:
+            # Without a session id there is no turn to interrupt and nowhere to
+            # send the text: refusing here is what keeps `steer_consumed` honest.
+            return {**base, **refusal, "steer_outcome": "not_consumed",
+                    "steer_consumed": False, "steer_confirmation": "none",
+                    "interrupted": None, "turn_was_active": False,
+                    "side_effects_possible": False}
 
         with self.lock:
             was_active = bool(self.turn["active"])

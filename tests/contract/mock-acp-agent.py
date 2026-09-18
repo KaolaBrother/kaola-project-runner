@@ -269,6 +269,16 @@ class MockAgent:
         respond(request_id, {})
 
     def on_session_new(self, request_id: Any, params: dict[str, Any]) -> None:
+        if self.scenario == "session_new_fails":
+            # Issue #65: what OpenCode did when its bootstrap could not reach the
+            # network - the process stays alive and healthy, but no session id is
+            # ever negotiated. Nothing may be dispatched onto such a holder.
+            respond(
+                request_id,
+                error={"code": -32603, "message": "Internal error: service failure",
+                       "data": {"service": "directory"}},
+            )
+            return
         if self.scenario == "auth_required" and not self.authenticated:
             respond(
                 request_id,

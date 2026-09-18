@@ -446,5 +446,56 @@ class SteeringContract(unittest.TestCase):
                              f"{platform} must accept the composite mode")
 
 
+    # -- a session that never negotiated an ACP session id -------------------
+    #
+    # Issue #65, found live: OpenCode's `start` failed (`acp-session-failed`,
+    # `acp_session_id: null`) yet the agent process stayed alive - so `send`
+    # answered `in_progress` and the composite steer reported
+    # `steer_consumed: true` for text no session ever received. A null session
+    # is not a steering success.
+
+    def start_without_session(self, platform: str = UNSUPPORTED_PLATFORM) -> dict:
+        """Start a holder whose `session/new` fails; the process stays alive."""
+        receipt = self.cli(platform, "start", scenario="session_new_fails", check=False)
+        self._started.append((platform, self.session))
+        self.assertIsNone(receipt.get("acp_session_id"),
+                          "the mock must not negotiate a session id")
+        return receipt
+
+    def test_send_without_an_acp_session_writes_nothing(self) -> None:
+        self.start_without_session()
+        sent = self.cli(UNSUPPORTED_PLATFORM, "send", "--no-wait", "--text", "do the thing",
+                        scenario="session_new_fails", check=False)
+        self.assertEqual(sent.get("error", {}).get("code"), "no-acp-session")
+        self.assertEqual(sent.get("outcome"), "no_session")
+        self.assertEqual(sent.get("mutation_status"), "not_started")
+        self.assertIs(sent.get("mutation_performed"), False)
+        # the caller must never read this as an accepted dispatch
+        self.assertIsNone(sent.get("dispatch_event_cursor"))
+
+    def test_composite_steer_without_an_acp_session_is_not_consumed(self) -> None:
+        self.start_without_session()
+        steered = self.cli(UNSUPPORTED_PLATFORM, "steer", "--steer-mode", "interrupt",
+                           "--text", STEER_TEXT, scenario="session_new_fails", check=False)
+        self.assertEqual(steered.get("error", {}).get("code"), "no-acp-session")
+        self.assertEqual(steered.get("steer_outcome"), "not_consumed")
+        self.assertIs(steered.get("steer_consumed"), False)
+        self.assertEqual(steered.get("steer_confirmation"), "none")
+        self.assertIs(steered.get("mutation_performed"), False)
+        # nothing was interrupted and no new turn was born
+        self.assertIsNone(steered.get("new_turn_request_id"))
+        self.assertIsNot(steered.get("interrupted"), True)
+        self.assertIsNot(steered.get("side_effects_possible"), True)
+
+    def test_native_steer_without_an_acp_session_is_not_consumed(self) -> None:
+        self.start_without_session(SUPPORTED_PLATFORM)
+        steered = self.cli(SUPPORTED_PLATFORM, "steer", "--text", STEER_TEXT,
+                           scenario="session_new_fails", check=False)
+        self.assertEqual(steered.get("error", {}).get("code"), "no-acp-session")
+        self.assertEqual(steered.get("steer_outcome"), "not_consumed")
+        self.assertIs(steered.get("steer_consumed"), False)
+        self.assertIs(steered.get("mutation_performed"), False)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

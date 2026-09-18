@@ -279,6 +279,11 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
   **refuses** with `steer-mode-required`, `available_steer_modes: ["interrupt"]`, and writes nothing.
   The Runner never interrupts a worker on its own initiative, and never silently degrades from
   `native` to `interrupt` after a failure or a timeout.
+- A session whose `start` never negotiated an ACP session id cannot be prompted or
+  steered at all: `send`, `steer` and the composite refuse with `no-acp-session`,
+  `outcome: no_session`, `mutation_performed: false` and nothing written, rather
+  than sending a frame with a null `sessionId` and reporting `in_progress` or
+  `steer_consumed: true` for text no session received.
 
 `steer_outcome` with `steer_consumed` and `steer_confirmation` carries the whole claim:
 

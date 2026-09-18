@@ -27,8 +27,11 @@
   platform without a native entry refuses a bare `steer` with
   `steer-mode-required` instead of interrupting on its own, an unconfirmed
   cancel sends nothing at all (`steer-cancel-unconfirmed`, outcome `unknown`, no
-  blind retry), an idle session is never natively steered, and a holder started
-  before this release answers `steer-holder-outdated` having written nothing.
+  blind retry), an idle session is never natively steered, a holder whose `start`
+  never negotiated an ACP session id refuses `send` and `steer` outright with
+  `no-acp-session` instead of writing a null-session frame and calling it
+  `in_progress`, and a holder started before this release answers
+  `steer-holder-outdated` having written nothing.
   `native_steering` also distinguishes `unknown` from `unsupported`, so an
   uninvestigated surface is never recorded as a proven absence.
 - **The Claude Code bridge gained the native channel it was missing
