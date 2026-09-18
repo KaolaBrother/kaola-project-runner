@@ -124,8 +124,11 @@ CHILD_RECORD_NAME = "children.jsonl"
 # list, records stage/delivery/confirmation in its own event log (the only
 # persistence: no new store), and delivers one ordinary ``session/prompt``
 # through the normal admission path - never a raw send, never a second stdin
-# writer, never a periodic scheduler. Other hosts are untouched: the carrier
-# op exists only for platform zcode.
+# writer, never a periodic scheduler. Issue #87: a 33rd detailed event is
+# refused as queue-full and recorded as one monotonic full-check generation
+# in that same log so the next heartbeat still wakes a real-status /
+# pending-approval pass (remind only). Other hosts are untouched: the
+# carrier op exists only for platform zcode.
 HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
 HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
 HEARTBEAT_EVENT_CAP = 32
@@ -134,6 +137,11 @@ HEARTBEAT_NOTIFY_GRACE = 6.0
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
 WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
 HEARTBEAT_DEFECT_CHARS = 200
+# Injection bound for the Host-maintained prompt file. Not a second Skill
+# budget: one read of at most this many bytes plus one, so an oversized file
+# cannot dump an arbitrary body into session/prompt.
+HEARTBEAT_PROMPT_MAX_BYTES = 65536
+OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
 
 
 def parse_heartbeat_host() -> dict[str, str] | None:
@@ -160,24 +168,40 @@ def parse_heartbeat_host() -> dict[str, str] | None:
 
 
 def heartbeat_prompt_body(source: Path) -> tuple[str | None, str | None]:
-    """``(body, defect)`` from exactly ONE read of the heartbeat prompt file.
+    """``(body, defect)`` from exactly ONE bounded read of the heartbeat prompt file.
 
     Issue #66: one read, so the body that was checked is the body that is
     delivered - a check-then-reread would let a rewrite between the two ship
     something the checks never saw. An absent file is not a defect, it is the
     honest fallback; anything else that cannot supply a prompt comes back as
     its real defect so the Host fixes the file instead of assuming its own
-    prompt is in effect. Read-only, bounded, never fatal.
+    prompt is in effect. Issue #87: the read itself is capped at
+    ``HEARTBEAT_PROMPT_MAX_BYTES``; an oversized file is a named defect and
+    its bytes are never injected, including as a truncated-looking body.
+    Read-only, bounded, never fatal.
     """
     try:
-        raw = source.read_bytes().decode("utf-8")
+        with source.open("rb") as handle:
+            raw = handle.read(HEARTBEAT_PROMPT_MAX_BYTES + 1)
     except FileNotFoundError:
         return None, None
-    except (OSError, UnicodeError) as exc:
+    except OSError as exc:
+        return None, f"unreadable: {getattr(exc, 'strerror', None) or exc}"[
+            :HEARTBEAT_DEFECT_CHARS]
+    if len(raw) > HEARTBEAT_PROMPT_MAX_BYTES:
+        return None, (
+            f"file exceeds {HEARTBEAT_PROMPT_MAX_BYTES} bytes; rewrite "
+            f"{source.name} as a complete JSON object whose \"body\" is a "
+            "non-empty string at or under that size. oversized bytes were "
+            "not injected"
+        )[:HEARTBEAT_DEFECT_CHARS]
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeError as exc:
         return None, f"unreadable: {getattr(exc, 'strerror', None) or exc}"[
             :HEARTBEAT_DEFECT_CHARS]
     try:
-        data = json.loads(raw)
+        data = json.loads(text)
     except ValueError as exc:
         return None, f"not valid JSON: {exc}"[:HEARTBEAT_DEFECT_CHARS]
     if not isinstance(data, dict):
@@ -1158,6 +1182,10 @@ class Holder:
         # pending worker events when it is a ZCode Host session, or the armed
         # notify target when it is a worker of one.
         self.pending_worker_events: list[dict[str, Any]] = []
+        self.overflow_generation = 0
+        self.overflow_confirmed_generation = 0
+        self.overflow_inflight_generation: int | None = None
+        self.overflow_inflight_fingerprint: Any = None
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
         self.heartbeat_host = parse_heartbeat_host()
@@ -1864,7 +1892,23 @@ class Holder:
                             "reason": reason, "target_session": target["session"],
                             "receipt": receipt})
 
-    def _heartbeat_payload(self, events: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+    def _record_overflow_full_check(self) -> int:
+        """Bump the one full-check generation and log the fact.
+
+        The 33rd detailed event is not staged. Resume rebuilds pending
+        full-check from this log. Remind only; nothing here approves a
+        permission.
+        """
+        with self.worker_events_lock:
+            self.overflow_generation += 1
+            generation = self.overflow_generation
+        self.events.append({"kind": "worker_event_overflow",
+                            "generation": generation})
+        return generation
+
+    def _heartbeat_payload(self, events: list[dict[str, Any]],
+                           overflow_full_check: bool = False
+                           ) -> tuple[str, dict[str, Any]]:
         """One literal notification prompt: fixed structured event metadata,
         the current FULL heartbeat prompt body read at delivery time from the
         file the ZCode Host agent maintains in the consuming project, and the
@@ -1901,6 +1945,15 @@ class Holder:
                   "event_cursor", "request_id")
                  if event.get(key) is not None},
                 ensure_ascii=False, sort_keys=True))
+        if overflow_full_check:
+            lines.append(OVERFLOW_FULL_CHECK_MARK)
+            lines.append(
+                f"detailed worker-event queue is at capacity {HEARTBEAT_EVENT_CAP}; "
+                "at least one later worker event was not staged as a detailed line.")
+            lines.append(
+                "This pass: inspect every authorized worker's real status and pending "
+                "approvals from their own receipts. Remind only; do not approve or "
+                "refuse permissions from this signal.")
         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
         if maintained:
             lines.append(f"heartbeat prompt source: {source} (fingerprint sha256:{digest}, "
@@ -1925,6 +1978,8 @@ class Holder:
                                 "heartbeat_maintained": maintained}
         if defect is not None:
             meta["heartbeat_body_error"] = defect
+        if overflow_full_check:
+            meta["overflow_full_check"] = True
         return "\n".join(lines), meta
 
     def _deliver_worker_events(self) -> dict[str, Any]:
@@ -1934,13 +1989,17 @@ class Holder:
         with self.worker_events_lock:
             staged = [item for item in self.pending_worker_events
                       if "prompt_fingerprint" not in item]
-        if not staged:
+            overflow_ready = (
+                self.overflow_generation > self.overflow_confirmed_generation
+                and self.overflow_inflight_generation is None)
+            overflow_generation = self.overflow_generation
+        if not staged and not overflow_ready:
             return {"delivered": False, "reason": "queue-empty"}
         if self.agent.proc is None or self.agent.exited.is_set():
             return {"delivered": False, "reason": "agent-not-running"}
         if self.turn["active"]:
             return {"delivered": False, "reason": "prompt-in-progress"}
-        text, meta = self._heartbeat_payload(staged)
+        text, meta = self._heartbeat_payload(staged, overflow_ready)
         prompt = self.op_prompt({"text": text, "wait": False})
         error = prompt.get("error")
         if error or prompt.get("outcome") != "in_progress":
@@ -1949,27 +2008,43 @@ class Holder:
         with self.worker_events_lock:
             for item in staged:
                 item["prompt_fingerprint"] = fingerprint
-        self.events.append({
+            if overflow_ready:
+                self.overflow_inflight_generation = overflow_generation
+                self.overflow_inflight_fingerprint = fingerprint
+        delivered: dict[str, Any] = {
             "kind": "worker_event_delivered",
             "event_ids": [item["event_id"] for item in staged],
             "prompt_fingerprint": fingerprint,
             **meta,
-        })
+        }
+        if overflow_ready:
+            delivered["overflow_full_check"] = True
+            delivered["overflow_generation"] = overflow_generation
+        self.events.append(delivered)
         return {"delivered": True, "prompt_fingerprint": fingerprint,
-                "count": len(staged)}
+                "count": len(staged), "overflow_full_check": bool(overflow_ready)}
 
     def _worker_event_turn_end(self, fingerprint: Any, outcome: str | None) -> None:
         """At a turn boundary: confirm the events this turn delivered, then
         flush whatever staged meanwhile. A notification turn that did not
         complete leaves its events staged - no retry loop; the next healthy
-        boundary, a newly staged event, or a resume redelivers them."""
+        boundary, a newly staged event, or a resume redelivers them.
+
+        Overflow confirmation is the generation snapped at delivery, not the
+        current generation: overflow during this notification still needs
+        the next wake.
+        """
         confirmed: list[str] = []
         was_notification = False
+        overflow_confirmed_generation: int | None = None
         with self.worker_events_lock:
             hit = [item for item in self.pending_worker_events
                    if fingerprint is not None
                    and item.get("prompt_fingerprint") == fingerprint]
-            was_notification = bool(hit)
+            overflow_hit = bool(
+                fingerprint is not None
+                and self.overflow_inflight_fingerprint == fingerprint)
+            was_notification = bool(hit) or overflow_hit
             if hit and outcome == "turn_completed":
                 for item in hit:
                     self.pending_worker_events.remove(item)
@@ -1977,9 +2052,19 @@ class Holder:
             elif hit:
                 for item in hit:
                     item.pop("prompt_fingerprint", None)
+            if overflow_hit:
+                if outcome == "turn_completed":
+                    overflow_confirmed_generation = self.overflow_inflight_generation
+                    if overflow_confirmed_generation is not None:
+                        self.overflow_confirmed_generation = overflow_confirmed_generation
+                self.overflow_inflight_generation = None
+                self.overflow_inflight_fingerprint = None
         if confirmed:
             self.events.append({"kind": "worker_event_confirmed",
                                 "event_ids": confirmed})
+        if overflow_confirmed_generation is not None:
+            self.events.append({"kind": "worker_event_overflow_confirmed",
+                                "generation": overflow_confirmed_generation})
         if not was_notification or outcome == "turn_completed":
             if self.agent.proc is not None and not self.agent.exited.is_set():
                 self._deliver_worker_events()
@@ -2025,12 +2110,20 @@ class Holder:
                 return {"event_id": event["event_id"], "duplicate": True,
                         "pending": len(self.pending_worker_events)}
             if len(self.pending_worker_events) >= HEARTBEAT_EVENT_CAP:
-                return {"error": {"code": "worker-event-queue-full",
-                                  "capacity": HEARTBEAT_EVENT_CAP,
-                                  "message": f"{HEARTBEAT_EVENT_CAP} worker events are "
-                                             "already waiting for this host turn boundary"}}
-            self.pending_worker_events.append(event)
-            pending = len(self.pending_worker_events)
+                queue_full = True
+            else:
+                queue_full = False
+                self.pending_worker_events.append(event)
+                pending = len(self.pending_worker_events)
+        if queue_full:
+            generation = self._record_overflow_full_check()
+            return {"error": {"code": "worker-event-queue-full",
+                              "capacity": HEARTBEAT_EVENT_CAP,
+                              "message": f"{HEARTBEAT_EVENT_CAP} worker events are "
+                                         "already waiting for this host turn boundary"},
+                    "overflow_full_check": True,
+                    "generation": generation,
+                    "pending": HEARTBEAT_EVENT_CAP}
         self.events.append({"kind": "worker_event", "event": event})
         receipt: dict[str, Any] = {"event_id": event["event_id"], "staged": True,
                                    "pending": pending}
@@ -2039,22 +2132,41 @@ class Holder:
             receipt.update(self._deliver_worker_events())
         return receipt
 
+    @staticmethod
+    def _overflow_generation_of(entry: dict[str, Any]) -> int | None:
+        generation = entry.get("generation")
+        if isinstance(generation, int) and not isinstance(generation, bool) and generation > 0:
+            return generation
+        return None
+
     def _restore_worker_events(self) -> None:
         """Resume redelivery: rebuild the pending list from this holder's own
         event log (staged without a matching confirmation) and deliver it into
-        the resumed session. At-least-once; the heartbeat pass itself is the
-        dedup authority, per the skeleton's recover step."""
+        the resumed session. Detailed events remain at-least-once; pending
+        full-check is last overflow generation minus last confirmed
+        generation."""
         staged: list[dict[str, Any]] = []
         confirmed: set[str] = set()
+        overflow_generation = 0
+        overflow_confirmed = 0
         for entry in self.events.read_since(0, None):
-            if entry.get("kind") == "worker_event":
+            kind = entry.get("kind")
+            if kind == "worker_event":
                 event = entry.get("event")
                 if isinstance(event, dict) and isinstance(event.get("event_id"), str):
                     staged.append(event)
-            elif entry.get("kind") == "worker_event_confirmed":
+            elif kind == "worker_event_confirmed":
                 ids = entry.get("event_ids")
                 if isinstance(ids, list):
                     confirmed.update(item for item in ids if isinstance(item, str))
+            elif kind == "worker_event_overflow":
+                generation = self._overflow_generation_of(entry)
+                overflow_generation = (
+                    generation if generation is not None else overflow_generation + 1)
+            elif kind == "worker_event_overflow_confirmed":
+                generation = self._overflow_generation_of(entry)
+                overflow_confirmed = (
+                    generation if generation is not None else overflow_confirmed + 1)
         pending: list[dict[str, Any]] = []
         seen: set[str] = set()
         for event in staged:
@@ -2063,14 +2175,25 @@ class Holder:
             seen.add(event["event_id"])
             pending.append(event)
         if len(pending) > HEARTBEAT_EVENT_CAP:
-            dropped = [event["event_id"] for event in pending[:-HEARTBEAT_EVENT_CAP]]
             pending = pending[-HEARTBEAT_EVENT_CAP:]
-            self.events.append({"kind": "worker_event_overflow", "dropped": dropped,
-                                "capacity": HEARTBEAT_EVENT_CAP})
+            overflow_generation += 1
+            self.events.append({"kind": "worker_event_overflow",
+                                "generation": overflow_generation})
         self.pending_worker_events = pending
-        if pending:
-            self.events.append({"kind": "worker_event_restored",
-                                "event_ids": [event["event_id"] for event in pending]})
+        self.overflow_generation = overflow_generation
+        self.overflow_confirmed_generation = overflow_confirmed
+        self.overflow_inflight_generation = None
+        self.overflow_inflight_fingerprint = None
+        overflow_pending = overflow_generation > overflow_confirmed
+        if pending or overflow_pending:
+            restored: dict[str, Any] = {
+                "kind": "worker_event_restored",
+                "event_ids": [event["event_id"] for event in pending],
+            }
+            if overflow_pending:
+                restored["overflow_full_check"] = True
+                restored["overflow_generation"] = overflow_generation
+            self.events.append(restored)
             self._deliver_worker_events()
 
 

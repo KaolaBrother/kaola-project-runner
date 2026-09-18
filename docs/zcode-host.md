@@ -69,10 +69,7 @@ rejects outright.
 Nothing is substituted. A transcript with no usable model, a model the enabled
 plan does not offer, or a model belonging to another account fails the resume
 closed without reaching `session/setModel` — the plan default is never selected
-on the user's behalf and the account is never switched. Because the session is
-dropped, a resume that fails closed also emits no `config_option_update`: an ACP
-client never sees an advertised option for a model that was refused and never
-took effect (Issue #85). A resume that fails for
+on the user's behalf and the account is never switched. A resume that fails for
 an ordinary reason reports that reason: an unknown or already-deleted native
 session answers `-32004 Session not found`, and the pre-3.12 `runtimeModel`
 overlay is retried only when the backend actually asks for it with
@@ -151,7 +148,9 @@ worker agent terminated / worker turn ended (one idle episode)
   -> worker holder's existing on_agent_exit / turn-end /
      request-permission paths
      -> one socket op `worker_event` to the ZCode Host holder
-        -> bounded in-memory staging list (cap 32, deduped by event id)
+        -> bounded in-memory staging list (cap 32 detailed events, deduped by event id)
+           -> if a later event cannot stage: one full-check generation in the
+              same event log (not a 33rd detailed line)
            -> one ordinary session/prompt through op_prompt
               (the normal admission path; prompt-in-progress is never bypassed)
 ```
@@ -209,25 +208,41 @@ worker agent terminated / worker turn ended (one idle episode)
   Skill's `references/heartbeat-skeleton.md` (Issue #68), so the next heartbeat
   pass carries that refreshed state (fingerprint and byte count are
   supplementary) — and one instruction to perform a single full pass per
-  `PROJECT_RUNNER_HEARTBEAT_V2`. No worker raw output travels with it. An
-  absent prompt file delivers an explicit fallback trigger context instead; a
-  file that exists but carries no usable `body` string (Issue #66: wrong field
-  name, wrong type, empty, or unparseable JSON) delivers the same fallback
-  **plus** the named defect - `heartbeat prompt source: <path> present but
-  UNUSABLE - <defect>` in the prompt and `heartbeat_body_error` in the host
-  holder's `worker_event_delivered` entry - so a Host cannot mistake a
-  mis-written file for a maintained prompt. Delivery is never blocked by it.
-- **Busy host.** While a turn is active the host holder stages events and
-  flushes them as one batched prompt at the next completed turn boundary; a
-  notification turn that fails or is canceled leaves its events staged for the
-  next healthy boundary. No retry loop, no raw send, no event loss.
+  `PROJECT_RUNNER_HEARTBEAT_V2`. No worker raw output travels with it. The
+  file is read once and capped at 65536 bytes (Issue #87): an ordinary file
+  under that size is delivered complete; a larger file is not truncated into
+  a look-alike body — the worker event still wakes with the named defect
+  (`file exceeds 65536 bytes` plus rewrite guidance) and
+  `heartbeat_body_error` on `worker_event_delivered`. An absent prompt file
+  delivers an explicit fallback trigger context instead; a file that exists
+  but carries no usable `body` string (Issue #66: wrong field name, wrong
+  type, empty, or unparseable JSON) delivers the same fallback **plus** the
+  named defect - `heartbeat prompt source: <path> present but UNUSABLE -
+  <defect>` in the prompt and `heartbeat_body_error` in the host holder's
+  `worker_event_delivered` entry - so a Host cannot mistake a mis-written
+  file for a maintained prompt. Delivery is never blocked by it.
+- **Busy host and overflow (Issue #87).** While a turn is active the host
+  holder stages up to 32 detailed events and flushes them as one batched
+  prompt at the next completed turn boundary; a notification turn that fails
+  or is canceled leaves its events staged for the next healthy boundary. No
+  retry loop and no raw send. The 33rd detailed event is still
+  `worker-event-queue-full` and is not staged as a 33rd line; the holder
+  records one monotonic full-check generation (`worker_event_overflow`) in
+  the existing event log and includes `kaola-host-notify/overflow-full-check`
+  in the next heartbeat so the Host inspects every authorized worker's real
+  status and pending approvals. That signal reminds only: it does not
+  approve or refuse permissions. Overflow during a notification is a later
+  generation and still needs the following wake. There is no lossless 33rd
+  detailed replay and no second queue.
 - **Confirmation and resume.** The host turn completing after the
-  notification confirms it. Stage, delivery, and confirmation are recorded in
-  the host holder's existing event log (`worker_event`,
-  `worker_event_delivered`, `worker_event_confirmed`); `start --resume` (the
-  `session/load` path) rebuilds the pending list from that log and redelivers
-  everything unconfirmed — at-least-once, with the heartbeat pass itself as
-  the dedup authority, so resume never silently drops an event.
+  notification confirms the detailed events and, when present, the
+  full-check generation snapped at delivery (`worker_event_overflow_confirmed`).
+  Stage, delivery, and confirmation are recorded in the host holder's
+  existing event log. `start --resume` (the `session/load` path, also after
+  exact `stop`) rebuilds the pending detailed list from that log
+  (at-least-once for those ≤32 events) and restores a full-check when the
+  last overflow generation exceeds the last confirmed generation. A later
+  event beyond the cap is not promised as a detailed line after resume.
 - **The Host must end its turn (Issue #65).** Staging only clears at a turn
   boundary, so a Host that holds its turn open with `sleep`, a poll loop, or a
   blocking `wait` is exactly what keeps its own events undelivered. The
@@ -290,8 +305,10 @@ approval gate was added for either flow.
   isolation contract (harness-driven), holder-lost sweep, child-record append.
 - `python3 tests/contract/test-zcode-heartbeat-contract.py` — the Phase 2
   carrier: terminated/idle delivery with the full current prompt body, busy
-  staging and boundary flush, bounded deduped queue, resume redelivery,
-  ZCode-only gates, and no periodic trigger without worker events.
+  staging and boundary flush, bounded deduped queue, 33rd-event full-check
+  (later overflow still wakes, exact-stop resume, remind-only), 64KiB
+  prompt-file bound, ZCode-only gates, and no periodic trigger without
+  worker events.
 - `bash tests/contract/test-installer-runtimes.sh` — `--runtime zcode` and
   workspace `.zcode/skills` installs.
 - `python3 tests/contract/test-issue-51-runner-integration.py` — ZCode worker

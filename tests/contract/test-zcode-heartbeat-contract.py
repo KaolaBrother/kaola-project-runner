@@ -51,6 +51,7 @@ FIXTURE_SECRET = json.loads(DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"))[
 HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
 PROMPT_FILE_RELPATH = (".kaola", "heartbeat-prompt.json")
 HEARTBEAT_EVENT_CAP = 32
+OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
 
 # A minimal ACP agent used only to prove the non-ZCode boundary: a holder for
 # another platform must reject the worker_event op outright.
@@ -333,6 +334,34 @@ class Sandbox:
                     pass
         import shutil
         shutil.rmtree(self.dir, ignore_errors=True)
+
+
+def fabricate_event(sandbox: Sandbox, index: int, *, kind: str = "idle",
+                    session: str | None = None, request_id: str | None = None,
+                    reason: str | None = None) -> dict:
+    event = {
+        "schema": "kaola-worker-event/1",
+        "kind": kind,
+        "platform": "codex",
+        "session": session or f"work-{index}",
+        "repo": os.path.realpath(str(sandbox.repo)),
+        "reason": reason or "outcome=turn_completed stop_reason=end_turn",
+        "event_cursor": 100 + index,
+    }
+    if request_id is not None:
+        event["request_id"] = request_id
+    return event
+
+
+def assert_overflow_full_check(content: str) -> None:
+    check(OVERFLOW_FULL_CHECK_MARK in content,
+          "overflow delivery names the full-check marker")
+    check("inspect every authorized worker's real status and pending approvals"
+          in content,
+          "overflow delivery requires a full status and pending-approval check")
+    check("Remind only; do not approve or refuse permissions from this signal"
+          in content,
+          "overflow delivery reminds only and does not auto-approve")
 
 
 def assert_delivered_notification(sandbox: Sandbox, host: str, content: str,
@@ -764,18 +793,27 @@ def test_issue_66_defective_prompt_file_reports_its_defect() -> None:
         # One read, not check-then-reread: the body that passed the checks is
         # the body returned, so a rewrite cannot slip between the two.
         reads: list[str] = []
-        original = type(path).read_bytes
+        original_open = Path.open
+        original_read_bytes = Path.read_bytes
 
-        def counting(self, *args, **kwargs):
-            reads.append(str(self))
-            return original(self, *args, **kwargs)
+        def counting_open(self, *args, **kwargs):
+            if str(self) == str(path):
+                reads.append("open")
+            return original_open(self, *args, **kwargs)
 
-        type(path).read_bytes = counting
+        def counting_read_bytes(self, *args, **kwargs):
+            if str(self) == str(path):
+                reads.append("read_bytes")
+            return original_read_bytes(self, *args, **kwargs)
+
+        Path.open = counting_open  # type: ignore[method-assign]
+        Path.read_bytes = counting_read_bytes  # type: ignore[method-assign]
         try:
             body, defect = read_body(path)
         finally:
-            type(path).read_bytes = original
-        check(len(reads) == 1 and reads[0] == str(path),
+            Path.open = original_open  # type: ignore[method-assign]
+            Path.read_bytes = original_read_bytes  # type: ignore[method-assign]
+        check(len(reads) == 1 and reads[0] in {"open", "read_bytes"},
               f"the helper reads the prompt file exactly once ({reads})")
         check((body, defect) == ("real", None), "that single read supplies the body itself")
     finally:
@@ -847,6 +885,211 @@ def test_issue_66_unarmed_worker_stays_ungated() -> None:
         worker_dir = sandbox.record_dir(worker)
         check(not events_of_kind(worker_dir, "heartbeat_carrier_sent"),
               "an unbound worker holder never runs the event carrier")
+    finally:
+        sandbox.cleanup()
+
+
+def test_issue_87_overflow_full_check_on_busy_host() -> None:
+    """Issue #87: the 33rd event is not a 33rd detailed line; the next
+    heartbeat is a full-check. Overflow during that notification is a later
+    generation and still needs the following wake. The carrier never
+    auto-approves."""
+    sandbox = Sandbox("overflow")
+    try:
+        host = sandbox.session()
+        sandbox.start(host, "permission")
+        body = "HEARTBEAT OVERFLOW: full-check body."
+        sandbox.write_prompt_file(body)
+        sandbox.cli("send", "--no-wait", "--text", "host busy turn", session=host)
+        wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions") or []),
+                   15, "host turn is busy waiting on a permission")
+        host_dir = sandbox.record_dir(host)
+        sock = holder_socket(host_dir)
+
+        for index in range(HEARTBEAT_EVENT_CAP):
+            receipt = holder_op(sock, "worker_event", fabricate_event(sandbox, index))
+            check(receipt.get("staged") is True and receipt.get("error") is None,
+                  f"event {index} stages while the host is busy ({receipt})")
+
+        first = holder_op(sock, "worker_event", fabricate_event(
+            sandbox, 32, kind="permission_required", session="work-pending-87",
+            request_id="req-87-pending",
+            reason="session/request_permission pending"))
+        check((first.get("error") or {}).get("code") == "worker-event-queue-full",
+              f"the 33rd detailed event is still refused as queue-full ({first})")
+        check(first.get("overflow_full_check") is True,
+              f"the queue-full receipt records the recoverable full-check ({first})")
+        check(len(events_of_kind(host_dir, "worker_event")) == HEARTBEAT_EVENT_CAP,
+              "exactly 32 detailed events remain staged")
+        check(events_of_kind(host_dir, "worker_event_overflow"),
+              "the existing event log keeps the overflow fact")
+
+        sandbox.cli("permit", "--option", "allow", session=host)
+        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 10,
+                   "busy boundary flushes the bounded batch plus the full-check")
+        delivered = events_of_kind(host_dir, "worker_event_delivered")[0]
+        check(len(delivered["event_ids"]) == HEARTBEAT_EVENT_CAP,
+              f"one prompt still flushes only the 32 detailed events ({len(delivered['event_ids'])})")
+        check(delivered.get("overflow_full_check") is True,
+              f"delivery records the overflow full-check ({delivered})")
+        sends = rpc_sends(sandbox.rpcs[host])
+        check(len(sends) == 2, f"the batch plus full-check is a single host prompt ({len(sends)} sends)")
+        assert_delivered_notification(sandbox, host, sends[1], delivered["event_ids"][:1], body)
+        assert_overflow_full_check(sends[1])
+
+        wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions") or []),
+                   15, "notification turn asks its permission")
+        later = holder_op(sock, "worker_event", fabricate_event(
+            sandbox, 33, kind="terminated", session="work-done-87", reason="exit_0"))
+        check((later.get("error") or {}).get("code") == "worker-event-queue-full",
+              f"overflow during the notification is still queue-full ({later})")
+        check(len(events_of_kind(host_dir, "worker_event_overflow")) >= 2,
+              "a later overflow is another fact in the same event log")
+
+        sandbox.cli("permit", "--option", "allow", session=host)
+        wait_until(lambda: events_of_kind(host_dir, "worker_event_overflow_confirmed"), 10,
+                   "the notification confirms only the generation it delivered")
+        wait_until(lambda: len(events_of_kind(host_dir, "worker_event_delivered")) >= 2, 10,
+                   "the later overflow still wakes the next heartbeat")
+        second = events_of_kind(host_dir, "worker_event_delivered")[1]
+        check(second.get("overflow_full_check") is True,
+              f"the next wake still carries the full-check ({second})")
+        assert_overflow_full_check(rpc_sends(sandbox.rpcs[host])[-1])
+
+        answered = [entry for entry in events_of_kind(host_dir, "permission_answered")
+                    if entry.get("request_id") == "req-87-pending"]
+        check(not answered, f"the carrier does not auto-approve ({answered})")
+
+        host_stop = sandbox.cli("stop", "--force", session=host)
+        check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
+    finally:
+        sandbox.cleanup()
+
+
+def test_issue_87_overflow_survives_stop_and_resume() -> None:
+    """Issue #87: unconfirmed overflow facts in the existing event log are
+    rebuilt after exact Host stop and ``start --resume``."""
+    sandbox = Sandbox("overflow-resume")
+    try:
+        host = sandbox.session()
+        host_start = sandbox.start(host, "permission")
+        body = "HEARTBEAT OVERFLOW RESUME: redelivery body."
+        sandbox.write_prompt_file(body)
+        sandbox.cli("send", "--no-wait", "--text", "host busy turn", session=host)
+        wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions") or []),
+                   15, "host turn is busy waiting on a permission")
+        host_dir = sandbox.record_dir(host)
+        sock = holder_socket(host_dir)
+
+        for index in range(HEARTBEAT_EVENT_CAP):
+            receipt = holder_op(sock, "worker_event", fabricate_event(sandbox, index))
+            check(receipt.get("staged") is True, f"event {index} staged ({receipt})")
+        for index in (32, 33):
+            overflow = holder_op(sock, "worker_event", fabricate_event(sandbox, index))
+            check((overflow.get("error") or {}).get("code") == "worker-event-queue-full",
+                  f"overflow {index} is queue-full ({overflow})")
+        check(len(events_of_kind(host_dir, "worker_event_overflow")) >= 2,
+              "each overflow is a fact in the event log before stop")
+        check(not events_of_kind(host_dir, "worker_event_overflow_confirmed"),
+              "the overflow full-check is unconfirmed at stop")
+
+        native_id = host_start.get("acp_session_id")
+        stop = sandbox.cli("stop", session=host)
+        check(stop.get("stopped") is True, f"exact host stop is terminal ({stop})")
+        check(stop.get("residual_pids") == [],
+              f"exact host stop leaves no residue ({stop.get('residual_pids')})")
+        check(not events_of_kind(host_dir, "worker_event_overflow_confirmed"),
+              "exact stop does not confirm the overflow in place of resume")
+
+        sends_before = len(rpc_sends(sandbox.rpcs[host]))
+        resumed = sandbox.cli("start", "--mode", "yolo", "--resume",
+                              str(native_id), session=host, scenario="basic")
+        check(resumed.get("state") == "ready", f"host session resumes ({resumed.get('error')})")
+        wait_until(lambda: any(
+            entry.get("overflow_full_check") is True
+            for entry in events_of_kind(host_dir, "worker_event_delivered")), 10,
+                   "resume redelivers the unconfirmed overflow full-check")
+        content = rpc_sends(sandbox.rpcs[host])[-1]
+        check(len(rpc_sends(sandbox.rpcs[host])) == sends_before + 1,
+              "resume adds one notification")
+        assert_overflow_full_check(content)
+        assert_delivered_notification(
+            sandbox, host, content,
+            events_of_kind(host_dir, "worker_event_delivered")[-1]["event_ids"][:1],
+            body)
+
+        host_stop = sandbox.cli("stop", "--force", session=host)
+        check(host_stop.get("residual_pids") == [], "resumed host stop leaves no residue")
+    finally:
+        sandbox.cleanup()
+
+
+def test_issue_87_oversized_heartbeat_prompt_is_not_injected() -> None:
+    """Issue #87: an oversized heartbeat-prompt.json is a named defect, never
+    a truncated-looking body, and the worker event still wakes."""
+    module = load_holder_module()
+    bound = getattr(module, "HEARTBEAT_PROMPT_MAX_BYTES", None)
+    check(bound == 65536, f"the prompt-file read is capped at 64KiB ({bound})")
+    read_body = module.heartbeat_prompt_body
+    sandbox = Sandbox("oversize-unit")
+    try:
+        path = sandbox.repo.joinpath(*PROMPT_FILE_RELPATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        marker = "ISSUE87-OVERSIZE-TOKEN-" + uuid.uuid4().hex
+        payload = json.dumps({"schema": "kaola-heartbeat-prompt/1",
+                              "body": ("A" * bound) + marker}, ensure_ascii=False)
+        path.write_text(payload, encoding="utf-8")
+        body, defect = read_body(path)
+        check(body is None and defect is not None and str(bound) in defect,
+              f"an oversized file is a named defect ({body!r}, {defect})")
+        check(marker not in (defect or ""),
+              "oversized bytes are not passed off as the defect")
+
+        ordinary = "ISSUE87-ORDINARY-COMPLETE-BODY"
+        path.write_text(json.dumps({"schema": "kaola-heartbeat-prompt/1",
+                                    "body": ordinary}), encoding="utf-8")
+        reads: list[str] = []
+        original_open = Path.open
+
+        def counting_open(self, *args, **kwargs):
+            if str(self) == str(path):
+                reads.append("open")
+            return original_open(self, *args, **kwargs)
+
+        Path.open = counting_open  # type: ignore[method-assign]
+        try:
+            body, defect = read_body(path)
+        finally:
+            Path.open = original_open  # type: ignore[method-assign]
+        check(reads == ["open"] and (body, defect) == (ordinary, None),
+              f"one bounded read still returns the complete ordinary body ({reads})")
+    finally:
+        sandbox.cleanup()
+
+    sandbox = Sandbox("oversize-live")
+    try:
+        host = sandbox.session()
+        worker = sandbox.session()
+        sandbox.start(host, "basic")
+        marker = "ISSUE87-LIVE-OVERSIZE-" + uuid.uuid4().hex
+        path = sandbox.repo.joinpath(*PROMPT_FILE_RELPATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema": "kaola-heartbeat-prompt/1",
+                                    "body": ("B" * bound) + marker}), encoding="utf-8")
+        sandbox.start(worker, "basic",
+                      heartbeat_host={"platform": "zcode", "session": host,
+                                      "repo": str(sandbox.repo)})
+        stop = sandbox.cli("stop", session=worker)
+        check(stop.get("stopped") is True, "worker stop receipt is terminal")
+        host_dir = sandbox.record_dir(host)
+        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 10,
+                   "an oversized prompt file still delivers the worker event")
+        content = rpc_sends(sandbox.rpcs[host])[0]
+        check(marker not in content, "oversized body bytes never enter the Host prompt")
+        check("present but UNUSABLE" in content and str(bound) in content,
+              "the notification names the oversized-file defect")
+        host_stop = sandbox.cli("stop", "--force", session=host)
+        check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
     finally:
         sandbox.cleanup()
 

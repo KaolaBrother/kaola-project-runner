@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **ZCode Host heartbeat overflow wakes a full check instead of dropping the 33rd event
+  (Issue #87).** The carrier still stages at most 32 detailed worker events. A later
+  event still returns `worker-event-queue-full` and is not a 33rd detailed line; the
+  host holder records one monotonic full-check generation in the existing event log
+  and puts it on the next heartbeat so the Host inspects authorized workers' real
+  status and pending approvals. A notification confirms only the generation it
+  delivered; overflow during that turn still needs the next wake. The signal reminds
+  only and does not approve permissions. Exact `stop` then `start --resume` restores
+  an unconfirmed generation. Reading `.kaola/heartbeat-prompt.json` is capped at
+  65536 bytes: an oversized file is a named defect, is never injected as a
+  truncated-looking body, and still delivers the worker wake. No new queue,
+  scheduler, timed heartbeat, or quota system.
+
 - **An unspecified token quota is no longer an extra hard start gate for
   Kaola-Delegator (Issue #86).** Issue #74 requires a new ZCode Host to hold
   current authorization before `start` and forbids fusing quota units. The
