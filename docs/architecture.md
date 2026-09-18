@@ -170,7 +170,9 @@ from a fresh render or exceeds its budget, and `scripts/kaola-grok-bot-verify.py
 the same from outside the renderer. Tests (`Issue49BridgeInvariance`, `Issue49PinModel`) prove
 that a canonical or manifest edit leaves all three products byte-identical, that a new pin
 changes exactly one line, and that the pin gate refuses a missing, non-ancestor, incomplete,
-self-pinned, or wrongly tagged commit.
+self-pinned, or wrongly tagged commit. The canonical half of that probe uses equal-length
+substitutions so it cannot spend `main_skill_bytes` (Issue #71); `templates/budgets.json`
+remains the only ceiling.
 
 `install-local.sh` delivers those directories to a consuming runtime: a verified named alias via
 `--runtime` (`codex`, `claude-code`, `cursor`, `devin`), or any absolute `--skills-dir` (the two are

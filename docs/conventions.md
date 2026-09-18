@@ -31,6 +31,8 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
   host-target attestation.
 - Progressive-disclosure budgets: `templates/budgets.json`, enforced by `render-skills.py
   --check`, the host verifier, and `tests/contract/test-progressive-disclosure.py`.
+  Host-invariance probes in `tests/contract/test-issue-49-grok-bot-host.py` mutate
+  canonical sources with equal-length substitutions and do not reduce those numbers.
 - Frozen historical Workflow lifecycle and prompts: `templates/grok-golden/`.
 - Shared evidence-first transport guidance: `templates/references/transport.md.tmpl` plus exact reversible
   renderer overlays; never broad-replace golden prose.

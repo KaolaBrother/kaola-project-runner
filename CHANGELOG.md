@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **The #49 host-invariance probe no longer spends product budget (Issue #71).**
+  It now applies equal-length canonical edits instead of appending 59 B, so
+  `templates/budgets.json` `main_skill_bytes` 17408 is the ceiling
+  `render-skills.py --check` already reports. No budget was raised.
 - **The heartbeat carries only the constraints that are still in force (Issue
   #68).** The heartbeat is the working prompt itself, and the main Skill now
   states which trigger delivers it on which host: Codex and Grok Bot from their

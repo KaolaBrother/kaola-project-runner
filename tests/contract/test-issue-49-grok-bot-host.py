@@ -184,6 +184,37 @@ def host_products(root: Path) -> dict[str, bytes]:
     return {name: (bundle / name).read_bytes() for name in (f"{ORCHESTRATOR_ID}.md", "bridge.json", "INSTALL.md")}
 
 
+# Issue #71: prove pin/host invariance with a real canonical edit that cannot spend budget.
+# Each pair is one unique span replaced by a same-UTF-8-length unique span.
+CANONICAL_INVARIANCE_EDITS = (
+    ("templates/orchestrator/SKILL.md.tmpl", "It is not a platform Runner and has", "It is not a platform InvTst and has"),
+    ("templates/SKILL.md.tmpl", "It gives the controlling Agent a", "It gives the controlling InvTs a"),
+    ("templates/references/transport.md.tmpl", "The Runner starts the runtime as", "The InvTst starts the runtime as"),
+    ("templates/orchestrator/references/grok-bot-host.md", "Grok Bot is a host for this Skill", "Grok Bot is a InvT for this Skill"),
+)
+
+
+def replace_equal_length(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    found = text.count(old)
+    if found != 1:
+        raise AssertionError(f"{path}: expected exactly one {old!r}, found {found}")
+    if new in text:
+        raise AssertionError(f"{path}: replacement already present: {new!r}")
+    old_n, new_n = len(old.encode("utf-8")), len(new.encode("utf-8"))
+    if old_n != new_n:
+        raise AssertionError(f"{path}: {old_n} B != {new_n} B")
+    updated = text.replace(old, new, 1)
+    if len(updated.encode("utf-8")) != len(text.encode("utf-8")):
+        raise AssertionError(f"{path}: UTF-8 size changed")
+    path.write_text(updated, encoding="utf-8")
+
+
+def apply_canonical_invariance_edits(root: Path) -> None:
+    for relative, old, new in CANONICAL_INVARIANCE_EDITS:
+        replace_equal_length(root / relative, old, new)
+
+
 def markdown_tree(root: Path) -> str:
     return "\n".join(p.read_text(encoding="utf-8") for p in sorted(root.rglob("*.md")))
 
@@ -480,20 +511,31 @@ class Issue49BridgeInvariance(unittest.TestCase):
             self.assertEqual(render(root, "--write").returncode, 0)
             before_products = host_products(root)
             before = bridge.read_text(encoding="utf-8").splitlines()
-            # Canonical edits: orchestrator body, worker template, a worker reference, a host reference,
-            # and a platform manifest (the adapter reads no manifest: all three products stay identical).
-            for relative, marker in (("templates/orchestrator/SKILL.md.tmpl", "\n\nCanonical policy sentence added for the invariance test.\n"),
-                                     ("templates/SKILL.md.tmpl", "\n\nCanonical transport sentence added for the invariance test.\n"),
-                                     ("templates/references/transport.md.tmpl", "\n\nReference sentence added for the invariance test.\n"),
-                                     ("templates/orchestrator/references/grok-bot-host.md", "\n\nHost reference sentence added for the invariance test.\n")):
-                path = root / relative
-                path.write_text(path.read_text(encoding="utf-8") + marker, encoding="utf-8")
+            before_main = (root / "skills" / ORCHESTRATOR_ID / "SKILL.md").read_bytes()
+            # Canonical edits must be equal-length (Issue #71): appending spent undeclared budget.
+            # Orchestrator body, worker template, a worker reference, a host reference, and a
+            # platform manifest (the adapter reads no manifest: all three products stay identical).
+            apply_canonical_invariance_edits(root)
             manifest = root / "platforms" / "claude-code.yaml"
             manifest.write_text(re.sub(r'(?m)^runtime_name: ".*"$', 'runtime_name: "Renamed Runtime"', manifest.read_text(encoding="utf-8")), encoding="utf-8")
             self.assertEqual(render(root, "--write").returncode, 0)
             self.assertEqual(host_products(root), before_products, "canonical and manifest edits must not touch any host product")
-            self.assertIn("Canonical policy sentence", (root / "skills" / ORCHESTRATOR_ID / "SKILL.md").read_text(encoding="utf-8"))
+            after_main = (root / "skills" / ORCHESTRATOR_ID / "SKILL.md").read_bytes()
+            self.assertEqual(len(after_main), len(before_main), "invariance probe must not change main Skill size")
+            self.assertNotEqual(after_main, before_main, "the canonical edit must actually land")
+            self.assertIn("platform InvTst and has", after_main.decode("utf-8"))
+            self.assertIn("controlling InvTs a", (root / "skills" / "claude-code-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8"))
+            self.assertIn("The InvTst starts the runtime as", (root / "skills" / "claude-code-kaola-project-runner" / "references" / "transport.md").read_text(encoding="utf-8"))
+            self.assertIn("Grok Bot is a InvT for this Skill", (root / "skills" / ORCHESTRATOR_ID / "references" / "grok-bot-host.md").read_text(encoding="utf-8"))
             self.assertIn("Renamed Runtime", (root / "skills" / "claude-code-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8"))
+            host_blob = b"".join(before_products.values())
+            for needle in (b"platform InvTst", b"controlling InvTs a", b"The InvTst starts", b"is a InvT for this Skill"):
+                self.assertNotIn(needle, host_blob)
+            # Positive control: a real host-template edit is visible in the host products.
+            bridge_tmpl = root / "templates" / HOST_ID / "bridge.md.tmpl"
+            bridge_tmpl.write_text(bridge_tmpl.read_text(encoding="utf-8") + "\nHost leakage probe sentence.\n", encoding="utf-8")
+            self.assertEqual(render(root, "--write").returncode, 0)
+            self.assertNotEqual(host_products(root), before_products, "a host-template edit must change host products")
             # The pin gate demands a tree that differs from R only by the pin itself, so the canonical
             # experiments above are reverted (and the workers re-rendered) before pinning.
             git(root, "checkout", "-q", "--", ".")
@@ -529,6 +571,38 @@ class Issue49BridgeInvariance(unittest.TestCase):
             changed = [i for i, (a, b) in enumerate(zip(after, again)) if a != b]
             self.assertEqual(len(changed), 1)
             self.assertIn(second, again[changed[0]])
+
+    def test_invariance_probe_does_not_spend_declared_main_skill_budget(self) -> None:
+        """Issue #71: equal-length canonical edits still render at the declared ceiling."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = copy_repo(temporary)
+            self.assertEqual(render(root, "--write").returncode, 0)
+            main = root / "skills" / ORCHESTRATOR_ID / "SKILL.md"
+            tmpl = root / "templates" / "orchestrator" / "SKILL.md.tmpl"
+            current = main.stat().st_size
+            declared = BUDGETS["main_skill_bytes"]
+            self.assertLessEqual(current, declared)
+            pad = declared - current
+            if pad:
+                tmpl.write_text(tmpl.read_text(encoding="utf-8") + ("P" * pad), encoding="utf-8")
+                written = render(root, "--write")
+                self.assertEqual(written.returncode, 0, written.stderr)
+            self.assertEqual(main.stat().st_size, declared)
+            at_ceiling = host_products(root)
+            apply_canonical_invariance_edits(root)
+            written = render(root, "--write")
+            self.assertEqual(written.returncode, 0, written.stderr)
+            check = render(root, "--check")
+            self.assertEqual(check.returncode, 0, check.stderr)
+            self.assertEqual(main.stat().st_size, declared)
+            self.assertIn("platform InvTst and has", main.read_text(encoding="utf-8"))
+            self.assertEqual(host_products(root), at_ceiling)
+            tmpl.write_text(tmpl.read_text(encoding="utf-8") + "X", encoding="utf-8")
+            over = render(root, "--write")
+            self.assertNotEqual(over.returncode, 0)
+            self.assertRegex(over.stderr, r"budget: kaola-project-runner/SKILL\.md is \d+ B > \d+ B \(main_skill_bytes\)")
+            self.assertEqual(main.stat().st_size, declared, "an over-budget product must never be written")
+            self.assertNotEqual(render(root, "--check").returncode, 0)
 
     def test_renderer_refuses_a_non_40_hex_revision_or_over_budget_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
