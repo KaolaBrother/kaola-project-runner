@@ -39,7 +39,8 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
 
 Do not start the Host from this file. Follow Kaola-Delegator (`kaola-delegator`)
 and its `references/handoff.md`. This section exists only so a Host that loaded
-this Skill does not copy a second outer procedure.
+this Skill does not copy a second outer procedure. Exceptions reach you; worker
+handling does not. Do not take that over session by session.
 
 ## C. The Host's own startup and beat
 
