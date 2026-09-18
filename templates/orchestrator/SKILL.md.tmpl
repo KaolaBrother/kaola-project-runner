@@ -33,10 +33,11 @@ checks against that plan, and keep-versus-stop: [host-startup.md](references/hos
 
 ## Consumer-project boundary
 
-For consumer-project work this repository, its templates, generated files, and
-any installed Skill payload are read-only unless a human explicitly assigned
-Project Runner development. Store project-specific authorization, heartbeat,
-and run facts in the consuming project.
+For consumer-project work, the Project Runner checkout, templates, generated
+files, and installed Skill payload are read-only. Store project-specific
+authorization, heartbeat, and run facts in the consuming project. Do not edit
+this repository, its templates, generated files, or an installed Skill payload
+unless a human explicitly assigned Project Runner development.
 
 ## Authorization
 
