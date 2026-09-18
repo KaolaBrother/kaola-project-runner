@@ -250,6 +250,14 @@ relay input/output facts, Git reporting facts, and compatibility editor/activity
 signals. Those compatibility fields are advisory evidence for the controlling agent; generic
 `send`/`stop` never consume them as semantic authority.
 
+ACP receipts also report the notification binding in force (Issue #70). `start`, `observe`
+and `status` carry `heartbeat_host`: the target the running holder really adopted, or `null`
+for an ordinary unbound worker; a holder or record written before the field exists instead
+answers `heartbeat_host_known: false` (unknown, never reported as unbound), and a receipt with
+no session at all stays silent. `start` keeps what it asked for separately in
+`heartbeat_host_requested`, and a `session-exists` start reports the reused holder's binding,
+so a later environment change or a repeated `start` can never look like a rebinding.
+
 ### `steer` — Agent-chosen steering of a running turn (Issue #65)
 
 `steer --repo ABS_PATH --session NAME [--text TEXT | --stdin] [--steer-mode native|interrupt]

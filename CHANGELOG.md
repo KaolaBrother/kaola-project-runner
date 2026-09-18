@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **A worker's notification binding is reported as the holder's own fact, and a
+  missed one is recovered inside the Runner (Issue #70).** A ZCode Host wakes
+  only through workers actually bound to it, but the `start` receipt used to
+  echo the caller's own `KAOLA_ACP_HEARTBEAT_HOST` input, so a missed or foreign
+  binding looked exactly like a correct one. The holder now carries the target it
+  really adopted in its own state and record, and `start`, `observe` and `status`
+  report that running fact: a target, an explicit `null` for an ordinary unbound
+  worker - which stays legal and ungated - or `heartbeat_host_known: false` for a
+  holder or record older than the field, which is unknown and never reported as
+  unbound. What a `start` asked for stays separate in `heartbeat_host_requested`,
+  and a reuse that returns `session-exists` answers with the binding in force, so
+  a later environment change, a `send`, or a repeated `start` can no longer look
+  like a rebinding. The ZCode Host guidance verifies that fact on every worker it
+  starts, reuses or adopts, and recovers a missed binding itself: it keeps the
+  in-flight work, reads the result in that beat with the existing bounded
+  `wait --timeout` when the unbound worker is its only wake source (a recovery
+  exception, never the ordinary event wait and never a poll loop), then rebinds by
+  exact `stop`/`start` and verifies the fact again; only a recovery it cannot
+  complete goes out as an exception naming the decision needed, and a note in the
+  heartbeat body is bookkeeping, not a wake-up. `--resume` there needs a real
+  native id, which for ZCode is reported in the session's own
+  `native_session_identity` event rather than `session_meta`. No new rebind
+  operation, scheduler, timer or global gate; no byte budget raised.
+
 - **Issue-backed dispatches are named for their issue, and one run claims one
   issue (Issue #72).** Every new issue-backed ACP worker dispatch now picks its
   real open GitHub issue before starting anything and names the Runner session
