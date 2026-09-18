@@ -26,6 +26,7 @@ from typing import Any
 PROJECT = Path(__file__).resolve().parents[2]
 CLI = PROJECT / "scripts" / "kaola-acp.py"
 HOLDER = PROJECT / "scripts" / "kaola-acp-holder.py"
+SWEEP = PROJECT / "scripts" / "kaola-acp-sweep.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 INSTALLER = PROJECT / "scripts" / "install-local.sh"
 TMUX = PROJECT / "scripts" / "kaola-tmux.sh"
@@ -167,7 +168,7 @@ def own_processes(root: Path) -> dict[int, str]:
 class AcpWatchContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        for path in (CLI, HOLDER, MOCK, SAMPLE, INSTALLER, TMUX):
+        for path in (CLI, HOLDER, SWEEP, MOCK, SAMPLE, INSTALLER, TMUX):
             if not path.is_file():
                 raise AssertionError(f"missing {path}")
         cls.sample = json.loads(SAMPLE.read_text(encoding="utf-8"))
@@ -569,15 +570,25 @@ class AcpWatchContractTests(unittest.TestCase):
             thread.join(timeout=2)
             # The stub listener replaced the holder's socket path, so nothing
             # at that path reaches the real holder any more and teardown's
-            # stop cannot find it. Kill the holder this test orphaned by its
-            # start-receipt pid; teardown's stop --force then sweeps the
-            # recorded agent group.
-            holder_pid = started.get("holder_pid")
-            if isinstance(holder_pid, int):
-                try:
-                    os.kill(holder_pid, signal.SIGKILL)
-                except OSError:
-                    pass
+            # stop cannot find it. Sweep this test's exact record dir — the
+            # same bounded path an interrupted run uses — which identifies the
+            # holder by its own --record-dir argv value, never a bare pid.
+            swept = self.run_raw(
+                [
+                    sys.executable, str(SWEEP), "--root",
+                    str(self.record_dir("grok", session, repo)),
+                ],
+                timeout=40,
+            )
+        receipt = self.load_object(swept, "kaola-acp-sweep")
+        self.assertEqual(
+            receipt.get("matched_pids"), [started.get("holder_pid")],
+            f"sweep must match exactly the orphaned holder: {receipt}",
+        )
+        self.assertEqual(
+            receipt.get("residual_pids"), [],
+            f"sweep left residue: {receipt}",
+        )
         self.assertEqual(payload.get("schema"), "kaola-acp-view/1")
         self.assertIn((payload.get("error") or {}).get("code"), {
             "holder-lost", "holder-unreachable", "no-session",
