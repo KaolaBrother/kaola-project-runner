@@ -67,6 +67,18 @@ BUILTIN_TABLE = {
     },
 }
 
+# Same rule ordering the shipped table uses: a generic rule then a specific one,
+# later matches overriding earlier, tested as `^(?:<modelMatch>)$` case-insensitively.
+BUILTIN_TABLE_WITH_RULES = json.loads(json.dumps(BUILTIN_TABLE))
+BUILTIN_TABLE_WITH_RULES["config"]["modelConfigRules"] = {
+    "modelRules": [
+        {"modelMatch": ".*",
+         "config": {"optionSpecs": {"reasoningLevel": {"values": ["disabled", "enabled"]}}}},
+        {"modelMatch": r".*glm-5\.3(?:-flash)?(?:[.\-:/\[].*)?",
+         "config": {"optionSpecs": {"reasoningLevel": {"values": ["low", "high", "max"]}}}},
+    ],
+}
+
 POISON = "/tmp/i79-inherited-must-not-be-used/zcode-builtin.json"
 
 
@@ -108,7 +120,7 @@ class Driver:
         self.builtin_path = self.entry_dir / "provider" / "zcode-builtin.json"
         if bundled:
             self.builtin_path.parent.mkdir(parents=True, exist_ok=True)
-            self.builtin_path.write_text(json.dumps(BUILTIN_TABLE), encoding="utf-8")
+            self.builtin_path.write_text(json.dumps(BUILTIN_TABLE_WITH_RULES), encoding="utf-8")
         self.shim = self._write_shim(modern, scenario)
 
         env = {
@@ -343,6 +355,17 @@ class TestModernTurn(TempCase):
         self.assertEqual(set_model.get("model", {}).get("providerId"), ACCOUNT_ID)
         self.assertEqual(set_model.get("model", {}).get("modelId"), "GLM-5.3")
         self.assertIs(set_model.get("persistAsWorkspaceLastUsed"), False)
+        # 3.12+ refuses a Coding Plan selection with no explicit reasoning level.
+        self.assertIn(set_model["model"].get("options", {}).get("reasoningLevel"),
+                      ("low", "high", "max"))
+
+    def test_reasoning_levels_come_from_the_bundled_table(self):
+        m = load_adapter()
+        self.assertEqual(m.account_reasoning_levels(BUILTIN_TABLE_WITH_RULES, "GLM-5.3"),
+                         ["low", "high", "max"])
+        # A model the specific rule does not match falls back to the generic one.
+        self.assertEqual(m.account_reasoning_levels(BUILTIN_TABLE_WITH_RULES, "some-other"),
+                         ["disabled", "enabled"])
 
     def test_account_snapshot_matches_installed_validator(self):
         drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
@@ -355,8 +378,13 @@ class TestModernTurn(TempCase):
         entry = (push.get("providers") or {}).get(ACCOUNT_ID) or {}
         self.assertEqual(entry.get("builtinModelIds"), ["GLM-5.3", "GLM-5.3-Flash"])
         self.assertEqual(entry.get("access"), {"type": "zhipu-account", "entitled": True})
-        # The required boolean an entitled zhipu-account provider must carry.
-        self.assertIs(((push.get("states") or {}).get(ACCOUNT_ID) or {}).get("current"), True)
+        # The state fields the installed 3.12.3 schema actually requires,
+        # measured live: availability enum + entitled + current.
+        state = (push.get("states") or {}).get(ACCOUNT_ID) or {}
+        self.assertIs(state.get("current"), True)
+        self.assertIs(state.get("entitled"), True)
+        self.assertIn(state.get("availability"),
+                      ("available", "pending", "unavailable", "unknown"))
         # No credential travels in the snapshot.
         self.assertNotIn(FIXTURE_SECRET, json.dumps(push))
 

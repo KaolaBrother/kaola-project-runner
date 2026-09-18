@@ -46,6 +46,7 @@ CREATE_KEYS = {
 SETMODEL_KEYS = {"sessionId", "model", "expectedRevision", "persistAsWorkspaceLastUsed"}
 MODEL_KEYS = {"providerId", "modelId", "options"}
 ACCOUNT_KEYS = {"revision", "basedOnZCodeBuiltinRevision", "providers", "states"}
+AVAILABILITY = {"available", "pending", "unavailable", "unknown"}
 
 
 def emit(msg: dict[str, Any]) -> None:
@@ -128,9 +129,16 @@ class Fake312:
             entitled = isinstance(access, dict) and access.get("entitled") is True
             zhipu = isinstance(access, dict) and access.get("type") == "zhipu-account"
             if pid.startswith("account:") and zhipu and entitled:
-                current = (states.get(pid) or {}).get("current")
-                if not isinstance(current, bool):
+                state = states.get(pid) or {}
+                # Measured live against installed 3.12.3: all three are required.
+                if not isinstance(state.get("current"), bool):
                     return f"Account State missing current: {pid}"
+                if state.get("availability") not in AVAILABILITY:
+                    return (f"states.{pid}.availability: Invalid option: expected one of "
+                            '"available"|"pending"|"unavailable"|"unknown"')
+                if not isinstance(state.get("entitled"), bool):
+                    return (f"states.{pid}.entitled: Invalid input: expected boolean, "
+                            "received undefined")
         return None
 
     # -- dispatch ---------------------------------------------------------
@@ -199,6 +207,14 @@ class Fake312:
             if mid not in self.catalog[pid]:
                 self.error(rid, -32602, f"{mid} is not offered by {pid}")
                 return
+            # Measured live against installed 3.12.3: an account provider
+            # refuses a selection that carries no explicit reasoning level.
+            if pid.startswith("account:"):
+                level = (model.get("options") or {}).get("reasoningLevel")
+                if not level:
+                    self.error(rid, -32603,
+                               f"Reasoning level is required for {pid}/{mid}")
+                    return
             self.selection[params.get("sessionId")] = {"providerId": pid, "modelId": mid}
             record({"set_model": params})
             self.result(rid, {})

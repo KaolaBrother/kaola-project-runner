@@ -50,6 +50,7 @@ import atexit
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -128,6 +129,9 @@ def personal_provider_config_path(home: str | None = None) -> str | None:
 # The app-server's own provider registry is keyed by `account:*` ids, not by the
 # desktop registry's `builtin:*` ids. The bundled table's providerRules list the
 # individual Coding Plan under these names (Issue #79).
+# `states[<id>].availability` enum, from the installed 3.12.3 schema.
+PLAN_AVAILABILITY = ("available", "pending", "unavailable", "unknown")
+
 ACCOUNT_PROVIDER_BY_CODING_PLAN = {
     "builtin:bigmodel-coding-plan": "account:bigmodel-individual-coding-plan",
     "builtin:zai-coding-plan": "account:zai-individual-coding-plan",
@@ -168,6 +172,33 @@ def account_model_ids(release: dict[str, Any], account_id: str) -> list[str]:
     return []
 
 
+def account_reasoning_levels(release: dict[str, Any], model_id: str) -> list[str]:
+    """Reasoning levels the bundled table allows for one model.
+
+    `modelRules` are regex rules applied in order, later matches overriding
+    earlier ones -- the backend tests them as `^(?:<modelMatch>)$`, case
+    insensitive. 3.12+ requires an explicit level for the Coding Plan models.
+    """
+    rules = ((release.get("config") or {}).get("modelConfigRules") or {}).get("modelRules") or []
+    levels: list[str] = []
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        pattern = rule.get("modelMatch")
+        if not isinstance(pattern, str):
+            continue
+        try:
+            if not re.match(f"^(?:{pattern})$", model_id, re.IGNORECASE):
+                continue
+        except re.error:
+            continue
+        values = (((rule.get("config") or {}).get("optionSpecs") or {})
+                  .get("reasoningLevel") or {}).get("values")
+        if isinstance(values, list) and values:
+            levels = [v for v in values if isinstance(v, str) and v]
+    return levels
+
+
 def build_account_config(
     choice: dict[str, Any], release: dict[str, Any], active_path: str,
 ) -> dict[str, Any] | None:
@@ -191,9 +222,15 @@ def build_account_config(
             f"{choice['provider_id']} offers {', '.join(choice['model_ids'])} but "
             f"{account_id} lists {', '.join(bundled)}; no shared model"
         )
+    # `availability` is reported, not asserted: the desktop plan cache is the
+    # only fact we have about the plan, and an unrecognised status stays
+    # `unknown` rather than being upgraded to `available`.
+    status = choice.get("plan_cache_status")
+    availability = status if status in PLAN_AVAILABILITY else "unknown"
     return {
         "account_id": account_id,
         "model_ids": model_ids,
+        "release": release,
         "params": {
             "revision": f"{ADAPTER_NAME}:{int(time.time() * 1000)}",
             "basedOnZCodeBuiltinRevision": builtin_revision_string(release, active_path),
@@ -203,8 +240,16 @@ def build_account_config(
                     "access": {"type": "zhipu-account", "entitled": True},
                 },
             },
-            # Required boolean for every entitled zhipu-account provider.
-            "states": {account_id: {"current": True}},
+            # Measured against the installed 3.12.3 schema: `availability` and
+            # `entitled` are required here, and `current` is required by the
+            # snapshot validator for an entitled zhipu-account provider.
+            "states": {
+                account_id: {
+                    "availability": availability,
+                    "entitled": True,
+                    "current": True,
+                },
+            },
         },
     }
 
@@ -1052,9 +1097,19 @@ class ZCodeAcpAgent:
                 f"model {model_id} is not offered by {account['account_id']} "
                 f"(available: {', '.join(account['model_ids'])})"
             )
+        model: dict[str, Any] = {
+            "providerId": account["account_id"], "modelId": model_id,
+        }
+        # 3.12+ refuses a Coding Plan selection with no explicit reasoning level
+        # ("Reasoning level is required for <provider>/<model>"). Honour the
+        # session's thought level when the model actually offers it.
+        levels = account_reasoning_levels(account.get("release") or {}, model_id)
+        if levels:
+            wanted = session.thought if session.thought in levels else levels[0]
+            model["options"] = {"reasoningLevel": wanted}
         backend.call("session/setModel", {
             "sessionId": session.backend_id,
-            "model": {"providerId": account["account_id"], "modelId": model_id},
+            "model": model,
             "persistAsWorkspaceLastUsed": False,
         })
         session.model_id = model_id
