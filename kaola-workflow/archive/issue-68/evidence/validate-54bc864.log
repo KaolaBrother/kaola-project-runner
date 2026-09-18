@@ -1,0 +1,164 @@
+render-skills: PASS (9 workers + kaola-project-runner + grok-bot host: 1 bridge skill, 2526 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+installer migration acceptance: PASS
+installer runtimes acceptance: PASS
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.088s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+...............................
+----------------------------------------------------------------------
+Ran 31 tests in 0.812s
+
+OK
+.............................................
+----------------------------------------------------------------------
+Ran 45 tests in 53.960s
+
+OK
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 9.440s
+
+OK
+............
+----------------------------------------------------------------------
+Ran 12 tests in 11.244s
+
+OK
+.............................
+----------------------------------------------------------------------
+Ran 29 tests in 6.776s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 2.835s
+
+OK
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 29.052s
+
+OK
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.002s
+
+OK
+generated Skill acceptance: PASS
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 0.037s
+
+OK
+.......................
+----------------------------------------------------------------------
+Ran 23 tests in 1.209s
+
+OK
+test_a_confirmed_change_takes_effect_in_the_same_beat (__main__.HeartbeatGuidanceObligation.test_a_confirmed_change_takes_effect_in_the_same_beat) ... ok
+test_budgets_are_not_raised (__main__.HeartbeatGuidanceObligation.test_budgets_are_not_raised) ... ok
+test_carriers_stay_host_native_and_no_new_mechanism_is_introduced (__main__.HeartbeatGuidanceObligation.test_carriers_stay_host_native_and_no_new_mechanism_is_introduced) ... ok
+test_each_beat_subtracts_while_keeping_live_work (__main__.HeartbeatGuidanceObligation.test_each_beat_subtracts_while_keeping_live_work) ... ok
+test_exhaustion_neither_switches_platform_nor_cancels_in_flight (__main__.HeartbeatGuidanceObligation.test_exhaustion_neither_switches_platform_nor_cancels_in_flight) ... ok
+test_heartbeat_is_defined_per_host_without_a_shared_implementation (__main__.HeartbeatGuidanceObligation.test_heartbeat_is_defined_per_host_without_a_shared_implementation) ... ok
+test_quota_units_are_not_fused_into_one_number (__main__.HeartbeatGuidanceObligation.test_quota_units_are_not_fused_into_one_number) ... ok
+test_before_snapshots_would_fail_the_same_invariants (__main__.HeartbeatSnapshotBehavior.test_before_snapshots_would_fail_the_same_invariants)
+The inputs are real: each `before` is exactly what the rule has to fix. ... ok
+test_compacted_snapshots_satisfy_every_invariant (__main__.HeartbeatSnapshotBehavior.test_compacted_snapshots_satisfy_every_invariant) ... ok
+test_wrong_snapshots_are_rejected (__main__.HeartbeatSnapshotBehavior.test_wrong_snapshots_are_rejected)
+Without this the invariants above could be vacuously true. ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.002s
+
+OK
+..........................................
+----------------------------------------------------------------------
+Ran 42 tests in 18.591s
+
+OK
+.....................
+----------------------------------------------------------------------
+Ran 21 tests in 16.246s
+
+OK
+PASS test_provenance (117 checks)
+PASS test_dist_self_contained (6 checks)
+PASS test_turns_flags_env_cwd_logs (45 checks)
+PASS test_cwd_validation (3 checks)
+PASS test_permission_roundtrip (4 checks)
+PASS test_cancel_kills_process_group (10 checks)
+PASS test_stale_cancel_does_not_taint_next_turn (6 checks)
+PASS test_stop_during_turn_cleans_everything (5 checks)
+PASS test_missing_binary_fails_closed (10 checks)
+PASS test_concurrent_session_isolation (4 checks)
+PASS test_named_continuity_list_and_resume (7 checks)
+test-issue-50: 217 checks, 11/11 tests passed
+PASS test_continue_and_resume_land_in_the_same_native_session (9 checks)
+PASS test_fail_closed_without_exact_binary_or_bridge (10 checks)
+PASS test_force_stop_sweeps_detached_claude_groups (70 checks)
+PASS test_manifest_and_generated_skill (39 checks)
+PASS test_preflight_facts_in_both_layouts (18 checks)
+PASS test_pty_fallback_stays_explicit (3 checks)
+PASS test_start_send_cancel_stop_through_generated_skill (32 checks)
+test-issue-50-runner-integration: 7/7 tests, 181 checks
+..........................
+----------------------------------------------------------------------
+Ran 26 tests in 3.601s
+
+OK
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 8.938s
+
+OK
+PASS test_fail_closed_without_explicit_runtime (14 checks)
+PASS test_installer_knows_zcode_and_rejects_zcode_bot (8 checks)
+PASS test_manifest_renderer_and_inventory (49 checks)
+PASS test_skip_all_mode_is_yolo_on_acp_and_pty (8 checks)
+PASS test_start_send_cancel_stop_schema_v3 (32 checks)
+PASS test_transport_dispatch_acp_default_pty_diagnostic (8 checks)
+test-issue-51-runner-integration: 6/6 tests, 119 checks
+PASS test_command_start_appends_child_record_when_env_present (11 checks)
+PASS test_holder_lost_stop_force_sweeps_recorded_inner (11 checks)
+PASS test_nested_two_layer_isolation_and_exact_stop (25 checks)
+test-zcode-host-contract: 3/3 tests, 47 checks
+PASS test_bounded_queue_dedup_and_single_batch_flush (47 checks)
+PASS test_busy_host_stages_then_flushes_after_turn_completed (14 checks)
+PASS test_canonical_heartbeat_spec_stays_one_set (11 checks)
+PASS test_carrier_is_zcode_host_only (9 checks)
+PASS test_idle_episode_reads_prompt_body_at_delivery_time (23 checks)
+PASS test_issue_66_defective_prompt_file_reports_its_defect (21 checks)
+PASS test_issue_66_unarmed_worker_stays_ungated (5 checks)
+PASS test_resume_redelivers_unconfirmed_events (12 checks)
+PASS test_terminated_event_delivers_full_body_and_confirms (24 checks)
+test-zcode-heartbeat-contract: 9/9 tests, 166 checks
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.307s
+
+OK
+......
+----------------------------------------------------------------------
+Ran 6 tests in 3.356s
+
+OK
+kaola-grok-bot-verify: PASS /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-68/hosts/grok-bot (1 bridge skill, 2526 B, stage content, manifest, guide; no canonical content; generated state)
+{"killed_group_members": [], "matched_pids": [67935, 67972, 68029, 68063, 68104, 68148, 68193, 68231, 68267, 68393, 68468, 68644, 68720, 68818, 71526], "residual_pids": [], "results": [{"force_killed": true, "holder_alive": false, "pid": 67935, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 67972, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68029, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68063, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68104, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68148, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68193, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68231, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68267, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68393, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68468, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68644, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68720, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 68818, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 71526, "stop_error": {"code": "holder-unreachable", "message": "[Errno 61] Connection refused"}, "stop_residual_pids": [], "via": "kill"}], "root": "/tmp/kaola-val.lseOcQ", "swept_groups": []}
