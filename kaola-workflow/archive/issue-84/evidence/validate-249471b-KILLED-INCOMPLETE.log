@@ -1,0 +1,14 @@
+render-skills: PASS (9 workers + kaola-project-runner + grok-bot host: 1 bridge skill, 2526 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+installer migration acceptance: PASS
+installer runtimes acceptance: PASS
+{"killed_group_members": [], "matched_pids": [57542, 57561], "residual_pids": [], "results": [{"force_killed": false, "holder_alive": false, "pid": 57542, "stop_error": null, "stop_residual_pids": [], "via": "socket"}, {"force_killed": false, "holder_alive": false, "pid": 57561, "stop_error": null, "stop_residual_pids": [], "via": "socket"}], "root": "/tmp/kaola-val.FMDkQx", "swept_groups": [57546, 57562]}
