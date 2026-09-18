@@ -1,0 +1,110 @@
+commit c4caf3729a2635118abf86e5e319584404b1122b
+Author:     Devin <devin@cognition.ai>
+AuthorDate: Sat Sep 19 00:40:35 2026 +0800
+Commit:     Devin <devin@cognition.ai>
+CommitDate: Sat Sep 19 00:40:35 2026 +0800
+
+    test(issue-80): disable detached git auto-maintenance in fixtures
+    
+    git >=2.47 spawns `git maintenance run --auto --quiet --detach` after
+    commit/merge/rebase (and receive-pack after push). The detached child
+    runs `repack --write-midx` + update-server-info inside the fixture .git
+    while TemporaryDirectory teardown rmtree's it, making
+    test-issue-49-grok-bot-host.py die in cleanup with Errno 66 on
+    repo/.git after all 43 assertions pass — and taking validate.sh's
+    lane B down with it.
+    
+    Fixtures never need background maintenance: set maintenance.auto=false
+    via GIT_CONFIG_* env in git() for direct children, and
+    receive.autogc=false in the bare origin's own config because push
+    strips GIT_CONFIG_* before spawning git-receive-pack. gc.auto=0 does
+    not gate this spawn; neither knob masks the symptom.
+    
+    Generated with [Devin](https://devin.ai)
+    
+    Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+
+ tests/contract/test-issue-49-grok-bot-host.py | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+diff --git a/tests/contract/test-issue-49-grok-bot-host.py b/tests/contract/test-issue-49-grok-bot-host.py
+index 4dbe189..4fdd4cd 100644
+--- a/tests/contract/test-issue-49-grok-bot-host.py
++++ b/tests/contract/test-issue-49-grok-bot-host.py
+@@ -82,7 +82,12 @@ def run(argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> subpro
+ 
+ 
+ def git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
++    # Issue #80: git >=2.47 `commit`/`merge`/`rebase` spawn a detached `maintenance run --auto`
++    # child that repacks and rewrites .git (pack/, objects/info/, info/refs) after the command
++    # returns, racing TemporaryDirectory teardown into Errno 66. Fixtures never need background
++    # maintenance, so every fixture git call disables it; gc.auto=0 does not gate this spawn.
+     base = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
++                GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="maintenance.auto", GIT_CONFIG_VALUE_0="false",
+                 GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+     if env:
+         base.update(env)
+@@ -237,6 +242,9 @@ class LocatorFixture:
+         self.bare = self.base / "origin.git"
+         self.bare.mkdir()
+         git(self.bare, "init", "--bare", "-q")
++        # receive-pack never sees push's GIT_CONFIG_* env (the transport strips it), so the
++        # bare repo's own config must refuse the auto-maintenance spawn from Issue #80.
++        git(self.bare, "config", "receive.autogc", "false")
+         seed = self.base / "seed"
+         seed.mkdir()
+         git(seed, "init", "-q")
+
+=== post-rebase onto b40813f (after #79 sink) ===
+ CHANGELOG.md                                  | 12 ++++++++++++
+ tests/contract/test-issue-49-grok-bot-host.py |  8 ++++++++
+ 2 files changed, 20 insertions(+)
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index ecfa558..b454612 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,18 @@
+ 
+ ## Unreleased
+ 
++- **`./scripts/validate.sh` is green on a clean checkout again (Issue #80).**
++  `tests/contract/test-issue-49-grok-bot-host.py` died in `TemporaryDirectory`
++  teardown with `OSError: [Errno 66] Directory not empty: <tmp>/repo/.git`
++  after all 43 assertions passed: git >=2.47's `commit`/`merge`/`rebase` (and
++  `receive-pack` on push) spawn a detached `maintenance run --auto` child that
++  keeps repacking and rewriting `.git` while `rmtree` removes it, and the first
++  failing suite then aborted a whole validation lane, hiding every suite after
++  it. The fixtures now run every git call with `maintenance.auto=false`, and
++  the bare origin carries `receive.autogc=false` because the push transport
++  strips the config environment before `git-receive-pack` starts. No assertion
++  changed, no `ignore_cleanup_errors`, no sleeps.
++
+ - **ZCode 3.12+ app-server compatibility, proven by a live model turn (Issue #79).**
+   The Runner-owned adapter still spoke the v0.39-era private protocol, and the
+   installed ZCode 3.12.3 build contains no `runtimeModel` at all, so a turn could
+diff --git a/tests/contract/test-issue-49-grok-bot-host.py b/tests/contract/test-issue-49-grok-bot-host.py
+index 4dbe189..4fdd4cd 100644
+--- a/tests/contract/test-issue-49-grok-bot-host.py
++++ b/tests/contract/test-issue-49-grok-bot-host.py
+@@ -82,7 +82,12 @@ def run(argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> subpro
+ 
+ 
+ def git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
++    # Issue #80: git >=2.47 `commit`/`merge`/`rebase` spawn a detached `maintenance run --auto`
++    # child that repacks and rewrites .git (pack/, objects/info/, info/refs) after the command
++    # returns, racing TemporaryDirectory teardown into Errno 66. Fixtures never need background
++    # maintenance, so every fixture git call disables it; gc.auto=0 does not gate this spawn.
+     base = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
++                GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="maintenance.auto", GIT_CONFIG_VALUE_0="false",
+                 GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+     if env:
+         base.update(env)
+@@ -237,6 +242,9 @@ class LocatorFixture:
+         self.bare = self.base / "origin.git"
+         self.bare.mkdir()
+         git(self.bare, "init", "--bare", "-q")
++        # receive-pack never sees push's GIT_CONFIG_* env (the transport strips it), so the
++        # bare repo's own config must refuse the auto-maintenance spawn from Issue #80.
++        git(self.bare, "config", "receive.autogc", "false")
+         seed = self.base / "seed"
+         seed.mkdir()
+         git(seed, "init", "-q")
