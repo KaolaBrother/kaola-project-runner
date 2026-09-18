@@ -34,6 +34,17 @@
   `steer-holder-outdated` having written nothing.
   `native_steering` also distinguishes `unknown` from `unsupported`, so an
   uninvestigated surface is never recorded as a proven absence.
+- **Cancels are bound to the turn they targeted (Issue #65).** `cancel` accepts
+  an `expected_request_id`, and the composite steer uses it. Connections are
+  served on separate threads and worker events start turns of their own, so a
+  turn that ends on its own can be replaced between a caller's snapshot and its
+  cancel — the cancel would then hit the newcomer while the receipt still named
+  the old turn, and the steering text would be dispatched onto a turn nobody
+  asked to interrupt. Now nothing is cancelled and nothing is sent: the outcome
+  is `unknown` with `steer-turn-changed`. The wait is bound the same way, so a
+  receipt never describes a different turn than the one it cancelled, and a
+  dispatched turn's id comes from its own admission rather than from whatever is
+  running afterwards.
 - **The Claude Code bridge gained the native channel it was missing
   (Issue #65).** The vendored bridge now drives every streaming turn with
   `claude -p --input-format stream-json` and writes the prompt to an open

@@ -17,9 +17,12 @@ facts that make the receipt trustworthy:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import secrets
+import socket
 import subprocess
 import sys
 import tempfile
@@ -495,6 +498,155 @@ class SteeringContract(unittest.TestCase):
         self.assertEqual(steered.get("steer_outcome"), "not_consumed")
         self.assertIs(steered.get("steer_consumed"), False)
         self.assertIs(steered.get("mutation_performed"), False)
+
+
+    # -- the turn-swap race --------------------------------------------------
+    #
+    # Issue #65 review finding: `op_steer_interrupt` snapshots the running turn
+    # under the lock, releases it, and only then cancels. Connections are served
+    # on separate threads and a worker event starts turns of its own, so turn A
+    # can end and turn B can be admitted inside that window - the old code then
+    # cancelled B while reporting A's id, and dispatched the steering text onto
+    # a turn nobody asked to interrupt. The barrier makes that window exact.
+
+    def barrier_env(self) -> dict[str, str]:
+        env = self.env()
+        env["KAOLA_ACP_TEST_BARRIER"] = str(self.barrier_dir)
+        return env
+
+    def cli_async(self, platform: str, command: str, *args: str,
+                  steering: str = "none", turn_ms: int = 0) -> subprocess.Popen:
+        argv = [sys.executable, str(CLI), platform, command,
+                "--repo", str(self.repo), "--session", self.session,
+                "--command", self.mock_command(steering, turn_ms), *args]
+        return subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, env=self.barrier_env())
+
+    def await_barrier(self, name: str, timeout: float = 20) -> None:
+        marker = self.barrier_dir / f"{name}.at"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if marker.exists():
+                return
+            time.sleep(0.02)
+        self.fail(f"the holder never reached the {name} barrier")
+
+    def release_barrier(self, name: str) -> None:
+        (self.barrier_dir / f"{name}.go").write_text("go", encoding="utf-8")
+
+    def await_turn(self, platform: str, active: bool, turn_ms: int,
+                   timeout: float = 15) -> dict:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            state = self.cli(platform, "observe", turn_ms=turn_ms, check=False)
+            if bool(state.get("turn_active")) is active:
+                return state
+            time.sleep(0.1)
+        self.fail(f"turn_active never became {active}")
+
+    def holder_call(self, platform: str, message: dict, timeout: float = 20) -> dict:
+        """Speak to the holder directly, to exercise an op parameter the CLI does
+        not surface (here: a cancel bound to one turn's request id)."""
+        repo = os.path.realpath(str(self.repo))
+        directory = (self.record_root / platform / self.session
+                     / hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16])
+        digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
+        sock_path = Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+        op = message.pop("op")
+        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            connection.settimeout(timeout)
+            connection.connect(str(sock_path))
+            connection.sendall(json.dumps({
+                "op": op, "request_id": secrets.token_hex(8), "params": message,
+            }).encode("utf-8") + b"\n")
+            buffer = bytearray()
+            while b"\n" not in buffer:
+                data = connection.recv(65536)
+                if not data:
+                    break
+                buffer.extend(data)
+            line, _, _ = bytes(buffer).partition(b"\n")
+            return json.loads((line or bytes(buffer)).decode("utf-8") or "{}")
+        finally:
+            connection.close()
+
+    def test_composite_steer_never_cancels_a_turn_it_did_not_target(self) -> None:
+        platform, turn_ms = UNSUPPORTED_PLATFORM, 9000
+        self.barrier_dir = self.root / f"barrier-{self.session}"
+        self.barrier_dir.mkdir()
+        # Turn A is running, and the holder is started with the barrier armed.
+        started = subprocess.run(
+            [sys.executable, str(CLI), platform, "start", "--repo", str(self.repo),
+             "--session", self.session, "--command", self.mock_command("none", turn_ms)],
+            capture_output=True, text=True, env=self.barrier_env(), timeout=45)
+        self.assertEqual(json.loads(started.stdout).get("state"), "ready")
+        self._started.append((platform, self.session))
+        sent_a = self.cli(platform, "send", "--no-wait", "--text", "turn A",
+                          turn_ms=turn_ms)
+        self.assertEqual(sent_a.get("outcome"), "in_progress")
+        turn_a = sent_a.get("turn_request_id")
+        self.assertIsNotNone(turn_a, "the send must report its own admitted id")
+        self.await_turn(platform, True, turn_ms)
+
+        # The composite steer snapshots turn A, then blocks on the barrier.
+        steer = self.cli_async(platform, "steer", "--steer-mode", "interrupt",
+                               "--cancel-timeout", "10", "--text", STEER_TEXT,
+                               turn_ms=turn_ms)
+        try:
+            self.await_barrier("steer-interrupt-snapshot")
+            # Inside that window: turn A ends and turn B takes its place.
+            self.cli(platform, "cancel", turn_ms=turn_ms, check=False)
+            self.await_turn(platform, False, turn_ms)
+            sent_b = self.cli(platform, "send", "--no-wait", "--text", "turn B",
+                              turn_ms=turn_ms)
+            self.assertEqual(sent_b.get("outcome"), "in_progress")
+            turn_b = sent_b.get("turn_request_id")
+            self.assertNotEqual(turn_b, turn_a, "turn B must be a different turn")
+            self.await_turn(platform, True, turn_ms)
+        finally:
+            self.release_barrier("steer-interrupt-snapshot")
+        stdout, stderr = steer.communicate(timeout=60)
+        receipt = json.loads(stdout or "{}")
+
+        # It must not cancel B, must not claim it cancelled A, and must not send.
+        self.assertEqual(receipt.get("error", {}).get("code"), "steer-turn-changed")
+        self.assertEqual(receipt.get("steer_outcome"), "unknown")
+        self.assertIsNone(receipt.get("steer_consumed"))
+        self.assertEqual(receipt.get("steer_confirmation"), "none")
+        self.assertIsNone(receipt.get("new_turn_request_id"))
+        self.assertIsNot(receipt.get("interrupted"), True)
+        self.assertNotEqual(receipt.get("steer_outcome"), "interrupted_and_resent")
+        # ... and turn B is still the running turn, untouched.
+        state = self.cli(platform, "observe", turn_ms=turn_ms, check=False)
+        self.assertTrue(state.get("turn_active"), "turn B must still be running")
+        # and the running turn is still B - a stale cancel bound to A reports so
+        # without touching anything
+        still = self.holder_call(platform, {"op": "cancel", "expected_request_id": turn_a})
+        self.assertEqual(still.get("outcome"), "turn-changed")
+        self.assertEqual(still.get("request_id"), turn_b)
+        self.assertTrue(still.get("turn_active"))
+
+    def test_cancel_bound_to_a_finished_turn_reports_turn_changed(self) -> None:
+        """The same binding, reachable directly: a stale id cancels nothing."""
+        platform, turn_ms = UNSUPPORTED_PLATFORM, 9000
+        self.cli(platform, "start", turn_ms=turn_ms)
+        self._started.append((platform, self.session))
+        sent_a = self.cli(platform, "send", "--no-wait", "--text", "turn A", turn_ms=turn_ms)
+        turn_a = sent_a.get("turn_request_id")
+        self.await_turn(platform, True, turn_ms)
+        self.cli(platform, "cancel", turn_ms=turn_ms, check=False)
+        self.await_turn(platform, False, turn_ms)
+        sent_b = self.cli(platform, "send", "--no-wait", "--text", "turn B", turn_ms=turn_ms)
+        self.assertNotEqual(sent_b.get("turn_request_id"), turn_a)
+        self.await_turn(platform, True, turn_ms)
+        # B is running; a cancel bound to A must leave it alone.
+        stale = self.holder_call(platform, {"op": "cancel", "expected_request_id": turn_a})
+        self.assertEqual(stale.get("outcome"), "turn-changed")
+        self.assertEqual(stale.get("error", {}).get("code"), "cancel-turn-changed")
+        self.assertIs(stale.get("mutation_performed"), False)
+        state = self.cli(platform, "observe", turn_ms=turn_ms, check=False)
+        self.assertTrue(state.get("turn_active"), "the untargeted turn must keep running")
 
 
 if __name__ == "__main__":

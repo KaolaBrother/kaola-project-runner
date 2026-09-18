@@ -307,6 +307,13 @@ reports `cancelled_turn_request_id`, `cancelled_turn_stop_reason` and a distinct
 report `steer_method`, `steer_request_id`, `steer_fingerprint`, `turn_prompt_fingerprint` and the raw
 `steer_response`.
 
+The composite's cancel is bound to the exact turn it targeted (`expected_request_id`), because
+turns also start from worker events on another connection thread: if the targeted turn is replaced
+before it can be interrupted, nothing is cancelled and nothing is sent (`steer-turn-changed`,
+outcome `unknown`). The same applies if a different turn is admitted between the confirmed cancel
+and the send — the text is not written and the outcome is `not_consumed`. The new turn's id comes
+from the send's own admission, never from whatever turn happens to be running afterwards.
+
 Two refusals protect against a double dispatch. An unconfirmed cancel sends **nothing**
 (`steer-cancel-unconfirmed`, outcome `unknown`): a turn that will not confirm it stopped can never
 receive a second prompt, and the Agent must `observe` before deciding — the Runner does not retry.

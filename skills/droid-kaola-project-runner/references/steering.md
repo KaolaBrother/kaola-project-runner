@@ -37,8 +37,11 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 `agent-confirmed` is a bug, not an optimism.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
-answer an idle steering call by starting a detached turn. A turn ending in the same instant returns
-`not_consumed`, never a silent resend.
+answer an idle steering call by starting a detached turn. A turn that ends in the same instant is
+decided by what the agent actually answers, not by a blanket rule: `not_consumed` when the holder
+still held the turn and refused before writing, `started_new_turn` when the agent says it opened a
+separate turn instead, and `unknown` when it answers nothing, answers something unrecognized, or the
+turn settles while the text is being written. Nothing is ever silently resent.
 
 ### The composite (`--steer-mode interrupt`)
 
@@ -56,6 +59,10 @@ the whole conversation.
   Verify with `observe` before deciding; the Runner does not retry.
 - If the turn had already ended, nothing is cancelled and the receipt says
   `resent_without_interrupt` rather than claiming an interruption.
+- The cancel is bound to the exact turn this steer targeted. If that turn is replaced by a different
+  one first - turns also start from worker events, on another thread - nothing is cancelled and
+  nothing is sent: the outcome is `unknown` with `steer-turn-changed`. The Runner never interrupts
+  a turn the Agent did not target, and never reports one turn's cancel under another's id.
 - The text is sent at most once. A send that fails after a successful cancel reports
   `steer-send-failed` and is not resent here.
 - `--cancel-timeout SECONDS` bounds the wait for the old turn to settle; without it the op's own
