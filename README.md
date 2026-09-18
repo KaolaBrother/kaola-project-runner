@@ -197,6 +197,21 @@ Start Claude Code with `--repo /path/to/project` at the canonical project root. 
 conversation to invoke `workflow-next` for issue #52. Workflow claims the issue and creates or
 resumes its chosen child worktree. The Runner session remains the root-started exact session.
 
+### Orchestrator binding
+
+A Project Runner Orchestrator states that root once instead of re-proving it on every dispatch:
+
+```bash
+export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=/path/to/project
+```
+
+While it is exported, `--repo` may be omitted and is completed from that root, and a `start` that
+names a different root - a linked worktree of the same repository included - is refused with
+`canonical-root-mismatch` and `mutation_performed: false` before any process, tmux session or
+record exists; an accepted dispatch reports `canonical_repo` in its receipt. Commands on a session
+that already exists keep the `--repo` they were given, so earlier work stays observable and exactly
+stoppable by its own locator. Without that export nothing changes.
+
 ### Evidence-backed exception
 
 If a live run already exists and an earlier session was started inside a child worktree, the

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **An Orchestrator binds one canonical project root, and an exact stop is bound to
+  the holder instance it verified (Issue #73).** Dispatching a worker with `--repo`
+  pointing at a Workflow child worktree made one project look like several
+  downstream, because a linked worktree is its own Git top-level and the Runner
+  faithfully recorded it. A Project Runner Orchestrator now exports
+  `KAOLA_PROJECT_RUNNER_CANONICAL_REPO` once at setup. The one entrypoint both
+  transports and all nine platforms already pass through resolves that binding and
+  the requested `--repo` with `realpath`, requires the binding to be a Git
+  top-level, completes an omitted `--repo` from it, and on `start` compares the two
+  exactly: a different root - a linked worktree of the same repository included -
+  returns a typed `canonical-root-mismatch` refusal, and an unusable binding
+  returns `canonical-root-invalid`, both with `mutation_performed: false` before
+  any process, tmux session or record exists. An accepted dispatch reports
+  `canonical_repo`. Separately, `stop` now carries the existing
+  `--expected-holder-instance-id` through to the holder, which checks it before
+  anything is requested, cancelled or written, so a same-named session rebuilt by a
+  later holder instance is refused instead of stopped. Without the export nothing
+  changes: standalone starts, existing sessions, and close-out of a legacy
+  worktree-rooted session by its own `--repo` behave exactly as before. No
+  registry, lock, daemon or multi-host arbitration; with the check mechanical the
+  orchestrator Skill payload drops 186 bytes.
+
 - **A worker's notification binding is reported as the holder's own fact, and a
   missed one is recovered inside the Runner (Issue #70).** A ZCode Host wakes
   only through workers actually bound to it, but the `start` receipt used to
