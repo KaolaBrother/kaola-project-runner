@@ -548,8 +548,15 @@ class Issue49BridgeInvariance(unittest.TestCase):
             for needle in (b"platform InvTst", b"controlling InvTs a", b"The InvTst starts", b"external delegatIon Skill"):
                 self.assertNotIn(needle, host_blob)
             # Positive control: a real host-template edit is visible in the host products.
+            # Equal-length (Issue #71): the generated bridge is 2536 B / 2560, so appending
+            # a probe sentence overflows `bridge_bytes` and `render --write` refuses.
             bridge_tmpl = root / "templates" / HOST_ID / "bridge.md.tmpl"
-            bridge_tmpl.write_text(bridge_tmpl.read_text(encoding="utf-8") + "\nHost leakage probe sentence.\n", encoding="utf-8")
+            tmpl_text = bridge_tmpl.read_text(encoding="utf-8")
+            probe_from = "This Skill holds no policy, transport,"
+            probe_to = "This Skill holds no Policy, transport,"
+            self.assertIn(probe_from, tmpl_text)
+            self.assertEqual(len(probe_from), len(probe_to))
+            bridge_tmpl.write_text(tmpl_text.replace(probe_from, probe_to, 1), encoding="utf-8")
             self.assertEqual(render(root, "--write").returncode, 0)
             self.assertNotEqual(host_products(root), before_products, "a host-template edit must change host products")
             # The pin gate demands a tree that differs from R only by the pin itself, so the canonical
