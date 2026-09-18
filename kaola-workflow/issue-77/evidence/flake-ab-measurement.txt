@@ -1,0 +1,9 @@
+# Issue #77 re-verification on main 5239fec: load-sensitive flake, NOT caused by the #77 change.
+# Interleaved A/B, same machine, load recorded before each run:
+#   cand1 OK 24.6s (load 3.86) | base1 OK 26.1s (3.94)
+#   cand2 OK 25.1s (5.18) | base2 OK 25.6s (4.90)
+#   cand3 OK 25.0s (4.04) | base3 OK 20.6s (3.78)
+#   cand4 OK 24.1s (4.17) | base4 OK 22.9s (3.95)
+# Two earlier candidate runs FAILED at load 6.71+: 2x subprocess.TimeoutExpired after 60s,
+# in TestBindingRefusesDrift (runs 2nd) -- byte-identical between baseline and candidate,
+# and executing BEFORE TestPreservedBehavior (runs 5th), the only class #77 modifies.

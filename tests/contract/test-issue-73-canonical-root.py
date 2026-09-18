@@ -274,6 +274,18 @@ class TestPreservedBehavior(CanonicalRootFixture):
         self.assert_reached_pty_transport(result)
 
     def test_standalone_acp_start_in_a_child_worktree_is_not_refused(self) -> None:
+        # This is the one case in this class that reaches a real ACP start, so
+        # it is the one that creates a holder. A holder never exits merely
+        # because its agent is gone -- it stays up so that outcome stays
+        # readable, here in state `error`, since the `/bin/false` this fixture
+        # configures does not exist on macOS and the spawn fails -- so nothing
+        # reaps it unless this test does. Register the stop before the start: a
+        # start that raises must still be cleaned up, and stop must run while
+        # the record it rewrites still exists, since tearDownClass removes the
+        # whole tree (Issue #77).
+        self.addCleanup(lambda: self.run_cli(
+            ACP_PLATFORM, "stop", "--force", "--repo", str(self.child_b),
+            bound=None, transport="acp", timeout=60))
         result = self.run_cli(ACP_PLATFORM, "start", "--repo", str(self.child_b),
                               bound=None, transport="acp")
         self.assert_passed_guard(result)
