@@ -268,10 +268,13 @@ class NoNewMechanism(unittest.TestCase):
         self.assertLessEqual(limits["main_skill_bytes"], 17408)
         self.assertLessEqual(limits["reference_bytes"], 8192)
         self.assertLessEqual(len(SKILL.read_bytes()), limits["main_skill_bytes"])
-        # Issue #71: test-issue-49-grok-bot-host.py appends 59 B to the orchestrator
-        # template and then requires a successful render, so the honest ceiling is lower.
-        self.assertLessEqual(len(SKILL.read_bytes()), limits["main_skill_bytes"] - 59,
-                             "the main Skill must still render after the Issue #49 probe's 59 B")
+        # This change was written against a lower effective ceiling: the #49 host-invariance
+        # probe used to append 59 B to the orchestrator template and then require a
+        # successful render, so 17408 was not really reachable. Issue #71 (c19cdde, on main)
+        # made those canonical edits equal-length, so the declared budget is now the real
+        # ceiling and the assertion above is the whole story. Kept as a named fact so a
+        # future reader does not rediscover the trap from a red suite.
+        self.assertEqual(limits["main_skill_bytes"], 17408)
         for reference in sorted((ORCHESTRATOR / "references").glob("*.md")):
             self.assertLessEqual(len(reference.read_bytes()), limits["reference_bytes"], reference.name)
 
