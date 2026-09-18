@@ -319,6 +319,36 @@ any of the machinery above:
 No role parameter, launcher, state machine, config system, scheduler, or
 approval gate was added for either flow.
 
+## Context compaction recovery (Issue #75)
+
+ZCode 0.16.5 has no compaction hook: `SessionStart` fires only on `startup`
+and `resume`, the hook event enum carries no compact event, and nothing about
+compaction reaches the ACP session stream — `observe`/`capture` expose no
+compaction field and `context_usage` stays null. Recovery is a
+Host/Skill-layer carrier, verified live on ZCode 3.12.3:
+
+- **Trigger.** A `session/prompt` whose text is `/compact` routes through the
+  runtime's normal turn-command path into a real manual compaction, persisted
+  as `compaction` and `context_compaction` rows in `db.sqlite`'s `part` table
+  with `trigger:"manual"`, `auto:false` — verified against a live session.
+  Auto-compaction writes the same record family per static analysis but was
+  not exercised live.
+- **Carrier.** The controlling Agent puts the recovery carrier —
+  `references/zcode-compact-recovery.md` inside the installed main Skill —
+  once at the head of the next prompt to the compacted Host. Verified:
+  post-compact, the model executed a real `read` of the installed Skill and
+  quoted the reload marker planted in its payload (`KPR-SKILL-RELOAD-7931`
+  in the experiment; `KPR-SKILL-RELOAD-V1` ships in the reference).
+- **Detection honesty.** An Agent-requested compaction is self-evident; any
+  other compaction is silent in the ACP stream. A read-only `part`-table
+  cursor on `db.sqlite` confirms it (verified live: the rows are committed
+  synchronously) but stays a diagnostic the Agent may run — never a per-send
+  transport gate, a cursor ledger, or a hooks/config change. A
+  `UserPromptSubmit` hook could carry recovery too, at the cost of a
+  user-global `hooks.enabled` write plus a process per prompt for coverage
+  the Runner does not need; it remains the documented fallback, not the
+  mechanism.
+
 ## Verification
 
 - `python3 tests/contract/test-zcode-acp-contract.py` — adapter contract, env

@@ -30,7 +30,9 @@ continue that Host through Kaola-Delegator (`kaola-delegator`); do not copy that
 outer procedure here. Role, authorization and lifecycle boundary come from the
 project's existing Project Plan or already-authorized task plan - never a new
 schema, never this session's claim of having loaded this Skill. Your own startup
-receipt and beat: [host-startup.md](references/host-startup.md).
+receipt, beat, and post-compact recovery:
+[host-startup.md](references/host-startup.md),
+[zcode-compact-recovery.md](references/zcode-compact-recovery.md).
 
 ## Consumer-project boundary
 
@@ -154,7 +156,7 @@ sink, and write ownership.
 
 ## Main execution loop
 
-1. **Recover and observe.** Read existing worker/run records, relevant
+1. **Recover and observe.** Read worker/run records, relevant
    Git/Forge state, and fresh Runner evidence. Use exact owned sessions and
    current platform Skills. Observe busy workers without injecting "status?"
    messages or polling raw PTY screens as a human UI. Do not replay a prompt whose
@@ -172,19 +174,18 @@ sink, and write ownership.
    worktree or Mission List is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims.
-3. **Accept the delivery.** {{ACCEPTANCE_BEFORE_FINALIZE}}. Inspect the actual
-   diff, verification evidence and project acceptance requirements. Use a
+3. **Accept the delivery.** {{ACCEPTANCE_BEFORE_FINALIZE}}. Inspect the diff,
+   verification evidence and acceptance requirements. Use a
    verifier distinct from the implementer where available; if only one
-   authorized worker is available, disclose self-verification and still
-   satisfy project requirements. Match evidence to the actual candidate and
+   is authorized, disclose self-verification and still
+   satisfy project requirements. Match evidence to the candidate and
    affected behavior. Dispatch missing proof or repairs; do not finalize on
    incomplete evidence. Do not lower assertions or substitute worker prose,
    idle, green CI or a successful script exit for acceptance.
 4. **Finalize and synchronize.** Once accepted and authorized, direct the
    worker to finalize and merge, then verify remote, Issue, archive, doc
    docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).
-   Prefer closing one run at a time, but judge safe
-   concurrency. After the baseline moves, direct other affected owners to save
+   Prefer one run at a time; judge safe concurrency. After the baseline moves, direct other affected owners to save
    work and rebase/update at a safe boundary. Review conflicts and revalidate
    affected changes; do not switch HEAD during a measurement or silently reuse
    invalidated evidence. History rewriting needs applicable authorization.
@@ -199,10 +200,10 @@ sink, and write ownership.
    close-out open, is not an idle worker: keep it and send it no "continue"; its
    next beat is a worker event. Cancel the heartbeat once no unfinished
    delivery/sync/cleanup remains; preserve existing recovery information and give
-   anything remaining a named owner. Direct safe cleanup of completed,
+   the rest a named owner. Direct cleanup of completed,
    unreferenced worktrees and branches; protect in-flight work and evidence.
    Continue the same heartbeat
-   while authorized work or unfinished close-out remains. Session stop, candidate
+   while authorized work or close-out remains. Session stop, candidate
    acceptance, merge, Issue closure and workspace cleanup are different facts,
    not interchangeable completion labels.
 

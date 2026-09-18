@@ -239,5 +239,48 @@ class DocMaintenanceSurface(unittest.TestCase):
         self.assertLessEqual(self.ref_path.stat().st_size, self.ref_budget)
 
 
+class ZcodeCompactCarrierSurface(unittest.TestCase):
+    """The ZCode Host/Skill-layer carrier renders into the orchestrator Skill.
+
+    ZCode has no compact hook (verified: SessionStart fires on
+    startup/resume only), so recovery rides the controlling Agent's next
+    prompt. These tests pin the rendered carrier and the host-startup
+    pointer that leads an Agent to it.
+    """
+
+    def setUp(self) -> None:
+        orch = PROJECT / "skills" / "kaola-project-runner"
+        self.ref_path = orch / "references" / "zcode-compact-recovery.md"
+        self.ref = self.ref_path.read_text(encoding="utf-8")
+        self.host_startup = (
+            orch / "references" / "host-startup.md"
+        ).read_text(encoding="utf-8")
+        limits = json.loads(
+            (PROJECT / "templates" / "budgets.json").read_text(encoding="utf-8")
+        )
+        self.ref_budget = limits["reference_bytes"]
+
+    def test_carrier_renders_with_markers_and_boundaries(self) -> None:
+        for needle in (
+            "KPR-ZCODE-RECOVERY-V1",
+            "KPR-SKILL-RELOAD-V1",
+            "never re-intake, re-claim, restart sessions, or re-dispatch",
+            "never a per-send check, never a",
+            "transport gate, never a cursor ledger",
+            "UserPromptSubmit",
+        ):
+            self.assertIn(needle, self.ref)
+
+    def test_host_startup_points_at_the_carrier(self) -> None:
+        self.assertIn(
+            "zcode-compact-recovery.md](zcode-compact-recovery.md)",
+            self.host_startup,
+        )
+        self.assertIn("compacted mid-run", self.host_startup)
+
+    def test_budget_holds(self) -> None:
+        self.assertLessEqual(self.ref_path.stat().st_size, self.ref_budget)
+
+
 if __name__ == "__main__":
     unittest.main()
