@@ -553,12 +553,18 @@ class CodexCompactHookContract(unittest.TestCase):
 
     def test_prepare_refuses_ambiguous_binding(self) -> None:
         """An unclassifiable binding is refused before any write."""
+        root = os.path.realpath(self.repo)
         for bad in (
             "not json",
             "[]",
-            '{"session_id": 5, "project_root": "%s"}' % os.path.realpath(self.repo),
+            '{"session_id": 5, "project_root": "%s"}' % root,
             '{"session_id": "%s", "project_root": "/elsewhere"}'
             % HOST_SESSION_ID,
+            # bound-looking shapes that can never match: no project_root,
+            # empty id, whitespace-only id
+            '{"session_id": "%s"}' % HOST_SESSION_ID,
+            '{"session_id": "", "project_root": "%s"}' % root,
+            '{"session_id": "   ", "project_root": "%s"}' % root,
         ):
             binding = hooks_dir(self.repo) / "binding.json"
             binding.parent.mkdir(parents=True, exist_ok=True)

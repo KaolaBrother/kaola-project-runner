@@ -77,9 +77,12 @@ are never bound.
   keeps the session id, so the binding survives resume; for a brand-new Host
   session, re-run `bind` (or `install`) with the new id — only `binding.json`
   changes, so the already-reviewed hook entry is not disturbed. `prepare` is
-  safe to re-run: a valid bound `binding.json` is left byte-for-byte
-  (`binding_preserved` in the receipt), so a live Host is never silently
-  unbound; an ambiguous or other-project binding is refused before any write.
+  safe to re-run: a `binding.json` is left byte-for-byte only when it holds a
+  non-empty `session_id` AND this project's canonical `project_root` — the
+  exact pair `emit` matches on (`binding_preserved` in the receipt), so a
+  live Host is never silently unbound; an id without the matching root, an
+  empty/whitespace id, or any other unclassifiable shape is refused before
+  any write.
 - Owns exactly one entry, id `kaola-project-runner:compact-context`, under
   `hooks.SessionStart` — matched by id, so foreign entries (Workflow-owned,
   user-owned) keep their JSON content untouched. The document is

@@ -261,9 +261,11 @@
   start), then `bind` writes only `binding.json` once the designated session
   id is known — in the Codex host's own shell `CODEX_SESSION_ID`/
   `CODEX_THREAD_ID` equal that hook-input `session_id`. Re-running `prepare`
-  never silently unbinds: a valid bound `binding.json` is preserved
-  byte-for-byte (`binding_preserved`) and an ambiguous or other-project
-  binding is refused before any write. The hook command quotes
+  never silently unbinds: a `binding.json` is preserved byte-for-byte only
+  when it holds a non-empty `session_id` AND this project's canonical
+  `project_root` (`binding_preserved`); an id without the matching root, an
+  empty/whitespace id, or any other unclassifiable shape is refused before
+  any write. The hook command quotes
   its path with `shlex.quote` so a metacharacter-bearing project root cannot
   alter execution, the payload, emitter, and binding copies live under
   `<project_root>/.codex/kaola-project-runner/hooks/`, no backup copy of

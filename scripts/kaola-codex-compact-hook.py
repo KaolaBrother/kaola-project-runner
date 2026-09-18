@@ -51,10 +51,12 @@ hook itself performs no dispatch and edits no project state; it prints the
 short recovery prompt that becomes the model's ``additionalContext``.
 
 Binding safety: ``prepare`` is deliberately re-runnable but never silently
-unbinds -- when a valid bound ``binding.json`` already exists it is left
-byte-for-byte (``binding_preserved`` in the receipt), and an ambiguous or
-mismatched binding is refused before any write. ``install``/``bind`` with an
-explicit ``--session-id`` always overwrite the binding by operator choice.
+unbinds -- a ``binding.json`` is preserved byte-for-byte only when it holds
+a non-empty ``session_id`` AND this project's canonical ``project_root``
+(the exact pair ``emit`` matches on); an id without the matching root, an
+empty/whitespace id, or any other unclassifiable shape is refused before
+any write. ``install``/``bind`` with an explicit ``--session-id`` always
+overwrite the binding by operator choice.
 
 Every action prints one bounded JSON receipt; ``result`` is ``ok`` or
 ``refused`` with reasons. A malformed existing ``hooks.json`` -- including
@@ -239,21 +241,30 @@ def _install(root: Path, session_id: str | None, action: str) -> int:
             return 1
         existing_id = existing.get("session_id") if existing else None
         existing_root = existing.get("project_root") if existing else None
-        if isinstance(existing_id, str):
-            if existing_root is not None and existing_root != str(root):
+        bound = isinstance(existing_id, str) and bool(existing_id.strip())
+        if bound:
+            # A preserved binding must be verifiably bound to THIS project:
+            # emit matches session_id AND project_root, so an id without the
+            # exact canonical root can never fire -- refuse it as ambiguous
+            # rather than reporting binding_preserved on broken recovery.
+            if existing_root == str(root):
+                preserve_binding = True
+                bound_session = existing_id
+            else:
                 receipt(
                     action,
                     "refused",
                     reasons=[
-                        f"{binding_path}: bound to a different project root"
+                        f"{binding_path}: bound session id without the "
+                        "canonical project_root of this project"
                     ],
                 )
                 return 1
-            preserve_binding = True
-            bound_session = existing_id
-        elif existing_id is not None or (
-            existing_root is not None and existing_root != str(root)
+        elif existing_id is None and (
+            existing_root is None or existing_root == str(root)
         ):
+            pass  # inert binding -- rewritten canonically below
+        else:
             receipt(
                 action,
                 "refused",
