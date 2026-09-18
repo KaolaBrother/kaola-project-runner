@@ -1,0 +1,445 @@
+{
+  "n": 21,
+  "events": [
+    {
+      "channel": "session/event",
+      "type": "session.titleUpdated",
+      "payload": {
+        "keys": [
+          "previousTitle",
+          "source",
+          "title"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "turn.started",
+      "payload": {
+        "keys": [
+          "foregroundExecutionId",
+          "input",
+          "messageId",
+          "queryId",
+          "turnNumber"
+        ],
+        "input_present": true,
+        "input_type": "str",
+        "input": {
+          "kind": "opaque",
+          "len": 133,
+          "sha12": "d335004c7c4a"
+        }
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.updated",
+      "payload": {
+        "keys": [
+          "iteration",
+          "messageCount",
+          "model",
+          "modelRef",
+          "toolCount"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.updated",
+      "payload": {
+        "keys": [
+          "_meta",
+          "attempt",
+          "baseURL",
+          "maxAttempts",
+          "model",
+          "modelCall",
+          "modelRequestSessionType",
+          "parentSpanId",
+          "providerKind",
+          "queryId",
+          "querySource",
+          "requestHeaderCount",
+          "requestHeaders",
+          "requestId",
+          "sessionId",
+          "spanId",
+          "timestamp",
+          "traceId",
+          "transport",
+          "turnId",
+          "type"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.titleUpdated",
+      "payload": {
+        "keys": [
+          "messageID",
+          "modelRef",
+          "previousTitle",
+          "source",
+          "title"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "model.streaming",
+      "payload": {
+        "keys": [
+          "assistantMessageId",
+          "delta",
+          "done",
+          "kind",
+          "toolCallId",
+          "toolName"
+        ],
+        "kind": "tool_input_start",
+        "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+        "toolName": "Read",
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "model.streaming",
+      "payload": {
+        "keys": [
+          "assistantMessageId",
+          "delta",
+          "done",
+          "kind",
+          "toolCallId"
+        ],
+        "kind": "tool_input_delta",
+        "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "model.streaming",
+      "payload": {
+        "keys": [
+          "assistantMessageId",
+          "delta",
+          "done",
+          "kind",
+          "toolCallId"
+        ],
+        "kind": "tool_input_end",
+        "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "model.streaming",
+      "payload": {
+        "keys": [
+          "assistantMessageId",
+          "delta",
+          "done",
+          "input",
+          "kind",
+          "toolCallId",
+          "toolName"
+        ],
+        "kind": "tool_call",
+        "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+        "toolName": "Read",
+        "input_present": true,
+        "input_type": "dict",
+        "input_keys": [
+          "file_path"
+        ],
+        "input": {
+          "file_path": {
+            "kind": "probe_marker"
+          }
+        }
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "tool.updated",
+      "payload": {
+        "keys": [
+          "assistantMessageId",
+          "canRunParallel",
+          "dependencies",
+          "inputByteLength",
+          "inputOmitted",
+          "inputRef",
+          "kind",
+          "parallelGroupIndex",
+          "schedule",
+          "toolCallId",
+          "toolName"
+        ],
+        "kind": "scheduled",
+        "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+        "toolName": "Read",
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "tool.updated",
+      "payload": {
+        "keys": [
+          "kind",
+          "startedAt",
+          "toolCallId",
+          "toolName"
+        ],
+        "kind": "started",
+        "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+        "toolName": "Read",
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "tool.updated",
+      "payload": {
+        "keys": [
+          "duration",
+          "kind",
+          "result",
+          "toolCallId"
+        ],
+        "kind": "result",
+        "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+        "input_present": false,
+        "result": {
+          "present": true,
+          "type": "dict",
+          "len": null
+        }
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "tool.updated",
+      "payload": {
+        "keys": [
+          "errorCount",
+          "kind",
+          "successCount",
+          "toolCallIds"
+        ],
+        "kind": "batch",
+        "input_present": false,
+        "batch_len": 0,
+        "items": []
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.updated",
+      "payload": {
+        "keys": [
+          "_meta",
+          "attempt",
+          "baseURL",
+          "durationMs",
+          "finishReason",
+          "maxAttempts",
+          "model",
+          "modelCall",
+          "modelRequestSessionType",
+          "parentSpanId",
+          "providerKind",
+          "providerRequestId",
+          "queryId",
+          "querySource",
+          "requestHeaderCount",
+          "requestHeaders",
+          "requestId",
+          "responseHeaderCount",
+          "responseHeaders",
+          "sessionId",
+          "spanId",
+          "streamOutputCommitted",
+          "streamStallCount",
+          "timeToFirstContentMs",
+          "timeToFirstProviderEventMs",
+          "timestamp",
+          "traceId",
+          "transport",
+          "turnId",
+          "type",
+          "usage"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.updated",
+      "payload": {
+        "keys": [
+          "cacheHit",
+          "content",
+          "contextUsageBreakdown",
+          "contextWindow",
+          "querySource",
+          "stopReason",
+          "toolCallCount",
+          "usage"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "streamRecovery.updated",
+      "payload": {
+        "keys": [
+          "anchorId",
+          "assistantMessageId",
+          "attemptId",
+          "committedAt",
+          "committedToolCallIds",
+          "kind",
+          "resultPartId",
+          "toolCallId",
+          "toolName"
+        ],
+        "kind": "tool_result",
+        "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+        "toolName": "Read",
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.updated",
+      "payload": {
+        "keys": [
+          "iteration",
+          "messageCount",
+          "model",
+          "modelRef",
+          "toolCount"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.updated",
+      "payload": {
+        "keys": [
+          "_meta",
+          "attempt",
+          "baseURL",
+          "maxAttempts",
+          "model",
+          "modelCall",
+          "modelRequestSessionType",
+          "parentSpanId",
+          "providerKind",
+          "queryId",
+          "querySource",
+          "requestHeaderCount",
+          "requestHeaders",
+          "requestId",
+          "sessionId",
+          "spanId",
+          "timestamp",
+          "traceId",
+          "transport",
+          "turnId",
+          "type"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.updated",
+      "payload": {
+        "keys": [
+          "_meta",
+          "attempt",
+          "baseURL",
+          "durationMs",
+          "finishReason",
+          "maxAttempts",
+          "model",
+          "modelCall",
+          "modelRequestSessionType",
+          "parentSpanId",
+          "providerKind",
+          "providerRequestId",
+          "queryId",
+          "querySource",
+          "requestHeaderCount",
+          "requestHeaders",
+          "requestId",
+          "responseHeaderCount",
+          "responseHeaders",
+          "sessionId",
+          "spanId",
+          "streamOutputCommitted",
+          "streamStallCount",
+          "timeToFirstContentMs",
+          "timeToFirstProviderEventMs",
+          "timeToFirstTextMs",
+          "timestamp",
+          "traceId",
+          "transport",
+          "turnId",
+          "type",
+          "usage"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "session.updated",
+      "payload": {
+        "keys": [
+          "cacheHit",
+          "content",
+          "contextUsageBreakdown",
+          "contextWindow",
+          "querySource",
+          "stopReason",
+          "toolCallCount",
+          "usage"
+        ],
+        "input_present": false
+      }
+    },
+    {
+      "channel": "session/event",
+      "type": "turn.completed",
+      "payload": {
+        "keys": [
+          "cacheStats",
+          "duration",
+          "historyRoundCount",
+          "response",
+          "resultType",
+          "tokenCount",
+          "toolCallCount",
+          "usage"
+        ],
+        "input_present": false
+      }
+    }
+  ]
+}

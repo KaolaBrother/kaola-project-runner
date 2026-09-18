@@ -1,0 +1,906 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f0efddb..11db0c5 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -30,10 +30,27 @@
+   byte budget was raised, and running sessions - including names predating the
+   rule - are neither renamed nor restarted to adopt it.
+ 
++- **ZCode ACP tool cards persist path/line only, never a command (Issue #67).**
++  `rawInput`/`locations` copy top-level path and line fields the app-server
++  already named. Plaintext `command` is not forwarded; execute cards keep
++  kind/title/status without claiming a command transcript. No generic
++  sanitizer was added.
++- **ZCode ACP tool evidence is a bounded path/command receipt (Issue #67).**
++  `rawInput` copies only top-level path and truncated `command` fields, with a
++  1536-byte / depth-1 cap. Nested blobs and extra keys are dropped. Registered
++  adapter secrets in copied strings are redacted; arbitrary command text is not
++  a full credential scrub. Holder `events.jsonl` is covered by the same bound.
+ - **The #49 host-invariance probe no longer spends product budget (Issue #71).**
+   It now applies equal-length canonical edits instead of appending 59 B, so
+   `templates/budgets.json` `main_skill_bytes` 17408 is the ceiling
+   `render-skills.py --check` already reports. No budget was raised.
++- **ZCode ACP `tool_call` updates forward the app-server `input` (Issue #67).**
++  Live CLI 0.16.5 `model.streaming` `tool_call` already names `file_path` /
++  `command`; the translator was caching that object and dropping it. The same
++  update the holder records now carries a redacted `rawInput` and, when a
++  path-like key is present, `locations`. No path is invented, `inputRef` is
++  not followed, and credentials stay scrubbed. Verification guidance in
++  `references/host-startup.md` matches that fact. No byte budget was raised.
+ - **The heartbeat carries only the constraints that are still in force (Issue
+   #68).** The heartbeat is the working prompt itself, and the main Skill now
+   states which trigger delivers it on which host: Codex and Grok Bot from their
+diff --git a/scripts/kaola-zcode-acp.py b/scripts/kaola-zcode-acp.py
+index 6b20120..f23bf41 100755
+--- a/scripts/kaola-zcode-acp.py
++++ b/scripts/kaola-zcode-acp.py
+@@ -59,7 +59,7 @@ from datetime import datetime, timezone
+ from typing import Any
+ 
+ ADAPTER_NAME = "kaola-zcode-acp"
+-ADAPTER_VERSION = "0.3.0"
++ADAPTER_VERSION = "0.3.3"
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+@@ -592,6 +592,94 @@ TOOL_STATUS = {
+     "error": "failed",
+ }
+ 
++# Path-like keys actually observed on ZCode tool `input` (live 0.16.5 Read:
++# `file_path`) plus the same names sibling file tools use. `command` is never
++# copied: an execute card keeps kind/title/status only.
++TOOL_INPUT_PATH_KEYS = (
++    "file_path",
++    "filePath",
++    "path",
++    "file",
++    "notebook_path",
++    "glob",
++)
++TOOL_INPUT_LINE_KEYS = ("line", "offset")
++RAW_INPUT_PATH_CAP = 1024
++RAW_INPUT_MAX_BYTES = 1536
++RAW_INPUT_MAX_DEPTH = 1
++
++
++def _cap_str(text: str, cap: int) -> str:
++    return text if len(text) <= cap else text[:cap] + "…"
++
++
++def extract_tool_evidence(source: Any) -> dict[str, Any] | None:
++    """Copy only top-level path and line evidence.
++
++    `command` and every other key are dropped. Depth is 1: a path buried in a
++    nested dict is not lifted. Registered adapter secrets in a copied path
++    string are still redacted.
++    """
++    if not isinstance(source, dict):
++        return None
++    # RAW_INPUT_MAX_DEPTH is 1: never walk nested dicts to find a path.
++    evidence: dict[str, Any] = {}
++    for key in TOOL_INPUT_PATH_KEYS:
++        val = source.get(key)
++        if isinstance(val, str) and val:
++            evidence[key] = _cap_str(redact(val), RAW_INPUT_PATH_CAP)
++    for key in TOOL_INPUT_LINE_KEYS:
++        val = source.get(key)
++        if isinstance(val, int) and not isinstance(val, bool):
++            evidence[key] = val
++            break
++    if not evidence:
++        return None
++    encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
++    if len(encoded) > RAW_INPUT_MAX_BYTES:
++        for key in list(evidence):
++            if key in TOOL_INPUT_PATH_KEYS and isinstance(evidence[key], str):
++                evidence[key] = _cap_str(evidence[key], 96)
++        encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
++    if len(encoded) > RAW_INPUT_MAX_BYTES:
++        return None
++    return evidence
++
++
++def locations_from_input(raw: Any) -> list[dict[str, Any]]:
++    """Copy path fields that are already present. Never invent a path."""
++    if not isinstance(raw, dict):
++        return []
++    line = None
++    for key in TOOL_INPUT_LINE_KEYS:
++        val = raw.get(key)
++        if isinstance(val, int) and not isinstance(val, bool):
++            line = val
++            break
++    locations: list[dict[str, Any]] = []
++    for key in TOOL_INPUT_PATH_KEYS:
++        val = raw.get(key)
++        if isinstance(val, str) and val:
++            locations.append({"path": val, "line": line})
++    return locations
++
++
++def attach_tool_input(
++    update: dict[str, Any], payload: dict[str, Any], cached: dict[str, Any]
++) -> None:
++    source = payload.get("input")
++    if source is None:
++        source = cached.get("input")
++    if source is None:
++        return
++    raw = extract_tool_evidence(source)
++    if not raw:
++        return
++    update["rawInput"] = raw
++    locations = locations_from_input(raw)
++    if locations:
++        update["locations"] = locations
++
+ 
+ # --------------------------------------------------------------------------
+ # ACP agent
+@@ -899,10 +987,12 @@ class ZCodeAcpAgent:
+             elif kind == "tool_call":
+                 call_id = payload.get("toolCallId")
+                 if call_id:
+-                    session.tools[call_id] = {
+-                        "toolName": payload.get("toolName") or "",
+-                        "input": payload.get("input"),
+-                    }
++                    cached = session.tools.setdefault(call_id, {})
++                    name = payload.get("toolName") or ""
++                    if name:
++                        cached["toolName"] = name
++                    if "input" in payload:
++                        cached["input"] = payload.get("input")
+             return
+ 
+         if etype == "tool.updated":
+@@ -952,6 +1042,8 @@ class ZCodeAcpAgent:
+         name = payload.get("toolName") or cached.get("toolName") or ""
+         if name:
+             cached["toolName"] = name
++        if "input" in payload:
++            cached["input"] = payload.get("input")
+         update: dict[str, Any] = {
+             "sessionUpdate": "tool_call",
+             "toolCallId": call_id,
+@@ -970,6 +1062,7 @@ class ZCodeAcpAgent:
+                 content.append({"type": "text", "text": str(message)})
+         if content:
+             update["content"] = content
++        attach_tool_input(update, payload, cached)
+         self.update(session, update)
+ 
+     def finish_turn(self, session: Session, stop: str, usage: Any) -> None:
+@@ -1026,14 +1119,16 @@ class ZCodeAcpAgent:
+                 {"optionId": "allow", "kind": "allow_once", "name": "Allow once"},
+                 {"optionId": "deny", "kind": "deny_once", "name": "Deny"},
+             ]
++            tool_call: dict[str, Any] = {
++                "toolCallId": params.get("toolCallId"),
++                "title": params.get("toolName") or "tool",
++                "kind": tool_kind(params.get("toolName") or ""),
++                "status": "pending",
++            }
++            attach_tool_input(tool_call, params, {})
+             answer = self.request_client("session/request_permission", {
+                 "sessionId": session.acp_id,
+-                "toolCall": {
+-                    "toolCallId": params.get("toolCallId"),
+-                    "title": params.get("toolName") or "tool",
+-                    "kind": tool_kind(params.get("toolName") or ""),
+-                    "status": "pending",
+-                },
++                "toolCall": tool_call,
+                 "options": options,
+             })
+             backend.respond(rid, self._permission_answer(answer, options))
+diff --git a/skills/kaola-project-runner/references/host-startup.md b/skills/kaola-project-runner/references/host-startup.md
+index 0a644e9..af7b0c0 100644
+--- a/skills/kaola-project-runner/references/host-startup.md
++++ b/skills/kaola-project-runner/references/host-startup.md
+@@ -59,8 +59,11 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
+ 
+ 4. **Read the startup receipt, then verify it against evidence.** The Host's own
+    claim of having loaded the Skill is not evidence, and its tool record may show
+-   only that read and execute calls happened - ZCode's `tool_call` updates carry
+-   `kind`, `title` and status, not paths - so check what does not depend on its
++   only that read and execute calls happened when `locations`/`rawInput` are
++   absent; the translator forwards those fields only for a path or line the
++   app-server `input` already named, never a command transcript, and never
++   invents a path - so
++   check what does not depend on its
+    prose: the roles, authorization and lifecycle boundary against the plan file
+    you read yourself; quotes it could only produce from that plan and this
+    reference; and the artifacts this procedure leaves behind (a
+diff --git a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+index 6b20120..f23bf41 100755
+--- a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
++++ b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+@@ -59,7 +59,7 @@ from datetime import datetime, timezone
+ from typing import Any
+ 
+ ADAPTER_NAME = "kaola-zcode-acp"
+-ADAPTER_VERSION = "0.3.0"
++ADAPTER_VERSION = "0.3.3"
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+@@ -592,6 +592,94 @@ TOOL_STATUS = {
+     "error": "failed",
+ }
+ 
++# Path-like keys actually observed on ZCode tool `input` (live 0.16.5 Read:
++# `file_path`) plus the same names sibling file tools use. `command` is never
++# copied: an execute card keeps kind/title/status only.
++TOOL_INPUT_PATH_KEYS = (
++    "file_path",
++    "filePath",
++    "path",
++    "file",
++    "notebook_path",
++    "glob",
++)
++TOOL_INPUT_LINE_KEYS = ("line", "offset")
++RAW_INPUT_PATH_CAP = 1024
++RAW_INPUT_MAX_BYTES = 1536
++RAW_INPUT_MAX_DEPTH = 1
++
++
++def _cap_str(text: str, cap: int) -> str:
++    return text if len(text) <= cap else text[:cap] + "…"
++
++
++def extract_tool_evidence(source: Any) -> dict[str, Any] | None:
++    """Copy only top-level path and line evidence.
++
++    `command` and every other key are dropped. Depth is 1: a path buried in a
++    nested dict is not lifted. Registered adapter secrets in a copied path
++    string are still redacted.
++    """
++    if not isinstance(source, dict):
++        return None
++    # RAW_INPUT_MAX_DEPTH is 1: never walk nested dicts to find a path.
++    evidence: dict[str, Any] = {}
++    for key in TOOL_INPUT_PATH_KEYS:
++        val = source.get(key)
++        if isinstance(val, str) and val:
++            evidence[key] = _cap_str(redact(val), RAW_INPUT_PATH_CAP)
++    for key in TOOL_INPUT_LINE_KEYS:
++        val = source.get(key)
++        if isinstance(val, int) and not isinstance(val, bool):
++            evidence[key] = val
++            break
++    if not evidence:
++        return None
++    encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
++    if len(encoded) > RAW_INPUT_MAX_BYTES:
++        for key in list(evidence):
++            if key in TOOL_INPUT_PATH_KEYS and isinstance(evidence[key], str):
++                evidence[key] = _cap_str(evidence[key], 96)
++        encoded = json.dumps(evidence, ensure_ascii=False).encode("utf-8")
++    if len(encoded) > RAW_INPUT_MAX_BYTES:
++        return None
++    return evidence
++
++
++def locations_from_input(raw: Any) -> list[dict[str, Any]]:
++    """Copy path fields that are already present. Never invent a path."""
++    if not isinstance(raw, dict):
++        return []
++    line = None
++    for key in TOOL_INPUT_LINE_KEYS:
++        val = raw.get(key)
++        if isinstance(val, int) and not isinstance(val, bool):
++            line = val
++            break
++    locations: list[dict[str, Any]] = []
++    for key in TOOL_INPUT_PATH_KEYS:
++        val = raw.get(key)
++        if isinstance(val, str) and val:
++            locations.append({"path": val, "line": line})
++    return locations
++
++
++def attach_tool_input(
++    update: dict[str, Any], payload: dict[str, Any], cached: dict[str, Any]
++) -> None:
++    source = payload.get("input")
++    if source is None:
++        source = cached.get("input")
++    if source is None:
++        return
++    raw = extract_tool_evidence(source)
++    if not raw:
++        return
++    update["rawInput"] = raw
++    locations = locations_from_input(raw)
++    if locations:
++        update["locations"] = locations
++
+ 
+ # --------------------------------------------------------------------------
+ # ACP agent
+@@ -899,10 +987,12 @@ class ZCodeAcpAgent:
+             elif kind == "tool_call":
+                 call_id = payload.get("toolCallId")
+                 if call_id:
+-                    session.tools[call_id] = {
+-                        "toolName": payload.get("toolName") or "",
+-                        "input": payload.get("input"),
+-                    }
++                    cached = session.tools.setdefault(call_id, {})
++                    name = payload.get("toolName") or ""
++                    if name:
++                        cached["toolName"] = name
++                    if "input" in payload:
++                        cached["input"] = payload.get("input")
+             return
+ 
+         if etype == "tool.updated":
+@@ -952,6 +1042,8 @@ class ZCodeAcpAgent:
+         name = payload.get("toolName") or cached.get("toolName") or ""
+         if name:
+             cached["toolName"] = name
++        if "input" in payload:
++            cached["input"] = payload.get("input")
+         update: dict[str, Any] = {
+             "sessionUpdate": "tool_call",
+             "toolCallId": call_id,
+@@ -970,6 +1062,7 @@ class ZCodeAcpAgent:
+                 content.append({"type": "text", "text": str(message)})
+         if content:
+             update["content"] = content
++        attach_tool_input(update, payload, cached)
+         self.update(session, update)
+ 
+     def finish_turn(self, session: Session, stop: str, usage: Any) -> None:
+@@ -1026,14 +1119,16 @@ class ZCodeAcpAgent:
+                 {"optionId": "allow", "kind": "allow_once", "name": "Allow once"},
+                 {"optionId": "deny", "kind": "deny_once", "name": "Deny"},
+             ]
++            tool_call: dict[str, Any] = {
++                "toolCallId": params.get("toolCallId"),
++                "title": params.get("toolName") or "tool",
++                "kind": tool_kind(params.get("toolName") or ""),
++                "status": "pending",
++            }
++            attach_tool_input(tool_call, params, {})
+             answer = self.request_client("session/request_permission", {
+                 "sessionId": session.acp_id,
+-                "toolCall": {
+-                    "toolCallId": params.get("toolCallId"),
+-                    "title": params.get("toolName") or "tool",
+-                    "kind": tool_kind(params.get("toolName") or ""),
+-                    "status": "pending",
+-                },
++                "toolCall": tool_call,
+                 "options": options,
+             })
+             backend.respond(rid, self._permission_answer(answer, options))
+diff --git a/templates/orchestrator/references/host-startup.md.tmpl b/templates/orchestrator/references/host-startup.md.tmpl
+index 9201d01..8083b17 100644
+--- a/templates/orchestrator/references/host-startup.md.tmpl
++++ b/templates/orchestrator/references/host-startup.md.tmpl
+@@ -59,8 +59,11 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
+ 
+ 4. **Read the startup receipt, then verify it against evidence.** The Host's own
+    claim of having loaded the Skill is not evidence, and its tool record may show
+-   only that read and execute calls happened - ZCode's `tool_call` updates carry
+-   `kind`, `title` and status, not paths - so check what does not depend on its
++   only that read and execute calls happened when `locations`/`rawInput` are
++   absent; the translator forwards those fields only for a path or line the
++   app-server `input` already named, never a command transcript, and never
++   invents a path - so
++   check what does not depend on its
+    prose: the roles, authorization and lifecycle boundary against the plan file
+    you read yourself; quotes it could only produce from that plan and this
+    reference; and the artifacts this procedure leaves behind (a
+diff --git a/tests/contract/fake-zcode-app-server.py b/tests/contract/fake-zcode-app-server.py
+index ac0ee4a..8c0edd8 100755
+--- a/tests/contract/fake-zcode-app-server.py
++++ b/tests/contract/fake-zcode-app-server.py
+@@ -32,6 +32,11 @@ Scenarios (argv ``--scenario``):
+   resume_missing      session/resume fails 1404 (session unknown)
+   resume_needs_overlay session/resume fails without a runtimeModel overlay
+   read_fails   session/read fails after a successful resume
++  read_path    Read tool_call with file_path (Issue #67)
++  no_input     tool.updated without cached input (Issue #67)
++  sensitive_extra  Read input mixes a path with secrets and nested blobs
++  huge_nested  Read input with a huge command and deep extra dict
++  command_token  Bash input whose command carries an unregistered token
+ """
+ 
+ from __future__ import annotations
+@@ -501,6 +506,117 @@ class FakeAppServer:
+             self.complete(session_id)
+             return
+ 
++        if scenario == "read_path":
++            self.event(session_id, "model.streaming", {
++                "kind": "tool_call", "toolCallId": "call_r1",
++                "toolName": "Read",
++                "input": {"file_path": "/tmp/kpr-issue-67-fixture/MARKER.txt"},
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "scheduled", "toolCallId": "call_r1", "toolName": "Read",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "started", "toolCallId": "call_r1", "toolName": "Read",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "result", "toolCallId": "call_r1", "toolName": "Read",
++                "output": "marker-line",
++            })
++            self.complete(session_id)
++            return
++
++        if scenario == "no_input":
++            self.event(session_id, "tool.updated", {
++                "kind": "started", "toolCallId": "call_n1", "toolName": "Read",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "result", "toolCallId": "call_n1", "toolName": "Read",
++                "output": "opaque",
++            })
++            self.complete(session_id)
++            return
++
++        if scenario == "sensitive_extra":
++            secret = self.last_secret or "no-secret-seen"
++            nested: dict[str, Any] = {
++                "blob": "PAD" * 20000,
++                "secret": secret,
++                "unregistered": "unregistered-secret-value-abc123xyz",
++            }
++            for _ in range(12):
++                nested = {"child": nested, "pad": "Y" * 1000}
++            self.event(session_id, "model.streaming", {
++                "kind": "tool_call", "toolCallId": "call_s1",
++                "toolName": "Read",
++                "input": {
++                    "file_path": "/tmp/kpr-issue-67-fixture/MARKER.txt",
++                    "contents": secret,
++                    "apiKey": secret,
++                    "extra": nested,
++                    "unregistered": "unregistered-secret-value-abc123xyz",
++                    "command": f"echo {secret}",
++                },
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "scheduled", "toolCallId": "call_s1", "toolName": "Read",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "started", "toolCallId": "call_s1", "toolName": "Read",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "result", "toolCallId": "call_s1", "toolName": "Read",
++                "output": secret,
++            })
++            self.complete(session_id)
++            return
++
++        if scenario == "huge_nested":
++            nested = {"leaf": "Z" * 8000}
++            for _ in range(16):
++                nested = {"k": nested, **{f"p{i}": "Q" * 200 for i in range(24)}}
++            self.event(session_id, "model.streaming", {
++                "kind": "tool_call", "toolCallId": "call_h1",
++                "toolName": "Read",
++                "input": {
++                    "file_path": "/tmp/kpr-issue-67-fixture/MARKER.txt",
++                    "command": "x" * 80000,
++                    "extra": nested,
++                },
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "scheduled", "toolCallId": "call_h1", "toolName": "Read",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "started", "toolCallId": "call_h1", "toolName": "Read",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "result", "toolCallId": "call_h1", "toolName": "Read",
++                "output": "ok",
++            })
++            self.complete(session_id)
++            return
++
++        if scenario == "command_token":
++            self.event(session_id, "model.streaming", {
++                "kind": "tool_call", "toolCallId": "call_c1",
++                "toolName": "Bash",
++                "input": {
++                    "command": "curl -H 'Authorization: Bearer unreg-i67-token-9f3a7c2e' https://example.invalid",
++                },
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "scheduled", "toolCallId": "call_c1", "toolName": "Bash",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "started", "toolCallId": "call_c1", "toolName": "Bash",
++            })
++            self.event(session_id, "tool.updated", {
++                "kind": "result", "toolCallId": "call_c1", "toolName": "Bash",
++                "output": "ok",
++            })
++            self.complete(session_id)
++            return
++
+         # basic / tool_error
+         self.event(session_id, "model.streaming",
+                    {"kind": "reasoning_delta", "delta": "thinking about it"})
+diff --git a/tests/contract/test-zcode-acp-contract.py b/tests/contract/test-zcode-acp-contract.py
+index 6496c3f..fea87c2 100644
+--- a/tests/contract/test-zcode-acp-contract.py
++++ b/tests/contract/test-zcode-acp-contract.py
+@@ -20,11 +20,13 @@ import tempfile
+ import threading
+ import time
+ import unittest
++import uuid
+ from pathlib import Path
+ 
+ 
+ PROJECT = Path(__file__).resolve().parents[2]
+ ADAPTER = PROJECT / "scripts" / "kaola-zcode-acp.py"
++CHECKOUT_CLI = PROJECT / "scripts" / "kaola-acp.py"
+ FAKE = PROJECT / "tests" / "contract" / "fake-zcode-app-server.py"
+ PROBE = PROJECT / "tests" / "contract" / "hooks" / "zcode-probe"
+ UPSTREAM = PROJECT / "third_party" / "zcode-acp" / "UPSTREAM.md"
+@@ -50,6 +52,7 @@ PLAN_CACHE_FIXTURE = FIXTURES / "zcode-coding-plan-cache.json"
+ DESKTOP_CONFIG = json.loads(DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"))
+ CODING_PLAN_ID = "builtin:bigmodel-coding-plan"
+ FIXTURE_SECRET = DESKTOP_CONFIG["provider"][CODING_PLAN_ID]["options"]["apiKey"]
++UNREGISTERED_COMMAND_TOKEN = "unreg-i67-token-9f3a7c2e"
+ START_PLAN_SECRET = DESKTOP_CONFIG["provider"]["builtin:bigmodel-start-plan"]["options"]["apiKey"]
+ DENIED_ENV = (
+     "ANTHROPIC_API_KEY",
+@@ -304,6 +307,87 @@ class AdapterDriver:
+         return code
+ 
+ 
++class HolderTurn:
++    """Drive one fake-ZCode turn through the real holder so events.jsonl is the record."""
++
++    def __init__(self, tmp: Path, scenario: str) -> None:
++        self.scenario = scenario
++        self.root = tmp / f"holder-{scenario}-{uuid.uuid4().hex[:8]}"
++        self.home = self.root / "home"
++        self.repo = self.root / "repo"
++        self.record_root = self.root / "records"
++        for path in (self.home, self.repo, self.record_root):
++            path.mkdir(parents=True)
++        (self.home / ".zcode" / "v2").mkdir(parents=True)
++        (self.home / ".zcode" / "cli").mkdir(parents=True)
++        (self.home / ".zcode" / "v2" / "config.json").write_text(
++            DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
++        (self.home / ".zcode" / "v2" / "coding-plan-cache.json").write_text(
++            PLAN_CACHE_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
++        (self.home / ".zcode" / "cli" / "config.json").write_text('{"hooks":{}}\n', encoding="utf-8")
++        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
++        self.fake_record = self.root / "fake-record.json"
++        self.entry = self.root / f"zcode-entry-{scenario}.py"
++        self.entry.write_text(
++            "#!/usr/bin/env python3\n"
++            "import os, runpy, sys\n"
++            f"os.environ['FAKE_ZCODE_SCENARIO'] = {scenario!r}\n"
++            f"os.environ['FAKE_ZCODE_RECORD'] = {str(self.fake_record)!r}\n"
++            f"sys.argv = [{str(FAKE)!r}, *sys.argv[1:]]\n"
++            f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
++            encoding="utf-8",
++        )
++        self.entry.chmod(self.entry.stat().st_mode | stat.S_IXUSR)
++        self.session = f"zcode-i67-{uuid.uuid4().hex[:8]}"
++        self.record_dir = self.record_root / "zcode" / self.session
++
++    def env(self) -> dict[str, str]:
++        return {
++            "PATH": os.environ.get("PATH", "/usr/bin"),
++            "HOME": str(self.home),
++            "LANG": "C",
++            "KAOLA_ACP_RECORD_ROOT": str(self.record_root),
++            "KAOLA_ZCODE_ENTRY": str(self.entry),
++            "KAOLA_ZCODE_NODE": sys.executable,
++            "PYTHONUNBUFFERED": "1",
++            "NO_COLOR": "1",
++        }
++
++    def cli(self, command: str, *args: str, timeout: float = 30) -> dict:
++        argv = [sys.executable, str(CHECKOUT_CLI), "zcode", command,
++                "--repo", str(self.repo), "--session", self.session, *args]
++        result = subprocess.run(
++            argv, capture_output=True, text=True, env=self.env(), timeout=timeout)
++        text = (result.stdout or "").strip()
++        payload = None
++        if text:
++            try:
++                payload = json.loads(text.splitlines()[-1])
++            except ValueError:
++                payload = None
++        if result.returncode != 0 or not isinstance(payload, dict):
++            raise AssertionError(
++                f"{command} exit {result.returncode}: {(result.stderr or '')[-800:]} "
++                f"{(result.stdout or '')[-400:]}")
++        return payload
++
++    def start(self) -> dict:
++        receipt = self.cli("start", "--mode", "yolo")
++        if receipt.get("error") or receipt.get("state") != "ready":
++            raise AssertionError(f"holder start failed: {receipt.get('error') or receipt}")
++        return receipt
++
++    def send(self, text: str) -> dict:
++        return self.cli("send", "--text", text)
++
++    def stop(self) -> None:
++        subprocess.run(
++            [sys.executable, str(CHECKOUT_CLI), "zcode", "stop",
++             "--repo", str(self.repo), "--session", self.session, "--force"],
++            capture_output=True, env=self.env(), timeout=30,
++        )
++
++
+ class ZcodeAcpStaticTests(unittest.TestCase):
+     def test_pin_and_gate2_attribution(self) -> None:
+         text = UPSTREAM.read_text(encoding="utf-8")
+@@ -331,6 +415,47 @@ class ZcodeAcpStaticTests(unittest.TestCase):
+         for name in DENIED_ENV:
+             self.assertIn(name, module.DENIED_ENV)
+ 
++    def test_extract_tool_evidence_keeps_only_bounded_path_and_line(self) -> None:
++        module = load_adapter_module()
++        module.register_secret("super-secret-value-xyz")
++        path = "/tmp/kpr-issue-67-fixture/MARKER.txt"
++        nested = {"file_path": path, "blob": "PAD" * 5000}
++        for _ in range(8):
++            nested = {"child": nested}
++        raw = module.extract_tool_evidence({
++            "file_path": path,
++            "offset": 12,
++            "command": "echo super-secret-value-xyz " + UNREGISTERED_COMMAND_TOKEN,
++            "apiKey": "super-secret-value-xyz",
++            "contents": "unregistered-secret-value-abc123xyz",
++            "extra": nested,
++        })
++        assert raw is not None
++        self.assertEqual(raw.get("file_path"), path)
++        self.assertEqual(raw.get("offset"), 12)
++        self.assertNotIn("command", raw)
++        self.assertNotIn("apiKey", raw)
++        self.assertNotIn("contents", raw)
++        self.assertNotIn("extra", raw)
++        blob = json.dumps(raw)
++        self.assertNotIn("unregistered-secret-value-abc123xyz", blob)
++        self.assertNotIn(UNREGISTERED_COMMAND_TOKEN, blob)
++        self.assertNotIn("super-secret-value-xyz", blob)
++        self.assertLessEqual(
++            len(json.dumps(raw, ensure_ascii=False).encode("utf-8")),
++            module.RAW_INPUT_MAX_BYTES,
++        )
++        self.assertEqual(module.RAW_INPUT_MAX_DEPTH, 1)
++        self.assertIsNone(module.extract_tool_evidence(nested), "nested path is not lifted")
++        self.assertEqual(
++            module.locations_from_input(raw),
++            [{"path": path, "line": 12}],
++        )
++        self.assertEqual(module.locations_from_input({"command": "cat /etc/passwd"}), [])
++        self.assertIsNone(module.extract_tool_evidence({"command": "echo hi"}))
++        self.assertIsNone(module.extract_tool_evidence({}))
++        self.assertIsNone(module.extract_tool_evidence(None))
++
+     def test_resolve_runtime_fails_closed(self) -> None:
+         module = load_adapter_module()
+         with self.assertRaises(module.RuntimeError_):
+@@ -455,6 +580,12 @@ class ZcodeAcpContractTests(unittest.TestCase):
+         self.assertIn("from zcode", texts)
+         tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
+         self.assertTrue(any(u.get("kind") == "execute" and u.get("status") == "completed" for u in tools))
++        completed = [u for u in tools if u.get("status") == "completed"]
++        self.assertTrue(completed)
++        self.assertEqual(completed[-1].get("kind"), "execute")
++        self.assertEqual(completed[-1].get("title"), "Bash")
++        self.assertNotIn("rawInput", completed[-1])
++        self.assertNotIn("locations", completed[-1])
+         record = wait_for(lambda: driver.record() or None, 3)
+         self.assertIsNotNone(record)
+         assert record is not None
+@@ -547,6 +678,11 @@ class ZcodeAcpContractTests(unittest.TestCase):
+         permit = driver.wait_method("session/request_permission", timeout=8)
+         self.assertIsNotNone(permit)
+         assert permit is not None
++        tool_call = (permit.get("params") or {}).get("toolCall") or {}
++        self.assertEqual(tool_call.get("title"), "Bash")
++        self.assertEqual(tool_call.get("kind"), "execute")
++        self.assertNotIn("rawInput", tool_call)
++        self.assertNotIn("locations", tool_call)
+         driver.send({
+             "jsonrpc": "2.0",
+             "id": permit.get("id"),
+@@ -991,8 +1127,166 @@ class ZcodeAcpContractTests(unittest.TestCase):
+         tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") in ("tool_call", "tool_call_update")]
+         self.assertTrue(tools)
+         self.assertNotIn(FIXTURE_SECRET, json.dumps(tools))
++        for update in tools:
++            self.assertNotIn("rawInput", update)
++            self.assertNotIn("command", json.dumps(update))
+         self.assert_registry_read_only_and_secret_contained(driver)
+ 
++    def test_read_file_path_is_forwarded_as_locations(self) -> None:
++        """Issue #67: live 0.16.5 Read `input.file_path` must surface on ACP."""
++        driver = self.start("read_path")
++        session_id = self.handshake(driver)
++        driver.request(3, "session/prompt", {
++            "sessionId": session_id, "prompt": [{"type": "text", "text": "read"}],
++        })
++        done = driver.wait_result(3, timeout=8)
++        self.assertIsNotNone(done)
++        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
++        self.assertTrue(tools)
++        path = "/tmp/kpr-issue-67-fixture/MARKER.txt"
++        for update in tools:
++            self.assertEqual(update.get("rawInput"), {"file_path": path})
++            self.assertEqual(update.get("locations"), [{"path": path, "line": None}])
++            self.assertNotEqual(update.get("title"), path)
++
++    def test_absent_tool_input_is_not_invented(self) -> None:
++        """Issue #67: no path key on the backend means no locations/rawInput."""
++        driver = self.start("no_input")
++        session_id = self.handshake(driver)
++        driver.request(3, "session/prompt", {
++            "sessionId": session_id, "prompt": [{"type": "text", "text": "read"}],
++        })
++        done = driver.wait_result(3, timeout=8)
++        self.assertIsNotNone(done)
++        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
++        self.assertTrue(tools)
++        for update in tools:
++            self.assertNotIn("rawInput", update)
++            self.assertNotIn("locations", update)
++            self.assertEqual(update.get("title"), "Read")
++
++    def test_sensitive_extra_fields_are_not_forwarded(self) -> None:
++        driver = self.start("sensitive_extra")
++        session_id = self.handshake(driver)
++        driver.request(3, "session/prompt", {
++            "sessionId": session_id, "prompt": [{"type": "text", "text": "read"}],
++        })
++        done = driver.wait_result(3, timeout=8)
++        self.assertIsNotNone(done)
++        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
++        self.assertTrue(tools)
++        path = "/tmp/kpr-issue-67-fixture/MARKER.txt"
++        blob = json.dumps(driver.messages)
++        self.assertNotIn(FIXTURE_SECRET, blob)
++        self.assertNotIn("unregistered-secret-value-abc123xyz", blob)
++        self.assertNotIn("PADPAD", blob)
++        for update in tools:
++            raw = update.get("rawInput") or {}
++            self.assertEqual(raw.get("file_path"), path)
++            self.assertNotIn("contents", raw)
++            self.assertNotIn("apiKey", raw)
++            self.assertNotIn("extra", raw)
++            self.assertNotIn("unregistered", raw)
++            self.assertNotIn("command", raw)
++            self.assertEqual(update.get("locations"), [{"path": path, "line": None}])
++
++    def test_huge_nested_input_stays_within_raw_input_bound(self) -> None:
++        driver = self.start("huge_nested")
++        session_id = self.handshake(driver)
++        driver.request(3, "session/prompt", {
++            "sessionId": session_id, "prompt": [{"type": "text", "text": "read"}],
++        })
++        done = driver.wait_result(3, timeout=8)
++        self.assertIsNotNone(done)
++        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
++        self.assertTrue(tools)
++        module = load_adapter_module()
++        for update in tools:
++            raw = update.get("rawInput") or {}
++            self.assertEqual(raw.get("file_path"), "/tmp/kpr-issue-67-fixture/MARKER.txt")
++            self.assertNotIn("extra", raw)
++            self.assertNotIn("command", raw)
++            encoded = json.dumps(raw, ensure_ascii=False).encode("utf-8")
++            self.assertLessEqual(len(encoded), module.RAW_INPUT_MAX_BYTES)
++            self.assertLess(len(json.dumps(update, ensure_ascii=False)), 4096)
++
++    def test_holder_events_drop_secrets_and_stay_bounded(self) -> None:
++        """Issue #67 comment 5728867515: holder persistence matches the bound."""
++        self._assert_holder_events("sensitive_extra", secret=True)
++        self._assert_holder_events("huge_nested", secret=False)
++        self._assert_holder_events("command_token", secret=False)
++
++    def test_holder_events_omit_unregistered_command_token(self) -> None:
++        """Execute cards keep kind/title/status; plaintext command is not persisted."""
++        driver = self.start("command_token")
++        session_id = self.handshake(driver)
++        driver.request(3, "session/prompt", {
++            "sessionId": session_id, "prompt": [{"type": "text", "text": "run"}],
++        })
++        done = driver.wait_result(3, timeout=8)
++        self.assertIsNotNone(done)
++        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
++        self.assertTrue(any(u.get("kind") == "execute" and u.get("title") == "Bash" for u in tools))
++        for update in tools:
++            self.assertNotIn("rawInput", update)
++            self.assertNotIn("locations", update)
++            self.assertNotIn(UNREGISTERED_COMMAND_TOKEN, json.dumps(update))
++        self.stop_driver()
++
++        turn = HolderTurn(self.tmp, "command_token")
++        try:
++            turn.start()
++            turn.send("run")
++            matches = list(turn.record_dir.rglob("events.jsonl"))
++            self.assertEqual(len(matches), 1)
++            blob = matches[0].read_text(encoding="utf-8", errors="replace")
++            self.assertNotIn(UNREGISTERED_COMMAND_TOKEN, blob)
++            saw_execute = False
++            for line in blob.splitlines():
++                try:
++                    entry = json.loads(line)
++                except ValueError:
++                    continue
++                update = (entry.get("update") or {})
++                if update.get("sessionUpdate") != "tool_call":
++                    continue
++                self.assertNotIn("rawInput", update)
++                self.assertNotIn("command", update)
++                if update.get("kind") == "execute" and update.get("title") == "Bash":
++                    saw_execute = True
++            self.assertTrue(saw_execute)
++        finally:
++            turn.stop()
++
++    def _assert_holder_events(self, scenario: str, *, secret: bool) -> None:
++        turn = HolderTurn(self.tmp, scenario)
++        try:
++            turn.start()
++            turn.send("read")
++            matches = list(turn.record_dir.rglob("events.jsonl"))
++            self.assertEqual(len(matches), 1, f"holder events.jsonl missing under {turn.record_dir}")
++            events_path = matches[0]
++            turn.record_dir = events_path.parent
++            blob = events_path.read_text(encoding="utf-8", errors="replace")
++            self.assertNotIn(FIXTURE_SECRET, blob)
++            self.assertNotIn("unregistered-secret-value-abc123xyz", blob)
++            self.assertNotIn("PADPAD", blob)
++            self.assertLess(events_path.stat().st_size, 256_000)
++            tool_lines = []
++            for line in blob.splitlines():
++                if "tool_call" not in line:
++                    continue
++                self.assertLess(len(line), 8192, "a persisted tool_call event stayed bounded")
++                tool_lines.append(line)
++            self.assertTrue(tool_lines)
++            if secret:
++                self.assertIn("MARKER.txt", blob)
++            record = turn.record_dir / "record.json"
++            if record.is_file():
++                self.assertNotIn(FIXTURE_SECRET, record.read_text(encoding="utf-8", errors="replace"))
++        finally:
++            turn.stop()
++
+     def test_failed_load_leaves_no_half_registered_session(self) -> None:
+         driver = self.start("resume_missing")
+         self.handshake(driver)
+diff --git a/third_party/zcode-acp/UPSTREAM.md b/third_party/zcode-acp/UPSTREAM.md
+index fe63d73..d7777f6 100644
+--- a/third_party/zcode-acp/UPSTREAM.md
++++ b/third_party/zcode-acp/UPSTREAM.md
+@@ -56,6 +56,15 @@ Start Plan and pay-as-you-go providers are refused; unknown models and other
+ providers fail closed; the adapter never substitutes a model or a provider,
+ never writes `~/.zcode/cli/config.json`, and never logs the credential.
+ 
++Tool `input` (Issue #67, measured on CLI 0.16.5): `model.streaming` kind
++`tool_call` carries `input` (`Read` used `file_path`; protocol examples use
++`command` for `Bash`). `tool.updated` `scheduled` may omit `input` and set
++`inputOmitted`/`inputRef` instead. The adapter caches the streaming `input`
++and forwards only top-level path and line fields as a bounded ACP `rawInput`
++plus `locations`. Extra, nested, and `command` fields are dropped — execute
++cards keep kind/title/status without a command transcript. It does not follow
++`inputRef` and does not invent a path.
++
+ ## Removed / never implemented
+ 
+ quota client, tasks-index sqlite, remote hub / WebSocket listener, TUI /

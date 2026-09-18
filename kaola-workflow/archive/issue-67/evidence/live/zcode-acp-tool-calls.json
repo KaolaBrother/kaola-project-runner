@@ -1,0 +1,200 @@
+{
+  "entry": "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs",
+  "node": "/opt/homebrew/bin/node",
+  "sentinel": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/kaola-workflow/issue-67/evidence/live-sentinel",
+  "marker_basename": "MARKER.txt",
+  "adapter": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-67/scripts/kaola-zcode-acp.py",
+  "initialize": {
+    "ok": true,
+    "agent": "kaola-zcode-acp",
+    "error": null
+  },
+  "session_new": {
+    "ok": true,
+    "error": null,
+    "has_session": true
+  },
+  "prompt": {
+    "ok": true,
+    "stopReason": "end_turn",
+    "error": null
+  },
+  "acp_tool_calls": [
+    {
+      "sessionUpdate": "tool_call",
+      "keys": [
+        "kind",
+        "locations",
+        "rawInput",
+        "sessionUpdate",
+        "status",
+        "title",
+        "toolCallId"
+      ],
+      "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+      "title": "Read",
+      "kind": "read",
+      "status": "pending",
+      "locations": [
+        {
+          "path": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/kaola-workflow/issue-67/evidence/live-sentinel/MARKER.txt",
+          "line": null
+        }
+      ],
+      "rawInput_present": true,
+      "rawInput_keys": [
+        "file_path"
+      ],
+      "content_present": false
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "keys": [
+        "kind",
+        "locations",
+        "rawInput",
+        "sessionUpdate",
+        "status",
+        "title",
+        "toolCallId"
+      ],
+      "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+      "title": "Read",
+      "kind": "read",
+      "status": "in_progress",
+      "locations": [
+        {
+          "path": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/kaola-workflow/issue-67/evidence/live-sentinel/MARKER.txt",
+          "line": null
+        }
+      ],
+      "rawInput_present": true,
+      "rawInput_keys": [
+        "file_path"
+      ],
+      "content_present": false
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "keys": [
+        "kind",
+        "locations",
+        "rawInput",
+        "sessionUpdate",
+        "status",
+        "title",
+        "toolCallId"
+      ],
+      "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+      "title": "Read",
+      "kind": "read",
+      "status": "completed",
+      "locations": [
+        {
+          "path": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/kaola-workflow/issue-67/evidence/live-sentinel/MARKER.txt",
+          "line": null
+        }
+      ],
+      "rawInput_present": true,
+      "rawInput_keys": [
+        "file_path"
+      ],
+      "content_present": false
+    }
+  ],
+  "assistant_text": "kpr-issue-67-marker-a1f3",
+  "assistant_has_marker": true,
+  "adapter_exit": 0,
+  "stderr_len": 0,
+  "stderr_has_redacted": false,
+  "upstream_n": 21,
+  "upstream_streaming_tool_calls": [
+    {
+      "keys": [
+        "assistantMessageId",
+        "delta",
+        "done",
+        "input",
+        "kind",
+        "toolCallId",
+        "toolName"
+      ],
+      "kind": "tool_call",
+      "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+      "toolName": "Read",
+      "input_present": true,
+      "input_type": "dict",
+      "input_keys": [
+        "file_path"
+      ],
+      "input": {
+        "file_path": {
+          "kind": "probe_marker"
+        }
+      }
+    }
+  ],
+  "upstream_tool_updated": [
+    {
+      "keys": [
+        "assistantMessageId",
+        "canRunParallel",
+        "dependencies",
+        "inputByteLength",
+        "inputOmitted",
+        "inputRef",
+        "kind",
+        "parallelGroupIndex",
+        "schedule",
+        "toolCallId",
+        "toolName"
+      ],
+      "kind": "scheduled",
+      "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+      "toolName": "Read",
+      "input_present": false
+    },
+    {
+      "keys": [
+        "kind",
+        "startedAt",
+        "toolCallId",
+        "toolName"
+      ],
+      "kind": "started",
+      "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+      "toolName": "Read",
+      "input_present": false
+    },
+    {
+      "keys": [
+        "duration",
+        "kind",
+        "result",
+        "toolCallId"
+      ],
+      "kind": "result",
+      "toolCallId": "call_7a0f0ae6b0db423b910f3277",
+      "input_present": false,
+      "result": {
+        "present": true,
+        "type": "dict",
+        "len": null
+      }
+    },
+    {
+      "keys": [
+        "errorCount",
+        "kind",
+        "successCount",
+        "toolCallIds"
+      ],
+      "kind": "batch",
+      "input_present": false,
+      "batch_len": 0,
+      "items": []
+    }
+  ],
+  "upstream_any_input": true,
+  "leftover_pids": []
+}

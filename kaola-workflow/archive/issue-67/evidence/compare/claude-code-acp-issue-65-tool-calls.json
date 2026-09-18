@@ -1,0 +1,59 @@
+{
+  "source": "kaola-workflow/archive/issue-65/evidence/live/claude-code-6-capture.json",
+  "platform": "claude-code",
+  "n": 4,
+  "union_keys": [
+    "kind",
+    "rawInput",
+    "sessionUpdate",
+    "status",
+    "title",
+    "toolCallId"
+  ],
+  "samples": [
+    {
+      "kind": "execute",
+      "rawInput": {
+        "command": "sleep 4 && echo step-1",
+        "description": "Run step 1"
+      },
+      "sessionUpdate": "tool_call",
+      "status": "completed",
+      "title": "Bash",
+      "toolCallId": "call_1"
+    },
+    {
+      "kind": "execute",
+      "rawInput": {
+        "command": "sleep 4 && echo step-2",
+        "description": "Run step 2"
+      },
+      "sessionUpdate": "tool_call",
+      "status": "completed",
+      "title": "Bash",
+      "toolCallId": "call_2"
+    },
+    {
+      "kind": "execute",
+      "rawInput": {
+        "command": "sleep 4 && echo step-3",
+        "description": "Run step 3"
+      },
+      "sessionUpdate": "tool_call",
+      "status": "completed",
+      "title": "Bash",
+      "toolCallId": "call_3"
+    },
+    {
+      "kind": "execute",
+      "rawInput": {
+        "command": "sleep 4 && echo step-4",
+        "description": "Run step 4"
+      },
+      "sessionUpdate": "tool_call",
+      "status": "completed",
+      "title": "Bash",
+      "toolCallId": "call_4"
+    }
+  ]
+}

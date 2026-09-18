@@ -1,0 +1,42 @@
+{
+  "source": "kaola-workflow/archive/issue-66/evidence/live/03-host-startup-capture.json",
+  "platform": "zcode",
+  "n": 15,
+  "union_keys": [
+    "kind",
+    "sessionUpdate",
+    "status",
+    "title",
+    "toolCallId"
+  ],
+  "samples": [
+    {
+      "kind": "read",
+      "sessionUpdate": "tool_call",
+      "status": "pending",
+      "title": "Read",
+      "toolCallId": "call_3caeb9a1dd1c421abb719724"
+    },
+    {
+      "kind": "read",
+      "sessionUpdate": "tool_call",
+      "status": "in_progress",
+      "title": "Read",
+      "toolCallId": "call_3caeb9a1dd1c421abb719724"
+    },
+    {
+      "kind": "read",
+      "sessionUpdate": "tool_call",
+      "status": "completed",
+      "title": "Read",
+      "toolCallId": "call_3caeb9a1dd1c421abb719724"
+    },
+    {
+      "kind": "read",
+      "sessionUpdate": "tool_call",
+      "status": "pending",
+      "title": "Read",
+      "toolCallId": "call_6d87c05f28c44aa992d2d13f"
+    }
+  ]
+}
