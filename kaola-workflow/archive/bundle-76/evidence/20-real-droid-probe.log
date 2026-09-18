@@ -1,0 +1,54 @@
+Issue #76 isolated real-path probe — run transcript
+====================================================
+
+Setup: Host = zcode platform session on the fake app-server (no real zcode
+binary exists on this machine — inherent limitation). Worker = REAL droid
+0.220.0 (`droid exec --output-format acp`), started `--mode manual`
+(autonomy `normal`), bound via KAOLA_ACP_HEARTBEAT_HOST to the Host.
+Command asked droid to run `touch <marker>` — a permission-gated tool call
+under `normal` autonomy. Probe script: 20-real-droid-probe.py.
+
+[PASS] host start ready
+[PASS] real droid start ready
+[PASS] binding adopted {"platform": "zcode", "repo": "<repo>",
+      "session": "zcode-i76-probe-host", "socket": "<holder-socket>"}
+[PASS] dispatch admitted {'outcome': 'in_progress',
+      'mutation_status': 'in_progress', 'platform': 'droid', ...}
+[PASS] real session/request_permission pending [{"options": [
+      {"id": "proceed_once", "kind": "allow_once", "label": "Allow"},
+      {"id": "proceed_always", "kind": "allow_always",
+       "label": "Allow & auto-run medium risk commands"},
+      {"id": "cancel", "kind": "reject_once", "label": "No, cancel"}],
+      "request_id": 0, "title": "`touch ...`", ...}]
+[PASS] worker turn still active turn_active=True
+[PASS] permission_required event on host {"cursor": 20,
+      "event_ids": ["droid/droid-i76-probe-worker/permission_required/16"],
+      "kind": "worker_event_confirmed"}
+[PASS] delivered prompt carries permission_required
+      kaola-host-notify/1 ... {"event_cursor": 16, "event_id":
+      "droid/droid-i76-probe-worker/permission_required/16", "kind":
+      "permission_required", "platform": "droid", "reason":
+      "session/request_permission pending", "repo": "...",
+      "request_id": "0", "session": "droid-i76-probe-worker"}
+[PASS] event carries only the request_id locator
+      (delivered prompt contains NO "touch"/"marker" — zero raw tool input)
+[PASS] permit settles the request {'permitted': '0',
+      'option': 'proceed_once', 'pending_permissions': [], ...}
+[PASS] turn-end idle still arrives
+      (worker_event_confirmed for droid/droid-i76-probe-worker/idle/21)
+[PASS] marker file written by real droid
+stop droid-i76-probe-worker: residual=[]
+stop zcode-i76-probe-host: residual=[]
+
+PROBE: PASS
+
+Notes
+- Real ACP approval path verified for the worker side: genuine
+  session/request_permission -> pending_permissions -> permission_required
+  carrier event -> Host delivery+confirm -> permit -> turn-end idle.
+- Host-side agent process is the fake zcode app-server; the holder,
+  carrier, staging, delivery, confirm, and permit code paths are all real.
+- request_id 0 (integer) exercised the normalize_id edge: event and permit
+  receipts carry the normalized key "0".
+- artifacts dir: /var/folders/.../kaola-i76-real-78mpwogn (temp; events and
+  rpc logs copied here as 21-/22-* files).
