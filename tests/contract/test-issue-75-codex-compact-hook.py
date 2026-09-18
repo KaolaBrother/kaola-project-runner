@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Issue #75: the Codex SessionStart(compact) recovery carrier is merge-safe.
 
-kaola-codex-compact-hook.py owns exactly one hooks.json entry
-(``kaola-project-runner:compact-context``) plus its payload copy. Foreign
-entries -- Workflow-owned, user-owned, anything -- keep their JSON content
-untouched (the file is re-serialized canonically on write; byte-level
-formatting is not promised), and a malformed hooks.json is refused rather
-than clobbered. These tests run the real script against throwaway CODEX_HOME
-directories only.
+kaola-codex-compact-hook.py owns exactly one entry in the CONSUMING
+project's ``.codex/hooks.json`` (``kaola-project-runner:compact-context``)
+plus its asset copies under ``<repo>/.codex/kaola-project-runner/hooks/``.
+The project layer is what lets two projects coexist: project A's binding
+can never overwrite project B's, and uninstalling B leaves A untouched.
+Foreign entries -- Workflow-owned, user-owned, anything -- keep their JSON
+content untouched (the file is re-serialized canonically on write;
+byte-level formatting is not promised), and a malformed hooks.json is
+refused before any write. These tests run the real script against
+throwaway project directories only; no user-global config is touched.
 """
 
 from __future__ import annotations
@@ -39,139 +42,452 @@ FOREIGN_OTHER = {
 }
 
 
-def run_hook(home: Path, action: str) -> dict:
+HOST_SESSION_ID = "0192b5f4-0000-7000-8000-0000000000aa"
+
+
+def run_hook(*cli: str, stdin: str | None = None) -> dict:
     proc = subprocess.run(
-        [sys.executable, str(SCRIPT), action, "--codex-home", str(home)],
+        [sys.executable, str(SCRIPT), *cli],
         capture_output=True,
         text=True,
+        input=stdin,
         timeout=60,
     )
     lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
-    assert lines, f"{action} produced no receipt: {proc.stderr}"
+    assert lines, f"{cli} produced no receipt: {proc.stderr}"
     receipt = json.loads(lines[-1])
     receipt["_rc"] = proc.returncode
     receipt["_stderr"] = proc.stderr
     return receipt
 
 
-def hooks_doc(home: Path) -> dict:
-    path = home / "hooks.json"
+def install(repo: Path, session_id: str = HOST_SESSION_ID) -> dict:
+    return run_hook(
+        "install",
+        "--project-root", str(repo),
+        "--session-id", session_id,
+    )
+
+
+def uninstall(repo: Path) -> dict:
+    return run_hook("uninstall", "--project-root", str(repo))
+
+
+def hooks_path(repo: Path) -> Path:
+    return repo / ".codex" / "hooks.json"
+
+
+def hooks_dir(repo: Path) -> Path:
+    return repo / ".codex" / "kaola-project-runner" / "hooks"
+
+
+def hook_input(repo: Path, **overrides) -> str:
+    """The official SessionStart command-hook stdin shape (binary-verified)."""
+    event = {
+        "session_id": HOST_SESSION_ID,
+        "transcript_path": "/t/rollout.jsonl",
+        "cwd": str(repo),
+        "hook_event_name": "SessionStart",
+        "source": "compact",
+        "model": "gpt-5-codex",
+        "permission_mode": "default",
+    }
+    event.update(overrides)
+    return json.dumps(event)
+
+
+def hooks_doc(repo: Path) -> dict:
+    path = hooks_path(repo)
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
-def session_entries(home: Path) -> list:
-    return (hooks_doc(home).get("hooks") or {}).get("SessionStart") or []
+def session_entries(repo: Path) -> list:
+    return (hooks_doc(repo).get("hooks") or {}).get("SessionStart") or []
 
 
-def our_entries(home: Path) -> list:
+def our_entries(repo: Path) -> list:
     return [
-        e for e in session_entries(home)
+        e for e in session_entries(repo)
         if isinstance(e, dict) and e.get("id") == ENTRY_ID
     ]
 
 
+def installed_command(repo: Path) -> str:
+    return our_entries(repo)[0]["hooks"][0]["command"]
+
+
+def run_installed(repo: Path, stdin: str) -> subprocess.CompletedProcess:
+    """Run the exact installed hook command the way Codex would."""
+    return subprocess.run(
+        ["/bin/sh", "-c", installed_command(repo)],
+        capture_output=True, text=True, input=stdin, timeout=30,
+    )
+
+
 class CodexCompactHookContract(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i75-codex-home.")
-        self.home = Path(self.tmp.name)
+        self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i75-repo.")
+        self.repo = Path(self.tmp.name) / "repo"
+        self.repo.mkdir()
+        self.repo = Path(os.path.realpath(self.repo))
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def seed_foreign(self) -> dict:
+    def seed_foreign(self, repo: Path | None = None) -> dict:
+        repo = repo or self.repo
         doc = {
             "hooks": {
                 "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "/bin/true"}], "id": "user-owned:pre-bash"}],
                 "SessionStart": [FOREIGN_WORKFLOW, FOREIGN_OTHER],
             }
         }
-        (self.home / "hooks.json").write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+        path = hooks_path(repo)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
         return doc
 
-    def test_fresh_install_creates_entry_and_payload(self) -> None:
-        receipt = run_hook(self.home, "install")
+    def test_fresh_install_creates_entry_and_assets(self) -> None:
+        receipt = install(self.repo)
         self.assertEqual(receipt["result"], "ok")
         self.assertEqual(receipt["_rc"], 0)
-        entries = our_entries(self.home)
+        entries = our_entries(self.repo)
         self.assertEqual(len(entries), 1)
         entry = entries[0]
         self.assertEqual(entry["matcher"], "compact")
         handler = entry["hooks"][0]
         self.assertEqual(handler["type"], "command")
-        payload = self.home / "kaola-project-runner" / "hooks" / "compact-recovery.md"
-        self.assertEqual(handler["command"], f"cat {shlex.quote(str(payload))}")
+        emitter = hooks_dir(self.repo) / "kaola-codex-compact-hook.py"
+        self.assertEqual(
+            handler["command"], f"python3 {shlex.quote(str(emitter))} emit"
+        )
         self.assertEqual(handler["timeout"], 5)
+        payload = hooks_dir(self.repo) / "compact-recovery.md"
         self.assertTrue(payload.is_file())
         self.assertEqual(payload.read_bytes(), PAYLOAD_SOURCE.read_bytes())
+        self.assertTrue(emitter.is_file())
+        self.assertEqual(emitter.read_bytes(), SCRIPT.read_bytes())
+        binding = json.loads(
+            (hooks_dir(self.repo) / "binding.json").read_text()
+        )
+        self.assertEqual(
+            binding,
+            {
+                "session_id": HOST_SESSION_ID,
+                "project_root": os.path.realpath(self.repo),
+            },
+        )
+
+    def test_install_requires_host_binding(self) -> None:
+        """Install without the designated-Host binding refuses, no writes."""
+        for cli in (
+            ("install", "--project-root", str(self.repo)),
+            ("install", "--session-id", HOST_SESSION_ID),
+            ("install",),
+        ):
+            receipt = run_hook(*cli)
+            self.assertEqual(receipt["result"], "refused", cli)
+            self.assertNotEqual(receipt["_rc"], 0, cli)
+        self.assertFalse((self.repo / ".codex").exists())
 
     def test_install_preserves_foreign_entries(self) -> None:
         self.seed_foreign()
-        receipt = run_hook(self.home, "install")
+        receipt = install(self.repo)
         self.assertEqual(receipt["result"], "ok")
-        session = session_entries(self.home)
+        session = session_entries(self.repo)
         self.assertEqual(len(session), 3)
         self.assertIn(FOREIGN_WORKFLOW, session)
         self.assertIn(FOREIGN_OTHER, session)
-        doc = hooks_doc(self.home)
+        doc = hooks_doc(self.repo)
         pre = doc["hooks"]["PreToolUse"]
         self.assertEqual(pre[0]["id"], "user-owned:pre-bash")
 
     def test_reinstall_is_idempotent(self) -> None:
         self.seed_foreign()
-        run_hook(self.home, "install")
-        first = (self.home / "hooks.json").read_bytes()
-        receipt = run_hook(self.home, "install")
-        second = (self.home / "hooks.json").read_bytes()
+        install(self.repo)
+        first = hooks_path(self.repo).read_bytes()
+        receipt = install(self.repo)
+        second = hooks_path(self.repo).read_bytes()
         self.assertEqual(receipt["result"], "ok")
         self.assertFalse(receipt["changed"])
         self.assertEqual(first, second)
-        self.assertEqual(len(our_entries(self.home)), 1)
+        self.assertEqual(len(our_entries(self.repo)), 1)
+
+    def test_two_phase_bootstrap_covers_first_session(self) -> None:
+        """prepare before Host start (inert), bind after — first compact covered.
+
+        Hooks load at session start, so the entry must exist before the Host
+        launches; the session id can only be bound afterwards, and binding
+        must not touch the loaded hooks.json.
+        """
+        receipt = run_hook("prepare", "--project-root", str(self.repo))
+        self.assertEqual(receipt["result"], "ok")
+        self.assertIsNone(receipt["session_id"])
+        binding = json.loads((hooks_dir(self.repo) / "binding.json").read_text())
+        self.assertEqual(
+            binding,
+            {"session_id": None, "project_root": os.path.realpath(self.repo)},
+        )
+        self.assertEqual(len(our_entries(self.repo)), 1)
+        payload = (
+            hooks_dir(self.repo) / "compact-recovery.md"
+        ).read_text(encoding="utf-8")
+
+        # Inert: any session id emits nothing — including the eventual Host's.
+        inert = run_installed(self.repo, hook_input(self.repo))
+        self.assertEqual(inert.returncode, 0, inert.stderr)
+        self.assertEqual(inert.stdout, "")
+        self.assertFalse(
+            run_hook("status", "--project-root", str(self.repo))["bound"]
+        )
+
+        # Host started; its real session id becomes known. bind touches ONLY
+        # binding.json — the loaded entry must stay byte-identical.
+        before = hooks_path(self.repo).read_bytes()
+        bound = run_hook(
+            "bind", "--project-root", str(self.repo),
+            "--session-id", HOST_SESSION_ID,
+        )
+        self.assertEqual(bound["result"], "ok")
+        self.assertTrue(bound["changed"])
+        self.assertEqual(hooks_path(self.repo).read_bytes(), before)
+        self.assertTrue(
+            run_hook("status", "--project-root", str(self.repo))["bound"]
+        )
+
+        fired = run_installed(self.repo, hook_input(self.repo))
+        self.assertEqual(fired.stdout, payload)
+        worker = run_installed(
+            self.repo,
+            hook_input(self.repo, session_id="ffffffff-0000-0000-0000-0000000000ee"),
+        )
+        self.assertEqual(worker.stdout, "")
+
+    def test_bind_refuses_without_prepare(self) -> None:
+        """bind never creates the entry — it only rebinds a prepared one."""
+        receipt = run_hook(
+            "bind", "--project-root", str(self.repo),
+            "--session-id", HOST_SESSION_ID,
+        )
+        self.assertEqual(receipt["result"], "refused")
+        self.assertNotEqual(receipt["_rc"], 0)
+        self.assertFalse((self.repo / ".codex").exists())
+
+    def test_bind_refuses_malformed_or_null_config(self) -> None:
+        """bind still validates config shape before writing binding.json."""
+        self.seed_foreign()
+        path = hooks_path(self.repo)
+        for doc in ({"hooks": None}, "{not json"):
+            path.write_text(
+                doc if isinstance(doc, str) else json.dumps(doc),
+                encoding="utf-8",
+            )
+            before = path.read_bytes()
+            receipt = run_hook(
+                "bind", "--project-root", str(self.repo),
+                "--session-id", HOST_SESSION_ID,
+            )
+            self.assertEqual(receipt["result"], "refused", doc)
+            self.assertNotEqual(receipt["_rc"], 0, doc)
+            self.assertEqual(path.read_bytes(), before, doc)
+            self.assertFalse(
+                (self.repo / ".codex" / "kaola-project-runner").exists(), doc
+            )
+
+    def test_reinstall_rebinds_session_without_touching_entry(self) -> None:
+        """Rebinding is a data-file change: the reviewed entry stays stable."""
+        install(self.repo)
+        before = hooks_path(self.repo).read_bytes()
+        new_id = "00000000-0000-0000-0000-0000000000ff"
+        receipt = install(self.repo, session_id=new_id)
+        self.assertEqual(receipt["result"], "ok")
+        self.assertTrue(receipt["changed"])
+        self.assertEqual(hooks_path(self.repo).read_bytes(), before)
+        binding = json.loads(
+            (hooks_dir(self.repo) / "binding.json").read_text()
+        )
+        self.assertEqual(binding["session_id"], new_id)
+        bound = run_installed(self.repo, hook_input(self.repo, session_id=new_id))
+        self.assertNotEqual(bound.stdout, "")
+        stale = run_installed(self.repo, hook_input(self.repo))
+        self.assertEqual(stale.stdout, "")
+
+    def test_two_projects_coexist_and_uninstall_is_local(self) -> None:
+        """Project A/B each bind their own Host; removing B never harms A."""
+        repo_b = Path(self.tmp.name) / "repo-b"
+        repo_b.mkdir()
+        repo_b = Path(os.path.realpath(repo_b))
+        sid_a = "0192b5f4-0000-7000-8000-0000000000aa"
+        sid_b = "0192b5f4-0000-7000-8000-0000000000bb"
+        self.seed_foreign()
+        self.seed_foreign(repo_b)
+        self.assertEqual(install(self.repo, session_id=sid_a)["result"], "ok")
+        self.assertEqual(install(repo_b, session_id=sid_b)["result"], "ok")
+
+        bind_a = json.loads((hooks_dir(self.repo) / "binding.json").read_text())
+        bind_b = json.loads((hooks_dir(repo_b) / "binding.json").read_text())
+        self.assertEqual(bind_a["session_id"], sid_a)
+        self.assertEqual(bind_b["session_id"], sid_b)
+        self.assertEqual(bind_a["project_root"], os.path.realpath(self.repo))
+        self.assertEqual(bind_b["project_root"], os.path.realpath(repo_b))
+
+        payload = PAYLOAD_SOURCE.read_text(encoding="utf-8")
+        proc_a = run_installed(self.repo, hook_input(self.repo, session_id=sid_a))
+        self.assertEqual(proc_a.stdout, payload)
+        proc_b = run_installed(repo_b, hook_input(repo_b, session_id=sid_b))
+        self.assertEqual(proc_b.stdout, payload)
+        cross = run_installed(repo_b, hook_input(repo_b, session_id=sid_a))
+        self.assertEqual(cross.stdout, "")
+
+        gone = uninstall(repo_b)
+        self.assertEqual(gone["result"], "ok")
+        self.assertFalse((repo_b / ".codex" / "kaola-project-runner").exists())
+        self.assertEqual(
+            session_entries(repo_b), [FOREIGN_WORKFLOW, FOREIGN_OTHER]
+        )
+        still = run_installed(self.repo, hook_input(self.repo, session_id=sid_a))
+        self.assertEqual(still.stdout, payload)
+        self.assertEqual(len(our_entries(self.repo)), 1)
 
     def test_uninstall_removes_only_ours(self) -> None:
         self.seed_foreign()
-        run_hook(self.home, "install")
-        receipt = run_hook(self.home, "uninstall")
+        install(self.repo)
+        receipt = uninstall(self.repo)
         self.assertEqual(receipt["result"], "ok")
         self.assertEqual(receipt["removed_entries"], 1)
-        session = session_entries(self.home)
+        session = session_entries(self.repo)
         self.assertEqual(session, [FOREIGN_WORKFLOW, FOREIGN_OTHER])
-        payload = self.home / "kaola-project-runner" / "hooks" / "compact-recovery.md"
-        self.assertFalse(payload.exists())
-        again = run_hook(self.home, "uninstall")
+        self.assertFalse((self.repo / ".codex" / "kaola-project-runner").exists())
+        again = uninstall(self.repo)
         self.assertEqual(again["result"], "ok")
         self.assertEqual(again["removed_entries"], 0)
 
+    def test_uninstall_leaves_no_residue_when_only_ours(self) -> None:
+        """A hooks.json that held only our entry is removed with .codex."""
+        install(self.repo)
+        self.assertTrue(hooks_path(self.repo).exists())
+        receipt = uninstall(self.repo)
+        self.assertEqual(receipt["result"], "ok")
+        self.assertFalse(hooks_path(self.repo).exists())
+        self.assertFalse((self.repo / ".codex").exists())
+
     def test_malformed_hooks_json_is_refused_not_clobbered(self) -> None:
-        path = self.home / "hooks.json"
+        path = hooks_path(self.repo)
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("{not json", encoding="utf-8")
         before = path.read_bytes()
         for action in ("install", "uninstall", "status"):
-            receipt = run_hook(self.home, action)
+            receipt = run_hook(action, "--project-root", str(self.repo))
             self.assertEqual(receipt["result"], "refused", action)
             self.assertNotEqual(receipt["_rc"], 0, action)
         self.assertEqual(path.read_bytes(), before)
 
+    def test_null_shapes_refused_before_any_write(self) -> None:
+        """JSON-null `hooks` / `hooks.SessionStart` are malformed config.
+
+        Refusal must be atomic: no payload, no emitter, no binding, no
+        re-serialized hooks.json — the file stays byte-identical.
+        """
+        for doc in (
+            {"hooks": None},
+            {"hooks": {"SessionStart": None}},
+        ):
+            path = hooks_path(self.repo)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            before = path.read_bytes()
+            receipt = install(self.repo)
+            self.assertEqual(receipt["result"], "refused", doc)
+            self.assertNotEqual(receipt["_rc"], 0, doc)
+            self.assertEqual(path.read_bytes(), before, doc)
+            self.assertFalse(
+                (self.repo / ".codex" / "kaola-project-runner").exists(), doc
+            )
+            refused = uninstall(self.repo)
+            self.assertEqual(refused["result"], "refused", doc)
+            self.assertEqual(path.read_bytes(), before, doc)
+
     def test_status_is_read_only(self) -> None:
-        receipt = run_hook(self.home, "status")
+        receipt = run_hook("status", "--project-root", str(self.repo))
         self.assertEqual(receipt["result"], "ok")
         self.assertFalse(receipt["installed"])
-        self.assertFalse((self.home / "hooks.json").exists())
-        self.assertFalse((self.home / "kaola-project-runner").exists())
+        self.assertFalse((self.repo / ".codex").exists())
 
-    def test_metachar_home_command_quotes_and_only_reads(self) -> None:
-        """A CODEX_HOME with shell metacharacters cannot alter execution."""
+    def test_emit_only_for_bound_host(self) -> None:
+        """Host-only filter: payload leaves stdout only on exact match."""
+        install(self.repo)
+        payload = (
+            hooks_dir(self.repo) / "compact-recovery.md"
+        ).read_text(encoding="utf-8")
+
+        bound = run_installed(self.repo, hook_input(self.repo))
+        self.assertEqual(bound.returncode, 0, bound.stderr)
+        self.assertEqual(bound.stdout, payload)
+
+        worker = run_installed(
+            self.repo,
+            hook_input(self.repo, session_id="ffffffff-0000-0000-0000-0000000000ee"),
+        )
+        self.assertEqual(worker.returncode, 0, worker.stderr)
+        self.assertEqual(worker.stdout, "")
+
+        other_repo = run_installed(
+            self.repo, hook_input(self.repo, cwd="/tmp/kpr-i75-elsewhere")
+        )
+        self.assertEqual(other_repo.returncode, 0, other_repo.stderr)
+        self.assertEqual(other_repo.stdout, "")
+
+    def test_emit_only_for_compact_source(self) -> None:
+        install(self.repo)
+        for source in ("startup", "resume", "clear"):
+            proc = run_installed(self.repo, hook_input(self.repo, source=source))
+            self.assertEqual(proc.returncode, 0, source)
+            self.assertEqual(proc.stdout, "", source)
+        non_hook = run_installed(
+            self.repo, hook_input(self.repo, hook_event_name="UserPromptSubmit")
+        )
+        self.assertEqual(non_hook.returncode, 0)
+        self.assertEqual(non_hook.stdout, "")
+
+    def test_emit_malformed_stdin_is_silent(self) -> None:
+        install(self.repo)
+        for bad in ("", "not json", "[1,2]", '{"session_id": 5}', "null"):
+            proc = run_installed(self.repo, bad)
+            self.assertEqual(proc.returncode, 0, bad)
+            self.assertEqual(proc.stdout, "", bad)
+
+    def test_emit_missing_or_bad_binding_is_silent(self) -> None:
+        install(self.repo)
+        binding = hooks_dir(self.repo) / "binding.json"
+        for bad in ("not json", "null", "[]", '{"session_id": 1}'):
+            binding.write_text(bad, encoding="utf-8")
+            proc = run_installed(self.repo, hook_input(self.repo))
+            self.assertEqual(proc.returncode, 0, bad)
+            self.assertEqual(proc.stdout, "", bad)
+        binding.unlink()
+        proc = run_installed(self.repo, hook_input(self.repo))
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout, "")
+
+    def test_metachar_root_command_quotes_and_only_reads(self) -> None:
+        """A project path with shell metacharacters cannot alter execution."""
         evil = Path(self.tmp.name) / "odd \"q\" $(touch PWNED)'s"
-        receipt = run_hook(evil, "install")
+        evil.mkdir()
+        evil = Path(os.path.realpath(evil))
+        receipt = install(evil)
         self.assertEqual(receipt["result"], "ok")
-        command = our_entries(evil)[0]["hooks"][0]["command"]
-        payload = evil / "kaola-project-runner" / "hooks" / "compact-recovery.md"
-        self.assertEqual(command, f"cat {shlex.quote(str(payload))}")
+        command = installed_command(evil)
         self.assertIn("'", command)
+        emitter = hooks_dir(evil) / "kaola-codex-compact-hook.py"
+        parts = shlex.split(command)
+        self.assertEqual(parts, ["python3", str(emitter), "emit"])
         proc = subprocess.run(
             ["/bin/sh", "-c", command],
-            capture_output=True, text=True, timeout=15, cwd=self.tmp.name,
+            capture_output=True, text=True, input=hook_input(evil), timeout=30,
+            cwd=self.tmp.name,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = hooks_dir(evil) / "compact-recovery.md"
         self.assertEqual(proc.stdout, payload.read_text(encoding="utf-8"))
         for root, _dirs, files in os.walk(self.tmp.name):
             self.assertNotIn("PWNED", files, f"side effect in {root}")
@@ -179,13 +495,13 @@ class CodexCompactHookContract(unittest.TestCase):
     def test_backup_is_written_0600(self) -> None:
         """The content-addressed backup mirrors config at 0600, not umask."""
         self.seed_foreign()
-        run_hook(self.home, "install")
-        backups = list(self.home.glob("hooks.json.kaola-backup-*"))
+        install(self.repo)
+        backups = list((self.repo / ".codex").glob("hooks.json.kaola-backup-*"))
         self.assertEqual(len(backups), 1)
         self.assertEqual(stat.S_IMODE(backups[0].stat().st_mode), 0o600)
-        receipt = run_hook(self.home, "uninstall")
+        receipt = uninstall(self.repo)
         self.assertEqual(receipt["removed_entries"], 1)
-        for backup in self.home.glob("hooks.json.kaola-backup-*"):
+        for backup in (self.repo / ".codex").glob("hooks.json.kaola-backup-*"):
             self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o600)
 
     def test_payload_teaches_role_reload_and_no_repeat(self) -> None:

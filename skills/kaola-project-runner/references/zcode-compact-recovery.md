@@ -32,8 +32,11 @@ never writes a consuming project's `AGENTS.md` itself.
 
 ## The durable carrier — reusable block
 
-Owner-authorized, placed in the consuming project's `AGENTS.md` (or
-`.zcode/AGENTS.md`) before the Host session starts. Every Agent in the
+Owner-authorized, placed in the consuming project's `AGENTS.md`
+before the Host session starts. Resolved instruction sources, verified in
+the 3.12.3 bundle: the workspace `AGENTS.md` upward walk plus the user-global
+`~/.zcode/AGENTS.md` — a project `.zcode/AGENTS.md` is NOT resolved, and
+this mechanism never targets the user-global file. Every Agent in the
 workspace reads that file, so the block is explicitly role-scoped: it
 applies only to the designated Host — one project has only one Runner
 Agent — and ordinary Workers pass over it. Fill in only the Skill path —

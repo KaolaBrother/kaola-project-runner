@@ -241,15 +241,33 @@
   using Project Runner (or Kaola-Delegator) can no longer be assumed to hold
   the Skill text after context compaction. The new
   `scripts/kaola-codex-compact-hook.py` installs, reports, and removes exactly
-  one Runner-owned entry - `kaola-project-runner:compact-context` - in
-  `${CODEX_HOME}/hooks.json`, matched by id so Workflow-owned and other foreign
-  entries keep their JSON content untouched (the file is re-serialized
-  canonically, so byte-level formatting is not promised); the hook command
-  quotes its payload path with `shlex.quote` so a metacharacter-bearing
-  `CODEX_HOME` cannot alter execution, the payload copy lives under
-  `<codex_home>/kaola-project-runner/hooks/`, the prior config is kept as a
-  0600 atomic backup, a malformed file is refused
-  rather than clobbered, and `status` never writes. The short payload only
+  one Runner-owned entry - `kaola-project-runner:compact-context` - in the
+  consuming project's `.codex/hooks.json`, matched by id so Workflow-owned and
+  other foreign entries keep their JSON content untouched (the file is
+  re-serialized canonically, so byte-level formatting is not promised). The
+  project layer is deliberate: a single user-global hooks.json could hold only
+  one project binding, while per-project config lets any number of designated
+  Hosts coexist and keeps uninstall strictly local; nothing writes
+  `${CODEX_HOME}` or `~/.codex`. `install` requires `--session-id` +
+  `--project-root` binding the exact designated Host session into
+  `binding.json`, and the installed command runs a copied `emit` action that
+  reads the binding plus the official hook stdin
+  (`session_id`/`cwd`/`hook_event_name`/`source`) and prints the payload only
+  for `SessionStart(compact)` on that bound session at that root — ordinary
+  Worker sessions and other repositories emit nothing, and re-installing
+  rebinds without touching the reviewed hook entry. For first-session
+  coverage a two-phase form exists: `prepare` writes the entry and assets
+  with an inert binding BEFORE the Host starts (hooks load at session
+  start), then `bind` writes only `binding.json` once the designated session
+  id is known — in the Codex host's own shell `CODEX_SESSION_ID`/
+  `CODEX_THREAD_ID` equal that hook-input `session_id`. The hook command
+  quotes
+  its path with `shlex.quote` so a metacharacter-bearing project root cannot
+  alter execution, the payload, emitter, and binding copies live under
+  `<project_root>/.codex/kaola-project-runner/hooks/`, the prior config is
+  kept as a 0600 atomic backup, and a malformed file — including JSON-null
+  `hooks` or `hooks.SessionStart` — is refused before any write rather than
+  clobbered or crashed on; `status` never writes. The short payload only
   re-points the host: confirm role, fully re-read the installed Skill, recover
   authorization/heartbeat/run records - never re-intake, re-claim, or
   re-dispatch. Verified in an isolated real `/compact`: the injected context

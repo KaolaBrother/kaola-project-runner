@@ -1,30 +1,66 @@
 #!/usr/bin/env python3
 """Merge-safe installer for the Project Runner Codex compact-recovery hook.
 
-Issue #75: a Codex host that uses Project Runner (or Kaola-Delegator) reloads its
-installed Skill after context compaction through Codex's verified
-``SessionStart(source=compact)`` hook. This script installs, removes, and reports
-exactly one Runner-owned entry in ``${CODEX_HOME}/hooks.json`` -- id
-``kaola-project-runner:compact-context`` -- plus one payload copy at
-``<codex_home>/kaola-project-runner/hooks/compact-recovery.md``.
+Issue #75: a Codex host that uses Project Runner (or Kaola-Delegator) reloads
+its installed Skill after context compaction through Codex's verified
+``SessionStart(source=compact)`` hook. This script installs, removes, and
+reports exactly one Runner-owned entry in the CONSUMING project's
+``<project_root>/.codex/hooks.json`` -- id
+``kaola-project-runner:compact-context`` -- plus private asset copies under
+``<project_root>/.codex/kaola-project-runner/hooks/`` (payload, emitter,
+binding).
+
+Why the project layer: Codex officially supports project-level hooks in
+``<repo>/.codex/hooks.json`` (loaded only while the directory is trusted and
+subject to the ``/hooks`` review flow; ``--dangerously-bypass-hook-trust``
+runs enabled hooks without review). A single user-global ``hooks.json``
+cannot hold two projects' bindings -- installing project B would overwrite
+project A's designated-Host binding, and uninstalling B would strip A. The
+project layer keeps each binding inside the repository it describes, so any
+number of bound Hosts coexist and removal stays strictly local. Nothing here
+ever writes to ``${CODEX_HOME}`` or ``~/.codex``.
+
+Host-only filter: the hook command runs a copy of this script (``emit``)
+that reads ``binding.json`` plus the official hook input on stdin --
+``session_id``, ``cwd``, ``hook_event_name``, ``source`` -- and prints the
+payload ONLY when the event is ``SessionStart(compact)`` AND the session id
+and (realpath-normalized) cwd match the binding. An ordinary Worker session,
+a session in another repository, a non-compact source, or an untrusted /
+unmatched context emits nothing; the entry alone is never sufficient.
+
+Two-phase bootstrap (first-session coverage): hooks load at session start,
+so a binding that can only be written after the Host exists must not gate
+entry installation. ``prepare`` writes the assets and the hook entry with an
+inert ``binding.json`` (``session_id: null`` -- emit always silent) BEFORE
+the Host is launched; ``bind`` then writes ONLY ``binding.json`` with the
+exact designated session id after the Host starts, leaving the already
+loaded/reviewed entry untouched. ``install`` remains the one-shot form
+(prepare + bind) for a session id that is already known. Inside the Codex
+host's own shell, ``CODEX_SESSION_ID``/``CODEX_THREAD_ID`` carry the session
+identity that equals the hook input's ``session_id`` -- verified live. The
+session id is bound only by explicit operator choice; nothing auto-claims
+the first session and ordinary Workers are never bound.
 
 Merge safety is the contract: the entry is matched by id only and foreign
-entries (Workflow-owned, user-owned, or plugin-era leftovers) keep their JSON
-content untouched. The document is re-serialized canonically on write, so
-byte-level formatting is not preserved and none is claimed; uninstall removes
-only our entry and our payload copy. The hook itself performs no dispatch and
-edits no project state; it prints the short recovery prompt that becomes the
-model's ``additionalContext``.
+entries (Workflow-owned, user-owned, or plugin-era leftovers) keep their
+JSON content untouched. The document is re-serialized canonically on write,
+so byte-level formatting is not preserved and none is claimed; uninstall
+removes only our entry and our copies (a hooks.json that held nothing else
+is removed, and ``.codex`` is left only while other content remains). The
+hook itself performs no dispatch and edits no project state; it prints the
+short recovery prompt that becomes the model's ``additionalContext``.
 
 Every action prints one bounded JSON receipt; ``result`` is ``ok`` or
-``refused`` with reasons. A malformed existing ``hooks.json`` is refused rather
-than clobbered. Before rewriting an existing ``hooks.json`` the prior content
-is kept once as ``hooks.json.kaola-backup-<sha12>`` (content-addressed, so
-repeated installs do not accumulate backups; the backup is written atomically
-at mode 0600 since it mirrors config content). The hook command quotes the
-payload path with ``shlex.quote`` so a ``CODEX_HOME`` containing shell
-metacharacters cannot alter what the hook executes. Nothing here reads,
-prints, or forwards a credential, and ``status`` never writes.
+``refused`` with reasons. A malformed existing ``hooks.json`` -- including
+JSON-null ``hooks`` or ``hooks.SessionStart`` -- is refused before any write
+rather than clobbered or crashed on. Before rewriting an existing
+``hooks.json`` the prior content is kept once as
+``hooks.json.kaola-backup-<sha12>`` (content-addressed, so repeated installs
+do not accumulate backups; the backup is written atomically at mode 0600
+since it mirrors config content). The hook command quotes every path with
+``shlex.quote`` so a project root containing shell metacharacters cannot
+alter what the hook executes. Nothing here reads, prints, or forwards a
+credential, and ``status`` never writes.
 """
 
 from __future__ import annotations
@@ -39,7 +75,7 @@ import tempfile
 from pathlib import Path
 
 ENTRY_ID = "kaola-project-runner:compact-context"
-PAYLOAD_REL = Path("kaola-project-runner") / "hooks" / "compact-recovery.md"
+ASSETS_REL = Path(".codex") / "kaola-project-runner" / "hooks"
 PAYLOAD_SOURCE = (
     Path(__file__).resolve().parents[1]
     / "templates"
@@ -49,28 +85,42 @@ PAYLOAD_SOURCE = (
 RECEIPT_LIMIT = 4096
 
 
-def codex_home(raw: str | None) -> Path:
-    if raw:
-        return Path(raw).expanduser()
-    env = os.environ.get("CODEX_HOME")
-    if env:
-        return Path(env).expanduser()
-    return Path.home() / ".codex"
+def canonical_root(raw: str | None) -> Path | None:
+    if not raw:
+        return None
+    return Path(os.path.realpath(Path(raw).expanduser()))
 
 
-def hook_entry(payload_path: Path) -> dict:
+def hooks_path_for(root: Path) -> Path:
+    return root / ".codex" / "hooks.json"
+
+
+def payload_path_for(root: Path) -> Path:
+    return root / ASSETS_REL / "compact-recovery.md"
+
+
+def emitter_path_for(root: Path) -> Path:
+    return payload_path_for(root).with_name("kaola-codex-compact-hook.py")
+
+
+def binding_path_for(root: Path) -> Path:
+    return payload_path_for(root).with_name("binding.json")
+
+
+def hook_entry(emitter: Path) -> dict:
+    command = f"python3 {shlex.quote(str(emitter))} emit"
     return {
         "matcher": "compact",
         "hooks": [
             {
                 "type": "command",
-                "command": f"cat {shlex.quote(str(payload_path))}",
+                "command": command,
                 "timeout": 5,
             }
         ],
         "description": (
             "Inject the Project Runner compact-recovery prompt after context "
-            "compaction"
+            "compaction (bound Host session only)"
         ),
         "id": ENTRY_ID,
     }
@@ -86,11 +136,10 @@ def load_hooks(path: Path) -> dict:
         raise ValueError(f"{path}: unreadable or invalid JSON ({exc})") from exc
     if not isinstance(data, dict):
         raise ValueError(f"{path}: top-level JSON is not an object")
-    hooks = data.get("hooks")
-    if hooks is not None and not isinstance(hooks, dict):
+    if "hooks" in data and not isinstance(data["hooks"], dict):
         raise ValueError(f"{path}: 'hooks' is not an object")
-    session = (hooks or {}).get("SessionStart")
-    if session is not None and not isinstance(session, list):
+    hooks = data.get("hooks") or {}
+    if "SessionStart" in hooks and not isinstance(hooks["SessionStart"], list):
         raise ValueError(f"{path}: 'hooks.SessionStart' is not a list")
     return data
 
@@ -127,20 +176,47 @@ def receipt(action: str, result: str, **fields) -> None:
     sys.stdout.write(line[:RECEIPT_LIMIT] + "\n")
 
 
-def payload_path_for(home: Path) -> Path:
-    return home / PAYLOAD_REL
+def write_hooks(hooks_path: Path, data: dict, backup: bool = True) -> None:
+    if backup and hooks_path.exists():
+        write_backup(hooks_path)
+    existing_mode = hooks_path.stat().st_mode & 0o777 if hooks_path.exists() else None
+    atomic_write(
+        hooks_path,
+        (json.dumps(data, indent=2) + "\n").encode("utf-8"),
+        mode=existing_mode,
+    )
 
 
-def cmd_install(home: Path) -> int:
+def write_binding(root: Path, session_id: str | None) -> bool:
+    """Write binding.json (inert when session_id is None); return changed."""
+    binding_path = binding_path_for(root)
+    binding_bytes = (
+        json.dumps(
+            {"session_id": session_id, "project_root": str(root)},
+            indent=2,
+        )
+        + "\n"
+    ).encode("utf-8")
+    changed = (
+        not binding_path.exists() or binding_path.read_bytes() != binding_bytes
+    )
+    if changed:
+        atomic_write(binding_path, binding_bytes)
+    return changed
+
+
+def _install(root: Path, session_id: str | None, action: str) -> int:
+    """Write assets, binding, and the entry; session_id None means inert."""
     if not PAYLOAD_SOURCE.is_file():
-        receipt("install", "refused", reasons=[f"missing payload source: {PAYLOAD_SOURCE}"])
+        receipt(action, "refused", reasons=[f"missing payload source: {PAYLOAD_SOURCE}"])
         return 1
-    payload_path = payload_path_for(home)
-    hooks_path = home / "hooks.json"
+    payload_path = payload_path_for(root)
+    emitter = emitter_path_for(root)
+    hooks_path = hooks_path_for(root)
     try:
         data = load_hooks(hooks_path)
     except ValueError as exc:
-        receipt("install", "refused", reasons=[str(exc)])
+        receipt(action, "refused", reasons=[str(exc)])
         return 1
 
     payload_path.parent.mkdir(parents=True, exist_ok=True)
@@ -148,38 +224,158 @@ def cmd_install(home: Path) -> int:
     payload_changed = not payload_path.exists() or payload_path.read_bytes() != payload_bytes
     if payload_changed:
         atomic_write(payload_path, payload_bytes)
+    emitter_bytes = Path(__file__).resolve().read_bytes()
+    emitter_changed = not emitter.exists() or emitter.read_bytes() != emitter_bytes
+    if emitter_changed:
+        atomic_write(emitter, emitter_bytes)
+    binding_changed = write_binding(root, session_id)
 
     hooks = data.setdefault("hooks", {})
     session = hooks.setdefault("SessionStart", [])
     foreign = [e for e in session if not (isinstance(e, dict) and e.get("id") == ENTRY_ID)]
-    entry = hook_entry(payload_path)
+    entry = hook_entry(emitter)
     merged = foreign + [entry]
     changed = session != merged
     if changed:
         session[:] = merged
-        if hooks_path.exists():
-            write_backup(hooks_path)
-        existing_mode = hooks_path.stat().st_mode & 0o777 if hooks_path.exists() else None
-        atomic_write(
-            hooks_path,
-            (json.dumps(data, indent=2) + "\n").encode("utf-8"),
-            mode=existing_mode,
-        )
+        write_hooks(hooks_path, data)
     receipt(
-        "install",
+        action,
         "ok",
-        changed=changed or payload_changed,
+        changed=changed or payload_changed or emitter_changed or binding_changed,
         hooks_json=str(hooks_path),
         payload=str(payload_path),
+        emitter=str(emitter),
+        binding=str(binding_path_for(root)),
         entry_id=ENTRY_ID,
+        session_id=session_id,
+        project_root=str(root),
         foreign_session_start=len(foreign),
     )
     return 0
 
 
-def cmd_uninstall(home: Path) -> int:
-    payload_path = payload_path_for(home)
-    hooks_path = home / "hooks.json"
+def cmd_prepare(root: Path) -> int:
+    """Install the entry + assets with an inert (unbound) binding."""
+    return _install(root, None, "prepare")
+
+
+def cmd_install(root: Path, session_id: str | None) -> int:
+    if not session_id:
+        receipt(
+            "install",
+            "refused",
+            reasons=[
+                "missing --session-id",
+                "the entry must bind the exact designated Host session identity",
+            ],
+        )
+        return 1
+    return _install(root, session_id, "install")
+
+
+def cmd_bind(root: Path, session_id: str | None) -> int:
+    """Rebind the designated session by writing ONLY binding.json.
+
+    The hook entry itself is never touched -- it is already loaded/reviewed
+    from the session start, and the emit copy re-reads binding.json on every
+    event. Refuses when the project has no prepared Runner entry.
+    """
+    if not session_id:
+        receipt(
+            "bind",
+            "refused",
+            reasons=[
+                "missing --session-id",
+                "the entry must bind the exact designated Host session identity",
+            ],
+        )
+        return 1
+    hooks_path = hooks_path_for(root)
+    try:
+        data = load_hooks(hooks_path)
+    except ValueError as exc:
+        receipt("bind", "refused", reasons=[str(exc)])
+        return 1
+    hooks = data.get("hooks") or {}
+    session = hooks.get("SessionStart")
+    ours = [
+        e
+        for e in (session if isinstance(session, list) else [])
+        if isinstance(e, dict) and e.get("id") == ENTRY_ID
+    ]
+    emitter = emitter_path_for(root)
+    payload_path = payload_path_for(root)
+    if not ours or not emitter.is_file() or not payload_path.is_file():
+        receipt(
+            "bind",
+            "refused",
+            reasons=[
+                "no prepared Runner entry/assets in this project; run prepare first"
+            ],
+        )
+        return 1
+    changed = write_binding(root, session_id)
+    receipt(
+        "bind",
+        "ok",
+        changed=changed,
+        binding=str(binding_path_for(root)),
+        hooks_json=str(hooks_path),
+        session_id=session_id,
+        project_root=str(root),
+    )
+    return 0
+
+
+def cmd_emit() -> int:
+    """Print the payload only for the bound Host's SessionStart(compact).
+
+    Reads ``binding.json`` next to this script copy and the official hook
+    input on stdin (``session_id``, ``cwd``, ``hook_event_name``, ``source``).
+    Any other session, repository, or event emits nothing and still exits 0 --
+    a hook must never break the host turn. The payload, the binding, and this
+    script sit side by side under ``<repo>/.codex/kaola-project-runner/hooks/``.
+    """
+    here = Path(__file__).resolve().parent
+    try:
+        binding = json.loads((here / "binding.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(binding, dict):
+        return 0
+    session_id = binding.get("session_id")
+    project_root = binding.get("project_root")
+    if not isinstance(session_id, str) or not isinstance(project_root, str):
+        return 0
+    try:
+        event = json.loads(sys.stdin.read() or "null")
+    except json.JSONDecodeError:
+        return 0
+    if not isinstance(event, dict):
+        return 0
+    if event.get("hook_event_name") != "SessionStart" or event.get("source") != "compact":
+        return 0
+    if event.get("session_id") != session_id:
+        return 0
+    cwd = event.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        return 0
+    try:
+        if os.path.realpath(cwd) != os.path.realpath(project_root):
+            return 0
+    except OSError:
+        return 0
+    try:
+        sys.stdout.buffer.write((here / "compact-recovery.md").read_bytes())
+    except OSError:
+        pass
+    return 0
+
+
+def cmd_uninstall(root: Path) -> int:
+    payload_path = payload_path_for(root)
+    hooks_path = hooks_path_for(root)
     try:
         data = load_hooks(hooks_path)
     except ValueError as exc:
@@ -198,34 +394,44 @@ def cmd_uninstall(home: Path) -> int:
         removed = len(session) - len(kept)
         if removed:
             session[:] = kept
-            write_backup(hooks_path)
-            atomic_write(
-                hooks_path,
-                (json.dumps(data, indent=2) + "\n").encode("utf-8"),
-                mode=hooks_path.stat().st_mode & 0o777,
-            )
-    payload_removed = False
-    if payload_path.is_file():
-        payload_path.unlink()
-        payload_removed = True
-        for parent in (payload_path.parent, payload_path.parent.parent):
-            try:
-                parent.rmdir()
-            except OSError:
-                break
+            if not session:
+                del hooks["SessionStart"]
+            if not hooks:
+                del data["hooks"]
+            if not data:
+                hooks_path.unlink()
+            else:
+                write_hooks(hooks_path, data)
+    payload_removed = payload_path.is_file()
+    emitter_removed = emitter_path_for(root).is_file()
+    binding_removed = binding_path_for(root).is_file()
+    for path in (payload_path, emitter_path_for(root), binding_path_for(root)):
+        if path.is_file():
+            path.unlink()
+    for parent in (
+        payload_path.parent,
+        payload_path.parent.parent,
+        payload_path.parent.parent.parent,
+    ):
+        try:
+            parent.rmdir()
+        except OSError:
+            break
     receipt(
         "uninstall",
         "ok",
-        changed=bool(removed or payload_removed),
+        changed=bool(removed or payload_removed or emitter_removed or binding_removed),
         removed_entries=removed,
         payload_removed=payload_removed,
+        emitter_removed=emitter_removed,
+        binding_removed=binding_removed,
         hooks_json=str(hooks_path),
     )
     return 0
 
 
-def cmd_status(home: Path) -> int:
-    hooks_path = home / "hooks.json"
+def cmd_status(root: Path) -> int:
+    hooks_path = hooks_path_for(root)
     try:
         data = load_hooks(hooks_path)
     except ValueError as exc:
@@ -238,16 +444,27 @@ def cmd_status(home: Path) -> int:
         for e in (session if isinstance(session, list) else [])
         if isinstance(e, dict) and e.get("id") == ENTRY_ID
     ]
+    bound = False
+    try:
+        binding = json.loads(
+            binding_path_for(root).read_text(encoding="utf-8")
+        )
+        bound = isinstance(binding, dict) and isinstance(
+            binding.get("session_id"), str
+        )
+    except (OSError, json.JSONDecodeError):
+        pass
     receipt(
         "status",
         "ok",
         installed=bool(ours),
+        bound=bound,
         entry=ours[0] if ours else None,
         hooks_json=str(hooks_path),
         hooks_json_exists=hooks_path.exists(),
         session_start_entries=len(session) if isinstance(session, list) else 0,
-        payload=str(payload_path_for(home)),
-        payload_present=payload_path_for(home).is_file(),
+        payload=str(payload_path_for(root)),
+        payload_present=payload_path_for(root).is_file(),
     )
     return 0
 
@@ -255,27 +472,55 @@ def cmd_status(home: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Install, remove, or report the Project Runner Codex "
-            "SessionStart(compact) recovery entry. Only the "
+            "Prepare, install, bind, remove, or report the Project Runner "
+            "Codex SessionStart(compact) recovery entry inside the consuming "
+            "project's .codex/hooks.json. Only the "
             f"{ENTRY_ID!r} entry is ever added or removed; foreign hooks are "
-            "never modified."
+            "never modified and user-global config is never touched. "
+            "prepare writes the entry + assets with an inert binding before "
+            "the Host starts (hooks load at session start); bind later "
+            "writes only binding.json with the designated Host session id; "
+            "install is prepare+bind in one step. The entry emits the "
+            "recovery payload only for the bound session at the canonical "
+            "--project-root."
         )
     )
     parser.add_argument(
-        "action", choices=("install", "uninstall", "status")
+        "action",
+        choices=("prepare", "install", "bind", "uninstall", "status", "emit"),
     )
     parser.add_argument(
-        "--codex-home",
+        "--project-root",
         default=None,
-        help="Codex home directory (default: $CODEX_HOME or ~/.codex)",
+        help=(
+            "canonical project root holding .codex/hooks.json "
+            "(required by prepare, install, bind, uninstall, status)"
+        ),
+    )
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help=(
+            "designated Codex Host session id to bind "
+            "(required by install and bind)"
+        ),
     )
     args = parser.parse_args(argv)
-    home = codex_home(args.codex_home)
+    if args.action == "emit":
+        return cmd_emit()
+    root = canonical_root(args.project_root)
+    if root is None:
+        receipt(args.action, "refused", reasons=["missing --project-root"])
+        return 1
+    if args.action == "prepare":
+        return cmd_prepare(root)
     if args.action == "install":
-        return cmd_install(home)
+        return cmd_install(root, args.session_id)
+    if args.action == "bind":
+        return cmd_bind(root, args.session_id)
     if args.action == "uninstall":
-        return cmd_uninstall(home)
-    return cmd_status(home)
+        return cmd_uninstall(root)
+    return cmd_status(root)
 
 
 if __name__ == "__main__":
