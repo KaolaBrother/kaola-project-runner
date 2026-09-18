@@ -82,7 +82,12 @@ def run(argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> subpro
 
 
 def git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
+    # Issue #80: git >=2.47 `commit`/`merge`/`rebase` spawn a detached `maintenance run --auto`
+    # child that repacks and rewrites .git (pack/, objects/info/, info/refs) after the command
+    # returns, racing TemporaryDirectory teardown into Errno 66. Fixtures never need background
+    # maintenance, so every fixture git call disables it; gc.auto=0 does not gate this spawn.
     base = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
+                GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="maintenance.auto", GIT_CONFIG_VALUE_0="false",
                 GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
     if env:
         base.update(env)
@@ -237,6 +242,9 @@ class LocatorFixture:
         self.bare = self.base / "origin.git"
         self.bare.mkdir()
         git(self.bare, "init", "--bare", "-q")
+        # receive-pack never sees push's GIT_CONFIG_* env (the transport strips it), so the
+        # bare repo's own config must refuse the auto-maintenance spawn from Issue #80.
+        git(self.bare, "config", "receive.autogc", "false")
         seed = self.base / "seed"
         seed.mkdir()
         git(seed, "init", "-q")
