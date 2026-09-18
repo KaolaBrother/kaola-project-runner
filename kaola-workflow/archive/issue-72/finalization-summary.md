@@ -194,7 +194,43 @@ pushed before ACCEPT; the branch was local-only throughout.
 
 ## Sink Findings
 
-(filled after the sink)
+`kaola-workflow-sink-merge.js --branch workflow/issue-72 --issue 72 --sink` →
+`result: ok`, `status: sinked`, every step `done`
+(preflight, push_upstream, merge, finalize, stash_restore, archive_commit, push_main, closure).
+
+```text
+branch_head / published_head  9db4673f2976554888eb4ee5544bda28fadc0fce
+resolved_default_branch       main
+main                          464c4f9 -> a1a8ca9  chore: archive issue-72 [sink]
+closed_issues                 [72]        remote_closed_after_publish: verified
+remote branch workflow/issue-72   deleted     local branch: removed
+post_rebase_tests             skipped (the branch was already rebased and revalidated
+                              at 9db4673 before ACCEPT)
+```
+
+Issue #72 is `CLOSED` / `COMPLETED` at `2026-09-18T11:18:54Z`. `git diff 9db4673 <main> --`
+outside `kaola-workflow/archive/issue-72` is **empty**: main published exactly the accepted
+bytes. Merge is linear — `9db4673` is `a1a8ca9`'s first parent.
+
+`archived_paths` — 17 files reported by the sink (`.cache/doc-docking.md`,
+`.cache/final-validation.md`, `.cache/mirror-digest.json`,
+`.cache/origin/selection-record.json`, the ten `evidence/` JSON and Markdown records,
+`finalization-summary.md`, `mission-list.md`, `workflow-state.md`).
+
+One gap the sink could not see: `.gitignore` excludes `*.log`, so the three
+`./scripts/validate.sh` transcripts this summary cites (`evidence/validate-finalize.log`,
+`evidence/validate-rebased.log`, `evidence/validate-final.log`) were archived on disk but left
+untracked. Force-added in a follow-up commit on main, as Issue #68 did in `b229f84` for the
+same reason — the archive now tracks 20 files.
+
+Closure audit (`kaola-workflow-closure-audit.js --project issue-72`): all four scoped counts
+zero — no stale `workflow:in-progress` label, no active folder for a closed issue, no
+unarchived PR folder, no incomplete archive content — and all four repository-wide
+out-of-scope counts zero as well.
+
+Cleanup: worktree `.kw/worktrees/issue-72` removed, local and remote `workflow/issue-72`
+removed. The co-active runs `issue-67`, `issue-70` and `issue-74` keep their folders,
+branches and worktrees untouched, and no Issue #65 evidence was altered.
 
 archived_paths:
 - kaola-workflow/archive/issue-72/.cache/doc-docking.md
