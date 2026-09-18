@@ -145,6 +145,17 @@ workers, paths, scheduling, or heartbeat. Missing authorization stays missing:
 do not expand it.
 ```
 
+## After the first Host beat
+
+Do not trust the Host's self-description. After the first `end_turn`, check the
+Project Plan and current authorization against Host file-read or work-product
+evidence and the first worker dispatch receipt — including
+`<project>/.kaola/heartbeat-prompt.json` with a usable `body`. That `start`
+receipt must echo `heartbeat_host` for this Host (`session` and `repo`); the
+worker `--session` is an issue-scoped worker name, not `$HOST`; platforms,
+counts, and the stop boundary must match. Mismatch or missing evidence: correct
+on this Host; do not accept completion. No new script, gate, ledger, or store.
+
 ## Afterward
 
 Read delivery with `observe` / `capture` on this Host. The outer session is not

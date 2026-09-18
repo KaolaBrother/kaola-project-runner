@@ -53,7 +53,10 @@ heartbeat instructions. Do not rename, restart, or cancel an in-flight Host.
 
 Relay later user changes to that same Host using idle `send` or, when busy, the
 Runner's existing `steer` / a held undelivered update. A `--no-wait` admission or
-a Host `end_turn` is not project delivery. Read results with `observe` /
+a Host `end_turn` is not project delivery. After the first Host beat, check
+file-read or work-product evidence and the first dispatch receipt against the
+plan and authorization; do not trust the Host's self-description. Mismatch:
+correct on this Host; do not accept completion. Read results with `observe` /
 `capture`. Escalate only an unrecoverable human decision. Do not dispatch workers,
 copy a Mission List, maintain a heartbeat, create a Routine, operate on inner
 sessions, or `stop` the Host before close-out. Changing the outer Agent does not

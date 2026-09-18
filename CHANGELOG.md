@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Kaola-Delegator checks the first Host beat against independent facts
+  (Issue #74).** Start-receipt identity is not enough. After the first
+  `end_turn`, compare the Project Plan and current authorization with Host
+  file-read or work-product evidence and the first worker dispatch receipt
+  (`heartbeat_host`, issue-scoped worker name, authorized platforms). Do not
+  trust the Host's self-description. Mismatch or missing evidence: correct on
+  that Host; do not accept completion. No new script, gate, ledger, or budget.
+
 - **Kaola-Delegator recovers a live Host from canonical repo, standard Runner
   session name, and existing status/receipts (Issue #74).** There is no
   required `.kaola/delegator-host.json`. Agent B attaches the same ACP Host in

@@ -319,8 +319,29 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "Codex and generic hosts are not given the locator")
     check("uniquely adopted live nonstandard name" in handoff_one,
           "adopted live Host attests the real exact session")
+    check("Do not trust the Host's self-description" in handoff_one,
+          "first-beat check does not trust Host self-description")
+    check("After the first Host beat" in handoff_doc, "handoff has a first-beat verification step")
+    check("heartbeat-prompt.json" in handoff_doc, "first-beat check names the heartbeat work product")
+    check("first worker dispatch receipt" in handoff_one, "first-beat check uses the first dispatch receipt")
+    check("echo `heartbeat_host`" in handoff_one or "echo heartbeat_host" in handoff_one,
+          "first-beat check requires heartbeat_host on the worker start receipt")
+    check("issue-scoped worker name" in handoff_one, "first-beat check requires an issue-scoped worker name")
+    check("do not accept completion" in handoff_one, "mismatch is not accepted as complete")
+    check("No new script, gate, ledger, or store" in handoff_one,
+          "first-beat check adds no script, gate, ledger, or store")
+    check("do not trust the Host's self-description" in skill_one,
+          "Skill points at the first-beat check")
+    check("do not accept completion" in skill_one, "Skill refuses to accept a mismatched first beat")
+    host_startup = (RUNNER / "references" / "host-startup.md").read_text(encoding="utf-8")
+    check("Do not start the Host from this file" in host_startup,
+          "outer start stays in Delegator, not a second host-startup procedure")
+    check("Read the startup receipt, then verify it against evidence" not in host_startup,
+          "old long Outer Agent startup-receipt procedure is not restored")
     check(len((EXTERNAL / "SKILL.md").read_bytes()) <= BUDGETS["external_skill_bytes"],
           "external Skill stays in its small budget")
+    check(len((EXTERNAL / "references" / "handoff.md").read_bytes()) <= BUDGETS["reference_bytes"],
+          "handoff stays in the existing reference budget")
     check(BUDGETS["main_skill_bytes"] <= 17408, "existing main budget not raised")
     check(BUDGETS["worker_skill_bytes"] <= 12288, "existing worker budget not raised")
     check(BUDGETS["bridge_bytes"] <= 2560, "existing bridge budget not raised")
@@ -422,6 +443,13 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
         sandbox.dump("06-worker-start.json", worker_start)
         check(worker_start.get("heartbeat_host"), "inner worker is heartbeat-bound by the Host role")
         check(worker_start.get("session") != host, "inner worker is a separate session")
+        bound = worker_start.get("heartbeat_host") or {}
+        check(bound.get("session") == host,
+              "first dispatch receipt heartbeat_host.session is this Host")
+        check(str(sandbox.repo) in str(bound.get("repo") or ""),
+              "first dispatch receipt heartbeat_host.repo is this project")
+        check(worker.startswith("zcode-KPR-i74-"),
+              "first worker uses an issue-scoped name, not the Host")
 
         worker_send = sandbox.cli("send", "--text", "ISSUE74-WORKER-TURN", session=worker)
         sandbox.dump("07-worker-send.json", worker_send)
