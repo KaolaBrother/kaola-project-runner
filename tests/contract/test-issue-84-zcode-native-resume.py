@@ -190,6 +190,41 @@ class TestResumeWireShape(ResumeCase):
         self.assertIn(ACCOUNT_ID, drv.record().get("catalog") or {})
 
 
+class TestFreshSessionPathUnchanged(ResumeCase):
+    """The #84 transcript derivation is for resume. A freshly created session
+    already knows its own selection from the `session/setModel` the backend
+    accepted, and must not go looking for it in the transcript."""
+
+    def fresh_turn(self, drv):
+        msg = drv.new_session()
+        self.assertIsNotNone(msg, "session/new returned nothing")
+        self.assertNotIn("error", msg, f"session/new failed: {msg}")
+        res = drv.prompt(msg["result"]["sessionId"])
+        self.assertIsNotNone(res, "fresh prompt returned nothing")
+        return res
+
+    def test_fresh_session_does_not_read_the_transcript_for_its_model(self):
+        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
+        res = self.fresh_turn(drv)
+        self.assertEqual((res.get("result") or {}).get("stopReason"), "end_turn",
+                         json.dumps(res))
+        calls = drv.record().get("calls") or []
+        self.assertNotIn(
+            "session/messages", calls,
+            "a fresh session went looking for its own model in the transcript: "
+            + json.dumps(calls))
+
+    def test_fresh_session_reports_the_account_qualified_model(self):
+        """`select_account_model` records the provider it just had accepted, so
+        the advertised option names the account the turn actually runs on."""
+        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
+        self.fresh_turn(drv)
+        sent = (drv.record().get("set_model_attempts") or [])
+        self.assertTrue(sent, "the fresh session never selected a model")
+        chosen = (sent[-1].get("model") or {})
+        self.assertEqual(chosen.get("providerId"), ACCOUNT_ID)
+
+
 class TestResumeFailureIsReported(ResumeCase):
     def test_unknown_session_reports_its_own_reason_not_a_schema_error(self):
         """A 3.12+ backend has no `runtimeModel` channel, so the resume path

@@ -372,7 +372,9 @@ class Fake312:
             spec = self.resume_spec()
             sid = params.get("sessionId")
             if spec is None or not sid or spec.get("unknown"):
-                self.error(rid, 1404, f"session not found: {sid}")
+                # Measured on real 3.12.3 (Issue #84 live receipt): an unknown
+                # or already-deleted native session answers -32004, not 1404.
+                self.error(rid, -32004, f"Session not found: {sid}")
                 return
             # A fresh app-server: resuming restores the transcript, never the
             # provider registry. `self.catalog` stays exactly as it was.

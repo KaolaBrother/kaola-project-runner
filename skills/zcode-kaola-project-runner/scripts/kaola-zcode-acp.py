@@ -1162,8 +1162,12 @@ class ZCodeAcpAgent:
             "model": model,
             "persistAsWorkspaceLastUsed": False,
         })
-        # The backend accepted; only now is the selection real.
+        # The backend accepted; only now is the selection real. Recording the
+        # provider too keeps the pair complete, so a fresh session reports the
+        # account-qualified model it is actually running and never has to infer
+        # its own provider back out of the transcript.
         session.model_id = requested
+        session.provider_id = account["account_id"]
 
     def runtime_headers_answer(self, params: dict[str, Any]) -> dict[str, Any]:
         """Answer the per-model-request provider auth callback (3.12+).
@@ -1266,11 +1270,13 @@ class ZCodeAcpAgent:
         """Read native mode/model/thought. Never invent a substitute model."""
         if session.hydrated or session.backend_id is None or self.backend is None:
             return
+        read_transcript = "session/read"
         try:
             state = self.backend.call("session/read", {"sessionId": session.backend_id}) or {}
         except RuntimeError_:
             state = None
         if state is None:
+            read_transcript = "session/messages"
             # A build that does not serve `session/read` still serves the same
             # transcript through `session/messages`; only when neither answers
             # is there nothing to hydrate from.
@@ -1301,7 +1307,7 @@ class ZCodeAcpAgent:
             # the sibling method, and leave the model unset when neither shows
             # a complete pair -- `reregister_provider` then fails closed.
             persisted = persisted_model_from_messages(state)
-            if persisted is None:
+            if persisted is None and read_transcript != "session/messages":
                 try:
                     persisted = persisted_model_from_messages(self.backend.call(
                         "session/messages", {"sessionId": session.backend_id}) or {})

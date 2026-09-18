@@ -23,8 +23,10 @@
   pre-3.12 `Model config is missing` signal, exactly as `session/create` already did, and a
   missing session reports `-32004 Session not found`. Nothing is substituted: a persisted model
   outside the enabled plan, or belonging to another account, still fails closed without ever
-  calling `setModel`, and the plan default is never selected on the user's behalf. The pre-3.12
-  overlay path is unchanged. Verified on real ZCode.app 3.12.3 / CLI 0.16.5 over ACP in an
+  calling `setModel`, and the plan default is never selected on the user's behalf.
+  `reregister_provider()`'s pre-3.12 overlay branch is unchanged; the only pre-3.12 behaviour that
+  narrows is that a backend asking for the resume overlay must now say so with the same
+  `Model config is missing` signal `session/create` already required. Verified on real ZCode.app 3.12.3 / CLI 0.16.5 over ACP in an
   isolated repo: one native session, a real turn, an exact holder stop
   (`residual_pids: []`), `--resume sess_6fe8bc2d-...`, then a second real turn that answered on
   `account:bigmodel-individual-coding-plan\GLM-5.3` and quoted its own first reply back. Resuming
