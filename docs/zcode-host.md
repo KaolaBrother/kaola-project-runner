@@ -334,9 +334,12 @@ Host/Skill-layer carrier, verified live on ZCode 3.12.3:
   The runtime also exposes a programmatic `session/compact` RPC that produces
   the identical record family mid-run (verified live); it is not reachable
   through the adapter's fixed method dispatch today. Auto-compaction writes
-  the same record family per static analysis but was not exercised live —
-  both catalog models report a 1M context window, putting the auto threshold
-  beyond bounded experiment cost.
+  the same record family — verified live on an isolated MOCK provider with a
+  declared small `contextWindow` (personal-provider model rule, scratch
+  `HOME` only): real `trigger:"auto"` / `compactReason:"context_limit"` /
+  `phase:"pre_request"` / `status:"completed"` part rows committed by the
+  installed runtime. Both catalog models report a 1M context window, so
+  auto-compaction on a real GLM account stays beyond bounded cost.
 - **Carrier.** The controlling Agent puts the recovery carrier —
   `references/zcode-compact-recovery.md` inside the installed main Skill —
   once at the head of the next prompt to the compacted Host. Verified:
@@ -361,8 +364,10 @@ Host/Skill-layer carrier, verified live on ZCode 3.12.3:
   quoted after a real `/compact`, and a standing "reload the Skill if its
   text is gone" instruction drove a real `read` plus the reload marker
   with no carrier in the prompt. That makes a planted AGENTS block the
-  trigger-agnostic carrier (covers any compaction, including the
-  first post-compact inference); SessionStart/hook `additionalContext`
+  trigger-agnostic carrier — verified end-to-end for `trigger:"auto"` too:
+  on the MOCK-provider session, every conversation inference after each
+  real auto-compaction still carried the `# agentsMd` section and the
+  standing instruction on the wire. SessionStart/hook `additionalContext`
   lands in history instead and is not durable. Adoption is a boundary
   decision for outer review, not shipped here.
 
