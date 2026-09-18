@@ -1,0 +1,21 @@
+worktree_head b229f8419e404e9ba65353e07c87d0a447679c0e
+declared_main_skill_bytes 17408
+current_main_skill_bytes 17337
+declared_headroom 71
+old_probe_bytes 59
+effective_ceiling_if_append 17349
+current_slack_vs_effective 12
+budgets.json_unchanged_values {'main_skill_bytes': 17408, 'worker_skill_bytes': 12288, 'reference_bytes': 8192, 'bridge_bytes': 2560}
+baseline_write_rc 0
+copy_main_skill_bytes 17337
+pad_to_17405_write_rc 0
+pad_to_17405_stderr_tail 
+padded_main_skill_bytes 17405
+padded_check_rc 0
+padded_check_stdout ['render-skills: PASS (9 workers + kaola-project-runner + grok-bot host: 1 bridge skill, 2526 B, content stage, unpinned (not saveable); budgets OK)']
+padded_under_declared True 17405 <= 17408
+append_59_write_rc 1
+append_59_stderr budget: kaola-project-runner/SKILL.md is 17464 B > 17408 B (main_skill_bytes)
+append_59_check_rc 1
+append_59_check_stderr budget: kaola-project-runner/SKILL.md is 17464 B > 17408 B (main_skill_bytes)
+REPRO_TRAP True

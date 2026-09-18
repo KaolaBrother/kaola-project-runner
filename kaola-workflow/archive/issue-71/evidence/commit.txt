@@ -1,0 +1,17 @@
+commit c19cdde4113792bfd8ac68881c740dd1d37296f8
+Author:     KaolaBrother <yanleichen@hotmail.com>
+AuthorDate: Fri Sep 18 17:31:46 2026 +0800
+Commit:     KaolaBrother <yanleichen@hotmail.com>
+CommitDate: Fri Sep 18 17:31:46 2026 +0800
+
+    test: equal-length #49 host-invariance probe (Issue #71)
+    
+    Stop the undeclared 59 B deduction from main_skill_bytes. Canonical edits
+    in the pin/host invariance test are now same-UTF-8-length substitutions,
+    so render --check's 17408 B ceiling is the real one. No budget raised.
+
+ CHANGELOG.md                                  |  4 ++
+ docs/architecture.md                          |  4 +-
+ docs/conventions.md                           |  2 +
+ tests/contract/test-issue-49-grok-bot-host.py | 92 ++++++++++++++++++++++++---
+ 4 files changed, 92 insertions(+), 10 deletions(-)

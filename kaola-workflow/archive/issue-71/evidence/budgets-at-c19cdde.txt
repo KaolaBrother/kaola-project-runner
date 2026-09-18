@@ -1,0 +1,4 @@
+main_skill_bytes 17408
+worker_skill_bytes 12288
+rendered_main 17337
+headroom 71

@@ -1,0 +1,7 @@
+PASS test_fail_closed_without_explicit_runtime (14 checks)
+PASS test_installer_knows_zcode_and_rejects_zcode_bot (8 checks)
+PASS test_manifest_renderer_and_inventory (49 checks)
+PASS test_skip_all_mode_is_yolo_on_acp_and_pty (8 checks)
+PASS test_start_send_cancel_stop_schema_v3 (32 checks)
+PASS test_transport_dispatch_acp_default_pty_diagnostic (8 checks)
+test-issue-51-runner-integration: 6/6 tests, 119 checks

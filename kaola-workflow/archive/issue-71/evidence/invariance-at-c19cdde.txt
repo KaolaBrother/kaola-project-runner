@@ -1,0 +1,9 @@
+test_invariance_probe_does_not_spend_declared_main_skill_budget (__main__.Issue49BridgeInvariance.test_invariance_probe_does_not_spend_declared_main_skill_budget)
+Issue #71: equal-length canonical edits still render at the declared ceiling. ... ok
+test_pin_changes_exactly_one_line_and_canonical_or_manifest_edits_change_nothing (__main__.Issue49BridgeInvariance.test_pin_changes_exactly_one_line_and_canonical_or_manifest_edits_change_nothing) ... ok
+test_renderer_refuses_a_non_40_hex_revision_or_over_budget_bridge (__main__.Issue49BridgeInvariance.test_renderer_refuses_a_non_40_hex_revision_or_over_budget_bridge) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.494s
+
+OK

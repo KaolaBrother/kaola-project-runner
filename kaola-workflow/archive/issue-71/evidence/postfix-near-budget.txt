@@ -1,0 +1,14 @@
+declared 17408
+HEAD b229f8419e404e9ba65353e07c87d0a447679c0e
+write0_rc 0
+main0 17337
+pad17405_write_rc 0 size 17405
+pad17405_check_rc 0
+equal_length_write_rc 0 stderr 
+equal_length_size 17405
+equal_length_check_rc 0
+equal_length_check_tail render-skills: PASS (9 workers + kaola-project-runner + grok-bot host: 1 bridge skill, 2526 B, content stage, unpinned (not saveable); budgets OK)
+marker_in_main True
+host_unchanged True
+old_append_on_17405_write_rc 1
+old_append_on_17405_stderr budget: kaola-project-runner/SKILL.md is 17464 B > 17408 B (main_skill_bytes)

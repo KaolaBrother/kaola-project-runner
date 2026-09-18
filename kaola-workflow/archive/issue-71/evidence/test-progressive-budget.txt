@@ -1,0 +1,6 @@
+test_check_fails_naming_surface_and_size_when_a_budget_regresses (__main__.RendererEnforcesBudgets.test_check_fails_naming_surface_and_size_when_a_budget_regresses) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.152s
+
+OK
