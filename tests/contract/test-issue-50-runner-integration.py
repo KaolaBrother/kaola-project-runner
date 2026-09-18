@@ -301,7 +301,9 @@ def test_start_send_cancel_stop_through_generated_skill() -> None:
               and receipt["final_text"] == "echo:hello", "send --wait returns the turn's final text")
         first = sandbox.records()[0]
         argv = first["argv"]
-        check(flag(argv, "-p") == "hello" and flag(argv, "--output-format") == "stream-json", "first turn is one claude -p subprocess")
+        check(flag(argv, "--input-format") == "stream-json" and flag(argv, "--output-format") == "stream-json",
+              "first turn is one streaming claude subprocess reading its prompt from stdin")
+        check("hello" not in " ".join(argv), "the prompt text stays out of the argument list")
         check(flag(argv, "--model") == "fable" and flag(argv, "--effort") == "high", "first turn carries --model fable --effort high")
         check(flag(argv, "--permission-mode") == "bypassPermissions" and "--dangerously-skip-permissions" not in argv,
               "first turn carries the mapped --permission-mode and no skip flag")

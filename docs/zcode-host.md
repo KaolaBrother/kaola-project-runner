@@ -149,6 +149,23 @@ worker agent terminated / worker turn ended (one idle episode)
   `session/load` path) rebuilds the pending list from that log and redelivers
   everything unconfirmed — at-least-once, with the heartbeat pass itself as
   the dedup authority, so resume never silently drops an event.
+- **The Host must end its turn (Issue #65).** Staging only clears at a turn
+  boundary, so a Host that holds its turn open with `sleep`, a poll loop, or a
+  blocking `wait` is exactly what keeps its own events undelivered. The
+  post-dispatch contract is therefore: bind `KAOLA_ACP_HEARTBEAT_HOST` per
+  worker `start` and check the receipt's `heartbeat_host`, dispatch with
+  `send --no-wait` and read the acceptance receipt (`in_progress` is accepted,
+  not finished), settle the rest of the beat, update the one
+  `.kaola/heartbeat-prompt.json`, then end the reply naturally — there is no
+  "wait mode" command, because ending the turn *is* the wait. A Host awaiting
+  in-flight workers or open close-out is not a stoppable idle worker, and the
+  outer Agent must not send it "continue". The generated main Skill carries
+  these rules, and
+  `skills/kaola-project-runner/references/zcode-host-dispatch.md` carries the
+  runnable role-by-role procedure (outer Agent, Host, worker/carrier).
+- **Never steering.** A worker event is delivered as an ordinary prompt at a
+  turn boundary and is never converted into a mid-turn `steer`; `steer` is a
+  separate Agent-chosen tool (Issue #65) that does not touch this wake path.
 - **ZCode-only.** The `worker_event` op answers `worker-event-unsupported` on
   any non-zcode holder, and the CLI refuses non-ZCode and self targets.
   Other hosts' periodic carriers, the shared main Skill policy, and the
@@ -159,7 +176,13 @@ worker agent terminated / worker turn ended (one idle episode)
 ## Verification
 
 - `python3 tests/contract/test-zcode-acp-contract.py` — adapter contract, env
-  boundary, session identity, load result.
+  boundary, session identity, load result, and the Issue #65 rule that a
+  concurrent `session/prompt` is refused `-32010` instead of stealing the
+  running turn's request id.
+- `python3 tests/contract/test-issue-65-host-contract.py` — the generated Host
+  event-wait wording and its reference: identity bootstrap, carrier binding and
+  receipt check, non-blocking dispatch, ending the turn instead of sleeping, and
+  reading results by worker identity and cursor.
 - `python3 tests/contract/test-zcode-host-contract.py` — two-layer real-holder
   isolation contract (harness-driven), holder-lost sweep, child-record append.
 - `python3 tests/contract/test-zcode-heartbeat-contract.py` — the Phase 2

@@ -89,8 +89,14 @@ def thought_chunk(session_id: str, text: str, message_id: str | None = None) -> 
 
 class MockAgent:
     def __init__(self, scenario: str, caps: set[str], turn_ms: int, flood_bytes: int,
+                 steering: str = "none",
                  caps_objects: bool = False):
         self.scenario = scenario
+        # Issue #65: native mid-turn steering. "none" leaves `_session/steering`
+        # unimplemented (JSON-RPC -32601), exactly like a platform without the
+        # entry; every other value advertises `_meta.steering` and answers.
+        self.steering = steering
+        self.steer_texts: list[str] = []
         self.caps = caps
         self.caps_objects = caps_objects
         self.turn_ms = turn_ms
@@ -245,6 +251,10 @@ class MockAgent:
             if self.scenario == "auth_required"
             else [],
             "agentInfo": {"name": "mock-acp-agent", "version": "0.0.1"},
+            # Issue #65: the steering wire protocol advertises support at the
+            # top-level `_meta.steering`, a sibling of `agentCapabilities`.
+            **({"_meta": {"steering": {"supported": True}}}
+               if self.steering != "none" else {}),
         }
         if self.scenario == "numeric_string_id":
             respond(str(request_id), result)
@@ -679,6 +689,39 @@ class MockAgent:
             return
         self.run_prompt(request_id, session_id, text)
 
+    def on_steering(self, request_id: Any, params: dict[str, Any]) -> None:
+        """Issue #65: the `_session/steering` extension, scripted per mode."""
+        text = " ".join(
+            part.get("text", "") for part in params.get("prompt", []) if isinstance(part, dict)
+        )
+        with self.lock:
+            active = self.active_turn
+        log_event({"event": "steering", "text": text, "mode": self.steering,
+                   "turn_active": active is not None})
+        if self.steering == "none":
+            respond(request_id, error={"code": -32601,
+                                       "message": "unsupported: _session/steering"})
+            return
+        if self.steering == "silent":
+            return
+        if self.steering == "error":
+            respond(request_id, error={"code": -32602, "message": "mock refuses this steer"})
+            return
+        if self.steering == "weird":
+            respond(request_id, {"outcome": "somethingElse"})
+            return
+        if self.steering == "promptRequired":
+            respond(request_id, {"outcome": "promptRequired", "reason": "noRunningTurn"})
+            return
+        if self.steering == "startedNewTurn":
+            respond(request_id, {"outcome": "startedNewTurn"})
+            return
+        # injected: the running turn really takes the text
+        self.steer_texts.append(text)
+        if active is not None:
+            message_chunk(active[1], f"MOCK-STEERED {text[:64]}")
+        respond(request_id, {"outcome": "injected"})
+
     def on_cancel_notification(self, params: dict[str, Any]) -> None:
         log_event({"event": "session_cancel", "params": params})
         self.finish_active_turn("cancelled")
@@ -755,6 +798,9 @@ class MockAgent:
         if method == "session/list":
             self.on_session_list(request_id, params)
             return
+        if method == "_session/steering":
+            self.on_steering(request_id, params)
+            return
         handler = handlers.get(method)
         if handler is None:
             respond(request_id, error={"code": -32601, "message": f"unsupported: {method}"})
@@ -797,10 +843,13 @@ def main() -> int:
     parser.add_argument("--caps-objects", action="store_true")
     parser.add_argument("--turn-ms", type=int, default=0)
     parser.add_argument("--flood-bytes", type=int, default=1024 * 1024)
+    parser.add_argument("--steering", default="none",
+                        choices=("none", "injected", "promptRequired", "startedNewTurn",
+                                 "error", "silent", "weird"))
     args, _unknown = parser.parse_known_args()
     caps = {item for item in args.caps.split(",") if item}
     agent = MockAgent(args.scenario, caps, args.turn_ms, args.flood_bytes,
-                      caps_objects=args.caps_objects)
+                      steering=args.steering, caps_objects=args.caps_objects)
     return agent.serve()
 
 

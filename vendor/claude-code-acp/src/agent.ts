@@ -37,6 +37,12 @@ import {
   validateMcpArgs,
 } from "./validation.js";
 
+/**
+ * Kaola fork (Issue #65): the ACP steering extension method, per the steering
+ * wire protocol (the client calls it while a turn is running).
+ */
+const STEERING_METHOD = "_session/steering";
+
 function generateSessionId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -257,7 +263,12 @@ export function createClaudeCodeAgent(
           },
         },
         authMethods: [],
-      };
+        // Kaola fork (Issue #65): the ACP steering wire protocol advertises
+        // support at the top-level `_meta.steering`, a sibling of
+        // `agentCapabilities`. Claude Code steers natively through its
+        // stream-json stdin, so this bridge serves `_session/steering`.
+        _meta: { steering: { supported: true } },
+      } as InitializeResponse;
     },
 
     async newSession(
@@ -712,6 +723,53 @@ export function createClaudeCodeAgent(
 
         return { stopReason: "end_turn" };
       }
+    },
+
+    /**
+     * Kaola fork (Issue #65): the `_session/steering` extension.
+     *
+     * The client delivers one follow-up message to a turn that is still
+     * running. `injected` means the message reached that turn; `promptRequired`
+     * means no running turn owned it, so the message was NOT consumed and the
+     * client must send an ordinary `session/prompt`. This bridge never invents
+     * the legacy detached `startedNewTurn` fallback: an idle session is left
+     * exactly as it was.
+     */
+    async extMethod(
+      method: string,
+      params: Record<string, unknown>
+    ): Promise<Record<string, unknown>> {
+      if (method !== STEERING_METHOD) {
+        throw RequestError.methodNotFound(method);
+      }
+      const sessionId = params.sessionId;
+      if (typeof sessionId !== "string" || !store.has(sessionId)) {
+        throw RequestError.resourceNotFound(`Session ${String(sessionId)} not found`);
+      }
+      const blocks = Array.isArray(params.prompt) ? params.prompt : [];
+      const text = blocks
+        .filter(
+          (block): block is { type: "text"; text: string } =>
+            !!block &&
+            typeof block === "object" &&
+            (block as { type?: unknown }).type === "text" &&
+            typeof (block as { text?: unknown }).text === "string"
+        )
+        .map((block) => block.text)
+        .join("\n");
+      if (!text.trim()) {
+        throw RequestError.invalidParams("Empty steering text");
+      }
+      if (!runner.steer) {
+        throw RequestError.methodNotFound(method);
+      }
+      const outcome = runner.steer(sessionId, text);
+      logger.info(
+        `Steering for session ${sessionId}: ${text.length} chars -> ${outcome}`
+      );
+      return outcome === "injected"
+        ? { outcome: "injected" }
+        : { outcome: "promptRequired", reason: "noRunningTurn" };
     },
 
     async cancel(params: CancelNotification): Promise<void> {

@@ -1244,6 +1244,20 @@ class ZCodeAcpAgent:
             self.respond(rid, error={"code": -32000, "message": str(exc)})
             return
         with self.lock:
+            # Issue #65: one turn owns one request id. A second prompt that
+            # landed while a turn is running used to overwrite this field, which
+            # orphaned the original request forever and handed its completion to
+            # the newcomer. ZCode 0.16.5 rejects a concurrent `session/send`
+            # itself (-32010); refuse here too, so the original turn keeps its
+            # response attribution no matter which client wrote.
+            if session.turn_request_id is not None:
+                active = session.turn_request_id
+                self.respond(rid, error={
+                    "code": -32010,
+                    "message": "a prompt is already running for this session",
+                    "data": {"activeRequestId": active},
+                })
+                return
             session.turn_request_id = rid
             session.cancelled = False
         try:

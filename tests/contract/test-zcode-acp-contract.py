@@ -472,6 +472,47 @@ class ZcodeAcpContractTests(unittest.TestCase):
         closed = driver.wait_result(4)
         self.assertIsNotNone(closed)
 
+    def test_concurrent_prompt_never_steals_the_active_request_id(self) -> None:
+        """Issue #65: one turn owns one request id.
+
+        A second ``session/prompt`` that lands while a turn is running used to
+        overwrite ``turn_request_id``, which orphaned the original request for
+        good and handed its completion to the newcomer. It is now refused with
+        the same code ZCode 0.16.5 uses itself, and the original turn keeps its
+        own response attribution.
+        """
+        driver = self.start("slow")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id,
+            "prompt": [{"type": "text", "text": "long running"}],
+        })
+        # wait until the turn is genuinely streaming before the second prompt
+        streaming = wait_for(
+            lambda: any(u.get("sessionUpdate") == "agent_message_chunk"
+                        for u in driver.updates(session_id)),
+            8,
+        )
+        self.assertTrue(streaming, "the slow turn never started streaming")
+        driver.request(4, "session/prompt", {
+            "sessionId": session_id,
+            "prompt": [{"type": "text", "text": "second prompt"}],
+        })
+        refused = driver.wait_result(4, timeout=8)
+        self.assertIsNotNone(refused)
+        assert refused is not None
+        error = refused.get("error") or {}
+        self.assertEqual(error.get("code"), -32010)
+        self.assertIn("already running", str(error.get("message", "")))
+        self.assertIsNone(refused.get("result"))
+        # the original request is still the one that settles this turn
+        self.assertIsNone(driver.wait_result(3, timeout=0.5))
+        driver.request(5, "session/cancel", {"sessionId": session_id})
+        settled = driver.wait_result(3, timeout=12)
+        self.assertIsNotNone(settled, "the original prompt never got its own response")
+        assert settled is not None
+        self.assertIn("stopReason", settled.get("result") or {})
+
     def test_tool_error_and_turn_failure(self) -> None:
         driver = self.start("tool_error")
         session_id = self.handshake(driver)

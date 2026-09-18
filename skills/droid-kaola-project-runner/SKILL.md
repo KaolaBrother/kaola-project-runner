@@ -13,11 +13,11 @@ transport-only.
 
 ## Transport facts
 
-Default transport: **acp**. The ACP command is `droid exec --output-format acp`; its known quirks are `native ACP agent (no bridge, no translator, acp_wrapper_pin empty); config options are declared in the session/new result, never initialize: model, reasoning_effort, autonomy_level (full bypass = auto-high); the default ACP session is already auto-high; the Runner's --permission-mode names translate onto autonomy values over ACP (bypassPermissions/high→auto-high, medium→auto-medium, low→auto-low, manual→normal) because the agent has no mode configId; launch flags do not shape ACP sessions; session/resume preferred and the native session id surfaces in the session/new result and session/list (resume/load do not echo it); auth stays native (device-pairing or FACTORY_API_KEY), never handled by the Runner`, and login requires a PTY: `true`. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
+Default transport: **acp**. The ACP command is `droid exec --output-format acp`; login requires a PTY: `true`. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
 
 ## Cost hints
 
-ACP usually carries structured text and events with less terminal-rendering overhead. Where supported, PTY preserves the native interactive UI and handles terminal-only login or selection flows. These are cost and capability facts; the controlling Agent chooses the transport.
+ACP usually carries structured text and events with less terminal-rendering overhead; where supported, PTY preserves the native interactive UI and terminal-only login or selection flows. These are cost and capability facts; the Agent chooses the transport.
 
 ## Fallback
 
@@ -29,7 +29,7 @@ ACP usually carries structured text and events with less terminal-rendering over
 | `completed` | The turn reached a reported stop reason. |
 | `unknown` | Partial mutation cannot be ruled out. |
 
-Runner never auto-falls back or resends. Read the receipt and let the controlling Agent decide whether another transport or prompt is appropriate.
+Runner never auto-falls back or resends. Read the receipt and decide whether another transport or prompt is appropriate.
 
 ## Communication loop
 
@@ -93,6 +93,14 @@ After reading current evidence, the controlling Agent chooses what to send:
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 200
 ```
 
+## Steering a running turn
+
+Droid exposes no native mid-turn steering here, so this Skill offers no
+`steer` tool; the shared route answers `steer_outcome: unsupported` with the
+text unconsumed. Use `send` for the next turn.
+
+## Native keys
+
 For a native selection screen, the Agent may choose one exact key. The Runner transfers it without
 interpreting its meaning or adding Enter:
 
@@ -130,14 +138,14 @@ operation and reports the true result. These are suggestions, never gates:
   it is never coupled to a history wipe. Judge success by the `stop`/`status` result
   evidence, not by a completed call.
 - Before stopping, the Agent may keep whatever resume facts are already available —
-  platform, canonical repo, any reported native session ID, outcome, and remaining work —
-  reusing existing receipts and Workflow records. The native session ID is the CLI's own
-  conversation identifier and is not the Runner's tmux session name. Missing identifiers
+  platform, canonical repo, any reported native session ID, outcome, remaining work —
+  from existing receipts and Workflow records. The native session ID is the CLI's own
+  conversation identifier, never the Runner's tmux session name. Missing identifiers
   never block a chosen `stop`; nothing here is a required checkpoint.
-- Later work resumes through the Agent's choice: `start --resume <native-session-id>` when
-  an exact identifier is known, `start --continue` to let the platform pick its latest
-  conversation, or a fresh `start` plus existing work records when the platform cannot
-  resume. The Runner never auto-falls back, resends an old prompt, or restarts on its own.
+- Later work resumes through the Agent's choice: `start --resume <native-session-id>`,
+  `start --continue` for the platform's latest conversation, or a fresh `start` plus
+  existing records where the platform cannot resume. The Runner never auto-falls back,
+  resends an old prompt, or restarts on its own.
 
 ## Optional Kaola Workflow recommendation
 

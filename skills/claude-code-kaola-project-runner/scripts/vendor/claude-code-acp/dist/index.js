@@ -15601,10 +15601,17 @@ var ClaudeBinaryError = class extends Error {
 var SENSITIVE_FLAGS = /* @__PURE__ */ new Set(["-p", "--print"]);
 var REDACT_FLAGS = /* @__PURE__ */ new Set(["--resume"]);
 var KILL_GRACE_MS = 2e3;
+var STREAM_INPUT_ARGS = ["--input-format", "stream-json"];
+function streamUserMessage(text) {
+  return JSON.stringify({
+    type: "user",
+    message: { role: "user", content: [{ type: "text", text }] }
+  }) + "\n";
+}
 function maskArgs(args) {
   const masked = [];
   for (let i = 0; i < args.length; i++) {
-    if (SENSITIVE_FLAGS.has(args[i]) && i + 1 < args.length) {
+    if (SENSITIVE_FLAGS.has(args[i]) && i + 1 < args.length && !args[i + 1].startsWith("-")) {
       masked.push(args[i], `<prompt: ${args[i + 1].length} chars>`);
       i++;
     } else if (REDACT_FLAGS.has(args[i]) && i + 1 < args.length) {
@@ -15672,6 +15679,7 @@ function isRunning(proc) {
 }
 var ClaudeRunner = class {
   runningProcesses = /* @__PURE__ */ new Map();
+  streamingTurns = /* @__PURE__ */ new Map();
   tempDirs = [];
   config;
   constructor(config2) {
@@ -15723,18 +15731,18 @@ var ClaudeRunner = class {
   async startSessionStreaming(cwd, prompt, onEvent, trackingId, options) {
     const args = [
       "-p",
-      prompt,
+      ...STREAM_INPUT_ARGS,
       "--output-format",
       "stream-json",
       "--verbose",
       ...this.buildExtraArgs(options)
     ];
-    return this.runStreaming(args, cwd, onEvent, trackingId);
+    return this.runStreaming(args, cwd, onEvent, trackingId, void 0, prompt);
   }
   async continueSessionStreaming(claudeSessionId, prompt, onEvent, trackingId, options, cwd) {
     const args = [
       "-p",
-      prompt,
+      ...STREAM_INPUT_ARGS,
       "--resume",
       claudeSessionId,
       "--output-format",
@@ -15742,21 +15750,21 @@ var ClaudeRunner = class {
       "--verbose",
       ...this.buildExtraArgs(options)
     ];
-    return this.runStreaming(args, cwd, onEvent, trackingId);
+    return this.runStreaming(args, cwd, onEvent, trackingId, void 0, prompt);
   }
   async startSessionWithMcp(cwd, prompt, mcpServers, onEvent, trackingId, options) {
     const { args: mcpArgs, dir } = this.buildMcpArgs(mcpServers);
     if (onEvent) {
       const args = [
         "-p",
-        prompt,
+        ...STREAM_INPUT_ARGS,
         "--output-format",
         "stream-json",
         "--verbose",
         ...this.buildExtraArgs(options),
         ...mcpArgs
       ];
-      return this.runStreaming(args, cwd, onEvent, trackingId, dir);
+      return this.runStreaming(args, cwd, onEvent, trackingId, dir, prompt);
     } else {
       const args = [
         "-p",
@@ -15811,11 +15819,40 @@ var ClaudeRunner = class {
     return env;
   }
   cancel(trackingId) {
+    const turn = this.streamingTurns.get(trackingId);
+    if (turn) {
+      turn.settled = true;
+      this.streamingTurns.delete(trackingId);
+    }
     const proc = this.runningProcesses.get(trackingId);
     if (proc) {
       this.runningProcesses.delete(trackingId);
       this.terminate(proc);
     }
+  }
+  /**
+   * Kaola fork (Issue #65): deliver one Agent-chosen steering message to the
+   * turn that is running for `trackingId`.
+   *
+   * This is a transport act, not a judgment: `injected` says only that the text
+   * reached the running turn's stdin before that turn reported its result, and
+   * never that the model adopted it. With no running turn — or one whose result
+   * already landed — the text is NOT consumed and nothing is written, so an
+   * idle session can never be steered into an untracked turn.
+   */
+  steer(trackingId, text) {
+    const turn = this.streamingTurns.get(trackingId);
+    if (!turn || turn.settled) return "notConsumed";
+    const stdin = turn.proc.stdin;
+    if (!stdin || stdin.destroyed || stdin.writableEnded || !isRunning(turn.proc)) {
+      return "notConsumed";
+    }
+    try {
+      stdin.write(streamUserMessage(text));
+    } catch {
+      return "notConsumed";
+    }
+    return "injected";
   }
   /** Kaola fork: SIGTERM the child's process group, SIGKILL after a grace period. */
   terminate(proc) {
@@ -15844,12 +15881,12 @@ var ClaudeRunner = class {
     }
     this.cleanup();
   }
-  spawnClaude(args, cwd) {
+  spawnClaude(args, cwd, stdinMode = "ignore") {
     const binary = resolveClaudeBinary(this.config);
     const proc = spawn(binary, args, {
       cwd,
       env: this.sanitizeEnv(),
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [stdinMode, "pipe", "pipe"],
       detached: true
     });
     recordChildSpawn(proc, binary);
@@ -15897,12 +15934,12 @@ var ClaudeRunner = class {
       proc.on("error", reject);
     });
   }
-  runStreaming(args, cwd, onEvent, trackingId, tempDir) {
+  runStreaming(args, cwd, onEvent, trackingId, tempDir, prompt) {
     return new Promise((resolve2, reject) => {
       logger.debug(`spawn streaming: claude ${maskArgs(args)}`);
       let proc;
       try {
-        proc = this.spawnClaude(args, cwd);
+        proc = this.spawnClaude(args, cwd, prompt === void 0 ? "ignore" : "pipe");
       } catch (err) {
         if (tempDir) this.removeTempDir(tempDir);
         reject(err);
@@ -15910,6 +15947,32 @@ var ClaudeRunner = class {
       }
       if (trackingId) {
         this.runningProcesses.set(trackingId, proc);
+      }
+      const turn = prompt === void 0 ? void 0 : { proc, settled: false };
+      if (turn && trackingId) {
+        this.streamingTurns.set(trackingId, turn);
+      }
+      const endStdin = () => {
+        if (turn) turn.settled = true;
+        try {
+          proc.stdin?.end();
+        } catch {
+        }
+      };
+      if (prompt !== void 0) {
+        proc.stdin?.on("error", () => {
+        });
+        try {
+          proc.stdin?.write(streamUserMessage(prompt));
+        } catch (err) {
+          if (trackingId) {
+            this.runningProcesses.delete(trackingId);
+            this.streamingTurns.delete(trackingId);
+          }
+          if (tempDir) this.removeTempDir(tempDir);
+          reject(err);
+          return;
+        }
       }
       let buffer = "";
       let resultText = "";
@@ -15932,14 +15995,17 @@ var ClaudeRunner = class {
             if (parsed.type === "result") {
               sessionId = parsed.session_id ?? sessionId;
               resultText = parsed.result ?? resultText;
+              endStdin();
             }
           } catch {
           }
         }
       });
       proc.on("close", (code) => {
+        if (turn) turn.settled = true;
         if (trackingId) {
           this.runningProcesses.delete(trackingId);
+          this.streamingTurns.delete(trackingId);
         }
         if (tempDir) this.removeTempDir(tempDir);
         if (buffer.trim()) {
@@ -16074,6 +16140,7 @@ function loadMcpAllowedCommands() {
 }
 
 // src/agent.ts
+var STEERING_METHOD = "_session/steering";
 function generateSessionId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -16266,7 +16333,12 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
             resume: {}
           }
         },
-        authMethods: []
+        authMethods: [],
+        // Kaola fork (Issue #65): the ACP steering wire protocol advertises
+        // support at the top-level `_meta.steering`, a sibling of
+        // `agentCapabilities`. Claude Code steers natively through its
+        // stream-json stdin, so this bridge serves `_session/steering`.
+        _meta: { steering: { supported: true } }
       };
     },
     async newSession(params) {
@@ -16624,6 +16696,40 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
         });
         return { stopReason: "end_turn" };
       }
+    },
+    /**
+     * Kaola fork (Issue #65): the `_session/steering` extension.
+     *
+     * The client delivers one follow-up message to a turn that is still
+     * running. `injected` means the message reached that turn; `promptRequired`
+     * means no running turn owned it, so the message was NOT consumed and the
+     * client must send an ordinary `session/prompt`. This bridge never invents
+     * the legacy detached `startedNewTurn` fallback: an idle session is left
+     * exactly as it was.
+     */
+    async extMethod(method, params) {
+      if (method !== STEERING_METHOD) {
+        throw RequestError.methodNotFound(method);
+      }
+      const sessionId = params.sessionId;
+      if (typeof sessionId !== "string" || !store.has(sessionId)) {
+        throw RequestError.resourceNotFound(`Session ${String(sessionId)} not found`);
+      }
+      const blocks = Array.isArray(params.prompt) ? params.prompt : [];
+      const text = blocks.filter(
+        (block) => !!block && typeof block === "object" && block.type === "text" && typeof block.text === "string"
+      ).map((block) => block.text).join("\n");
+      if (!text.trim()) {
+        throw RequestError.invalidParams("Empty steering text");
+      }
+      if (!runner.steer) {
+        throw RequestError.methodNotFound(method);
+      }
+      const outcome = runner.steer(sessionId, text);
+      logger.info(
+        `Steering for session ${sessionId}: ${text.length} chars -> ${outcome}`
+      );
+      return outcome === "injected" ? { outcome: "injected" } : { outcome: "promptRequired", reason: "noRunningTurn" };
     },
     async cancel(params) {
       logger.info(`Cancel request for session ${params.sessionId}`);

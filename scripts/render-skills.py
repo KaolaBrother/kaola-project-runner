@@ -46,6 +46,7 @@ REQUIRED = {
     "acp_login_requires_pty", "acp_mode_config_id", "acp_model_config_id", "acp_effort_config_id",
     "acp_fast_config_id", "acp_model_map", "acp_wrapper_pin",
     "acp_init_meta", "acp_fast_values",
+    "native_steering", "acp_steer_method", "steering_summary",
 }
 
 
@@ -83,13 +84,54 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: invalid recurring_execution")
     if result["default_transport"] not in {"acp", "pty"}:
         raise ValueError(f"{path}: invalid default_transport")
+    # Issue #65: the native steering fact and its transport entry travel together.
+    if result["native_steering"] not in {"supported", "unsupported", "unknown"}:
+        raise ValueError(f"{path}: invalid native_steering")
+    if result["native_steering"] == "supported" and not result["acp_steer_method"]:
+        raise ValueError(f"{path}: native_steering supported needs acp_steer_method")
+    if result["native_steering"] != "supported" and result["acp_steer_method"]:
+        raise ValueError(f"{path}: acp_steer_method requires native_steering supported")
+    if not result["steering_summary"]:
+        raise ValueError(f"{path}: empty steering_summary")
     if not result["acp_command"]:
         raise ValueError(f"{path}: empty acp_command")
     return result
 
 
+STEERING_SUPPORTED = """## Steering a running turn
+
+{runtime} steers natively, so `steer` is an Agent choice for a turn already
+running — not a Runner policy and not a second lifecycle:
+
+```bash
+"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" --text '<redirection>'
+```
+
+`steer_outcome` is the whole claim: `injected`, `not_consumed` (nothing was
+written — decide whether to `send`), `unsupported`, or `unknown` (never resend
+blindly). Acceptance is not adoption; see [references/acp.md](references/acp.md).
+"""
+
+STEERING_UNSUPPORTED = """## Steering a running turn
+
+{runtime} exposes no native mid-turn steering here, so this Skill offers no
+`steer` tool; the shared route answers `steer_outcome: unsupported` with the
+text unconsumed. Use `send` for the next turn.
+"""
+
+
+def steering_block(manifest: dict[str, str]) -> str:
+    """Issue #65: a platform advertises a steering tool only where the native
+    entry actually exists. Unsupported and unknown never advertise one."""
+    template = (STEERING_SUPPORTED if manifest["native_steering"] == "supported"
+                else STEERING_UNSUPPORTED)
+    return template.format(runtime=manifest["runtime_name"]).rstrip()
+
+
 def variables(manifest: dict[str, str]) -> dict[str, str]:
-    return {key.upper(): value for key, value in manifest.items()}
+    values = {key.upper(): value for key, value in manifest.items()}
+    values["STEERING_BLOCK"] = steering_block(manifest)
+    return values
 
 
 def render_text(template: str, values: dict[str, str], source: Path) -> str:

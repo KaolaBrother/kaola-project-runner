@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+- **Native mid-turn steering is now a real tool, where the platform really has
+  one (Issue #65).** A unified `steer` operation joins `send`/`wait`/`cancel`/
+  `stop` on the same exact session/repo/transport routing — no scheduler, no
+  second stdin writer, no second lifecycle. All nine platforms were probed on
+  the real installed CLIs (four candidate entries each, plus a live mid-turn
+  observation): **Claude Code** and **Codex** steer natively and are connected;
+  the other seven answer JSON-RPC `-32601` on every entry and are recorded
+  `unsupported` with versioned evidence, so their Skills never advertise a tool
+  they do not have. `steer_outcome`/`steer_consumed` keep `injected`,
+  `started_new_turn`, `not_consumed`, `unsupported`, `rejected`, and `unknown`
+  apart — a queued or detached turn is never called injection — and the running
+  turn keeps its own request id, output, and terminal state
+  (`turn_request_id_preserved`). An idle session is never steered, and `steer`
+  over `pty` is an honest `steer-unsupported-transport` rather than an unproven
+  injection claim.
+- **The Claude Code bridge gained the native channel it was missing
+  (Issue #65).** The vendored bridge now drives every streaming turn with
+  `claude -p --input-format stream-json` and writes the prompt to an open
+  stdin — the CLI's own mid-turn steering channel — and serves
+  `_session/steering`, advertising it at the `initialize` top-level
+  `_meta.steering`. The turn still ends on the CLI's `result`, which closes
+  stdin, so the one-subprocess-per-turn lifetime is unchanged; as a side effect
+  the prompt text no longer appears in the process argument list at all.
+- **ZCode: engine-capable, protocol-surface unsupported — and one real bug
+  fixed (Issue #65).** ZCode 0.16.5 has a turn-steer queue internally but does
+  not expose it on the `app-server --stdio` protocol the Runner drives (no steer
+  method, a `.strict()` `session/send` schema with no delivery field, and a hard
+  `-32010` while a turn is active). Probing that surface also exposed a defect in
+  our own adapter: `kaola-zcode-acp.py` overwrote the active turn's request id
+  when a second prompt arrived, orphaning the original request and handing its
+  completion to the newcomer. It now refuses the concurrent prompt with the same
+  `-32010`, so one turn keeps one request id.
+- **The ZCode Host post-dispatch contract is now operating instructions
+  (Issue #65).** The generated main Skill states the action rules — hand the Host
+  its real Runner identity, bind `KAOLA_ACP_HEARTBEAT_HOST` per worker `start`
+  and check the receipt's `heartbeat_host`, dispatch with `send --no-wait` and
+  read the acceptance, update the one `.kaola/heartbeat-prompt.json`, then end
+  the turn naturally instead of sleeping, polling, or blocking — and a Host
+  awaiting in-flight workers is explicitly not a stoppable idle worker. The new
+  on-demand reference `references/zcode-host-dispatch.md` carries the runnable
+  role-by-role procedure for the outer Agent, the Host, and the worker/carrier,
+  including how to read a worker's real reply by its own identity and event
+  cursor. Nothing here needs the Python source to be read.
+
 ## 0.3.5 — 2026-09-18
 
 - **validate wall time cut with zero coverage loss.** The 24 contract suites in

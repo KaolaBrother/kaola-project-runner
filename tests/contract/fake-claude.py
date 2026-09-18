@@ -7,6 +7,12 @@ value of the harness canary ``KAOLA_FAKE_CANARY`` only, and whether the two
 API credential variables were present. Then it emits a minimal
 ``--output-format stream-json`` conversation.
 
+Issue #65: the bridge drives every streaming turn with ``--input-format
+stream-json`` and no positional prompt, so the first user message arrives as one
+JSON line on stdin. A second such line while the turn is still running is a
+native mid-turn steer; this stand-in echoes it into the same turn and into the
+single ``result``, exactly as the real CLI absorbs it.
+
 ``FAKE_CLAUDE_MODE`` (or a ``[mode]`` prefix on the prompt text): ``echo``
 (default) answers and exits; ``permission`` first emits a
 ``permission_request`` line; ``hang`` starts a ``sleep`` grandchild and
@@ -21,6 +27,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import uuid
 
@@ -34,6 +41,34 @@ def option(argv, flag):
         if index + 1 < len(argv):
             return argv[index + 1]
     return None
+
+
+def read_stream_message(stream):
+    """One ``--input-format stream-json`` user message line; "" at EOF."""
+    line = stream.readline()
+    while line:
+        line = line.strip()
+        if line:
+            try:
+                message = json.loads(line)
+            except ValueError:
+                return ""
+            blocks = ((message.get("message") or {}).get("content")) or []
+            return "\n".join(
+                block.get("text", "") for block in blocks
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+        line = stream.readline()
+    return ""
+
+
+def collect_steers(stream, sink):
+    """Every later stdin message is a mid-turn steer for the running turn."""
+    while True:
+        text = read_stream_message(stream)
+        if not text:
+            return
+        sink.append(text)
 
 
 def emit(obj):
@@ -56,7 +91,13 @@ def main():
               "  -r, --resume [sessionId]\n  -c, --continue\n  -p, --print\n"
               "  --output-format <format>\n  --verbose")
         return 0
-    prompt = option(argv, "-p") or ""
+    stream_input = "stream-json" == option(argv, "--input-format")
+    steers: list[str] = []
+    if stream_input:
+        prompt = read_stream_message(sys.stdin)
+        threading.Thread(target=collect_steers, args=(sys.stdin, steers), daemon=True).start()
+    else:
+        prompt = option(argv, "-p") or ""
     mode = os.environ.get("FAKE_CLAUDE_MODE", "echo")
     for candidate in MODES:
         if prompt.startswith(f"[{candidate}]"):
@@ -108,7 +149,18 @@ def main():
               "tool_input": {"command": "echo hi"}, "permission_id": "perm-1"})
     emit({"type": "assistant", "session_id": session_id,
           "message": {"content": [{"type": "text", "text": f"echo:{prompt}"}]}})
-    emit({"type": "result", "subtype": "success", "result": f"echo:{prompt}",
+    # A steer that arrived while this turn was running joins THIS turn: one
+    # result event, carrying the redirection the running turn absorbed.
+    if stream_input and os.environ.get("FAKE_CLAUDE_STEER_WAIT_MS"):
+        deadline = time.time() + int(os.environ["FAKE_CLAUDE_STEER_WAIT_MS"]) / 1000.0
+        while time.time() < deadline and not steers:
+            time.sleep(0.02)
+    text = f"echo:{prompt}"
+    for steer in list(steers):
+        emit({"type": "assistant", "session_id": session_id,
+              "message": {"content": [{"type": "text", "text": f"steered:{steer}"}]}})
+        text = f"{text}|steered:{steer}"
+    emit({"type": "result", "subtype": "success", "result": text,
           "session_id": session_id})
     return 0
 

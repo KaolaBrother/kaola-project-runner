@@ -1542,7 +1542,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="kaola-acp.py")
     parser.add_argument("platform", choices=PLATFORMS)
     parser.add_argument("command", choices=[
-        "preflight", "start", "send", "wait", "observe", "capture",
+        "preflight", "start", "send", "steer", "wait", "observe", "capture",
         "permit", "key", "answer", "cancel", "stop", "status", "view",
         "follow",
     ])
@@ -1627,6 +1627,41 @@ def main() -> int:
              "max_final_chars": args.max_final_chars},
             sock_timeout,
         )
+    elif args.command == "steer":
+        text = args.text
+        if args.stdin:
+            text = sys.stdin.read()
+        if not text:
+            die("steer requires --text or --stdin")
+        # Issue #65: the manifest is the single source of truth for the native
+        # steering entry, so a holder started before this release still answers
+        # correctly without a restart.
+        method = (args.manifest.get("acp_steer_method") or "").strip()
+        native_steering = args.manifest.get("native_steering") or "unknown"
+        if not method:
+            receipt = base_receipt(args, repo)
+            receipt.update({
+                "steer_outcome": "unsupported",
+                "steer_consumed": False,
+                "steer_method": None,
+                "native_steering": native_steering,
+                "mutation_status": "not_started",
+                "mutation_performed": False,
+                "error": {
+                    "code": "steer-unsupported",
+                    "message": (
+                        f"{args.platform} exposes no native mid-turn steering entry "
+                        f"(native_steering={native_steering}); the text was not consumed"
+                    ),
+                },
+            })
+        else:
+            receipt = op_or_holder_lost(
+                args, repo, directory, "steer",
+                {"text": text, "method": method, "timeout": timeout},
+                sock_timeout,
+            )
+            receipt.setdefault("native_steering", native_steering)
     elif args.command == "wait":
         receipt = op_or_holder_lost(
             args, repo, directory, "wait", {"timeout": timeout}, sock_timeout

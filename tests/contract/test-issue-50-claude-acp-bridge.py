@@ -340,7 +340,10 @@ def test_turns_flags_env_cwd_logs() -> None:
         r1 = rec[0]
         argv = r1["argv"]
         check(r1["argv0"] == str(FAKE.resolve()), "spawned binary is the exact CLAUDE_BIN path")
-        check(argv_value(argv, "-p") == "hello one", "prompt travels as -p <prompt>")
+        # Issue #65: streaming turns carry the prompt on stdin, not in argv, so
+        # the steering channel exists and the prompt text never reaches `ps`.
+        check(argv_value(argv, "--input-format") == "stream-json", "prompt travels as stream-json stdin")
+        check("hello one" not in " ".join(argv), "prompt text never appears in the argument list")
         check(argv_value(argv, "--output-format") == "stream-json" and "--verbose" in argv, "stream-json verbose output")
         check(argv_value(argv, "--model") == "fable", "first turn carries --model fable")
         check(argv_value(argv, "--effort") == "high", "first turn carries --effort high")
@@ -374,7 +377,16 @@ def test_turns_flags_env_cwd_logs() -> None:
         check(err["code"] == -32602, "unknown session mode rejected")
         check(bridge.stop() == 0, "bridge exits 0 on stdin close")
         log = bridge.stderr()
-        check("spawn streaming: claude" in log and "<session-id>" in log and "<prompt:" in log, "debug log masks --resume id and prompt")
+        check("spawn streaming: claude" in log and "<session-id>" in log, "debug log masks the --resume id")
+        # Issue #65: the prompt now travels on stdin, so no spawn line can carry
+        # it - the text never reaches the argument list this log records.
+        # (The separate upstream `Prompt content:` debug line is unchanged.)
+        spawn_lines = [line for line in log.splitlines() if "spawn streaming: claude" in line]
+        check(bool(spawn_lines), "the streaming spawn is logged")
+        check(all("hello one" not in line for line in spawn_lines),
+              "prompt text never appears in a logged argument list")
+        check(all("--input-format stream-json" in line for line in spawn_lines),
+              "every streaming spawn reads its prompt from stdin")
         for secret, label in ((r1["session_id"], "raw Claude session id"), (sandbox.canary, "inherited env value"), (sandbox.api_key, "API key value"), (sandbox.auth_token, "auth token value")):
             check(secret not in log, f"bridge log never prints {label}")
         check(not sandbox.trap_hit.exists(), "PATH claude trap never executed")

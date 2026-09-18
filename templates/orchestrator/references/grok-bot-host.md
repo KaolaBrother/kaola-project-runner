@@ -46,8 +46,10 @@ the same target.
   untracked Workflow records, which the locator correctly reports as `dirty`;
   the owner therefore selects a clean checkout or worktree detached at R (no
   fixed path is assumed and the clean check is never weakened). The cloud
-  computer never clones, installs, updates, or manages anything on the Mac; the
-  Mac path lives only in the Mac's locator link, never in the account Skill.
+  computer never clones, installs, updates, or manages anything on the Mac -
+  nothing clones, installs, or updates Local Computer from the cloud, and the two
+  targets never reach each other's files, CLIs, tmux, or sessions; the Mac path
+  lives only in the Mac's locator link, never in the account Skill.
   Moving the checkout or changing R means re-registering the locator;
   `register --target local|cloud` validates origin, expected revision, and clean
   state before it touches an existing link, then atomically writes a

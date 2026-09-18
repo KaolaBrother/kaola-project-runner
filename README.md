@@ -309,6 +309,20 @@ SESSION="opencode-example"
 ./scripts/kaola-tmux.sh opencode status --repo "$REPO" --session "$SESSION"
 ```
 
+Where a platform steers natively — today Claude Code and Codex — `steer` delivers one
+Agent-chosen message into a turn that is **already running**, alongside `send`:
+
+```bash
+./scripts/kaola-tmux.sh codex steer --repo "$REPO" --session "$SESSION" \
+  --text 'Stop the current approach and do X instead.'
+```
+
+The receipt states only whether this agent consumed the text (`steer_outcome`
+`injected` / `not_consumed` / `unsupported` / `unknown`, never a queued or detached turn
+called injection), and the original prompt keeps its own request id and terminal state.
+A platform with no native entry never advertises the tool and answers `unsupported` with
+the text unconsumed. See [docs/api.md](docs/api.md).
+
 Installed Skills use their own `scripts/runtime-tmux.sh` with the same operations and no platform
 argument. Invoke it by absolute path; `--repo` identifies the project being worked on.
 

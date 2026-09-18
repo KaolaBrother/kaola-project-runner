@@ -38,6 +38,9 @@ STDERR_RING = 64 * 1024
 EVENT_LOG_MAX = 10 * 1024 * 1024
 EVENT_LOG_KEEP = 3
 CANCEL_GRACE = 5.0
+# Issue #65: a native steering call answers inside the running turn; it never
+# waits for the turn itself, so this bounds only the extension round trip.
+STEER_TIMEOUT = 30.0
 EXIT_GRACE = 5.0
 TERM_GRACE = 3.0
 SENSITIVE_KEYS = ("_API_KEY", "TOKEN", "Authorization")
@@ -633,7 +636,7 @@ FOLLOW_QUEUE_CAP = 256
 FOLLOW_HEARTBEAT_SECONDS = 5.0
 FOLLOW_SNDBUF = 4096
 FOLLOW_DROP_GRACE = 2.0
-FOLLOW_WRITE_OPS = frozenset({"prompt", "permit", "cancel", "stop"})
+FOLLOW_WRITE_OPS = frozenset({"prompt", "steer", "permit", "cancel", "stop"})
 
 
 def _as_text(value: Any) -> str:
@@ -2022,6 +2025,141 @@ class Holder:
             return {"permitted": request_id, "option": option,
                     "pending_permissions": list(pending.values())}
 
+    def op_steer(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Issue #65: one native mid-turn steering request for this exact session.
+
+        Steering is a transport operation the controlling Agent chooses, never a
+        Runner policy. It reuses the running turn: it starts no second turn, adds
+        no scheduler, and never becomes a second stdin writer. The receipt states
+        one fact — whether this agent consumed the text into the running turn —
+        and keeps that separate from whether the model actually followed it.
+        """
+        method = (params.get("method") or "").strip()
+        text = params.get("text") or ""
+        base: dict[str, Any] = {
+            "steer_method": method or None,
+            "steer_text_chars": len(text),
+            "steer_fingerprint": "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        }
+        if not method:
+            return {**base, "steer_outcome": "unsupported", "steer_consumed": False,
+                    "outcome": "steer_unsupported",
+                    "mutation_status": self.turn.get("mutation_status"),
+                    "mutation_performed": False,
+                    "error": {"code": "steer-unsupported",
+                              "message": "this platform exposes no native steering entry; "
+                                         "the text was not consumed"}}
+        if not text.strip():
+            return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
+                    "outcome": "steer_rejected",
+                    "error": {"code": "steer-empty", "message": "steer requires non-empty text"}}
+        if self.agent.exited.is_set() or self.agent.proc is None:
+            return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
+                    "outcome": "process_exited", "mutation_status": "unknown",
+                    "mutation_performed": False,
+                    "error": {"code": "agent-not-running",
+                              "message": "agent process is not running"}}
+
+        with self.lock:
+            if not self.turn["active"]:
+                # An idle steer is never written. Some agents answer an idle
+                # steering call by starting a detached turn this holder would not
+                # own (Codex 1.11.0 returns startedNewTurn), so the Agent gets an
+                # honest not-consumed and decides whether to send a normal prompt.
+                return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
+                        "steer_reason": "no-active-turn", "outcome": "no-active-turn",
+                        "mutation_status": self.turn.get("mutation_status"),
+                        "mutation_performed": False}
+            turn_request_id_before = self.turn["request_id"]
+            turn_fingerprint = self.turn["fingerprint"]
+            steer_request_id = self.agent.send_request(
+                method,
+                {
+                    "sessionId": self.acp_session_id,
+                    "prompt": [{"type": "text", "text": text}],
+                    # A compliant agent must not manufacture a detached turn when
+                    # the turn settles between our check and its handler.
+                    "_meta": {"steering": {"idleBehavior": "promptRequired"}},
+                },
+            )
+            self.events.append({"kind": "steer_sent", "method": method,
+                                "request_id": steer_request_id,
+                                "turn_request_id": turn_request_id_before,
+                                "fingerprint": base["steer_fingerprint"]})
+        base["steer_request_id"] = steer_request_id
+        base["turn_request_id"] = turn_request_id_before
+
+        timeout = params.get("timeout")
+        if timeout is None:
+            timeout = STEER_TIMEOUT
+        response = self.agent.wait_response(steer_request_id, timeout)
+
+        if response is None:
+            outcome, consumed, error = "unknown", None, {
+                "code": "steer-no-response",
+                "message": "no reply to the steering request before the timeout; "
+                           "consumption is unknown — do not resend blindly"}
+        elif "error" in response:
+            detail = response.get("error") or {}
+            if detail.get("code") == -32601:
+                outcome, consumed = "unsupported", False
+                error = {"code": "steer-unsupported",
+                         "message": f"agent does not implement {method}", "detail": detail}
+            else:
+                outcome, consumed = "rejected", False
+                error = {"code": "steer-rejected", "message": str(detail.get("message", "")),
+                         "detail": detail}
+        else:
+            result = response.get("result") or {}
+            native = result.get("outcome")
+            base["steer_native_outcome"] = native
+            error = None
+            if native == "injected":
+                outcome, consumed = "injected", True
+            elif native == "startedNewTurn":
+                # Honest naming: this is NOT injection into the running turn.
+                outcome, consumed = "started_new_turn", True
+                error = {"code": "steer-started-new-turn",
+                         "message": "the agent started a separate turn this holder does not "
+                                    "track; the running turn did not absorb the text"}
+            elif native == "promptRequired":
+                outcome, consumed = "not_consumed", False
+                error = {"code": "steer-prompt-required",
+                         "message": "the turn had already settled; send a normal prompt instead"}
+            else:
+                outcome, consumed = "unknown", None
+                error = {"code": "steer-unrecognized-outcome",
+                         "message": f"unrecognized steering outcome {native!r}"}
+
+        with self.lock:
+            turn_request_id_after = self.turn["request_id"]
+            receipt = {
+                **base,
+                "steer_outcome": outcome,
+                "steer_consumed": consumed,
+                "steer_response": response,
+                "turn_request_id_after": turn_request_id_after,
+                "turn_request_id_preserved": (
+                    turn_request_id_after in (turn_request_id_before, None)
+                ),
+                "turn_prompt_fingerprint": turn_fingerprint,
+                "turn_active": self.turn["active"],
+                "outcome": f"steer_{outcome}",
+                "mutation_status": self.turn.get("mutation_status"),
+                # This steer's own effect: `injected` wrote into the running
+                # turn, anything else wrote nothing. The turn's own progress
+                # stays in `mutation_status`.
+                "mutation_performed": consumed,
+            }
+            if error:
+                receipt["error"] = error
+            self.events.append({"kind": "steer_result", "method": method,
+                                "request_id": steer_request_id,
+                                "steer_outcome": outcome,
+                                "steer_consumed": consumed,
+                                "turn_request_id_preserved": receipt["turn_request_id_preserved"]})
+        return receipt
+
     def op_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
         expected = params.get("expected_holder_instance_id")
         with self.lock:
@@ -2389,6 +2527,8 @@ class Holder:
             return self.op_state()
         if op == "prompt":
             return self.op_prompt(params)
+        if op == "steer":
+            return self.op_steer(params)
         if op == "wait":
             return self.op_wait(params)
         if op == "permit":

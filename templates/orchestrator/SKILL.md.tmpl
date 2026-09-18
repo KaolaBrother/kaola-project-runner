@@ -65,28 +65,28 @@ directory. A ZCode Host session is one named Runner session like any other:
 when it dispatches an inner worker, including another ZCode, the inner session
 is a separate Runner session with its own record root entry and process group —
 an inner stop never reaches the outer Host, and the outer stop sweeps only
-recorded inner sessions. A ZCode Host session's heartbeat is event-driven:
-no Routine, cron, or sleep loop. It owns the full working prompt at the project
-root `.kaola/heartbeat-prompt.json`: after each worker termination or turn-end
-idle it settles the next step, then updates the file (project info, pace,
-plans, coordination) so the next heartbeat pass carries fresh state. It
-exports `KAOLA_ACP_HEARTBEAT_HOST` on each worker start; each worker
-termination or turn-end idle then delivers one full heartbeat pass into this
-session. No worker event, no trigger. A **bridge
-host** (Grok Bot today) reaches this checkout through one thin account Skill
-instead: it binds an execution target first (Local Computer, or the cloud Agent
-Computer), asks that target's device-local locator `{{LOCATOR}}` for the verified
-repo root ROOT, and loads only `ROOT/skills/{{SKILL_NAME}}` and, per dispatch,
-one selected `ROOT/skills/<platform id>-{{SKILL_NAME}}`. On a bridge host, before
-each worker dispatch run the locator attestation on the bound target with the
-`{{LOCATOR}}` command in `references/grok-bot-host.md` and refuse any `refused`
-receipt: the consumer project, the selected worker script under the same ROOT,
-and a session of the exact name must all be on that one target. Local Computer
-and the cloud Agent Computer never reach each other's files, CLIs, tmux, or
-sessions, and nothing clones, installs, or updates Local Computer from the
-cloud. Grok Bot is a host, not a worker and not a tenth
-platform: `--platform grok` is the Grok CLI worker; `--platform grok-bot` is
-invalid.
+recorded inner sessions. A ZCode Host session's heartbeat is event-driven: no Routine, cron, or sleep
+loop. Give a Host its own `platform`/`session`/`repo` in its first prompt; it
+cannot discover them, and a `sess_...` id is not a Runner session name. Each
+beat: set `KAOLA_ACP_HEARTBEAT_HOST` (a JSON object naming the Host) on every
+worker `start` and verify the receipt's `heartbeat_host`; dispatch with
+`send --no-wait`, reading `in_progress` as accepted, not done; settle the rest
+of the beat; update the one project `.kaola/heartbeat-prompt.json`; then **end
+the turn normally** - that is the wait. Never sleep, poll, blocking-`wait`, or
+stop/cancel anything to manufacture a wake-up. A worker turn-end or exit then
+delivers one full pass here; read the worker's real reply through its own
+platform Skill with the event's session, repo, and `event_cursor`. No worker
+event, no trigger. Full role-by-role procedure with runnable examples:
+[references/zcode-host-dispatch.md](references/zcode-host-dispatch.md). A **bridge host** (Grok Bot today) reaches this checkout through one thin
+account Skill instead: it binds an execution target first (Local Computer, or the
+cloud Agent Computer), asks that target's device-local locator `{{LOCATOR}}` for
+the verified repo root ROOT, and loads only `ROOT/skills/{{SKILL_NAME}}` and,
+per dispatch, one selected `ROOT/skills/<platform id>-{{SKILL_NAME}}`. Re-run that
+attestation before every dispatch and refuse any `refused` receipt: project,
+worker script, and the exact session must all be on that one bound target, which
+never reaches the other's files, CLIs, tmux, or sessions. Grok Bot is a host,
+not a worker and not a tenth platform: `--platform grok` is the Grok CLI worker;
+`--platform grok-bot` is invalid.
 
 On Grok Bot one Routine on this Bot conversation is the only heartbeat carrier:
 never stack it with a Codex heartbeat or blocking sleep. Takeover cancels the
@@ -103,9 +103,8 @@ This Skill loads on its own. Load one selected worker Skill only at dispatch, a
 reference only when the current step needs it, and never read script source or
 whole files into context: receipts, hashes, counts, and bounded excerpts are the
 evidence. Ordinary `observe`, `status`, and `capture --lines` receipts are
-bounded on both transports: over budget, the newest part is kept and a
-`truncated` block names what was dropped with counts and the sha256 of the whole
-value; `capture --full` is the only explicit, unbounded request.
+bounded on both transports, keeping the newest part and naming what a
+`truncated` block dropped; `capture --full` is the only unbounded request.
 
 ### Defaults
 
@@ -143,10 +142,10 @@ instructions materially change; replace obsolete text rather than append
 conflicting versions. Do not hard-code host tool names into this Skill. A
 report-only request disables execution actions.
 
-Native recurring wake and blocking sleep must not be stacked. On a ZCode Host
-session, worker events are the only heartbeat trigger (see Hosts). After
-close-out, cancel the native heartbeat or stop scheduling the next sleep. No CLI
-allowlist means no heartbeat. Temporarily having no ready task is not project
+Native recurring wake and blocking sleep must not be stacked; on a ZCode Host
+session worker events are the only trigger (see Hosts). After close-out, cancel
+the native heartbeat or stop scheduling the next sleep. No allowlist, no
+heartbeat. Temporarily having no ready task is not project
 completion. On Grok Bot the native recurring carrier is one Routine on this Bot;
 do not hard-code other hosts' scheduler APIs.
 
@@ -167,8 +166,10 @@ sink, and write ownership.
    current platform Skills. Observe busy workers without injecting "status?"
    messages or repeatedly polling raw PTY screens as a human UI. Do not replay
    a prompt whose acceptance or effects are already known or uncertain;
-   investigate the existing action first. No automatic fallback/resend, raw
-   tmux injection, or global model-picker mutation.
+   investigate the existing action first. Where a platform Skill lists `steer`,
+   mid-turn steering is an Agent choice for a running turn, never a Runner
+   policy: read its receipt and never call a not-consumed steer delivered. No
+   automatic fallback/resend, raw tmux injection, or model-picker mutation.
 2. **Decide and dispatch.** Resolve worker questions within existing
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
@@ -197,15 +198,15 @@ sink, and write ownership.
    repair using existing tools; do not fabricate claim identities or introduce
    a parallel lifecycle system.
 5. **Release and report.** Stop an idle exact session only when no suitable
-   authorized work is executable. ACP and PTY/tmux are the same stop action:
-   exact owned session `stop` via the matching platform Runner Skill,
-   including ACP holders. Idle is not keep-alive. ACP idle left running is
-   not completion and not keep-alive. When the authorized goal is complete,
-   or no suitable authorized work is executable, stop remaining idle owned
-   sessions, including ACP holders. Then cancel heartbeat once no unfinished
-   delivery/sync/cleanup remains. Preserve its existing recovery information
-   and give any remaining delivery/sync/cleanup a named owner. Direct safe cleanup of completed, unreferenced worktrees
-   and branches; protect in-flight work and evidence. Report active workers
+   authorized work is executable; then stop the rest. ACP and PTY/tmux are the
+   same stop action: exact owned session `stop` via the matching platform Skill,
+   including ACP holders. Idle is neither keep-alive nor completion. A Host that
+   ended its turn while workers are in flight, or with delivery, acceptance or
+   close-out open, is not an idle worker: keep it and send it no "continue"; its
+   next beat is a worker event. Cancel heartbeat once no unfinished
+   delivery/sync/cleanup remains. Preserve its existing recovery information and
+   give any remaining delivery/sync/cleanup a named owner. Direct safe cleanup of completed, unreferenced
+   worktrees and branches; protect in-flight work and evidence. Report active workers
    and outstanding close-out work, then continue the same heartbeat while
    authorized work or unfinished close-out remains. Session stop, candidate
    acceptance, merge, Issue closure and workspace cleanup are different facts,
@@ -250,10 +251,9 @@ machine, quota engine, or extra dashboards.
 
 Call the matching platform Runner Skill by its installed directory. Use Runner
 default start (including measured bypass). Do not pass a permission-mode
-override unless the human wrote one. Resume with `--resume` when a native
-session id is known, otherwise `--continue` or a fresh `start`. One dispatch
+override unless the human wrote one. One dispatch
 prompt per ready session; do not replay a prompt whose effects are known or
-uncertain.
+uncertain. Resume as in "Ending a run".
 
 The worker is not the orchestrator. Its prompt should name the authorized
 scope, whether Workflow is on, whether `--repo` is the canonical project root or

@@ -1,10 +1,10 @@
 # ZCode ACP transport
 
-Command: `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`. Login requires a PTY: `false`. Platform quirks: Runner-owned ACP translator over installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist (no auth env injection); CLI 0.16.5 needs a model provider that headless app-server cannot read from the desktop login, so the adapter passes the enabled GLM Coding Plan provider from ~/.zcode/v2/config.json in memory via runtimeModel on session/create, session/resume and session/setModel (desktop-App parity, apiKey source inline, never logged, never written to disk); Start Plan (headless captcha) and pay-as-you-go providers are refused; agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login happens in the ZCode desktop App; PTY is unsupported by the bundled runtime (no terminal UI) and is selectable only as a diagnostic entry.
+Command: `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`. Login requires a PTY: `false`. Platform quirks: Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider travels in memory as the runtimeModel overlay on session/create, session/resume and session/setModel (launch facts in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login happens in the ZCode desktop App; PTY is unsupported by the bundled runtime (no terminal UI) and is a diagnostic entry only.
 
 ## Command surface
 
-Use `preflight`, `start`, `send`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; other native keys and editor replacement are PTY-only capabilities. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
+Use `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; other native keys and editor replacement are PTY-only capabilities. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
 
 Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Orchestrator ordinary turns must not poll raw frames as a human UI. Where supported, PTY can handle terminal-only login and native TUI takeover; check platform quirks before using it.
 
@@ -12,9 +12,37 @@ Humans watch with Terminal or host-wide `list`, session `view`, and local `follo
 
 Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `transport`, and Git facts. Mutation receipts also report `mutation_status`, outcome, stop reason, and available protocol events or final text.
 
-`capture` defaults to compact final text. `--tools` includes tool events, `--since EVENT_OFFSET` selects newer events, `--full` includes the complete event record, and `--inline` returns content inline when supported. Every ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded: when it would exceed the shared capture budget, the oldest entries are dropped and `truncated` records kept/dropped/total counts, the byte size and sha256 of the untruncated stream, and the `--full` hint; `--full` is the explicit, unbounded request. Ordinary `observe`/`status` receipts are bounded the same way on their own larger `state_receipt_bytes` budget (256 KiB, Issue #64: a realistic `session_meta` and the stored `record` stay whole, so `configOptions` `currentValue` — the configured model — remains readable): scalar facts stay whole, and an over-budget structure (`record`, `session_meta`, `initial_config_options`, `capabilities`, `agent_info`; `pending_permissions` keeps its newest entries) is replaced by its byte size and sha256 under `truncated.fields`.
+`capture` defaults to compact final text. `--tools` includes tool events, `--since EVENT_OFFSET` selects newer events, `--full` includes the complete event record, and `--inline` returns content inline when supported. Every ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded: over budget, the oldest entries are dropped and `truncated` records kept/dropped/total counts, the byte size and sha256 of the untruncated stream, and the `--full` hint; `--full` is the explicit, unbounded request. Ordinary `observe`/`status` receipts are bounded the same way on their own larger `state_receipt_bytes` budget (256 KiB, Issue #64, so a realistic `session_meta` and the stored `record` stay whole and `configOptions` `currentValue` — the configured model — remains readable): scalar facts stay whole, and an over-budget structure (`record`, `session_meta`, `initial_config_options`, `capabilities`, `agent_info`; `pending_permissions` keeps its newest entries) is replaced by its byte size and sha256 under `truncated.fields`.
 
 `mutation_status` is one of `not_started`, `accepted`, `in_progress`, `completed`, or `unknown`. These are transport facts, not permission to retry.
+
+## Steering (`steer`)
+
+Native steering on this platform: **unsupported** (entry ``). The ZCode engine has a turn-steer queue (`turn.steerQueued`/`turn.steerDrained`), but cli 0.16.5 does not expose it on the app-server `--stdio` protocol the Runner drives: its method table has no steer method, the `session/send` schema is `.strict()` with no delivery or steer field, and `sendPrompt` rejects `-32010 "A prompt is already running for this session"` while a turn is active. Engine-capable, protocol-surface unsupported.
+
+`steer` delivers one Agent-chosen message to the turn **already running** on this exact session,
+over the same routing as `send`: no scheduler, no second writer, no second lifecycle. The original
+prompt keeps its request id, output, and terminal state, and the receipt's `turn_request_id`,
+`turn_request_id_after`, and `turn_request_id_preserved` make that checkable. Content is literal
+transport under the same identity, redaction, and bounded-receipt rules as `send`.
+
+`steer_outcome` and `steer_consumed` are the only consumption claims:
+
+| `steer_outcome` | `steer_consumed` | Meaning |
+|---|---|---|
+| `injected` | `true` | the running turn took the text; adoption by the model is a separate question |
+| `started_new_turn` | `true` | the agent opened a separate turn instead — not injection, and this holder does not track it |
+| `not_consumed` | `false` | nothing was written (no active turn, or the turn had already settled); `send` a normal prompt if you still want it |
+| `unsupported` | `false` | no native entry on this platform or transport; nothing was written |
+| `rejected` | `false` | the agent refused the request; `error.detail` carries its reason |
+| `unknown` | `null` | no reply or an unrecognized outcome — consumption is undecided; do not resend blindly |
+
+An idle session is never steered: the Runner refuses before writing, since some agents answer an
+idle steering call by starting a detached turn. A turn ending in the same instant returns
+`not_consumed`, never a silent resend. `steer` is an `acp` operation; over `pty` it answers
+`steer-unsupported-transport`, because a mid-turn terminal write is an ordinary keystroke stream
+whose meaning only the native UI decides. The Runner never turns a `steer` into `cancel`+`send`,
+a transport fallback, or a worker event.
 
 `start` resolves the same tier/model/effort/Fast selection as PTY and applies it through the
 agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
