@@ -133,6 +133,53 @@ class RenderedSurfacesStateTheRule(unittest.TestCase):
         self.assertIn("issue-dispatch.md", body)
 
 
+class ExamplesDoNotTeachTheOldName(unittest.TestCase):
+    """An Agent copies the examples. Owner review of 6d78c61 caught
+    `codex-kaola-issue-77` still being taught in the startup reference."""
+
+    # Documented exemptions, each with its owner. Nothing else may bypass the rule.
+    #   zcode-kaola-host     - a Host, not an issue-backed worker; dressing it up as one
+    #                          would misstate what it is. Its naming belongs to Issue #74's
+    #                          Delegator integration.
+    #   codex-kaola-feature-a - a genuine violation, in zcode-host-dispatch.md, which Issue
+    #                          #70's in-flight candidate is rewriting line by line (the name
+    #                          also appears inside its event-id payloads). Out of this run's
+    #                          authorized scope; raised to the outer Agent instead of
+    #                          conflicting with a live branch.
+    NOT_ISSUE_BACKED = {"zcode-kaola-host"}
+    OWNED_ELSEWHERE = {"codex-kaola-feature-a"}
+
+    def rendered_session_examples(self):
+        found = []
+        surfaces = [SKILL] + sorted((ORCHESTRATOR / "references").glob("*.md"))
+        for path in surfaces:
+            for name in re.findall(r"--session ([A-Za-z0-9][A-Za-z0-9_.-]*)", path.read_text(encoding="utf-8")):
+                found.append((path.name, name))
+        return found
+
+    def test_every_worker_example_uses_an_issue_scoped_name(self) -> None:
+        examples = self.rendered_session_examples()
+        self.assertTrue(examples, "the orchestrator package must still show session examples")
+        for surface, name in examples:
+            with self.subTest(surface=surface, session=name):
+                if name in self.NOT_ISSUE_BACKED or name in self.OWNED_ELSEWHERE:
+                    continue
+                self.assertIsNotNone(
+                    ANCHORED_NAME.match(name),
+                    f"{surface} teaches {name!r}, which bypasses the Issue #72 contract",
+                )
+
+    def test_the_startup_reference_keeps_one_exact_name_across_the_five_operations(self) -> None:
+        body = (ORCHESTRATOR / "references" / "host-startup.md").read_text(encoding="utf-8")
+        self.assertNotIn("codex-kaola-issue-77", body)
+        worker = [n for s, n in self.rendered_session_examples()
+                  if s == "host-startup.md" and n not in self.NOT_ISSUE_BACKED]
+        self.assertEqual(len(set(worker)), 1, f"the worker example must be one exact name: {worker}")
+        for operation in ("start", "send", "observe", "capture", "stop"):
+            self.assertRegex(body, rf'"\$WORKER" {operation}\s+--repo "\$PROJECT" --session {worker[0]}')
+        self.assertIn("](issue-dispatch.md)", body, "the example must point at the rule it follows")
+
+
 class AnchoredGrammarSeparatesIssues(unittest.TestCase):
     def setUp(self) -> None:
         self.acp = load_acp()

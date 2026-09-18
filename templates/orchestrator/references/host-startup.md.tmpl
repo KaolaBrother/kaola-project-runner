@@ -16,12 +16,17 @@ You keep authorization, dispatch, acceptance and close-out in your own session.
 Nothing below in this file applies: no event binding, no heartbeat file, no Host.
 
 ```bash
-"$WORKER" start   --repo "$PROJECT" --session codex-kaola-issue-77
-"$WORKER" send    --repo "$PROJECT" --session codex-kaola-issue-77 --text '<the task>'
-"$WORKER" observe --repo "$PROJECT" --session codex-kaola-issue-77
-"$WORKER" capture --repo "$PROJECT" --session codex-kaola-issue-77 --lines 200
-"$WORKER" stop    --repo "$PROJECT" --session codex-kaola-issue-77
+"$WORKER" start   --repo "$PROJECT" --session codex-KT-i274-parser
+"$WORKER" send    --repo "$PROJECT" --session codex-KT-i274-parser --text '<the task>'
+"$WORKER" observe --repo "$PROJECT" --session codex-KT-i274-parser
+"$WORKER" capture --repo "$PROJECT" --session codex-KT-i274-parser --lines 200
+"$WORKER" stop    --repo "$PROJECT" --session codex-KT-i274-parser
 ```
+
+That one exact name is the issue-scoped dispatch name of
+[issue-dispatch.md](issue-dispatch.md): the platform id, the consuming project's declared
+heartbeat short code, `i` plus the real issue number, and a purpose token. All five
+operations use it unchanged.
 
 Check each receipt: a `start` without a ready session started nothing, a `send`
 `error` dispatched nothing, and a `prompt_timeout` or missing receipt leaves
