@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Standalone ACP contract suites now stop the sessions they start (Issue #82).**
+  `Issue34ModelSelectionAcpTests` starts codex/cursor-cli/devin holders but the
+  shared fixture's `tearDown` always stopped the default grok session, so a
+  standalone `test-acp-contract.py` run silently leaked 14 holder/mock-agent
+  pairs; `test_view_accept_then_close_uses_frozen_runtime_code` replaced the
+  holder's socket with a stub listener, so teardown's `stop --force` got
+  `holder-unreachable` and left that holder and its agent running. Teardown now
+  stops the platform the fixture actually started, the socket-replaced holder
+  is reclaimed by the existing `kaola-acp-sweep.py` bounded to that test's own
+  record directory (matched by its `--record-dir` argv, never a bare pid), and
+  every fixture class asserts zero of its own holders or mock agents survive.
+  Production stop/lifecycle behavior is unchanged.
+
 - **A failing `./scripts/validate.sh` suite no longer hides the rest of its lane (Issue #83).**
   `run_suite_lane` returned on the first failing suite, so every suite ordered
   after it in that lane never ran and never left a log; the ordered replay then
