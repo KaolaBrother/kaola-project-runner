@@ -7,9 +7,11 @@
   the overflow generation only *after* `session/prompt` was admitted, so a Host that
   answered inside that window ran the turn-end callback against an unmarked turn:
   it confirmed nothing and delivered the same events — and the same full-check
-  generation — a second time. The delivery now claims that turn's identity under the
-  existing worker-event lock before admission and releases exactly that claim when the
-  prompt is not admitted, so one worker event is one Host prompt and one confirmation.
+  generation — a second time. Admission and the marking of what it delivered are now one
+  hold of the existing worker-event lock, so the callback waits and sees a marked turn,
+  and two deliveries racing over the same staged events cannot both admit. Marking only
+  follows a successful admission, so a refused prompt leaves nothing to undo. One worker
+  event is one Host prompt and one confirmation.
   A retry of an already confirmed deterministic `event_id` is answered as a duplicate
   from the holder's bounded memory of recently confirmed ids instead of being staged
   and delivered again. Busy-host staging, failed-notification restaging, cap-32

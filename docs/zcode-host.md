@@ -239,15 +239,19 @@ worker agent terminated / worker turn ended (one idle episode)
 - **Confirmation and resume.** The host turn completing after the
   notification confirms the detailed events and, when present, the
   full-check generation snapped at delivery (`worker_event_overflow_confirmed`).
-  The delivery claims that turn's fingerprint for its staged events and for the
-  overflow generation *before* the prompt is admitted, under the same lock the
-  turn-end callback takes, so a Host that answers immediately still finds a
-  marked notification turn instead of prompting the same events a second time;
-  a prompt that is never admitted releases exactly that claim and leaves the
-  events staged. A confirmed `event_id` offered again is answered
-  `duplicate` (with `confirmed`) from the holder's bounded memory of recently
-  confirmed ids, so a worker retry does not re-prompt the Host; a genuinely
-  unconfirmed event is still redelivered.
+  Admitting the prompt and marking the events and overflow generation it
+  carried are one hold of the carrier's lock — the same lock the turn-end
+  callback takes. A Host that answers immediately therefore waits there and
+  then finds a fully marked notification turn, instead of concluding the turn
+  was not a notification and sending the same events again; and two deliveries
+  racing over one staged list cannot both admit, because the second finds the
+  events already marked. Marking only follows a successful admission, so a
+  prompt that is refused or never written leaves nothing to undo and its events
+  stay staged. A confirmed `event_id` offered again is answered `duplicate`
+  (with `confirmed`) from the holder's in-memory index of the 256 most recently
+  confirmed ids, so a worker retry does not re-prompt the Host; after a resume
+  that index is rebuilt from the log, which is also what still filters the
+  pending list, so a genuinely unconfirmed event is redelivered as before.
   Stage, delivery, and confirmation are recorded in the host holder's
   existing event log. `start --resume` (the `session/load` path, also after
   exact `stop`) rebuilds the pending detailed list from that log

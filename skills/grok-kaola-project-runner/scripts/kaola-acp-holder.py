@@ -150,12 +150,6 @@ OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
 HEARTBEAT_CONFIRMED_MEMORY = 8 * HEARTBEAT_EVENT_CAP
 
 
-def prompt_fingerprint(text: str) -> str:
-    """The one prompt identity. Issue #90: the worker-event carrier claims this
-    for its staged events BEFORE admission, so it must be the very value
-    ``op_prompt`` records for the same text - one definition, not two."""
-    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
-
 
 def parse_heartbeat_host() -> dict[str, str] | None:
     """The armed carrier target, or None. The CLI already validated it and
@@ -1763,7 +1757,7 @@ class Holder:
             # Read before anything is written: every event this turn produces
             # has a cursor strictly greater than this one.
             dispatch_cursor = self.events.cursor
-            fingerprint = prompt_fingerprint(text)
+            fingerprint = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
             previous = self.last_prompt or {}
             self.turn = self._empty_turn()
             self.turn.update({
@@ -2004,7 +1998,21 @@ class Holder:
     def _deliver_worker_events(self) -> dict[str, Any]:
         """Deliver every staged event as one ordinary prompt through the
         normal admission path. A busy or dead-agent host keeps events staged
-        for the next boundary or resume; nothing here bypasses op_prompt."""
+        for the next boundary or resume; nothing here bypasses op_prompt.
+
+        Issue #90: admission and the marking of what it delivered are ONE hold
+        of ``worker_events_lock``. ``op_prompt`` starts the turn's response
+        thread before it returns, so a Host that answers at once runs
+        ``_worker_event_turn_end`` - which takes this same lock - while this
+        call is still inside it. The callback therefore waits and then sees a
+        fully marked notification turn, instead of concluding there was none
+        and delivering the same events a second time. The one hold is also what
+        keeps two concurrent deliveries off the same staged events: the second
+        finds them already marked and has nothing to send. Marking only after a
+        successful admission means a refused prompt leaves nothing to undo. The
+        lock order is ``worker_events_lock`` then ``self.lock`` (taken inside
+        ``op_prompt``); no path takes them the other way round.
+        """
         with self.worker_events_lock:
             staged = [item for item in self.pending_worker_events
                       if "prompt_fingerprint" not in item]
@@ -2012,59 +2020,38 @@ class Holder:
                 self.overflow_generation > self.overflow_confirmed_generation
                 and self.overflow_inflight_generation is None)
             overflow_generation = self.overflow_generation
-        if not staged and not overflow_ready:
-            return {"delivered": False, "reason": "queue-empty"}
-        if self.agent.proc is None or self.agent.exited.is_set():
-            return {"delivered": False, "reason": "agent-not-running"}
-        if self.turn["active"]:
-            return {"delivered": False, "reason": "prompt-in-progress"}
-        text, meta = self._heartbeat_payload(staged, overflow_ready)
-        # Issue #90: `op_prompt` starts the turn's response thread before it
-        # returns, so a Host that answers at once runs `_worker_event_turn_end`
-        # INSIDE this call. Marking the events afterwards left that callback
-        # looking at an unmarked notification turn: it confirmed nothing and
-        # delivered the same events a second time. Claim the fingerprint first -
-        # it is the identity of the very text being admitted - so the callback
-        # either sees the whole claim or the prompt was never admitted.
-        fingerprint = prompt_fingerprint(text)
-        with self.worker_events_lock:
+            if not staged and not overflow_ready:
+                return {"delivered": False, "reason": "queue-empty"}
+            if self.agent.proc is None or self.agent.exited.is_set():
+                return {"delivered": False, "reason": "agent-not-running"}
+            if self.turn["active"]:
+                return {"delivered": False, "reason": "prompt-in-progress"}
+            text, meta = self._heartbeat_payload(staged, overflow_ready)
+            prompt = self.op_prompt({"text": text, "wait": False})
+            error = prompt.get("error")
+            if error or prompt.get("outcome") != "in_progress":
+                # Nothing was marked, so there is nothing to undo: the events
+                # stay staged for the next boundary or a resume, exactly as a
+                # refused or unwritten prompt always left them.
+                return {"delivered": False, "error": error or prompt}
+            fingerprint = prompt.get("prompt_fingerprint")
             for item in staged:
                 item["prompt_fingerprint"] = fingerprint
             if overflow_ready:
                 self.overflow_inflight_generation = overflow_generation
                 self.overflow_inflight_fingerprint = fingerprint
-        prompt = self.op_prompt({"text": text, "wait": False})
-        error = prompt.get("error")
-        if error or prompt.get("outcome") != "in_progress":
-            self._release_worker_event_claim(staged, fingerprint, overflow_ready)
-            return {"delivered": False, "error": error or prompt}
-        delivered: dict[str, Any] = {
-            "kind": "worker_event_delivered",
-            "event_ids": [item["event_id"] for item in staged],
-            "prompt_fingerprint": fingerprint,
-            **meta,
-        }
-        if overflow_ready:
-            delivered["overflow_full_check"] = True
-            delivered["overflow_generation"] = overflow_generation
-        self.events.append(delivered)
+            delivered: dict[str, Any] = {
+                "kind": "worker_event_delivered",
+                "event_ids": [item["event_id"] for item in staged],
+                "prompt_fingerprint": fingerprint,
+                **meta,
+            }
+            if overflow_ready:
+                delivered["overflow_full_check"] = True
+                delivered["overflow_generation"] = overflow_generation
+            self.events.append(delivered)
         return {"delivered": True, "prompt_fingerprint": fingerprint,
                 "count": len(staged), "overflow_full_check": bool(overflow_ready)}
-
-    def _release_worker_event_claim(self, staged: list[dict[str, Any]],
-                                    fingerprint: str,
-                                    overflow_claimed: bool) -> None:
-        """Undo exactly the claim this delivery made when admission failed
-        (Issue #90). Only our own marks are dropped, so a turn that legitimately
-        owns them keeps its claim; the events stay staged for the next boundary
-        or a resume, which is what a refused or unwritten prompt always did."""
-        with self.worker_events_lock:
-            for item in staged:
-                if item.get("prompt_fingerprint") == fingerprint:
-                    item.pop("prompt_fingerprint", None)
-            if overflow_claimed and self.overflow_inflight_fingerprint == fingerprint:
-                self.overflow_inflight_generation = None
-                self.overflow_inflight_fingerprint = None
 
     def _remember_confirmed_worker_events(self, event_ids: list[str]) -> None:
         """Bounded, insertion-ordered memory of confirmed ids (Issue #90). The
@@ -2225,8 +2212,12 @@ class Holder:
             elif kind == "worker_event_confirmed":
                 ids = entry.get("event_ids")
                 if isinstance(ids, list):
-                    confirmed.update(
-                        (item, None) for item in ids if isinstance(item, str))
+                    for event_id in ids:
+                        if isinstance(event_id, str):
+                            # re-insert so a re-confirmed id keeps the NEWEST
+                            # position; plain `update` would keep its oldest.
+                            confirmed.pop(event_id, None)
+                            confirmed[event_id] = None
             elif kind == "worker_event_overflow":
                 generation = self._overflow_generation_of(entry)
                 overflow_generation = (max(overflow_generation, generation)

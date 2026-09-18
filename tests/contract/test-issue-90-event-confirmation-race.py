@@ -101,6 +101,7 @@ class EventConfirmationRace(unittest.TestCase):
             platform="zcode", session="kaola-zcode-host-90", repo=str(root),
             init_meta="", command="stub",
         )
+        self._answers: dict = {}
         self.holder = holder_module.Holder(args)
         self.agent = StubAgent()
         self.holder.agent = self.agent
@@ -117,30 +118,67 @@ class EventConfirmationRace(unittest.TestCase):
     def arm_instant_host(self, stop_reason: str = "end_turn") -> dict:
         """Answer the FIRST admitted prompt before its caller gets the receipt.
 
-        This is the whole race: `on_prompt_response` (and therefore
-        `_worker_event_turn_end`) completes while `_deliver_worker_events` is
-        still between `op_prompt` and its post-hoc bookkeeping.
+        This is the whole race: the turn ENDS while `_deliver_worker_events` is
+        still inside its own `op_prompt` call. The answer is delivered on its own
+        thread, exactly as production does it - `op_prompt` starts `_await_prompt`
+        and that thread calls `on_prompt_response` - so the callback contends for
+        `worker_events_lock` for real instead of re-entering it on this thread.
+
+        The join is bounded rather than unconditional: a holder that serialises
+        admission and marking leaves the callback waiting on the lock (it
+        finishes right after this returns and the delivery releases), while a
+        holder that marks after admission lets it run straight through. Both
+        outcomes are reached without a sleep in the passing path.
         """
         real_op_prompt = self.holder.op_prompt
-        state: dict = {"answered": 0}
+        state: dict = {"answered": 0, "threads": []}
 
         def op_prompt_then_answer(params):
             receipt = real_op_prompt(params)
             if receipt.get("outcome") == "in_progress" and not state["answered"]:
                 state["answered"] += 1
-                self.holder.on_prompt_response(
-                    receipt["turn_request_id"], {"result": {"stopReason": stop_reason}})
+                answer = threading.Thread(
+                    target=self.holder.on_prompt_response,
+                    args=(receipt["turn_request_id"],
+                          {"result": {"stopReason": stop_reason}}))
+                state["threads"].append(answer)
+                answer.start()
+                answer.join(0.5)
             return receipt
 
         self.holder.op_prompt = op_prompt_then_answer
+        self._answers = state
+        self.addCleanup(self.settle)
         return state
 
+    def settle(self) -> None:
+        """Let an answer that is waiting on `worker_events_lock` finish.
+
+        On a holder that serialises admission with marking, the callback is
+        still blocked when the delivery returns; it completes as soon as the
+        lock is released. Assertions about confirmation read state after this.
+        """
+        for answer in list(self._answers.get("threads", [])):
+            answer.join(10)
+            self.assertFalse(answer.is_alive(), "a turn-end callback never returned")
+
     def stage(self, cursor: int, kind: str = "idle", session: str = "w-1") -> dict:
-        return self.holder.op_worker_event({
+        receipt = self.holder.op_worker_event({
             "schema": holder_module.WORKER_EVENT_SCHEMA, "kind": kind,
             "platform": "codex", "session": session, "repo": "/tmp/consuming",
             "reason": f"outcome=turn_completed c={cursor}", "event_cursor": cursor,
         })
+        self.settle()
+        return receipt
+
+    def stage_without_delivery(self, cursor: int) -> None:
+        """Stage one event with the Host busy, then free the turn, so a test can
+        drive `_deliver_worker_events()` itself."""
+        busy = self.holder.op_prompt({"text": "host is working", "wait": False})
+        self.stage(cursor)
+        self.holder.turn = self.holder._empty_turn()
+        self.agent.sent = [m for m in self.agent.sent
+                           if m.get("id") != busy["turn_request_id"]]
 
     def log_kinds(self, kind: str) -> list[dict]:
         return [e for e in self.holder.events.read_since(0, None)
@@ -165,12 +203,18 @@ class EventConfirmationRace(unittest.TestCase):
         self.assertEqual(len(confirmed), 1, confirmed)
         self.assertEqual(confirmed[0]["event_ids"], ["codex/w-1/idle/7"])
         self.assertEqual(len(self.log_kinds("worker_event_delivered")), 1)
+        order = [e["kind"] for e in self.holder.events.read_since(0, None)
+                 if str(e.get("kind", "")).startswith("worker_event")]
+        self.assertEqual(order, ["worker_event", "worker_event_delivered",
+                                 "worker_event_confirmed"],
+                         "an instant answer must not invert the recorded chain")
 
     def test_instant_response_does_not_double_prompt_the_overflow_full_check(self) -> None:
         """Overflow full-check carries a generation, and races the same window."""
         self.holder._record_overflow_full_check()
         self.arm_instant_host()
         result = self.holder._deliver_worker_events()
+        self.settle()
 
         self.assertTrue(result.get("delivered"), result)
         self.assertIs(result.get("overflow_full_check"), True)
@@ -204,6 +248,7 @@ class EventConfirmationRace(unittest.TestCase):
         self.arm_instant_host()
         self.holder.on_prompt_response(busy["turn_request_id"],
                                        {"result": {"stopReason": "end_turn"}})
+        self.settle()
 
         self.assertEqual(len(self.notification_prompts()), 1)
         self.assertEqual(self.holder.pending_worker_events, [])
@@ -223,6 +268,8 @@ class EventConfirmationRace(unittest.TestCase):
         retry = self.stage(11)
         self.assertIs(retry.get("duplicate"), True,
                       "a confirmed event_id offered again is a duplicate")
+        self.assertIs(retry.get("confirmed"), True,
+                      "and says WHY it is a duplicate: already confirmed, not still pending")
         self.assertEqual(retry.get("event_id"), first["event_id"])
         self.assertNotEqual(retry.get("staged"), True)
         self.assertEqual(len(self.notification_prompts()), 1,
@@ -266,7 +313,7 @@ class EventConfirmationRace(unittest.TestCase):
         self.assertTrue(again.get("delivered"), again)
         self.assertEqual(len(self.notification_prompts()), 2)
 
-    def test_admission_failure_rolls_back_and_keeps_the_event_deliverable(self) -> None:
+    def test_admission_failure_marks_nothing_and_keeps_the_event_deliverable(self) -> None:
         """A prompt frame that is never written must not wedge the queue."""
         self.holder._record_overflow_full_check()
         self.agent.write_fails = True
@@ -283,6 +330,7 @@ class EventConfirmationRace(unittest.TestCase):
         self.agent.write_fails = False
         self.arm_instant_host()
         retry = self.holder._deliver_worker_events()
+        self.settle()
         self.assertTrue(retry.get("delivered"), retry)
         self.assertIs(retry.get("overflow_full_check"), True)
         self.assertEqual(self.holder.pending_worker_events, [])
@@ -309,6 +357,129 @@ class EventConfirmationRace(unittest.TestCase):
         self.assertEqual(len(self.notification_prompts()), 3)
         self.assertEqual([e["event_id"] for e in self.holder.pending_worker_events],
                          ["codex/w-1/idle/42"])
+
+    def test_resume_rebuilds_the_confirmed_memory_from_the_event_log(self) -> None:
+        """Dedup must survive a resume: the memory is derived from the log, so a
+        retry arriving after `start --resume` is still the same confirmed event."""
+        self.arm_instant_host()
+        self.stage(61)
+        self.assertEqual(self.holder.pending_worker_events, [])
+
+        # resume: only this holder's own event log survives
+        self.holder.turn = self.holder._empty_turn()
+        self.holder.pending_worker_events = []
+        self.holder.confirmed_worker_events = {}
+        self.holder._restore_worker_events()
+
+        self.assertIn("codex/w-1/idle/61", self.holder.confirmed_worker_events)
+        retry = self.stage(61)
+        self.assertIs(retry.get("duplicate"), True, retry)
+        self.assertIs(retry.get("confirmed"), True, retry)
+        self.assertEqual(len(self.notification_prompts()), 1,
+                         "a resumed holder must not re-prompt a confirmed event")
+
+    def test_the_confirmed_memory_is_bounded_and_keeps_the_newest(self) -> None:
+        bound = holder_module.HEARTBEAT_CONFIRMED_MEMORY
+        self.holder._remember_confirmed_worker_events(
+            [f"codex/w/idle/{index}" for index in range(bound + 50)])
+
+        self.assertEqual(len(self.holder.confirmed_worker_events), bound,
+                         "an unbounded memory would grow with every confirmed turn")
+        self.assertNotIn("codex/w/idle/0", self.holder.confirmed_worker_events,
+                         "the oldest confirmed ids are the ones evicted")
+        self.assertIn(f"codex/w/idle/{bound + 49}", self.holder.confirmed_worker_events,
+                      "the most recent confirmed id is always remembered")
+
+    def test_a_second_delivery_cannot_disturb_the_one_in_flight(self) -> None:
+        """The interleaving a per-delivery rollback gets wrong.
+
+        Connections are served on their own threads and a turn boundary starts a
+        delivery of its own, so a second `_deliver_worker_events()` arriving over
+        the same staged events is ordinary. Both would build the SAME prompt
+        text, so nothing derived from that text can tell the second attempt from
+        the first one's live turn: the second must not be able to undo the
+        first's mark, or the completed turn confirms nothing and the same events
+        go out twice - the very Issue #90 symptom.
+        """
+        self.stage_without_delivery(71)
+        first = self.holder._deliver_worker_events()
+        self.assertTrue(first.get("delivered"), first)
+        claimed = dict(self.holder.pending_worker_events[0])
+
+        second = self.holder._deliver_worker_events()
+
+        self.assertEqual(second.get("reason"), "queue-empty",
+                         "the in-flight events are claimed; there is nothing to send")
+        self.assertEqual(len(self.notification_prompts()), 1)
+        self.assertEqual(self.holder.pending_worker_events[0], claimed,
+                         "the second attempt must leave the live claim untouched")
+
+        self.holder.on_prompt_response(self.holder.turn["request_id"],
+                                       {"result": {"stopReason": "end_turn"}})
+        self.assertEqual(len(self.notification_prompts()), 1,
+                         "the completed turn must not redeliver what it confirmed")
+        self.assertEqual(self.holder.pending_worker_events, [])
+        self.assertEqual(
+            [ids for e in self.log_kinds("worker_event_confirmed") for ids in e["event_ids"]],
+            ["codex/w-1/idle/71"])
+
+    def test_two_deliveries_cannot_be_inside_the_admission_window_together(self) -> None:
+        """Real threads, and deterministic in BOTH directions.
+
+        The rendezvous sits in `_heartbeat_payload`, i.e. between reading the
+        staged list and admitting the prompt. A holder that builds the payload
+        while holding `worker_events_lock` can never have two deliveries there
+        at once, so the barrier times out, the first delivery proceeds alone,
+        and the second finds the events already claimed - the wait is the proof.
+        A holder that leaves that window unlocked lets both through instantly,
+        and then the loser's rollback strips the winner's live mark: one worker
+        event goes out twice and the completed turn confirms nothing.
+        """
+        rendezvous = threading.Barrier(2)
+        real_payload = self.holder._heartbeat_payload
+
+        def payload_then_rendezvous(events, overflow_full_check=False):
+            out = real_payload(events, overflow_full_check)
+            try:
+                rendezvous.wait(1.0)
+            except threading.BrokenBarrierError:
+                pass          # serialised: nobody else can be in here
+            return out
+
+        self.holder._heartbeat_payload = payload_then_rendezvous
+        self.stage_without_delivery(72)
+        results: list[dict] = []
+        guard = threading.Lock()
+
+        def deliver() -> None:
+            out = self.holder._deliver_worker_events()
+            with guard:
+                results.append(out)
+
+        threads = [threading.Thread(target=deliver) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(30)
+            self.assertFalse(thread.is_alive(), "a delivery never returned")
+
+        self.assertEqual(len(self.notification_prompts()), 1,
+                         "two racing deliveries are still one Host prompt")
+        self.assertEqual(len([out for out in results if out.get("delivered")]), 1, results)
+        self.assertEqual(len(self.holder.pending_worker_events), 1,
+                         "the event is in flight, not dropped")
+        self.assertEqual(self.holder.pending_worker_events[0].get("prompt_fingerprint"),
+                         self.holder.turn["fingerprint"],
+                         "the live turn's mark must survive the refused sibling")
+
+        self.holder.on_prompt_response(self.holder.turn["request_id"],
+                                       {"result": {"stopReason": "end_turn"}})
+        self.assertEqual(len(self.notification_prompts()), 1,
+                         "the completed turn must not redeliver what it confirmed")
+        self.assertEqual(self.holder.pending_worker_events, [])
+        self.assertEqual(
+            [ids for e in self.log_kinds("worker_event_confirmed") for ids in e["event_ids"]],
+            ["codex/w-1/idle/72"])
 
     def test_the_carrier_op_stays_a_zcode_host_capability(self) -> None:
         self.holder.args.platform = "codex"
