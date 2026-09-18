@@ -69,7 +69,10 @@ rejects outright.
 Nothing is substituted. A transcript with no usable model, a model the enabled
 plan does not offer, or a model belonging to another account fails the resume
 closed without reaching `session/setModel` — the plan default is never selected
-on the user's behalf and the account is never switched. A resume that fails for
+on the user's behalf and the account is never switched. Because the session is
+dropped, a resume that fails closed also emits no `config_option_update`: an ACP
+client never sees an advertised option for a model that was refused and never
+took effect (Issue #85). A resume that fails for
 an ordinary reason reports that reason: an unknown or already-deleted native
 session answers `-32004 Session not found`, and the pre-3.12 `runtimeModel`
 overlay is retried only when the backend actually asks for it with

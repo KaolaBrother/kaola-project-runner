@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **A failed-closed native `sess_*` resume no longer advertises the rejected
+  model (Issue #85).** `hydrate_settings()` used to emit its
+  `session/update {sessionUpdate: config_option_update}` — including a model
+  `currentValue` naming the persisted selection — before
+  `reregister_provider()` validated the recovered pair, so a resume that then
+  failed closed had already advertised an option for a model that was refused
+  and never took effect. The resume path now announces the session's
+  mode/model/thought only after the selection is established: a refused resume
+  emits no config advertisement at all, while a successful one still
+  advertises the accepted model exactly once. Fail-closed semantics are
+  unchanged — nothing is substituted, the backend still sees no
+  `session/setModel`, on 3.12+ and on the pre-3.12 overlay path alike.
 - **Native `sess_*` resume keeps the session's own Coding Plan model on ZCode 3.12+ (Issue #84).**
   A faithful `--resume sess_*` failed outright with `resume-failed` / "resumed session reports no
   persisted model", because five things were wrong at once on the 3.12 wire. `session/read` on
