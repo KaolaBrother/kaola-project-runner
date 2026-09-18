@@ -1,0 +1,3 @@
+install: /tmp/kw-i65-e2e2/repo/.zcode/skills/zcode-kaola-project-runner
+install: /tmp/kw-i65-e2e2/repo/.zcode/skills/codex-kaola-project-runner
+install: /tmp/kw-i65-e2e2/repo/.zcode/skills/kaola-project-runner
