@@ -75,7 +75,9 @@ canonical project root is refused (a project-local ``.codex`` symlink
 remains legal). ``install``/``bind`` refuse a missing or blank
 ``--session-id``, and ``status`` reports only safe metadata -- it never
 echoes a matched entry's command or arbitrary config, which could carry a
-credential. Nothing here reads, prints, or forwards a credential, and
+credential. Reading the existing ``hooks.json`` -- which may hold a
+credential-bearing foreign command -- is required to merge; the boundary
+is that nothing prints, copies, or forwards foreign content, and
 ``status`` never writes.
 """
 
