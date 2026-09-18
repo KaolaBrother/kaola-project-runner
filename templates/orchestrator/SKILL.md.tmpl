@@ -12,12 +12,25 @@ session. Kaola-Workflow, when used, owns worker-side claim, Mission List,
 child worktree, finalize, archive, and sink.
 
 You own scheduling and acceptance decisions. Helpers may research, inspect,
-test, review, or execute assigned work. They must not take over continuous topic
-selection, scaling, cross-worker scheduling, or final completion judgment.
+test, review, or execute assigned work, never continuous topic selection,
+scaling, cross-worker scheduling, or final completion judgment. Without explicit
+permission to self-execute, read evidence and direct workers: do not implement,
+test, edit project documentation, create worktrees, or mutate the repository
+yourself.
 
-Without explicit permission to self-execute, read evidence and direct workers.
-Do not implement, test, edit project documentation, create worktrees, or mutate
-the repository yourself.
+## Two entry points
+
+**Ordinary worker supervision** - you dispatch and accept from your own session:
+use the loop below. A worker dispatched this way carries no Host obligation, no
+event binding, and no extra gate.
+
+**Orchestrator (ZCode Host)** - you start, or you are, a named ZCode Host session
+that loads this Skill and supervises workers on event-driven beats. Its role,
+authorization and lifecycle boundary come from the project's existing Project
+Plan or already-authorized task plan, never a new schema and never the Host's own
+claim of having loaded this Skill. Startup order, the startup receipt the outer
+Agent checks against that plan, per-beat binding, and keep-versus-stop:
+[references/host-startup.md](references/host-startup.md).
 
 ## Consumer-project boundary
 
@@ -34,14 +47,13 @@ questions. A Skill update or resumed conversation must not restart intake,
 workers, claims or assignments already established. Ask only for missing or
 conflicting information.
 
-Allowed CLIs: none without human authorization. On a fresh invocation with no
-allowlist, ask which CLIs; do not start workers or register a heartbeat. All
-nine supported platforms, including Codex, are eligible when named.
+Allowed CLIs: none without human authorization; all nine supported platforms,
+including Codex, are eligible when named.
 
 Record the human's CLI, model/effort, count, and capability restrictions in the
-consuming project's run records, not in this Skill. A named CLI without a count
-defaults to one. Respect explicitly authorized multiple model assignments or
-open-ended concurrency; do not invent a quota system.
+consuming project's run records, not in this Skill. Respect explicitly authorized
+multiple model assignments or open-ended concurrency; do not invent a quota
+system.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. A serial build, GPU, port, or cache constraint must not block
@@ -223,24 +235,21 @@ a project run.
 
 A human stop boundary such as "run until 5pm", "run until done", or
 "run until CONDITION" means: after that line, do not accept or dispatch new
-tasks, and do not claim or start new issues. Time-up is not drop-everything.
-Default after any such termination: still finish in-hand authorized work and
-in-hand issues, merge worktrees/branches, and leave the workspace clean. A
-clock or condition boundary must not be treated as that skip-cleanup pause.
+tasks, and do not claim or start new issues. Time-up is not drop-everything:
+that same default applies, and a clock or condition boundary is not the
+skip-cleanup pause below.
 
 Only an explicit "stop here and continue later" (stated scope) is a scoped
-pause: do not force merge/cleanup beyond that scope; preserve recovery so
-work can resume. Only an explicit "stop here and continue later" skips that
-cleanup and may leave recovery-preserving unfinished branches.
+pause: it skips that cleanup, may leave recovery-preserving unfinished branches,
+and forces no merge or cleanup beyond its stated scope.
 
 Honor a user stop request within its stated scope. Otherwise cancel the
 heartbeat when the authorized goal is complete, no unfinished
 delivery/sync/cleanup remains, and remaining idle owned sessions have been
 stopped.
 
-Restart a session only when there is new authorized work. After remaining
-idle owned sessions have been stopped, later authorized work starts or
-resumes a session only then. Resume with `--resume` when a native session id
+Only new authorized work restarts a session once the idle ones were stopped.
+Resume with `--resume` when a native session id
 is known, otherwise `--continue` or a fresh `start`. Do not keep an idle ACP
 or PTY session running as a holder for future work. Reuse existing Runner
 `stop` / `start` / `--resume` / `--continue`. Do not invent a session state
@@ -250,10 +259,9 @@ machine, quota engine, or extra dashboards.
 
 Call the matching platform Runner Skill by its installed directory. Use Runner
 default start (including measured bypass). Do not pass a permission-mode
-override unless the human wrote one. Resume with `--resume` when a native
-session id is known, otherwise `--continue` or a fresh `start`. One dispatch
-prompt per ready session; do not replay a prompt whose effects are known or
-uncertain.
+override unless the human wrote one. One dispatch prompt per ready session; do
+not replay a prompt whose effects are known or uncertain. Resume as under
+"Ending a run".
 
 The worker is not the orchestrator. Its prompt should name the authorized
 scope, whether Workflow is on, whether `--repo` is the canonical project root or

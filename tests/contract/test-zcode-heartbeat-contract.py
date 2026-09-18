@@ -710,6 +710,112 @@ def test_resume_redelivers_unconfirmed_events() -> None:
         sandbox.cleanup()
 
 
+def load_holder_module():
+    """The real holder module, imported for its pure prompt-file predicate."""
+    import importlib.util
+    path = ROOT / "scripts" / "kaola-acp-holder.py"
+    spec = importlib.util.spec_from_file_location("kaola_acp_holder_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_issue_66_defective_prompt_file_reports_its_defect() -> None:
+    """Issue #66: a heartbeat prompt file that exists but carries no usable
+    ``body`` is reported as the defect it is. The audited Host had written
+    ``prompt``; "none maintained" hid that, so the Host believed its full
+    prompt was in effect. Visibility only: the event is still delivered."""
+    module = load_holder_module()
+    defect_of = module.heartbeat_body_defect
+    sandbox = Sandbox("defect-unit")
+    try:
+        path = sandbox.repo.joinpath(*PROMPT_FILE_RELPATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        check(defect_of(path) is None, "an absent file is the honest fallback, not a defect")
+        path.write_text("{not json", encoding="utf-8")
+        check("not valid JSON" in (defect_of(path) or ""), "unparseable JSON is named")
+        path.write_text('["body"]', encoding="utf-8")
+        check("not an object" in (defect_of(path) or ""), "a non-object payload is named")
+        path.write_text('{"body": 7}', encoding="utf-8")
+        check("not a string" in (defect_of(path) or ""), "a non-string body is named")
+        path.write_text('{"body": ""}', encoding="utf-8")
+        check("empty string" in (defect_of(path) or ""), "an empty body is named")
+        path.write_text('{"prompt": "x", "schema": "s"}', encoding="utf-8")
+        wrong_field = defect_of(path) or ""
+        check('no "body" field' in wrong_field and "prompt" in wrong_field,
+              f"a wrong field name is named with the fields present ({wrong_field})")
+        path.write_text('{"body": "real"}', encoding="utf-8")
+        check(defect_of(path) is None, "a usable body is no defect")
+    finally:
+        sandbox.cleanup()
+
+    sandbox = Sandbox("defect")
+    try:
+        host = sandbox.session()
+        worker = sandbox.session()
+        sandbox.start(host, "basic")
+        # The audited real-world mistake: the working prompt written under
+        # `prompt` instead of `body`.
+        mistyped = "HEARTBEAT UNDER THE WRONG FIELD: dispatch, accept, close out."
+        path = sandbox.repo.joinpath(*PROMPT_FILE_RELPATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema": "kaola-heartbeat-prompt/1",
+                                    "prompt": mistyped}), encoding="utf-8")
+        sandbox.start(worker, "basic",
+                      heartbeat_host={"platform": "zcode", "session": host,
+                                      "repo": str(sandbox.repo)})
+        stop = sandbox.cli("stop", session=worker)
+        check(stop.get("stopped") is True, "worker stop receipt is terminal")
+
+        host_dir = sandbox.record_dir(host)
+        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 10,
+                   "a defective prompt file still delivers the worker event")
+        delivered = events_of_kind(host_dir, "worker_event_delivered")[0]
+        check(delivered.get("heartbeat_maintained") is False,
+              "a defective file is not reported as a maintained prompt")
+        error = str(delivered.get("heartbeat_body_error") or "")
+        check('no "body" field' in error and "prompt" in error,
+              f"the delivery log names the actual defect ({error})")
+
+        content = rpc_sends(sandbox.rpcs[host])[0]
+        check("present but UNUSABLE" in content,
+              "the notification says the file exists and is unusable")
+        check("No maintained heartbeat prompt was found" not in content
+              and "none maintained at" not in content,
+              "the notification no longer claims there is no file")
+        check('"body"' in content and str(path) in content,
+              "the notification names the file and the field to fix")
+        check(mistyped not in content,
+              "text under the wrong field is never passed off as the prompt body")
+
+        host_stop = sandbox.cli("stop", "--force", session=host)
+        check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
+    finally:
+        sandbox.cleanup()
+
+
+def test_issue_66_unarmed_worker_stays_ungated() -> None:
+    """Issue #66: an ordinary worker - no Host, no binding - gains no gate.
+    Its start receipt simply carries no ``heartbeat_host``, blocking send
+    still works, and its holder never runs the carrier."""
+    sandbox = Sandbox("unarmed")
+    try:
+        worker = sandbox.session()
+        start = sandbox.start(worker, "basic")
+        check("heartbeat_host" not in start,
+              f"an unarmed start receipt carries no binding fact ({start.get('heartbeat_host')})")
+        reply = sandbox.cli("send", "--text", "ordinary blocking dispatch", session=worker)
+        check(reply.get("error") is None and reply.get("outcome") == "turn_completed",
+              f"blocking send on an unbound worker still completes ({reply.get('outcome')})")
+        stop = sandbox.cli("stop", session=worker)
+        check(stop.get("stopped") is True, "an unbound worker stops normally")
+        worker_dir = sandbox.record_dir(worker)
+        check(not events_of_kind(worker_dir, "heartbeat_carrier_sent"),
+              "an unbound worker holder never runs the event carrier")
+    finally:
+        sandbox.cleanup()
+
+
 def test_canonical_heartbeat_spec_stays_one_set() -> None:
     skeleton = ROOT / "templates" / "orchestrator" / "references" / "heartbeat-skeleton.txt"
     text = skeleton.read_text(encoding="utf-8")

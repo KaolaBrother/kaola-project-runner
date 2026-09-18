@@ -130,6 +130,7 @@ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
 HEARTBEAT_NOTIFY_GRACE = 6.0
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
 WORKER_EVENT_KINDS = ("terminated", "idle")
+HEARTBEAT_DEFECT_CHARS = 200
 
 
 def parse_heartbeat_host() -> dict[str, str] | None:
@@ -153,6 +154,38 @@ def parse_heartbeat_host() -> dict[str, str] | None:
         return None
     return {"platform": "zcode", "session": target["session"],
             "repo": target["repo"], "socket": socket_path}
+
+
+def heartbeat_body_defect(source: Path) -> str | None:
+    """Why this heartbeat prompt file cannot supply a body, or None.
+
+    Issue #66: an absent file is not a defect - it is the honest fallback. A
+    file that exists and still cannot supply a prompt is reported by its real
+    defect, so the Host fixes the file instead of assuming its own prompt is
+    in effect. Read-only and bounded; never fatal.
+    """
+    try:
+        raw = source.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return f"unreadable: {exc.strerror or exc}"[:HEARTBEAT_DEFECT_CHARS]
+    try:
+        data = json.loads(raw)
+    except ValueError as exc:
+        return f"not valid JSON: {exc}"[:HEARTBEAT_DEFECT_CHARS]
+    if not isinstance(data, dict):
+        return f'JSON {type(data).__name__}, not an object with a "body" field'
+    if "body" not in data:
+        present = ", ".join(sorted(key for key in data if isinstance(key, str))[:8])
+        return (f'no "body" field (top-level fields present: {present or "none"})'
+                )[:HEARTBEAT_DEFECT_CHARS]
+    value = data["body"]
+    if not isinstance(value, str):
+        return f'"body" is {type(value).__name__}, not a string'
+    if not value:
+        return '"body" is an empty string'
+    return None
 # ``ps lstart`` is truncated to the second and the agent records ``Date.now()``
 # only after ``spawn`` returned, so a genuine child's start time is at or
 # before its recorded time, by under a second plus the spawn latency. The
@@ -1762,17 +1795,30 @@ class Holder:
         one-pass instruction. No worker raw output, no shell execution."""
         source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
         body: str | None = None
-        try:
-            data = json.loads(source.read_text(encoding="utf-8"))
-            if isinstance(data, dict) and isinstance(data.get("body"), str) and data["body"]:
-                body = data["body"]
-        except (OSError, ValueError):
-            body = None
+        # Issue #66: a file that exists but carries no usable `body` is a
+        # different fact from no file at all, and silently reporting "none
+        # maintained" let a Host believe a prompt it had written under another
+        # field name was in effect. Name the defect; still deliver the event.
+        defect = heartbeat_body_defect(source)
+        if defect is None:
+            try:
+                body = json.loads(source.read_text(encoding="utf-8"))["body"]
+            except (OSError, ValueError, KeyError, TypeError):
+                body = None
         maintained = body is not None
         if not maintained:
-            body = (f"No maintained heartbeat prompt was found at {source}. Recover "
-                    "authorization and field state from the consuming project records, "
-                    "then run one full pass.")
+            if defect is not None:
+                body = (f"The heartbeat prompt file at {source} exists but carries no "
+                        f"usable prompt: {defect}. This ZCode Host session maintains "
+                        'that file; write a JSON object whose "body" field is a '
+                        "non-empty string holding the full working prompt, and treat "
+                        "this pass as running without it. Recover authorization and "
+                        "field state from the consuming project records, then run one "
+                        "full pass.")
+            else:
+                body = (f"No maintained heartbeat prompt was found at {source}. Recover "
+                        "authorization and field state from the consuming project records, "
+                        "then run one full pass.")
         lines = [
             "kaola-host-notify/1: event-driven heartbeat carrier (ZCode Host)",
             "worker events (structured, one JSON object per line):",
@@ -1787,6 +1833,9 @@ class Holder:
         if maintained:
             lines.append(f"heartbeat prompt source: {source} (fingerprint sha256:{digest}, "
                          f"{len(body.encode('utf-8'))} bytes)")
+        elif defect is not None:
+            lines.append(f"heartbeat prompt source: {source} present but UNUSABLE - "
+                         f"{defect} (fallback trigger context, sha256:{digest})")
         else:
             lines.append(f"heartbeat prompt source: none maintained at {source} "
                          f"(fallback trigger context, sha256:{digest})")
@@ -1799,9 +1848,12 @@ class Holder:
                      "suitable authorized work, verify deliveries, and close out - per "
                      "PROJECT_RUNNER_HEARTBEAT_V2. This worker event is the only heartbeat "
                      "trigger; this ZCode Host registers no periodic carrier.")
-        return "\n".join(lines), {"heartbeat_fingerprint": f"sha256:{digest}",
-                                  "heartbeat_source": str(source),
-                                  "heartbeat_maintained": maintained}
+        meta: dict[str, Any] = {"heartbeat_fingerprint": f"sha256:{digest}",
+                                "heartbeat_source": str(source),
+                                "heartbeat_maintained": maintained}
+        if defect is not None:
+            meta["heartbeat_body_error"] = defect
+        return "\n".join(lines), meta
 
     def _deliver_worker_events(self) -> dict[str, Any]:
         """Deliver every staged event as one ordinary prompt through the
