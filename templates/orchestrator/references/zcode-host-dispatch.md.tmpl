@@ -1,7 +1,7 @@
 # ZCode Host: dispatch, end the turn, wake on worker events
 
-The ZCode Host beat: flags and receipt fields. Entry points:
-[host-startup.md](host-startup.md).
+Host worker beat. Startup: [host-startup.md](host-startup.md). Outer Agents
+start or continue that Host through Kaola-Delegator (`kaola-delegator`).
 
 ## Three identities, never interchangeable
 

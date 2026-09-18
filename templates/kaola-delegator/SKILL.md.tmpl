@@ -5,14 +5,14 @@ description: {{DESCRIPTION}}
 
 # {{DISPLAY_NAME}}
 
-This Skill is the external delegation Skill. It is not Project Runner and not a
-platform worker. Shared core for Grok Bot (after the account bridge), Codex, and
-generic Skill-directory hosts.
+This Skill is the external delegation Skill. Shared core for Grok Bot (after the
+account bridge), Codex, and generic Skill-directory hosts. It is not Project
+Runner and not a platform worker.
 
 {{RUNNER_DISPLAY}} (`{{RUNNER_SKILL}}`) is the inner control-plane Skill. A
 ZCode Host loads it and owns planning, worker dispatch, notification binding,
 path binding, heartbeat, acceptance, and Workflow close-out. Do not copy that
-engine.
+engine. One project has only one Agent running Project Runner.
 
 ## Extract once
 
@@ -25,21 +25,25 @@ quota units, raise quota, or expand authorization.
 
 ## One Host
 
-Use the installed ZCode Runner (`{{ZCODE_WORKER}}`) to start or resume **one**
-exact ZCode Host. An existing Host for this work is resumed, never duplicated.
-Do not rename, restart, or cancel in-flight Hosts to adopt this Skill.
+If the installed ZCode Runner (`{{ZCODE_WORKER}}`) is missing, stop and report
+that this Skill is not executable. Do not claim a Host started.
 
-Hand over in one non-blocking `send --no-wait` only: the extracted task and
-progress; authorized platforms, quota, and priority; project context as given;
-the Host identity it cannot discover (`platform`/`session`/`repo`); and that it
-must load `{{RUNNER_SKILL}}` and finish the run internally. Do not pass
-per-worker notification bindings, per-worker `--repo`, scheduling, or heartbeat
-instructions. Commands and the prompt fields:
+Recover the project's continuation pointer first. A **live** Host is attached in
+place — do not `start` again. A **stopped** Host restores only with the attested
+native `sess_*`. Missing native id is cannot-resume, not `--continue`. Name a new
+Host `zcode-<PROJECT_CODE>-orchestrator-<purpose>`. Commands, the three identity
+fields, and the prompt:
 [handoff.md](references/handoff.md).
+
+Do not pass per-worker notification bindings, per-worker `--repo`, scheduling, or
+heartbeat instructions. Do not rename, restart, or cancel an in-flight Host.
 
 ## After the handoff
 
-Relay later user changes to that same Host. Read delivery through the Host's
-replies. Escalate only an unrecoverable exception that needs a human decision,
-and keep it in this conversation. Do not dispatch workers, copy a Mission List,
-maintain a heartbeat, create a Routine, or operate on inner sessions.
+Relay later user changes to that same Host using idle `send` or, when busy, the
+Runner's existing `steer` / a held undelivered update. A `--no-wait` admission or
+a Host `end_turn` is not project delivery. Read results with `observe` /
+`capture`. Escalate only an unrecoverable human decision. Do not dispatch
+workers, copy a Mission List, maintain a heartbeat, create a Routine, operate on
+inner sessions, or `stop` the Host before close-out. Changing the outer Agent
+does not stop the Host.

@@ -492,14 +492,20 @@ codex_home="$tmp_root/orch-codex"
 output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok --method link 2>&1)" \
   || fail "test_orchestrator_runtime_codex" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_runtime_codex" "$codex_home/skills"
-assert_link "test_external_runtime_codex" "$codex_home/skills/kaola-delegator" \
+assert_absent "test_external_runtime_codex_needs_zcode" "$codex_home/skills/kaola-delegator"
+[[ "$output" == *"skipping kaola-delegator"* ]] \
+  || fail "test_external_runtime_codex_skip_message" "expected skip note, got: $output"
+codex_home_z="$tmp_root/orch-codex-z"
+output="$(CODEX_HOME="$codex_home_z" run_installer "$repo" "$home" --runtime codex --platform grok,zcode --method link 2>&1)" \
+  || fail "test_external_runtime_codex_with_zcode" "install failed: $output"
+assert_link "test_external_runtime_codex_with_zcode" "$codex_home_z/skills/kaola-delegator" \
   "$(source_for "$repo" kaola-delegator)"
 
 dest="$tmp_root/orch-skills-dir/skills"
 output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method link --platform grok,codex 2>&1)" \
   || fail "test_orchestrator_skills_dir" "install failed: $output"
 assert_orchestrator_link "test_orchestrator_skills_dir" "$dest"
-assert_link "test_external_skills_dir" "$dest/kaola-delegator" "$(source_for "$repo" kaola-delegator)"
+assert_absent "test_external_skills_dir_needs_zcode" "$dest/kaola-delegator"
 assert_link "test_orchestrator_skills_dir_workers_filtered" \
   "$dest/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
 assert_link "test_orchestrator_skills_dir_codex_worker" \

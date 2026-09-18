@@ -1,43 +1,81 @@
 # One Host handoff
 
-Read this when starting or resuming the ZCode Host. Every command is the
-installed ZCode Runner; no new tool, scheduler, or heartbeat.
+Outer Agents start, continue, or restore the project's one ZCode Host here.
+Project Runner inside that Host owns workers, heartbeat, and close-out. No new
+tool, queue, registry, or scheduler.
 
 ```bash
 ZCODE="<skills>/{{ZCODE_WORKER}}/scripts/runtime-tmux.sh"
-PROJECT="/abs/path/to/consumer-project"   # as the user authorized it
-HOST="zcode-kaola-host"                   # exact existing name if one exists
+PROJECT="/abs/path/to/consumer-project"          # bound canonical Git root
+HOST="zcode-<PROJECT_CODE>-orchestrator-main"    # e.g. zcode-KPR-orchestrator-main
+RECORD="$PROJECT/.kaola/delegator-host.json"     # current pointer only
 ```
 
-`<skills>` is the sibling Skill directory on this host, or `ROOT/skills` after
-the Grok Bot bridge has bound a target and located ROOT. Never search the
-filesystem for it.
+`<skills>` is the sibling Skill directory, or `ROOT/skills` after the Grok Bot
+bridge located ROOT. If `$ZCODE` is missing, stop: this Skill is not executable
+without the ZCode Runner. Never search the filesystem for it.
 
-## Recover, then one session
+`<PROJECT_CODE>` is the project's established short code. Ask once if none is
+recorded. Inner workers keep `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>`
+(#72). The Host name is not an Issue worker and does not use `i0`.
 
-1. Read existing run records and live Runner sessions. Resume an existing Host
-   for this work (`start --resume` when a native id is known, else
-   `--continue`). Do not start a second Host, and do not rename, restart, or
-   cancel the one already running.
-2. If none exists:
+Three identities stay separate, from real receipts, never synthesized:
+
+| Field | Source | Use |
+|---|---|---|
+| Runner `--session` | you choose it (`$HOST`) | live attach, observe, send, stop |
+| `acp_session_id` | ACP `session/new` on the start receipt | ACP bridge id |
+| native `sess_*` | `session/update` `native_session_identity.nativeSessionId` | `start --resume` after the holder stopped |
+
+`session_meta` does not automatically hold `sess_*`. Read the Host event log or
+observe output for `native_session_identity`. After a successful start or
+restore, write `$RECORD` with those three fields plus target, `$PROJECT`,
+`platform=zcode`, and any holder-instance facts the start receipt already
+named. Keep only the current pointer.
+
+## Recover
+
+1. Bind the same execution target and `$PROJECT`. Read `$RECORD` and live
+   Runner sessions for `$HOST`.
+2. **Live Host** (exact platform/repo/session still serves): do not `start`.
+   Continue communication on that locator. Changing the outer Agent does not
+   stop the Host, start a second Host, or replay the first handoff.
+3. **Stopped Host** with an attested native `sess_*` in `$RECORD`: restore
+   only that context:
 
    ```bash
-   "$ZCODE" start --repo "$PROJECT" --session "$HOST"
+   "$ZCODE" start --repo "$PROJECT" --session "$HOST" --resume "$NATIVE_SESS"
    ```
 
-   Confirm the receipt: ready, and `session`/`repo`/`acp_session_id` are the
-   identity you meant.
-3. One non-blocking handoff. Do not set `KAOLA_ACP_HEARTBEAT_HOST`. Do not
-   start any other platform.
+   Then update `$RECORD` if the holder instance changed. Never use `--continue`
+   to guess a same-directory worker.
+4. Missing, mismatched, or unattested `sess_*` is cannot-resume: report and
+   wait. Do not create a new Host and call it continuation.
+5. No Host yet: start once at the canonical root under `$HOST`. Confirm
+   `session`/`repo`/`acp_session_id`, then wait for `native_session_identity`
+   before writing `$RECORD`.
 
-   ```bash
-   "$ZCODE" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
-   ```
+Do not rename, restart, or cancel an in-flight Host to adopt this Skill.
 
-## Handoff text
+## First handoff and later updates
 
-Give the Host only what it cannot discover plus the extracted authorization.
-Keep concurrency, account quota, and token budget as three numbers.
+Do not set `KAOLA_ACP_HEARTBEAT_HOST`. Do not start any other platform.
+
+Idle Host: `send` is enough. `--no-wait` means admitted, not delivered, and not
+project complete. A first Host `end_turn` is only that beat finishing.
+
+Busy Host (`prompt-in-progress` / turn active): do not claim a `--no-wait` send
+was consumed. Use the ZCode Runner's existing `steer` when that is the chosen
+update, or keep the user change undelivered until a safe idle send. `unknown`
+or `not_consumed` is not a resend. Never invent a queue.
+
+```bash
+"$ZCODE" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
+"$ZCODE" observe --repo "$PROJECT" --session "$HOST"
+"$ZCODE" capture --repo "$PROJECT" --session "$HOST" --lines 200
+```
+
+Handoff text (concurrency, account quota, and token budget stay three numbers):
 
 ```text
 Load <skills>/{{RUNNER_SKILL}}/SKILL.md (Project Runner) and follow it.
@@ -59,12 +97,10 @@ workers, paths, scheduling, or heartbeat. Missing authorization stays missing:
 do not expand it.
 ```
 
-A later quota or priority update is another `--no-wait` send to this same Host,
-replacing those fields only.
-
 ## Afterward
 
-`observe` / `capture` this Host to read delivery. Relay user changes here.
-Escalate only an unrecoverable human decision. Do not `stop` a Host that still
-has in-flight workers or open close-out. Exact `stop` is for this Host session
-after those duties end, never for inner workers.
+Read delivery with `observe` / `capture` on this Host. The outer session is not
+woken automatically. Escalate only an unrecoverable human decision. Do not
+`stop` the Host while workers, acceptance, or Workflow close-out remain; Host
+`stop` sweeps recorded inner processes. Exact `stop` uses the same `$PROJECT`
+and `$HOST` after those duties end, never inner workers.

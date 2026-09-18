@@ -439,7 +439,15 @@ done
 if [[ "$install_orchestrator" == true ]]; then
   plan_skill "$orchestrator_skill_name"
   if [[ "$resolved_runtime" == "codex" || "$resolved_runtime" == "generic" ]]; then
-    plan_skill "$external_skill_name"
+    zcode_selected=false
+    for item in "${selection[@]}"; do
+      [[ "$item" == zcode ]] && zcode_selected=true
+    done
+    if [[ "$zcode_selected" == true ]]; then
+      plan_skill "$external_skill_name"
+    else
+      printf 'skipping %s: needs the ZCode worker Skill (not in --platform)\n' "$external_skill_name"
+    fi
   fi
 fi
 

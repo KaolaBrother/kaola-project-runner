@@ -216,14 +216,25 @@ class Sandbox:
 
 def test_generated_entry_matrix_and_no_engine_leak() -> None:
     skill = (EXTERNAL / "SKILL.md").read_text(encoding="utf-8")
+    skill_one = re.sub(r"\s+", " ", skill)
     check(re.search(r"(?m)^name: kaola-delegator$", skill) is not None, "skill id is kaola-delegator")
     check("# Kaola-Delegator" in skill, "display name is Kaola-Delegator")
     check("Grok Bot" in skill and "Codex" in skill and "generic" in skill, "external entries named")
     check("kaola-project-runner" in skill, "inner Project Runner named")
     check("zcode-kaola-project-runner" in skill, "Host is started through the ZCode worker")
     check("KAOLA_ACP_HEARTBEAT_HOST" not in skill, "external Skill does not bind per-worker heartbeat")
-    check("copy a Mission List" in skill, "external Skill refuses copying a Mission List")
-    check("Do not dispatch workers" in skill, "external Skill refuses worker dispatch")
+    check("copy a Mission List" in skill_one, "external Skill refuses copying a Mission List")
+    check("Do not dispatch workers" in skill_one, "external Skill refuses worker dispatch")
+    check("not executable" in skill, "missing ZCode Runner is a hard stop")
+    check("`sess_*`" in skill, "Skill names native sess_* resume")
+    handoff_doc = (EXTERNAL / "references" / "handoff.md").read_text(encoding="utf-8")
+    check("Never use `--continue`" in handoff_doc, "handoff forbids --continue guessing")
+    check("else `--continue`" not in handoff_doc, "handoff does not recommend --continue as fallback")
+    check("zcode-<PROJECT_CODE>-orchestrator-" in handoff_doc, "standard Host session name")
+    check("acp_session_id" in handoff_doc and "native_session_identity" in handoff_doc,
+          "three identities are sourced separately")
+    check("delegator-host.json" in handoff_doc, "current continuation pointer is named")
+    check("prompt-in-progress" in handoff_doc, "busy send is not claimed delivered")
     check(len((EXTERNAL / "SKILL.md").read_bytes()) <= BUDGETS["external_skill_bytes"],
           "external Skill stays in its small budget")
     check(BUDGETS["main_skill_bytes"] <= 17408, "existing main budget not raised")
@@ -251,14 +262,46 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
     sandbox = Sandbox("layer")
     try:
         external = (EXTERNAL / "SKILL.md").read_text(encoding="utf-8")
-        check("start or resume **one**" in external or "start or resume" in external,
-              "external Skill instructs one Host start/resume")
         sandbox.dump("00-external-skill.txt", external)
 
-        host = f"zcode-kaola-host-{uuid.uuid4().hex[:6]}"
+        host = f"zcode-KPR-orchestrator-{uuid.uuid4().hex[:6]}"
+        check(host.startswith("zcode-KPR-orchestrator-"), "Host uses standard orchestrator session name")
         host_start = sandbox.cli("start", "--mode", "yolo", session=host)
         check(host_start.get("state") == "ready", f"Host start ready ({host_start.get('error')})")
         sandbox.dump("01-host-start.json", host_start)
+        native_id = None
+        events_path = sandbox.record_dir(host) / "events.jsonl"
+        if events_path.is_file():
+            for line in events_path.read_text(encoding="utf-8").splitlines():
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                blob = json.dumps(entry)
+                if "nativeSessionId" in blob or "native_session_identity" in blob:
+                    native_id = (
+                        ((entry.get("event") or {}).get("nativeSessionId"))
+                        or ((entry.get("update") or {}).get("nativeSessionId"))
+                        or entry.get("nativeSessionId")
+                    )
+                    if not native_id:
+                        match = re.search(r"sess_[A-Za-z0-9_-]+", blob)
+                        if match:
+                            native_id = match.group(0)
+        continuation = {
+            "schema": "kaola-delegator-host/1",
+            "canonical_repo": str(sandbox.repo),
+            "platform": "zcode",
+            "session": host,
+            "acp_session_id": host_start.get("acp_session_id"),
+            "native_session_id": native_id,
+            "session_meta": host_start.get("session_meta"),
+        }
+        sandbox.dump("01b-continuation.json", continuation)
+        check(continuation["session"] == host, "continuation stores the Runner session name")
+        check(continuation["acp_session_id"], "continuation stores acp_session_id from the start receipt")
+        check(continuation.get("session_meta") != continuation["acp_session_id"],
+              "session_meta is not used as a stand-in for acp_session_id")
 
         handoff = (
             f"Load {RUNNER / 'SKILL.md'} (Project Runner) and follow it.\n"
@@ -283,7 +326,7 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
         check("Main execution loop" in runner_text, "inner Host loads Project Runner")
         sandbox.dump("05-inner-runner-loaded.txt", f"bytes={len(runner_text.encode())}\n")
 
-        worker = f"zcode-kaola-issue-74-{uuid.uuid4().hex[:6]}"
+        worker = f"zcode-KPR-i74-{uuid.uuid4().hex[:6]}"
         heartbeat = json.dumps({"platform": "zcode", "session": host, "repo": str(sandbox.repo)})
         worker_start = sandbox.cli(
             "start", "--mode", "yolo", session=worker,

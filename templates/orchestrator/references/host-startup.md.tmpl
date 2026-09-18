@@ -1,8 +1,10 @@
-# Startup: ordinary worker flow, Host flow, and the startup receipt
+# Startup: ordinary worker flow, and the Host's own startup receipt
 
-Read this when choosing between the two entry points, when an outer Agent starts
-a ZCode Orchestrator (Host), or when a Host session is doing its own startup.
-Every command is the installed form; no platform argument, no new tool.
+Read this for ordinary worker supervision from Project Runner, or when this
+session **is** the ZCode Host doing its own startup. Outer Agents start or
+continue that Host through Kaola-Delegator (`kaola-delegator`); that Skill is
+the single source for outer recover/start/send/stop. Every command here is the
+installed form; no platform argument, no new tool.
 
 ```bash
 WORKER="$HOME/.zcode/skills/codex-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
@@ -35,61 +37,9 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
 
 ## B. Outer Agent: starting a Host
 
-1. **Recover first.** Read the project's run records, Git/forge state and live
-   Runner sessions. An existing Host, claim or dispatch is resumed, never
-   re-created; do not claim or start a second one for the same work.
-2. **Start the Host at the canonical project root** under an exact name, and
-   confirm from the receipt that this session is ready and is the identity you
-   meant (`session`, `repo`, `acp_session_id`).
-
-   ```bash
-   "$HOSTRUN" start --repo "$PROJECT" --session zcode-kaola-host
-   ```
-
-3. **Hand over what a Host cannot discover** in one non-blocking prompt: its own
-   `platform`/`session`/`repo`; the main Skill directory it must load and whether
-   that is the installed release or a candidate checkout; the path of the existing
-   Project Plan or already-authorized task plan; the authorized platforms and
-   count; whether it may implement itself; the acceptance and finalize boundary;
-   and the existing runs and worker session names; tell it to read
-   [zcode-host-dispatch.md](zcode-host-dispatch.md) before its first dispatch.
-
-   ```bash
-   "$HOSTRUN" send --repo "$PROJECT" --session zcode-kaola-host --no-wait --text '<handover>'
-   ```
-
-4. **Read the startup receipt, then verify it against evidence.** The Host's own
-   claim of having loaded the Skill is not evidence, and its tool record may show
-   only that read and execute calls happened when `locations`/`rawInput` are
-   absent; the translator forwards those fields only for a path or line the
-   app-server `input` already named, never a command transcript, and never
-   invents a path - so
-   check what does not depend on its
-   prose: the roles, authorization and lifecycle boundary against the plan file
-   you read yourself; quotes it could only produce from that plan and this
-   reference; and the artifacts this procedure leaves behind (a
-   `.kaola/heartbeat-prompt.json` with a usable `body`, a worker start receipt
-   whose `heartbeat_host` - the holder's own fact, not `heartbeat_host_requested`
-   - names this Host, a `--no-wait` dispatch receipt, a turn that ended with no
-   sleep, poll or stop). Check which payload is actually loaded: a merged
-   checkout is not an installed Skill, and a Host that loaded an older installed
-   copy follows that copy. A wrong role, a missing authorization or a
-   contradiction is corrected before any dispatch; unauthorized, it stays idle.
-5. **Verify the first real event loop**: a bound worker `start`, a `--no-wait`
-   dispatch, the Host's turn ending on its own, and a `kaola-host-notify/1` pass
-   arriving from a worker event. A background blocking `send` that returns to a
-   human or outer Agent is not that loop and does not prove it.
-6. **Exceptions reach you; worker handling does not.** The Host schedules its
-   own workers through the Runner, including recovering one that ended up
-   unbound — reading its result with a bounded `wait` and rebinding it by exact
-   `stop`/`start`. Do not take that over session by session. What comes to you
-   is an exception it cannot resolve and the decision it needs: answer that, and
-   keep the Host.
-7. **Keep, then stop.** A Host that returns `end_turn` has finished that beat,
-   not the project: with workers in flight or delivery, acceptance or close-out
-   open it is not idle. Keep it and send no "continue" — its next beat is a
-   worker event. Stop it exactly, by name, once
-   delivery, acceptance, Workflow finalize/archive/sink and cleanup are verified.
+Do not start the Host from this file. Follow Kaola-Delegator (`kaola-delegator`)
+and its `references/handoff.md`. This section exists only so a Host that loaded
+this Skill does not copy a second outer procedure.
 
 ## C. The Host's own startup and beat
 

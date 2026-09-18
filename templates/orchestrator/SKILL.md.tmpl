@@ -22,14 +22,15 @@ yourself.
 
 **Ordinary worker supervision** - you dispatch and accept from your own session
 with the loop below; that worker carries no Host obligation, no event binding and
-no extra gate.
+no extra gate. Direct Project Runner use does not require a ZCode Host.
 
-**Orchestrator (ZCode Host)** - you start, or you are, a named ZCode Host session
-that loads this Skill and supervises workers on event-driven beats. Its role,
-authorization and lifecycle boundary come from the project's existing Project
-Plan or already-authorized task plan - never a new schema, never the Host's own
-claim of having loaded this Skill. Startup order, the receipt the outer Agent
-checks against that plan, and keep-versus-stop: [host-startup.md](references/host-startup.md).
+**ZCode Host** - you are already a named ZCode Host session that loaded this
+Skill and supervises workers on event-driven beats. Outer Agents start or
+continue that Host through Kaola-Delegator (`kaola-delegator`); do not copy that
+outer procedure here. Role, authorization and lifecycle boundary come from the
+project's existing Project Plan or already-authorized task plan - never a new
+schema, never this session's claim of having loaded this Skill. Your own startup
+receipt and beat: [host-startup.md](references/host-startup.md).
 
 ## Consumer-project boundary
 
