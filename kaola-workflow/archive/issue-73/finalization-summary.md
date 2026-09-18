@@ -135,9 +135,28 @@ five `TestStopInstanceProtection` tests, including force-stop and the shell-entr
 No new defects were discovered during this run that warrant filing, and no correction to the Issue
 text is needed — the Issue's own analysis held up against the code.
 
+## Sink record
+
+- Mainline: `0dacb07..7911a91`, pushed. Published head `e324c35c54ebf8c112d251df9ab3be4a6ae110bc`;
+  `7911a91` is the sink's own archive commit.
+- Issue #73 CLOSED at 2026-09-18T12:45:00Z. Remote branch `workflow/issue-73` deleted; local branch
+  and worktree removed by the sink.
+- Closure audit: `current_project_clean: true`, every drift counter 0 both in scope and outside it.
+- Session close-out: no `i73-*` tmux session, holder process, or temp root remains. One holder had
+  leaked from a standalone (non-`validate.sh`) run of this Issue's own suite - pid 14003, session
+  `i73-test-standalone-acp-start-in-a-child-worktree-is-not-refused` - identified by three
+  independent facts (its binary path under this run's removed worktree, its `i73-` session name,
+  its `kaola-i73-` record root). Its graceful socket `stop` answered `holder-closed` and its record
+  root was already gone, so it was ended with the sweeper's documented `SIGTERM` fallback, scoped to
+  that single-member process group. No other session's holders (30 running) or tmux session were
+  touched.
+- Run-discovered defect filed: **#77** (P3), confirmed OPEN with a 2212-byte body - the test above
+  starts an ACP holder it never stops. `validate.sh` is unaffected because its TMPDIR-scoped sweep
+  catches it; only standalone runs leak.
+
 ## Readiness
 
-Ready to sink. Validation pass recorded, docs docked, acceptance criteria walked.
+Sunk and closed. Validation pass recorded, docs docked, acceptance criteria walked.
 
 ## Sink Findings
 
