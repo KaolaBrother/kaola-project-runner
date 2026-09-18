@@ -105,6 +105,20 @@ gates; PTY and ACP share that authority. Do not add a `.kw/worktrees` refusal to
 runtime scripts. Change this guidance through `templates/orchestrator/` and `templates/SKILL.md.tmpl`,
 then `./scripts/render-skills.py --write`.
 
+## Issue-scoped dispatch names
+
+Every new issue-backed ACP dispatch decides its real open issue first and names the session
+`<platform>-<PROJECT>-i<ISSUE>-<unique-purpose>`, where `PROJECT` is the stable short code the
+consuming project's heartbeat declares beside its canonical repository identity; the name is
+verified in the start receipt and reused on later dispatches and same-issue restarts. One
+Workflow run claims one real issue, and several workers may share that issue's run and Mission
+List under distinct names and native sessions. This is scheduling policy carried by the main
+Skill and the rendered heartbeat (`templates/orchestrator/references/issue-dispatch.md`): the
+nine worker Skills gain no classifier, the 1-80 `--session` syntax is the only validator, no
+registry, daemon, or Workflow state field is added, and a running session is never renamed or
+restarted to adopt the rule. Whether any consumer displays issue-run progress from these names
+is outside this repository and is not verified here.
+
 ## Tests and live evidence
 
 Behavioral changes require baseline-failing acceptance. Offline tests use temporary repositories,

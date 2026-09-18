@@ -169,7 +169,8 @@ A typical collaboration works like this:
    worktree).
 3. Send the task and ask that CLI's main conversation to start or resume with `workflow-next`,
    following that runtime's installed Workflow instructions. The worker's Workflow then creates,
-   resumes, or recovers its own bundle, branch, Mission List, and child worktree.
+   resumes, or recovers its own run, branch, Mission List, and child worktree. One run
+   claims one real issue; a second issue means a second run, session, and name.
 4. The CLI performs the work and validates the result. The controlling agent reads replies and
    work evidence, then sends follow-up instructions as needed. Keep `kaola-workflow-finalize` in
    the worker conversation; the outer agent verifies evidence before directing it.
@@ -178,8 +179,17 @@ A typical collaboration works like this:
    interaction is no longer needed.
 
 Several exact Runner sessions may share one canonical project root while their Workflows own
-distinct child worktrees. Linked-worktree starts, outer-created bundles, and existing-run recovery
-are Agent decisions, not transport gates; PTY and ACP have the same authority.
+distinct child worktrees. Linked-worktree starts, outer-created branches, and existing-run
+recovery are Agent decisions, not transport gates; PTY and ACP have the same authority.
+
+Every new issue-backed ACP dispatch picks its real open issue first and names the session
+`<platform>-<PROJECT>-i<ISSUE>-<unique-purpose>` (`droid-KT-i274-parser`), where `PROJECT` is
+the short code the consuming project's heartbeat declares beside its canonical repository
+identity. Several workers may share one issue's run and Mission List under distinct names and
+distinct native sessions. This is control-plane scheduling policy in the main Skill
+(`references/issue-dispatch.md`), not a transport gate: the `--session` syntax is unchanged, a
+running session is never renamed or restarted to adopt it, and a name never overrides the
+repository identity and claimed `issue_number` it is checked against.
 
 ### Normal path
 
@@ -189,7 +199,7 @@ resumes its chosen child worktree. The Runner session remains the root-started e
 
 ### Evidence-backed exception
 
-If live bundles already exist and an earlier session was started inside a child worktree, the
+If a live run already exists and an earlier session was started inside a child worktree, the
 controlling Agent may stop it and restart at the canonical project root, or continue there for
 review or recovery. Report the chosen Git root. The transport did not refuse the linked worktree.
 

@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **Issue-backed dispatches are named for their issue, and one run claims one
+  issue (Issue #72).** Every new issue-backed ACP worker dispatch now picks its
+  real open GitHub issue before starting anything and names the Runner session
+  `<platform>-<PROJECT>-i<ISSUE>-<unique-purpose>` - for example
+  `droid-KT-i274-parser` - where `PROJECT` is the stable ASCII short code the
+  consuming project's rendered heartbeat declares beside its canonical
+  repository identity. The field order and the literal `i` delimiter are fixed,
+  an issue is never read out of the purpose token or any other substring, and
+  the name is verified in the start receipt and reused on later heartbeat
+  dispatches and same-issue restarts. A Workflow run claims one real issue: no
+  bundle claim, branch, child worktree, Mission List, or Runner session spans
+  several, while several workers may collaborate on the same issue and share
+  that issue run's Mission List under distinct names and distinct native
+  sessions. The orchestrator Host itself, transport-only diagnostics, and
+  genuinely issue-less tasks carry no issue number, and none is ever invented.
+  Downstream, the association means **issue-run progress - completed Mission
+  List items over total** - shared by every verified session on that host,
+  repository, and issue; it never predicts when one ACP process finishes, and
+  `all missions done` does not by itself mean review, finalize, merge, or issue
+  close-out happened. A missing or malformed name, a repository mismatch, no
+  active run, or two active runs for one issue fall back to unknown rather than
+  being guessed from mtime, newest file, `session_marker`, worktree location, or
+  the native ACP id. This is control-plane scheduling policy only: the nine
+  worker Skills gained no classifier, the existing 1-80 `--session` syntax stays
+  the only validator, no registry, daemon, or Workflow state field was added, no
+  byte budget was raised, and running sessions - including names predating the
+  rule - are neither renamed nor restarted to adopt it.
+
 - **The #49 host-invariance probe no longer spends product budget (Issue #71).**
   It now applies equal-length canonical edits instead of appending 59 B, so
   `templates/budgets.json` `main_skill_bytes` 17408 is the ceiling
