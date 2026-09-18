@@ -18,6 +18,8 @@ Mirrors the strictness measured in the installed 3.12.3 bundle
 * a turn with no selection fails like `createRuntimeModel`, with
   `CONFIGURATION_ERROR` / `Select a model before continuing` at turn phase
   `model_creation`.
+* scenario `switch_rejected` refuses every `session/setModel` after the first,
+  so a rejected mid-session switch can be driven end to end.
 * every model request first asks `interaction/requestProviderRuntimeHeaders`
   and refuses to proceed unless the answer matches the strict `VKe` union and
   actually carries `requestAuth`.
@@ -78,6 +80,7 @@ class Fake312:
         self.next_request_id = 5000
         self.catalog: dict[str, list[str]] = {}
         self.selection: dict[str, dict[str, str]] = {}
+        self.set_model_calls = 0
         self.sessions: dict[str, dict[str, Any]] = {}
         self.pending: dict[Any, threading.Event] = {}
         self.answers: dict[Any, Any] = {}
@@ -200,6 +203,13 @@ class Fake312:
                 self.error(rid, -32602, "invalid params: model")
                 return
             pid, mid = model.get("providerId"), model.get("modelId")
+            # `switch_rejected`: the initial selection succeeds, every later one
+            # is refused, so a mid-session switch can be observed failing.
+            if self.scenario == "switch_rejected":
+                self.set_model_calls += 1
+                if self.set_model_calls > 1:
+                    self.error(rid, -32602, f"{mid} refused by the backend")
+                    return
             if pid not in self.catalog:
                 self.error(rid, -32602,
                            f"{pid} is not in the Provider Registry")

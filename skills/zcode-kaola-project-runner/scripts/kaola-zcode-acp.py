@@ -1085,34 +1085,43 @@ class ZCodeAcpAgent:
 
     def select_account_model(
         self, session: Session, backend: ZCodeBackend, account: dict[str, Any],
+        model_id: str | None = None,
     ) -> None:
         """Select the plan model on the 3.12+ account provider.
+
+        `model_id` names the requested model explicitly; without it the session's
+        current model is kept and a fresh session falls back to the plan's first.
+        Local state is committed only after the backend accepts: a refused
+        selection must leave the session on the model it was already running,
+        or the advertised config option would name a model that never took
+        effect while every turn still used the old one.
 
         `persistAsWorkspaceLastUsed` stays false so a Runner turn never edits the
         user's workspace defaults.
         """
-        model_id = session.model_id or account["model_ids"][0]
-        if model_id not in account["model_ids"]:
+        requested = model_id or session.model_id or account["model_ids"][0]
+        if requested not in account["model_ids"]:
             raise RuntimeError_(
-                f"model {model_id} is not offered by {account['account_id']} "
+                f"model {requested} is not offered by {account['account_id']} "
                 f"(available: {', '.join(account['model_ids'])})"
             )
         model: dict[str, Any] = {
-            "providerId": account["account_id"], "modelId": model_id,
+            "providerId": account["account_id"], "modelId": requested,
         }
         # 3.12+ refuses a Coding Plan selection with no explicit reasoning level
         # ("Reasoning level is required for <provider>/<model>"). Honour the
         # session's thought level when the model actually offers it.
-        levels = account_reasoning_levels(account.get("release") or {}, model_id)
+        levels = account_reasoning_levels(account.get("release") or {}, requested)
         if levels:
-            wanted = session.thought if session.thought in levels else levels[0]
-            model["options"] = {"reasoningLevel": wanted}
+            level = session.thought if session.thought in levels else levels[0]
+            model["options"] = {"reasoningLevel": level}
         backend.call("session/setModel", {
             "sessionId": session.backend_id,
             "model": model,
             "persistAsWorkspaceLastUsed": False,
         })
-        session.model_id = model_id
+        # The backend accepted; only now is the selection real.
+        session.model_id = requested
 
     def runtime_headers_answer(self, params: dict[str, Any]) -> dict[str, Any]:
         """Answer the per-model-request provider auth callback (3.12+).
@@ -1807,8 +1816,8 @@ class ZCodeAcpAgent:
                             ),
                         })
                         return
-                    session.model_id = model_id
-                    self.select_account_model(session, self.ensure_backend(), account)
+                    self.select_account_model(
+                        session, self.ensure_backend(), account, model_id)
                 else:
                     # The overlay re-registers the same provider in the backend's
                     # workspace catalog (desktop parity); runtime-only, not persisted.

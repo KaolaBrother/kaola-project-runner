@@ -432,6 +432,38 @@ class TestModernTurn(TempCase):
                       ("low", "high", "max"))
         self.assertIs(sent.get("persistAsWorkspaceLastUsed"), False)
 
+    def test_rejected_switch_does_not_commit_local_model_state(self):
+        """A backend that refuses `session/setModel` must leave the session on
+        its previous model. Committing `session.model_id` before the backend
+        confirms would make configOptions advertise a model that never took
+        effect, and every later turn would still run on the old one."""
+        drv = self.driver(modern=True, scenario="switch_rejected",
+                          expect_key=FIXTURE_SECRET)
+        sid = self.sid(drv)
+        drv.prompt(sid)
+        before = drv.record().get("set_model", {}).get("model", {}).get("modelId")
+        self.assertEqual(before, "GLM-5.3", "initial selection did not land")
+
+        drv.request(22, "session/set_config_option", {
+            "sessionId": sid, "configId": "model",
+            "value": f"{CODING_PLAN_ID}\\GLM-5.3-Flash"})
+        res = drv.wait_result(22)
+        self.assertIsNotNone(res)
+        self.assertIn("error", res, "the backend refusal was not surfaced")
+
+        # Drive a change the backend does accept, and read what the adapter now
+        # believes the model is.
+        drv.request(23, "session/set_config_option", {
+            "sessionId": sid, "configId": "mode", "value": "yolo"})
+        res2 = drv.wait_result(23)
+        self.assertIsNotNone(res2)
+        self.assertNotIn("error", res2, f"mode change failed: {json.dumps(res2)}")
+        options = {o["id"]: o for o in (res2.get("result") or {}).get("configOptions", [])}
+        current = options.get("model", {}).get("currentValue")
+        self.assertNotIn("GLM-5.3-Flash", str(current),
+                         "a refused model was committed to local state")
+        self.assertIn("GLM-5.3", str(current))
+
     def test_mid_session_switch_still_refuses_a_foreign_provider(self):
         """The one-Coding-Plan boundary is unchanged by the account path."""
         drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
