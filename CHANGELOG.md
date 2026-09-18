@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Kaola-Delegator Host stop and live attach bind the receipt holder
+  (Issue #74).** Exact `stop` passes the existing Runner
+  `--expected-holder-instance-id` from the start/`status` receipt. A
+  `holder-instance-mismatch` (H1 replaced by H2 on the same session name)
+  is refused; re-read `status`. Live attach compares `holder_instance_id`,
+  not repo+session name alone. Fake ACP isolation is not outer A→B; missing
+  authorization non-start stays documentation-only. A filtered
+  `--platform` reinstall/uninstall on Codex/generic no longer leaves a
+  stale `kaola-delegator` after a full install. Existing budgets were not
+  raised.
+
 - **Kaola-Delegator checks the first Host beat against independent facts
   (Issue #74).** Start-receipt identity is not enough. After the first
   `end_turn`, compare the Project Plan and current authorization with Host

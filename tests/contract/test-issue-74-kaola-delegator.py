@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Issue #74: thin Kaola-Delegator entry and two-layer isolation.
+"""Issue #74: thin Kaola-Delegator entry and fake-ACP isolation.
 
 Contract: generated ``kaola-delegator`` is the external Skill (Grok Bot /
 Codex / generic). Project Runner remains the inner engine. The Grok Bot bridge
 loads only the external Skill after bind+locator. This suite does not claim
 live Grok Bot UAT.
 
-Behavioral isolation (real ACP, fake ZCode backend, original receipts):
-user task/quota -> external Skill loaded -> one Host start + handoff -> inner
-read of Project Runner -> one allowed worker -> natural end_turn -> Host event
-wake with the worker's real reply. A later resume does not create a second Host.
+``test_fake_acp_host_worker_event_and_live_status`` drives the real Runner ACP
+holder against ``fake-zcode-app-server.py``. That is a low-level Host/worker
+chain, not an outer Delegator Agent A→B. Authentic live A→B receipts (real
+ZCode 3.12.3, Devin worker, event wake, Agent B attach) are
+``kaola-workflow/issue-74/evidence/live-ab-44a17b9/`` and are not reproduced
+here.
 """
 
 from __future__ import annotations
@@ -333,6 +335,15 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("do not trust the Host's self-description" in skill_one,
           "Skill points at the first-beat check")
     check("do not accept completion" in skill_one, "Skill refuses to accept a mismatched first beat")
+    check("--expected-holder-instance-id" in handoff_doc,
+          "Host stop passes existing Runner --expected-holder-instance-id")
+    check("holder-instance-mismatch" in handoff_one,
+          "a different holder on the same session name is refused, not stopped")
+    check("holder_instance_id" in handoff_one and "not H1" in handoff_one,
+          "live attach re-verifies holder_instance_id, not repo+session name alone")
+    check("`--expected-holder-instance-id`" in skill_one
+          or "--expected-holder-instance-id" in skill,
+          "Skill names the existing holder-instance stop flag")
     host_startup = (RUNNER / "references" / "host-startup.md").read_text(encoding="utf-8")
     check("Do not start the Host from this file" in host_startup,
           "outer start stays in Delegator, not a second host-startup procedure")
@@ -366,7 +377,7 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check(golden.is_file(), "grok-golden remains present and frozen by the generated-skills suite")
 
 
-def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
+def test_fake_acp_host_worker_event_and_live_status() -> None:
     sandbox = Sandbox("layer")
     try:
         external = (EXTERNAL / "SKILL.md").read_text(encoding="utf-8")
@@ -479,19 +490,40 @@ def test_two_layer_handoff_worker_end_turn_and_resume() -> None:
         check(listed == sorted({host, worker}), f"external path started only the Host; inner worker is Host-owned ({listed})")
 
         sandbox.dump("12-resume-boundary.txt", (
-            "fake-zcode-app-server is not a production ZCode backend.\n"
-            "This suite proves live attach via Runner status on the original "
-            "Host and that a second Host name is not started while it lives.\n"
-            "It does not claim real ZCode first-prompt model reply or "
-            "stop-then-start --resume sess_* restoring the same native "
-            "session. Measured live ZCode 3.12.3: after exact stop, sess_* is "
-            "Session not found; Skill then allows a new standard-named Host "
-            "as a new ACP session, which this fake must not impersonate.\n"
+            "fake-zcode-app-server is not a production ZCode backend and this "
+            "test is not an outer Delegator Agent A→B.\n"
+            "It proves Runner ACP live status on the original Host and that a "
+            "second Host name is not started while it lives.\n"
+            "Authentic live A→B (real ZCode 3.12.3, Devin worker, event wake, "
+            "Agent B attach) is kaola-workflow/issue-74/evidence/live-ab-44a17b9/.\n"
+            "Fake must not impersonate that path or start --resume sess_*.\n"
         ))
+        check("not an outer Delegator Agent A→B" in
+              (sandbox.evidence / "12-resume-boundary.txt").read_text(encoding="utf-8"),
+              "fake isolation is labeled as not outer A→B")
 
-        for session in (worker, host):
-            stop = sandbox.cli("stop", "--force", session=session)
-            check(stop.get("error") is None, f"{session} exact stop")
+        mismatch = sandbox.cli(
+            "stop", "--force",
+            "--expected-holder-instance-id", "0" * 32,
+            session=host, allow_error=True,
+        )
+        sandbox.dump("12b-stop-holder-mismatch.json", mismatch)
+        err = mismatch.get("error") or {}
+        check(err.get("code") == "holder-instance-mismatch",
+              f"stop with a foreign holder id is refused ({err})")
+        still = sandbox.cli("status", session=host)
+        check(still.get("error") is None, "refused stop leaves the live Host")
+        check(still.get("holder_instance_id") == receipt_ids["holder_instance_id"],
+              "refused stop did not replace the holder")
+
+        stop_worker = sandbox.cli("stop", "--force", session=worker)
+        check(stop_worker.get("error") is None, "worker exact stop")
+        stop_host = sandbox.cli(
+            "stop", "--force",
+            "--expected-holder-instance-id", str(receipt_ids["holder_instance_id"]),
+            session=host,
+        )
+        check(stop_host.get("error") is None, "Host stop with receipt holder id")
     finally:
         sandbox.cleanup()
 
@@ -586,21 +618,64 @@ def test_existing_locator_accepts_zcode_host_full_attestation() -> None:
         sandbox.cleanup()
 
 
+def test_missing_authorization_non_start_is_documentation_only() -> None:
+    """Missing-auth non-start is a Skill/README contract, not measured here.
+
+    This test starts no Host. A green result does not prove an outer Agent
+    withheld start. Fake ACP cannot impersonate that judgment.
+    """
+    skill = (EXTERNAL / "SKILL.md").read_text(encoding="utf-8")
+    handoff = (EXTERNAL / "references" / "handoff.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    check("Do not open a blank Host" in skill or "Do not open a blank Host" in handoff,
+          "documentation forbids starting a blank Host")
+    check("authorization **before** `start`" in handoff
+          or "authorization before `start`" in handoff
+          or "confirmed before `start`" in skill,
+          "documentation requires authorization before start")
+    check("do not `start`" in readme, "README forbids start when authorization is missing")
+    marker = {
+        "contract": (
+            "missing, conflicting, or expired key authorization: ask the "
+            "user; do not start; do not open a blank Host"
+        ),
+        "issue_comment": "5730908734",
+        "measured": False,
+        "coverage": "untested",
+        "reason": (
+            "no harness executes an outer Agent's Skill judgment; a "
+            "handwritten skip-start script would impersonate that Agent"
+        ),
+        "not_claimed": (
+            "this suite does not prove an outer Agent withheld start; "
+            "a PASS here is documentation presence only"
+        ),
+    }
+    check(marker["measured"] is False, "missing-auth non-start is not claimed measured")
+    check(marker["coverage"] == "untested", "missing-auth non-start is labeled untested")
+
+
 def test_new_standard_host_after_confirmed_stop() -> None:
-    """Confirmed stop then a new standard Host under complete authorization.
+    """Confirmed stop then a new standard Host after authorization is on disk.
 
     Fake ACP/holder identity change is the measured branch. Fake is not a
-    real ZCode model-session or sess_* --resume proof.
+    real ZCode model-session or sess_* --resume proof. Authorization facts
+    are written before every start; the later send is a first handoff, not
+    a substitute for pre-start authorization. Missing-auth non-start is
+    not measured here (see test_missing_authorization_non_start_is_documentation_only).
     """
     sandbox = Sandbox("newhost")
     try:
         workflow = sandbox.repo / "kaola-workflow"
         workflow.mkdir()
-        (workflow / "mission-list.md").write_text(
+        auth = sandbox.repo / "kaola-workflow" / "mission-list.md"
+        auth.write_text(
             "# isolation remaining=handoff isolation\n"
             f"{ORIGINAL_TASK}\n",
             encoding="utf-8",
         )
+        check(auth.is_file() and ORIGINAL_TASK in auth.read_text(encoding="utf-8"),
+              "complete authorization is on disk before the first start")
         host = f"zcode-KPR-orchestrator-{uuid.uuid4().hex[:6]}"
         check(host.startswith("zcode-KPR-orchestrator-"),
               "new-Host path uses the standard orchestrator session name")
@@ -617,7 +692,11 @@ def test_new_standard_host_after_confirmed_stop() -> None:
         check(first_ids["acp_session_id"] and first_ids["holder_instance_id"],
               "first Host receipts include ACP and holder ids")
 
-        stop = sandbox.cli("stop", "--force", session=host)
+        stop = sandbox.cli(
+            "stop", "--force",
+            "--expected-holder-instance-id", str(first_ids["holder_instance_id"]),
+            session=host,
+        )
         sandbox.dump("21-first-stop.json", stop)
         check(stop.get("error") is None, f"first Host exact stop ({stop.get('error')})")
 
@@ -631,6 +710,8 @@ def test_new_standard_host_after_confirmed_stop() -> None:
         )
         check(stopped, f"status after stop is not a live Host ({dead})")
 
+        check(auth.is_file() and ORIGINAL_TASK in auth.read_text(encoding="utf-8"),
+              "complete authorization is still on disk before the second start")
         second = sandbox.cli("start", "--mode", "yolo", session=host)
         sandbox.dump("23-second-host.json", second)
         check(second.get("state") == "ready", f"new Host start ready ({second.get('error')})")
@@ -640,8 +721,6 @@ def test_new_standard_host_after_confirmed_stop() -> None:
         if first_ids["pid"] and second.get("pid"):
             check(second.get("pid") != first_ids["pid"],
                   "new Host is a new holder process")
-        # acp_session_id is assigned per holder process (often zcode-1 again).
-        # A reused string is not the stopped session: the new holder owns it.
         sandbox.dump("23b-identity-delta.json", {
             "first": first_ids,
             "second": {
@@ -669,6 +748,8 @@ def test_new_standard_host_after_confirmed_stop() -> None:
               "live status names the new holder, not the stopped one")
         check(live.get("acp_session_id") == second.get("acp_session_id"),
               "live status names the new holder's ACP session")
+        check(live.get("holder_instance_id") != first_ids["holder_instance_id"],
+              "live attach must not treat H2 as H1")
 
         orchestrators = sorted({name for name in sandbox.sessions if "-orchestrator-" in name})
         sandbox.dump("25-orchestrator-names.json", orchestrators)
@@ -677,26 +758,15 @@ def test_new_standard_host_after_confirmed_stop() -> None:
 
         send = sandbox.cli("send", "--no-wait", "--text", ORIGINAL_TASK, session=host)
         sandbox.dump("26-new-host-handoff.json", send)
-        check(send.get("error") is None, f"complete-auth handoff admitted ({send.get('error')})")
+        check(send.get("error") is None,
+              f"first handoff after authorized start admitted ({send.get('error')})")
 
-        sandbox.dump("27-missing-auth-untested.json", {
-            "contract": (
-                "missing, conflicting, or expired key authorization: ask the "
-                "user; do not start; do not open a blank Host"
-            ),
-            "issue_comment": "5730908734",
-            "measured": False,
-            "reason": (
-                "no harness executes an outer Agent's Skill judgment; a "
-                "handwritten skip-start script would impersonate that Agent"
-            ),
-            "not_claimed": (
-                "this suite does not prove an outer Agent withheld start"
-            ),
-        })
-
-        stop2 = sandbox.cli("stop", "--force", session=host)
-        check(stop2.get("error") is None, "new Host exact stop")
+        stop2 = sandbox.cli(
+            "stop", "--force",
+            "--expected-holder-instance-id", str(second.get("holder_instance_id")),
+            session=host,
+        )
+        check(stop2.get("error") is None, "new Host exact stop with receipt holder id")
     finally:
         sandbox.cleanup()
 
@@ -704,9 +774,10 @@ def test_new_standard_host_after_confirmed_stop() -> None:
 def main() -> int:
     tests = (
         test_generated_entry_matrix_and_no_engine_leak,
-        test_two_layer_handoff_worker_end_turn_and_resume,
+        test_fake_acp_host_worker_event_and_live_status,
         test_adopt_nonstandard_live_host_without_second_start,
         test_existing_locator_accepts_zcode_host_full_attestation,
+        test_missing_authorization_non_start_is_documentation_only,
         test_new_standard_host_after_confirmed_stop,
     )
     failed = 0

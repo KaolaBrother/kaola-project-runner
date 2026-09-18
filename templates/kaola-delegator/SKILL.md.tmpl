@@ -48,6 +48,8 @@ prompt: [handoff.md](references/handoff.md).
 
 Do not pass per-worker notification bindings, per-worker `--repo`, scheduling, or
 heartbeat instructions. Do not rename, restart, or cancel an in-flight Host.
+Exact Host `stop` and live attach use `holder_instance_id` from the existing
+receipt (`--expected-holder-instance-id`); a different holder is not that Host.
 
 ## After the handoff
 

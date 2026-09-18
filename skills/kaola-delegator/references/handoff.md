@@ -67,11 +67,13 @@ gate and not ownership.
    uniquely name a live Host whose session is not `$HOST`, adopt that locator
    — do not rename it and do not start a second Host. Missing `$HOST` is not
    proof that no Host exists. Ambiguous location: report and do not start.
-2. **Live Host** (exact platform/repo/session still serves; holder and
-   `acp_session_id` match the receipts): do not `start`. Continue on that
-   locator. Do not replay the first handoff. Changing the outer Agent does not
-   stop the Host or re-ask the full authorization set; apply only the user's
-   latest change.
+2. **Live Host** (exact platform/repo/session still serves, and
+   `holder_instance_id` plus `acp_session_id` match the receipts): do not
+   `start`. Continue on that holder. If `status` shows a different
+   `holder_instance_id`, it is not H1 — do not `send`/`stop` as H1; re-verify.
+   Do not replay the first handoff. Changing the outer
+   Agent does not stop the Host or re-ask the full authorization set; apply
+   only the user's latest change.
 3. **Confirmed stopped** and no other live orchestrator on this `$PROJECT`:
    if existing receipts attest a native `sess_*`, try only:
 
@@ -98,10 +100,8 @@ gate and not ownership.
    guess and do not reuse a stale quota. Do not open a blank Host. A live
    Host A→B attach is not a new session: do not re-ask the full set.
 5. With step 4 complete and no live Host: start once under `$HOST` at
-   `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/holder from the
-   start receipt, then send the first handoff. Exact `start` and `stop` use
-   the same canonical `$PROJECT` and the exact `$HOST` (or uniquely adopted
-   locator) and holder.
+   `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/`holder_instance_id`
+   from the start receipt, then send the first handoff.
 
 Do not rename, restart, or cancel an in-flight Host to adopt this Skill.
 
@@ -158,8 +158,16 @@ on this Host; do not accept completion. No new script, gate, ledger, or store.
 
 ## Afterward
 
-Read delivery with `observe` / `capture` on this Host. The outer session is not
-woken automatically. Escalate only an unrecoverable human decision. Do not
-`stop` the Host while workers, acceptance, or Workflow close-out remain; Host
-`stop` sweeps recorded inner processes. Exact `stop` uses the same `$PROJECT`
-and `$HOST` after those duties end, never inner workers.
+Read delivery with `observe` / `capture`. Escalate only an unrecoverable
+decision. Do not `stop` while workers, acceptance, or Workflow close-out
+remain. Then stop the exact holder from the existing start/`status` receipt —
+not inner workers or name-only:
+
+```bash
+"$ZCODE" stop --repo "$PROJECT" --session "$HOST" \
+  --expected-holder-instance-id "$HOLDER"
+```
+
+`$HOLDER` is `holder_instance_id` on that receipt. `holder-instance-mismatch`
+means this name now serves a different instance: do not stop it; re-read
+`status`.

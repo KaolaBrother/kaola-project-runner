@@ -501,6 +501,29 @@ output="$(CODEX_HOME="$codex_home_z" run_installer "$repo" "$home" --runtime cod
 assert_link "test_external_runtime_codex_with_zcode" "$codex_home_z/skills/kaola-delegator" \
   "$(source_for "$repo" kaola-delegator)"
 
+# Full install then a filtered reinstall/uninstall must not leave a stale Delegator.
+dest_stale="$tmp_root/delegator-stale/skills"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_stale" --method link 2>&1)" \
+  || fail "test_external_full_install_for_filter" "install failed: $output"
+assert_link "test_external_full_install_for_filter" "$dest_stale/kaola-delegator" \
+  "$(source_for "$repo" kaola-delegator)"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_stale" --method link --platform grok 2>&1)" \
+  || fail "test_external_filtered_reinstall_keeps_delegator" "reinstall failed: $output"
+assert_link "test_external_filtered_reinstall_keeps_delegator" "$dest_stale/kaola-delegator" \
+  "$(source_for "$repo" kaola-delegator)"
+assert_link "test_external_filtered_reinstall_still_has_zcode_worker" \
+  "$dest_stale/zcode-kaola-project-runner" "$(source_for "$repo" zcode-kaola-project-runner)"
+dest_stale_un="$tmp_root/delegator-stale-un/skills"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_stale_un" --method link 2>&1)" \
+  || fail "test_external_full_install_for_uninstall" "install failed: $output"
+output="$(run_installer "$repo" "$home" --skills-dir "$dest_stale_un" --platform grok --uninstall 2>&1)" \
+  || fail "test_external_filtered_uninstall_removes_delegator" "uninstall failed: $output"
+assert_absent "test_external_filtered_uninstall_removes_delegator" "$dest_stale_un/kaola-delegator"
+assert_absent "test_external_filtered_uninstall_removes_orchestrator" "$dest_stale_un/kaola-project-runner"
+assert_absent "test_external_filtered_uninstall_removes_grok" "$dest_stale_un/grok-kaola-project-runner"
+assert_link "test_external_filtered_uninstall_keeps_zcode_worker" \
+  "$dest_stale_un/zcode-kaola-project-runner" "$(source_for "$repo" zcode-kaola-project-runner)"
+
 dest="$tmp_root/orch-skills-dir/skills"
 output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method link --platform grok,codex 2>&1)" \
   || fail "test_orchestrator_skills_dir" "install failed: $output"

@@ -58,9 +58,12 @@ or --method copy reinstall.
 Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex, zcode, droid
 --platform filters worker Skills only. The main Skill kaola-project-runner
 (display name Project Runner) is installed for every destination unless
---no-orchestrator is passed. Codex and generic --skills-dir destinations also
-install kaola-delegator (display name Kaola-Delegator) unless that flag
-is passed. Neither control-plane Skill is a platform ID.
+--no-orchestrator is passed. Codex and generic destinations also plan
+kaola-delegator as control-plane unless that flag is passed: a first install
+requires zcode in this --platform (or no --platform); an already-installed
+Delegator stays in the plan on later reinstall/uninstall even when this
+--platform omits zcode, so it is not left stale. Neither control-plane Skill
+is a platform ID.
 With no --platform, installs all nine worker Skills plus the control-plane
 Skills for that destination (unless skipped). With no destination flags the
 legacy Codex destination is used. Existing foreign paths are never replaced.
@@ -444,6 +447,10 @@ if [[ "$install_orchestrator" == true ]]; then
       [[ "$item" == zcode ]] && zcode_selected=true
     done
     if [[ "$zcode_selected" == true ]]; then
+      plan_skill "$external_skill_name"
+    elif [[ -e "$target_parent/$external_skill_name" || -L "$target_parent/$external_skill_name" ]]; then
+      # Already installed: keep it in this control-plane plan so a filtered
+      # reinstall updates it and a filtered uninstall removes it.
       plan_skill "$external_skill_name"
     else
       printf 'skipping %s: needs the ZCode worker Skill (not in --platform)\n' "$external_skill_name"

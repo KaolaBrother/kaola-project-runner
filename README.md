@@ -343,6 +343,10 @@ kaola-project-runner-locate --target local --expect-revision <accepted commit>  
 
 `--runtime` selects the host's skill directory; `--platform` selects worker CLI Skills only.
 `--no-orchestrator` skips `kaola-project-runner`. That name is not a `--platform` id.
+On Codex and generic destinations, `kaola-delegator` is control-plane: a first
+install still needs `zcode` in this `--platform` (or no `--platform`); an
+already-installed Delegator is included on later reinstall/uninstall even when
+this `--platform` omits `zcode`, so a filtered pass does not leave a stale copy.
 `--runtime` and `--skills-dir` are mutually exclusive. Copies work without this checkout;
 `--method link` requires it to remain in place. Reinstalling the default over an owned
 source link migrates that Skill to a copy. The installer preserves foreign files and
