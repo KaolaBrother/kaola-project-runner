@@ -77,6 +77,7 @@ python_suites_all=(
   "test-issue-52-workflow-worktree.py"
   "test-issue-64-receipt-bound.py"
   "test-issue-65-steering.py"
+  "test-issue-65-steer-race.py"
   "test-issue-65-host-contract.py"
 )
 python_suites_a=(
@@ -107,6 +108,7 @@ python_suites_b=(
   "test-issue-52-workflow-worktree.py"
   "test-issue-24-opencode-pty-bypass.py"
   "test-issue-64-receipt-bound.py"
+  "test-issue-65-steer-race.py"
   "test-issue-65-host-contract.py"
 )
 run_suite_lane() {

@@ -59,10 +59,14 @@ the whole conversation.
   Verify with `observe` before deciding; the Runner does not retry.
 - If the turn had already ended, nothing is cancelled and the receipt says
   `resent_without_interrupt` rather than claiming an interruption.
-- The cancel is bound to the exact turn this steer targeted. If that turn is replaced by a different
-  one first - turns also start from worker events, on another thread - nothing is cancelled and
-  nothing is sent: the outcome is `unknown` with `steer-turn-changed`. The Runner never interrupts
-  a turn the Agent did not target, and never reports one turn's cancel under another's id.
+- The cancel is bound to the exact turn this steer targeted, and every fact reported about that
+  turn is read while it is still held - turns also start from worker events, on another thread, so
+  `the turn running now` is not the same question as `the turn we cancelled`. If the target is
+  replaced, the outcome is `unknown` with `steer-turn-changed` and the steering text is **not**
+  sent. `cancel_sent` then says whether a cancel had already gone out: `false` means nothing was
+  cancelled at all, `true` means the target was asked to stop and the outcome of that request is
+  unconfirmed - read `side_effects_possible` with it. The Runner never interrupts a turn the Agent
+  did not target, and never reports one turn's cancel under another's id.
 - The text is sent at most once. A send that fails after a successful cancel reports
   `steer-send-failed` and is not resent here.
 - `--cancel-timeout SECONDS` bounds the wait for the old turn to settle; without it the op's own

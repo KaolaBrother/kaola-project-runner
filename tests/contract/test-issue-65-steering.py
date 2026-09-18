@@ -500,39 +500,11 @@ class SteeringContract(unittest.TestCase):
         self.assertIs(steered.get("mutation_performed"), False)
 
 
-    # -- the turn-swap race --------------------------------------------------
+    # -- the turn-swap race, through the real route ---------------------------
     #
-    # Issue #65 review finding: `op_steer_interrupt` snapshots the running turn
-    # under the lock, releases it, and only then cancels. Connections are served
-    # on separate threads and a worker event starts turns of its own, so turn A
-    # can end and turn B can be admitted inside that window - the old code then
-    # cancelled B while reporting A's id, and dispatched the steering text onto
-    # a turn nobody asked to interrupt. The barrier makes that window exact.
-
-    def barrier_env(self) -> dict[str, str]:
-        env = self.env()
-        env["KAOLA_ACP_TEST_BARRIER"] = str(self.barrier_dir)
-        return env
-
-    def cli_async(self, platform: str, command: str, *args: str,
-                  steering: str = "none", turn_ms: int = 0) -> subprocess.Popen:
-        argv = [sys.executable, str(CLI), platform, command,
-                "--repo", str(self.repo), "--session", self.session,
-                "--command", self.mock_command(steering, turn_ms), *args]
-        return subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, env=self.barrier_env())
-
-    def await_barrier(self, name: str, timeout: float = 20) -> None:
-        marker = self.barrier_dir / f"{name}.at"
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if marker.exists():
-                return
-            time.sleep(0.02)
-        self.fail(f"the holder never reached the {name} barrier")
-
-    def release_barrier(self, name: str) -> None:
-        (self.barrier_dir / f"{name}.go").write_text("go", encoding="utf-8")
+    # The interleavings themselves are arranged in-process in
+    # test-issue-65-steer-race.py; this one checks that the binding is reachable
+    # over the holder socket the CLI uses.
 
     def await_turn(self, platform: str, active: bool, turn_ms: int,
                    timeout: float = 15) -> dict:
@@ -570,62 +542,6 @@ class SteeringContract(unittest.TestCase):
             return json.loads((line or bytes(buffer)).decode("utf-8") or "{}")
         finally:
             connection.close()
-
-    def test_composite_steer_never_cancels_a_turn_it_did_not_target(self) -> None:
-        platform, turn_ms = UNSUPPORTED_PLATFORM, 9000
-        self.barrier_dir = self.root / f"barrier-{self.session}"
-        self.barrier_dir.mkdir()
-        # Turn A is running, and the holder is started with the barrier armed.
-        started = subprocess.run(
-            [sys.executable, str(CLI), platform, "start", "--repo", str(self.repo),
-             "--session", self.session, "--command", self.mock_command("none", turn_ms)],
-            capture_output=True, text=True, env=self.barrier_env(), timeout=45)
-        self.assertEqual(json.loads(started.stdout).get("state"), "ready")
-        self._started.append((platform, self.session))
-        sent_a = self.cli(platform, "send", "--no-wait", "--text", "turn A",
-                          turn_ms=turn_ms)
-        self.assertEqual(sent_a.get("outcome"), "in_progress")
-        turn_a = sent_a.get("turn_request_id")
-        self.assertIsNotNone(turn_a, "the send must report its own admitted id")
-        self.await_turn(platform, True, turn_ms)
-
-        # The composite steer snapshots turn A, then blocks on the barrier.
-        steer = self.cli_async(platform, "steer", "--steer-mode", "interrupt",
-                               "--cancel-timeout", "10", "--text", STEER_TEXT,
-                               turn_ms=turn_ms)
-        try:
-            self.await_barrier("steer-interrupt-snapshot")
-            # Inside that window: turn A ends and turn B takes its place.
-            self.cli(platform, "cancel", turn_ms=turn_ms, check=False)
-            self.await_turn(platform, False, turn_ms)
-            sent_b = self.cli(platform, "send", "--no-wait", "--text", "turn B",
-                              turn_ms=turn_ms)
-            self.assertEqual(sent_b.get("outcome"), "in_progress")
-            turn_b = sent_b.get("turn_request_id")
-            self.assertNotEqual(turn_b, turn_a, "turn B must be a different turn")
-            self.await_turn(platform, True, turn_ms)
-        finally:
-            self.release_barrier("steer-interrupt-snapshot")
-        stdout, stderr = steer.communicate(timeout=60)
-        receipt = json.loads(stdout or "{}")
-
-        # It must not cancel B, must not claim it cancelled A, and must not send.
-        self.assertEqual(receipt.get("error", {}).get("code"), "steer-turn-changed")
-        self.assertEqual(receipt.get("steer_outcome"), "unknown")
-        self.assertIsNone(receipt.get("steer_consumed"))
-        self.assertEqual(receipt.get("steer_confirmation"), "none")
-        self.assertIsNone(receipt.get("new_turn_request_id"))
-        self.assertIsNot(receipt.get("interrupted"), True)
-        self.assertNotEqual(receipt.get("steer_outcome"), "interrupted_and_resent")
-        # ... and turn B is still the running turn, untouched.
-        state = self.cli(platform, "observe", turn_ms=turn_ms, check=False)
-        self.assertTrue(state.get("turn_active"), "turn B must still be running")
-        # and the running turn is still B - a stale cancel bound to A reports so
-        # without touching anything
-        still = self.holder_call(platform, {"op": "cancel", "expected_request_id": turn_a})
-        self.assertEqual(still.get("outcome"), "turn-changed")
-        self.assertEqual(still.get("request_id"), turn_b)
-        self.assertTrue(still.get("turn_active"))
 
     def test_cancel_bound_to_a_finished_turn_reports_turn_changed(self) -> None:
         """The same binding, reachable directly: a stale id cancels nothing."""

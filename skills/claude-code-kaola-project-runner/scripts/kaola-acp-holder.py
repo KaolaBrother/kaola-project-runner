@@ -41,28 +41,6 @@ CANCEL_GRACE = 5.0
 # Issue #65: a native steering call answers inside the running turn; it never
 # waits for the turn itself, so this bounds only the extension round trip.
 STEER_TIMEOUT = 30.0
-
-
-def test_barrier(name: str, timeout: float = 30.0) -> None:
-    """Deterministic interleaving point for the contract suite.
-
-    Inert unless `KAOLA_ACP_TEST_BARRIER` names a directory. When it does, the
-    holder records that it reached `name` and blocks until the test releases it,
-    which is how a turn-swap race is reproduced without sleeps.
-    """
-    root = os.environ.get("KAOLA_ACP_TEST_BARRIER") or ""
-    if not root:
-        return
-    try:
-        base = Path(root)
-        base.mkdir(parents=True, exist_ok=True)
-        (base / f"{name}.at").write_text(str(round(time.time(), 3)), encoding="utf-8")
-        released = base / f"{name}.go"
-        deadline = time.monotonic() + timeout
-        while not released.exists() and time.monotonic() < deadline:
-            time.sleep(0.02)
-    except OSError:
-        return
 EXIT_GRACE = 5.0
 TERM_GRACE = 3.0
 SENSITIVE_KEYS = ("_API_KEY", "TOKEN", "Authorization")
@@ -1474,6 +1452,10 @@ class Holder:
         turn = self.turn
         if response is None or not turn["active"]:
             return
+        if normalize_id(turn.get("request_id")) != normalize_id(request_id):
+            # A late answer to a turn that is already over must not settle the
+            # turn running now (Issue #65: same attribution boundary).
+            return
         if "error" in response:
             turn["error"] = response["error"]
             turn["outcome"] = (
@@ -1584,8 +1566,12 @@ class Holder:
         }
 
     def turn_receipt(self, wait_timeout: float | None = None,
-                     max_final_chars: int = 4000) -> dict[str, Any]:
-        turn = self.turn
+                     max_final_chars: int = 4000,
+                     turn: dict[str, Any] | None = None) -> dict[str, Any]:
+        # `self.turn` is REPLACED when a new prompt is admitted, never reset in
+        # place, so holding the object is how a receipt stays bound to the turn
+        # it describes even if another turn starts meanwhile (Issue #65).
+        turn = self.turn if turn is None else turn
         outcome = turn.get("outcome")
         mutation_status = turn.get("mutation_status") or "not_started"
         performed = {"completed": True, "accepted": True, "in_progress": True,
@@ -2309,62 +2295,74 @@ class Holder:
                     "side_effects_possible": False}
 
         with self.lock:
-            was_active = bool(self.turn["active"])
-            cancelled_request_id = self.turn["request_id"] if was_active else None
-            mutation_before = self.turn.get("mutation_status")
+            # Hold the turn OBJECT, not just its id: `self.turn` is replaced when
+            # a new prompt is admitted, so this is what keeps every later fact
+            # bound to the turn the Agent targeted.
+            target_turn = self.turn
+            was_active = bool(target_turn["active"])
+            cancelled_request_id = target_turn["request_id"] if was_active else None
+            mutation_before = target_turn.get("mutation_status")
         base.update({
             "turn_was_active": was_active,
             "cancelled_turn_request_id": cancelled_request_id,
             "cancelled_turn_mutation_status_before": mutation_before,
         })
-        # The snapshot above and the cancel below are two separate lock holds:
-        # everything between them is exactly the window this barrier reproduces.
-        test_barrier("steer-interrupt-snapshot")
 
         if was_active:
             timeout = params.get("cancel_timeout")
             if timeout is None:
                 timeout = params.get("timeout")
-            # Bound to the exact turn snapshotted above: between that snapshot
-            # and here the turn can end on its own and a different one can start
-            # (a worker event prompts too, on another connection thread).
-            # Cancelling then would hit the newcomer under the old turn's name.
-            cancel = self.op_cancel({"timeout": timeout,
-                                     "expected_request_id": cancelled_request_id})
+            # Bound to the exact turn object snapshotted above, and the facts
+            # below come from the cancel's own locked snapshot of THAT turn -
+            # never from `self.turn`, which by now may be somebody else's.
+            cancel, cancel_sent, snapshot = self.cancel_turn(target_turn, timeout)
             base["cancel_receipt"] = {
                 key: cancel.get(key) for key in
                 ("outcome", "stop_reason", "mutation_status", "request_id",
-                 "expected_request_id")
+                 "expected_request_id", "cancel_sent")
                 if key in cancel
             }
-            if cancel.get("outcome") == "turn-changed":
-                # Nothing of ours was cancelled, and sending now would dispatch
-                # onto a turn the Agent never asked to interrupt.
-                return {**base, "interrupted": None,
-                        "steer_outcome": "unknown", "steer_consumed": None,
-                        "steer_confirmation": "none", "outcome": "steer_turn_changed",
-                        "side_effects_possible": False,
-                        "cancelled_turn_stop_reason": None,
-                        "mutation_status": None, "mutation_performed": None,
-                        "current_turn_request_id": cancel.get("request_id"),
-                        "error": {"code": "steer-turn-changed",
-                                  "message": "the turn this steer targeted was replaced before it "
-                                             "could be interrupted, so nothing was cancelled and "
-                                             "the steering text was NOT sent; observe the session "
-                                             "and decide again - do not resend blindly",
-                                  "detail": cancel.get("error")}}
-            with self.lock:
-                still_active = bool(self.turn["active"])
-                stop_reason = self.turn.get("stop_reason")
-                mutation_after = self.turn.get("mutation_status")
+            base["cancel_sent"] = cancel_sent
+            still_active = bool(snapshot["active"])
+            stop_reason = snapshot["stop_reason"]
+            mutation_after = snapshot["mutation_status"]
+            # A cancelled turn may already have written files, run commands, or
+            # half-applied an edit, and a cancel that went out to a turn whose
+            # end we could not confirm is no different. The Agent is told, not
+            # reassured.
+            side_effects = (mutation_after in ("in_progress", "unknown", "completed")
+                            or mutation_before in ("in_progress", "unknown"))
             base.update({
                 "cancelled_turn_stop_reason": stop_reason,
                 "cancelled_turn_mutation_status": mutation_after,
-                # A cancelled turn may already have written files, run commands,
-                # or half-applied an edit. The Agent is told, not reassured.
-                "side_effects_possible": mutation_after in ("in_progress", "unknown", "completed")
-                or mutation_before in ("in_progress", "unknown"),
+                "side_effects_possible": side_effects,
             })
+            if cancel.get("outcome") == "turn-changed":
+                # The targeted turn was replaced before our cancel could go out.
+                # Sending now would dispatch onto a turn nobody asked to steer.
+                return {**base, "interrupted": None,
+                        "steer_outcome": "unknown", "steer_consumed": None,
+                        "steer_confirmation": "none", "outcome": "steer_turn_changed",
+                        "mutation_status": mutation_after, "mutation_performed": None,
+                        "current_turn_request_id": cancel.get("request_id"),
+                        "error": {"code": "steer-turn-changed",
+                                  "message": "the turn this steer targeted was replaced before it "
+                                             "could be interrupted, so nothing was "
+                                             + ("cancelled and " if not cancel_sent else "")
+                                             + "the steering text was NOT sent; observe the "
+                                               "session and decide again - do not resend blindly",
+                                  "detail": cancel.get("error")}}
+            if not snapshot["is_current"]:
+                # Our turn did stop, but a different one already took the session.
+                return {**base, "interrupted": True,
+                        "steer_outcome": "unknown", "steer_consumed": None,
+                        "steer_confirmation": "none", "outcome": "steer_turn_changed",
+                        "mutation_status": mutation_after, "mutation_performed": None,
+                        "error": {"code": "steer-turn-changed",
+                                  "message": "the targeted turn stopped but another turn now owns "
+                                             "the session, so the steering text was NOT sent; "
+                                             "observe the session and decide again - do not "
+                                             "resend blindly"}}
             if still_active or cancel.get("outcome") == "cancel-unconfirmed":
                 # Nothing is sent onto a session whose previous turn may still be
                 # running: that is how a duplicate dispatch happens.
@@ -2446,69 +2444,99 @@ class Holder:
                             "fingerprint": base["steer_fingerprint"]})
         return receipt
 
-    def op_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Cancel the running turn.
+    def cancel_turn(self, target: dict[str, Any] | None, timeout: float | None,
+                    ) -> tuple[dict[str, Any], bool, dict[str, Any]]:
+        """Cancel one exact turn and describe THAT turn.
 
-        `expected_request_id` binds the whole operation - the admission check,
-        the outbound `session/cancel` and the wait - to ONE turn. Connections are
-        served on separate threads and a worker event can start a turn of its
-        own, so without that binding a turn that ends on its own can be replaced
-        between the caller's snapshot and this call, and the cancel would hit
-        the newcomer while the receipt still named the old turn. When the id no
-        longer matches, nothing is sent and the outcome is `turn-changed`.
+        `target` is the turn object itself. `self.turn` is replaced - never reset
+        in place - when a new prompt is admitted, so holding the object keeps the
+        admission check, the outbound `session/cancel`, the wait and the receipt
+        all bound to the same turn even though connections are served on separate
+        threads and a worker event starts turns of its own (Issue #65).
+
+        Returns `(receipt, cancel_sent, snapshot)`. The snapshot is taken under
+        the lock from the target turn and is what a caller must report; nothing
+        downstream may re-read `self.turn`, because by then it can already be
+        somebody else's.
         """
-        expected = params.get("expected_holder_instance_id")
-        target = params.get("expected_request_id")
+        if target is None:
+            target = self.turn
         with self.lock:
-            if expected is not None and expected != self.holder_instance_id:
-                return self._holder_instance_mismatch("cancel", expected)
-            current = self.turn.get("request_id")
-            if target is not None and (not self.turn["active"]
-                                       or normalize_id(current) != normalize_id(target)):
-                return {"outcome": "turn-changed", "request_id": current,
-                        "expected_request_id": target,
-                        "turn_active": bool(self.turn["active"]),
-                        "mutation_status": self.turn.get("mutation_status"),
-                        "mutation_performed": False,
-                        "error": {"code": "cancel-turn-changed",
-                                  "message": "the turn this cancel was bound to is no longer the "
-                                             "running turn, so nothing was cancelled"}}
-            if not self.turn["active"]:
-                return {"outcome": "no-active-turn", "mutation_status": self.turn.get("mutation_status")}
+            if self.turn is not target:
+                return ({"outcome": "turn-changed",
+                         "request_id": self.turn.get("request_id"),
+                         "expected_request_id": target.get("request_id"),
+                         "turn_active": bool(self.turn["active"]),
+                         "cancel_sent": False, "mutation_performed": False,
+                         "error": {"code": "cancel-turn-changed",
+                                   "message": "the turn this cancel was bound to is no longer the "
+                                              "running turn, so nothing was cancelled"}},
+                        False, self._turn_snapshot_locked(target))
+            if not target["active"]:
+                return ({"outcome": "no-active-turn",
+                         "mutation_status": target.get("mutation_status"),
+                         "cancel_sent": False},
+                        False, self._turn_snapshot_locked(target))
             for key in list(self.pending_permissions):
                 self._settle_pending_permission_locked(key, "cancelled")
-            self.turn["cancel_requested"] = True
+            target["cancel_requested"] = True
             self.agent.send_message(
                 {"jsonrpc": "2.0", "method": "session/cancel",
                  "params": {"sessionId": self.acp_session_id}}
             )
-        timeout = params.get("timeout")
         if timeout is None:
             timeout = CANCEL_GRACE
         deadline = time.monotonic() + timeout
         with self.turn_cond:
-            while self.turn["active"]:
-                if target is not None and normalize_id(self.turn.get("request_id")) != normalize_id(target):
-                    # The target turn ended and a different one is running now.
-                    # Its receipt describes the newcomer, so do not return it.
-                    return {"outcome": "turn-changed", "request_id": self.turn.get("request_id"),
-                            "expected_request_id": target, "turn_active": True,
-                            "cancel_sent": True, "mutation_performed": None,
-                            "error": {"code": "cancel-turn-changed",
-                                      "message": "the cancelled turn was replaced while this cancel "
-                                                 "was in flight; whether it stopped is unconfirmed"}}
+            # Waiting on the captured object, so a newcomer can neither end this
+            # wait early nor have its own end mistaken for this turn's.
+            while target["active"]:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    return {**self.turn_receipt(), "outcome": "cancel-unconfirmed"}
+                    return ({**self.turn_receipt(turn=target),
+                             "outcome": "cancel-unconfirmed", "cancel_sent": True},
+                            True, self._turn_snapshot_locked(target))
                 self.turn_cond.wait(timeout=remaining)
-            if target is not None and normalize_id(self.turn.get("request_id")) != normalize_id(target):
-                return {"outcome": "turn-changed", "request_id": self.turn.get("request_id"),
-                        "expected_request_id": target, "turn_active": False,
-                        "cancel_sent": True, "mutation_performed": None,
+            # Built here, still holding the lock, from the target turn itself.
+            return ({**self.turn_receipt(turn=target), "cancel_sent": True},
+                    True, self._turn_snapshot_locked(target))
+
+    def _turn_snapshot_locked(self, turn: dict[str, Any]) -> dict[str, Any]:
+        """The facts a caller may report about one turn. Caller holds the lock."""
+        return {
+            "request_id": turn.get("request_id"),
+            "active": bool(turn.get("active")),
+            "stop_reason": turn.get("stop_reason"),
+            "outcome": turn.get("outcome"),
+            "mutation_status": turn.get("mutation_status"),
+            "is_current": self.turn is turn,
+        }
+
+    def op_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Cancel the running turn.
+
+        `expected_request_id` binds the operation to one turn: when the running
+        turn is not that turn, nothing is sent and the outcome is `turn-changed`.
+        """
+        expected = params.get("expected_holder_instance_id")
+        wanted = params.get("expected_request_id")
+        with self.lock:
+            if expected is not None and expected != self.holder_instance_id:
+                return self._holder_instance_mismatch("cancel", expected)
+            target = self.turn
+            if wanted is not None and (not target["active"]
+                                       or normalize_id(target.get("request_id"))
+                                       != normalize_id(wanted)):
+                return {"outcome": "turn-changed", "request_id": target.get("request_id"),
+                        "expected_request_id": wanted,
+                        "turn_active": bool(target["active"]),
+                        "mutation_status": target.get("mutation_status"),
+                        "mutation_performed": False, "cancel_sent": False,
                         "error": {"code": "cancel-turn-changed",
-                                  "message": "the cancelled turn was replaced while this cancel was "
-                                             "in flight; this receipt would describe another turn"}}
-        return self.turn_receipt()
+                                  "message": "the turn this cancel was bound to is no longer the "
+                                             "running turn, so nothing was cancelled"}}
+        receipt, _sent, _snapshot = self.cancel_turn(target, params.get("timeout"))
+        return receipt
 
     def op_view(self, params: dict[str, Any]) -> dict[str, Any]:
         since = params.get("since")

@@ -307,12 +307,18 @@ reports `cancelled_turn_request_id`, `cancelled_turn_stop_reason` and a distinct
 report `steer_method`, `steer_request_id`, `steer_fingerprint`, `turn_prompt_fingerprint` and the raw
 `steer_response`.
 
-The composite's cancel is bound to the exact turn it targeted (`expected_request_id`), because
-turns also start from worker events on another connection thread: if the targeted turn is replaced
-before it can be interrupted, nothing is cancelled and nothing is sent (`steer-turn-changed`,
-outcome `unknown`). The same applies if a different turn is admitted between the confirmed cancel
-and the send — the text is not written and the outcome is `not_consumed`. The new turn's id comes
-from the send's own admission, never from whatever turn happens to be running afterwards.
+The composite binds to the turn **object** it targeted, not merely to its id: `self.turn` is
+replaced when a prompt is admitted, so the cancel's admission check, its outbound `session/cancel`,
+its wait and its receipt are all taken from that one turn while the lock is held, and nothing
+downstream re-reads `self.turn`. Turns also start from worker events on another connection thread,
+so this matters in ordinary operation. If the targeted turn is replaced, the outcome is `unknown`
+with `steer-turn-changed` and the steering text is not sent; `cancel_sent` distinguishes "nothing
+was cancelled" (`false`) from "the target was asked to stop and we cannot confirm what followed"
+(`true`), and `side_effects_possible` is reported for both. If the target did stop but another turn
+already owns the session, the answer is the same refusal rather than a dispatch onto a turn nobody
+asked to steer. The new turn's id comes from the send's own admission, never from whatever happens
+to be running afterwards, and a late answer to a finished turn can no longer settle the turn
+running now.
 
 Two refusals protect against a double dispatch. An unconfirmed cancel sends **nothing**
 (`steer-cancel-unconfirmed`, outcome `unknown`): a turn that will not confirm it stopped can never
