@@ -1,0 +1,2237 @@
+diff --git a/docs/zcode-host.md b/docs/zcode-host.md
+index 82b7478..57cef01 100644
+--- a/docs/zcode-host.md
++++ b/docs/zcode-host.md
+@@ -107,7 +107,9 @@ writer anywhere in the chain. Worker events are the only trigger:
+ 
+ ```text
+ worker agent terminated / worker turn ended (one idle episode)
+-  -> worker holder's existing on_agent_exit / turn-end path
++  / new pending session/request_permission (one permission_required)
++  -> worker holder's existing on_agent_exit / turn-end /
++     request-permission paths
+      -> one socket op `worker_event` to the ZCode Host holder
+         -> bounded in-memory staging list (cap 32, deduped by event id)
+            -> one ordinary session/prompt through op_prompt
+@@ -147,10 +149,18 @@ worker agent terminated / worker turn ended (one idle episode)
+   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
+   out the send; `idle` fires once per ended turn with the agent still alive
+   (`outcome` `turn_completed`/`turn_failed`), so the next idle episode needs a
+-  new worker turn. The 600s `idle_watcher` stays a non-business exit timer and
+-  is never a heartbeat event.
++  new worker turn. `permission_required` (Issue #76) fires once per *new*
++  `session/request_permission` pending key — a wake, not an idle and not the
++  turn's end: the request's `request_id` is the only locator the event
++  carries (title, options, and tool input never travel; the Host reads them
++  from the worker's own `pending_permissions` receipt and decides inside
++  existing authorization or escalates), a re-sent request id stays one wake,
++  and the ordinary turn-end `idle` still arrives after the request settles.
++  The 600s `idle_watcher` stays a non-business exit timer and is never a
++  heartbeat event.
+ - **Payload.** One literal prompt: fixed structured event metadata (one JSON
+-  object per event: id, kind, platform, session, repo, reason, event cursor),
++  object per event: id, kind, platform, session, repo, reason, event cursor,
++  and `request_id` when the kind carries one),
+   the current **full** heartbeat prompt body read at delivery time from
+   `<repo>/.kaola/heartbeat-prompt.json` — the single file the ZCode Host agent
+   owns; after each worker terminated/idle notification it settles the next step
+diff --git a/scripts/kaola-acp-holder.py b/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100755
+--- a/scripts/kaola-acp-holder.py
++++ b/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/scripts/validate.sh b/scripts/validate.sh
+index e2b0c4a..044a10c 100755
+--- a/scripts/validate.sh
++++ b/scripts/validate.sh
+@@ -83,11 +83,13 @@ python_suites_all=(
+   "test-issue-65-steer-race.py"
+   "test-issue-65-host-contract.py"
+   "test-issue-70-binding-fact.py"
++  "test-issue-76-permission-wake.py"
+ )
+ python_suites_a=(
+   "test-issue-65-steering.py"
+   "test-acp-contract.py"
+   "test-zcode-heartbeat-contract.py"
++  "test-issue-76-permission-wake.py"
+   "test-acp-follow-contract.py"
+   "test-progressive-disclosure.py"
+   "test-droid-acp-contract.py"
+diff --git a/skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/skills/kaola-project-runner/references/heartbeat-skeleton.md b/skills/kaola-project-runner/references/heartbeat-skeleton.md
+index 551e6d3..b271675 100644
+--- a/skills/kaola-project-runner/references/heartbeat-skeleton.md
++++ b/skills/kaola-project-runner/references/heartbeat-skeleton.md
+@@ -23,7 +23,7 @@ Workflow、自执行、心跳间隔：{用户选择或默认值}
+ 
+ 每拍基于新鲜证据：
+ 1. 恢复授权和现场，核对已派动作，避免重复启动、认领或发送。以本篇快照为准；用户已确认的额度、优先级、平台、模型或并发变化立即替换旧值，并在本拍就按新约束重新安排可执行工作，不等下一拍，也不再按已被替代的额度派工。
+-2. 处理工人问题；每拍核对已授权的空闲线程和可安全并行的工作，派出所有合适匹配；无合适工作则保持空闲，不创造任务或扩大授权。平台故障或实测额度耗尽只是证据，本身不扩大换平台的授权；额度下调也不等于取消或丢弃在飞任务——按用户新指令的范围处理，保留其定位与剩余收尾职责。
++2. 处理工人问题；绑定 Worker 的 `permission_required` 事件是它在 turn 未结束时就待审批的唤醒，不是 idle 也不结束该 turn：用该 Worker 的 observe/status 读当前 pending_permissions，已消失的请求幂等忽略，只在既有授权内用 Runner `permit` 批准或拒绝，超出授权的决定如实上报用户，事件本身不批准任何操作；批准后该 Worker 的 turn-end `idle` 仍会正常到达。每拍核对已授权的空闲线程和可安全并行的工作，派出所有合适匹配；无合适工作则保持空闲，不创造任务或扩大授权。平台故障或实测额度耗尽只是证据，本身不扩大换平台的授权；额度下调也不等于取消或丢弃在飞任务——按用户新指令的范围处理，保留其定位与剩余收尾职责。
+ 3. 核对交付和项目验收；缺口派补证或修复，证据充分再指挥finalize/merge。
+ 4. 合并后协调其他工人安全同步，审查冲突并重验受影响部分。
+ 5. 没有合适工作的闲置会话才关闭（ACP holder 与 PTY/tmux 同一精确 stop；闲置不是保活）；保留待收尾事项的责任人，清理已完成工作区。
+diff --git a/skills/kaola-project-runner/references/zcode-host-dispatch.md b/skills/kaola-project-runner/references/zcode-host-dispatch.md
+index 0d5d3c5..c6922b9 100644
+--- a/skills/kaola-project-runner/references/zcode-host-dispatch.md
++++ b/skills/kaola-project-runner/references/zcode-host-dispatch.md
+@@ -1,8 +1,7 @@
+ # ZCode Host: dispatch, end the turn, wake on worker events
+ 
+-Read this when a ZCode Host supervises workers: the flags and receipt fields it
+-uses. Entry points and startup: [host-startup.md](host-startup.md).
+-This file is the beat.
++The ZCode Host beat: flags and receipt fields. Entry points:
++[host-startup.md](host-startup.md).
+ 
+ ## Three identities, never interchangeable
+ 
+@@ -29,9 +28,8 @@ KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-kaola-host","repo
+   "$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser
+ ```
+ 
+-`platform` must be `zcode`, `session`/`repo` the Host's own, and it may not name
+-the worker's own session; anything else fails the start closed rather than
+-dropping the carrier silently. Exporting it, or setting it on a later `send`,
++`platform` must be `zcode`, `session`/`repo` the Host's own, never the worker's;
++anything else fails the start closed rather than dropping the carrier silently. Exporting it, or setting it on a later `send`,
+ binds nothing. Worker names are issue-scoped:
+ `<platform>-<CODE>-i<ISSUE>-<purpose>`.
+ 
+@@ -42,13 +40,12 @@ binds nothing. Worker names are issue-scoped:
+ "heartbeat_host": {"platform":"zcode","session":"zcode-kaola-host","repo":"…","socket":"…"}
+ ```
+ 
+-`heartbeat_host` is the running holder's own binding; a receipt's
+-`heartbeat_host_requested` is only the request. Check the fact's `session`/`repo`
+-are **yours**; `observe` reports it any time, so verify reused and adopted
+-workers too.
++`heartbeat_host` is the running holder's own binding; `heartbeat_host_requested`
++is only the request. Check the fact's `session`/`repo` are **yours**; `observe`
++reports it any time, so verify reused workers too.
+ 
+ - `heartbeat_host: null` (known) — an ordinary unbound worker: legitimate, never
+-  wakes you; another Host's `session`/`repo` wakes that Host.
++  wakes you; another Host's binding wakes that Host.
+ - `heartbeat_host_known: false` — a holder or record older than the field:
+   unknown; treat it as unbound.
+ - `"error": {"code": "session-exists"}` — you reused a live holder and bound
+@@ -63,12 +60,11 @@ delegated to you:
+ 1. **Keep the in-flight work** — it runs on, readable with `observe` and
+    `capture` from your anchor. Cancel nothing.
+ 2. **Recover in this beat.** Another bound worker or confirmed wake source: end
+-   the turn and read this one on that beat. The unbound worker is
+-   your only wake source: ending the turn waits on nothing and a heartbeat note
+-   wakes nobody, so read its result here with the bounded `wait --timeout
++   the turn and read this one on that beat. The unbound worker is your only
++   wake source — ending the turn waits on nothing, a heartbeat note wakes
++   nobody — so read its result here with the bounded `wait --timeout
+    <seconds>` (`observe`/`capture` once its turn ended). That bounded read is
+-   the recovery exception — nothing is bound, so no event can be kept
+-   undelivered — never the ordinary wait, never a poll loop.
++   the recovery exception — never the ordinary wait, never a poll loop.
+ 3. **Rebind at that safe idle point** — turn ended, nothing in flight, result
+    read: exact `stop` of that one session, `start` again with the variable, and
+    verify the new receipt. `--resume` needs the real native id — ZCode reports
+@@ -93,7 +89,7 @@ decision you need. A heartbeat note claiming a wait you lack is no report.
+ `"mutation_status": "in_progress"` — **accepted and running — not finished, and
+ not correct**. An `error` (`prompt-in-progress`, `agent-not-running`) dispatched
+ nothing; a `prompt_timeout` or missing receipt leaves consumption unknown —
+-establish the fact with `observe` before re-sending.
++establish it with `observe` before re-sending.
+ 
+ **Keep two values**: `prompt_fingerprint`, the turn you dispatched, and
+ `dispatch_event_cursor`, the cursor *before* it produced anything.
+@@ -105,9 +101,9 @@ Do the rest of this beat, update the heartbeat prompt at
+ report, then **end your reply normally**.
+ 
+ There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
+-`sleep`, poll in a loop, or call a blocking `wait` to hold this turn open — a
+-Host turn that stays active is exactly what keeps events undelivered. Do not
+-`stop` or `cancel` yourself or an in-flight worker to manufacture a wake-up.
++`sleep`, poll in a loop, or hold this turn open with a blocking `wait` — an
++active Host turn is exactly what keeps events undelivered. Do not `stop` or
++`cancel` yourself or an in-flight worker to manufacture a wake-up.
+ 
+ ### When an event wakes you
+ 
+@@ -126,8 +122,8 @@ object per event —
+ what happened with the event's own `platform`/`session`/`repo` and that Skill.
+ 
+ **`event_cursor` is the end of the turn, not the start** — `19` is where that
+-turn ended, so the reply sits *below* it and `capture --since <event_cursor>`
+-returns only carrier and title updates. Read from an earlier anchor:
++turn ended, so `capture --since <event_cursor>` sees only carrier and title
++updates. Read from an earlier anchor:
+ 
+ ```bash
+ # the dispatch receipt's cursor, from before the reply existed
+@@ -137,36 +133,38 @@ returns only carrier and title updates. Read from an earlier anchor:
+ "$W" capture --repo "$WORK_REPO" --session codex-KT-i274-parser --lines 200
+ ```
+ 
+-Confirm you are reading the turn you dispatched: `observe`'s
++Confirm you read the turn you dispatched: `observe`'s
+ `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
+ and `turn_outcome`/`stop_reason` must show it finished. A capture with no
+-assistant text means your window was wrong — widen it before judging. Then
+-accept, ask for a fix or dispatch more, update the heartbeat prompt, and end the
+-turn again.
++assistant text means the window was wrong — widen it. Then accept, fix, or
++dispatch more, update the heartbeat prompt, and end the turn.
+ 
+-`kind` is `idle` when the worker's turn ended and `terminated` when its process
+-exited; a finished turn is a full trigger, and you never kill a worker to be
+-notified.
++`kind` is `idle` when the worker's turn ended and `terminated` when its
++process exited; a finished turn is a full trigger, and you never kill a
++worker to be notified. `permission_required` is a bound worker's agent raising
++`session/request_permission` mid-turn — a wake, not an idle; the ordinary
++`idle` still arrives at turn end. The event carries only `request_id`:
++decide it from the worker's live `pending_permissions` — inside existing
++authorization or escalated to the user.
+ 
+ ## 3. Workers and the notification carrier
+ 
+ The worker Agent owns its delivery; it never fabricates events and never writes
+-to your stdin — its holder sends the event over the Host holder's admin socket.
++to your stdin — its holder sends the event over your holder's admin socket.
+ Never ask a worker to notify you or duplicate the carrier.
+ 
+ Delivery rules you can rely on:
+ 
+ - Busy Host: the event is staged and delivered at your next turn boundary, never
+   injected mid-turn, and a worker event is never turned into steering. One that
+-  finished before your turn ended is staged the same way, so that race can
+-  neither skip nor double-dispatch.
+-- Duplicate `event_id`s collapse; several pending events arrive in one prompt,
+-  each with the full current body.
++  finished before your turn ended stages the same way: the race can neither
++  skip nor double-dispatch.
++- Duplicate `event_id`s collapse; several pending events arrive in one prompt
++  with the full current body.
+ - Confirmation follows the notification turn *completing*; after a resume,
+   unconfirmed events are redelivered at least once — keep each pass idempotent.
+ - Dispatch failure, unknown acceptance, or an unverified binding means you are
+-  **not** reliably event-driven: recover it this beat, or report the exception,
+-  before ending the turn.
++  **not** reliably event-driven: recover it this beat, or report the exception.
+ 
+ Steering (`steer`, where supported) is a separate tool and does not alter this
+ wake path.
+diff --git a/skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py b/skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py
+index f6104dd..9dffcf0 100644
+--- a/skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py
++++ b/skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py
+@@ -132,7 +132,7 @@ HEARTBEAT_EVENT_CAP = 32
+ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+ HEARTBEAT_NOTIFY_GRACE = 6.0
+ WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
+-WORKER_EVENT_KINDS = ("terminated", "idle")
++WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+ HEARTBEAT_DEFECT_CHARS = 200
+ 
+ 
+@@ -1432,7 +1432,9 @@ class Holder:
+                     for opt in params.get("options") or []
+                 ],
+             }
+-            self.pending_permissions[normalize_id(request_id)] = entry
++            key = normalize_id(request_id)
++            is_new = key not in self.pending_permissions
++            self.pending_permissions[key] = entry
+             if self.turn["active"] and self.turn["mutation_status"] == "in_progress":
+                 self.turn["mutation_status"] = "accepted"
+                 self.note_agent_children()
+@@ -1441,6 +1443,15 @@ class Holder:
+             self.fanout_follow_delta()
+             with self.turn_cond:
+                 self.turn_cond.notify_all()
++            if is_new:
++                # Issue #76: a bound worker blocked on approval cannot wait for
++                # a turn-end idle that may never come. One wake per new pending
++                # request; ``request_id`` is the only locator - title, options
++                # and tool input stay in this worker's own receipts, and the
++                # event approves nothing.
++                self._notify_heartbeat_host_now(
++                    "permission_required", "session/request_permission pending",
++                    extra={"request_id": key})
+             return
+         self.agent.send_message(
+             {"jsonrpc": "2.0", "id": request_id,
+@@ -1803,13 +1814,16 @@ class Holder:
+ 
+     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
+ 
+-    def _notify_heartbeat_host_now(self, kind: str, reason: str) -> None:
++    def _notify_heartbeat_host_now(self, kind: str, reason: str,
++                                   extra: dict[str, Any] | None = None) -> None:
+         """One carrier send from this worker holder to the ZCode Host holder.
+ 
+         Synchronous and bounded: the caller is an existing agent-exit or
+         turn-end path, and ``op_stop`` waits out this lock before exiting, so
+         an exact stop never kills a half-delivered event. The receipt (staged,
+         delivered, or an honest error) is evidence in this holder's event log.
++        ``extra`` adds locating metadata only (Issue #76: ``request_id``) -
++        never request titles, options, tool input, or credentials.
+         """
+         target = self.heartbeat_host
+         if target is None:
+@@ -1818,6 +1832,8 @@ class Holder:
+                   "platform": self.args.platform, "session": self.args.session,
+                   "repo": self.args.repo, "reason": reason,
+                   "event_cursor": self.events.cursor}
++        if extra:
++            params.update(extra)
+         receipt: dict[str, Any] = {}
+         with self.heartbeat_notify_lock:
+             try:
+@@ -1880,9 +1896,10 @@ class Holder:
+         ]
+         for event in events:
+             lines.append(json.dumps(
+-                {key: event.get(key) for key in
++                {key: event[key] for key in
+                  ("event_id", "kind", "platform", "session", "repo", "reason",
+-                  "event_cursor")},
++                  "event_cursor", "request_id")
++                 if event.get(key) is not None},
+                 ensure_ascii=False, sort_keys=True))
+         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+         if maintained:
+@@ -1981,13 +1998,18 @@ class Holder:
+         repo = params.get("repo")
+         reason = params.get("reason")
+         cursor = params.get("event_cursor")
++        request_id = params.get("request_id")
+         if (kind not in WORKER_EVENT_KINDS or not isinstance(platform, str)
+                 or not platform or not isinstance(session, str) or not session
+                 or not isinstance(repo, str) or not repo
+                 or not isinstance(reason, str)
+-                or not isinstance(cursor, int) or isinstance(cursor, bool)):
++                or not isinstance(cursor, int) or isinstance(cursor, bool)
++                or (request_id is not None
++                    and (not isinstance(request_id, (str, int))
++                         or isinstance(request_id, bool)))):
+             return {"error": {"code": "worker-event-invalid",
+-                              "message": "worker_event needs kind terminated|idle plus "
++                              "message": "worker_event needs kind "
++                                         "terminated|idle|permission_required plus "
+                                          "platform, session, repo, reason, and an integer "
+                                          "event_cursor"}}
+         event = {"schema": WORKER_EVENT_SCHEMA,
+@@ -1995,6 +2017,8 @@ class Holder:
+                  "kind": kind, "platform": platform, "session": session,
+                  "repo": repo, "reason": reason, "event_cursor": cursor,
+                  "staged_at": round(time.time(), 3)}
++        if request_id is not None:
++            event["request_id"] = request_id
+         with self.worker_events_lock:
+             if any(item.get("event_id") == event["event_id"]
+                    for item in self.pending_worker_events):
+diff --git a/templates/orchestrator/references/heartbeat-skeleton.txt b/templates/orchestrator/references/heartbeat-skeleton.txt
+index 78be1d7..994e077 100644
+--- a/templates/orchestrator/references/heartbeat-skeleton.txt
++++ b/templates/orchestrator/references/heartbeat-skeleton.txt
+@@ -18,7 +18,7 @@ Workflow、自执行、心跳间隔：{用户选择或默认值}
+ 
+ 每拍基于新鲜证据：
+ 1. 恢复授权和现场，核对已派动作，避免重复启动、认领或发送。以本篇快照为准；用户已确认的额度、优先级、平台、模型或并发变化立即替换旧值，并在本拍就按新约束重新安排可执行工作，不等下一拍，也不再按已被替代的额度派工。
+-2. 处理工人问题；每拍核对已授权的空闲线程和可安全并行的工作，派出所有合适匹配；无合适工作则保持空闲，不创造任务或扩大授权。平台故障或实测额度耗尽只是证据，本身不扩大换平台的授权；额度下调也不等于取消或丢弃在飞任务——按用户新指令的范围处理，保留其定位与剩余收尾职责。
++2. 处理工人问题；绑定 Worker 的 `permission_required` 事件是它在 turn 未结束时就待审批的唤醒，不是 idle 也不结束该 turn：用该 Worker 的 observe/status 读当前 pending_permissions，已消失的请求幂等忽略，只在既有授权内用 Runner `permit` 批准或拒绝，超出授权的决定如实上报用户，事件本身不批准任何操作；批准后该 Worker 的 turn-end `idle` 仍会正常到达。每拍核对已授权的空闲线程和可安全并行的工作，派出所有合适匹配；无合适工作则保持空闲，不创造任务或扩大授权。平台故障或实测额度耗尽只是证据，本身不扩大换平台的授权；额度下调也不等于取消或丢弃在飞任务——按用户新指令的范围处理，保留其定位与剩余收尾职责。
+ 3. 核对交付和项目验收；缺口派补证或修复，证据充分再指挥finalize/merge。
+ 4. 合并后协调其他工人安全同步，审查冲突并重验受影响部分。
+ 5. 没有合适工作的闲置会话才关闭（ACP holder 与 PTY/tmux 同一精确 stop；闲置不是保活）；保留待收尾事项的责任人，清理已完成工作区。
+diff --git a/templates/orchestrator/references/zcode-host-dispatch.md.tmpl b/templates/orchestrator/references/zcode-host-dispatch.md.tmpl
+index 1a989a2..997f2ca 100644
+--- a/templates/orchestrator/references/zcode-host-dispatch.md.tmpl
++++ b/templates/orchestrator/references/zcode-host-dispatch.md.tmpl
+@@ -1,8 +1,7 @@
+ # ZCode Host: dispatch, end the turn, wake on worker events
+ 
+-Read this when a ZCode Host supervises workers: the flags and receipt fields it
+-uses. Entry points and startup: [host-startup.md](host-startup.md).
+-This file is the beat.
++The ZCode Host beat: flags and receipt fields. Entry points:
++[host-startup.md](host-startup.md).
+ 
+ ## Three identities, never interchangeable
+ 
+@@ -29,9 +28,8 @@ KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-kaola-host","repo
+   "$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser
+ ```
+ 
+-`platform` must be `zcode`, `session`/`repo` the Host's own, and it may not name
+-the worker's own session; anything else fails the start closed rather than
+-dropping the carrier silently. Exporting it, or setting it on a later `send`,
++`platform` must be `zcode`, `session`/`repo` the Host's own, never the worker's;
++anything else fails the start closed rather than dropping the carrier silently. Exporting it, or setting it on a later `send`,
+ binds nothing. Worker names are issue-scoped:
+ `<platform>-<CODE>-i<ISSUE>-<purpose>`.
+ 
+@@ -42,13 +40,12 @@ binds nothing. Worker names are issue-scoped:
+ "heartbeat_host": {"platform":"zcode","session":"zcode-kaola-host","repo":"…","socket":"…"}
+ ```
+ 
+-`heartbeat_host` is the running holder's own binding; a receipt's
+-`heartbeat_host_requested` is only the request. Check the fact's `session`/`repo`
+-are **yours**; `observe` reports it any time, so verify reused and adopted
+-workers too.
++`heartbeat_host` is the running holder's own binding; `heartbeat_host_requested`
++is only the request. Check the fact's `session`/`repo` are **yours**; `observe`
++reports it any time, so verify reused workers too.
+ 
+ - `heartbeat_host: null` (known) — an ordinary unbound worker: legitimate, never
+-  wakes you; another Host's `session`/`repo` wakes that Host.
++  wakes you; another Host's binding wakes that Host.
+ - `heartbeat_host_known: false` — a holder or record older than the field:
+   unknown; treat it as unbound.
+ - `"error": {"code": "session-exists"}` — you reused a live holder and bound
+@@ -63,12 +60,11 @@ delegated to you:
+ 1. **Keep the in-flight work** — it runs on, readable with `observe` and
+    `capture` from your anchor. Cancel nothing.
+ 2. **Recover in this beat.** Another bound worker or confirmed wake source: end
+-   the turn and read this one on that beat. The unbound worker is
+-   your only wake source: ending the turn waits on nothing and a heartbeat note
+-   wakes nobody, so read its result here with the bounded `wait --timeout
++   the turn and read this one on that beat. The unbound worker is your only
++   wake source — ending the turn waits on nothing, a heartbeat note wakes
++   nobody — so read its result here with the bounded `wait --timeout
+    <seconds>` (`observe`/`capture` once its turn ended). That bounded read is
+-   the recovery exception — nothing is bound, so no event can be kept
+-   undelivered — never the ordinary wait, never a poll loop.
++   the recovery exception — never the ordinary wait, never a poll loop.
+ 3. **Rebind at that safe idle point** — turn ended, nothing in flight, result
+    read: exact `stop` of that one session, `start` again with the variable, and
+    verify the new receipt. `--resume` needs the real native id — ZCode reports
+@@ -93,7 +89,7 @@ decision you need. A heartbeat note claiming a wait you lack is no report.
+ `"mutation_status": "in_progress"` — **accepted and running — not finished, and
+ not correct**. An `error` (`prompt-in-progress`, `agent-not-running`) dispatched
+ nothing; a `prompt_timeout` or missing receipt leaves consumption unknown —
+-establish the fact with `observe` before re-sending.
++establish it with `observe` before re-sending.
+ 
+ **Keep two values**: `prompt_fingerprint`, the turn you dispatched, and
+ `dispatch_event_cursor`, the cursor *before* it produced anything.
+@@ -105,9 +101,9 @@ Do the rest of this beat, update the heartbeat prompt at
+ report, then **end your reply normally**.
+ 
+ There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
+-`sleep`, poll in a loop, or call a blocking `wait` to hold this turn open — a
+-Host turn that stays active is exactly what keeps events undelivered. Do not
+-`stop` or `cancel` yourself or an in-flight worker to manufacture a wake-up.
++`sleep`, poll in a loop, or hold this turn open with a blocking `wait` — an
++active Host turn is exactly what keeps events undelivered. Do not `stop` or
++`cancel` yourself or an in-flight worker to manufacture a wake-up.
+ 
+ ### When an event wakes you
+ 
+@@ -126,8 +122,8 @@ object per event —
+ what happened with the event's own `platform`/`session`/`repo` and that Skill.
+ 
+ **`event_cursor` is the end of the turn, not the start** — `19` is where that
+-turn ended, so the reply sits *below* it and `capture --since <event_cursor>`
+-returns only carrier and title updates. Read from an earlier anchor:
++turn ended, so `capture --since <event_cursor>` sees only carrier and title
++updates. Read from an earlier anchor:
+ 
+ ```bash
+ # the dispatch receipt's cursor, from before the reply existed
+@@ -137,36 +133,38 @@ returns only carrier and title updates. Read from an earlier anchor:
+ "$W" capture --repo "$WORK_REPO" --session codex-KT-i274-parser --lines 200
+ ```
+ 
+-Confirm you are reading the turn you dispatched: `observe`'s
++Confirm you read the turn you dispatched: `observe`'s
+ `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
+ and `turn_outcome`/`stop_reason` must show it finished. A capture with no
+-assistant text means your window was wrong — widen it before judging. Then
+-accept, ask for a fix or dispatch more, update the heartbeat prompt, and end the
+-turn again.
++assistant text means the window was wrong — widen it. Then accept, fix, or
++dispatch more, update the heartbeat prompt, and end the turn.
+ 
+-`kind` is `idle` when the worker's turn ended and `terminated` when its process
+-exited; a finished turn is a full trigger, and you never kill a worker to be
+-notified.
++`kind` is `idle` when the worker's turn ended and `terminated` when its
++process exited; a finished turn is a full trigger, and you never kill a
++worker to be notified. `permission_required` is a bound worker's agent raising
++`session/request_permission` mid-turn — a wake, not an idle; the ordinary
++`idle` still arrives at turn end. The event carries only `request_id`:
++decide it from the worker's live `pending_permissions` — inside existing
++authorization or escalated to the user.
+ 
+ ## 3. Workers and the notification carrier
+ 
+ The worker Agent owns its delivery; it never fabricates events and never writes
+-to your stdin — its holder sends the event over the Host holder's admin socket.
++to your stdin — its holder sends the event over your holder's admin socket.
+ Never ask a worker to notify you or duplicate the carrier.
+ 
+ Delivery rules you can rely on:
+ 
+ - Busy Host: the event is staged and delivered at your next turn boundary, never
+   injected mid-turn, and a worker event is never turned into steering. One that
+-  finished before your turn ended is staged the same way, so that race can
+-  neither skip nor double-dispatch.
+-- Duplicate `event_id`s collapse; several pending events arrive in one prompt,
+-  each with the full current body.
++  finished before your turn ended stages the same way: the race can neither
++  skip nor double-dispatch.
++- Duplicate `event_id`s collapse; several pending events arrive in one prompt
++  with the full current body.
+ - Confirmation follows the notification turn *completing*; after a resume,
+   unconfirmed events are redelivered at least once — keep each pass idempotent.
+ - Dispatch failure, unknown acceptance, or an unverified binding means you are
+-  **not** reliably event-driven: recover it this beat, or report the exception,
+-  before ending the turn.
++  **not** reliably event-driven: recover it this beat, or report the exception.
+ 
+ Steering (`steer`, where supported) is a separate tool and does not alter this
+ wake path.
+diff --git a/tests/contract/test-issue-65-host-contract.py b/tests/contract/test-issue-65-host-contract.py
+index 99648ce..6ca7ef1 100644
+--- a/tests/contract/test-issue-65-host-contract.py
++++ b/tests/contract/test-issue-65-host-contract.py
+@@ -148,7 +148,8 @@ class HostDispatchContract(unittest.TestCase):
+         self.assertIn("<<<heartbeat-prompt", holder)
+         # events only reach an idle host, through the ordinary prompt path
+         self.assertIn('return {"delivered": False, "reason": "prompt-in-progress"}', holder)
+-        self.assertIn('WORKER_EVENT_KINDS = ("terminated", "idle")', holder)
++        self.assertIn('WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")',
++                      holder)
+         # and a worker event is never converted into a steer
+         self.assertNotIn('op_steer(self._heartbeat', holder)
+ 
+diff --git a/tests/contract/test-issue-76-permission-wake.py b/tests/contract/test-issue-76-permission-wake.py
+new file mode 100644
+index 0000000..989105d
+--- /dev/null
++++ b/tests/contract/test-issue-76-permission-wake.py
+@@ -0,0 +1,740 @@
++#!/usr/bin/env python3
++"""Issue #76: a bound worker's pending permission wakes the ZCode Host.
++
++Contract companion to test-zcode-heartbeat-contract.py — same offline harness:
++real holder processes, the real Runner CLI, hermetic fakes. The new fact under
++test: ``session/request_permission`` while the worker turn is still active is
++itself a worker event (``permission_required``) on the existing
++holder->ZCode-Host carrier — it is not ``idle``, it ends no turn, and it
++approves nothing.
++
++* a worker armed with ``KAOLA_ACP_HEARTBEAT_HOST`` emits exactly one
++  ``permission_required`` carrier event per NEW pending permission, while
++  ``turn_active`` is still true and no ``idle`` exists yet; the request's
++  ``request_id`` is the only locator — title, options, and raw tool input
++  never travel;
++* an idle host holder delivers it immediately through the ordinary prompt
++  admission path; a busy host stages it and flushes at the next completed
++  turn boundary; duplicate event ids and a re-sent request stay single;
++* after ``permit`` settles the request the turn ends and the ordinary
++  turn-end ``idle`` still arrives — the wake changed no semantics;
++* an unbound worker records the same pending permission but sends nothing;
++* the host-side ``worker_event`` op accepts the new kind and validates the
++  optional ``request_id``.
++
++No real ZCode install, no login, no network, no live model-driven approval.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++import signal
++import socket
++import subprocess
++import sys
++import tempfile
++import time
++import uuid
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[2]
++CHECKOUT_CLI = ROOT / "scripts" / "kaola-acp.py"
++FAKE = ROOT / "tests" / "contract" / "fake-zcode-app-server.py"
++PYTHON = sys.executable
++
++DESKTOP_CONFIG_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-desktop-config.json"
++PLAN_CACHE_FIXTURE = ROOT / "tests" / "contract" / "fixtures" / "zcode-coding-plan-cache.json"
++FIXTURE_SECRET = json.loads(DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"))["provider"][
++    "builtin:bigmodel-coding-plan"]["options"]["apiKey"]
++
++HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
++PROMPT_FILE_RELPATH = (".kaola", "heartbeat-prompt.json")
++
++# The permission title/options are deliberately hostile markers: they reach the
++# worker's own pending_permissions receipt (bounded, read locally) but must
++# never appear in the worker event or the delivered host prompt.
++MARKER_TITLE = "Run `PERM-CMD-MARKER-4c91` --approve-all"
++MARKER_OPTION = "Allow PERM-OPTION-MARKER-82be"
++PERMISSION_REQUEST_ID = 7
++
++# A minimal ACP agent in the droid/cursor shape: advertises the droid-style
++# config options so `start`'s real delegation receipt can be checked, then on
++# prompt raises session/request_permission and blocks the turn until the
++# holder answers it. PERMISSION_FAKE_RETRANSMIT=1 re-sends the same request id
++# to prove a repeated request stays one wake.
++PERMISSION_ACP_AGENT = (
++    "#!/usr/bin/env python3\n"
++    "import json, os, sys\n"
++    "def send(m):\n"
++    "    sys.stdout.write(json.dumps(m) + '\\n'); sys.stdout.flush()\n"
++    f"PERM_ID = {PERMISSION_REQUEST_ID}\n"
++    f"MARKER = {MARKER_TITLE!r}\n"
++    f"OPT = {MARKER_OPTION!r}\n"
++    "retransmit = os.environ.get('PERMISSION_FAKE_RETRANSMIT') == '1'\n"
++    "prompt_id = None\n"
++    "for raw in sys.stdin.buffer:\n"
++    "    line = raw.decode('utf-8', 'replace').strip()\n"
++    "    if not line:\n"
++    "        continue\n"
++    "    msg = json.loads(line)\n"
++    "    rid, method = msg.get('id'), msg.get('method')\n"
++    "    if method == 'initialize':\n"
++    "        send({'jsonrpc': '2.0', 'id': rid, 'result': {\n"
++    "            'protocolVersion': 1, 'agentCapabilities': {}, 'authMethods': [],\n"
++    "            'agentInfo': {'name': 'fake-permission-agent'}}})\n"
++    "    elif method == 'session/new':\n"
++    "        send({'jsonrpc': '2.0', 'id': rid, 'result': {'sessionId': 'perm-s1',\n"
++    "            'configOptions': [\n"
++    "                {'id': 'autonomy_level', 'name': 'Autonomy Level', 'category': 'mode',\n"
++    "                 'type': 'select', 'currentValue': 'auto-high',\n"
++    "                 'options': [{'value': 'auto-high', 'name': 'auto-high'},\n"
++    "                             {'value': 'normal', 'name': 'normal'}]},\n"
++    "                {'id': 'model', 'name': 'Model', 'category': 'model',\n"
++    "                 'type': 'select', 'currentValue': 'auto',\n"
++    "                 'options': [{'value': 'auto', 'name': 'auto'}]}]}})\n"
++    "    elif method in ('session/set_config_option', 'session/set_mode'):\n"
++    "        send({'jsonrpc': '2.0', 'id': rid, 'result': {}})\n"
++    "    elif method == 'session/prompt':\n"
++    "        prompt_id = rid\n"
++    "        send({'jsonrpc': '2.0', 'method': 'session/update', 'params': {\n"
++    "            'sessionId': 'perm-s1', 'update': {'sessionUpdate': 'agent_message_chunk',\n"
++    "            'content': {'type': 'text', 'text': 'working'}}}})\n"
++    "        req = {'jsonrpc': '2.0', 'id': PERM_ID, 'method': 'session/request_permission',\n"
++    "               'params': {'sessionId': 'perm-s1', 'toolCall': {\n"
++    "                   'toolCallId': 'call-1', 'title': MARKER, 'kind': 'execute',\n"
++    "                   'status': 'pending'},\n"
++    "               'options': [{'optionId': 'allow', 'kind': 'allow_once', 'name': OPT},\n"
++    "                           {'optionId': 'deny', 'kind': 'deny_once', 'name': 'Deny'}]}}\n"
++    "        send(req)\n"
++    "        if retransmit:\n"
++    "            send(req)\n"
++    "    elif rid == PERM_ID and prompt_id is not None:\n"
++    "        send({'jsonrpc': '2.0', 'id': prompt_id, 'result': {'stopReason': 'end_turn'}})\n"
++    "        prompt_id = None\n"
++    "    elif rid is not None:\n"
++    "        send({'jsonrpc': '2.0', 'id': rid, 'error': {\n"
++    "            'code': -32601, 'message': 'unsupported: ' + str(method)}})\n"
++)
++
++ALLOWED_EVENT_KEYS = {"schema", "event_id", "kind", "platform", "session", "repo",
++                      "reason", "event_cursor", "request_id", "staged_at"}
++
++CHECKS: list[str] = []
++
++
++def check(condition: bool, label: str) -> None:
++    if not condition:
++        raise AssertionError(label)
++    CHECKS.append(label)
++
++
++def pid_alive(pid: int | None) -> bool:
++    if not pid:
++        return False
++    try:
++        os.kill(pid, 0)
++    except OSError:
++        return False
++    return True
++
++
++def wait_until(predicate, timeout: float, label: str) -> None:
++    deadline = time.monotonic() + timeout
++    while time.monotonic() < deadline:
++        if predicate():
++            return
++        time.sleep(0.05)
++    raise AssertionError(f"timeout: {label}")
++
++
++def holder_socket(record_dir: Path) -> Path:
++    """The holder's deterministic socket path (kaola-acp.sock_path_for_directory)."""
++    digest = hashlib.sha256(str(record_dir).encode("utf-8")).hexdigest()[:24]
++    return Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
++
++
++def holder_op(sock: Path, op: str, params: dict, timeout: float = 15.0) -> dict:
++    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
++    try:
++        connection.settimeout(timeout)
++        connection.connect(str(sock))
++        payload = json.dumps({"op": op, "request_id": f"t-{uuid.uuid4().hex[:8]}",
++                              "params": params}).encode("utf-8") + b"\n"
++        connection.sendall(payload)
++        buffer = bytearray()
++        while b"\n" not in buffer:
++            data = connection.recv(65536)
++            if not data:
++                break
++            buffer.extend(data)
++        line = buffer.partition(b"\n")[0]
++        return json.loads(line.decode("utf-8")) if line.strip() else {}
++    finally:
++        connection.close()
++
++
++def read_events(record_dir: Path) -> list[dict]:
++    path = record_dir / "events.jsonl"
++    if not path.is_file():
++        return []
++    entries = []
++    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
++        try:
++            entries.append(json.loads(line))
++        except ValueError:
++            pass
++    return entries
++
++
++def events_of_kind(record_dir: Path, kind: str) -> list[dict]:
++    return [entry for entry in read_events(record_dir) if entry.get("kind") == kind]
++
++
++def rpc_sends(rpc_path: Path) -> list[str]:
++    """Every prompt the fake app-server received, as literal content text."""
++    if not rpc_path.is_file():
++        return []
++    sends = []
++    for line in rpc_path.read_text(encoding="utf-8", errors="replace").splitlines():
++        try:
++            entry = json.loads(line)
++        except ValueError:
++            continue
++        message = entry.get("msg") or {}
++        if entry.get("direction") == "in" and message.get("method") == "session/send":
++            sends.append(str((message.get("params") or {}).get("content") or ""))
++    return sends
++
++
++class Sandbox:
++    """Isolated Runner environment for a ZCode Host + Worker chain."""
++
++    def __init__(self, name: str):
++        self.dir = Path(tempfile.mkdtemp(prefix=f"kaola-perm-wake-{name}-"))
++        self.home = self.dir / "home"
++        self.repo = self.dir / "repo"
++        self.record_root = self.dir / "records"
++        for path in (self.home, self.repo, self.record_root):
++            path.mkdir(parents=True)
++        (self.home / ".zcode" / "v2").mkdir(parents=True)
++        (self.home / ".zcode" / "cli").mkdir(parents=True)
++        (self.home / ".zcode" / "v2" / "config.json").write_text(
++            DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
++        (self.home / ".zcode" / "v2" / "coding-plan-cache.json").write_text(
++            PLAN_CACHE_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
++        (self.home / ".zcode" / "v2" / "credentials.json").write_text("{}\n", encoding="utf-8")
++        (self.home / ".zcode" / "cli" / "config.json").write_text('{"hooks":{}}\n', encoding="utf-8")
++        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
++        self.node = Path(PYTHON).resolve()
++        self.droid_shim = self.dir / "droid-fixture"
++        self.droid_shim.write_text(
++            "#!/bin/sh\n"
++            'if [[ "${1:-}" == --version ]]; then printf "droid 0.220.0\\n"; exit 0; fi\n'
++            "exit 0\n", encoding="utf-8")
++        self.droid_shim.chmod(self.droid_shim.stat().st_mode | 0o755)
++        self.entries: dict[tuple[str, str], Path] = {}
++        self.records: dict[tuple[str, str], Path] = {}
++        self.rpcs: dict[tuple[str, str], Path] = {}
++        self.sessions: list[tuple[str, str]] = []
++
++    def entry_for(self, scenario: str, session: str) -> Path:
++        key = (scenario, session)
++        if key in self.entries:
++            return self.entries[key]
++        record = self.dir / f"fake-{session}.json"
++        rpc = self.dir / f"rpc-{session}.jsonl"
++        entry = self.dir / f"zcode-entry-{scenario}-{session}.py"
++        entry.write_text(
++            "#!/usr/bin/env python3\n"
++            "import os, runpy, sys\n"
++            f"os.environ['FAKE_ZCODE_SCENARIO'] = {scenario!r}\n"
++            f"os.environ['FAKE_ZCODE_RECORD'] = {str(record)!r}\n"
++            f"os.environ['FAKE_ZCODE_RPC_LOG'] = {str(rpc)!r}\n"
++            f"sys.argv = [{str(FAKE)!r}, *sys.argv[1:]]\n"
++            f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
++            encoding="utf-8",
++        )
++        entry.chmod(entry.stat().st_mode | 0o755)
++        self.entries[key] = entry
++        self.records[(entry.stat().st_dev, session)] = record
++        self.rpcs[session] = rpc
++        return entry
++
++    def env(self, **overrides: str | None) -> dict[str, str]:
++        base = {
++            "PATH": os.environ.get("PATH", "/usr/bin"),
++            "HOME": str(self.home),
++            "LANG": os.environ.get("LANG", "C"),
++            "TMPDIR": tempfile.gettempdir(),
++            "KAOLA_ACP_RECORD_ROOT": str(self.record_root),
++            "KAOLA_ZCODE_NODE": str(self.node),
++            "DROID_BIN": str(self.droid_shim),
++            "PYTHONUNBUFFERED": "1",
++        }
++        for key, value in overrides.items():
++            if value is None:
++                base.pop(key, None)
++            else:
++                base[key] = value
++        return base
++
++    def session(self) -> str:
++        return f"zcode-pw-{uuid.uuid4().hex[:8]}"
++
++    def record_dir(self, session: str, platform: str = "zcode") -> Path:
++        real_repo = os.path.realpath(str(self.repo))
++        digest = hashlib.sha256(real_repo.encode("utf-8")).hexdigest()[:16]
++        return self.record_root / platform / session / digest
++
++    def invoke(self, command: str, *args: str, session: str | None = None,
++               scenario: str | None = None, platform: str = "zcode",
++               timeout: float = 120,
++               **env_overrides: str | None) -> tuple[subprocess.CompletedProcess[str], dict | None]:
++        argv = [PYTHON, str(CHECKOUT_CLI), platform, command, "--repo", str(self.repo)]
++        if session:
++            argv += ["--session", session]
++            if command == "start":
++                self.sessions.append((platform, session))
++        if scenario is not None and session is not None:
++            env_overrides.setdefault(
++                "KAOLA_ZCODE_ENTRY", str(self.entry_for(scenario, session)))
++        argv += list(args)
++        result = subprocess.run(
++            argv, capture_output=True, text=True,
++            env=self.env(**env_overrides), timeout=timeout,
++        )
++        payload = None
++        text = (result.stdout or "").strip()
++        if text:
++            try:
++                payload = json.loads(text.splitlines()[-1])
++            except ValueError:
++                payload = None
++        return result, payload
++
++    def cli(self, command: str, *args: str, session: str | None = None,
++            scenario: str | None = None, platform: str = "zcode", timeout: float = 120,
++            **env_overrides: str | None) -> dict:
++        result, payload = self.invoke(
++            command, *args, session=session, scenario=scenario, platform=platform,
++            timeout=timeout, **env_overrides,
++        )
++        if result.returncode != 0:
++            raise AssertionError(
++                f"{command} exit {result.returncode}: {(result.stderr or '')[-800:]}")
++        if not isinstance(payload, dict):
++            raise AssertionError(
++                f"{command} printed no JSON receipt: {(result.stdout or '')[-400:]} "
++                f"{(result.stderr or '')[-400:]}")
++        return payload
++
++    def start(self, session_name: str, scenario: str, *,
++              platform: str = "zcode", heartbeat_host: dict | None = None,
++              extra_env: dict[str, str] | None = None) -> dict:
++        env_overrides: dict[str, str | None] = dict(extra_env or {})
++        if heartbeat_host is not None:
++            env_overrides[HEARTBEAT_HOST_ENV] = json.dumps(heartbeat_host)
++        receipt = self.cli("start", "--mode", "yolo", session=session_name,
++                           scenario=scenario, platform=platform, **env_overrides)
++        check(receipt.get("error") is None and receipt.get("state") == "ready",
++              f"{session_name} start reaches ready ({receipt.get('error')})")
++        return receipt
++
++    def write_prompt_file(self, body: str) -> None:
++        path = self.repo.joinpath(*PROMPT_FILE_RELPATH)
++        path.parent.mkdir(parents=True, exist_ok=True)
++        path.write_text(json.dumps({
++            "schema": "kaola-heartbeat-prompt/1",
++            "body": body,
++            "fingerprint": "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest(),
++            "updated_at": int(time.time() * 1000),
++        }, ensure_ascii=False, indent=2), encoding="utf-8")
++
++    def fake(self, path: Path) -> dict:
++        if not path.is_file():
++            return {}
++        try:
++            return json.loads(path.read_text(encoding="utf-8"))
++        except ValueError:
++            return {}
++
++    def cleanup(self) -> None:
++        for platform, session in list(self.sessions):
++            try:
++                self.invoke("stop", "--force", session=session, platform=platform,
++                            timeout=30)
++            except Exception:
++                pass
++        for record in list(self.records.values()):
++            fake_pid = self.fake(record).get("pid")
++            if pid_alive(fake_pid):
++                try:
++                    os.kill(int(fake_pid), signal.SIGKILL)
++                except (OSError, TypeError):
++                    pass
++        import shutil
++        shutil.rmtree(self.dir, ignore_errors=True)
++
++
++def worker_event_entries(record_dir: Path) -> list[dict]:
++    return [entry["event"] for entry in events_of_kind(record_dir, "worker_event")]
++
++
++def carrier_entries(record_dir: Path, event_kind: str | None = None) -> list[dict]:
++    entries = [entry for entry in read_events(record_dir)
++               if entry.get("kind") == "heartbeat_carrier_sent"]
++    if event_kind is not None:
++        entries = [entry for entry in entries if entry.get("event_kind") == event_kind]
++    return entries
++
++
++def test_permission_required_wakes_idle_host_while_turn_active() -> None:
++    sandbox = Sandbox("idle-wake")
++    try:
++        host = sandbox.session()
++        worker = sandbox.session()
++        sandbox.start(host, "basic")
++        sandbox.write_prompt_file("HEARTBEAT V1: permission wake body.")
++        worker_start = sandbox.start(
++            worker, "permission",
++            heartbeat_host={"platform": "zcode", "session": host, "repo": str(sandbox.repo)})
++        fact = worker_start.get("heartbeat_host") or {}
++        check(fact.get("session") == host and fact.get("platform") == "zcode",
++              f"armed start receipt carries the heartbeat_host fact ({fact})")
++
++        send = sandbox.cli("send", "--no-wait", "--text", "do work", session=worker)
++        check(send.get("outcome") == "in_progress",
++              f"worker prompt admitted ({send.get('outcome')})")
++
++        # The worker's turn is still active, blocked on the permission — this
++        # is the deadlock shape the issue describes: no turn end, no idle.
++        wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
++                            or []), 15, "worker is waiting on a permission")
++        status = sandbox.cli("status", session=worker)
++        check(status.get("turn_active") is True, "worker turn still active while pending")
++        check(status.get("activity_hint") == "waiting",
++              f"worker activity_hint reports waiting ({status.get('activity_hint')})")
++        pending = status.get("pending_permissions") or []
++        request_id = pending[0].get("request_id")
++
++        host_dir = sandbox.record_dir(host)
++        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
++                   "permission_required event reaches the idle host and delivers")
++        staged = worker_event_entries(host_dir)
++        check(len(staged) == 1, f"exactly one worker event staged ({len(staged)})")
++        event = staged[0]
++        check(event["kind"] == "permission_required" and event["session"] == worker
++              and event["platform"] == "zcode",
++              f"the wake is a permission_required, not an idle ({event})")
++        check(str(event.get("request_id")) == str(request_id),
++              f"the event locates the pending request ({event.get('request_id')})")
++        check(set(event) <= ALLOWED_EVENT_KEYS,
++              f"the event carries only locating metadata ({sorted(event)})")
++        check(not any(e["kind"] == "idle" for e in staged),
++              "no idle event exists while the turn is still active")
++
++        sends = rpc_sends(sandbox.rpcs[host])
++        check(len(sends) == 1, f"the wake delivered as one host prompt ({len(sends)})")
++        content = sends[0]
++        check("kaola-host-notify/1" in content and event["event_id"] in content,
++              "the delivered prompt carries the permission event line")
++        check(str(request_id) in content,
++              "the delivered prompt carries the request locator")
++        check("ls -la" not in content,
++              "the raw tool input never travels in the event prompt")
++        check(FIXTURE_SECRET not in content, "no credential reaches the prompt")
++        check(sandbox.cli("status", session=worker).get("turn_active") is True,
++              "the worker turn is still active after the wake (it is not an idle)")
++
++        # Within existing authorization the Host permits; the turn then ends
++        # and the ordinary turn-end idle still arrives — semantics unchanged.
++        permit = sandbox.cli("permit", "--option", "allow", session=worker)
++        check(permit.get("permitted") is not None,
++              f"permit settles the pending request ({permit.get('error')})")
++        wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
++                   "the ordinary turn-end idle still arrives after the permission wake")
++        second = worker_event_entries(host_dir)[1]
++        check(second["kind"] == "idle" and second["session"] == worker,
++              f"the second event is the real turn-end idle ({second})")
++        check(second["event_cursor"] > event["event_cursor"],
++              "the permission wake precedes the turn-end idle in worker event order")
++        wait_until(lambda: len(events_of_kind(host_dir, "worker_event_delivered")) == 2, 15,
++                   "the idle episode also delivers")
++        check(len(rpc_sends(sandbox.rpcs[host])) == 2,
++              "exactly one prompt per worker event, still no periodic carrier")
++
++        carrier = carrier_entries(sandbox.record_dir(worker))
++        kinds = [entry["event_kind"] for entry in carrier]
++        check(kinds == ["permission_required", "idle"],
++              f"worker carrier sent one permission wake then the idle ({kinds})")
++        check(carrier[0]["receipt"].get("delivered") is True,
++              f"the permission wake receipt reports delivery ({carrier[0]['receipt']})")
++
++        for session in (worker, host):
++            stop = sandbox.cli("stop", "--force", session=session)
++            check(stop.get("residual_pids") == [], f"{session} stop leaves no residue")
++    finally:
++        sandbox.cleanup()
++
++
++def test_permission_event_stages_on_busy_host_then_flushes() -> None:
++    sandbox = Sandbox("busy")
++    try:
++        host = sandbox.session()
++        worker = sandbox.session()
++        sandbox.start(host, "permission")
++        sandbox.write_prompt_file("HEARTBEAT BUSY: staged permission flush.")
++        sandbox.start(
++            worker, "permission",
++            heartbeat_host={"platform": "zcode", "session": host, "repo": str(sandbox.repo)})
++
++        # The host is itself mid-turn on a permission: the wake must stage.
++        sandbox.cli("send", "--no-wait", "--text", "host busy turn", session=host)
++        wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions")
++                            or []), 15, "host turn is busy waiting on a permission")
++
++        sandbox.cli("send", "--no-wait", "--text", "worker work", session=worker)
++        wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
++                            or []), 15, "worker turn is waiting on a permission")
++        host_dir = sandbox.record_dir(host)
++        wait_until(lambda: events_of_kind(host_dir, "worker_event"), 15,
++                   "the permission wake stages on the busy host")
++        staged = worker_event_entries(host_dir)
++        check(len(staged) == 1 and staged[0]["kind"] == "permission_required",
++              f"the staged event is the permission wake ({staged})")
++        carrier = carrier_entries(sandbox.record_dir(worker), "permission_required")
++        check(carrier and carrier[0]["receipt"].get("staged") is True
++              and carrier[0]["receipt"].get("delivered") is not True,
++              f"the carrier receipt reports staging, not delivery ({carrier[:1]})")
++        check(not events_of_kind(host_dir, "worker_event_delivered"),
++              "no delivery while the host turn is active")
++        check(len(rpc_sends(sandbox.rpcs[host])) == 1,
++              "no prompt reached the busy host besides its own turn")
++
++        # The host's own turn ends; the staged wake flushes at that boundary.
++        sandbox.cli("permit", "--option", "allow", session=host)
++        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
++                   "the staged wake flushes at the completed turn boundary")
++        sends = rpc_sends(sandbox.rpcs[host])
++        check(len(sends) == 2, f"the wake flushed as the next host prompt ({len(sends)})")
++        check(staged[0]["event_id"] in sends[1] and "permission_required" in sends[1],
++              "the flushed prompt carries the permission event line")
++        check("ls -la" not in sends[1], "the raw tool input never travels")
++
++        # This notification turn also asks a permission (scenario); answering
++        # it completes the pass and confirms the event.
++        wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions")
++                            or []), 15, "notification turn asks its permission")
++        sandbox.cli("permit", "--option", "allow", session=host)
++        wait_until(lambda: events_of_kind(host_dir, "worker_event_confirmed"), 15,
++                   "the completed notification turn confirms the wake")
++
++        # The worker's own permission then resolves and its idle still comes.
++        sandbox.cli("permit", "--option", "allow", session=worker)
++        wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
++                   "the worker's ordinary idle still arrives afterwards")
++        check(worker_event_entries(host_dir)[1]["kind"] == "idle",
++              "the second event is the worker's turn-end idle")
++
++        for session in (worker, host):
++            stop = sandbox.cli("stop", "--force", session=session)
++            check(stop.get("residual_pids") == [], f"{session} stop leaves no residue")
++    finally:
++        sandbox.cleanup()
++
++
++def test_droid_worker_wake_is_metadata_only_and_idempotent() -> None:
++    """A bound non-ZCode ACP worker (the droid shape): same wake, no leak, one
++    event per NEW pending request even when the agent re-sends the same id."""
++    sandbox = Sandbox("droid")
++    try:
++        fake = sandbox.dir / "fake-permission-agent.py"
++        fake.write_text(PERMISSION_ACP_AGENT, encoding="utf-8")
++        fake.chmod(fake.stat().st_mode | 0o755)
++        host = sandbox.session()
++        worker = f"droid-pw-{uuid.uuid4().hex[:8]}"
++        sandbox.start(host, "basic")
++        sandbox.write_prompt_file("HEARTBEAT DROID: metadata-only wake body.")
++
++        worker_start = sandbox.cli(
++            "start", "--command", f"{PYTHON} {fake}", session=worker,
++            platform="droid",
++            **{HEARTBEAT_HOST_ENV: json.dumps(
++                {"platform": "zcode", "session": host, "repo": str(sandbox.repo)}),
++               "PERMISSION_FAKE_RETRANSMIT": "1"})
++        check(worker_start.get("error") is None and worker_start.get("state") == "ready",
++              f"droid worker starts ({worker_start.get('error')})")
++        # First the actual delegation receipt, before any pending exists:
++        # auto-high is what start really applied — a fact, not a promise that
++        # the native side can never ask.
++        application = worker_start.get("config_application") or {}
++        mode = application.get("mode") or {}
++        check(mode.get("applied") is True and mode.get("value") == "auto-high",
++              f"start applied the real delegation ({application.get('mode')})")
++        fact = worker_start.get("heartbeat_host") or {}
++        check(fact.get("session") == host, f"armed start carries the host fact ({fact})")
++
++        send = sandbox.cli("send", "--no-wait", "--text", "do work", session=worker,
++                           platform="droid")
++        check(send.get("outcome") == "in_progress", "droid worker prompt admitted")
++        wait_until(lambda: (sandbox.cli("status", session=worker, platform="droid")
++                            .get("pending_permissions") or []),
++                   15, "droid worker waits on its permission")
++        status = sandbox.cli("status", session=worker, platform="droid")
++        check(status.get("turn_active") is True and status.get("activity_hint") == "waiting",
++              "the droid worker turn is active and waiting")
++        pending = status.get("pending_permissions") or []
++        check(pending[0].get("title") == MARKER_TITLE,
++              "the worker's own bounded receipt keeps the request detail")
++
++        worker_dir = sandbox.record_dir(worker, platform="droid")
++        requests = [entry for entry in read_events(worker_dir)
++                    if entry.get("kind") == "request_permission"]
++        check(len(requests) == 2, "the agent's re-sent request is on record")
++        carrier = carrier_entries(worker_dir, "permission_required")
++        check(len(carrier) == 1,
++              f"a re-sent request id stays ONE permission wake ({len(carrier)})")
++        check(len(sandbox.cli("status", session=worker, platform="droid")
++                  .get("pending_permissions") or []) == 1,
++              "the pending list holds the single request")
++
++        host_dir = sandbox.record_dir(host)
++        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
++                   "the droid wake reaches the idle host and delivers")
++        staged = worker_event_entries(host_dir)
++        check(len(staged) == 1 and staged[0]["kind"] == "permission_required"
++              and staged[0]["platform"] == "droid" and staged[0]["session"] == worker,
++              f"the staged event is the droid permission wake ({staged})")
++        event = staged[0]
++        check(str(event.get("request_id")) == str(PERMISSION_REQUEST_ID),
++              "the event carries the request locator")
++        check(set(event) <= ALLOWED_EVENT_KEYS,
++              f"the event is metadata only ({sorted(event)})")
++        event_blob = json.dumps(event, sort_keys=True)
++        check(MARKER_TITLE not in event_blob and MARKER_OPTION not in event_blob,
++              "no title or option text travels in the staged event")
++        sends = rpc_sends(sandbox.rpcs[host])
++        check(len(sends) == 1 and MARKER_TITLE not in sends[0]
++              and MARKER_OPTION not in sends[0],
++              "the delivered prompt carries no request detail, only the locator")
++        check(str(PERMISSION_REQUEST_ID) in sends[0],
++              "the delivered prompt does carry the request_id")
++        check(FIXTURE_SECRET not in sends[0], "no credential reaches the prompt")
++
++        # permit settles it; a repeated permit is an honest no-op error, and
++        # the ordinary turn-end idle still arrives afterwards.
++        permit = sandbox.cli("permit", "--request-id", str(PERMISSION_REQUEST_ID),
++                             "--option", "allow", session=worker, platform="droid")
++        check(permit.get("permitted") is not None,
++              f"permit settles the request ({permit.get('error')})")
++        again = sandbox.invoke("permit", "--request-id", str(PERMISSION_REQUEST_ID),
++                               "--option", "allow", session=worker, platform="droid")[1] or {}
++        check((again.get("error") or {}).get("code") == "no-pending-permission",
++              f"an already-settled request is an idempotent error ({again.get('error')})")
++        wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
++                   "the ordinary idle still arrives after the wake")
++        check(worker_event_entries(host_dir)[1]["kind"] == "idle",
++              "the second event is the real turn-end idle")
++
++        for platform, session in (("droid", worker), ("zcode", host)):
++            stop = sandbox.cli("stop", "--force", session=session, platform=platform)
++            check(stop.get("residual_pids") == [], f"{session} stop leaves no residue")
++    finally:
++        sandbox.cleanup()
++
++
++def test_unbound_worker_permission_is_unchanged() -> None:
++    sandbox = Sandbox("unbound")
++    try:
++        worker = sandbox.session()
++        sandbox.start(worker, "permission")
++        send = sandbox.cli("send", "--no-wait", "--text", "do work", session=worker)
++        check(send.get("outcome") == "in_progress", "unbound worker prompt admitted")
++        wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
++                            or []), 15, "unbound worker waits on its permission")
++        status = sandbox.cli("status", session=worker)
++        check(status.get("turn_active") is True and status.get("activity_hint") == "waiting",
++              "the unbound worker reports the same pending shape")
++        check(not carrier_entries(sandbox.record_dir(worker)),
++              "an unbound worker sends nothing anywhere")
++        permit = sandbox.cli("permit", "--option", "allow", session=worker)
++        check(permit.get("permitted") is not None, "the unbound permit still works")
++        check(not carrier_entries(sandbox.record_dir(worker)),
++              "settling changed no carrier behavior")
++        stop = sandbox.cli("stop", "--force", session=worker)
++        check(stop.get("residual_pids") == [], "unbound worker stop leaves no residue")
++    finally:
++        sandbox.cleanup()
++
++
++def test_worker_event_validation_accepts_permission_required() -> None:
++    sandbox = Sandbox("validate")
++    try:
++        host = sandbox.session()
++        sandbox.start(host, "basic")
++        host_dir = sandbox.record_dir(host)
++        sock = holder_socket(host_dir)
++
++        base = {"schema": "kaola-worker-event/1", "kind": "permission_required",
++                "platform": "droid", "session": "droid-pw-x",
++                "repo": os.path.realpath(str(sandbox.repo)),
++                "reason": "session/request_permission pending", "event_cursor": 11}
++        receipt = holder_op(sock, "worker_event", {**base, "request_id": "7"})
++        check(receipt.get("staged") is True and receipt.get("error") is None,
++              f"the new kind stages with a string request_id ({receipt})")
++        receipt = holder_op(sock, "worker_event", {**base, "event_cursor": 12,
++                                                   "request_id": 7})
++        check(receipt.get("staged") is True,
++              f"the new kind stages with an integer request_id ({receipt})")
++        receipt = holder_op(sock, "worker_event", {**base, "event_cursor": 12,
++                                                   "request_id": 7})
++        check(receipt.get("duplicate") is True,
++              f"an identical event stays a deduped duplicate ({receipt})")
++        for bad in ({"nested": 1}, ["list"], True):
++            receipt = holder_op(sock, "worker_event", {**base, "event_cursor": 13,
++                                                       "request_id": bad})
++            check((receipt.get("error") or {}).get("code") == "worker-event-invalid",
++                  f"a malformed request_id is rejected ({receipt})")
++        receipt = holder_op(sock, "worker_event", {**base, "kind": "bogus",
++                                                   "event_cursor": 14})
++        check((receipt.get("error") or {}).get("code") == "worker-event-invalid",
++              f"an unknown kind is still rejected ({receipt})")
++
++        # The host is idle: each staged event delivers its own prompt at once.
++        wait_until(lambda: len(events_of_kind(host_dir, "worker_event_delivered")) == 2
++                   and len(rpc_sends(sandbox.rpcs[host])) == 2, 15,
++                   "each staged permission event delivers on the idle host")
++        sends = rpc_sends(sandbox.rpcs[host])
++        check("permission_required" in sends[0] and '"request_id": "7"' in sends[0],
++              "the first delivered line carries the string request_id")
++        check("permission_required" in sends[1] and '"request_id": 7' in sends[1],
++              "the second delivered line carries the integer request_id")
++
++        host_stop = sandbox.cli("stop", "--force", session=host)
++        check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
++    finally:
++        sandbox.cleanup()
++
++
++TESTS = (
++    test_permission_required_wakes_idle_host_while_turn_active,
++    test_permission_event_stages_on_busy_host_then_flushes,
++    test_droid_worker_wake_is_metadata_only_and_idempotent,
++    test_unbound_worker_permission_is_unchanged,
++    test_worker_event_validation_accepts_permission_required,
++)
++
++
++def main() -> int:
++    for test in TESTS:
++        CHECKS.clear()
++        test()
++        print(f"PASS {test.__name__} ({len(CHECKS)} checks)")
++    print(f"PASS: issue-76 permission wake contract ({len(TESTS)} tests)")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
