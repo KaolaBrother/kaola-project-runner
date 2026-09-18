@@ -1,0 +1,36 @@
+render-skills: PASS (9 workers + kaola-project-runner + grok-bot host: 1 bridge skill, 2526 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+installer migration acceptance: PASS
+installer runtimes acceptance: PASS
+FAILED: test-issue-49-grok-bot-host.py
+test_every_generated_copy_is_covered (__main__.TestEntrypointCannotSelfDeadlock.test_every_generated_copy_is_covered)
+The rule is worthless if it only guards the un-run source file. ... ok
+test_no_here_document_anywhere_in_the_shared_entrypoint (__main__.TestEntrypointCannotSelfDeadlock.test_no_here_document_anywhere_in_the_shared_entrypoint)
+One rule, checked structurally: this file uses no heredoc, ever. ... ok
+test_the_entrypoint_exists (__main__.TestEntrypointCannotSelfDeadlock.test_the_entrypoint_exists) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.004s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.059s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+cat: /tmp/kaola-val.ZSvzxG/test-devin-regressions.py.log: No such file or directory
+{"killed_group_members": [], "matched_pids": [82652, 82674, 82717, 82740, 82767, 82797, 82824, 82844, 82860, 82914, 82962, 83050, 83097, 83152], "residual_pids": [], "results": [{"force_killed": true, "holder_alive": false, "pid": 82652, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82674, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82717, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82740, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82767, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82797, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82824, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82844, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82860, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82914, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 82962, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 83050, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 83097, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}, {"force_killed": true, "holder_alive": false, "pid": 83152, "stop_error": {"code": "holder-closed", "message": "holder closed the connection"}, "stop_residual_pids": [], "via": "kill"}], "root": "/tmp/kaola-val.ZSvzxG", "swept_groups": []}

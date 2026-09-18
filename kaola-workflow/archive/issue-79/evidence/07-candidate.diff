@@ -1,0 +1,2032 @@
+diff --git a/README.md b/README.md
+index a3604d0..c0b696b 100644
+--- a/README.md
++++ b/README.md
+@@ -74,10 +74,24 @@ inside the ZCode App; the adapter's child environment is an allowlist, so `ANTHR
+ and other billing levers are not forwarded. Because headless CLI 0.16.5 cannot see the desktop
+ login, the adapter reads the App's provider registry (`~/.zcode/v2/config.json`) read-only,
+ selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go providers are
+-refused, never fallen back to) and hands it to the app-server in memory as the protocol's
+-`runtimeModel` overlay, the same mechanism the desktop App uses; nothing is written under
+-`~/.zcode`, and the credential never reaches receipts or logs. Default transport is ACP (the
+-live Coding Plan gate passed on 2026-09-16). ZCode does not support a PTY transport: the bundled
++refused, never fallen back to) and hands it to the app-server in memory, the same mechanism the
++desktop App uses; nothing is written under `~/.zcode`, and the credential never reaches receipts
++or logs. Which in-memory mechanism applies depends on the installed app-server, and the CLI
++version string cannot tell them apart (0.16.5 ships with both), so the adapter picks by the
++backend's own error rather than a version gate: a pre-3.12 app-server takes the `runtimeModel`
++overlay, while ZCode 3.12+ dropped `runtimeModel` entirely and instead needs the bundled provider
++table located next to the verified entry (the shipped 3.12.x entry cannot find its own), the plan
++registered through `provider/updateAccountConfig`, the model selected on the `account:*` provider
++through `session/setModel`, and the credential supplied per model request through
++`interaction/requestProviderRuntimeHeaders`, which also requires an explicit `options.reasoningLevel`
++on selection. Default transport is ACP. Two live Coding Plan gates have passed, each against the
++desktop build named: **3.11.2** on 2026-09-16 (the `runtimeModel` path), and **3.12.3** on
++2026-09-19 (the account-provider path — start with mode `yolo` applied, explicit selection on
++`account:bigmodel-individual-coding-plan`/`GLM-5.3`, a real model reply, then exact stop reporting
++no residual process). Neither receipt carries over to a build it was not run against, and both were
++taken on one macOS machine with the ZCode desktop App already logged in; a different desktop
++version, plan, or machine is unverified until it is run there. ZCode does not support a PTY
++transport: the bundled
+ runtime ships no terminal UI (`Cannot find package '@zcode/tui'`) and headless `--prompt` needs
+ `~/.zcode/cli/config.json`, so `--transport pty` remains selectable only as a known-unsupported
+ diagnostic entry, and login happens in the ZCode desktop App.
+diff --git a/platforms/zcode.yaml b/platforms/zcode.yaml
+index a7652b0..14cecdf 100644
+--- a/platforms/zcode.yaml
++++ b/platforms/zcode.yaml
+@@ -11,7 +11,7 @@ binary_env: "ZCODE_BIN"
+ continue_syntax: "--continue"
+ resume_syntax: "--resume <session-id>"
+ preflight_summary: "Verify the explicit ZCode runtime path and report app-server readiness and Coding Plan provider facts without PATH discovery; the bundled runtime ships no terminal UI."
+-launch_summary: "Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP (the default) runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Explicit --transport pty is a known-unsupported diagnostic entry, not a login or fallback channel: the bundled runtime cannot open a terminal UI (Cannot find package @zcode/tui) and headless --prompt needs ~/.zcode/cli/config.json. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only, selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused), and hands it to the app-server in memory as the protocol's runtimeModel overlay; it never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login happens in the ZCode desktop App, never through the Runner."
++launch_summary: "Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP (the default) runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Explicit --transport pty is a known-unsupported diagnostic entry, not a login or fallback channel: the bundled runtime cannot open a terminal UI (Cannot find package @zcode/tui) and headless --prompt needs ~/.zcode/cli/config.json. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only and selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused). Because the shipped 3.12.x entry cannot locate its own bundled provider table, the adapter resolves that table next to the verified entry and injects both ZCODE_BUILTIN_PROVIDER_CONFIG_FILE and ZCODE_PERSONAL_PROVIDER_CONFIG_FILE (both or neither, never inherited). On 3.12+ it registers the plan through provider/updateAccountConfig, creates the session with no model channel, selects the model on the account:* provider through session/setModel with persistAsWorkspaceLastUsed false, and answers interaction/requestProviderRuntimeHeaders per model request; a pre-3.12 app-server keeps the in-memory runtimeModel overlay, chosen by that backend's own error rather than a version gate. It never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login happens in the ZCode desktop App, never through the Runner."
+ recurring_execution: "unsupported"
+ recurring_summary: "Use the caller-selected one-shot, Codex heartbeat, or live-verified runtime-native carrier described in [scheduling.md](scheduling.md)."
+ quit_text: "/exit"
+@@ -28,7 +28,7 @@ fast_summary: "no native Fast toggle; thought level is a separate config option
+ default_transport: "acp"
+ acp_command: "python3 $SKILL_DIR/scripts/kaola-zcode-acp.py"
+ acp_client_capabilities: "terminal:false,fs:false"
+-acp_quirks: "Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider travels in memory as the runtimeModel overlay on session/create, session/resume and session/setModel (launch facts in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login happens in the ZCode desktop App; PTY is unsupported by the bundled runtime (no terminal UI) and is a diagnostic entry only"
++acp_quirks: "Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider is registered in memory per backend process -- on ZCode 3.12+ via provider/updateAccountConfig plus session/setModel on the account:* provider with the credential supplied only through interaction/requestProviderRuntimeHeaders, and on pre-3.12 app-servers via the runtimeModel overlay on session/create, session/resume and session/setModel (launch facts in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login happens in the ZCode desktop App; PTY is unsupported by the bundled runtime (no terminal UI) and is a diagnostic entry only"
+ acp_verified_versions: "cli=0.16.5;adapter=kaola-zcode-acp;protocol=1"
+ acp_env_allowlist: ""
+ acp_login_requires_pty: "false"
+diff --git a/scripts/kaola-zcode-acp.py b/scripts/kaola-zcode-acp.py
+index f23bf41..a9e145c 100755
+--- a/scripts/kaola-zcode-acp.py
++++ b/scripts/kaola-zcode-acp.py
+@@ -50,6 +50,7 @@ import atexit
+ import hashlib
+ import json
+ import os
++import re
+ import signal
+ import subprocess
+ import sys
+@@ -74,6 +75,184 @@ API_FORMAT_BY_KIND = {
+ }
+ PROVIDER_SOURCES = ("builtin", "models-dev", "custom", "user", "workspace", "ephemeral")
+ 
++# ZCode 3.12+ bundled provider-config resolution (Issue #79).
++#
++# 3.12.3's own bootstrap probes only two paths from the entry's directory --
++# `<entryDir>/provider/zcode-builtin.json` and a five-levels-up
++# `config/provider/zcode-builtin.json` that fits the source tree
++# (`apps/zcode-cli/packages/cli/dist/zcode.cjs`) but not the shipped .app, where
++# the table sits ONE level up at `<Resources>/config/provider/zcode-builtin.json`.
++# In the .app layout the probe therefore fails and `app-server` exits 1 before it
++# ever serves a request. Setting the two env names below makes the CLI use the
++# given paths verbatim instead of probing.
++#
++# The builtin path is derived from the entry this adapter already verified in
++# resolve_runtime(), never inherited from the parent environment: an inherited
++# value would be unowned and could point the CLI at an attacker- or
++# stale-controlled provider table. Neither name is in ENV_ALLOWLIST, so an
++# inherited value cannot reach the child.
++BUILTIN_PROVIDER_CONFIG_ENV = "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE"
++PERSONAL_PROVIDER_CONFIG_ENV = "ZCODE_PERSONAL_PROVIDER_CONFIG_FILE"
++PERSONAL_PROVIDER_CONFIG_RELPATH = os.path.join(".zcode", "v2", "provider_config.json")
++# Probed in order, first existing file wins; mirrors the CLI's own candidates
++# plus the shipped .app layout it misses.
++BUILTIN_PROVIDER_CONFIG_CANDIDATES = (
++    ("provider", "zcode-builtin.json"),
++    (os.pardir, "config", "provider", "zcode-builtin.json"),
++    (os.pardir, os.pardir, os.pardir, os.pardir, os.pardir,
++     "config", "provider", "zcode-builtin.json"),
++)
++
++
++def resolve_builtin_provider_config(entry: str) -> str | None:
++    """Locate the bundled provider table relative to the verified entry.
++
++    Returns None when no candidate exists; the caller then leaves both env
++    names unset and the CLI keeps its own (older, working) behaviour.
++    """
++    base = os.path.dirname(os.path.abspath(entry))
++    for parts in BUILTIN_PROVIDER_CONFIG_CANDIDATES:
++        candidate = os.path.normpath(os.path.join(base, *parts))
++        if os.path.isfile(candidate):
++            return candidate
++    return None
++
++
++def personal_provider_config_path(home: str | None = None) -> str | None:
++    """Path of the per-user provider config. Never opened by this adapter."""
++    home = home or os.environ.get("HOME") or ""
++    if not home:
++        return None
++    return os.path.join(home, PERSONAL_PROVIDER_CONFIG_RELPATH)
++
++
++# The app-server's own provider registry is keyed by `account:*` ids, not by the
++# desktop registry's `builtin:*` ids. The bundled table's providerRules list the
++# individual Coding Plan under these names (Issue #79).
++# `states[<id>].availability` enum, from the installed 3.12.3 schema.
++PLAN_AVAILABILITY = ("available", "pending", "unavailable", "unknown")
++
++ACCOUNT_PROVIDER_BY_CODING_PLAN = {
++    "builtin:bigmodel-coding-plan": "account:bigmodel-individual-coding-plan",
++    "builtin:zai-coding-plan": "account:zai-individual-coding-plan",
++}
++
++
++def read_builtin_release(path: str) -> dict[str, Any]:
++    """Read the bundled provider table. Rules only; it carries no credential."""
++    release = _read_json_readonly(path)
++    if not isinstance(release, dict):
++        raise RuntimeError_(f"bundled provider table is not an object: {path}")
++    if not isinstance(release.get("revision"), int):
++        raise RuntimeError_(f"bundled provider table has no integer revision: {path}")
++    return release
++
++
++def builtin_revision_string(release: dict[str, Any], active_path: str) -> str:
++    """Reproduce the backend's own builtin revision identity.
++
++    `NodeZCodeBuiltinProviderConfigSource` hashes the RESOLVED PATH STRING of the
++    active table -- not its bytes -- and reports
++    `zcode-builtin:<revision>:<sha256(path)>`. Node's path.resolve() normalises
++    without following symlinks, so abspath is the faithful equivalent.
++    """
++    digest = hashlib.sha256(os.path.abspath(active_path).encode("utf-8")).hexdigest()
++    return f"zcode-builtin:{release['revision']}:{digest}"
++
++
++def account_model_ids(release: dict[str, Any], account_id: str) -> list[str]:
++    """`builtinModelIds` the bundled table lists for one account provider."""
++    rules = (((release.get("config") or {}).get("providerConfigRules") or {})
++             .get("providerRules") or [])
++    for rule in rules:
++        if isinstance(rule, dict) and rule.get("providerId") == account_id:
++            ids = (rule.get("config") or {}).get("builtinModelIds")
++            if isinstance(ids, list):
++                return [m for m in ids if isinstance(m, str) and m]
++    return []
++
++
++def account_reasoning_levels(release: dict[str, Any], model_id: str) -> list[str]:
++    """Reasoning levels the bundled table allows for one model.
++
++    `modelRules` are regex rules applied in order, later matches overriding
++    earlier ones -- the backend tests them as `^(?:<modelMatch>)$`, case
++    insensitive. 3.12+ requires an explicit level for the Coding Plan models.
++    """
++    rules = ((release.get("config") or {}).get("modelConfigRules") or {}).get("modelRules") or []
++    levels: list[str] = []
++    for rule in rules:
++        if not isinstance(rule, dict):
++            continue
++        pattern = rule.get("modelMatch")
++        if not isinstance(pattern, str):
++            continue
++        try:
++            if not re.match(f"^(?:{pattern})$", model_id, re.IGNORECASE):
++                continue
++        except re.error:
++            continue
++        values = (((rule.get("config") or {}).get("optionSpecs") or {})
++                  .get("reasoningLevel") or {}).get("values")
++        if isinstance(values, list) and values:
++            levels = [v for v in values if isinstance(v, str) and v]
++    return levels
++
++
++def build_account_config(
++    choice: dict[str, Any], release: dict[str, Any], active_path: str,
++) -> dict[str, Any] | None:
++    """`provider/updateAccountConfig` snapshot for the one enabled Coding Plan.
++
++    Carries no credential: the backend asks for auth per model request through
++    `interaction/requestProviderRuntimeHeaders`. Returns None when this plan has
++    no account-provider counterpart, so the caller can stay on the old path.
++    """
++    account_id = ACCOUNT_PROVIDER_BY_CODING_PLAN.get(choice["provider_id"])
++    if not account_id:
++        return None
++    bundled = account_model_ids(release, account_id)
++    if not bundled:
++        return None
++    # Offer only models the desktop plan and the bundled table agree on, in the
++    # desktop's order; nothing is substituted or invented.
++    model_ids = [m for m in choice["model_ids"] if m in bundled]
++    if not model_ids:
++        raise RuntimeError_(
++            f"{choice['provider_id']} offers {', '.join(choice['model_ids'])} but "
++            f"{account_id} lists {', '.join(bundled)}; no shared model"
++        )
++    # `availability` is reported, not asserted: the desktop plan cache is the
++    # only fact we have about the plan, and an unrecognised status stays
++    # `unknown` rather than being upgraded to `available`.
++    status = choice.get("plan_cache_status")
++    availability = status if status in PLAN_AVAILABILITY else "unknown"
++    return {
++        "account_id": account_id,
++        "model_ids": model_ids,
++        "release": release,
++        "params": {
++            "revision": f"{ADAPTER_NAME}:{int(time.time() * 1000)}",
++            "basedOnZCodeBuiltinRevision": builtin_revision_string(release, active_path),
++            "providers": {
++                account_id: {
++                    "builtinModelIds": model_ids,
++                    "access": {"type": "zhipu-account", "entitled": True},
++                },
++            },
++            # Measured against the installed 3.12.3 schema: `availability` and
++            # `entitled` are required here, and `current` is required by the
++            # snapshot validator for an entitled zhipu-account provider.
++            "states": {
++                account_id: {
++                    "availability": availability,
++                    "entitled": True,
++                    "current": True,
++                },
++            },
++        },
++    }
++
+ # Environment names that must never reach the ZCode child. The child env is
+ # built from ENV_ALLOWLIST, so these are already excluded by construction;
+ # DENIED_ENV is the explicit, testable statement of that boundary.
+@@ -205,11 +384,17 @@ def resolve_runtime(entry: str | None, node: str | None) -> tuple[str, str]:
+     return entry, node
+ 
+ 
+-def build_child_env() -> dict[str, str]:
++def build_child_env(entry: str | None = None) -> dict[str, str]:
+     """Build the child environment from a strict allowlist.
+ 
+     ELECTRON_RUN_AS_NODE is set because the shipped ZCode runtime is the
+     Electron binary acting as node; it also keeps the desktop UI from starting.
++
++    When ``entry`` is given and the bundled provider table is found next to it,
++    both ZCode 3.12+ provider-config names are set from that verified location
++    (Issue #79). The CLI requires both or neither: given only the builtin name
++    it re-syncs the table into a version-keyed runtime copy and rewires its
++    config revision to that copy, so a half-set pair is worse than none.
+     """
+     env = {k: os.environ[k] for k in ENV_ALLOWLIST if k in os.environ}
+     for name in DENIED_ENV:
+@@ -218,6 +403,14 @@ def build_child_env() -> dict[str, str]:
+     leaked = sorted(n for n in DENIED_ENV if n in env)
+     if leaked:  # unreachable by construction; kept as an enforced invariant
+         raise RuntimeError_(f"denied env leaked into child: {leaked}")
++    # Neither provider-config name is in ENV_ALLOWLIST, so anything inherited
++    # was already dropped above; these are set only from the verified entry.
++    if entry:
++        builtin = resolve_builtin_provider_config(entry)
++        personal = personal_provider_config_path(env.get("HOME"))
++        if builtin and personal:
++            env[BUILTIN_PROVIDER_CONFIG_ENV] = builtin
++            env[PERSONAL_PROVIDER_CONFIG_ENV] = personal
+     return env
+ 
+ 
+@@ -449,7 +642,7 @@ class ZCodeBackend:
+         self.proc = subprocess.Popen(
+             [self.node, self.entry, "app-server", "--stdio"],
+             cwd=self.cwd,
+-            env=build_child_env(),
++            env=build_child_env(self.entry),
+             stdin=subprocess.PIPE,
+             stdout=subprocess.PIPE,
+             stderr=subprocess.DEVNULL,
+@@ -717,6 +910,11 @@ class ZCodeAcpAgent:
+         self._next_out_id = 0
+         self._out_pending: dict[Any, dict[str, Any]] = {}
+         self._session_seq = 0
++        # ZCode 3.12+ account-provider registry state (Issue #79). `None` until
++        # the first backend session decides which protocol the child speaks.
++        self.account: dict[str, Any] | None = None
++        self.account_pushed = False
++        self.legacy_overlay = False
+ 
+     # -- ACP wire ---------------------------------------------------------
+ 
+@@ -770,6 +968,44 @@ class ZCodeAcpAgent:
+             self.backend.start()
+         return self.backend
+ 
++    def resolve_account(self) -> dict[str, Any] | None:
++        """Account-provider snapshot for this plan, or None on the old path."""
++        if self.account is None:
++            builtin = resolve_builtin_provider_config(self.entry)
++            if not builtin:
++                return None
++            try:
++                release = read_builtin_release(builtin)
++            except (RuntimeError_, OSError, ValueError) as exc:
++                log(f"bundled provider table unusable ({exc.__class__.__name__}); "
++                    "staying on the pre-3.12 path")
++                return None
++            self.account = build_account_config(
++                self.resolve_provider(), release, builtin) or {}
++        return self.account or None
++
++    def push_account_config(self, backend: ZCodeBackend) -> None:
++        """Register the Coding Plan with the backend's provider registry.
++
++        Without this the 3.12+ registry is empty and the first turn fails with
++        `Select a model before continuing`. A pre-3.12 backend does not know the
++        method and answers -32601; that is a benign no-op, not an error.
++        """
++        if self.account_pushed:
++            return
++        account = self.resolve_account()
++        if account is None:
++            self.account_pushed = True
++            return
++        try:
++            backend.call("provider/updateAccountConfig", account["params"])
++        except RuntimeError_ as exc:
++            if "-32601" in str(exc) or "not found" in str(exc).lower():
++                log("backend has no provider/updateAccountConfig (pre-3.12); continuing")
++            else:
++                raise
++        self.account_pushed = True
++
+     def resolve_provider(self) -> dict[str, Any]:
+         """Read-only desktop registry lookup, cached; raises when ineligible."""
+         if self.provider is not None:
+@@ -793,22 +1029,21 @@ class ZCodeAcpAgent:
+     def materialize(self, session: Session) -> str:
+         """Create and subscribe the backend session on first real use."""
+         # Fail closed before spawning anything when no Coding Plan is eligible.
+-        overlay = self.overlay_for(session)
++        self.resolve_provider()
+         backend = self.ensure_backend()
+         if session.backend_id is None:
+             workspace = {"workspacePath": session.cwd, "workspaceKey": session.cwd}
+-            # runtimeModel carries the desktop Coding Plan provider in memory;
+-            # CLI 0.16.5 otherwise demands ~/.zcode/cli/config.json.
+-            result = backend.call(
+-                "session/create",
+-                {"workspace": workspace, "mode": session.mode, "runtimeModel": overlay},
+-            ) or {}
++            self.push_account_config(backend)
++            result = self.create_backend_session(session, backend, workspace)
+             backend_id = (result.get("session") or {}).get("sessionId")
+             if not backend_id:
+                 raise RuntimeError_("zcode session/create returned no sessionId")
+             session.backend_id = backend_id
+             with self.lock:
+                 self.by_backend[backend_id] = session
++            account = self.resolve_account()
++            if account is not None and not self.legacy_overlay:
++                self.select_account_model(session, backend, account)
+         if not session.subscribed:
+             backend.call(
+                 "session/subscribe",
+@@ -824,6 +1059,92 @@ class ZCodeAcpAgent:
+         self.hydrate_settings(session)
+         return session.backend_id
+ 
++    def create_backend_session(
++        self, session: Session, backend: ZCodeBackend, workspace: dict[str, Any],
++    ) -> dict[str, Any]:
++        """Create the backend session under whichever protocol the child speaks.
++
++        3.12+ takes no model on `session/create` (`runtimeModel` is gone from the
++        build entirely) and selects afterwards through `session/setModel`. A
++        pre-3.12 backend instead refuses a create that carries no model config,
++        which is what selects the legacy overlay -- the CLI version string cannot
++        tell the two apart, so the protocol is decided by that error, not a gate.
++        """
++        params = {"workspace": workspace, "mode": session.mode}
++        if self.resolve_account() is not None and not self.legacy_overlay:
++            try:
++                return backend.call("session/create", params) or {}
++            except RuntimeError_ as exc:
++                if "Model config is missing" not in str(exc):
++                    raise
++                log("backend requires the pre-3.12 model overlay on session/create")
++                self.legacy_overlay = True
++        overlay = self.overlay_for(session)
++        return backend.call(
++            "session/create", {**params, "runtimeModel": overlay}) or {}
++
++    def select_account_model(
++        self, session: Session, backend: ZCodeBackend, account: dict[str, Any],
++        model_id: str | None = None,
++    ) -> None:
++        """Select the plan model on the 3.12+ account provider.
++
++        `model_id` names the requested model explicitly; without it the session's
++        current model is kept and a fresh session falls back to the plan's first.
++        Local state is committed only after the backend accepts: a refused
++        selection must leave the session on the model it was already running,
++        or the advertised config option would name a model that never took
++        effect while every turn still used the old one.
++
++        `persistAsWorkspaceLastUsed` stays false so a Runner turn never edits the
++        user's workspace defaults.
++        """
++        requested = model_id or session.model_id or account["model_ids"][0]
++        if requested not in account["model_ids"]:
++            raise RuntimeError_(
++                f"model {requested} is not offered by {account['account_id']} "
++                f"(available: {', '.join(account['model_ids'])})"
++            )
++        model: dict[str, Any] = {
++            "providerId": account["account_id"], "modelId": requested,
++        }
++        # 3.12+ refuses a Coding Plan selection with no explicit reasoning level
++        # ("Reasoning level is required for <provider>/<model>"). Honour the
++        # session's thought level when the model actually offers it.
++        levels = account_reasoning_levels(account.get("release") or {}, requested)
++        if levels:
++            level = session.thought if session.thought in levels else levels[0]
++            model["options"] = {"reasoningLevel": level}
++        backend.call("session/setModel", {
++            "sessionId": session.backend_id,
++            "model": model,
++            "persistAsWorkspaceLastUsed": False,
++        })
++        # The backend accepted; only now is the selection real.
++        session.model_id = requested
++
++    def runtime_headers_answer(self, params: dict[str, Any]) -> dict[str, Any]:
++        """Answer the per-model-request provider auth callback (3.12+).
++
++        The plan credential is handed to the backend in memory only: it is never
++        logged, never echoed into ACP output and never written to disk. The
++        response union is strict and has no not-implemented branch, so a wrong
++        shape fails the turn with -32031.
++        """
++        account = self.resolve_account()
++        wanted = (params.get("providerId")
++                  or (params.get("modelSelection") or {}).get("providerId"))
++        if account is None or wanted != account["account_id"]:
++            return {
++                "headersApplied": False,
++                "errorMessage": f"no authorized Coding Plan provider for {wanted}",
++            }
++        try:
++            choice = self.resolve_provider()
++        except RuntimeError_ as exc:
++            return {"headersApplied": False, "errorMessage": redact(str(exc))}
++        return {"headersApplied": True, "requestAuth": {"apiKey": choice["_secret"]}}
++
+     def emit_session_identity(self, session: Session) -> None:
+         """Report the two wire-level identities once the backend session exists:
+         the ACP session id this client holds and the native ZCode session id
+@@ -1098,13 +1419,15 @@ class ZCodeAcpAgent:
+                 "modelContextBudgetStrategy": "preflight-v1",
+             })
+             return
+-        # Never supply credential/header values. Native login owns auth.
+-        if method in (
+-            "interaction/requestOfficialMcpAuthHeaders",
+-            "interaction/requestProviderRuntimeHeaders",
+-        ):
++        # Never supply MCP credential/header values. Native login owns that auth.
++        if method == "interaction/requestOfficialMcpAuthHeaders":
+             backend.respond(rid, {})
+             return
++        # 3.12+ asks for provider auth before EVERY model request on an account
++        # provider, and `{}` does not satisfy the strict response union.
++        if method == "interaction/requestProviderRuntimeHeaders":
++            backend.respond(rid, self.runtime_headers_answer(params))
++            return
+         with self.lock:
+             session = self.by_backend.get(params.get("sessionId"))
+         if session is None:
+@@ -1478,18 +1801,36 @@ class ZCodeAcpAgent:
+                         ),
+                     })
+                     return
+-                # The overlay re-registers the same provider in the backend's
+-                # workspace catalog (desktop parity); runtime-only, not persisted.
+-                self.ensure_backend().call(
+-                    "session/setModel",
+-                    {
+-                        "sessionId": backend_id,
+-                        "model": {"providerId": provider_id, "modelId": model_id},
+-                        "runtimeModel": build_runtime_model(choice, model_id),
+-                        "persistAsWorkspaceLastUsed": False,
+-                    },
+-                )
+-                session.model_id = model_id
++                account = self.resolve_account()
++                if account is not None and not self.legacy_overlay:
++                    # 3.12+ has no `runtimeModel` key and requires an explicit
++                    # reasoning level, so a mid-session switch takes the same
++                    # account path as the initial selection (Issue #79).
++                    if model_id not in account["model_ids"]:
++                        self.respond(rid, error={
++                            "code": -32602,
++                            "message": (
++                                f"model {model_id} is not offered by "
++                                f"{account['account_id']} "
++                                f"(available: {', '.join(account['model_ids'])})"
++                            ),
++                        })
++                        return
++                    self.select_account_model(
++                        session, self.ensure_backend(), account, model_id)
++                else:
++                    # The overlay re-registers the same provider in the backend's
++                    # workspace catalog (desktop parity); runtime-only, not persisted.
++                    self.ensure_backend().call(
++                        "session/setModel",
++                        {
++                            "sessionId": backend_id,
++                            "model": {"providerId": provider_id, "modelId": model_id},
++                            "runtimeModel": build_runtime_model(choice, model_id),
++                            "persistAsWorkspaceLastUsed": False,
++                        },
++                    )
++                    session.model_id = model_id
+                 session.provider_id = provider_id
+             elif config_id in ("thought", "thoughtLevel", "thought_level"):
+                 session.thought = text
+diff --git a/scripts/validate.sh b/scripts/validate.sh
+index a33d8f8..6ab8c64 100755
+--- a/scripts/validate.sh
++++ b/scripts/validate.sh
+@@ -85,8 +85,10 @@ python_suites_all=(
+   "test-issue-65-host-contract.py"
+   "test-issue-70-binding-fact.py"
+   "test-issue-76-permission-wake.py"
++  "test-issue-79-zcode-312.py"
+ )
+ python_suites_a=(
++  "test-issue-79-zcode-312.py"
+   "test-issue-65-steering.py"
+   "test-acp-contract.py"
+   "test-zcode-heartbeat-contract.py"
+diff --git a/skills/zcode-kaola-project-runner/references/acp.md b/skills/zcode-kaola-project-runner/references/acp.md
+index 73e96eb..4f1b039 100644
+--- a/skills/zcode-kaola-project-runner/references/acp.md
++++ b/skills/zcode-kaola-project-runner/references/acp.md
+@@ -1,6 +1,6 @@
+ # ZCode ACP transport
+ 
+-Command: `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`. Login requires a PTY: `false`. Platform quirks: Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider travels in memory as the runtimeModel overlay on session/create, session/resume and session/setModel (launch facts in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login happens in the ZCode desktop App; PTY is unsupported by the bundled runtime (no terminal UI) and is a diagnostic entry only.
++Command: `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`. Login requires a PTY: `false`. Platform quirks: Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider is registered in memory per backend process -- on ZCode 3.12+ via provider/updateAccountConfig plus session/setModel on the account:* provider with the credential supplied only through interaction/requestProviderRuntimeHeaders, and on pre-3.12 app-servers via the runtimeModel overlay on session/create, session/resume and session/setModel (launch facts in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login happens in the ZCode desktop App; PTY is unsupported by the bundled runtime (no terminal UI) and is a diagnostic entry only.
+ 
+ ## Command surface
+ 
+diff --git a/skills/zcode-kaola-project-runner/references/platform.md b/skills/zcode-kaola-project-runner/references/platform.md
+index 54a9d9d..937b0fc 100644
+--- a/skills/zcode-kaola-project-runner/references/platform.md
++++ b/skills/zcode-kaola-project-runner/references/platform.md
+@@ -30,7 +30,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
+ 
+ ## Launch
+ 
+-Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP (the default) runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Explicit --transport pty is a known-unsupported diagnostic entry, not a login or fallback channel: the bundled runtime cannot open a terminal UI (Cannot find package @zcode/tui) and headless --prompt needs ~/.zcode/cli/config.json. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only, selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused), and hands it to the app-server in memory as the protocol's runtimeModel overlay; it never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login happens in the ZCode desktop App, never through the Runner.
++Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP (the default) runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Explicit --transport pty is a known-unsupported diagnostic entry, not a login or fallback channel: the bundled runtime cannot open a terminal UI (Cannot find package @zcode/tui) and headless --prompt needs ~/.zcode/cli/config.json. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only and selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused). Because the shipped 3.12.x entry cannot locate its own bundled provider table, the adapter resolves that table next to the verified entry and injects both ZCODE_BUILTIN_PROVIDER_CONFIG_FILE and ZCODE_PERSONAL_PROVIDER_CONFIG_FILE (both or neither, never inherited). On 3.12+ it registers the plan through provider/updateAccountConfig, creates the session with no model channel, selects the model on the account:* provider through session/setModel with persistAsWorkspaceLastUsed false, and answers interaction/requestProviderRuntimeHeaders per model request; a pre-3.12 app-server keeps the in-memory runtimeModel overlay, chosen by that backend's own error rather than a version gate. It never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login happens in the ZCode desktop App, never through the Runner.
+ 
+ Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
+ send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill
+diff --git a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+index f23bf41..a9e145c 100755
+--- a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
++++ b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+@@ -50,6 +50,7 @@ import atexit
+ import hashlib
+ import json
+ import os
++import re
+ import signal
+ import subprocess
+ import sys
+@@ -74,6 +75,184 @@ API_FORMAT_BY_KIND = {
+ }
+ PROVIDER_SOURCES = ("builtin", "models-dev", "custom", "user", "workspace", "ephemeral")
+ 
++# ZCode 3.12+ bundled provider-config resolution (Issue #79).
++#
++# 3.12.3's own bootstrap probes only two paths from the entry's directory --
++# `<entryDir>/provider/zcode-builtin.json` and a five-levels-up
++# `config/provider/zcode-builtin.json` that fits the source tree
++# (`apps/zcode-cli/packages/cli/dist/zcode.cjs`) but not the shipped .app, where
++# the table sits ONE level up at `<Resources>/config/provider/zcode-builtin.json`.
++# In the .app layout the probe therefore fails and `app-server` exits 1 before it
++# ever serves a request. Setting the two env names below makes the CLI use the
++# given paths verbatim instead of probing.
++#
++# The builtin path is derived from the entry this adapter already verified in
++# resolve_runtime(), never inherited from the parent environment: an inherited
++# value would be unowned and could point the CLI at an attacker- or
++# stale-controlled provider table. Neither name is in ENV_ALLOWLIST, so an
++# inherited value cannot reach the child.
++BUILTIN_PROVIDER_CONFIG_ENV = "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE"
++PERSONAL_PROVIDER_CONFIG_ENV = "ZCODE_PERSONAL_PROVIDER_CONFIG_FILE"
++PERSONAL_PROVIDER_CONFIG_RELPATH = os.path.join(".zcode", "v2", "provider_config.json")
++# Probed in order, first existing file wins; mirrors the CLI's own candidates
++# plus the shipped .app layout it misses.
++BUILTIN_PROVIDER_CONFIG_CANDIDATES = (
++    ("provider", "zcode-builtin.json"),
++    (os.pardir, "config", "provider", "zcode-builtin.json"),
++    (os.pardir, os.pardir, os.pardir, os.pardir, os.pardir,
++     "config", "provider", "zcode-builtin.json"),
++)
++
++
++def resolve_builtin_provider_config(entry: str) -> str | None:
++    """Locate the bundled provider table relative to the verified entry.
++
++    Returns None when no candidate exists; the caller then leaves both env
++    names unset and the CLI keeps its own (older, working) behaviour.
++    """
++    base = os.path.dirname(os.path.abspath(entry))
++    for parts in BUILTIN_PROVIDER_CONFIG_CANDIDATES:
++        candidate = os.path.normpath(os.path.join(base, *parts))
++        if os.path.isfile(candidate):
++            return candidate
++    return None
++
++
++def personal_provider_config_path(home: str | None = None) -> str | None:
++    """Path of the per-user provider config. Never opened by this adapter."""
++    home = home or os.environ.get("HOME") or ""
++    if not home:
++        return None
++    return os.path.join(home, PERSONAL_PROVIDER_CONFIG_RELPATH)
++
++
++# The app-server's own provider registry is keyed by `account:*` ids, not by the
++# desktop registry's `builtin:*` ids. The bundled table's providerRules list the
++# individual Coding Plan under these names (Issue #79).
++# `states[<id>].availability` enum, from the installed 3.12.3 schema.
++PLAN_AVAILABILITY = ("available", "pending", "unavailable", "unknown")
++
++ACCOUNT_PROVIDER_BY_CODING_PLAN = {
++    "builtin:bigmodel-coding-plan": "account:bigmodel-individual-coding-plan",
++    "builtin:zai-coding-plan": "account:zai-individual-coding-plan",
++}
++
++
++def read_builtin_release(path: str) -> dict[str, Any]:
++    """Read the bundled provider table. Rules only; it carries no credential."""
++    release = _read_json_readonly(path)
++    if not isinstance(release, dict):
++        raise RuntimeError_(f"bundled provider table is not an object: {path}")
++    if not isinstance(release.get("revision"), int):
++        raise RuntimeError_(f"bundled provider table has no integer revision: {path}")
++    return release
++
++
++def builtin_revision_string(release: dict[str, Any], active_path: str) -> str:
++    """Reproduce the backend's own builtin revision identity.
++
++    `NodeZCodeBuiltinProviderConfigSource` hashes the RESOLVED PATH STRING of the
++    active table -- not its bytes -- and reports
++    `zcode-builtin:<revision>:<sha256(path)>`. Node's path.resolve() normalises
++    without following symlinks, so abspath is the faithful equivalent.
++    """
++    digest = hashlib.sha256(os.path.abspath(active_path).encode("utf-8")).hexdigest()
++    return f"zcode-builtin:{release['revision']}:{digest}"
++
++
++def account_model_ids(release: dict[str, Any], account_id: str) -> list[str]:
++    """`builtinModelIds` the bundled table lists for one account provider."""
++    rules = (((release.get("config") or {}).get("providerConfigRules") or {})
++             .get("providerRules") or [])
++    for rule in rules:
++        if isinstance(rule, dict) and rule.get("providerId") == account_id:
++            ids = (rule.get("config") or {}).get("builtinModelIds")
++            if isinstance(ids, list):
++                return [m for m in ids if isinstance(m, str) and m]
++    return []
++
++
++def account_reasoning_levels(release: dict[str, Any], model_id: str) -> list[str]:
++    """Reasoning levels the bundled table allows for one model.
++
++    `modelRules` are regex rules applied in order, later matches overriding
++    earlier ones -- the backend tests them as `^(?:<modelMatch>)$`, case
++    insensitive. 3.12+ requires an explicit level for the Coding Plan models.
++    """
++    rules = ((release.get("config") or {}).get("modelConfigRules") or {}).get("modelRules") or []
++    levels: list[str] = []
++    for rule in rules:
++        if not isinstance(rule, dict):
++            continue
++        pattern = rule.get("modelMatch")
++        if not isinstance(pattern, str):
++            continue
++        try:
++            if not re.match(f"^(?:{pattern})$", model_id, re.IGNORECASE):
++                continue
++        except re.error:
++            continue
++        values = (((rule.get("config") or {}).get("optionSpecs") or {})
++                  .get("reasoningLevel") or {}).get("values")
++        if isinstance(values, list) and values:
++            levels = [v for v in values if isinstance(v, str) and v]
++    return levels
++
++
++def build_account_config(
++    choice: dict[str, Any], release: dict[str, Any], active_path: str,
++) -> dict[str, Any] | None:
++    """`provider/updateAccountConfig` snapshot for the one enabled Coding Plan.
++
++    Carries no credential: the backend asks for auth per model request through
++    `interaction/requestProviderRuntimeHeaders`. Returns None when this plan has
++    no account-provider counterpart, so the caller can stay on the old path.
++    """
++    account_id = ACCOUNT_PROVIDER_BY_CODING_PLAN.get(choice["provider_id"])
++    if not account_id:
++        return None
++    bundled = account_model_ids(release, account_id)
++    if not bundled:
++        return None
++    # Offer only models the desktop plan and the bundled table agree on, in the
++    # desktop's order; nothing is substituted or invented.
++    model_ids = [m for m in choice["model_ids"] if m in bundled]
++    if not model_ids:
++        raise RuntimeError_(
++            f"{choice['provider_id']} offers {', '.join(choice['model_ids'])} but "
++            f"{account_id} lists {', '.join(bundled)}; no shared model"
++        )
++    # `availability` is reported, not asserted: the desktop plan cache is the
++    # only fact we have about the plan, and an unrecognised status stays
++    # `unknown` rather than being upgraded to `available`.
++    status = choice.get("plan_cache_status")
++    availability = status if status in PLAN_AVAILABILITY else "unknown"
++    return {
++        "account_id": account_id,
++        "model_ids": model_ids,
++        "release": release,
++        "params": {
++            "revision": f"{ADAPTER_NAME}:{int(time.time() * 1000)}",
++            "basedOnZCodeBuiltinRevision": builtin_revision_string(release, active_path),
++            "providers": {
++                account_id: {
++                    "builtinModelIds": model_ids,
++                    "access": {"type": "zhipu-account", "entitled": True},
++                },
++            },
++            # Measured against the installed 3.12.3 schema: `availability` and
++            # `entitled` are required here, and `current` is required by the
++            # snapshot validator for an entitled zhipu-account provider.
++            "states": {
++                account_id: {
++                    "availability": availability,
++                    "entitled": True,
++                    "current": True,
++                },
++            },
++        },
++    }
++
+ # Environment names that must never reach the ZCode child. The child env is
+ # built from ENV_ALLOWLIST, so these are already excluded by construction;
+ # DENIED_ENV is the explicit, testable statement of that boundary.
+@@ -205,11 +384,17 @@ def resolve_runtime(entry: str | None, node: str | None) -> tuple[str, str]:
+     return entry, node
+ 
+ 
+-def build_child_env() -> dict[str, str]:
++def build_child_env(entry: str | None = None) -> dict[str, str]:
+     """Build the child environment from a strict allowlist.
+ 
+     ELECTRON_RUN_AS_NODE is set because the shipped ZCode runtime is the
+     Electron binary acting as node; it also keeps the desktop UI from starting.
++
++    When ``entry`` is given and the bundled provider table is found next to it,
++    both ZCode 3.12+ provider-config names are set from that verified location
++    (Issue #79). The CLI requires both or neither: given only the builtin name
++    it re-syncs the table into a version-keyed runtime copy and rewires its
++    config revision to that copy, so a half-set pair is worse than none.
+     """
+     env = {k: os.environ[k] for k in ENV_ALLOWLIST if k in os.environ}
+     for name in DENIED_ENV:
+@@ -218,6 +403,14 @@ def build_child_env() -> dict[str, str]:
+     leaked = sorted(n for n in DENIED_ENV if n in env)
+     if leaked:  # unreachable by construction; kept as an enforced invariant
+         raise RuntimeError_(f"denied env leaked into child: {leaked}")
++    # Neither provider-config name is in ENV_ALLOWLIST, so anything inherited
++    # was already dropped above; these are set only from the verified entry.
++    if entry:
++        builtin = resolve_builtin_provider_config(entry)
++        personal = personal_provider_config_path(env.get("HOME"))
++        if builtin and personal:
++            env[BUILTIN_PROVIDER_CONFIG_ENV] = builtin
++            env[PERSONAL_PROVIDER_CONFIG_ENV] = personal
+     return env
+ 
+ 
+@@ -449,7 +642,7 @@ class ZCodeBackend:
+         self.proc = subprocess.Popen(
+             [self.node, self.entry, "app-server", "--stdio"],
+             cwd=self.cwd,
+-            env=build_child_env(),
++            env=build_child_env(self.entry),
+             stdin=subprocess.PIPE,
+             stdout=subprocess.PIPE,
+             stderr=subprocess.DEVNULL,
+@@ -717,6 +910,11 @@ class ZCodeAcpAgent:
+         self._next_out_id = 0
+         self._out_pending: dict[Any, dict[str, Any]] = {}
+         self._session_seq = 0
++        # ZCode 3.12+ account-provider registry state (Issue #79). `None` until
++        # the first backend session decides which protocol the child speaks.
++        self.account: dict[str, Any] | None = None
++        self.account_pushed = False
++        self.legacy_overlay = False
+ 
+     # -- ACP wire ---------------------------------------------------------
+ 
+@@ -770,6 +968,44 @@ class ZCodeAcpAgent:
+             self.backend.start()
+         return self.backend
+ 
++    def resolve_account(self) -> dict[str, Any] | None:
++        """Account-provider snapshot for this plan, or None on the old path."""
++        if self.account is None:
++            builtin = resolve_builtin_provider_config(self.entry)
++            if not builtin:
++                return None
++            try:
++                release = read_builtin_release(builtin)
++            except (RuntimeError_, OSError, ValueError) as exc:
++                log(f"bundled provider table unusable ({exc.__class__.__name__}); "
++                    "staying on the pre-3.12 path")
++                return None
++            self.account = build_account_config(
++                self.resolve_provider(), release, builtin) or {}
++        return self.account or None
++
++    def push_account_config(self, backend: ZCodeBackend) -> None:
++        """Register the Coding Plan with the backend's provider registry.
++
++        Without this the 3.12+ registry is empty and the first turn fails with
++        `Select a model before continuing`. A pre-3.12 backend does not know the
++        method and answers -32601; that is a benign no-op, not an error.
++        """
++        if self.account_pushed:
++            return
++        account = self.resolve_account()
++        if account is None:
++            self.account_pushed = True
++            return
++        try:
++            backend.call("provider/updateAccountConfig", account["params"])
++        except RuntimeError_ as exc:
++            if "-32601" in str(exc) or "not found" in str(exc).lower():
++                log("backend has no provider/updateAccountConfig (pre-3.12); continuing")
++            else:
++                raise
++        self.account_pushed = True
++
+     def resolve_provider(self) -> dict[str, Any]:
+         """Read-only desktop registry lookup, cached; raises when ineligible."""
+         if self.provider is not None:
+@@ -793,22 +1029,21 @@ class ZCodeAcpAgent:
+     def materialize(self, session: Session) -> str:
+         """Create and subscribe the backend session on first real use."""
+         # Fail closed before spawning anything when no Coding Plan is eligible.
+-        overlay = self.overlay_for(session)
++        self.resolve_provider()
+         backend = self.ensure_backend()
+         if session.backend_id is None:
+             workspace = {"workspacePath": session.cwd, "workspaceKey": session.cwd}
+-            # runtimeModel carries the desktop Coding Plan provider in memory;
+-            # CLI 0.16.5 otherwise demands ~/.zcode/cli/config.json.
+-            result = backend.call(
+-                "session/create",
+-                {"workspace": workspace, "mode": session.mode, "runtimeModel": overlay},
+-            ) or {}
++            self.push_account_config(backend)
++            result = self.create_backend_session(session, backend, workspace)
+             backend_id = (result.get("session") or {}).get("sessionId")
+             if not backend_id:
+                 raise RuntimeError_("zcode session/create returned no sessionId")
+             session.backend_id = backend_id
+             with self.lock:
+                 self.by_backend[backend_id] = session
++            account = self.resolve_account()
++            if account is not None and not self.legacy_overlay:
++                self.select_account_model(session, backend, account)
+         if not session.subscribed:
+             backend.call(
+                 "session/subscribe",
+@@ -824,6 +1059,92 @@ class ZCodeAcpAgent:
+         self.hydrate_settings(session)
+         return session.backend_id
+ 
++    def create_backend_session(
++        self, session: Session, backend: ZCodeBackend, workspace: dict[str, Any],
++    ) -> dict[str, Any]:
++        """Create the backend session under whichever protocol the child speaks.
++
++        3.12+ takes no model on `session/create` (`runtimeModel` is gone from the
++        build entirely) and selects afterwards through `session/setModel`. A
++        pre-3.12 backend instead refuses a create that carries no model config,
++        which is what selects the legacy overlay -- the CLI version string cannot
++        tell the two apart, so the protocol is decided by that error, not a gate.
++        """
++        params = {"workspace": workspace, "mode": session.mode}
++        if self.resolve_account() is not None and not self.legacy_overlay:
++            try:
++                return backend.call("session/create", params) or {}
++            except RuntimeError_ as exc:
++                if "Model config is missing" not in str(exc):
++                    raise
++                log("backend requires the pre-3.12 model overlay on session/create")
++                self.legacy_overlay = True
++        overlay = self.overlay_for(session)
++        return backend.call(
++            "session/create", {**params, "runtimeModel": overlay}) or {}
++
++    def select_account_model(
++        self, session: Session, backend: ZCodeBackend, account: dict[str, Any],
++        model_id: str | None = None,
++    ) -> None:
++        """Select the plan model on the 3.12+ account provider.
++
++        `model_id` names the requested model explicitly; without it the session's
++        current model is kept and a fresh session falls back to the plan's first.
++        Local state is committed only after the backend accepts: a refused
++        selection must leave the session on the model it was already running,
++        or the advertised config option would name a model that never took
++        effect while every turn still used the old one.
++
++        `persistAsWorkspaceLastUsed` stays false so a Runner turn never edits the
++        user's workspace defaults.
++        """
++        requested = model_id or session.model_id or account["model_ids"][0]
++        if requested not in account["model_ids"]:
++            raise RuntimeError_(
++                f"model {requested} is not offered by {account['account_id']} "
++                f"(available: {', '.join(account['model_ids'])})"
++            )
++        model: dict[str, Any] = {
++            "providerId": account["account_id"], "modelId": requested,
++        }
++        # 3.12+ refuses a Coding Plan selection with no explicit reasoning level
++        # ("Reasoning level is required for <provider>/<model>"). Honour the
++        # session's thought level when the model actually offers it.
++        levels = account_reasoning_levels(account.get("release") or {}, requested)
++        if levels:
++            level = session.thought if session.thought in levels else levels[0]
++            model["options"] = {"reasoningLevel": level}
++        backend.call("session/setModel", {
++            "sessionId": session.backend_id,
++            "model": model,
++            "persistAsWorkspaceLastUsed": False,
++        })
++        # The backend accepted; only now is the selection real.
++        session.model_id = requested
++
++    def runtime_headers_answer(self, params: dict[str, Any]) -> dict[str, Any]:
++        """Answer the per-model-request provider auth callback (3.12+).
++
++        The plan credential is handed to the backend in memory only: it is never
++        logged, never echoed into ACP output and never written to disk. The
++        response union is strict and has no not-implemented branch, so a wrong
++        shape fails the turn with -32031.
++        """
++        account = self.resolve_account()
++        wanted = (params.get("providerId")
++                  or (params.get("modelSelection") or {}).get("providerId"))
++        if account is None or wanted != account["account_id"]:
++            return {
++                "headersApplied": False,
++                "errorMessage": f"no authorized Coding Plan provider for {wanted}",
++            }
++        try:
++            choice = self.resolve_provider()
++        except RuntimeError_ as exc:
++            return {"headersApplied": False, "errorMessage": redact(str(exc))}
++        return {"headersApplied": True, "requestAuth": {"apiKey": choice["_secret"]}}
++
+     def emit_session_identity(self, session: Session) -> None:
+         """Report the two wire-level identities once the backend session exists:
+         the ACP session id this client holds and the native ZCode session id
+@@ -1098,13 +1419,15 @@ class ZCodeAcpAgent:
+                 "modelContextBudgetStrategy": "preflight-v1",
+             })
+             return
+-        # Never supply credential/header values. Native login owns auth.
+-        if method in (
+-            "interaction/requestOfficialMcpAuthHeaders",
+-            "interaction/requestProviderRuntimeHeaders",
+-        ):
++        # Never supply MCP credential/header values. Native login owns that auth.
++        if method == "interaction/requestOfficialMcpAuthHeaders":
+             backend.respond(rid, {})
+             return
++        # 3.12+ asks for provider auth before EVERY model request on an account
++        # provider, and `{}` does not satisfy the strict response union.
++        if method == "interaction/requestProviderRuntimeHeaders":
++            backend.respond(rid, self.runtime_headers_answer(params))
++            return
+         with self.lock:
+             session = self.by_backend.get(params.get("sessionId"))
+         if session is None:
+@@ -1478,18 +1801,36 @@ class ZCodeAcpAgent:
+                         ),
+                     })
+                     return
+-                # The overlay re-registers the same provider in the backend's
+-                # workspace catalog (desktop parity); runtime-only, not persisted.
+-                self.ensure_backend().call(
+-                    "session/setModel",
+-                    {
+-                        "sessionId": backend_id,
+-                        "model": {"providerId": provider_id, "modelId": model_id},
+-                        "runtimeModel": build_runtime_model(choice, model_id),
+-                        "persistAsWorkspaceLastUsed": False,
+-                    },
+-                )
+-                session.model_id = model_id
++                account = self.resolve_account()
++                if account is not None and not self.legacy_overlay:
++                    # 3.12+ has no `runtimeModel` key and requires an explicit
++                    # reasoning level, so a mid-session switch takes the same
++                    # account path as the initial selection (Issue #79).
++                    if model_id not in account["model_ids"]:
++                        self.respond(rid, error={
++                            "code": -32602,
++                            "message": (
++                                f"model {model_id} is not offered by "
++                                f"{account['account_id']} "
++                                f"(available: {', '.join(account['model_ids'])})"
++                            ),
++                        })
++                        return
++                    self.select_account_model(
++                        session, self.ensure_backend(), account, model_id)
++                else:
++                    # The overlay re-registers the same provider in the backend's
++                    # workspace catalog (desktop parity); runtime-only, not persisted.
++                    self.ensure_backend().call(
++                        "session/setModel",
++                        {
++                            "sessionId": backend_id,
++                            "model": {"providerId": provider_id, "modelId": model_id},
++                            "runtimeModel": build_runtime_model(choice, model_id),
++                            "persistAsWorkspaceLastUsed": False,
++                        },
++                    )
++                    session.model_id = model_id
+                 session.provider_id = provider_id
+             elif config_id in ("thought", "thoughtLevel", "thought_level"):
+                 session.thought = text
+diff --git a/skills/zcode-kaola-project-runner/scripts/platform.yaml b/skills/zcode-kaola-project-runner/scripts/platform.yaml
+index a7652b0..14cecdf 100644
+--- a/skills/zcode-kaola-project-runner/scripts/platform.yaml
++++ b/skills/zcode-kaola-project-runner/scripts/platform.yaml
+@@ -11,7 +11,7 @@ binary_env: "ZCODE_BIN"
+ continue_syntax: "--continue"
+ resume_syntax: "--resume <session-id>"
+ preflight_summary: "Verify the explicit ZCode runtime path and report app-server readiness and Coding Plan provider facts without PATH discovery; the bundled runtime ships no terminal UI."
+-launch_summary: "Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP (the default) runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Explicit --transport pty is a known-unsupported diagnostic entry, not a login or fallback channel: the bundled runtime cannot open a terminal UI (Cannot find package @zcode/tui) and headless --prompt needs ~/.zcode/cli/config.json. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only, selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused), and hands it to the app-server in memory as the protocol's runtimeModel overlay; it never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login happens in the ZCode desktop App, never through the Runner."
++launch_summary: "Launch the installed ZCode CLI from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN) with --mode yolo (CLI 0.16.5 permission mode that bypasses per-tool prompts; --permission-mode is the legacy alias). ACP (the default) runs Skill-relative kaola-zcode-acp.py over app-server --stdio; ACP start sets mode=yolo after initialize. Explicit --transport pty is a known-unsupported diagnostic entry, not a login or fallback channel: the bundled runtime cannot open a terminal UI (Cannot find package @zcode/tui) and headless --prompt needs ~/.zcode/cli/config.json. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only and selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused). Because the shipped 3.12.x entry cannot locate its own bundled provider table, the adapter resolves that table next to the verified entry and injects both ZCODE_BUILTIN_PROVIDER_CONFIG_FILE and ZCODE_PERSONAL_PROVIDER_CONFIG_FILE (both or neither, never inherited). On 3.12+ it registers the plan through provider/updateAccountConfig, creates the session with no model channel, selects the model on the account:* provider through session/setModel with persistAsWorkspaceLastUsed false, and answers interaction/requestProviderRuntimeHeaders per model request; a pre-3.12 app-server keeps the in-memory runtimeModel overlay, chosen by that backend's own error rather than a version gate. It never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential. Login happens in the ZCode desktop App, never through the Runner."
+ recurring_execution: "unsupported"
+ recurring_summary: "Use the caller-selected one-shot, Codex heartbeat, or live-verified runtime-native carrier described in [scheduling.md](scheduling.md)."
+ quit_text: "/exit"
+@@ -28,7 +28,7 @@ fast_summary: "no native Fast toggle; thought level is a separate config option
+ default_transport: "acp"
+ acp_command: "python3 $SKILL_DIR/scripts/kaola-zcode-acp.py"
+ acp_client_capabilities: "terminal:false,fs:false"
+-acp_quirks: "Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider travels in memory as the runtimeModel overlay on session/create, session/resume and session/setModel (launch facts in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login happens in the ZCode desktop App; PTY is unsupported by the bundled runtime (no terminal UI) and is a diagnostic entry only"
++acp_quirks: "Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider is registered in memory per backend process -- on ZCode 3.12+ via provider/updateAccountConfig plus session/setModel on the account:* provider with the credential supplied only through interaction/requestProviderRuntimeHeaders, and on pre-3.12 app-servers via the runtimeModel overlay on session/create, session/resume and session/setModel (launch facts in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; login happens in the ZCode desktop App; PTY is unsupported by the bundled runtime (no terminal UI) and is a diagnostic entry only"
+ acp_verified_versions: "cli=0.16.5;adapter=kaola-zcode-acp;protocol=1"
+ acp_env_allowlist: ""
+ acp_login_requires_pty: "false"
+diff --git a/tests/contract/fake-zcode-312-app-server.py b/tests/contract/fake-zcode-312-app-server.py
+new file mode 100644
+index 0000000..a3add88
+--- /dev/null
++++ b/tests/contract/fake-zcode-312-app-server.py
+@@ -0,0 +1,335 @@
++#!/usr/bin/env python3
++"""Hermetic fake ZCode 3.12+ `app-server --stdio` for the Issue #79 suite.
++
++Mirrors the strictness measured in the installed 3.12.3 bundle
++(`/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs`), recorded in
++`kaola-workflow/issue-79/evidence/03-registry-push-schema.md`:
++
++* `session/create` is `.strict()` and has no model channel at all, so a
++  pre-3.12 `runtimeModel` overlay is rejected with -32602.
++* `provider/updateAccountConfig` validates like `G6n`
++  (`parseProcessAccountProviderConfigSnapshot`): non-empty `revision` and
++  `basedOnZCodeBuiltinRevision`, a providers record narrowed to
++  `{builtinModelIds, access:{type, entitled}}`, and a REQUIRED boolean
++  `states[id].current` for every entitled zhipu-account provider.
++* `session/setModel` validates like `mo`
++  (`{providerId, modelId, options?:{reasoningLevel?}}`, all strict) and refuses
++  a provider that was never registered.
++* a turn with no selection fails like `createRuntimeModel`, with
++  `CONFIGURATION_ERROR` / `Select a model before continuing` at turn phase
++  `model_creation`.
++* scenario `switch_rejected` refuses every `session/setModel` after the first,
++  so a rejected mid-session switch can be driven end to end.
++* every model request first asks `interaction/requestProviderRuntimeHeaders`
++  and refuses to proceed unless the answer matches the strict `VKe` union and
++  actually carries `requestAuth`.
++
++No credential, network, login or installed ZCode is involved. The API key it
++checks against is a fixture value that exists only inside the test tree.
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import sys
++import threading
++from typing import Any
++
++WRITE_LOCK = threading.Lock()
++
++# `session/create` accepted keys, from the installed 3.12.3 schema.
++CREATE_KEYS = {
++    "sessionId", "workspace", "parentSessionId", "mode", "model", "persistence",
++    "thoughtLevel", "titleGenerationEnabled", "mcpServers", "toolAllowlist",
++    "toolDenylist", "importedHistory", "offPeakToolEnabled",
++}
++SETMODEL_KEYS = {"sessionId", "model", "expectedRevision", "persistAsWorkspaceLastUsed"}
++MODEL_KEYS = {"providerId", "modelId", "options"}
++ACCOUNT_KEYS = {"revision", "basedOnZCodeBuiltinRevision", "providers", "states"}
++AVAILABILITY = {"available", "pending", "unavailable", "unknown"}
++
++
++def emit(msg: dict[str, Any]) -> None:
++    data = json.dumps(msg).encode("utf-8") + b"\n"
++    with WRITE_LOCK:
++        sys.stdout.buffer.write(data)
++        sys.stdout.buffer.flush()
++
++
++def record(update: dict[str, Any]) -> None:
++    path = os.environ.get("FAKE_ZCODE_RECORD")
++    if not path:
++        return
++    try:
++        with open(path, "r", encoding="utf-8") as handle:
++            payload = json.load(handle)
++    except (OSError, ValueError):
++        payload = {}
++    payload.update(update)
++    with open(path, "w", encoding="utf-8") as handle:
++        json.dump(payload, handle, indent=2, sort_keys=True)
++
++
++class Fake312:
++    def __init__(self, scenario: str) -> None:
++        self.scenario = scenario
++        self.seq = 0
++        self.counter = 0
++        self.next_request_id = 5000
++        self.catalog: dict[str, list[str]] = {}
++        self.selection: dict[str, dict[str, str]] = {}
++        self.set_model_calls = 0
++        self.sessions: dict[str, dict[str, Any]] = {}
++        self.pending: dict[Any, threading.Event] = {}
++        self.answers: dict[Any, Any] = {}
++
++    # -- wire -------------------------------------------------------------
++
++    def result(self, rid: Any, value: Any) -> None:
++        emit({"id": rid, "result": value})
++
++    def error(self, rid: Any, code: int, message: str) -> None:
++        emit({"id": rid, "error": {"code": code, "message": message}})
++
++    def event(self, session_id: str, etype: str, payload: dict[str, Any]) -> None:
++        self.seq += 1
++        emit({"method": "session/event", "params": {
++            "sessionId": session_id, "seq": self.seq, "type": etype, "payload": payload}})
++
++    def ask(self, method: str, params: dict[str, Any], timeout: float = 10.0) -> Any:
++        self.next_request_id += 1
++        rid = self.next_request_id
++        done = threading.Event()
++        self.pending[rid] = done
++        emit({"id": rid, "method": method, "params": params})
++        if not done.wait(timeout):
++            return None
++        return self.answers.pop(rid, None)
++
++    # -- validation mirrors ----------------------------------------------
++
++    def check_account(self, params: dict[str, Any]) -> str | None:
++        extra = set(params) - ACCOUNT_KEYS
++        if extra:
++            return f'Invalid params - (root): Unrecognized key: "{sorted(extra)[0]}"'
++        if not str(params.get("revision") or "").strip():
++            return "Account Config revision cannot be empty"
++        if not str(params.get("basedOnZCodeBuiltinRevision") or "").strip():
++            return "Account Config Built-in revision cannot be empty"
++        providers = params.get("providers")
++        if not isinstance(providers, dict) or not providers:
++            return "providers must be a non-empty record"
++        states = params.get("states") or {}
++        for pid, entry in providers.items():
++            if not isinstance(entry, dict):
++                return f"provider entry must be an object: {pid}"
++            ids = entry.get("builtinModelIds")
++            if not isinstance(ids, list) or not ids:
++                return f"builtinModelIds must be a non-empty array: {pid}"
++            access = entry.get("access") or {}
++            entitled = isinstance(access, dict) and access.get("entitled") is True
++            zhipu = isinstance(access, dict) and access.get("type") == "zhipu-account"
++            if pid.startswith("account:") and zhipu and entitled:
++                state = states.get(pid) or {}
++                # Measured live against installed 3.12.3: all three are required.
++                if not isinstance(state.get("current"), bool):
++                    return f"Account State missing current: {pid}"
++                if state.get("availability") not in AVAILABILITY:
++                    return (f"states.{pid}.availability: Invalid option: expected one of "
++                            '"available"|"pending"|"unavailable"|"unknown"')
++                if not isinstance(state.get("entitled"), bool):
++                    return (f"states.{pid}.entitled: Invalid input: expected boolean, "
++                            "received undefined")
++        return None
++
++    # -- dispatch ---------------------------------------------------------
++
++    def handle(self, msg: dict[str, Any]) -> None:
++        if "id" in msg and "method" not in msg:
++            rid = msg.get("id")
++            self.answers[rid] = msg.get("result")
++            waiter = self.pending.pop(rid, None)
++            if waiter:
++                waiter.set()
++            return
++
++        method = msg.get("method")
++        rid = msg.get("id")
++        params = msg.get("params") or {}
++
++        if method == "initialize":
++            self.result(rid, {"protocolVersion": 1,
++                              "capabilities": {"independentPlanState": True}})
++            return
++
++        if method == "provider/updateAccountConfig":
++            if self.scenario == "no_account_method":
++                self.error(rid, -32601, "Method not found: provider/updateAccountConfig")
++                return
++            problem = self.check_account(params)
++            if problem:
++                self.error(rid, -32602, f"invalid params: {problem}")
++                return
++            for pid, entry in params["providers"].items():
++                self.catalog[pid] = list(entry["builtinModelIds"])
++            record({"account_push": params, "catalog": self.catalog})
++            self.result(rid, {})
++            return
++
++        if method == "session/create":
++            extra = sorted(set(params) - CREATE_KEYS)
++            if extra:
++                # The exact 3.12.3 rejection a pre-3.12 overlay triggers.
++                self.error(rid, -32602,
++                           f'Invalid params - (root): Unrecognized key: "{extra[0]}"')
++                return
++            self.counter += 1
++            sid = f"sess_312_{self.counter}"
++            self.sessions[sid] = {"mode": params.get("mode")}
++            record({"create_params": params})
++            self.result(rid, {"session": {"sessionId": sid, "mode": params.get("mode")}})
++            return
++
++        if method == "session/setModel":
++            extra = sorted(set(params) - SETMODEL_KEYS)
++            if extra:
++                self.error(rid, -32602,
++                           f'Invalid params - (root): Unrecognized key: "{extra[0]}"')
++                return
++            model = params.get("model")
++            if not isinstance(model, dict) or sorted(set(model) - MODEL_KEYS):
++                self.error(rid, -32602, "invalid params: model")
++                return
++            pid, mid = model.get("providerId"), model.get("modelId")
++            # `switch_rejected`: the initial selection succeeds, every later one
++            # is refused, so a mid-session switch can be observed failing.
++            if self.scenario == "switch_rejected":
++                self.set_model_calls += 1
++                if self.set_model_calls > 1:
++                    self.error(rid, -32602, f"{mid} refused by the backend")
++                    return
++            if pid not in self.catalog:
++                self.error(rid, -32602,
++                           f"{pid} is not in the Provider Registry")
++                return
++            if mid not in self.catalog[pid]:
++                self.error(rid, -32602, f"{mid} is not offered by {pid}")
++                return
++            # Measured live against installed 3.12.3: an account provider
++            # refuses a selection that carries no explicit reasoning level.
++            if pid.startswith("account:"):
++                level = (model.get("options") or {}).get("reasoningLevel")
++                if not level:
++                    self.error(rid, -32603,
++                               f"Reasoning level is required for {pid}/{mid}")
++                    return
++            self.selection[params.get("sessionId")] = {"providerId": pid, "modelId": mid}
++            record({"set_model": params})
++            self.result(rid, {})
++            return
++
++        if method == "session/subscribe":
++            self.result(rid, {})
++            return
++
++        if method in ("session/close", "session/stop"):
++            self.result(rid, {})
++            return
++
++        if method == "session/send":
++            sid = params.get("sessionId")
++            self.result(rid, {"turnId": "turn_1"})
++            threading.Thread(target=self.turn, args=(sid,), daemon=True).start()
++            return
++
++        if rid is not None:
++            self.result(rid, {})
++
++    # -- one turn ---------------------------------------------------------
++
++    def turn(self, sid: str) -> None:
++        selection = self.selection.get(sid)
++        if not selection:
++            # createRuntimeModel with an empty registry.
++            self.event(sid, "turn.terminal", {
++                "kind": "turn.terminal", "status": "failed",
++                "turnPhase": "model_creation",
++                "errorCode": "CONFIGURATION_ERROR",
++                "errorMessage": "Select a model before continuing"})
++            return
++        answer = self.ask("interaction/requestProviderRuntimeHeaders", {
++            "requestId": "req_1", "sessionId": sid, "turnId": "turn_1",
++            "workspace": {"workspacePath": os.getcwd(), "workspaceKey": os.getcwd()},
++            "modelSelection": selection, "providerId": selection["providerId"],
++            "reason": "model-request"})
++        problem = self.validate_headers(answer)
++        record({"headers_answer_ok": problem is None, "headers_problem": problem})
++        if problem is not None:
++            self.event(sid, "turn.terminal", {
++                "kind": "turn.terminal", "status": "failed",
++                "turnPhase": "model_request",
++                "errorCode": "-32031",
++                "errorMessage": "Provider runtime headers were not applied before "
++                                "model request attempt."})
++            return
++        self.event(sid, "model.streaming", {
++            "kind": "text", "text": "hermetic-312-reply"})
++        self.event(sid, "turn.terminal", {
++            "kind": "turn.terminal", "status": "completed", "turnPhase": "done"})
++
++    def validate_headers(self, answer: Any) -> str | None:
++        if not isinstance(answer, dict):
++            return "no response"
++        applied = answer.get("headersApplied")
++        if applied is not True:
++            return f"headersApplied={applied!r}"
++        extra = sorted(set(answer) - {"headersApplied", "requestAuth", "errorMessage"})
++        if extra:
++            return f"unrecognized key {extra[0]}"
++        auth = answer.get("requestAuth")
++        if not isinstance(auth, dict):
++            return "requestAuth missing"
++        if sorted(set(auth) - {"apiKey", "headers"}):
++            return "requestAuth unrecognized key"
++        expected = os.environ.get("FAKE_ZCODE_EXPECT_KEY")
++        if expected and auth.get("apiKey") != expected:
++            return "apiKey mismatch"
++        if not auth.get("apiKey") and not auth.get("headers"):
++            return "requestAuth carries neither apiKey nor headers"
++        return None
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("command", nargs="?", default="app-server")
++    parser.add_argument("--stdio", action="store_true")
++    args, _ = parser.parse_known_args()
++    scenario = os.environ.get("FAKE_ZCODE_SCENARIO", "basic")
++    # Proof that the adapter injected a real, existing bundled table path.
++    record({
++        "argv": sys.argv[1:],
++        "env_names": sorted(os.environ),
++        "builtin_env": os.environ.get("ZCODE_BUILTIN_PROVIDER_CONFIG_FILE"),
++        "personal_env": os.environ.get("ZCODE_PERSONAL_PROVIDER_CONFIG_FILE"),
++        "builtin_env_exists": os.path.isfile(
++            os.environ.get("ZCODE_BUILTIN_PROVIDER_CONFIG_FILE") or ""),
++        "scenario": scenario,
++    })
++    fake = Fake312(scenario)
++    for raw in sys.stdin.buffer:
++        line = raw.decode("utf-8", "replace").strip()
++        if not line:
++            continue
++        try:
++            msg = json.loads(line)
++        except ValueError:
++            continue
++        if isinstance(msg, dict):
++            fake.handle(msg)
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/tests/contract/test-issue-79-zcode-312.py b/tests/contract/test-issue-79-zcode-312.py
+new file mode 100644
+index 0000000..414506c
+--- /dev/null
++++ b/tests/contract/test-issue-79-zcode-312.py
+@@ -0,0 +1,544 @@
++#!/usr/bin/env python3
++"""Issue #79 - ZCode 3.12+ ACP app-server compatibility, hermetic.
++
++Drives `scripts/kaola-zcode-acp.py` against `fake-zcode-312-app-server.py`,
++which mirrors the strictness measured in the installed 3.12.3 bundle. No
++installed ZCode, no login, no account, no network and no real credential are
++used: the only "secret" is the fixture value inside `fixtures/`.
++
++Covers what the pre-change adapter could not do:
++  * resolve the bundled provider table from the verified entry and inject BOTH
++    provider-config env names, never an inherited value;
++  * create a session with no model channel and select the model afterwards on
++    the `account:*` provider;
++  * push the account/entitlement snapshot in the shape `G6n` accepts;
++  * answer `interaction/requestProviderRuntimeHeaders` with the strict union;
++  * keep the credential out of every ACP byte and every log byte;
++  * still drive a pre-3.12 backend through the old overlay path.
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import queue
++import stat
++import subprocess
++import sys
++import threading
++import time
++import unittest
++from pathlib import Path
++
++PROJECT = Path(__file__).resolve().parents[2]
++ADAPTER = PROJECT / "scripts" / "kaola-zcode-acp.py"
++FAKE_312 = PROJECT / "tests" / "contract" / "fake-zcode-312-app-server.py"
++FAKE_LEGACY = PROJECT / "tests" / "contract" / "fake-zcode-app-server.py"
++FIXTURES = PROJECT / "tests" / "contract" / "fixtures"
++DESKTOP_CONFIG_FIXTURE = FIXTURES / "zcode-desktop-config.json"
++PLAN_CACHE_FIXTURE = FIXTURES / "zcode-coding-plan-cache.json"
++DESKTOP_CONFIG = json.loads(DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"))
++CODING_PLAN_ID = "builtin:bigmodel-coding-plan"
++ACCOUNT_ID = "account:bigmodel-individual-coding-plan"
++FIXTURE_SECRET = DESKTOP_CONFIG["provider"][CODING_PLAN_ID]["options"]["apiKey"]
++
++# A rules-only bundled table, same shape and revision as the shipped one.
++BUILTIN_TABLE = {
++    "schemaVersion": 1,
++    "revision": 28,
++    "config": {
++        "providerConfigRules": {
++            "templateRules": [],
++            "providerRules": [{
++                "providerId": ACCOUNT_ID,
++                "providerName": "BigModel Individual Coding Plan",
++                "config": {
++                    "group": "bigmodel-family",
++                    "builtinModelIds": ["GLM-5.3", "GLM-5.3-Flash"],
++                    "access": {"type": "zhipu-account",
++                               "mode": "individual-coding-plan",
++                               "accountType": "bigmodel"},
++                    "api": {"type": "anthropic-messages",
++                            "baseUrl": "https://open.bigmodel.cn/api/anthropic"},
++                },
++            }],
++        },
++        "modelConfigRules": {},
++    },
++}
++
++# Same rule ordering the shipped table uses: a generic rule then a specific one,
++# later matches overriding earlier, tested as `^(?:<modelMatch>)$` case-insensitively.
++BUILTIN_TABLE_WITH_RULES = json.loads(json.dumps(BUILTIN_TABLE))
++BUILTIN_TABLE_WITH_RULES["config"]["modelConfigRules"] = {
++    "modelRules": [
++        {"modelMatch": ".*",
++         "config": {"optionSpecs": {"reasoningLevel": {"values": ["disabled", "enabled"]}}}},
++        {"modelMatch": r".*glm-5\.3(?:-flash)?(?:[.\-:/\[].*)?",
++         "config": {"optionSpecs": {"reasoningLevel": {"values": ["low", "high", "max"]}}}},
++    ],
++}
++
++POISON = "/tmp/i79-inherited-must-not-be-used/zcode-builtin.json"
++
++
++def load_adapter():
++    import importlib.util
++    spec = importlib.util.spec_from_file_location("kaola_zcode_acp_79", ADAPTER)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++class Driver:
++    """Minimal ACP driver: adapter subprocess + sandboxed HOME + fake entry."""
++
++    def __init__(self, tmp: Path, modern: bool = True, scenario: str = "basic",
++                 bundled: bool = True, expect_key: str | None = None,
++                 desktop_config: dict | str | None = None) -> None:
++        self.tmp = tmp
++        self.cwd = tmp / "workspace"
++        self.cwd.mkdir(parents=True, exist_ok=True)
++        self.record_path = tmp / "record.json"
++        self.home = tmp / "home"
++        (self.home / ".zcode" / "v2").mkdir(parents=True, exist_ok=True)
++        if desktop_config is None:
++            registry = DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8")
++        elif isinstance(desktop_config, str):
++            registry = desktop_config
++        else:
++            registry = json.dumps(desktop_config)
++        if registry != "ABSENT":
++            (self.home / ".zcode" / "v2" / "config.json").write_text(registry, encoding="utf-8")
++        (self.home / ".zcode" / "v2" / "coding-plan-cache.json").write_text(
++            PLAN_CACHE_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
++        # The personal provider config is only ever referenced by path.
++        (self.home / ".zcode" / "v2" / "provider_config.json").write_text("{}\n", encoding="utf-8")
++
++        self.entry_dir = tmp / "bundle"
++        self.entry_dir.mkdir(parents=True, exist_ok=True)
++        self.builtin_path = self.entry_dir / "provider" / "zcode-builtin.json"
++        if bundled:
++            self.builtin_path.parent.mkdir(parents=True, exist_ok=True)
++            self.builtin_path.write_text(json.dumps(BUILTIN_TABLE_WITH_RULES), encoding="utf-8")
++        self.shim = self._write_shim(modern, scenario)
++
++        env = {
++            "HOME": str(self.home),
++            "PATH": os.environ.get("PATH", "/usr/bin"),
++            "PYTHONUNBUFFERED": "1",
++            "LANG": "C",
++            # An inherited, unowned value that must never reach the child.
++            "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE": POISON,
++            "ZCODE_PERSONAL_PROVIDER_CONFIG_FILE": POISON,
++        }
++        if expect_key:
++            env["FAKE_ZCODE_EXPECT_KEY"] = expect_key
++        self.messages: list[dict] = []
++        self.queue: queue.Queue = queue.Queue()
++        self.proc = subprocess.Popen(
++            [sys.executable, str(ADAPTER), "--zcode-entry", str(self.shim),
++             "--zcode-node", sys.executable, "--cwd", str(self.cwd)],
++            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
++            cwd=str(self.cwd), env=env)
++        self.stderr_bytes = bytearray()
++        threading.Thread(target=self._read_stdout, daemon=True).start()
++        threading.Thread(target=self._read_stderr, daemon=True).start()
++
++    def _write_shim(self, modern: bool, scenario: str) -> Path:
++        fake = FAKE_312 if modern else FAKE_LEGACY
++        shim = self.entry_dir / "zcode.py"
++        extra = ""
++        if not modern:
++            extra = (f"os.environ['FAKE_ZCODE_RPC_LOG'] = {str(self.tmp / 'rpc.jsonl')!r}\n")
++        shim.write_text(
++            "#!/usr/bin/env python3\n"
++            "import os, runpy, sys\n"
++            f"os.environ['FAKE_ZCODE_SCENARIO'] = {scenario!r}\n"
++            f"os.environ['FAKE_ZCODE_RECORD'] = {str(self.record_path)!r}\n"
++            + extra +
++            f"sys.argv = [{str(fake)!r}, *sys.argv[1:]]\n"
++            f"runpy.run_path({str(fake)!r}, run_name='__main__')\n",
++            encoding="utf-8")
++        shim.chmod(shim.stat().st_mode | stat.S_IXUSR)
++        return shim
++
++    def _read_stdout(self) -> None:
++        for raw in self.proc.stdout:
++            line = raw.decode("utf-8", "replace").strip()
++            if not line:
++                continue
++            try:
++                msg = json.loads(line)
++            except ValueError:
++                continue
++            if isinstance(msg, dict):
++                self.messages.append(msg)
++                self.queue.put(msg)
++
++    def _read_stderr(self) -> None:
++        for chunk in iter(lambda: self.proc.stderr.read(4096), b""):
++            if not chunk:
++                break
++            self.stderr_bytes.extend(chunk)
++
++    def request(self, rid, method: str, params: dict | None = None) -> None:
++        payload = {"jsonrpc": "2.0", "id": rid, "method": method}
++        if params is not None:
++            payload["params"] = params
++        self.proc.stdin.write(json.dumps(payload).encode("utf-8") + b"\n")
++        self.proc.stdin.flush()
++
++    def wait_for(self, pred, timeout: float = 20.0):
++        deadline = time.monotonic() + timeout
++        for msg in list(self.messages):
++            if pred(msg):
++                return msg
++        while time.monotonic() < deadline:
++            try:
++                msg = self.queue.get(timeout=0.05)
++            except queue.Empty:
++                if self.proc.poll() is not None:
++                    break
++                continue
++            if pred(msg):
++                return msg
++        for msg in list(self.messages):
++            if pred(msg):
++                return msg
++        return None
++
++    def wait_result(self, rid, timeout: float = 20.0):
++        return self.wait_for(lambda m: m.get("id") == rid, timeout)
++
++    def record(self) -> dict:
++        try:
++            return json.loads(self.record_path.read_text(encoding="utf-8"))
++        except (OSError, ValueError):
++            return {}
++
++    def stderr_text(self) -> str:
++        return bytes(self.stderr_bytes).decode("utf-8", "replace")
++
++    def stdout_text(self) -> str:
++        return "\n".join(json.dumps(m) for m in self.messages)
++
++    def close(self) -> None:
++        try:
++            self.proc.stdin.close()
++        except OSError:
++            pass
++        try:
++            self.proc.wait(timeout=10)
++        except subprocess.TimeoutExpired:
++            self.proc.kill()
++            self.proc.wait(timeout=10)
++        for pipe in (self.proc.stdout, self.proc.stderr):
++            try:
++                pipe.close()
++            except OSError:
++                pass
++
++    def new_session(self, rid=1):
++        self.request(rid, "initialize", {"protocolVersion": 1, "clientCapabilities": {}})
++        self.wait_result(rid)
++        self.request(rid + 1, "session/new", {"cwd": str(self.cwd), "mcpServers": []})
++        return self.wait_result(rid + 1)
++
++    def prompt(self, sid: str, rid: int = 10, text: str = "hello"):
++        """Drive one turn. The backend is created lazily on first real use, so
++        nothing reaches the child until a prompt is sent."""
++        self.request(rid, "session/prompt", {
++            "sessionId": sid, "prompt": [{"type": "text", "text": text}]})
++        return self.wait_result(rid)
++
++
++class TempCase(unittest.TestCase):
++    def setUp(self) -> None:
++        import tempfile
++        self._tmp = tempfile.TemporaryDirectory(prefix="i79-")
++        self.tmp = Path(self._tmp.name)
++        self.addCleanup(self._tmp.cleanup)
++
++    def driver(self, **kw) -> Driver:
++        drv = Driver(self.tmp, **kw)
++        self.addCleanup(drv.close)
++        return drv
++
++
++class TestBundledProviderConfigResolution(TempCase):
++    """The path must come from the verified entry, never from the parent env."""
++
++    def test_resolves_candidates_in_order(self):
++        m = load_adapter()
++        base = self.tmp / "b"
++        (base / "provider").mkdir(parents=True)
++        entry = base / "zcode.cjs"
++        entry.write_text("", encoding="utf-8")
++        first = base / "provider" / "zcode-builtin.json"
++        first.write_text("{}", encoding="utf-8")
++        self.assertEqual(m.resolve_builtin_provider_config(str(entry)), str(first))
++
++    def test_resolves_shipped_app_layout_one_level_up(self):
++        """The layout the CLI's own five-level-up probe misses."""
++        m = load_adapter()
++        res = self.tmp / "Resources"
++        (res / "glm").mkdir(parents=True)
++        (res / "config" / "provider").mkdir(parents=True)
++        entry = res / "glm" / "zcode.cjs"
++        entry.write_text("", encoding="utf-8")
++        table = res / "config" / "provider" / "zcode-builtin.json"
++        table.write_text("{}", encoding="utf-8")
++        self.assertEqual(m.resolve_builtin_provider_config(str(entry)), str(table))
++
++    def test_absent_table_resolves_to_none(self):
++        m = load_adapter()
++        entry = self.tmp / "lonely" / "zcode.cjs"
++        entry.parent.mkdir(parents=True)
++        entry.write_text("", encoding="utf-8")
++        self.assertIsNone(m.resolve_builtin_provider_config(str(entry)))
++
++    def test_both_env_names_or_neither(self):
++        m = load_adapter()
++        base = self.tmp / "c"
++        (base / "provider").mkdir(parents=True)
++        entry = base / "zcode.cjs"
++        entry.write_text("", encoding="utf-8")
++        (base / "provider" / "zcode-builtin.json").write_text("{}", encoding="utf-8")
++        env = m.build_child_env(str(entry))
++        self.assertIn(m.BUILTIN_PROVIDER_CONFIG_ENV, env)
++        self.assertIn(m.PERSONAL_PROVIDER_CONFIG_ENV, env)
++        # No table -> neither name is set.
++        lonely = self.tmp / "d" / "zcode.cjs"
++        lonely.parent.mkdir(parents=True)
++        lonely.write_text("", encoding="utf-8")
++        env2 = m.build_child_env(str(lonely))
++        self.assertNotIn(m.BUILTIN_PROVIDER_CONFIG_ENV, env2)
++        self.assertNotIn(m.PERSONAL_PROVIDER_CONFIG_ENV, env2)
++
++    def test_inherited_value_never_reaches_the_child(self):
++        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
++        msg = drv.new_session()
++        self.assertIsNotNone(msg)
++        drv.prompt(msg["result"]["sessionId"])
++        rec = drv.record()
++        self.assertEqual(rec.get("builtin_env"), str(drv.builtin_path))
++        self.assertNotEqual(rec.get("builtin_env"), POISON)
++        self.assertNotEqual(rec.get("personal_env"), POISON)
++        self.assertTrue(rec.get("builtin_env_exists"))
++        self.assertEqual(
++            rec.get("personal_env"),
++            str(drv.home / ".zcode" / "v2" / "provider_config.json"))
++
++
++class TestModernTurn(TempCase):
++    def sid(self, drv: Driver) -> str:
++        msg = drv.new_session()
++        self.assertIsNotNone(msg, "session/new returned nothing")
++        self.assertNotIn("error", msg, f"session/new failed: {msg}")
++        return msg["result"]["sessionId"]
++
++    def test_create_carries_no_model_and_set_model_follows(self):
++        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
++        sid = self.sid(drv)
++        res = drv.prompt(sid)
++        self.assertIsNotNone(res, "no prompt result")
++        rec = drv.record()
++
++        # 3.12+ create has no model channel at all.
++        self.assertNotIn("runtimeModel", rec.get("create_params") or {})
++        self.assertNotIn("model", rec.get("create_params") or {})
++
++        # Selection happens afterwards, on the account provider, without
++        # touching the user's workspace defaults.
++        set_model = rec.get("set_model") or {}
++        self.assertEqual(set_model.get("model", {}).get("providerId"), ACCOUNT_ID)
++        self.assertEqual(set_model.get("model", {}).get("modelId"), "GLM-5.3")
++        self.assertIs(set_model.get("persistAsWorkspaceLastUsed"), False)
++        # 3.12+ refuses a Coding Plan selection with no explicit reasoning level.
++        self.assertIn(set_model["model"].get("options", {}).get("reasoningLevel"),
++                      ("low", "high", "max"))
++
++    def test_reasoning_levels_come_from_the_bundled_table(self):
++        m = load_adapter()
++        self.assertEqual(m.account_reasoning_levels(BUILTIN_TABLE_WITH_RULES, "GLM-5.3"),
++                         ["low", "high", "max"])
++        # A model the specific rule does not match falls back to the generic one.
++        self.assertEqual(m.account_reasoning_levels(BUILTIN_TABLE_WITH_RULES, "some-other"),
++                         ["disabled", "enabled"])
++
++    def test_account_snapshot_matches_installed_validator(self):
++        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
++        drv.prompt(self.sid(drv))
++        push = drv.record().get("account_push") or {}
++        self.assertTrue(str(push.get("revision") or "").strip())
++        based = push.get("basedOnZCodeBuiltinRevision") or ""
++        self.assertTrue(based.startswith("zcode-builtin:28:"),
++                        f"unexpected builtin revision {based!r}")
++        entry = (push.get("providers") or {}).get(ACCOUNT_ID) or {}
++        self.assertEqual(entry.get("builtinModelIds"), ["GLM-5.3", "GLM-5.3-Flash"])
++        self.assertEqual(entry.get("access"), {"type": "zhipu-account", "entitled": True})
++        # The state fields the installed 3.12.3 schema actually requires,
++        # measured live: availability enum + entitled + current.
++        state = (push.get("states") or {}).get(ACCOUNT_ID) or {}
++        self.assertIs(state.get("current"), True)
++        self.assertIs(state.get("entitled"), True)
++        self.assertIn(state.get("availability"),
++                      ("available", "pending", "unavailable", "unknown"))
++        # No credential travels in the snapshot.
++        self.assertNotIn(FIXTURE_SECRET, json.dumps(push))
++
++    def test_builtin_revision_hashes_the_path_not_the_bytes(self):
++        m = load_adapter()
++        import hashlib
++        table = self.tmp / "t.json"
++        table.write_text(json.dumps(BUILTIN_TABLE), encoding="utf-8")
++        got = m.builtin_revision_string(BUILTIN_TABLE, str(table))
++        want_digest = hashlib.sha256(str(table).encode("utf-8")).hexdigest()
++        self.assertEqual(got, f"zcode-builtin:28:{want_digest}")
++        # Same bytes at a different path must give a different revision.
++        other = self.tmp / "other.json"
++        other.write_text(json.dumps(BUILTIN_TABLE), encoding="utf-8")
++        self.assertNotEqual(got, m.builtin_revision_string(BUILTIN_TABLE, str(other)))
++
++    def test_runtime_headers_answered_and_turn_completes(self):
++        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
++        sid = self.sid(drv)
++        res = drv.prompt(sid)
++        self.assertIsNotNone(res)
++        rec = drv.record()
++        self.assertTrue(rec.get("headers_answer_ok"),
++                        f"headers rejected: {rec.get('headers_problem')}")
++        self.assertEqual((res.get("result") or {}).get("stopReason"), "end_turn")
++
++    def test_mid_session_model_switch_uses_the_account_path(self):
++        """An Agent switching model mid-session must not fall back to the
++        pre-3.12 overlay: 3.12+ rejects `runtimeModel` outright and requires an
++        explicit reasoning level."""
++        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
++        sid = self.sid(drv)
++        drv.prompt(sid)
++        drv.request(20, "session/set_config_option", {
++            "sessionId": sid, "configId": "model",
++            "value": f"{CODING_PLAN_ID}\\GLM-5.3-Flash"})
++        res = drv.wait_result(20)
++        self.assertIsNotNone(res, "set_config_option returned nothing")
++        self.assertNotIn("error", res, f"model switch failed: {json.dumps(res)}")
++        sent = drv.record().get("set_model") or {}
++        self.assertNotIn("runtimeModel", sent)
++        self.assertEqual(sent.get("model", {}).get("providerId"), ACCOUNT_ID)
++        self.assertEqual(sent.get("model", {}).get("modelId"), "GLM-5.3-Flash")
++        self.assertIn(sent["model"].get("options", {}).get("reasoningLevel"),
++                      ("low", "high", "max"))
++        self.assertIs(sent.get("persistAsWorkspaceLastUsed"), False)
++
++    def test_rejected_switch_does_not_commit_local_model_state(self):
++        """A backend that refuses `session/setModel` must leave the session on
++        its previous model. Committing `session.model_id` before the backend
++        confirms would make configOptions advertise a model that never took
++        effect, and every later turn would still run on the old one."""
++        drv = self.driver(modern=True, scenario="switch_rejected",
++                          expect_key=FIXTURE_SECRET)
++        sid = self.sid(drv)
++        drv.prompt(sid)
++        before = drv.record().get("set_model", {}).get("model", {}).get("modelId")
++        self.assertEqual(before, "GLM-5.3", "initial selection did not land")
++
++        drv.request(22, "session/set_config_option", {
++            "sessionId": sid, "configId": "model",
++            "value": f"{CODING_PLAN_ID}\\GLM-5.3-Flash"})
++        res = drv.wait_result(22)
++        self.assertIsNotNone(res)
++        self.assertIn("error", res, "the backend refusal was not surfaced")
++
++        # Drive a change the backend does accept, and read what the adapter now
++        # believes the model is.
++        drv.request(23, "session/set_config_option", {
++            "sessionId": sid, "configId": "mode", "value": "yolo"})
++        res2 = drv.wait_result(23)
++        self.assertIsNotNone(res2)
++        self.assertNotIn("error", res2, f"mode change failed: {json.dumps(res2)}")
++        options = {o["id"]: o for o in (res2.get("result") or {}).get("configOptions", [])}
++        current = options.get("model", {}).get("currentValue")
++        self.assertNotIn("GLM-5.3-Flash", str(current),
++                         "a refused model was committed to local state")
++        self.assertIn("GLM-5.3", str(current))
++
++    def test_mid_session_switch_still_refuses_a_foreign_provider(self):
++        """The one-Coding-Plan boundary is unchanged by the account path."""
++        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
++        sid = self.sid(drv)
++        drv.prompt(sid)
++        drv.request(21, "session/set_config_option", {
++            "sessionId": sid, "configId": "model",
++            "value": "builtin:someone-else\\GLM-5.3"})
++        res = drv.wait_result(21)
++        self.assertIsNotNone(res)
++        self.assertIn("error", res, f"expected a refusal, got {json.dumps(res)}")
++        self.assertNotIn(FIXTURE_SECRET, json.dumps(res))
++
++    def test_credential_never_appears_in_acp_or_logs(self):
++        drv = self.driver(modern=True, expect_key=FIXTURE_SECRET)
++        sid = self.sid(drv)
++        drv.prompt(sid)
++        self.assertNotIn(FIXTURE_SECRET, drv.stdout_text())
++        self.assertNotIn(FIXTURE_SECRET, drv.stderr_text())
++
++    def test_refuses_a_model_the_plan_does_not_offer(self):
++        m = load_adapter()
++        release = BUILTIN_TABLE
++        choice = {"provider_id": CODING_PLAN_ID, "model_ids": ["GLM-9-not-in-plan"]}
++        with self.assertRaises(m.RuntimeError_):
++            m.build_account_config(choice, release, "/tmp/x.json")
++
++    def test_headers_refused_for_a_foreign_provider(self):
++        """A provider we did not authorize gets a negative answer, not the key."""
++        m = load_adapter()
++        agent = m.ZCodeAcpAgent.__new__(m.ZCodeAcpAgent)
++        agent.account = {"account_id": ACCOUNT_ID, "model_ids": ["GLM-5.3"],
++                         "params": {}}
++        answer = agent.runtime_headers_answer({"providerId": "account:someone-else"})
++        self.assertIs(answer["headersApplied"], False)
++        self.assertNotIn("requestAuth", answer)
++
++
++class TestMissingCredentialsAndRegistry(TempCase):
++    def _refuses_at_first_use(self, drv: Driver) -> None:
++        msg = drv.new_session()
++        self.assertIsNotNone(msg, "session/new returned nothing")
++        sid = msg["result"]["sessionId"]
++        res = drv.prompt(sid)
++        self.assertIsNotNone(res, "prompt returned nothing")
++        self.assertIn("error", res, f"expected a fail-closed error, got {json.dumps(res)}")
++        # The refusal never leaks a credential.
++        self.assertNotIn(FIXTURE_SECRET, json.dumps(res))
++
++    def test_absent_desktop_registry_fails_closed(self):
++        self._refuses_at_first_use(self.driver(modern=True, desktop_config="ABSENT"))
++
++    def test_plan_without_credential_fails_closed(self):
++        config = json.loads(DESKTOP_CONFIG_FIXTURE.read_text(encoding="utf-8"))
++        config["provider"][CODING_PLAN_ID]["options"]["apiKey"] = ""
++        self._refuses_at_first_use(self.driver(modern=True, desktop_config=config))
++
++
++class TestLegacyBackendStillWorks(TempCase):
++    """A pre-3.12 backend must keep working through the old overlay path."""
++
++    def test_legacy_backend_uses_the_runtime_model_overlay(self):
++        drv = self.driver(modern=False, bundled=True)
++        drv.request(1, "initialize", {"protocolVersion": 1, "clientCapabilities": {}})
++        drv.wait_result(1)
++        drv.request(2, "session/new", {"cwd": str(drv.cwd), "mcpServers": []})
++        msg = drv.wait_result(2)
++        self.assertIsNotNone(msg, "legacy session/new returned nothing")
++        self.assertNotIn("error", msg, f"legacy path failed: {msg}")
++        res = drv.prompt(msg["result"]["sessionId"])
++        self.assertIsNotNone(res, "legacy prompt returned nothing")
++        overlays = drv.record().get("overlays") or []
++        self.assertTrue(overlays, "legacy backend received no runtimeModel overlay")
++        self.assertEqual(overlays[0]["providerId"], CODING_PLAN_ID)
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=1)
+diff --git a/third_party/zcode-acp/UPSTREAM.md b/third_party/zcode-acp/UPSTREAM.md
+index d7777f6..989b26d 100644
+--- a/third_party/zcode-acp/UPSTREAM.md
++++ b/third_party/zcode-acp/UPSTREAM.md
+@@ -56,6 +56,41 @@ Start Plan and pay-as-you-go providers are refused; unknown models and other
+ providers fail closed; the adapter never substitutes a model or a provider,
+ never writes `~/.zcode/cli/config.json`, and never logs the credential.
+ 
++ZCode 3.12+ (Issue #79, measured on desktop 3.12.3 / CLI 0.16.5). The installed
++3.12.3 bundle contains no `runtimeModel` at all, so the overlay above applies
++only to pre-3.12 app-servers; the CLI version string is 0.16.5 on both and
++cannot discriminate, so the adapter chooses by the backend's own error. On
++3.12+ the adapter instead: resolves the bundled provider table next to the
++verified entry and injects `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` and
++`ZCODE_PERSONAL_PROVIDER_CONFIG_FILE` (both or neither, never inherited --
++the shipped entry's own probe misses the `.app` layout and exits 1); registers
++the one enabled Coding Plan through `provider/updateAccountConfig` as
++`{revision, basedOnZCodeBuiltinRevision, providers:{<account id>:{builtinModelIds,
++access:{type:"zhipu-account", entitled:true}}}, states:{<account id>:{availability,
++entitled:true, current:true}}}`; creates the session with no model channel; selects
++the model through `session/setModel` on the `account:*` provider as
++`{sessionId, model:{providerId, modelId, options:{reasoningLevel}},
++persistAsWorkspaceLastUsed:false}`; and answers the server-initiated
++`interaction/requestProviderRuntimeHeaders` with
++`{headersApplied:true, requestAuth:{apiKey}}` for that one authorized provider
++only. The credential still never touches disk, ACP output or a log. Upstream
++`william0wang/zcode-acp` v0.42.2-0.42.5 fixed the same chain independently; no
++upstream bytes are vendored, and where upstream and the installed build differ
++(upstream keeps `runtimeModel` as a fallback; 3.12.3 has removed it) the
++installed build wins.
++
++Two of those details were established only by running the real 3.12.3 app-server
++(Issue #79 Mission 5), because static reading understated them:
++`states[<id>]` needs `availability` (enum `available|pending|unavailable|unknown`)
++and `entitled` as well as the `current` boolean the snapshot validator reads --
++omitting them is rejected by the wire schema; and `session/setModel` refuses a
++Coding Plan selection carrying no `options.reasoningLevel`
++("Reasoning level is required for <provider>/<model>"). The allowed levels come
++from the bundled table's `modelConfigRules`, whose regex rules are applied in
++order with later matches overriding and are tested as `^(?:<modelMatch>)$`
++case-insensitively; `availability` is reported from the desktop plan cache and
++falls back to `unknown`, never upgraded to `available`.
++
+ Tool `input` (Issue #67, measured on CLI 0.16.5): `model.streaming` kind
+ `tool_call` carries `input` (`Read` used `file_path`; protocol examples use
+ `command` for `Bash`). `tool.updated` `scheduled` may omit `input` and set
