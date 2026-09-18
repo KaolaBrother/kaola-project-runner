@@ -1,4 +1,0 @@
-# Command: LC_ALL=C ps -eo pid,lstart,command | grep kaola-acp-holder | grep kaola-i77-final
-# After: TMPDIR=/tmp/kaola-i77-final python3 tests/contract/test-issue-73-canonical-root.py  ->  Ran 29 tests, OK
-# Result: ZERO matching lines follow. No holder survived the run.
-# Re-confirmed after the rebase onto main 5239fec (see flake-ab-measurement.txt).
