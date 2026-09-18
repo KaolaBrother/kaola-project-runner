@@ -236,6 +236,28 @@
   record directory (matched by its `--record-dir` argv, never a bare pid), and
   every fixture class asserts zero of its own holders or mock agents survive.
   Production stop/lifecycle behavior is unchanged.
+- **Codex hosts recover through `SessionStart(compact)`, and the orchestrator
+  gains a documentation-maintenance boundary (Issue #75).** A Codex host Agent
+  using Project Runner (or Kaola-Delegator) can no longer be assumed to hold
+  the Skill text after context compaction. The new
+  `scripts/kaola-codex-compact-hook.py` installs, reports, and removes exactly
+  one Runner-owned entry - `kaola-project-runner:compact-context` - in
+  `${CODEX_HOME}/hooks.json`, matched by id so Workflow-owned and other foreign
+  hooks are preserved byte-for-byte; the payload copy lives under
+  `<codex_home>/kaola-project-runner/hooks/`, a malformed file is refused
+  rather than clobbered, and `status` never writes. The short payload only
+  re-points the host: confirm role, fully re-read the installed Skill, recover
+  authorization/heartbeat/run records - never re-intake, re-claim, or
+  re-dispatch. Verified in an isolated real `/compact`: the injected context
+  reached the model before its next turn while the existing Workflow hook
+  fired alongside. Separately, the orchestrator template gains
+  `references/doc-maintenance.md`: workers judge per-issue documentation
+  impact at dispatch, acceptance reuses the Workflow documentation docking
+  (no second ledger or gate), `AGENTS.md` carries only verified durable facts
+  per ADR 0023, and post-sink verification syncs in-flight Agents at a safe
+  point without per-beat doc scans. ZCode's compact carrier stays unshipped:
+  its 0.16.5 `SessionStart` has no `compact` call site (see
+  `docs/codex-host.md`).
 
 - **A failing `./scripts/validate.sh` suite no longer hides the rest of its lane (Issue #83).**
   `run_suite_lane` returned on the first failing suite, so every suite ordered

@@ -21,16 +21,15 @@ yourself.
 ## Two entry points
 
 **Ordinary worker supervision** - you dispatch and accept from your own session
-with the loop below; that worker carries no Host obligation, no event binding and
-no extra gate. Direct Project Runner use does not require a ZCode Host.
+with this loop; that worker carries no Host obligation, no event binding, no
+extra gate.
 
-**ZCode Host** - you are already a named ZCode Host session that loaded this
-Skill and supervises workers on event-driven beats. Outer Agents start or
-continue that Host through Kaola-Delegator (`kaola-delegator`); do not copy that
-outer procedure here. Role, authorization and lifecycle boundary come from the
-project's existing Project Plan or already-authorized task plan - never a new
-schema, never this session's claim of having loaded this Skill. Your own startup
-receipt and beat: [host-startup.md](references/host-startup.md).
+**Orchestrator (ZCode Host)** - you start, or you are, a named ZCode Host session
+that loads this Skill and supervises workers on event-driven beats. Its role,
+authorization and lifecycle boundary come from the project's existing Project
+Plan or already-authorized task plan - never a new schema, never the Host's own
+claim of having loaded this Skill. Startup order, the receipt the outer Agent
+checks against that plan, and keep-versus-stop: [host-startup.md](references/host-startup.md).
 
 ## Consumer-project boundary
 
@@ -76,13 +75,13 @@ platform's default transport is ACP:
 
 ### Hosts
 
-This Skill is host-neutral. Consuming entries are Codex, generic
-`--skills-dir`, and ZCode. Native skill-directory installs also exist for
-Claude Code, Cursor and Devin, where the nine workers are sibling Skill
-directories. A ZCode Host session is one named Runner session like any other:
+This Skill is host-neutral. Native skill-directory installs exist for Codex,
+Claude Code, Cursor, Devin and ZCode (`~/.zcode/skills`; a workspace
+`.zcode/skills` works through `--skills-dir`), where the nine workers are sibling
+Skill directories. A ZCode Host session is one named Runner session like any other:
 an inner worker it dispatches, ZCode or not, is a separate session with its own
 record entry and process group - an inner stop never reaches the outer Host, and
-the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop, and it
+the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop; it
 cannot discover its own `platform`/`session`/`repo` - give them in its first
 prompt. Each beat: set `KAOLA_ACP_HEARTBEAT_HOST` (a JSON object naming the Host)
 on every worker `start`, verify the receipt's `heartbeat_host`, dispatch with
@@ -93,12 +92,25 @@ the turn normally** - that is the wait. Never sleep, poll, blocking-`wait`, or
 stop/cancel anything to manufacture a wake-up. A worker turn-end or exit delivers one
 full pass here; read the reply through that worker's own Skill from the dispatch
 anchor, not the event's `event_cursor`, which sits after it. Beat, event and carrier detail:
-[references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
-Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
-which starts one ZCode Host that then loads this Skill. `--platform grok` is the
-Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
-Routine to run this Skill. An in-flight session that still uses the old Grok Bot
-Project Runner entry is not renamed, restarted, or cancelled from here.
+[references/zcode-host-dispatch.md](references/zcode-host-dispatch.md). A **bridge host** (Grok Bot today) reaches this checkout through one thin
+account Skill instead: it binds an execution target first (Local Computer, or the
+cloud Agent Computer), asks that target's device-local locator `kaola-project-runner-locate` for
+the verified repo root ROOT, and loads only `ROOT/skills/kaola-project-runner` plus,
+per dispatch, one selected `ROOT/skills/<platform id>-kaola-project-runner`. Re-run that
+attestation before every dispatch and refuse any `refused` receipt: project,
+worker script, and the exact session must all be on that one bound target, which
+never reaches the other's files, CLIs, tmux, or sessions. Grok Bot is a host, not a worker and
+not a tenth platform: `--platform grok` is the Grok CLI worker, `--platform
+grok-bot` is invalid.
+
+On Grok Bot one Routine on this conversation is the only heartbeat carrier:
+never stack it with a Codex heartbeat or blocking sleep. Takeover cancels the
+previous host heartbeat without stopping in-flight workers.
+`HUMAN_DECISION_REQUIRED` stays in this Bot conversation (Needs attention /
+Notifications). Agent Computer takeover is not CLI decision and not
+exact-session stop. A saved bridge is not live adoption; the owner's read-only
+Local Computer UAT is the boundary. See
+[references/grok-bot-host.md](references/grok-bot-host.md).
 
 ### Progressive disclosure
 
@@ -119,7 +131,7 @@ dropped; `capture --full` is the only unbounded request.
 | Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
 | Heartbeat | 30 minutes unless specified; zero or "no heartbeat" means one-shot. One host-native carrier, else same-session sleep, never both. |
-| Permissions | Per platform, not one global bypass. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
+| Permissions | Existing Runner default bypass start. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled within authorized scope, not routinely sent to the human. |
 | Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
 
@@ -132,12 +144,12 @@ recovery are Agent decisions on both PTY and ACP, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
 
 `self_hosting_risk` and model mismatches are reported evidence, not automatic
-start gates. Bypass is not broader authorization. With no verified ACP skip-all,
-permission may still arise: `permit` settles it, never force PTY or add a gate.
+start gates. Bypass is not broader authorization. OpenCode ACP permission
+leftovers are a transport fact: do not force PTY or invent a new skip-all gate.
 
 ## Heartbeat
 
-The heartbeat is the working prompt itself: Codex runs it from its
+The heartbeat is the working prompt itself: Codex and Grok Bot run it from their
 own timer, a ZCode Host from each worker return or event, on host-native
 carriers. Render it from the skeleton in
 [references/heartbeat-skeleton.md](references/heartbeat-skeleton.md),
@@ -149,8 +161,9 @@ request disables execution actions.
 
 On a ZCode Host session worker events are the only heartbeat trigger (see
 Hosts). After close-out, cancel the native heartbeat or stop scheduling the next
-sleep. No allowlist, no heartbeat. Temporarily having no ready task is not
-project completion. Do not hard-code other hosts' scheduler APIs.
+sleep. Temporarily having no ready task is not
+project completion. Do not hard-code other
+hosts' scheduler APIs.
 
 ## Delivery
 
@@ -167,7 +180,7 @@ sink, and write ownership.
 1. **Recover and observe.** Read existing worker/run records, relevant
    Git/Forge state, and fresh Runner evidence. Use exact owned sessions and
    current platform Skills. Observe busy workers without injecting "status?"
-   messages or repeatedly polling raw PTY screens as a human UI. Do not replay a prompt whose
+   messages or polling raw PTY screens as a human UI. Do not replay a prompt whose
    acceptance or effects are known or uncertain; investigate the existing action
    first. Steering a running turn is an Agent
    choice, never a Runner policy: pick the mode yourself, read the receipt, and
@@ -177,9 +190,9 @@ sink, and write ownership.
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
    first. Examine authorized remaining work and real parallel opportunities.
-   At every heartbeat, match authorized idle workers to safe parallel work and dispatch every suitable match. Leave capacity idle rather than invent work or expand authorization. State the task, working location, write ownership, and
-   delivery requirements in its prompt; merely seeing a worktree or Mission
-   List is not write authorization. Same-file collaboration needs explicit
+   At every heartbeat, match authorized idle workers to safe parallel work and dispatch every suitable match. Leave capacity idle rather than invent work or expand authorization. State the task, working location, write ownership,
+   delivery requirements, and the doc-impact call in its prompt; merely seeing a
+   worktree or Mission List is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims.
 3. **Accept the delivery.** Mission-frontier done triggers review, not automatic finalize. Inspect the actual
@@ -191,8 +204,9 @@ sink, and write ownership.
    incomplete evidence. Do not lower assertions or substitute worker prose,
    idle, green CI or a successful script exit for acceptance.
 4. **Finalize and synchronize.** Once accepted and authorized, direct the
-   worker to finalize and merge, then verify remote, Issue, archive, and
-   cleanup results. Prefer closing one run at a time, but judge safe
+   worker to finalize and merge, then verify remote, Issue, archive, doc
+   docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).
+   Prefer closing one run at a time, but judge safe
    concurrency. After the baseline moves, direct other affected owners to save
    work and rebase/update at a safe boundary. Review conflicts and revalidate
    affected changes; do not switch HEAD during a measurement or silently reuse

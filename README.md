@@ -149,7 +149,8 @@ historical evidence, not this Skill's contract.
 
 The installer provides native skill-directory destinations for **Codex, Claude Code,
 Cursor, Devin, and ZCode** (`--runtime zcode` → `~/.zcode/skills`; a workspace
-`.zcode/skills` works through `--skills-dir` — see [ZCode host](docs/zcode-host.md)).
+`.zcode/skills` works through `--skills-dir` — see [ZCode host](docs/zcode-host.md);
+for Codex's `SessionStart(compact)` recovery hook see [Codex host](docs/codex-host.md)).
 **Grok Bot** is a **bridge host** for **Kaola-Delegator**, not a Project Runner
 host (in development on this candidate; not a released account Skill). The account
 holds exactly one very small generated Skill,

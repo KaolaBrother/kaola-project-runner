@@ -72,7 +72,7 @@ Claude Code, Cursor and Devin, where the nine workers are sibling Skill
 directories. A ZCode Host session is one named Runner session like any other:
 an inner worker it dispatches, ZCode or not, is a separate session with its own
 record entry and process group - an inner stop never reaches the outer Host, and
-the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop, and it
+the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop; it
 cannot discover its own `platform`/`session`/`repo` - give them in its first
 prompt. Each beat: set `KAOLA_ACP_HEARTBEAT_HOST` (a JSON object naming the Host)
 on every worker `start`, verify the receipt's `heartbeat_host`, dispatch with
@@ -157,7 +157,7 @@ sink, and write ownership.
 1. **Recover and observe.** Read existing worker/run records, relevant
    Git/Forge state, and fresh Runner evidence. Use exact owned sessions and
    current platform Skills. Observe busy workers without injecting "status?"
-   messages or repeatedly polling raw PTY screens as a human UI. Do not replay a prompt whose
+   messages or polling raw PTY screens as a human UI. Do not replay a prompt whose
    acceptance or effects are known or uncertain; investigate the existing action
    first. Steering a running turn is an Agent
    choice, never a Runner policy: pick the mode yourself, read the receipt, and
@@ -167,9 +167,9 @@ sink, and write ownership.
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
    first. Examine authorized remaining work and real parallel opportunities.
-   {{IDLE_BEFORE_STOP}}. State the task, working location, write ownership, and
-   delivery requirements in its prompt; merely seeing a worktree or Mission
-   List is not write authorization. Same-file collaboration needs explicit
+   {{IDLE_BEFORE_STOP}}. State the task, working location, write ownership,
+   delivery requirements, and the doc-impact call in its prompt; merely seeing a
+   worktree or Mission List is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims.
 3. **Accept the delivery.** {{ACCEPTANCE_BEFORE_FINALIZE}}. Inspect the actual
@@ -181,8 +181,9 @@ sink, and write ownership.
    incomplete evidence. Do not lower assertions or substitute worker prose,
    idle, green CI or a successful script exit for acceptance.
 4. **Finalize and synchronize.** Once accepted and authorized, direct the
-   worker to finalize and merge, then verify remote, Issue, archive, and
-   cleanup results. Prefer closing one run at a time, but judge safe
+   worker to finalize and merge, then verify remote, Issue, archive, doc
+   docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).
+   Prefer closing one run at a time, but judge safe
    concurrency. After the baseline moves, direct other affected owners to save
    work and rebase/update at a safe boundary. Review conflicts and revalidate
    affected changes; do not switch HEAD during a measurement or silently reuse

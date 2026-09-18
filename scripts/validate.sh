@@ -90,6 +90,7 @@ python_suites_all=(
   "test-issue-79-zcode-312.py"
   "test-issue-83-lane-failure-visibility.py"
   "test-issue-74-kaola-delegator.py"
+  "test-issue-75-codex-compact-hook.py"
   "test-issue-84-zcode-native-resume.py"
   "test-issue-85-zcode-resume-advertised-model.py"
   "test-issue-86-delegator-quota.py"
@@ -138,6 +139,7 @@ python_suites_b=(
   "test-issue-70-binding-fact.py"
   "test-issue-73-canonical-root.py"
   "test-issue-74-kaola-delegator.py"
+  "test-issue-75-codex-compact-hook.py"
   "test-issue-86-delegator-quota.py"
   "test-issue-90-event-confirmation-race.py"
 )
