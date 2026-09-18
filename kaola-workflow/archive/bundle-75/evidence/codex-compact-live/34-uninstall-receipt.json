@@ -1,0 +1,1 @@
+{"action": "uninstall", "changed": true, "hooks_json": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/tmp.4eROalsgvQ/hooks.json", "payload_removed": true, "removed_entries": 1, "result": "ok", "schema": "kaola-codex-compact-hook/1"}

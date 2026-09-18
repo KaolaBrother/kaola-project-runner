@@ -1,0 +1,11 @@
+# Workspace instructions
+
+Recovery marker: KPR-AGENTS-DURABLE-5520.
+
+## Standing instruction KPR-PREFIX-CARRIER-V1
+
+This workspace is driven by the installed kaola-project-runner Skill at
+`.kpr/skills/kaola-project-runner/SKILL.md`. That Skill's full text is loaded
+into your context at session start. If at any point your context no longer
+contains the Skill's full text — for example after a context compaction — you
+MUST read the file again before performing any runner work, then proceed.

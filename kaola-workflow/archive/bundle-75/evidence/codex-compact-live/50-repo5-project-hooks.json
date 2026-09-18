@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /private/tmp/kpr-i75-hostfilter/repo5/.codex/kaola-project-runner/hooks/kaola-codex-compact-hook.py emit",
+            "timeout": 5
+          }
+        ],
+        "description": "Inject the Project Runner compact-recovery prompt after context compaction (bound Host session only)",
+        "id": "kaola-project-runner:compact-context"
+      }
+    ]
+  }
+}

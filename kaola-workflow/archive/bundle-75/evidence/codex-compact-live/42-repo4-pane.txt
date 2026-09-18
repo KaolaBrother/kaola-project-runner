@@ -1,0 +1,17 @@
+# tmux capture-pane, kpr-i75-codex, session 01a0b658-0e8a-7481-9d1d-7f3f26ba13f2
+# codex --dangerously-bypass-hook-trust, cwd /private/tmp/kpr-i75-hostfilter/repo4
+# (verbatim pane excerpts, blank lines dropped)
+
+  directory:   /private/tmp/kpr-i75-hostfilter/repo4
+  permissions: YOLO mode
+  ⚠ `--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation.
+› Reply with exactly: READY
+• READY
+• Context compacted
+› After the last compact, did any hook inject context containing the marker KPR-COMPACT-RECOVERY-V1? Reply yes or no and quote it if yes.
+• Yes. “Recovery marker: KPR-COMPACT-RECOVERY-V1.”
+
+# Earlier in the same session, /hooks browser showed:
+#   SessionStart  Installed 3  Active 1  Review 2
+# i.e. the two project-layer entries were installed but INACTIVE until the
+# project dir trust + bypass allowed them; review-gating, not the filter.

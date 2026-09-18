@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /tmp/kpr-i75-hostfilter/fake-home/kaola-project-runner/hooks/kaola-codex-compact-hook.py emit",
+            "timeout": 5
+          }
+        ],
+        "description": "Inject the Project Runner compact-recovery prompt after context compaction (bound Host session only)",
+        "id": "kaola-project-runner:compact-context"
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat > /tmp/kpr-i75-hostfilter/repo4/hook-stdin-last.json",
+            "timeout": 5
+          }
+        ],
+        "description": "evidence: capture the real hook stdin",
+        "id": "kpr-evidence:stdin-capture"
+      }
+    ]
+  }
+}

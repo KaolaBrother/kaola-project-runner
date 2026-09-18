@@ -1,0 +1,32 @@
+# tmux pane excerpts — two-phase bootstrap, repo5, codex 0.153.4,
+# `codex --dangerously-bypass-hook-trust`, dir trusted at launch prompt.
+# Session A = first session (prepared entry loaded at session start, inert
+# binding). Session B = second session in the same repo (Worker contrast).
+# Session ids masked: A = 01a0b686…, B = distinct session.
+
+# --- Session A, compact #1 (binding inert: session_id null) ---
+› Reply with exactly: READY
+• READY
+• Context compacted
+› list every hook-injected marker you received …
+• KW-COMPACT-RECOVERY-V2                    # foreign only; ours silent
+
+# --- env identity check inside the host shell ---
+› printenv CODEX_SESSION_ID CODEX_THREAD_ID > env-ids.txt
+› printenv | grep -i codex > env-all.txt
+# offline compare: CODEX_SESSION_ID == CODEX_THREAD_ID == rollout session_id
+
+# --- bind (ONLY binding.json written; hooks.json sha256 identical) ---
+# {"action":"bind","result":"ok","changed":true, ...}
+
+# --- Session A, compact #2 (same session, NO restart/resume) ---
+• Context compacted
+› list every hook-injected marker you received …
+• KW-COMPACT-RECOVERY-V2                    # foreign hook still firing
+  KPR-COMPACT-RECOVERY-V1                   # bound emit fired
+
+# --- Session B (second session, same repo, Worker contrast) ---
+• READY
+• Context compacted
+› list every hook-injected marker you received …
+• KW-COMPACT-RECOVERY-V2                    # unbound session: ours silent

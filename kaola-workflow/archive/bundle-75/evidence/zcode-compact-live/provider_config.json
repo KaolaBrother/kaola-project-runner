@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "config": {
+    "providerOrder": [
+      "mock-local"
+    ],
+    "providerConfigRules": {
+      "providerRules": [
+        {
+          "providerId": "mock-local",
+          "providerName": "MOCK-LOCAL (test fixture, not a real provider)",
+          "enabled": true,
+          "config": {
+            "group": "standard-personal",
+            "access": {
+              "type": "api-key",
+              "apiKey": "sk-mock-local-not-a-credential"
+            },
+            "api": {
+              "type": "openai-chat-completions",
+              "baseUrl": "http://127.0.0.1:8797/v1"
+            },
+            "personalModelIds": [
+              "mock-small"
+            ],
+            "modelOrder": [
+              "mock-small"
+            ]
+          }
+        }
+      ]
+    },
+    "modelConfigRules": {
+      "providerModelRules": [],
+      "manualProviderModelRules": [
+        {
+          "modelId": "mock-small",
+          "config": {
+            "enabled": true,
+            "properties": {
+              "contextWindow": 8192,
+              "supportsJsonSchemaOutput": false,
+              "supportsNativeWebSearch": false,
+              "supportsMidConversationSystem": false,
+              "inputFormat": {
+                "supportsImage": false,
+                "supportsVideo": false,
+                "supportsPdf": false
+              }
+            },
+            "optionSpecs": {
+              "reasoningLevel": {
+                "values": [
+                  "disabled"
+                ],
+                "map": "{}"
+              },
+              "maxOutputTokens": {
+                "max": 4096
+              }
+            }
+          },
+          "providerId": "mock-local"
+        }
+      ]
+    }
+  }
+}

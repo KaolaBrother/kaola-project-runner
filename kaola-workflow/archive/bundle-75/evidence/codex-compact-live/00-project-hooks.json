@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat \"/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/bundle-75/templates/codex-host/compact-recovery.md\"",
+            "timeout": 5
+          }
+        ],
+        "description": "Inject the Project Runner compact-recovery prompt after context compaction",
+        "id": "kaola-project-runner:compact-context"
+      }
+    ]
+  }
+}
