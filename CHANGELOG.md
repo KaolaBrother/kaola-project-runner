@@ -11,8 +11,10 @@
   the backend cannot restore it, a new standard-named Host is a new ACP
   session continued from Git / Workflow / Issue records. Current
   authorization must be complete before that `start`; missing key values
-  block start, not only later dispatch. Fake tests are not a live ZCode
-  model-session proof. Existing budgets were not raised.
+  block start, not only later dispatch. The unproven ZCode.app 3.12.3
+  `runtimeModel` create fallback and swallowed `setModel` retry are not
+  in this candidate. Fake tests are not a live ZCode model-session proof.
+  Existing budgets were not raised.
 
 - **Kaola-Delegator is the external delegation Skill; Grok Bot is no longer a
   Project Runner host (Issue #74).** The generated Skill `kaola-delegator`

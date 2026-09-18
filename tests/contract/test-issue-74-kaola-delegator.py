@@ -199,7 +199,7 @@ class Sandbox:
         return self.record_root / "zcode" / session / digest
 
     def cli(self, command: str, *args: str, session: str, timeout: float = 120,
-            **env_overrides: str) -> dict:
+            allow_error: bool = False, **env_overrides: str) -> dict:
         if command == "start":
             env_overrides.setdefault("KAOLA_ZCODE_ENTRY", str(self.entry_for(session)))
             self.sessions.append(session)
@@ -214,6 +214,8 @@ class Sandbox:
                 payload = json.loads(text.splitlines()[-1])
             except ValueError:
                 payload = None
+        if allow_error and isinstance(payload, dict):
+            return payload
         if result.returncode != 0 or not isinstance(payload, dict):
             raise AssertionError(
                 f"{command} failed rc={result.returncode} "
@@ -287,6 +289,22 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "handoff no longer allows starting a blank Host first")
     check("apply only the user's latest change" in handoff_one,
           "live Host does not re-ask the full authorization set")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_one = re.sub(r"\s+", " ", readme)
+    check("do not `start`" in readme,
+          "README forbids start when authorization is missing")
+    check("only after current authorization is complete" in readme_one,
+          "README requires complete authorization before a new Host start")
+    adapter = (ROOT / "scripts" / "kaola-zcode-acp.py").read_text(encoding="utf-8")
+    generated_adapter = (
+        ROOT / "skills" / "zcode-kaola-project-runner" / "scripts" / "kaola-zcode-acp.py"
+    ).read_text(encoding="utf-8")
+    check("def apply_coding_plan_model" not in adapter,
+          "canonical adapter has no overlay-less setModel fallback")
+    check("def apply_coding_plan_model" not in generated_adapter,
+          "generated adapter copy has no overlay-less setModel fallback")
+    check("setModel after overlay-less create" not in adapter,
+          "adapter does not swallow overlay-less setModel errors")
     check("There is no Delegator continuation file" in skill_one,
           "Skill forbids a dedicated continuation file")
     check("even if its recorded name is not the new form" in skill_one,
@@ -464,9 +482,124 @@ def test_adopt_nonstandard_live_host_without_second_start() -> None:
         check(stop.get("error") is None, "exact stop of adopted Host")
         sandbox.dump("16-stopped-new-host-boundary.txt", (
             "stopped Host; fake backend is not production --resume evidence; "
-            "Skill allows a new standard-named Host as a new ACP session "
-            "once stop is confirmed and no other live orchestrator remains\n"
+            "post-stop new Host identity is measured in "
+            "test_new_standard_host_after_confirmed_stop\n"
         ))
+    finally:
+        sandbox.cleanup()
+
+
+def test_new_standard_host_after_confirmed_stop() -> None:
+    """Confirmed stop then a new standard Host under complete authorization.
+
+    Fake ACP/holder identity change is the measured branch. Fake is not a
+    real ZCode model-session or sess_* --resume proof.
+    """
+    sandbox = Sandbox("newhost")
+    try:
+        workflow = sandbox.repo / "kaola-workflow"
+        workflow.mkdir()
+        (workflow / "mission-list.md").write_text(
+            "# isolation remaining=handoff isolation\n"
+            f"{ORIGINAL_TASK}\n",
+            encoding="utf-8",
+        )
+        host = f"zcode-KPR-orchestrator-{uuid.uuid4().hex[:6]}"
+        check(host.startswith("zcode-KPR-orchestrator-"),
+              "new-Host path uses the standard orchestrator session name")
+
+        first = sandbox.cli("start", "--mode", "yolo", session=host)
+        sandbox.dump("20-first-host.json", first)
+        first_ids = {
+            "session": host,
+            "acp_session_id": first.get("acp_session_id"),
+            "holder_instance_id": first.get("holder_instance_id"),
+            "pid": first.get("pid"),
+        }
+        check(first.get("state") == "ready", f"first Host start ready ({first.get('error')})")
+        check(first_ids["acp_session_id"] and first_ids["holder_instance_id"],
+              "first Host receipts include ACP and holder ids")
+
+        stop = sandbox.cli("stop", "--force", session=host)
+        sandbox.dump("21-first-stop.json", stop)
+        check(stop.get("error") is None, f"first Host exact stop ({stop.get('error')})")
+
+        dead = sandbox.cli("status", session=host, allow_error=True)
+        sandbox.dump("22-status-after-stop.json", dead)
+        stopped = (
+            dead.get("state") == "stopped"
+            or dead.get("outcome") == "stopped"
+            or dead.get("agent_alive") is False
+            or dead.get("error") is not None
+        )
+        check(stopped, f"status after stop is not a live Host ({dead})")
+
+        second = sandbox.cli("start", "--mode", "yolo", session=host)
+        sandbox.dump("23-second-host.json", second)
+        check(second.get("state") == "ready", f"new Host start ready ({second.get('error')})")
+        check(second.get("session") == host, "new Host reuses the standard session name")
+        check(second.get("holder_instance_id") != first_ids["holder_instance_id"],
+              "new Host has a new holder instance")
+        if first_ids["pid"] and second.get("pid"):
+            check(second.get("pid") != first_ids["pid"],
+                  "new Host is a new holder process")
+        # acp_session_id is assigned per holder process (often zcode-1 again).
+        # A reused string is not the stopped session: the new holder owns it.
+        sandbox.dump("23b-identity-delta.json", {
+            "first": first_ids,
+            "second": {
+                "session": host,
+                "acp_session_id": second.get("acp_session_id"),
+                "holder_instance_id": second.get("holder_instance_id"),
+                "pid": second.get("pid"),
+            },
+            "acp_session_id_string_reused": (
+                first_ids["acp_session_id"] == second.get("acp_session_id")
+            ),
+            "same_acp_session": False,
+            "note": (
+                "zcode-N is per holder process. Reused acp_session_id string "
+                "plus a new holder_instance_id is a new ACP session, not the "
+                "stopped one."
+            ),
+        })
+        check(second.get("acp_session_id"), "new Host has an ACP session id")
+
+        live = sandbox.cli("status", session=host)
+        sandbox.dump("24-second-status.json", live)
+        check(live.get("error") is None, f"new Host is live ({live.get('error')})")
+        check(live.get("holder_instance_id") == second.get("holder_instance_id"),
+              "live status names the new holder, not the stopped one")
+        check(live.get("acp_session_id") == second.get("acp_session_id"),
+              "live status names the new holder's ACP session")
+
+        orchestrators = sorted({name for name in sandbox.sessions if "-orchestrator-" in name})
+        sandbox.dump("25-orchestrator-names.json", orchestrators)
+        check(orchestrators == [host],
+              f"only one orchestrator session name is live ({orchestrators})")
+
+        send = sandbox.cli("send", "--no-wait", "--text", ORIGINAL_TASK, session=host)
+        sandbox.dump("26-new-host-handoff.json", send)
+        check(send.get("error") is None, f"complete-auth handoff admitted ({send.get('error')})")
+
+        sandbox.dump("27-missing-auth-untested.json", {
+            "contract": (
+                "missing, conflicting, or expired key authorization: ask the "
+                "user; do not start; do not open a blank Host"
+            ),
+            "issue_comment": "5730908734",
+            "measured": False,
+            "reason": (
+                "no harness executes an outer Agent's Skill judgment; a "
+                "handwritten skip-start script would impersonate that Agent"
+            ),
+            "not_claimed": (
+                "this suite does not prove an outer Agent withheld start"
+            ),
+        })
+
+        stop2 = sandbox.cli("stop", "--force", session=host)
+        check(stop2.get("error") is None, "new Host exact stop")
     finally:
         sandbox.cleanup()
 
@@ -476,6 +609,7 @@ def main() -> int:
         test_generated_entry_matrix_and_no_engine_leak,
         test_two_layer_handoff_worker_end_turn_and_resume,
         test_adopt_nonstandard_live_host_without_second_start,
+        test_new_standard_host_after_confirmed_stop,
     )
     failed = 0
     for test in tests:
