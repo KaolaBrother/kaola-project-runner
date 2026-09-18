@@ -1271,6 +1271,24 @@ def heartbeat_host_target(args: argparse.Namespace, repo: str) -> dict[str, Any]
             "socket": str(sock_path_for_directory(directory))}
 
 
+def attach_binding_fact(receipt: dict[str, Any], facts: Any) -> dict[str, Any]:
+    """Report the notification target the running holder really adopted.
+
+    ``facts`` is a holder ``state`` response or its stored record - the running
+    fact, not this command's input. Three honest answers, never two: a target,
+    an explicit ``null`` for an ordinary unbound worker, and
+    ``heartbeat_host_known: false`` for a holder or record written before this
+    field existed. An unknown binding is never reported as unbound, and a later
+    environment change or repeated ``start`` never edits a live holder's answer.
+    """
+    if isinstance(facts, dict) and "heartbeat_host" in facts:
+        receipt["heartbeat_host"] = facts["heartbeat_host"]
+        receipt["heartbeat_host_known"] = True
+    else:
+        receipt["heartbeat_host_known"] = False
+    return receipt
+
+
 def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args))
@@ -1288,6 +1306,9 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             receipt["mutation_performed"] = False
             return receipt
     heartbeat_host = heartbeat_host_target(args, repo)
+    # What this command asked for. The fact that decides whether a worker can
+    # wake a Host is the holder's own, read back below.
+    receipt["heartbeat_host_requested"] = heartbeat_host
     directory = record_dir(args, repo)
     tmux = subprocess.run(
         ["tmux", "has-session", "-t", f"={args.session}"], capture_output=True
@@ -1306,7 +1327,9 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                                 "message": "a live ACP holder already owns this session",
                                 "holder_pid": record.get("holder_pid"),
                                 "acp_session_id": record.get("acp_session_id")}
-            return receipt
+            # This start bound nothing: the reused holder keeps the target it
+            # was started with, so report that one and let the caller verify it.
+            return attach_binding_fact(receipt, record)
         if pid_alive(record.get("agent_pgid")) or pid_alive(record.get("agent_pid")):
             receipt.update(holder_lost_receipt(args, repo, record))
             return receipt
@@ -1331,6 +1354,10 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     with open(log_path, "ab") as log:
         holder_env = agent_environment(args)
         if heartbeat_host is not None:
+            # Hand the holder the target this command validated and resolved,
+            # so the binding it reports back is the one that was checked here
+            # rather than a re-reading of the caller's raw string.
+            holder_env[HEARTBEAT_HOST_ENV] = json.dumps(heartbeat_host, sort_keys=True)
             holder_env[HEARTBEAT_HOST_SOCKET_ENV] = heartbeat_host["socket"]
         proc = subprocess.Popen(
             holder_argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
@@ -1341,8 +1368,6 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     child_record = record_holder_child_spawn(proc)
     if child_record is not None:
         receipt["child_record"] = child_record
-    if heartbeat_host is not None:
-        receipt["heartbeat_host"] = heartbeat_host
     sock = sock_path(args, repo)
     deadline = time.monotonic() + START_WAIT
     state: dict[str, Any] | None = None
@@ -1368,6 +1393,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         "acp_session_id": state.get("acp_session_id"),
         "state": state.get("state"),
     })
+    attach_binding_fact(receipt, state)
     receipt["transport"]["protocol_version"] = state.get("protocol_version")
     receipt["transport"]["agent_info"] = state.get("agent_info")
     receipt["transport"]["capabilities"] = state.get("capabilities")
@@ -1748,6 +1774,12 @@ def main() -> int:
         record = read_record(directory)
         if record:
             receipt.setdefault("record", record)
+        # Only a session that exists has a binding to report; ``no-session``
+        # stays silent rather than answering "unknown" about nothing.
+        if record is not None or "heartbeat_host" in receipt:
+            attach_binding_fact(
+                receipt, receipt if "heartbeat_host" in receipt else record
+            )
         receipt = bound_state_receipt(receipt)
     elif args.command == "capture":
         receipt = op_or_holder_lost(

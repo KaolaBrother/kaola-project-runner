@@ -10,6 +10,16 @@ HOSTRUN="$HOME/.zcode/skills/zcode-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
 PROJECT="/abs/path/to/project"     # the consuming project's canonical Git root
 ```
 
+## Three identities, never interchangeable
+
+| Name | What it is | Where it comes from |
+|---|---|---|
+| Runner session | what every `--session` takes | you choose it at `start` |
+| ACP session id | the bridge's id for this thread | `acp_session_id` in receipts |
+| native session id | the CLI's own id (`sess_…`) | `session_meta`, for `--resume` |
+
+A `sess_…` value is never a Runner session name. Never guess a session name.
+
 ## A. Ordinary worker supervision
 
 You keep authorization, dispatch, acceptance and close-out in your own session.
@@ -67,10 +77,13 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
    prose: the roles, authorization and lifecycle boundary against the plan file
    you read yourself; quotes it could only produce from that plan and this
    reference; and the artifacts this procedure leaves behind (a
-   `.kaola/heartbeat-prompt.json` with a usable `body`, a start receipt echoing
-   `heartbeat_host`, a `--no-wait` dispatch receipt, a turn that ended with no
-   sleep, poll or stop). A wrong role, a missing authorization or a contradiction
-   is corrected before any dispatch; unauthorized, it stays idle.
+   `.kaola/heartbeat-prompt.json` with a usable `body`, a worker start receipt
+   whose `heartbeat_host` - the holder's own fact, not `heartbeat_host_requested`
+   - names this Host, a `--no-wait` dispatch receipt, a turn that ended with no
+   sleep, poll or stop). Check which payload is actually loaded: a merged
+   checkout is not an installed Skill, and a Host that loaded an older installed
+   copy follows that copy. A wrong role, a missing authorization or a
+   contradiction is corrected before any dispatch; unauthorized, it stays idle.
 5. **Verify the first real event loop**: a bound worker `start`, a `--no-wait`
    dispatch, the Host's turn ending on its own, and a `kaola-host-notify/1` pass
    arriving from a worker event. A background blocking `send` that returns to a

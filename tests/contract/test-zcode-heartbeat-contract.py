@@ -828,14 +828,17 @@ def test_issue_66_defective_prompt_file_reports_its_defect() -> None:
 
 def test_issue_66_unarmed_worker_stays_ungated() -> None:
     """Issue #66: an ordinary worker - no Host, no binding - gains no gate.
-    Its start receipt simply carries no ``heartbeat_host``, blocking send
-    still works, and its holder never runs the carrier."""
+    Issue #70: its start receipt says so explicitly - a known, null binding -
+    blocking send still works, and its holder never runs the carrier."""
     sandbox = Sandbox("unarmed")
     try:
         worker = sandbox.session()
         start = sandbox.start(worker, "basic")
-        check("heartbeat_host" not in start,
-              f"an unarmed start receipt carries no binding fact ({start.get('heartbeat_host')})")
+        check(start.get("heartbeat_host_known") is True
+              and start.get("heartbeat_host") is None
+              and start.get("heartbeat_host_requested") is None,
+              "an unarmed start reports a known, unbound fact "
+              f"({start.get('heartbeat_host')}, known={start.get('heartbeat_host_known')})")
         reply = sandbox.cli("send", "--text", "ordinary blocking dispatch", session=worker)
         check(reply.get("error") is None and reply.get("outcome") == "turn_completed",
               f"blocking send on an unbound worker still completes ({reply.get('outcome')})")

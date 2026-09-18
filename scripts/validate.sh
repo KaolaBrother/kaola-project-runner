@@ -81,6 +81,7 @@ python_suites_all=(
   "test-issue-65-steering.py"
   "test-issue-65-steer-race.py"
   "test-issue-65-host-contract.py"
+  "test-issue-70-binding-fact.py"
 )
 python_suites_a=(
   "test-issue-65-steering.py"
@@ -114,6 +115,7 @@ python_suites_b=(
   "test-issue-64-receipt-bound.py"
   "test-issue-65-steer-race.py"
   "test-issue-65-host-contract.py"
+  "test-issue-70-binding-fact.py"
 )
 run_suite_lane() {
   for suite in "$@"; do

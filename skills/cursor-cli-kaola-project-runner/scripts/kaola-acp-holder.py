@@ -1204,6 +1204,10 @@ class Holder:
             "agent_info": self.agent_info,
             "capabilities": self.capabilities,
             "state": self.state,
+            # The target this holder really adopted at startup, or null for a
+            # plain unbound worker. A surface without the key predates Issue #70
+            # and is unknown, never evidence of being unbound.
+            "heartbeat_host": self.heartbeat_host,
             "pending_permissions": list(self.pending_permissions.values()),
             "last_prompt": self.last_prompt,
             "event_cursor": self.events.cursor,
@@ -1587,6 +1591,7 @@ class Holder:
             "protocol_version": self.protocol_version,
             "agent_info": self.agent_info,
             "capabilities": self.capabilities,
+            "heartbeat_host": self.heartbeat_host,
             "pending_permissions": list(self.pending_permissions.values()),
             "activity_hint": activity,
             "last_prompt": self.last_prompt,

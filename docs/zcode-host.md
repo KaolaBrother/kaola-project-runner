@@ -118,9 +118,19 @@ worker agent terminated / worker turn ended (one idle episode)
   (`{"platform": "zcode", "session": ..., "repo": ...}`) when starting each
   worker. `kaola-acp start` validates it (ZCode-only, fail closed: a
   non-ZCode, self-referential, or malformed target is a usage error before
-  anything spawns), resolves the host holder's deterministic socket, echoes a
-  `heartbeat_host` fact on the start receipt, and passes both env facts to the
-  worker holder.
+  anything spawns), resolves the host holder's deterministic socket, and hands
+  the resolved target plus its socket to the worker holder.
+- **The binding fact (Issue #70).** The holder carries the target it really
+  adopted in its own `state` and `record.json`, so `start`, `observe` and
+  `status` report the running fact rather than the caller's input: a target, an
+  explicit `null` for an ordinary unbound worker, or `heartbeat_host_known:
+  false` for a holder or record written before the field existed (unknown is
+  never reported as unbound). The `start` receipt keeps what it asked for
+  separately in `heartbeat_host_requested`. A live holder's binding is fixed at
+  its start: a later environment change, a `send`, or a repeat `start` (which
+  returns `session-exists` together with the binding in force) cannot alter it,
+  and there is no rebind operation — recovery is the existing exact
+  `stop`/`start` at a safe idle point.
 - **Events.** `terminated` fires once from the worker holder's existing
   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
   out the send; `idle` fires once per ended turn with the agent still alive
@@ -160,7 +170,8 @@ worker agent terminated / worker turn ended (one idle episode)
   boundary, so a Host that holds its turn open with `sleep`, a poll loop, or a
   blocking `wait` is exactly what keeps its own events undelivered. The
   post-dispatch contract is therefore: bind `KAOLA_ACP_HEARTBEAT_HOST` per
-  worker `start` and check the receipt's `heartbeat_host`, dispatch with
+  worker `start`, check the receipt's `heartbeat_host` fact on every worker
+  including reused ones, dispatch with
   `send --no-wait` and read the acceptance receipt (`in_progress` is accepted,
   not finished), settle the rest of the beat, update the one
   `.kaola/heartbeat-prompt.json`, then end the reply naturally — there is no
