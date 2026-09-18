@@ -1,0 +1,3 @@
+install: /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/verify-65-isolation/repo/.zcode/skills/zcode-kaola-project-runner
+install: /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/verify-65-isolation/repo/.zcode/skills/codex-kaola-project-runner
+install: /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/verify-65-isolation/repo/.zcode/skills/kaola-project-runner
