@@ -1,0 +1,16 @@
+c5155e5 fix(zcode-host): cached confirmations expire with the log; record before answering (Issue #90)
+ CHANGELOG.md                                       | 10 ++-
+ docs/zcode-host.md                                 | 17 ++--
+ scripts/kaola-acp-holder.py                        | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../scripts/kaola-acp-holder.py                    | 85 +++++++++++--------
+ .../test-issue-90-event-confirmation-race.py       | 95 +++++++++++++++++++++-
+ tests/contract/test-zcode-heartbeat-contract.py    |  2 +-
+ 14 files changed, 643 insertions(+), 331 deletions(-)
