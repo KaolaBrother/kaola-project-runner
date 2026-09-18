@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **Native `sess_*` resume keeps the session's own Coding Plan model on ZCode 3.12+ (Issue #84).**
+  A faithful `--resume sess_*` failed outright with `resume-failed` / "resumed session reports no
+  persisted model", because five things were wrong at once on the 3.12 wire. `session/read` on
+  3.12.3 returns `{"messages": [...]}` and no top-level `settings` at all, so `hydrate_settings()`
+  -- which only read `settings.model.current` -- never saw a model; the sibling `session/messages`
+  serves the same list with flat `info.modelId`/`info.providerId` keys and was never consulted.
+  `reregister_provider()` then compared the persisted provider against the desktop-registry id
+  (`builtin:bigmodel-coding-plan`) although a real persisted session names the account provider
+  (`account:bigmodel-individual-coding-plan`), sent `session/setModel` with a top-level
+  `runtimeModel` key that 3.12 rejects with a ZodError, and ran against a provider registry that
+  `_resume_backend_session()` never populated, because `provider/updateAccountConfig` was only
+  pushed on the fresh-session path. The resume path now reads the persisted model out of whichever
+  transcript shape the backend serves -- newest entry by `info.time.created`, not by array
+  position -- and re-registers through the same `push_account_config()` +
+  `select_account_model()` the fresh-session path already used. Separately,
+  `_resume_backend_session()` retried `session/resume` with the pre-3.12 `runtimeModel` overlay
+  after *any* failure, so an unknown or already-deleted session was reported as
+  `Unrecognized key: "runtimeModel"` instead of its real reason; it now retries only on the
+  pre-3.12 `Model config is missing` signal, exactly as `session/create` already did, and a
+  missing session reports `-32004 Session not found`. Nothing is substituted: a persisted model
+  outside the enabled plan, or belonging to another account, still fails closed without ever
+  calling `setModel`, and the plan default is never selected on the user's behalf. The pre-3.12
+  overlay path is unchanged. Verified on real ZCode.app 3.12.3 / CLI 0.16.5 over ACP in an
+  isolated repo: one native session, a real turn, an exact holder stop
+  (`residual_pids: []`), `--resume sess_6fe8bc2d-...`, then a second real turn that answered on
+  `account:bigmodel-individual-coding-plan\GLM-5.3` and quoted its own first reply back. Resuming
+  that same session with the pre-fix adapter still fails, on the same machine.
 - **Kaola-Delegator treats native resume after exact stop as
   backend-dependent (Issue #74).** After `stop`, try attested `--resume` of
   that `sess_*` first. Do not assume `session/close` always spends the id.

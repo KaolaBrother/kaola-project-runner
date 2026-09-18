@@ -618,6 +618,48 @@ def build_runtime_model(choice: dict[str, Any], model_id: str) -> dict[str, Any]
     }
 
 
+def persisted_model_from_messages(payload: Any) -> dict[str, str] | None:
+    """The session's own last model, read out of a 3.12+ transcript payload.
+
+    3.12+ answers `session/read` with `{"messages": [...]}` and no top-level
+    `settings` at all, so the persisted selection is only observable on the
+    messages themselves: `info.model = {providerId, modelId}` on `session/read`,
+    and the same pair flattened to `info.modelId` / `info.providerId` on
+    `session/messages`. Both shapes are read here because a build serves one or
+    the other, never a merged one.
+
+    The newest message that actually carries a complete pair wins, ordered by
+    the timestamp the payload carries rather than by array position, which real
+    transcripts do not keep sorted. An incomplete, non-string or absent pair is
+    not a model: it is skipped, and a payload with no usable pair returns None
+    so the caller fails closed instead of inventing a default.
+    """
+    messages = payload.get("messages") if isinstance(payload, dict) else None
+    if not isinstance(messages, list):
+        return None
+    best: tuple[float, int, dict[str, str]] | None = None
+    for index, entry in enumerate(messages):
+        info = entry.get("info") if isinstance(entry, dict) else None
+        if not isinstance(info, dict):
+            continue
+        model = info.get("model")
+        if isinstance(model, dict):
+            provider_id, model_id = model.get("providerId"), model.get("modelId")
+        else:
+            provider_id, model_id = info.get("providerId"), info.get("modelId")
+        if not (isinstance(provider_id, str) and provider_id
+                and isinstance(model_id, str) and model_id):
+            continue
+        created = (info.get("time") or {}).get("created") if isinstance(
+            info.get("time"), dict) else None
+        rank = float(created) if isinstance(created, (int, float)) and not isinstance(
+            created, bool) else float("-inf")
+        candidate = (rank, index, {"providerId": provider_id, "modelId": model_id})
+        if best is None or candidate[:2] > best[:2]:
+            best = candidate
+    return best[2] if best else None
+
+
 # --------------------------------------------------------------------------
 # ZCode Protocol client
 # --------------------------------------------------------------------------
@@ -1164,20 +1206,47 @@ class ZCodeAcpAgent:
     def reregister_provider(self, session: Session) -> None:
         """After a faithful resume the fresh app-server has no provider
         catalog, so the persisted model reports ZCODE_RUNTIME_MODEL_UNAVAILABLE
-        on the next send. Re-register the same Coding Plan provider through
-        session/setModel with the session's own persisted model. A persisted
-        model outside that provider fails closed; nothing is substituted.
+        on the next send. Re-register the same Coding Plan with the session's
+        own persisted model: on 3.12+ through the same `provider/
+        updateAccountConfig` push and `account:*` `session/setModel` selection a
+        fresh session already uses, and on a pre-3.12 backend through the
+        in-memory `runtimeModel` overlay. A persisted model outside the enabled
+        plan, or belonging to another account, fails closed; the plan default is
+        never substituted and the account is never switched.
         """
         if self.backend is None or session.backend_id is None:
             return
         choice = self.resolve_provider()
         if not session.model_id or not session.provider_id:
             raise RuntimeError_(
-                "resumed session reports no persisted model (session/read failed); "
-                "refusing to substitute the provider default"
+                "resumed session reports no persisted model (the resumed transcript "
+                "names none); refusing to substitute the provider default"
             )
         provider_id = session.provider_id
         model_id = session.model_id
+        account = None if self.legacy_overlay else self.resolve_account()
+        if account is not None:
+            # 3.12+: a resumed app-server starts with an empty provider
+            # registry and `session/setModel` has no `runtimeModel` channel at
+            # all, so re-registration is the same push-then-select the
+            # fresh-session path already uses -- with the session's own model,
+            # never the plan default.
+            if provider_id != account["account_id"]:
+                raise RuntimeError_(
+                    f"persisted session model {provider_id}\\{model_id} belongs to a "
+                    f"different provider than the enabled GLM Coding Plan account "
+                    f"{account['account_id']}; refusing to switch accounts"
+                )
+            if model_id not in account["model_ids"]:
+                raise RuntimeError_(
+                    f"persisted session model {provider_id}\\{model_id} is not offered "
+                    f"by the enabled GLM Coding Plan account {account['account_id']}; "
+                    "refusing to substitute (select a model explicitly)"
+                )
+            self.push_account_config(self.backend)
+            # Commits session.model_id only once the backend accepts it.
+            self.select_account_model(session, self.backend, account, model_id)
+            return
         if provider_id != choice["provider_id"] or model_id not in choice["model_ids"]:
             raise RuntimeError_(
                 f"persisted session model {provider_id}\\{model_id} is not offered by the "
@@ -1200,8 +1269,17 @@ class ZCodeAcpAgent:
         try:
             state = self.backend.call("session/read", {"sessionId": session.backend_id}) or {}
         except RuntimeError_:
-            session.hydrated = True
-            return
+            state = None
+        if state is None:
+            # A build that does not serve `session/read` still serves the same
+            # transcript through `session/messages`; only when neither answers
+            # is there nothing to hydrate from.
+            try:
+                state = self.backend.call(
+                    "session/messages", {"sessionId": session.backend_id}) or {}
+            except RuntimeError_:
+                session.hydrated = True
+                return
         settings = state.get("settings") or {}
         mode = (settings.get("mode") or {}).get("current")
         if isinstance(mode, str) and mode:
@@ -1217,6 +1295,21 @@ class ZCodeAcpAgent:
         thought = (settings.get("thoughtLevel") or {}).get("current")
         if isinstance(thought, str) and thought:
             session.thought = thought
+        if not (session.model_id and session.provider_id):
+            # 3.12+ carries no top-level `settings`, so the persisted selection
+            # is only on the transcript. Read the payload already in hand, then
+            # the sibling method, and leave the model unset when neither shows
+            # a complete pair -- `reregister_provider` then fails closed.
+            persisted = persisted_model_from_messages(state)
+            if persisted is None:
+                try:
+                    persisted = persisted_model_from_messages(self.backend.call(
+                        "session/messages", {"sessionId": session.backend_id}) or {})
+                except RuntimeError_:
+                    persisted = None
+            if persisted is not None:
+                session.provider_id = persisted["providerId"]
+                session.model_id = persisted["modelId"]
         session.hydrated = True
         self.update(session, {
             "sessionUpdate": "config_option_update",
@@ -1605,9 +1698,18 @@ class ZCodeAcpAgent:
         try:
             # Faithful resume keeps the session's own persisted model.
             backend.call("session/resume", {"sessionId": acp_id, "workspace": workspace})
-        except RuntimeError_:
+        except RuntimeError_ as exc:
             # The overlay supplies the same Coding Plan provider in memory for
-            # a backend that refuses to resume without a provider catalog.
+            # a backend that refuses to resume without a provider catalog, and
+            # such a backend says so exactly the way session/create does. 3.12+
+            # has no `runtimeModel` channel at all, so retrying unconditionally
+            # would answer every ordinary resume failure -- an unknown or
+            # already-deleted session above all -- with a schema complaint about
+            # a key that build never accepts, hiding the real reason.
+            if "Model config is missing" not in str(exc):
+                raise
+            log("backend requires the pre-3.12 model overlay on session/resume")
+            self.legacy_overlay = True
             backend.call("session/resume", {
                 "sessionId": acp_id, "workspace": workspace, "runtimeModel": overlay,
             })

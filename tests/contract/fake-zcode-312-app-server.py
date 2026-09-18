@@ -24,6 +24,22 @@ Mirrors the strictness measured in the installed 3.12.3 bundle
   and refuses to proceed unless the answer matches the strict `VKe` union and
   actually carries `requestAuth`.
 
+Issue #84 adds the native-resume surface, additively, in the shapes measured on
+the real 3.12.3 wire (`kaola-workflow/issue-84/`):
+
+* `session/resume` is strict on its top-level keys (`{sessionId, workspace}`)
+  like every other 3.12 schema, and resuming does NOT repopulate the provider
+  registry -- a fresh app-server starts with an empty `catalog`, so a
+  resume-time `session/setModel` is refused until `provider/updateAccountConfig`
+  has actually reached the backend.
+* `session/read` returns `{"messages": [...]}` and NO top-level `settings`.
+  The persisted model lives at `messages[i].info.model = {providerId, modelId}`.
+* `session/messages` returns the SAME message list with FLAT keys:
+  `messages[i].info.modelId` / `.providerId` (plus `info.mode`,
+  `info.planEnabled`).
+* messages carry `info.time.created` (epoch ms) and are deliberately NOT in
+  timestamp order, so a reader that trusts array position picks the wrong one.
+
 No credential, network, login or installed ZCode is involved. The API key it
 checks against is a fixture value that exists only inside the test tree.
 """
@@ -38,6 +54,7 @@ import threading
 from typing import Any
 
 WRITE_LOCK = threading.Lock()
+RECORD_LOCK = threading.Lock()
 
 # `session/create` accepted keys, from the installed 3.12.3 schema.
 CREATE_KEYS = {
@@ -49,6 +66,103 @@ SETMODEL_KEYS = {"sessionId", "model", "expectedRevision", "persistAsWorkspaceLa
 MODEL_KEYS = {"providerId", "modelId", "options"}
 ACCOUNT_KEYS = {"revision", "basedOnZCodeBuiltinRevision", "providers", "states"}
 AVAILABILITY = {"available", "pending", "unavailable", "unknown"}
+# `session/resume` is strict like every other 3.12 schema.
+RESUME_KEYS = {"sessionId", "workspace"}
+
+# -- Issue #84: persisted-session fixtures ---------------------------------
+#
+# Each scenario names one persisted native session. `items` is the neutral
+# message list; `read`/`messages` say which method serves it and in which
+# shape ("nested" = real `session/read`, "flat" = real `session/messages`,
+# "absent" = the method is not implemented on this build, -32601).
+ACCOUNT_ID = "account:bigmodel-individual-coding-plan"
+
+
+def plan_model(model_id: str, provider_id: str = ACCOUNT_ID) -> dict[str, str]:
+    return {"providerId": provider_id, "modelId": model_id}
+
+
+def msg(created: int, model: Any = None, role: str = "assistant") -> dict[str, Any]:
+    return {"created": created, "role": role, "model": model}
+
+
+RESUME_SCENARIOS: dict[str, dict[str, Any]] = {
+    # The persisted model is only reachable through the real `session/read`
+    # message-list shape (nested `info.model`).
+    "resume_nested": {
+        "read": "nested", "messages": "absent",
+        "items": [msg(1000, None, role="user"),
+                  msg(2000, plan_model("GLM-5.3-Flash"))],
+    },
+    # Same session, but this build only serves `session/messages`, whose keys
+    # are flat (`info.modelId` / `info.providerId`).
+    "resume_flat": {
+        "read": "absent", "messages": "flat",
+        "items": [msg(1000, None, role="user"),
+                  msg(2000, plan_model("GLM-5.3-Flash"))],
+    },
+    # Array order and timestamp order disagree on purpose. Newest by
+    # `info.time.created` is GLM-5.3-Flash; both the first and the last
+    # model-bearing entries say GLM-5.3.
+    "resume_ordered": {
+        "read": "nested", "messages": "flat",
+        "items": [msg(2000, plan_model("GLM-5.3")),
+                  msg(3000, plan_model("GLM-5.3-Flash")),
+                  msg(1000, plan_model("GLM-5.3"))],
+    },
+    # Nothing in the transcript carries model metadata.
+    "resume_no_metadata": {
+        "read": "nested", "messages": "flat",
+        "items": [msg(1000, None, role="user"), msg(2000, None)],
+    },
+    # Metadata is present but is not a model reference at all.
+    "resume_malformed": {
+        "read": "nested", "messages": "flat",
+        "items": [msg(1000, None, role="user"), msg(2000, 12345)],
+    },
+    # A model the enabled plan does not offer.
+    "resume_foreign_model": {
+        "read": "nested", "messages": "flat",
+        "items": [msg(2000, plan_model("GLM-9-not-in-plan"))],
+    },
+    # The session is unknown to this backend (never existed, or closed and
+    # deleted). Resume must report that, not a schema error about a key 3.12
+    # does not accept.
+    "resume_unknown": {"read": "nested", "messages": "flat", "items": [],
+                       "unknown": True},
+    # A provider (another account) the enabled plan is not.
+    "resume_foreign_provider": {
+        "read": "nested", "messages": "flat",
+        "items": [msg(2000, plan_model("GLM-5.3", "account:someone-else"))],
+    },
+}
+
+
+def render_nested(item: dict[str, Any]) -> dict[str, Any]:
+    """The real `session/read` shape: `info.model = {providerId, modelId}`."""
+    info: dict[str, Any] = {
+        "id": f"msg_{item['created']}",
+        "role": item.get("role") or "assistant",
+        "time": {"created": item["created"], "updated": item["created"]},
+        "mode": "yolo",
+        "planEnabled": False,
+    }
+    if item.get("model") is not None:
+        info["model"] = item["model"]
+    return {"info": info, "parts": [{"type": "text", "text": "persisted"}]}
+
+
+def render_flat(item: dict[str, Any]) -> dict[str, Any]:
+    """The real `session/messages` shape: `info.modelId` / `info.providerId`."""
+    payload = render_nested(item)
+    info = dict(payload["info"])
+    model = info.pop("model", None)
+    if isinstance(model, dict):
+        info["modelId"] = model.get("modelId")
+        info["providerId"] = model.get("providerId")
+    elif model is not None:
+        info["modelId"] = model
+    return {"info": info, "parts": payload["parts"]}
 
 
 def emit(msg: dict[str, Any]) -> None:
@@ -62,14 +176,15 @@ def record(update: dict[str, Any]) -> None:
     path = os.environ.get("FAKE_ZCODE_RECORD")
     if not path:
         return
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except (OSError, ValueError):
-        payload = {}
-    payload.update(update)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
+    with RECORD_LOCK:
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError):
+            payload = {}
+        payload.update(update)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
 
 
 class Fake312:
@@ -84,6 +199,13 @@ class Fake312:
         self.sessions: dict[str, dict[str, Any]] = {}
         self.pending: dict[Any, threading.Event] = {}
         self.answers: dict[Any, Any] = {}
+        # Issue #84: ordered request log plus resume bookkeeping.
+        self.calls: list[str] = []
+        self.resumed: set[str] = set()
+        self.set_model_attempts: list[dict[str, Any]] = []
+
+    def resume_spec(self) -> dict[str, Any] | None:
+        return RESUME_SCENARIOS.get(self.scenario)
 
     # -- wire -------------------------------------------------------------
 
@@ -159,6 +281,10 @@ class Fake312:
         rid = msg.get("id")
         params = msg.get("params") or {}
 
+        if method:
+            self.calls.append(method)
+            record({"calls": list(self.calls)})
+
         if method == "initialize":
             self.result(rid, {"protocolVersion": 1,
                               "capabilities": {"independentPlanState": True}})
@@ -193,6 +319,12 @@ class Fake312:
             return
 
         if method == "session/setModel":
+            # Recorded BEFORE any validation, so a refused or malformed
+            # selection is still visible to a substitution test.
+            self.set_model_attempts.append(params)
+            record({"set_model_attempts": self.set_model_attempts})
+            if params.get("sessionId") in self.resumed:
+                record({"resume_set_model": params})
             extra = sorted(set(params) - SETMODEL_KEYS)
             if extra:
                 self.error(rid, -32602,
@@ -228,6 +360,42 @@ class Fake312:
             self.selection[params.get("sessionId")] = {"providerId": pid, "modelId": mid}
             record({"set_model": params})
             self.result(rid, {})
+            return
+
+        if method == "session/resume":
+            # Issue #84. Strict top level, like every other 3.12 schema.
+            extra = sorted(set(params) - RESUME_KEYS)
+            if extra:
+                self.error(rid, -32602,
+                           f'Invalid params - (root): Unrecognized key: "{extra[0]}"')
+                return
+            spec = self.resume_spec()
+            sid = params.get("sessionId")
+            if spec is None or not sid or spec.get("unknown"):
+                self.error(rid, 1404, f"session not found: {sid}")
+                return
+            # A fresh app-server: resuming restores the transcript, never the
+            # provider registry. `self.catalog` stays exactly as it was.
+            self.sessions[sid] = {"mode": "yolo"}
+            self.resumed.add(sid)
+            record({"resume_params": params, "catalog_at_resume": self.catalog})
+            self.result(rid, {"session": {"sessionId": sid, "mode": "yolo",
+                                          "title": "persisted session"}})
+            return
+
+        if method in ("session/read", "session/messages") and self.resume_spec():
+            spec = self.resume_spec() or {}
+            sid = params.get("sessionId")
+            if sid not in self.sessions:
+                self.error(rid, 1404, "session not found")
+                return
+            shape = spec["read"] if method == "session/read" else spec["messages"]
+            if shape == "absent":
+                self.error(rid, -32601, f"Method not found: {method}")
+                return
+            render = render_nested if shape == "nested" else render_flat
+            # Measured on real 3.12.3: NO top-level `settings` on either method.
+            self.result(rid, {"messages": [render(item) for item in spec["items"]]})
             return
 
         if method == "session/subscribe":
