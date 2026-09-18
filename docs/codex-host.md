@@ -65,6 +65,16 @@ are never bound.
   user-global file could hold only one project binding, so two designated
   Hosts would overwrite each other. Each repository keeps its own binding, so
   projects A and B coexist and removing B leaves A fully intact.
+  `--project-root` must name an existing directory, and explicit
+  global/ancestor danger paths are refused before any write — the filesystem
+  root, the user home directory, and the effective `CODEX_HOME` layer — so a
+  mistaken `--project-root $HOME` can never write `~/.codex/hooks.json`.
+- `status` is read-only **and echo-safe**: it reports safe metadata
+  (installed/bound presence, counts, paths) but never a matched entry's
+  `command` or arbitrary config, which could carry a credential. `bound` is
+  true only for a non-empty `session_id` whose `project_root` equals this
+  project's canonical root; `install`/`bind` refuse a missing or blank
+  `--session-id`.
 - **Host-only filter (required binding).** `install`/`bind` refuse without
   `--session-id`: the entry is bound to the exact designated Codex Host
   session, not to a runtime. The binding is written to

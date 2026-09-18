@@ -272,7 +272,16 @@
   `hooks.json` is ever made — foreign content, which may carry credentials,
   stays only in the file it already lived in — and a malformed file,
   including JSON-null `hooks` or `hooks.SessionStart`, is refused before any
-  write rather than clobbered or crashed on; `status` never writes. The short payload only
+  write rather than clobbered or crashed on. `status` never writes and
+  never echoes a matched entry's `command` or arbitrary config into its
+  receipt — safe metadata only, since such content could carry a
+  credential; its `bound` flag is true only for a non-empty `session_id`
+  whose `project_root` equals this project's canonical root.
+  `--project-root` must name an existing directory, and the filesystem
+  root, the user home directory, and the effective `CODEX_HOME` layer are
+  refused before any write, so a mistaken `--project-root $HOME` can never
+  write `~/.codex/hooks.json`; `install`/`bind` refuse a missing or blank
+  `--session-id`. The short payload only
   re-points the host: confirm role, fully re-read the installed Skill, recover
   authorization/heartbeat/run records - never re-intake, re-claim, or
   re-dispatch. Verified in an isolated real `/compact`: the injected context

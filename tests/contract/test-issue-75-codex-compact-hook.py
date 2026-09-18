@@ -44,12 +44,18 @@ FOREIGN_OTHER = {
 HOST_SESSION_ID = "0192b5f4-0000-7000-8000-0000000000aa"
 
 
-def run_hook(*cli: str, stdin: str | None = None) -> dict:
+def run_hook(
+    *cli: str, stdin: str | None = None, env: dict | None = None
+) -> dict:
+    run_env = dict(os.environ)
+    if env:
+        run_env.update(env)
     proc = subprocess.run(
         [sys.executable, str(SCRIPT), *cli],
         capture_output=True,
         text=True,
         input=stdin,
+        env=run_env,
         timeout=60,
     )
     lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
@@ -57,6 +63,7 @@ def run_hook(*cli: str, stdin: str | None = None) -> dict:
     receipt = json.loads(lines[-1])
     receipt["_rc"] = proc.returncode
     receipt["_stderr"] = proc.stderr
+    receipt["_stdout"] = proc.stdout
     return receipt
 
 
@@ -550,6 +557,108 @@ class CodexCompactHookContract(unittest.TestCase):
         ).read_text(encoding="utf-8")
         fired = run_installed(self.repo, hook_input(self.repo))
         self.assertEqual(fired.stdout, payload)
+
+    def test_status_never_echoes_entry_config(self) -> None:
+        """status must not echo a same-ID entry's command/config (secrets).
+
+        An entry carrying our id but an arbitrary secret-bearing command is
+        reported only as safe metadata — the secret never reaches stdout.
+        """
+        secret = "sk-fake-status-secret-0000"
+        doc = {
+            "hooks": {
+                "SessionStart": [
+                    {
+                        "hooks": [
+                            {"type": "command", "command": f"echo {secret}"}
+                        ],
+                        "id": ENTRY_ID,
+                    }
+                ]
+            }
+        }
+        path = hooks_path(self.repo)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        receipt = run_hook("status", "--project-root", str(self.repo))
+        self.assertEqual(receipt["result"], "ok")
+        self.assertTrue(receipt["installed"])
+        self.assertNotIn(secret, receipt["_stdout"])
+        self.assertNotIn(secret, json.dumps(receipt))
+        self.assertNotIn("entry", receipt)
+
+    def test_project_root_refuses_dangerous_paths(self) -> None:
+        """--project-root at global/ancestor paths refuses before any write."""
+        home = Path(self.tmp.name) / "home"
+        home.mkdir()
+        home = Path(os.path.realpath(home))
+        codex_home = home / ".codex"
+        codex_home.mkdir()  # exists → its own danger branch, not "missing dir"
+        env = {"HOME": str(home), "CODEX_HOME": str(codex_home)}
+        for bad in (
+            str(home),
+            str(codex_home),
+            str(codex_home.parent),
+            "/",
+        ):
+            receipt = run_hook(
+                "prepare", "--project-root", bad, env=env
+            )
+            self.assertEqual(receipt["result"], "refused", bad)
+            self.assertNotEqual(receipt["_rc"], 0, bad)
+            self.assertFalse(
+                (Path(bad) / ".codex" / "hooks.json").exists(), bad
+            )
+        self.assertFalse((codex_home / "hooks.json").exists())
+        self.assertFalse((codex_home / ".codex").exists())
+
+    def test_project_root_must_exist(self) -> None:
+        missing = Path(self.tmp.name) / "no-such-dir"
+        receipt = run_hook("prepare", "--project-root", str(missing))
+        self.assertEqual(receipt["result"], "refused")
+        self.assertFalse(missing.exists())
+
+    def test_install_bind_refuse_blank_session_id(self) -> None:
+        for action in ("install", "bind"):
+            for bad in ("", "   ", "\t"):
+                receipt = run_hook(
+                    action,
+                    "--project-root",
+                    str(self.repo),
+                    "--session-id",
+                    bad,
+                )
+                self.assertEqual(
+                    receipt["result"], "refused", (action, repr(bad))
+                )
+                self.assertFalse(
+                    (hooks_dir(self.repo) / "binding.json").exists(),
+                    (action, repr(bad)),
+                )
+
+    def test_status_bound_requires_nonempty_id_and_matching_root(self) -> None:
+        install(self.repo)
+        binding = hooks_dir(self.repo) / "binding.json"
+        for bad in (
+            {"session_id": "", "project_root": str(self.repo)},
+            {"session_id": "  ", "project_root": str(self.repo)},
+            {"session_id": HOST_SESSION_ID, "project_root": "/elsewhere"},
+            {"session_id": HOST_SESSION_ID},
+        ):
+            binding.write_text(json.dumps(bad), encoding="utf-8")
+            receipt = run_hook("status", "--project-root", str(self.repo))
+            self.assertFalse(receipt["bound"], bad)
+        binding.write_text(
+            json.dumps(
+                {
+                    "session_id": HOST_SESSION_ID,
+                    "project_root": str(self.repo),
+                }
+            ),
+            encoding="utf-8",
+        )
+        receipt = run_hook("status", "--project-root", str(self.repo))
+        self.assertTrue(receipt["bound"])
 
     def test_prepare_refuses_ambiguous_binding(self) -> None:
         """An unclassifiable binding is refused before any write."""

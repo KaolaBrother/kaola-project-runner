@@ -65,8 +65,14 @@ rather than clobbered or crashed on. No backup copies of the configuration
 are ever made: foreign content (which may carry credentials) stays only in
 the file it already lived in. The hook command quotes every path with
 ``shlex.quote`` so a project root containing shell metacharacters cannot
-alter what the hook executes. Nothing here reads, prints, or forwards a
-credential, and ``status`` never writes.
+alter what the hook executes. ``--project-root`` must name an existing
+directory and explicit global/ancestor danger paths are refused -- the
+filesystem root, the user home directory, and the effective CODEX_HOME
+layer (so a mistaken ``$HOME`` can never write ``~/.codex/hooks.json``).
+``install``/``bind`` refuse a missing or blank ``--session-id``, and
+``status`` reports only safe metadata -- it never echoes a matched entry's
+command or arbitrary config, which could carry a credential. Nothing here
+reads, prints, or forwards a credential, and ``status`` never writes.
 """
 
 from __future__ import annotations
@@ -90,10 +96,40 @@ PAYLOAD_SOURCE = (
 RECEIPT_LIMIT = 4096
 
 
-def canonical_root(raw: str | None) -> Path | None:
+def resolve_root(raw: str | None) -> tuple[Path | None, str | None]:
+    """Canonicalize --project-root, or return a refusal reason.
+
+    The directory must exist, and explicit global/ancestor danger paths are
+    refused: the filesystem root, the user home directory, and the effective
+    CODEX_HOME layer (the directory itself or the parent whose ``.codex`` IS
+    that layer). Pointing at ``$HOME`` would otherwise write
+    ``~/.codex/hooks.json`` — user-global config this tool must never touch.
+    """
     if not raw:
-        return None
-    return Path(os.path.realpath(Path(raw).expanduser()))
+        return None, "missing --project-root"
+    root = Path(raw).expanduser()
+    if not root.is_dir():
+        return None, f"--project-root is not a directory: {root}"
+    root = Path(os.path.realpath(root))
+    dangers = []
+    if root == Path(root.anchor):
+        dangers.append("the filesystem root")
+    home = Path(os.path.realpath(Path.home()))
+    if root == home:
+        dangers.append("the user home directory")
+    codex_env = os.environ.get("CODEX_HOME")
+    codex_home = Path(
+        os.path.realpath(
+            Path(codex_env).expanduser() if codex_env else home / ".codex"
+        )
+    )
+    if root == codex_home or root / ".codex" == codex_home:
+        dangers.append("the effective CODEX_HOME layer")
+    if dangers:
+        return None, (
+            "--project-root resolves to " + " and ".join(dangers) + f": {root}"
+        )
+    return root, None
 
 
 def hooks_path_for(root: Path) -> Path:
@@ -317,12 +353,12 @@ def cmd_prepare(root: Path) -> int:
 
 
 def cmd_install(root: Path, session_id: str | None) -> int:
-    if not session_id:
+    if not session_id or not session_id.strip():
         receipt(
             "install",
             "refused",
             reasons=[
-                "missing --session-id",
+                "missing or blank --session-id",
                 "the entry must bind the exact designated Host session identity",
             ],
         )
@@ -337,12 +373,12 @@ def cmd_bind(root: Path, session_id: str | None) -> int:
     from the session start, and the emit copy re-reads binding.json on every
     event. Refuses when the project has no prepared Runner entry.
     """
-    if not session_id:
+    if not session_id or not session_id.strip():
         receipt(
             "bind",
             "refused",
             reasons=[
-                "missing --session-id",
+                "missing or blank --session-id",
                 "the entry must bind the exact designated Host session identity",
             ],
         )
@@ -505,8 +541,11 @@ def cmd_status(root: Path) -> int:
         binding = json.loads(
             binding_path_for(root).read_text(encoding="utf-8")
         )
-        bound = isinstance(binding, dict) and isinstance(
-            binding.get("session_id"), str
+        bound = (
+            isinstance(binding, dict)
+            and isinstance(binding.get("session_id"), str)
+            and bool(binding["session_id"].strip())
+            and binding.get("project_root") == str(root)
         )
     except (OSError, json.JSONDecodeError):
         pass
@@ -515,7 +554,10 @@ def cmd_status(root: Path) -> int:
         "ok",
         installed=bool(ours),
         bound=bound,
-        entry=ours[0] if ours else None,
+        entry_id=ENTRY_ID if ours else None,
+        entry_hook_count=(
+            len(ours[0].get("hooks") or []) if ours else 0
+        ),
         hooks_json=str(hooks_path),
         hooks_json_exists=hooks_path.exists(),
         session_start_entries=len(session) if isinstance(session, list) else 0,
@@ -564,9 +606,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.action == "emit":
         return cmd_emit()
-    root = canonical_root(args.project_root)
+    root, reason = resolve_root(args.project_root)
     if root is None:
-        receipt(args.action, "refused", reasons=["missing --project-root"])
+        receipt(args.action, "refused", reasons=[reason])
         return 1
     if args.action == "prepare":
         return cmd_prepare(root)
