@@ -1,0 +1,28 @@
+commit a0833d898f1e92be51627a2f0dc8cab121f1b10e
+Author: KaolaBrother <yanleichen@hotmail.com>
+Date:   Sat Sep 19 01:28:55 2026 +0800
+
+    test(validate): report SKIPPED honestly — no log, execution status unknown (Issue #83)
+    
+    "suite never ran" claimed a fact the replay cannot know: a suite may
+    have run and lost its log (the focused test's log-eater case is exactly
+    that). Keep the SKIPPED marker the issue asked for, but state only what
+    is measured — the log is missing and the suite's status is unknown.
+    
+    Generated with [Devin](https://devin.ai)
+    
+    Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+
+diff --git a/scripts/validate.sh b/scripts/validate.sh
+index a62ff37..bb2fba2 100755
+--- a/scripts/validate.sh
++++ b/scripts/validate.sh
+@@ -148,7 +148,7 @@ for suite in "${python_suites_all[@]}"; do
+   if [[ -f "$validate_tmp/$suite.log" ]]; then
+     cat "$validate_tmp/$suite.log"
+   else
+-    printf 'SKIPPED: %s (suite never ran; no log)\n' "$suite"
++    printf 'SKIPPED: %s (no log; execution status unknown)\n' "$suite"
+     python_status=1
+   fi
+ done

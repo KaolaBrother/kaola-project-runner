@@ -1,0 +1,63 @@
+diff --git a/scripts/validate.sh b/scripts/validate.sh
+index 6ab8c64..a62ff37 100755
+--- a/scripts/validate.sh
++++ b/scripts/validate.sh
+@@ -49,8 +49,10 @@ bash "$repo_root/tests/contract/test-installer-runtimes.sh"
+ # identical command it ran serially, its log is replayed in the original
+ # order after both lanes finish, and the logs live under $validate_tmp so
+ # the Issue #63 sweep still covers exactly this invocation's holders and the
+-# root removal takes the logs with it. A lane failure is reported and the
+-# script exits nonzero only after every suite has completed.
++# root removal takes the logs with it. A lane reports FAILED per failing
++# suite but still runs every suite, and the script exits nonzero only after
++# every suite has run; a suite that somehow left no log is reported SKIPPED
++# rather than letting a missing-log cat error abort the replay (Issue #83).
+ python_suites_all=(
+   "test-issue-78-heredoc-deadlock.py"
+   "test-issue-9-contract.py"
+@@ -86,6 +88,7 @@ python_suites_all=(
+   "test-issue-70-binding-fact.py"
+   "test-issue-76-permission-wake.py"
+   "test-issue-79-zcode-312.py"
++  "test-issue-83-lane-failure-visibility.py"
+ )
+ python_suites_a=(
+   "test-issue-79-zcode-312.py"
+@@ -102,6 +105,7 @@ python_suites_a=(
+   "test-runner-v2.py"
+   "test-direct-transport-contract.py"
+   "test-issue-9-contract.py"
++  "test-issue-83-lane-failure-visibility.py"
+ )
+ python_suites_b=(
+   "test-issue-78-heredoc-deadlock.py"
+@@ -126,12 +130,14 @@ python_suites_b=(
+   "test-issue-73-canonical-root.py"
+ )
+ run_suite_lane() {
++  local status=0
+   for suite in "$@"; do
+     if ! python3 "$repo_root/tests/contract/$suite" >"$validate_tmp/$suite.log" 2>&1; then
+       printf 'FAILED: %s\n' "$suite"
+-      return 1
++      status=1
+     fi
+   done
++  return "$status"
+ }
+ run_suite_lane "${python_suites_a[@]}" & lane_a=$!
+ run_suite_lane "${python_suites_b[@]}" & lane_b=$!
+@@ -139,7 +145,12 @@ python_status=0
+ wait "$lane_a" || python_status=1
+ wait "$lane_b" || python_status=1
+ for suite in "${python_suites_all[@]}"; do
+-  cat "$validate_tmp/$suite.log"
++  if [[ -f "$validate_tmp/$suite.log" ]]; then
++    cat "$validate_tmp/$suite.log"
++  else
++    printf 'SKIPPED: %s (suite never ran; no log)\n' "$suite"
++    python_status=1
++  fi
+ done
+ if (( python_status )); then
+   exit 1
