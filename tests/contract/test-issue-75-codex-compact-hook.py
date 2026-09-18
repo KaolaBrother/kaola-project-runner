@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import stat
 import subprocess
 import sys
 import tempfile
@@ -492,17 +491,84 @@ class CodexCompactHookContract(unittest.TestCase):
         for root, _dirs, files in os.walk(self.tmp.name):
             self.assertNotIn("PWNED", files, f"side effect in {root}")
 
-    def test_backup_is_written_0600(self) -> None:
-        """The content-addressed backup mirrors config at 0600, not umask."""
-        self.seed_foreign()
+    def test_no_backup_copy_of_config_is_made(self) -> None:
+        """Foreign config may carry secrets — never duplicated into backups.
+
+        A secret-bearing foreign hooks.json is preserved in place (entry
+        content untouched); no hooks.json.kaola-backup-* or other copy of its
+        content is ever created — on install, re-install, or uninstall.
+        """
+        secret = "sk-test-foreign-secret-0000"
+        doc = {
+            "hooks": {
+                "SessionStart": [
+                    {
+                        "hooks": [{"type": "command", "command": secret}],
+                        "id": "user-owned:secret-entry",
+                    }
+                ]
+            }
+        }
+        path = hooks_path(self.repo)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+
         install(self.repo)
-        backups = list((self.repo / ".codex").glob("hooks.json.kaola-backup-*"))
-        self.assertEqual(len(backups), 1)
-        self.assertEqual(stat.S_IMODE(backups[0].stat().st_mode), 0o600)
+        install(self.repo)  # re-install / idempotent path
         receipt = uninstall(self.repo)
         self.assertEqual(receipt["removed_entries"], 1)
-        for backup in (self.repo / ".codex").glob("hooks.json.kaola-backup-*"):
-            self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o600)
+
+        copies = []
+        for f in (self.repo / ".codex").rglob("*"):
+            if f.is_file() and secret in f.read_text(
+                encoding="utf-8", errors="replace"
+            ):
+                copies.append(f)
+        self.assertEqual(copies, [path])
+        self.assertEqual(
+            list((self.repo / ".codex").glob("hooks.json.kaola-backup-*")), []
+        )
+        remaining = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            remaining["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+            secret,
+        )
+
+    def test_prepare_preserves_existing_binding(self) -> None:
+        """prepare → bind Host → prepare must never silently unbind."""
+        install(self.repo)
+        before = (hooks_dir(self.repo) / "binding.json").read_bytes()
+        receipt = run_hook("prepare", "--project-root", str(self.repo))
+        self.assertEqual(receipt["result"], "ok")
+        self.assertTrue(receipt["binding_preserved"])
+        self.assertEqual(receipt["session_id"], HOST_SESSION_ID)
+        self.assertEqual(
+            (hooks_dir(self.repo) / "binding.json").read_bytes(), before
+        )
+        payload = (
+            hooks_dir(self.repo) / "compact-recovery.md"
+        ).read_text(encoding="utf-8")
+        fired = run_installed(self.repo, hook_input(self.repo))
+        self.assertEqual(fired.stdout, payload)
+
+    def test_prepare_refuses_ambiguous_binding(self) -> None:
+        """An unclassifiable binding is refused before any write."""
+        for bad in (
+            "not json",
+            "[]",
+            '{"session_id": 5, "project_root": "%s"}' % os.path.realpath(self.repo),
+            '{"session_id": "%s", "project_root": "/elsewhere"}'
+            % HOST_SESSION_ID,
+        ):
+            binding = hooks_dir(self.repo) / "binding.json"
+            binding.parent.mkdir(parents=True, exist_ok=True)
+            binding.write_text(bad, encoding="utf-8")
+            receipt = run_hook("prepare", "--project-root", str(self.repo))
+            self.assertEqual(receipt["result"], "refused", bad)
+            self.assertNotEqual(receipt["_rc"], 0, bad)
+            self.assertEqual(binding.read_text(encoding="utf-8"), bad, bad)
+            self.assertFalse(hooks_path(self.repo).exists(), bad)
+            binding.unlink()
 
     def test_payload_teaches_role_reload_and_no_repeat(self) -> None:
         text = PAYLOAD_SOURCE.read_text(encoding="utf-8")

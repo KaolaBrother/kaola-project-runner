@@ -50,14 +50,18 @@ is removed, and ``.codex`` is left only while other content remains). The
 hook itself performs no dispatch and edits no project state; it prints the
 short recovery prompt that becomes the model's ``additionalContext``.
 
+Binding safety: ``prepare`` is deliberately re-runnable but never silently
+unbinds -- when a valid bound ``binding.json`` already exists it is left
+byte-for-byte (``binding_preserved`` in the receipt), and an ambiguous or
+mismatched binding is refused before any write. ``install``/``bind`` with an
+explicit ``--session-id`` always overwrite the binding by operator choice.
+
 Every action prints one bounded JSON receipt; ``result`` is ``ok`` or
 ``refused`` with reasons. A malformed existing ``hooks.json`` -- including
 JSON-null ``hooks`` or ``hooks.SessionStart`` -- is refused before any write
-rather than clobbered or crashed on. Before rewriting an existing
-``hooks.json`` the prior content is kept once as
-``hooks.json.kaola-backup-<sha12>`` (content-addressed, so repeated installs
-do not accumulate backups; the backup is written atomically at mode 0600
-since it mirrors config content). The hook command quotes every path with
+rather than clobbered or crashed on. No backup copies of the configuration
+are ever made: foreign content (which may carry credentials) stays only in
+the file it already lived in. The hook command quotes every path with
 ``shlex.quote`` so a project root containing shell metacharacters cannot
 alter what the hook executes. Nothing here reads, prints, or forwards a
 credential, and ``status`` never writes.
@@ -66,7 +70,6 @@ credential, and ``status`` never writes.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shlex
@@ -161,14 +164,6 @@ def atomic_write(path: Path, content: bytes, mode: int | None = None) -> None:
         raise
 
 
-def write_backup(hooks_path: Path) -> None:
-    """Keep one content-addressed 0600 backup of the prior hooks.json."""
-    digest = hashlib.sha256(hooks_path.read_bytes()).hexdigest()[:12]
-    backup = hooks_path.with_name(f"{hooks_path.name}.kaola-backup-{digest}")
-    if not backup.exists():
-        atomic_write(backup, hooks_path.read_bytes())
-
-
 def receipt(action: str, result: str, **fields) -> None:
     out = {"schema": "kaola-codex-compact-hook/1", "action": action, "result": result}
     out.update(fields)
@@ -176,9 +171,7 @@ def receipt(action: str, result: str, **fields) -> None:
     sys.stdout.write(line[:RECEIPT_LIMIT] + "\n")
 
 
-def write_hooks(hooks_path: Path, data: dict, backup: bool = True) -> None:
-    if backup and hooks_path.exists():
-        write_backup(hooks_path)
+def write_hooks(hooks_path: Path, data: dict) -> None:
     existing_mode = hooks_path.stat().st_mode & 0o777 if hooks_path.exists() else None
     atomic_write(
         hooks_path,
@@ -205,6 +198,19 @@ def write_binding(root: Path, session_id: str | None) -> bool:
     return changed
 
 
+def read_binding(binding_path: Path) -> dict | None:
+    """Return the existing binding dict, or None when absent."""
+    if not binding_path.exists():
+        return None
+    try:
+        data = json.loads(binding_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{binding_path}: unreadable or invalid JSON ({exc})") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{binding_path}: top-level JSON is not an object")
+    return data
+
+
 def _install(root: Path, session_id: str | None, action: str) -> int:
     """Write assets, binding, and the entry; session_id None means inert."""
     if not PAYLOAD_SOURCE.is_file():
@@ -213,11 +219,47 @@ def _install(root: Path, session_id: str | None, action: str) -> int:
     payload_path = payload_path_for(root)
     emitter = emitter_path_for(root)
     hooks_path = hooks_path_for(root)
+    binding_path = binding_path_for(root)
     try:
         data = load_hooks(hooks_path)
     except ValueError as exc:
         receipt(action, "refused", reasons=[str(exc)])
         return 1
+
+    # prepare (inert install) must never silently unbind a live Host: a
+    # current binding that is already bound is preserved byte-for-byte; a
+    # binding we cannot classify is refused before any write.
+    preserve_binding = False
+    bound_session: str | None = None
+    if session_id is None and binding_path.exists():
+        try:
+            existing = read_binding(binding_path)
+        except ValueError as exc:
+            receipt(action, "refused", reasons=[str(exc)])
+            return 1
+        existing_id = existing.get("session_id") if existing else None
+        existing_root = existing.get("project_root") if existing else None
+        if isinstance(existing_id, str):
+            if existing_root is not None and existing_root != str(root):
+                receipt(
+                    action,
+                    "refused",
+                    reasons=[
+                        f"{binding_path}: bound to a different project root"
+                    ],
+                )
+                return 1
+            preserve_binding = True
+            bound_session = existing_id
+        elif existing_id is not None or (
+            existing_root is not None and existing_root != str(root)
+        ):
+            receipt(
+                action,
+                "refused",
+                reasons=[f"{binding_path}: ambiguous existing binding"],
+            )
+            return 1
 
     payload_path.parent.mkdir(parents=True, exist_ok=True)
     payload_bytes = PAYLOAD_SOURCE.read_bytes()
@@ -228,7 +270,9 @@ def _install(root: Path, session_id: str | None, action: str) -> int:
     emitter_changed = not emitter.exists() or emitter.read_bytes() != emitter_bytes
     if emitter_changed:
         atomic_write(emitter, emitter_bytes)
-    binding_changed = write_binding(root, session_id)
+    binding_changed = (
+        False if preserve_binding else write_binding(root, session_id)
+    )
 
     hooks = data.setdefault("hooks", {})
     session = hooks.setdefault("SessionStart", [])
@@ -247,8 +291,9 @@ def _install(root: Path, session_id: str | None, action: str) -> int:
         payload=str(payload_path),
         emitter=str(emitter),
         binding=str(binding_path_for(root)),
+        binding_preserved=preserve_binding,
         entry_id=ENTRY_ID,
-        session_id=session_id,
+        session_id=bound_session if preserve_binding else session_id,
         project_root=str(root),
         foreign_session_start=len(foreign),
     )

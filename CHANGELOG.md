@@ -260,14 +260,17 @@
   with an inert binding BEFORE the Host starts (hooks load at session
   start), then `bind` writes only `binding.json` once the designated session
   id is known — in the Codex host's own shell `CODEX_SESSION_ID`/
-  `CODEX_THREAD_ID` equal that hook-input `session_id`. The hook command
-  quotes
+  `CODEX_THREAD_ID` equal that hook-input `session_id`. Re-running `prepare`
+  never silently unbinds: a valid bound `binding.json` is preserved
+  byte-for-byte (`binding_preserved`) and an ambiguous or other-project
+  binding is refused before any write. The hook command quotes
   its path with `shlex.quote` so a metacharacter-bearing project root cannot
   alter execution, the payload, emitter, and binding copies live under
-  `<project_root>/.codex/kaola-project-runner/hooks/`, the prior config is
-  kept as a 0600 atomic backup, and a malformed file — including JSON-null
-  `hooks` or `hooks.SessionStart` — is refused before any write rather than
-  clobbered or crashed on; `status` never writes. The short payload only
+  `<project_root>/.codex/kaola-project-runner/hooks/`, no backup copy of
+  `hooks.json` is ever made — foreign content, which may carry credentials,
+  stays only in the file it already lived in — and a malformed file,
+  including JSON-null `hooks` or `hooks.SessionStart`, is refused before any
+  write rather than clobbered or crashed on; `status` never writes. The short payload only
   re-points the host: confirm role, fully re-read the installed Skill, recover
   authorization/heartbeat/run records - never re-intake, re-claim, or
   re-dispatch. Verified in an isolated real `/compact`: the injected context

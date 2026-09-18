@@ -76,7 +76,10 @@ are never bound.
   another repository, or a non-compact source emits nothing. `codex resume`
   keeps the session id, so the binding survives resume; for a brand-new Host
   session, re-run `bind` (or `install`) with the new id — only `binding.json`
-  changes, so the already-reviewed hook entry is not disturbed.
+  changes, so the already-reviewed hook entry is not disturbed. `prepare` is
+  safe to re-run: a valid bound `binding.json` is left byte-for-byte
+  (`binding_preserved` in the receipt), so a live Host is never silently
+  unbound; an ambiguous or other-project binding is refused before any write.
 - Owns exactly one entry, id `kaola-project-runner:compact-context`, under
   `hooks.SessionStart` — matched by id, so foreign entries (Workflow-owned,
   user-owned) keep their JSON content untouched. The document is
@@ -89,8 +92,8 @@ are never bound.
   `<project_root>/.codex/kaola-project-runner/hooks/compact-recovery.md`, the
   emitter to `kaola-codex-compact-hook.py`, and the binding to
   `binding.json` beside them, so the hook does not depend on a checkout
-  path; and keeps one content-addressed `hooks.json.kaola-backup-<sha12>`
-  (atomic write, mode 0600) before rewriting an existing file. The hook
+  path; and never copies `hooks.json` — foreign content, which may carry
+  credentials, stays only in the file it already lived in. The hook
   command quotes its path with `shlex.quote`, so a project root containing
   shell metacharacters cannot change what the hook executes.
 - Refuses atomically (no write of any file) on a malformed `hooks.json`,
@@ -128,7 +131,10 @@ tied to.
   idempotency, two-project coexistence with local uninstall, the required
   Host binding (payload emitted only for the bound `session_id` + project
   root; silent for Worker, other repo, or non-compact sources), atomic
-  refusal on malformed/null config, and payload content.
+  refusal on malformed/null config, `prepare` preserving a live binding
+  (`binding_preserved`) while refusing an ambiguous one before any write,
+  that no copy of `hooks.json` is ever created beside a secret-bearing
+  foreign config, and payload content.
 - Out of scope here: ZCode's compact carrier (see `docs/zcode-host.md` and the
   Issue #75 capability matrix — its 0.16.5 `SessionStart` has no `compact`
   call site), Grok Bot, and other native hosts.
