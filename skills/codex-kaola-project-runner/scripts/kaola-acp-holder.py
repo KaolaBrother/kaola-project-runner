@@ -1193,12 +1193,14 @@ class Holder:
         self.overflow_confirmed_generation = 0
         self.overflow_inflight_generation: int | None = None
         self.overflow_inflight_fingerprint: Any = None
-        # Issue #90: recently confirmed event ids, rebuilt on resume from this
-        # holder's own `worker_event_confirmed` records. Not a second ledger -
-        # the event log stays the only persistence - just the bounded in-memory
-        # view `op_worker_event` needs to recognise a retry of an event that a
-        # completed Host turn already confirmed and removed from the pending list.
+        # Issue #90: a bounded in-memory CACHE over this holder's own
+        # `worker_event_confirmed` records, so `op_worker_event` can recognise a
+        # retry of an event a completed Host turn already confirmed and removed
+        # from the pending list. Not a second ledger - the event log stays the
+        # only persistence, and once this cache has evicted anything a miss is
+        # resolved against those records instead of being taken as a no.
         self.confirmed_worker_events: dict[str, None] = {}
+        self.confirmed_worker_events_evicted = False
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
         self.heartbeat_host = parse_heartbeat_host()
@@ -2061,6 +2063,34 @@ class Holder:
             self.confirmed_worker_events[event_id] = None
         while len(self.confirmed_worker_events) > HEARTBEAT_CONFIRMED_MEMORY:
             self.confirmed_worker_events.pop(next(iter(self.confirmed_worker_events)))
+            # From here on this cache is no longer the whole confirmed truth,
+            # so a miss has to be checked against the records it was built from.
+            self.confirmed_worker_events_evicted = True
+
+    def _was_worker_event_confirmed(self, event_id: str) -> bool:
+        """Has a completed Host turn already confirmed this event (Issue #90)?
+
+        The bounded cache answers the ordinary case outright. It is bounded, so
+        a miss only means "not confirmed" while nothing has been evicted; past
+        that the answer is the `worker_event_confirmed` records the cache was
+        built from - the only place this holder persists anything. The promise
+        is therefore exactly as wide as the RETAINED event log, the same horizon
+        that already bounds resume redelivery, rather than the last N ids. A
+        found id is cached so a repeated retry costs one lookup, not one scan.
+        Caller holds ``worker_events_lock``.
+        """
+        if event_id in self.confirmed_worker_events:
+            return True
+        if not self.confirmed_worker_events_evicted:
+            return False
+        for entry in self.events.read_since(0, None):
+            if entry.get("kind") != "worker_event_confirmed":
+                continue
+            ids = entry.get("event_ids")
+            if isinstance(ids, list) and event_id in ids:
+                self._remember_confirmed_worker_events([event_id])
+                return True
+        return False
 
     def _worker_event_turn_end(self, fingerprint: Any, outcome: str | None) -> None:
         """At a turn boundary: confirm the events this turn delivered, then
@@ -2144,7 +2174,7 @@ class Holder:
         if request_id is not None:
             event["request_id"] = request_id
         with self.worker_events_lock:
-            if event["event_id"] in self.confirmed_worker_events:
+            if self._was_worker_event_confirmed(event["event_id"]):
                 # Issue #90: a completed Host turn already confirmed this exact
                 # event and removed it from the pending list. `event_id` is
                 # deterministic, so re-offering it is a retry of the same event,
@@ -2245,6 +2275,7 @@ class Holder:
                                 "generation": overflow_generation})
         self.pending_worker_events = pending
         self.confirmed_worker_events = {}
+        self.confirmed_worker_events_evicted = False
         self._remember_confirmed_worker_events(list(confirmed))
         self.overflow_generation = overflow_generation
         self.overflow_confirmed_generation = overflow_confirmed

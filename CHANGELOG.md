@@ -13,8 +13,10 @@
   follows a successful admission, so a refused prompt leaves nothing to undo. One worker
   event is one Host prompt and one confirmation.
   A retry of an already confirmed deterministic `event_id` is answered as a duplicate
-  from the holder's bounded memory of recently confirmed ids instead of being staged
-  and delivered again. Busy-host staging, failed-notification restaging, cap-32
+  instead of being staged and delivered again: a bounded in-memory index answers the
+  ordinary case, and past that index the holder consults the `worker_event_confirmed`
+  records it was built from, so the answer holds for as long as the event log retains
+  the confirmation rather than for a fixed number of ids. Busy-host staging, failed-notification restaging, cap-32
   overflow, and at-least-once resume of genuinely unconfirmed events are unchanged.
   No scheduler, no second queue or ledger, no new gate.
 

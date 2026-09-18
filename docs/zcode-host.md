@@ -248,10 +248,15 @@ worker agent terminated / worker turn ended (one idle episode)
   events already marked. Marking only follows a successful admission, so a
   prompt that is refused or never written leaves nothing to undo and its events
   stay staged. A confirmed `event_id` offered again is answered `duplicate`
-  (with `confirmed`) from the holder's in-memory index of the 256 most recently
-  confirmed ids, so a worker retry does not re-prompt the Host; after a resume
-  that index is rebuilt from the log, which is also what still filters the
-  pending list, so a genuinely unconfirmed event is redelivered as before.
+  (with `confirmed`) and does not re-prompt the Host. A bounded in-memory index
+  of recently confirmed ids answers that outright; once it has evicted anything
+  a miss is resolved against the `worker_event_confirmed` records themselves, so
+  the answer holds for as long as the event log still retains the confirmation —
+  the same horizon that already bounds resume redelivery, not a fixed number of
+  ids. Only confirmed ids are suppressed: a genuinely unconfirmed event is
+  redelivered as before, and once rotation has dropped a confirmation the holder
+  has no record of it anywhere and that event is deliverable again, which keeps
+  the carrier at-least-once rather than silently dropping it.
   Stage, delivery, and confirmation are recorded in the host holder's
   existing event log. `start --resume` (the `session/load` path, also after
   exact `stop`) rebuilds the pending detailed list from that log

@@ -481,6 +481,106 @@ class EventConfirmationRace(unittest.TestCase):
             [ids for e in self.log_kinds("worker_event_confirmed") for ids in e["event_ids"]],
             ["codex/w-1/idle/72"])
 
+    # -- the promise is as wide as the retained log, not the last N ids -------
+
+    def seed_confirmed_log(self, count: int) -> list[str]:
+        """Write `count` real stage+confirmation pairs into this holder's own
+        event log, the way completed notification turns would have, then resume
+        from it. Nothing else persists these facts."""
+        event_ids = []
+        for cursor in range(count):
+            event_id = f"codex/w-bulk/idle/{cursor}"
+            event_ids.append(event_id)
+            self.holder.events.append({"kind": "worker_event", "event": {
+                "schema": holder_module.WORKER_EVENT_SCHEMA, "event_id": event_id,
+                "kind": "idle", "platform": "codex", "session": "w-bulk",
+                "repo": "/tmp/consuming", "reason": "end_turn", "event_cursor": cursor}})
+            self.holder.events.append({"kind": "worker_event_confirmed",
+                                       "event_ids": [event_id]})
+        self.holder._restore_worker_events()
+        return event_ids
+
+    def test_a_confirmed_retry_is_ignored_past_the_hot_cache_bound(self) -> None:
+        """The Issue says a confirmed event_id retry is ignored - with no "unless
+        more than N events were confirmed since" exception.
+
+        The in-memory index is bounded, so beyond that bound it stops being proof
+        on its own. The confirmation is still right there in the holder's event
+        log, which is the only place any of this is persisted, so the answer must
+        still be `duplicate`.
+        """
+        bound = holder_module.HEARTBEAT_CONFIRMED_MEMORY
+        event_ids = self.seed_confirmed_log(bound + 1)
+        evicted = event_ids[0]
+        self.assertNotIn(evicted, self.holder.confirmed_worker_events,
+                         "precondition: the oldest id no longer fits the index")
+        self.assertTrue(any(
+            evicted in (entry.get("event_ids") or [])
+            for entry in self.log_kinds("worker_event_confirmed")),
+            "precondition: its confirmation is still in the retained log")
+
+        retry = self.holder.op_worker_event({
+            "schema": holder_module.WORKER_EVENT_SCHEMA, "kind": "idle",
+            "platform": "codex", "session": "w-bulk", "repo": "/tmp/consuming",
+            "reason": "end_turn", "event_cursor": 0})
+
+        self.assertIs(retry.get("duplicate"), True,
+                      "a confirmation the log still holds is still a confirmation")
+        self.assertIs(retry.get("confirmed"), True, retry)
+        self.assertNotEqual(retry.get("staged"), True, retry)
+        self.assertEqual(self.notification_prompts(), [],
+                         "the Host must not be prompted for an event it confirmed")
+        self.assertEqual(self.holder.pending_worker_events, [])
+
+    def test_a_new_event_is_still_delivered_past_the_hot_cache_bound(self) -> None:
+        """The wider lookup must not start swallowing genuinely new events."""
+        self.seed_confirmed_log(holder_module.HEARTBEAT_CONFIRMED_MEMORY + 1)
+        self.arm_instant_host()
+
+        fresh = self.stage(999, session="w-new")
+
+        self.assertIs(fresh.get("delivered"), True, fresh)
+        self.assertNotEqual(fresh.get("duplicate"), True, fresh)
+        self.assertEqual(len(self.notification_prompts()), 1)
+        self.assertEqual(
+            [ids for e in self.log_kinds("worker_event_confirmed")
+             for ids in e["event_ids"] if ids.startswith("codex/w-new/")],
+            ["codex/w-new/idle/999"])
+
+    def test_an_unconfirmed_event_past_the_bound_still_resumes(self) -> None:
+        """At-least-once is unchanged: only CONFIRMED ids are suppressed."""
+        self.seed_confirmed_log(holder_module.HEARTBEAT_CONFIRMED_MEMORY + 1)
+        self.holder.events.append({"kind": "worker_event", "event": {
+            "schema": holder_module.WORKER_EVENT_SCHEMA,
+            "event_id": "codex/w-lost/idle/5", "kind": "idle", "platform": "codex",
+            "session": "w-lost", "repo": "/tmp/consuming", "reason": "end_turn",
+            "event_cursor": 5}})
+
+        self.holder._restore_worker_events()
+
+        self.assertEqual([e["event_id"] for e in self.holder.pending_worker_events],
+                         ["codex/w-lost/idle/5"],
+                         "an event the log never confirmed still redelivers")
+        self.assertEqual(len(self.notification_prompts()), 1)
+
+    def test_a_confirmation_the_log_no_longer_holds_is_deliverable_again(self) -> None:
+        """The exact edge of the promise: it is as wide as the RETAINED log.
+
+        Rotation can drop an old confirmation. Once the holder has no record of
+        it anywhere, the event is new again - at-least-once, not a silent drop.
+        """
+        self.seed_confirmed_log(holder_module.HEARTBEAT_CONFIRMED_MEMORY + 1)
+        self.arm_instant_host()
+        # a confirmed id the retained log does not mention
+        forgotten = self.holder.op_worker_event({
+            "schema": holder_module.WORKER_EVENT_SCHEMA, "kind": "idle",
+            "platform": "codex", "session": "w-rotated", "repo": "/tmp/consuming",
+            "reason": "end_turn", "event_cursor": 7})
+
+        self.assertIs(forgotten.get("delivered"), True, forgotten)
+        self.assertNotEqual(forgotten.get("duplicate"), True, forgotten)
+        self.assertEqual(len(self.notification_prompts()), 1)
+
     def test_the_carrier_op_stays_a_zcode_host_capability(self) -> None:
         self.holder.args.platform = "codex"
         refusal = self.stage(51)
