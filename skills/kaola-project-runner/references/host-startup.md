@@ -59,8 +59,10 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
 
 4. **Read the startup receipt, then verify it against evidence.** The Host's own
    claim of having loaded the Skill is not evidence, and its tool record may show
-   only that read and execute calls happened - ZCode's `tool_call` updates carry
-   `kind`, `title` and status, not paths - so check what does not depend on its
+   only that read and execute calls happened when `locations`/`rawInput` are
+   absent; the translator forwards those fields only when the app-server `input`
+   already named a path or command (redacted), and never invents a path - so
+   check what does not depend on its
    prose: the roles, authorization and lifecycle boundary against the plan file
    you read yourself; quotes it could only produce from that plan and this
    reference; and the artifacts this procedure leaves behind (a

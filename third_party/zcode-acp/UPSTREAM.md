@@ -56,6 +56,13 @@ Start Plan and pay-as-you-go providers are refused; unknown models and other
 providers fail closed; the adapter never substitutes a model or a provider,
 never writes `~/.zcode/cli/config.json`, and never logs the credential.
 
+Tool `input` (Issue #67, measured on CLI 0.16.5): `model.streaming` kind
+`tool_call` carries `input` (`Read` used `file_path`; protocol examples use
+`command` for `Bash`). `tool.updated` `scheduled` may omit `input` and set
+`inputOmitted`/`inputRef` instead. The adapter caches the streaming `input`
+and forwards a redacted copy as ACP `rawInput` plus `locations` for path-like
+keys only; it does not follow `inputRef` and does not invent a path.
+
 ## Removed / never implemented
 
 quota client, tasks-index sqlite, remote hub / WebSocket listener, TUI /

@@ -34,6 +34,13 @@
   It now applies equal-length canonical edits instead of appending 59 B, so
   `templates/budgets.json` `main_skill_bytes` 17408 is the ceiling
   `render-skills.py --check` already reports. No budget was raised.
+- **ZCode ACP `tool_call` updates forward the app-server `input` (Issue #67).**
+  Live CLI 0.16.5 `model.streaming` `tool_call` already names `file_path` /
+  `command`; the translator was caching that object and dropping it. The same
+  update the holder records now carries a redacted `rawInput` and, when a
+  path-like key is present, `locations`. No path is invented, `inputRef` is
+  not followed, and credentials stay scrubbed. Verification guidance in
+  `references/host-startup.md` matches that fact. No byte budget was raised.
 - **The heartbeat carries only the constraints that are still in force (Issue
   #68).** The heartbeat is the working prompt itself, and the main Skill now
   states which trigger delivers it on which host: Codex and Grok Bot from their

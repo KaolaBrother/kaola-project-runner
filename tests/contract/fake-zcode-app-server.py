@@ -501,6 +501,36 @@ class FakeAppServer:
             self.complete(session_id)
             return
 
+        if scenario == "read_path":
+            self.event(session_id, "model.streaming", {
+                "kind": "tool_call", "toolCallId": "call_r1",
+                "toolName": "Read",
+                "input": {"file_path": "/tmp/kpr-issue-67-fixture/MARKER.txt"},
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "scheduled", "toolCallId": "call_r1", "toolName": "Read",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "started", "toolCallId": "call_r1", "toolName": "Read",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "result", "toolCallId": "call_r1", "toolName": "Read",
+                "output": "marker-line",
+            })
+            self.complete(session_id)
+            return
+
+        if scenario == "no_input":
+            self.event(session_id, "tool.updated", {
+                "kind": "started", "toolCallId": "call_n1", "toolName": "Read",
+            })
+            self.event(session_id, "tool.updated", {
+                "kind": "result", "toolCallId": "call_n1", "toolName": "Read",
+                "output": "opaque",
+            })
+            self.complete(session_id)
+            return
+
         # basic / tool_error
         self.event(session_id, "model.streaming",
                    {"kind": "reasoning_delta", "delta": "thinking about it"})

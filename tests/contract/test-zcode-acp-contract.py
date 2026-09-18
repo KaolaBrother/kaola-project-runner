@@ -331,6 +331,24 @@ class ZcodeAcpStaticTests(unittest.TestCase):
         for name in DENIED_ENV:
             self.assertIn(name, module.DENIED_ENV)
 
+    def test_bound_tool_input_redacts_and_does_not_invent_paths(self) -> None:
+        module = load_adapter_module()
+        module.register_secret("super-secret-value-xyz")
+        raw = module.bound_tool_input({
+            "file_path": "/tmp/kpr-issue-67-fixture/MARKER.txt",
+            "command": "echo super-secret-value-xyz",
+            "apiKey": "super-secret-value-xyz",
+        })
+        self.assertEqual(raw.get("file_path"), "/tmp/kpr-issue-67-fixture/MARKER.txt")
+        self.assertEqual(raw.get("command"), "echo <redacted-credential>")
+        self.assertNotIn("apiKey", raw)
+        self.assertEqual(
+            module.locations_from_input(raw),
+            [{"path": "/tmp/kpr-issue-67-fixture/MARKER.txt", "line": None}],
+        )
+        self.assertEqual(module.locations_from_input({"command": "cat /etc/passwd"}), [])
+        self.assertEqual(module.locations_from_input({}), [])
+
     def test_resolve_runtime_fails_closed(self) -> None:
         module = load_adapter_module()
         with self.assertRaises(module.RuntimeError_):
@@ -455,6 +473,10 @@ class ZcodeAcpContractTests(unittest.TestCase):
         self.assertIn("from zcode", texts)
         tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
         self.assertTrue(any(u.get("kind") == "execute" and u.get("status") == "completed" for u in tools))
+        completed = [u for u in tools if u.get("status") == "completed"]
+        self.assertTrue(completed)
+        self.assertEqual(completed[-1].get("rawInput"), {"command": "echo hi"})
+        self.assertNotIn("locations", completed[-1])
         record = wait_for(lambda: driver.record() or None, 3)
         self.assertIsNotNone(record)
         assert record is not None
@@ -547,6 +569,9 @@ class ZcodeAcpContractTests(unittest.TestCase):
         permit = driver.wait_method("session/request_permission", timeout=8)
         self.assertIsNotNone(permit)
         assert permit is not None
+        tool_call = (permit.get("params") or {}).get("toolCall") or {}
+        self.assertEqual(tool_call.get("rawInput"), {"command": "ls -la"})
+        self.assertNotIn("locations", tool_call)
         driver.send({
             "jsonrpc": "2.0",
             "id": permit.get("id"),
@@ -991,7 +1016,43 @@ class ZcodeAcpContractTests(unittest.TestCase):
         tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") in ("tool_call", "tool_call_update")]
         self.assertTrue(tools)
         self.assertNotIn(FIXTURE_SECRET, json.dumps(tools))
+        raw_inputs = [u.get("rawInput") for u in tools if u.get("rawInput") is not None]
+        self.assertTrue(raw_inputs)
+        self.assertTrue(all("<redacted-credential>" in json.dumps(raw) for raw in raw_inputs))
         self.assert_registry_read_only_and_secret_contained(driver)
+
+    def test_read_file_path_is_forwarded_as_locations(self) -> None:
+        """Issue #67: live 0.16.5 Read `input.file_path` must surface on ACP."""
+        driver = self.start("read_path")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "read"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
+        self.assertTrue(tools)
+        path = "/tmp/kpr-issue-67-fixture/MARKER.txt"
+        for update in tools:
+            self.assertEqual(update.get("rawInput"), {"file_path": path})
+            self.assertEqual(update.get("locations"), [{"path": path, "line": None}])
+            self.assertNotEqual(update.get("title"), path)
+
+    def test_absent_tool_input_is_not_invented(self) -> None:
+        """Issue #67: no path key on the backend means no locations/rawInput."""
+        driver = self.start("no_input")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id, "prompt": [{"type": "text", "text": "read"}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done)
+        tools = [u for u in driver.updates(session_id) if u.get("sessionUpdate") == "tool_call"]
+        self.assertTrue(tools)
+        for update in tools:
+            self.assertNotIn("rawInput", update)
+            self.assertNotIn("locations", update)
+            self.assertEqual(update.get("title"), "Read")
 
     def test_failed_load_leaves_no_half_registered_session(self) -> None:
         driver = self.start("resume_missing")

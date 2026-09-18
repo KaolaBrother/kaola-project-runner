@@ -59,7 +59,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 ADAPTER_NAME = "kaola-zcode-acp"
-ADAPTER_VERSION = "0.3.0"
+ADAPTER_VERSION = "0.3.1"
 
 # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
 DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
@@ -592,6 +592,92 @@ TOOL_STATUS = {
     "error": "failed",
 }
 
+# Path-like keys actually observed on ZCode tool `input` (live 0.16.5 Read:
+# `file_path`) plus the same names the protocol examples and sibling tools use.
+# `command` is forwarded as rawInput only — never parsed into a path.
+TOOL_INPUT_PATH_KEYS = (
+    "file_path",
+    "filePath",
+    "path",
+    "file",
+    "notebook_path",
+    "glob",
+)
+TOOL_INPUT_LINE_KEYS = ("line", "offset")
+RAW_INPUT_STRING_CAP = 1024
+_SECRETISH_KEY_SUBSTR = (
+    "apikey",
+    "api_key",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "authorization",
+)
+
+
+def _secretish_key(key: str) -> bool:
+    lowered = key.lower().replace("-", "_")
+    return any(marker in lowered for marker in _SECRETISH_KEY_SUBSTR)
+
+
+def bound_tool_input(value: Any, *, str_cap: int = RAW_INPUT_STRING_CAP) -> Any:
+    """Redact credentials, drop secret-like keys, and cap strings for ACP."""
+    return _bound_tool_input(redact(value), str_cap)
+
+
+def _bound_tool_input(value: Any, str_cap: int) -> Any:
+    if isinstance(value, str):
+        return value if len(value) <= str_cap else value[:str_cap] + "…"
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            name = str(key)
+            if _secretish_key(name):
+                continue
+            out[name] = _bound_tool_input(item, str_cap)
+        return out
+    if isinstance(value, list):
+        return [_bound_tool_input(item, str_cap) for item in value[:16]]
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return str(value)[:str_cap]
+
+
+def locations_from_input(raw: Any) -> list[dict[str, Any]]:
+    """Copy path fields that are already present. Never invent a path."""
+    if not isinstance(raw, dict):
+        return []
+    line = None
+    for key in TOOL_INPUT_LINE_KEYS:
+        val = raw.get(key)
+        if isinstance(val, int) and not isinstance(val, bool):
+            line = val
+            break
+    locations: list[dict[str, Any]] = []
+    for key in TOOL_INPUT_PATH_KEYS:
+        val = raw.get(key)
+        if isinstance(val, str) and val:
+            locations.append({"path": val, "line": line})
+    return locations
+
+
+def attach_tool_input(
+    update: dict[str, Any], payload: dict[str, Any], cached: dict[str, Any]
+) -> None:
+    source = payload.get("input")
+    if source is None:
+        source = cached.get("input")
+    if source is None:
+        return
+    raw = bound_tool_input(source)
+    if raw in (None, {}, [], ""):
+        return
+    update["rawInput"] = raw
+    locations = locations_from_input(raw)
+    if locations:
+        update["locations"] = locations
+
 
 # --------------------------------------------------------------------------
 # ACP agent
@@ -899,10 +985,12 @@ class ZCodeAcpAgent:
             elif kind == "tool_call":
                 call_id = payload.get("toolCallId")
                 if call_id:
-                    session.tools[call_id] = {
-                        "toolName": payload.get("toolName") or "",
-                        "input": payload.get("input"),
-                    }
+                    cached = session.tools.setdefault(call_id, {})
+                    name = payload.get("toolName") or ""
+                    if name:
+                        cached["toolName"] = name
+                    if "input" in payload:
+                        cached["input"] = payload.get("input")
             return
 
         if etype == "tool.updated":
@@ -952,6 +1040,8 @@ class ZCodeAcpAgent:
         name = payload.get("toolName") or cached.get("toolName") or ""
         if name:
             cached["toolName"] = name
+        if "input" in payload:
+            cached["input"] = payload.get("input")
         update: dict[str, Any] = {
             "sessionUpdate": "tool_call",
             "toolCallId": call_id,
@@ -970,6 +1060,7 @@ class ZCodeAcpAgent:
                 content.append({"type": "text", "text": str(message)})
         if content:
             update["content"] = content
+        attach_tool_input(update, payload, cached)
         self.update(session, update)
 
     def finish_turn(self, session: Session, stop: str, usage: Any) -> None:
@@ -1026,14 +1117,16 @@ class ZCodeAcpAgent:
                 {"optionId": "allow", "kind": "allow_once", "name": "Allow once"},
                 {"optionId": "deny", "kind": "deny_once", "name": "Deny"},
             ]
+            tool_call: dict[str, Any] = {
+                "toolCallId": params.get("toolCallId"),
+                "title": params.get("toolName") or "tool",
+                "kind": tool_kind(params.get("toolName") or ""),
+                "status": "pending",
+            }
+            attach_tool_input(tool_call, params, {})
             answer = self.request_client("session/request_permission", {
                 "sessionId": session.acp_id,
-                "toolCall": {
-                    "toolCallId": params.get("toolCallId"),
-                    "title": params.get("toolName") or "tool",
-                    "kind": tool_kind(params.get("toolName") or ""),
-                    "status": "pending",
-                },
+                "toolCall": tool_call,
                 "options": options,
             })
             backend.respond(rid, self._permission_answer(answer, options))
