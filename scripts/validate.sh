@@ -52,6 +52,7 @@ bash "$repo_root/tests/contract/test-installer-runtimes.sh"
 # root removal takes the logs with it. A lane failure is reported and the
 # script exits nonzero only after every suite has completed.
 python_suites_all=(
+  "test-issue-78-heredoc-deadlock.py"
   "test-issue-9-contract.py"
   "test-direct-transport-contract.py"
   "test-devin-regressions.py"
@@ -101,6 +102,7 @@ python_suites_a=(
   "test-issue-9-contract.py"
 )
 python_suites_b=(
+  "test-issue-78-heredoc-deadlock.py"
   "test-issue-33-config-meta.py"
   "test-issue-50-runner-integration.py"
   "test-issue-49-grok-bot-host.py"

@@ -51,9 +51,22 @@ HEREDOC_PIPESIZE = 4096
 # The smallest pipe macOS was measured handing out under pipe-KVA pressure.
 DEGRADED_PIPE_CAPACITY = 512
 
-# `cmd <<TAG`, `cmd <<'TAG'`, `cmd <<-TAG` and the `cmd <<<word` here-string.
-HEREDOC_OPENER = re.compile(r"<<-?\s*(?P<quote>['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)\s*")
+# Every spelling bash accepts for a here-document tag: bare, single- or
+# double-quoted (which may contain spaces), backslash-escaped, `<<-` dash form,
+# and digit-leading tags. Plus the `cmd <<<word` here-string, which bash feeds
+# through the same pipe and so deadlocks the same way.
+HEREDOC_OPENER = re.compile(
+    r"<<-?\s*(?:"
+    r"'(?P<squote>[^']*)'"
+    r'|"(?P<dquote>[^"]*)"'
+    r"|\\(?P<escaped>\w+)"
+    r"|(?P<bare>\w+)"
+    r")"
+)
 HERESTRING = re.compile(r"<<<")
+# `$((1 << n))` is an arithmetic left shift, not a redirection, and a `#` comment
+# may quote a `<<` while describing this very rule.
+NOT_A_REDIRECTION = ("$((", "#")
 
 
 def shell_sources() -> list[Path]:
@@ -74,8 +87,10 @@ def redirections(path: Path) -> list[tuple[int, str, int]]:
             found.append((index + 1, "<<<", 0))
         else:
             match = HEREDOC_OPENER.search(line)
-            if match:
-                tag = match.group("tag")
+            if match and not any(
+                    token in line[:match.start()] for token in NOT_A_REDIRECTION):
+                tag = (match.group("squote") or match.group("dquote")
+                       or match.group("escaped") or match.group("bare"))
                 cursor, size = index + 1, 0
                 while cursor < len(lines) and lines[cursor].strip() != tag:
                     size += len(lines[cursor].encode("utf-8")) + 1
@@ -115,12 +130,6 @@ class TestEntrypointCannotSelfDeadlock(unittest.TestCase):
                 self.assertEqual(copy.read_bytes(), source,
                                  "a generated copy drifted from scripts/kaola-tmux.sh; "
                                  "run ./scripts/render-skills.py --write")
-
-    def test_the_deadlock_window_is_stated_correctly(self) -> None:
-        """Guard the two constants this rule reasons from."""
-        self.assertLess(DEGRADED_PIPE_CAPACITY, HEREDOC_PIPESIZE,
-                        "if a degraded pipe could hold everything bash pipes, "
-                        "there would be no deadlock to prevent")
 
 
 if __name__ == "__main__":

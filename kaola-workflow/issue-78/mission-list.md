@@ -106,7 +106,25 @@ result: `scripts/kaola-tmux.sh` - all ten here-documents removed. Nine quoted bo
 item: Review the exact frozen candidate SHA for correctness, for whether it truly removes the cause
   rather than masking the symptom, and for test custody (the Issue #73 guard assertions and the
   Issue #77 holder-stop fix must survive unweakened).
-status: todo
+status: in-flight
+dispatched: subagent `code-reviewer`, on the frozen candidate `9632571` (branch workflow/issue-78,
+  parent f6be8a3). Findings land inline in its handback; verdict is mine.
+status: done
+result: NO DEFECTS. The reviewer verified rather than trusted: byte-identical comparison of all 8
+  converted program bodies, empirical `sys.argv[1:]`/`sys.path[0]` equivalence, a 400-iteration
+  process-substitution fd/zombie check, `cmp`-identical `usage()` output, and `cmp`-identical
+  generated copies. On test custody it PROVED the stub change was necessary rather than weakening,
+  by running the OLD stub against the NEW wrapper and reproducing `invalid manifest
+  default_transport`; and it confirmed `test-issue-73-canonical-root.py` has 0 diff lines, so the
+  #73 guard assertions and the #77 holder force-stop are untouched. My verdict, after reading the
+  diff myself: accept.
+  Three low-severity observations acted on - the new test's regex now catches `<<\EOF`, `<<'E O F'`,
+  `<<"EOF"`, `<<2EOF` and `<<-` while excluding `$((1 << n))` and `#` comments; a tautological
+  constant test was deleted; the argv-noise note was accepted with no change.
+  The review also surfaced, indirectly, that `scripts/validate.sh` picks suites from explicit lists
+  rather than a glob - so the guard was registered nowhere and would never have run. It is now first
+  in `python_suites_b` and listed in `python_suites_all`, and proven to execute in a real validate
+  run. Details: `evidence/verification.md` round 2.
 
 ## 6. Post-fix verification and residue receipt
 item: At the frozen SHA run the targeted Issue #73 suite, the full `./scripts/validate.sh`, and a

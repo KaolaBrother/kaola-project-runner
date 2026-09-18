@@ -128,3 +128,76 @@ shared machine; the owner ruled that out, and the structural baseline in section
 bounded capacity measurement in section 2 stand in its place. The causal chain is therefore
 established by: the live `sample` stacks of five already-hung processes, the measured pipe
 cliff, and the measured here-document sizes - not by a staged end-to-end hang.
+
+---
+
+# Round 2: independent review of frozen candidate 9632571, and what it changed
+
+## Review outcome
+
+A `code-reviewer` subagent reviewed `9632571` against parent `f6be8a3` in a clean context and
+found **no defects**. It verified independently rather than taking the commit message's word:
+
+- All 8 converted Python bodies are **byte-identical** to their old heredoc bodies (mechanical
+  extraction and compare); zero single quotes, zero backslashes, no `sys.argv[0]` use.
+  `sys.argv[1:]` equivalence confirmed empirically, and `sys.path[0]` is `''` under both spellings,
+  so `bootstrap_relay`'s `spec_from_file_location` import is unaffected.
+- No converted program touches stdin, and `kaola-relay-protocol.py` (the only foreign module one of
+  them loads) has no stdin access or top-level I/O.
+- `read` still runs in the current shell, so its assignments persist; every `STATE_*` is reset at
+  `scripts/kaola-tmux.sh:335-341` before use, so `|| true` cannot leave a stale value. A
+  400-iteration process-substitution loop leaked no file descriptors and no zombies - which matters
+  because `load_session_identity` is polled up to ~200x in the start loop.
+- `usage()` output is `cmp`-identical to the old `cat` output, rc=2 in both.
+- The `|| die "model contains unsupported terminal controls"` path still fires (`MODEL_VALUE=$'a\tb'`
+  gives rc=1).
+- All nine `skills/*/scripts/kaola-tmux.sh` are `cmp`-identical to the source.
+- **Test custody:** the reviewer proved the stub change was *necessary*, not a weakening, by running
+  the OLD stub against the NEW wrapper and reproducing `invalid manifest default_transport` (rc=1).
+  The assertions - `assertIn("kaola-acp.py", argv[0])` and exact `--expected-holder-instance-id`
+  forwarding including the empty value - are unchanged. `test-issue-73-canonical-root.py` has **0
+  diff lines**, so the Issue #73 guard assertions and the Issue #77 `addCleanup` force-stop are
+  untouched.
+
+## Three low-severity observations acted on
+
+1. The new test's opener regex missed heredoc spellings bash accepts. Hardened to detect
+   backslash-escaped tags (`<<\EOF`), quoted tags containing spaces (`<<'E O F'`), double-quoted
+   tags, digit-leading tags (`<<2EOF`) and the `<<-` dash form, while excluding an arithmetic left
+   shift (`$((1 << n))`) and a `#` comment that merely quotes `<<`. Verified case by case:
+
+       backslash-escaped tag        -> [(1, 'EOF', 5)]
+       quoted with spaces           -> [(1, 'E O F', 5)]
+       digit-leading tag            -> [(1, '2EOF', 5)]
+       dash form                    -> [(1, 'EOF', 5)]
+       double-quoted tag            -> [(1, 'EOF', 5)]
+       arithmetic shift             -> []
+       comment mentioning <<EOF     -> []
+       here-string                  -> [(1, '<<<', 0)]
+
+   Re-confirmed it still finds all **10** here-documents in the f6be8a3 entrypoint.
+2. `test_the_deadlock_window_is_stated_correctly` asserted `512 < 4096` over two constants declared
+   ten lines above it. Removed as a tautology with no regression value.
+3. The reviewer's note that `python3 -c` now carries up to 908 bytes of program text in argv is
+   accepted with no change: nothing in the repo matches on `kaola-tmux.sh` argv
+   (`--exact-process-title` in `kaola-pane-relay.py` matches the pane child only). The practical
+   consequence is only that `ps -ww` output for these children is noisier.
+
+## A gap the review surfaced indirectly, now closed
+
+`scripts/validate.sh` selects suites from explicit lists, not a glob, so the new guard was
+registered nowhere and would never have run in validation. It is now first in `python_suites_b`
+(it costs 3 ms, so it fails fast) and listed in `python_suites_all` for log output. Proven to
+execute inside a real validate run:
+
+    test_every_generated_copy_is_covered ... ok
+    test_no_here_document_anywhere_in_the_shared_entrypoint ... ok
+    test_the_entrypoint_exists ... ok
+    Ran 3 tests in 0.002s
+    OK
+
+## Final validate at the accepted tree
+
+`./scripts/validate.sh` -> exit 1, with exactly one failing suite, the pre-existing
+`test-issue-49-grok-bot-host.py` documented in section 5 above. Log:
+`kaola-workflow/issue-78/evidence/validate-final.log`.
