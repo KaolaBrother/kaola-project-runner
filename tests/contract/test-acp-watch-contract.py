@@ -102,6 +102,67 @@ def assert_shape(test: unittest.TestCase, sample: Any, actual: Any, path: str) -
                 assert_shape(test, sample[0], item, f"{path}[{index}]")
 
 
+def flag_value(tokens: list[str], flag: str) -> str | None:
+    for index in range(len(tokens) - 1):
+        if tokens[index] == flag:
+            return tokens[index + 1]
+    return None
+
+
+def live_process_table() -> dict[int, tuple[str, str]]:
+    """pid -> (state, command) for every process on the host."""
+    table = subprocess.run(
+        ["ps", "-axo", "pid=,state=,command="], capture_output=True, text=True
+    )
+    found: dict[int, tuple[str, str]] = {}
+    for line in table.stdout.splitlines():
+        fields = line.split(None, 2)
+        if len(fields) == 3 and fields[0].isdigit():
+            found[int(fields[0])] = (fields[1].upper(), fields[2])
+    return found
+
+
+def own_processes(root: Path) -> dict[int, str]:
+    """Live processes this suite's temp root still owns.
+
+    Holders are matched by a ``--record-dir``/``--socket`` argv value under
+    ``root`` — the exact match ``kaola-acp-sweep.py`` uses. Agents are matched
+    through the suite's own ``record.json`` files: the record names the exact
+    pids, and a command-name check keeps a reused pid from accusing a foreign
+    process. Nothing outside ``root`` is ever reported.
+    """
+    bases = {str(root), str(root.resolve())}
+    table = live_process_table()
+    found: dict[int, str] = {}
+    for pid, (state, command) in table.items():
+        if state.startswith("Z") or "kaola-acp-holder.py" not in command:
+            continue
+        tokens = command.split()
+        values = [
+            flag_value(tokens, flag) for flag in ("--record-dir", "--socket")
+        ]
+        if any(
+            value == base or value.startswith(base + os.sep)
+            for value in values if value for base in bases
+        ):
+            found[pid] = command
+    records = root / "records"
+    if records.is_dir():
+        for path in records.glob("*/*/*/record.json"):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            for key, marker in (
+                ("holder_pid", "kaola-acp-holder.py"),
+                ("agent_pid", "mock-acp-agent.py"),
+            ):
+                pid = record.get(key)
+                live = table.get(pid) if isinstance(pid, int) else None
+                if live and not live[0].startswith("Z") and marker in live[1]:
+                    found[pid] = live[1]
+    return found
+
 
 class AcpWatchContractTests(unittest.TestCase):
     @classmethod
@@ -125,7 +186,13 @@ class AcpWatchContractTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cls._tmp.cleanup()
+        try:
+            if not wait_for(lambda: not own_processes(cls.root), 15):
+                raise AssertionError(
+                    f"fixture leaked its own processes: {own_processes(cls.root)}"
+                )
+        finally:
+            cls._tmp.cleanup()
 
     def setUp(self) -> None:
         self._started: list[tuple[str, str, Path]] = []
@@ -471,7 +538,7 @@ class AcpWatchContractTests(unittest.TestCase):
         self.assertIsInstance(lost["error"].get("message"), str)
 
     def test_view_accept_then_close_uses_frozen_runtime_code(self) -> None:
-        session, repo, _ = self.start("grok")
+        session, repo, started = self.start("grok")
         directory = self.record_dir("grok", session, repo)
         sock = (
             Path(tempfile.gettempdir())
@@ -500,6 +567,17 @@ class AcpWatchContractTests(unittest.TestCase):
         finally:
             listener.close()
             thread.join(timeout=2)
+            # The stub listener replaced the holder's socket path, so nothing
+            # at that path reaches the real holder any more and teardown's
+            # stop cannot find it. Kill the holder this test orphaned by its
+            # start-receipt pid; teardown's stop --force then sweeps the
+            # recorded agent group.
+            holder_pid = started.get("holder_pid")
+            if isinstance(holder_pid, int):
+                try:
+                    os.kill(holder_pid, signal.SIGKILL)
+                except OSError:
+                    pass
         self.assertEqual(payload.get("schema"), "kaola-acp-view/1")
         self.assertIn((payload.get("error") or {}).get("code"), {
             "holder-lost", "holder-unreachable", "no-session",

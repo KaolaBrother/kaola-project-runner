@@ -89,6 +89,74 @@ def wait_for(predicate, timeout: float, interval: float = 0.05):
     return predicate()
 
 
+def flag_value(tokens: list[str], flag: str) -> str | None:
+    for index in range(len(tokens) - 1):
+        if tokens[index] == flag:
+            return tokens[index + 1]
+    return None
+
+
+def live_process_table() -> dict[int, tuple[str, str]]:
+    """pid -> (state, command) for every process on the host."""
+    table = subprocess.run(
+        ["ps", "-axo", "pid=,state=,command="], capture_output=True, text=True
+    )
+    found: dict[int, tuple[str, str]] = {}
+    for line in table.stdout.splitlines():
+        fields = line.split(None, 2)
+        if len(fields) == 3 and fields[0].isdigit():
+            found[int(fields[0])] = (fields[1].upper(), fields[2])
+    return found
+
+
+def process_gone(pid) -> bool:
+    """Zombie-safe liveness, the same read kaola-acp-sweep.py trusts."""
+    live = live_process_table().get(pid)
+    return live is None or live[0].startswith("Z")
+
+
+def own_processes(root: Path) -> dict[int, str]:
+    """Live processes this suite's temp root still owns.
+
+    Holders are matched by a ``--record-dir``/``--socket`` argv value under
+    ``root`` — the exact match ``kaola-acp-sweep.py`` uses. Agents are matched
+    through the suite's own ``record.json`` files: the record names the exact
+    pids, and a command-name check keeps a reused pid from accusing a foreign
+    process. Nothing outside ``root`` is ever reported.
+    """
+    bases = {str(root), str(root.resolve())}
+    table = live_process_table()
+    found: dict[int, str] = {}
+    for pid, (state, command) in table.items():
+        if state.startswith("Z") or "kaola-acp-holder.py" not in command:
+            continue
+        tokens = command.split()
+        values = [
+            flag_value(tokens, flag) for flag in ("--record-dir", "--socket")
+        ]
+        if any(
+            value == base or value.startswith(base + os.sep)
+            for value in values if value for base in bases
+        ):
+            found[pid] = command
+    records = root / "records"
+    if records.is_dir():
+        for path in records.glob("*/*/*/record.json"):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            for key, marker in (
+                ("holder_pid", "kaola-acp-holder.py"),
+                ("agent_pid", "mock-acp-agent.py"),
+            ):
+                pid = record.get(key)
+                live = table.get(pid) if isinstance(pid, int) else None
+                if live and not live[0].startswith("Z") and marker in live[1]:
+                    found[pid] = live[1]
+    return found
+
+
 class AcpSessionFixture:
     @classmethod
     def setUpClass(cls) -> None:
@@ -106,15 +174,25 @@ class AcpSessionFixture:
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cls._tmp.cleanup()
+        try:
+            if not wait_for(lambda: not own_processes(cls.root), 15):
+                raise AssertionError(
+                    f"fixture leaked its own processes: {own_processes(cls.root)}"
+                )
+        finally:
+            cls._tmp.cleanup()
 
     def setUp(self) -> None:
         self.session = f"{SESSION_RE}-{self._testMethodName.lower()}-{os.getpid()}"[:79]
         self._started = False
+        self._started_platform = "grok"
 
     def tearDown(self) -> None:
         if self._started:
-            self.cli("stop", "--force", check=False, timeout=15)
+            self.cli(
+                "stop", "--force", platform=self._started_platform,
+                check=False, timeout=15,
+            )
 
     # -- helpers -------------------------------------------------------------
 
@@ -134,9 +212,10 @@ class AcpSessionFixture:
 
     def cli(self, command: str, *args: str, check: bool = True, timeout: float = 30,
             scenario: str = "normal", caps: str = "", turn_ms: int = 0,
-            extra_env: dict[str, str] | None = None) -> dict:
+            extra_env: dict[str, str] | None = None,
+            platform: str = "grok") -> dict:
         argv = [
-            sys.executable, str(CLI), "grok", command,
+            sys.executable, str(CLI), platform, command,
             "--repo", str(self.repo), "--session", self.session,
             "--command", self.mock_command(scenario, caps, turn_ms),
             *args,
@@ -167,9 +246,14 @@ class AcpSessionFixture:
             if line.strip()
         ]
 
-    def start(self, scenario: str = "normal", caps: str = "", turn_ms: int = 0) -> dict:
-        receipt = self.cli("start", scenario=scenario, caps=caps, turn_ms=turn_ms)
+    def start(self, scenario: str = "normal", caps: str = "", turn_ms: int = 0,
+              platform: str = "grok") -> dict:
+        receipt = self.cli(
+            "start", scenario=scenario, caps=caps, turn_ms=turn_ms,
+            platform=platform,
+        )
         self._started = True
+        self._started_platform = platform
         return receipt
 
     def pending_permissions(self) -> list:
@@ -926,7 +1010,21 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
     def start(self, platform: str = "grok", *args: str, **kwargs) -> dict:
         receipt = self.cli("start", *args, platform=platform, **kwargs)
         self._started = True
+        self._started_platform = platform
         return receipt
+
+    def test_teardown_stops_the_started_platform(self) -> None:
+        # Issue #82: a teardown stop addressed at a platform the test did not
+        # start hits a session that does not exist and leaks the real holder.
+        started = self.start("codex")
+        holder_pid = started.get("holder_pid")
+        self.assertIsInstance(holder_pid, int)
+        self.tearDown()
+        self._started = False
+        self.assertTrue(
+            wait_for(lambda: process_gone(holder_pid), 10),
+            f"codex holder {holder_pid} survived the fixture teardown",
+        )
 
     def config_events(self) -> list[tuple[str, str]]:
         events = []
@@ -1218,7 +1316,13 @@ class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cls._tmp.cleanup()
+        try:
+            if not wait_for(lambda: not own_processes(cls.root), 15):
+                raise AssertionError(
+                    f"fixture leaked its own processes: {own_processes(cls.root)}"
+                )
+        finally:
+            cls._tmp.cleanup()
 
     def setUp(self) -> None:
         self.session = f"acp22-{self._testMethodName.lower()}-{os.getpid()}"[:79]
