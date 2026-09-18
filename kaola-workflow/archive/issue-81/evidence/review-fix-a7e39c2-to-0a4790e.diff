@@ -1,0 +1,740 @@
+diff --git a/scripts/kaola-zcode-acp.py b/scripts/kaola-zcode-acp.py
+index d83d4ef..3410a95 100755
+--- a/scripts/kaola-zcode-acp.py
++++ b/scripts/kaola-zcode-acp.py
+@@ -66,6 +66,10 @@ ADAPTER_VERSION = "0.3.3"
+ # an accepted v4 sendText. Must stay under the holder's 30 s steer timeout; a
+ # guide input whose boundary lands later is reported `written`, never guessed.
+ STEER_DRAIN_WINDOW = 20.0
++# Issue #81: hard cap on the whole steer exchange (subscribe + send + evidence
++# wait), kept under the holder's 30 s steer timeout so a slow or lost v4 ack
++# can never push the reply past the holder's own deadline.
++STEER_TOTAL_BUDGET = 26.0
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+@@ -1593,18 +1597,24 @@ class ZCodeAcpAgent:
+             # against an unrelated drained item that also omits the field must
+             # never count as ours. Only a nonempty known pending id or the
+             # exact sourceCommandId proves this drain consumed our input.
+-            ours = any(
+-                (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
+-                for item in drained
+-            )
+-            if not ours and pending_id:
+-                ours = (
+-                    pending_id in (payload.get("pendingInputIds") or [])
+-                    or any(item.get("pendingInputId") == pending_id for item in drained)
+-                )
+-            if not ours:
++            ours_items = [
++                item for item in drained
++                if (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
++                or (pending_id and item.get("pendingInputId") == pending_id)
++            ]
++            payload_level = bool(pending_id) and pending_id in (
++                payload.get("pendingInputIds") or [])
++            if not ours_items and not payload_level:
+                 return
++            injected = payload.get("injectedMessageIds") or []
+             steer["drained"] = payload
++            # Issue #81 review: `injected` further needs OUR drained item's own
++            # messageId inside injectedMessageIds — a batch that contains our
++            # input but injected someone else's message is not our injection.
++            steer["our_injected_ids"] = [
++                item.get("messageId") for item in ours_items
++                if item.get("messageId") in injected
++            ]
+             steer["done"].set()
+ 
+     def on_session_steering(self, rid: Any, params: dict[str, Any]) -> None:
+@@ -1654,6 +1664,9 @@ class ZCodeAcpAgent:
+             }
+             session.steer = steer
+         backend_id = session.backend_id
++        send_uncertain = False
++        ack: dict[str, Any] | None = None
++        steer_start = time.monotonic()
+         try:
+             backend = self.ensure_backend()
+             if not session.v4_subscribed:
+@@ -1695,34 +1708,45 @@ class ZCodeAcpAgent:
+                 "issuedAt": int(time.time() * 1000),
+             }, timeout=15.0)
+         except RuntimeError_ as exc:
+-            with self.lock:
+-                session.steer = None
+             # A pre-0.16 backend has no v4 surface at all: preserve the real
+             # -32601 so the holder reports `unsupported`, not `rejected`.
+             if "-32601" in str(exc) or "method not found" in str(exc):
++                with self.lock:
++                    session.steer = None
+                 self.respond(rid, error={
+                     "code": -32601,
+                     "message": "this ZCode backend exposes no v4 command surface",
+                 })
+-            else:
++                return
++            if "timed out" not in str(exc):
++                # A definitive server-side refusal: the request was evaluated
++                # and rejected, so an error here is honest.
++                with self.lock:
++                    session.steer = None
+                 self.respond(rid, error={"code": -32000, "message": str(exc)})
+-            return
+-
+-        ack = ack or {}
+-        status = ack.get("status")
+-        if status != "accepted":
+-            with self.lock:
+-                session.steer = None
+-            reason_code = ack.get("reasonCode")
+-            self.respond(rid, error={
+-                "code": -32000,
+-                "message": f"v4 sendText {status or 'failed'}: "
+-                           f"{reason_code or ack.get('message') or 'no reason given'}",
+-                "data": {"status": status, "reasonCode": reason_code},
+-            })
+-            return
++                return
++            # Transport-uncertain: the request may already have been staged
++            # server-side — a staged turn.steerQueued can still arrive — so an
++            # error would lie about a possibly-consumed steer. Fall through
++            # and let the remaining event window decide; never resend blindly.
++            send_uncertain = True
++
++        if not send_uncertain:
++            status = (ack or {}).get("status")
++            if status != "accepted":
++                with self.lock:
++                    session.steer = None
++                reason_code = (ack or {}).get("reasonCode")
++                self.respond(rid, error={
++                    "code": -32000,
++                    "message": f"v4 sendText {status or 'failed'}: "
++                               f"{reason_code or (ack or {}).get('message') or 'no reason given'}",
++                    "data": {"status": status, "reasonCode": reason_code},
++                })
++                return
+ 
+-        deadline = time.monotonic() + STEER_DRAIN_WINDOW
++        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW,
++                       steer_start + STEER_TOTAL_BUDGET)
+         try:
+             while True:
+                 with self.lock:
+@@ -1751,17 +1775,25 @@ class ZCodeAcpAgent:
+             queued = steer["queued"]
+             ended = steer["turn_ended"]
+             expected = steer.get("expected_turn_id")
++            our_injected_ids = steer.get("our_injected_ids") or []
++        extra = {"sendUncertain": True} if send_uncertain else {}
+ 
+         if drained is not None:
+             # `injected` needs the full same-turn chain (Issue #81): the guide
+             # admission AND the drain must name one targetTurnId, that id must
+-            # equal the turn this steer targeted, and the drain must carry the
+-            # injectedMessageIds. When the backend never named the running turn
+-            # (expected is None), a self-consistent pair still cannot prove it
+-            # hit the targeted turn — the steer may have landed in a successor.
+-            injected_ids = drained.get("injectedMessageIds") or []
++            # equal the turn this steer targeted, the admission itself must be
++            # `guide` (a queue-admitted input cannot be this turn's guide
++            # injection even when a drain batch names it), and a messageId
++            # provably belonging to THIS input — not just any batch item —
++            # must appear in injectedMessageIds. When the backend never named
++            # the running turn (expected is None), a self-consistent pair
++            # still cannot prove it hit the targeted turn — the steer may
++            # have landed in a successor.
++            injected_ids = our_injected_ids
+             queued_turn = (queued or {}).get("targetTurnId")
+             drained_turn = drained.get("targetTurnId")
++            admitted = ((queued or {}).get("intent") or {}).get("admittedDelivery") \
++                or (queued or {}).get("delivery")
+             same_turn = (
+                 queued is not None
+                 and queued_turn is not None
+@@ -1769,7 +1801,7 @@ class ZCodeAcpAgent:
+                 and expected is not None
+                 and drained_turn == expected
+             )
+-            if same_turn and injected_ids:
++            if same_turn and injected_ids and admitted == "guide":
+                 self.respond(rid, {
+                     "outcome": "injected",
+                     "confirmation": "agent-confirmed",
+@@ -1778,6 +1810,7 @@ class ZCodeAcpAgent:
+                     "pendingInputId": steer.get("pending_input_id"),
+                     "targetTurnId": drained_turn,
+                     "injectedMessageIds": injected_ids,
++                    **extra,
+                 })
+             else:
+                 gaps = []
+@@ -1787,6 +1820,11 @@ class ZCodeAcpAgent:
+                     gaps.append(
+                         f"admission targeted {queued_turn} but drained into "
+                         f"{drained_turn}")
++                elif admitted != "guide":
++                    gaps.append(
++                        f"admission reported delivery {admitted!r}, not "
++                        "'guide' — a queue-admitted input cannot be this "
++                        "turn's guide injection")
+                 if expected is None:
+                     gaps.append(
+                         "the backend never named the turn running when the "
+@@ -1796,7 +1834,16 @@ class ZCodeAcpAgent:
+                     gaps.append(f"drained turn {drained_turn} is not the "
+                                 f"steered turn {expected}")
+                 if not injected_ids:
+-                    gaps.append("drain carried no injectedMessageIds")
++                    if drained.get("injectedMessageIds"):
++                        gaps.append(
++                            "injectedMessageIds name other inputs; no drained "
++                            "item's messageId is provably this input's")
++                    else:
++                        gaps.append("drain carried no injectedMessageIds")
++                if send_uncertain:
++                    gaps.append(
++                        "the v4 sendText ack timed out — the request may "
++                        "still have reached the server")
+                 self.respond(rid, {
+                     "outcome": "unknown",
+                     "confirmation": "none",
+@@ -1804,6 +1851,7 @@ class ZCodeAcpAgent:
+                               "injection: " + "; ".join(gaps),
+                     "pendingInputId": steer.get("pending_input_id"),
+                     "targetTurnId": drained_turn,
++                    **extra,
+                 })
+             return
+ 
+@@ -1824,6 +1872,7 @@ class ZCodeAcpAgent:
+                 self.respond(rid, {
+                     **base, "outcome": "queued",
+                     "confirmation": "agent-confirmed", "reason": reason,
++                    **extra,
+                 })
+             else:
+                 self.respond(rid, {
+@@ -1832,15 +1881,22 @@ class ZCodeAcpAgent:
+                     "reason": "admitted as a guide input for the running turn; "
+                               "the drain was not observed within the wait window "
+                               "- the turn may still consume it, do not resend",
++                    **extra,
+                 })
+             return
+ 
++        reason = (
++            "the v4 sendText ack timed out or transport failed; the request "
++            "may still have reached the server — do not resend blindly"
++            if send_uncertain else
++            "v4 sendText was accepted but no steerQueued evidence arrived"
++        )
+         self.respond(rid, {
+             "outcome": "unknown",
+             "confirmation": "none",
+-            "reason": "v4 sendText was accepted but no steerQueued evidence "
+-                      "arrived" + ("; the turn ended first" if ended else
+-                                   " within the wait window"),
++            "reason": reason + ("; the turn ended first" if ended else
++                                " within the wait window"),
++            **extra,
+         })
+ 
+     def on_backend_request(self, msg: dict[str, Any]) -> None:
+diff --git a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+index d83d4ef..3410a95 100755
+--- a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
++++ b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+@@ -66,6 +66,10 @@ ADAPTER_VERSION = "0.3.3"
+ # an accepted v4 sendText. Must stay under the holder's 30 s steer timeout; a
+ # guide input whose boundary lands later is reported `written`, never guessed.
+ STEER_DRAIN_WINDOW = 20.0
++# Issue #81: hard cap on the whole steer exchange (subscribe + send + evidence
++# wait), kept under the holder's 30 s steer timeout so a slow or lost v4 ack
++# can never push the reply past the holder's own deadline.
++STEER_TOTAL_BUDGET = 26.0
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+@@ -1593,18 +1597,24 @@ class ZCodeAcpAgent:
+             # against an unrelated drained item that also omits the field must
+             # never count as ours. Only a nonempty known pending id or the
+             # exact sourceCommandId proves this drain consumed our input.
+-            ours = any(
+-                (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
+-                for item in drained
+-            )
+-            if not ours and pending_id:
+-                ours = (
+-                    pending_id in (payload.get("pendingInputIds") or [])
+-                    or any(item.get("pendingInputId") == pending_id for item in drained)
+-                )
+-            if not ours:
++            ours_items = [
++                item for item in drained
++                if (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
++                or (pending_id and item.get("pendingInputId") == pending_id)
++            ]
++            payload_level = bool(pending_id) and pending_id in (
++                payload.get("pendingInputIds") or [])
++            if not ours_items and not payload_level:
+                 return
++            injected = payload.get("injectedMessageIds") or []
+             steer["drained"] = payload
++            # Issue #81 review: `injected` further needs OUR drained item's own
++            # messageId inside injectedMessageIds — a batch that contains our
++            # input but injected someone else's message is not our injection.
++            steer["our_injected_ids"] = [
++                item.get("messageId") for item in ours_items
++                if item.get("messageId") in injected
++            ]
+             steer["done"].set()
+ 
+     def on_session_steering(self, rid: Any, params: dict[str, Any]) -> None:
+@@ -1654,6 +1664,9 @@ class ZCodeAcpAgent:
+             }
+             session.steer = steer
+         backend_id = session.backend_id
++        send_uncertain = False
++        ack: dict[str, Any] | None = None
++        steer_start = time.monotonic()
+         try:
+             backend = self.ensure_backend()
+             if not session.v4_subscribed:
+@@ -1695,34 +1708,45 @@ class ZCodeAcpAgent:
+                 "issuedAt": int(time.time() * 1000),
+             }, timeout=15.0)
+         except RuntimeError_ as exc:
+-            with self.lock:
+-                session.steer = None
+             # A pre-0.16 backend has no v4 surface at all: preserve the real
+             # -32601 so the holder reports `unsupported`, not `rejected`.
+             if "-32601" in str(exc) or "method not found" in str(exc):
++                with self.lock:
++                    session.steer = None
+                 self.respond(rid, error={
+                     "code": -32601,
+                     "message": "this ZCode backend exposes no v4 command surface",
+                 })
+-            else:
++                return
++            if "timed out" not in str(exc):
++                # A definitive server-side refusal: the request was evaluated
++                # and rejected, so an error here is honest.
++                with self.lock:
++                    session.steer = None
+                 self.respond(rid, error={"code": -32000, "message": str(exc)})
+-            return
+-
+-        ack = ack or {}
+-        status = ack.get("status")
+-        if status != "accepted":
+-            with self.lock:
+-                session.steer = None
+-            reason_code = ack.get("reasonCode")
+-            self.respond(rid, error={
+-                "code": -32000,
+-                "message": f"v4 sendText {status or 'failed'}: "
+-                           f"{reason_code or ack.get('message') or 'no reason given'}",
+-                "data": {"status": status, "reasonCode": reason_code},
+-            })
+-            return
++                return
++            # Transport-uncertain: the request may already have been staged
++            # server-side — a staged turn.steerQueued can still arrive — so an
++            # error would lie about a possibly-consumed steer. Fall through
++            # and let the remaining event window decide; never resend blindly.
++            send_uncertain = True
++
++        if not send_uncertain:
++            status = (ack or {}).get("status")
++            if status != "accepted":
++                with self.lock:
++                    session.steer = None
++                reason_code = (ack or {}).get("reasonCode")
++                self.respond(rid, error={
++                    "code": -32000,
++                    "message": f"v4 sendText {status or 'failed'}: "
++                               f"{reason_code or (ack or {}).get('message') or 'no reason given'}",
++                    "data": {"status": status, "reasonCode": reason_code},
++                })
++                return
+ 
+-        deadline = time.monotonic() + STEER_DRAIN_WINDOW
++        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW,
++                       steer_start + STEER_TOTAL_BUDGET)
+         try:
+             while True:
+                 with self.lock:
+@@ -1751,17 +1775,25 @@ class ZCodeAcpAgent:
+             queued = steer["queued"]
+             ended = steer["turn_ended"]
+             expected = steer.get("expected_turn_id")
++            our_injected_ids = steer.get("our_injected_ids") or []
++        extra = {"sendUncertain": True} if send_uncertain else {}
+ 
+         if drained is not None:
+             # `injected` needs the full same-turn chain (Issue #81): the guide
+             # admission AND the drain must name one targetTurnId, that id must
+-            # equal the turn this steer targeted, and the drain must carry the
+-            # injectedMessageIds. When the backend never named the running turn
+-            # (expected is None), a self-consistent pair still cannot prove it
+-            # hit the targeted turn — the steer may have landed in a successor.
+-            injected_ids = drained.get("injectedMessageIds") or []
++            # equal the turn this steer targeted, the admission itself must be
++            # `guide` (a queue-admitted input cannot be this turn's guide
++            # injection even when a drain batch names it), and a messageId
++            # provably belonging to THIS input — not just any batch item —
++            # must appear in injectedMessageIds. When the backend never named
++            # the running turn (expected is None), a self-consistent pair
++            # still cannot prove it hit the targeted turn — the steer may
++            # have landed in a successor.
++            injected_ids = our_injected_ids
+             queued_turn = (queued or {}).get("targetTurnId")
+             drained_turn = drained.get("targetTurnId")
++            admitted = ((queued or {}).get("intent") or {}).get("admittedDelivery") \
++                or (queued or {}).get("delivery")
+             same_turn = (
+                 queued is not None
+                 and queued_turn is not None
+@@ -1769,7 +1801,7 @@ class ZCodeAcpAgent:
+                 and expected is not None
+                 and drained_turn == expected
+             )
+-            if same_turn and injected_ids:
++            if same_turn and injected_ids and admitted == "guide":
+                 self.respond(rid, {
+                     "outcome": "injected",
+                     "confirmation": "agent-confirmed",
+@@ -1778,6 +1810,7 @@ class ZCodeAcpAgent:
+                     "pendingInputId": steer.get("pending_input_id"),
+                     "targetTurnId": drained_turn,
+                     "injectedMessageIds": injected_ids,
++                    **extra,
+                 })
+             else:
+                 gaps = []
+@@ -1787,6 +1820,11 @@ class ZCodeAcpAgent:
+                     gaps.append(
+                         f"admission targeted {queued_turn} but drained into "
+                         f"{drained_turn}")
++                elif admitted != "guide":
++                    gaps.append(
++                        f"admission reported delivery {admitted!r}, not "
++                        "'guide' — a queue-admitted input cannot be this "
++                        "turn's guide injection")
+                 if expected is None:
+                     gaps.append(
+                         "the backend never named the turn running when the "
+@@ -1796,7 +1834,16 @@ class ZCodeAcpAgent:
+                     gaps.append(f"drained turn {drained_turn} is not the "
+                                 f"steered turn {expected}")
+                 if not injected_ids:
+-                    gaps.append("drain carried no injectedMessageIds")
++                    if drained.get("injectedMessageIds"):
++                        gaps.append(
++                            "injectedMessageIds name other inputs; no drained "
++                            "item's messageId is provably this input's")
++                    else:
++                        gaps.append("drain carried no injectedMessageIds")
++                if send_uncertain:
++                    gaps.append(
++                        "the v4 sendText ack timed out — the request may "
++                        "still have reached the server")
+                 self.respond(rid, {
+                     "outcome": "unknown",
+                     "confirmation": "none",
+@@ -1804,6 +1851,7 @@ class ZCodeAcpAgent:
+                               "injection: " + "; ".join(gaps),
+                     "pendingInputId": steer.get("pending_input_id"),
+                     "targetTurnId": drained_turn,
++                    **extra,
+                 })
+             return
+ 
+@@ -1824,6 +1872,7 @@ class ZCodeAcpAgent:
+                 self.respond(rid, {
+                     **base, "outcome": "queued",
+                     "confirmation": "agent-confirmed", "reason": reason,
++                    **extra,
+                 })
+             else:
+                 self.respond(rid, {
+@@ -1832,15 +1881,22 @@ class ZCodeAcpAgent:
+                     "reason": "admitted as a guide input for the running turn; "
+                               "the drain was not observed within the wait window "
+                               "- the turn may still consume it, do not resend",
++                    **extra,
+                 })
+             return
+ 
++        reason = (
++            "the v4 sendText ack timed out or transport failed; the request "
++            "may still have reached the server — do not resend blindly"
++            if send_uncertain else
++            "v4 sendText was accepted but no steerQueued evidence arrived"
++        )
+         self.respond(rid, {
+             "outcome": "unknown",
+             "confirmation": "none",
+-            "reason": "v4 sendText was accepted but no steerQueued evidence "
+-                      "arrived" + ("; the turn ended first" if ended else
+-                                   " within the wait window"),
++            "reason": reason + ("; the turn ended first" if ended else
++                                " within the wait window"),
++            **extra,
+         })
+ 
+     def on_backend_request(self, msg: dict[str, Any]) -> None:
+diff --git a/tests/contract/fake-zcode-app-server.py b/tests/contract/fake-zcode-app-server.py
+index 1f4bb11..a7a1f14 100755
+--- a/tests/contract/fake-zcode-app-server.py
++++ b/tests/contract/fake-zcode-app-server.py
+@@ -48,6 +48,16 @@ Scenarios (argv ``--scenario``):
+   steer_noexpect adversarial: turn.started never carries turnId, then a
+               queue/drain pair agrees on a successor-turn id — with the
+               steered turn's identity unknown it must never report injected
++  steer_mixed adversarial: guide admission, then a drain batch holding our
++              input (p1->m1) AND an unrelated one (p2->m2) while
++              injectedMessageIds names only m2 — must never report injected
++  steer_qdrain adversarial: queue admission plus a same-turn drain whose
++              injectedMessageIds includes our messageId, both staged before
++              the ack — a queue-admitted input must never report injected
++  steer_timeout_staged v4/command ack withheld entirely (client timeout), but
++              the server had already staged a steerQueued{queue} admission
++  steer_timeout_silent v4/command ack withheld and no steer events — the
++              request may or may not have reached the server
+   steer_silent v4 sendText accepted but no steer events at all
+   steer_reject v4 sendText answered status:"rejected" with a reasonCode
+   steer_unsupported no v4 methods at all (pre-0.16 build parity): -32601
+@@ -507,12 +517,10 @@ class FakeAppServer:
+             self.turn_gate.set()
+             return
+ 
+-        self.result(rid, {
+-            "commandId": command_id, "status": "accepted",
+-            "revisionAtDecision": 7,
+-            "result": {"type": "inputAccepted", "delivery": "queue",
+-                       "inputId": command_id},
+-        })
++        # Queue-admission legs: the steerQueued reports delivery `queue` on
++        # both the top-level and intent.admittedDelivery fields.
++        queue_admission = scenario in (
++            "steer_queue", "steer_qdrain", "steer_timeout_staged")
+ 
+         def emit_leg() -> None:
+             queued_payload = {
+@@ -520,7 +528,7 @@ class FakeAppServer:
+                 "pendingInputId": pending_id,
+                 "input": text, "inputPreview": text, "inputSize": len(text),
+                 "targetTurnId": turn_id, "queueLength": 1,
+-                "delivery": "queue" if scenario == "steer_queue" else "guide",
++                "delivery": "queue" if queue_admission else "guide",
+                 "intent": {
+                     "sourceCommandId": command_id,
+                     "queueItemId": pending_id,
+@@ -528,7 +536,7 @@ class FakeAppServer:
+                     "kind": "sendText", "text": text,
+                     "requestedDelivery": payload.get("requestedDelivery"),
+                     "admittedDelivery": (
+-                        "queue" if scenario == "steer_queue" else "guide"),
++                        "queue" if queue_admission else "guide"),
+                 },
+             }
+             if scenario in ("steer_phantom", "steer_guide_nopid"):
+@@ -542,10 +550,11 @@ class FakeAppServer:
+                 queued_payload["targetTurnId"] = f"{turn_id}_later"
+             if scenario in ("steer_guide", "steer_queue", "steer_turnend",
+                             "steer_xturn", "steer_phantom", "steer_guide_nopid",
+-                            "steer_noexpect"):
++                            "steer_noexpect", "steer_mixed", "steer_qdrain",
++                            "steer_timeout_staged"):
+                 self.event(session_id, "turn.steerQueued", queued_payload)
+             if scenario in ("steer_guide", "steer_xturn", "steer_guide_nopid",
+-                            "steer_noexpect"):
++                            "steer_noexpect", "steer_mixed", "steer_qdrain"):
+                 time.sleep(0.15)
+                 # steer_xturn drains into a DIFFERENT turn id — a same-turn
+                 # claim off this pair would be a lie, so the adapter must not
+@@ -572,6 +581,24 @@ class FakeAppServer:
+                     # pendingInputId field anywhere in this drain.
+                     drained_payload["pendingInputIds"] = []
+                     drained_payload["drainedInputs"] = [drained_item]
++                elif scenario == "steer_mixed":
++                    # Adversarial mixed drain: the batch contains OUR input
++                    # (pendingInputId -> msg_fake_mixed_ours) AND an unrelated
++                    # input (-> msg_fake_mixed_other), but only the UNRELATED
++                    # messageId is in injectedMessageIds. A batch-level match
++                    # must never be read as our injection.
++                    drained_payload["injectedMessageIds"] = [
++                        "msg_fake_mixed_other"]
++                    drained_payload["pendingInputIds"] = [
++                        pending_id, "queue_cmd-unrelated-2"]
++                    drained_payload["drainedInputs"] = [
++                        dict(drained_item, pendingInputId=pending_id,
++                             messageId="msg_fake_mixed_ours"),
++                        {"messageId": "msg_fake_mixed_other",
++                         "pendingInputId": "queue_cmd-unrelated-2",
++                         "text": "someone else's input", "delivery": "guide",
++                         "intent": {"sourceCommandId": "cmd-unrelated-2"}},
++                    ]
+                 self.event(session_id, "turn.steerDrained", drained_payload)
+             if scenario == "steer_phantom":
+                 time.sleep(0.15)
+@@ -592,7 +619,30 @@ class FakeAppServer:
+             # steer_silent emits nothing: accepted ack, then only the turn end.
+             self.turn_gate.set()
+ 
+-        threading.Thread(target=emit_leg, daemon=True).start()
++        if scenario in ("steer_timeout_staged", "steer_timeout_silent"):
++            # The ack is withheld entirely: the adapter's `v4/command` call
++            # must time out. `steer_timeout_staged` still emits the
++            # steerQueued the server had already recorded; the request
++            # demonstrably reached the server even though the client never
++            # learns it from an ack. `steer_timeout_silent` emits nothing —
++            # the request may or may not have arrived.
++            emit_leg()
++            return
++        if scenario == "steer_qdrain":
++            # Stage the queue admission AND the same-turn drain before the
++            # ack reaches the adapter: its ledger then holds both when the
++            # wait loop starts, making the outcome deterministic (the loop
++            # would otherwise break early on the `queue` admission and never
++            # evaluate the drain).
++            emit_leg()
++        self.result(rid, {
++            "commandId": command_id, "status": "accepted",
++            "revisionAtDecision": 7,
++            "result": {"type": "inputAccepted", "delivery": "queue",
++                       "inputId": command_id},
++        })
++        if scenario != "steer_qdrain":
++            threading.Thread(target=emit_leg, daemon=True).start()
+ 
+     # -- the scripted turn -------------------------------------------------
+ 
+diff --git a/tests/contract/test-zcode-acp-contract.py b/tests/contract/test-zcode-acp-contract.py
+index 13b21ed..1734085 100644
+--- a/tests/contract/test-zcode-acp-contract.py
++++ b/tests/contract/test-zcode-acp-contract.py
+@@ -1474,13 +1474,14 @@ class ZcodeAcpSteerContractTests(unittest.TestCase):
+         self.assertIsNotNone(driver.wait_for(
+             lambda m: m.get("method") == "session/update", timeout=8))
+ 
+-    def _steer(self, driver: AdapterDriver, session_id: str, rid: int = 4):
++    def _steer(self, driver: AdapterDriver, session_id: str, rid: int = 4,
++               wait: float = 10):
+         driver.request(rid, "_session/steering", {
+             "sessionId": session_id,
+             "prompt": [{"type": "text", "text": "reply with exactly STEERED"}],
+             "_meta": {"steering": {"idleBehavior": "promptRequired"}},
+         })
+-        result = driver.wait_result(rid, timeout=10)
++        result = driver.wait_result(rid, timeout=wait)
+         self.assertIsNotNone(result, f"no _session/steering reply under {driver.scenario}")
+         return result
+ 
+@@ -1605,6 +1606,60 @@ class ZcodeAcpSteerContractTests(unittest.TestCase):
+         payload = (sends[0].get("params") or {}).get("payload") or {}
+         self.assertIsNone(payload.get("expectedTurnId"))
+ 
++    def test_mixed_drain_injected_ids_must_be_ours(self) -> None:
++        # Outer-review adversarial leg: the drain batch contains OUR input
++        # (p1 -> m1) AND an unrelated input (p2 -> m2), but injectedMessageIds
++        # names only m2. A batch-level correlation must never report injected
++        # — someone else's injection is not ours.
++        driver, session_id = self._session("steer_mixed")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "unknown")
++        self.assertNotEqual(result.get("outcome"), "injected")
++        self.assertIn("provably this input", result.get("reason") or "")
++
++    def test_queue_admission_with_same_turn_drain_is_never_injected(self) -> None:
++        # Outer-review adversarial leg: a queue admission (delivery /
++        # admittedDelivery `queue`) followed by a same-turn drain whose
++        # injectedMessageIds include our messageId — both staged before the
++        # ack so the wait loop evaluates them together. A queue-admitted
++        # input can never be this turn's guide injection.
++        driver, session_id = self._session("steer_qdrain")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id)
++        result = reply.get("result") or {}
++        self.assertNotEqual(result.get("outcome"), "injected")
++        self.assertEqual(result.get("outcome"), "unknown")
++        self.assertIn("queue", result.get("reason") or "")
++
++    def test_ack_timeout_with_staged_queue_is_never_rejected(self) -> None:
++        # Outer-review leg: the v4/command ack is lost entirely (client-side
++        # timeout) but the server had already staged the steerQueued
++        # admission. An error here would lie about a staged steer — the staged
++        # event evidence must decide instead, never `rejected`.
++        driver, session_id = self._session("steer_timeout_staged")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id, wait=45)
++        self.assertNotIn("error", reply)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "queued")
++        self.assertIs(result.get("sendUncertain"), True)
++
++    def test_ack_timeout_without_evidence_reports_unknown(self) -> None:
++        # Outer-review leg: the v4/command ack is lost and no steer evidence
++        # arrives at all — the request may or may not have reached the server.
++        # The honest outcome is unknown/undecided, never a definite rejection
++        # and never an invitation to resend blindly.
++        driver, session_id = self._session("steer_timeout_silent")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id, wait=45)
++        self.assertNotIn("error", reply)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "unknown")
++        self.assertIs(result.get("sendUncertain"), True)
++        self.assertIn("do not resend blindly", result.get("reason") or "")
++
+     def test_accepted_then_silence_reports_unknown(self) -> None:
+         driver, session_id = self._session("steer_silent")
+         self._prompt_running(driver, session_id)
+@@ -1750,6 +1805,40 @@ class ZcodeAcpSteerHolderTests(unittest.TestCase):
+         self.assertEqual((receipt.get("error") or {}).get("code"),
+                          "steer-undecided")
+ 
++    def test_mixed_drain_receipt_is_never_injected(self) -> None:
++        # Outer-review leg: the drain injected someone else's message while
++        # our input sat in the same batch — the receipt must be undecided,
++        # never injected.
++        turn, receipt = self._steer_receipt("steer_mixed")
++        self.assertEqual(receipt.get("steer_outcome"), "unknown")
++        self.assertIsNot(receipt.get("steer_outcome"), "injected")
++        self.assertIs(receipt.get("steer_consumed"), None)
++        self.assertEqual(receipt.get("steer_native_outcome"), "unknown")
++        self.assertEqual((receipt.get("error") or {}).get("code"),
++                         "steer-undecided")
++
++    def test_queue_admission_drain_receipt_is_never_injected(self) -> None:
++        # Outer-review leg: a queue-admitted input with a later same-turn
++        # drain must reach the receipt as undecided — never as this turn's
++        # guide injection.
++        turn, receipt = self._steer_receipt("steer_qdrain")
++        self.assertEqual(receipt.get("steer_outcome"), "unknown")
++        self.assertIsNot(receipt.get("steer_outcome"), "injected")
++        self.assertIs(receipt.get("steer_consumed"), None)
++
++    def test_ack_timeout_receipt_is_undecided_not_rejected(self) -> None:
++        # Outer-review leg: a lost v4/command ack must never reach the holder
++        # as `rejected` / steer_consumed=False — the request may have been
++        # staged server-side, so the honest receipt is undecided and forbids
++        # a blind resend.
++        turn, receipt = self._steer_receipt("steer_timeout_silent")
++        self.assertEqual(receipt.get("steer_outcome"), "unknown")
++        self.assertIs(receipt.get("steer_consumed"), None)
++        self.assertEqual((receipt.get("error") or {}).get("code"),
++                         "steer-undecided")
++        self.assertNotEqual(receipt.get("steer_outcome"), "rejected")
++        self.assertIsNot(receipt.get("steer_consumed"), False)
++
+     def test_unsupported_backend_receipt(self) -> None:
+         turn, receipt = self._steer_receipt("steer_unsupported")
+         self.assertEqual(receipt.get("steer_outcome"), "unsupported")

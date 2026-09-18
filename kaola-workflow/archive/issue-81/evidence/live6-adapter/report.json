@@ -1,0 +1,342 @@
+{
+  "adapter": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-81/scripts/kaola-zcode-acp.py",
+  "repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/kaola-workflow/issue-81/evidence/live6-adapter/repo",
+  "initialize": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "loadSession": true,
+      "sessionCapabilities": {
+        "list": true,
+        "resume": true,
+        "close": true
+      },
+      "promptCapabilities": {
+        "embeddedContext": true
+      }
+    },
+    "authMethods": [],
+    "agentInfo": {
+      "name": "kaola-zcode-acp",
+      "version": "0.3.3",
+      "_meta": {
+        "zcode": {
+          "plan": "coding-plan",
+          "providerId": "builtin:bigmodel-coding-plan",
+          "providerLabel": "BigModel - Coding Plan",
+          "kind": "anthropic",
+          "baseURL": "https://open.bigmodel.cn/api/anthropic",
+          "credential": "desktop-registry-inline-memory",
+          "modelIds": [
+            "GLM-5.3",
+            "GLM-5.3-Flash"
+          ],
+          "defaultModelId": "GLM-5.3",
+          "planCacheStatus": "available",
+          "rejectedProviders": {
+            "builtin:bigmodel": "not a coding-plan provider (refused: no pay-as-you-go billing)",
+            "builtin:zai": "not a coding-plan provider (refused: no pay-as-you-go billing)",
+            "builtin:bigmodel-start-plan": "start-plan (headless captcha flow, refused)",
+            "builtin:zai-coding-plan": "not enabled (oauth_provider_inactive)",
+            "builtin:zai-start-plan": "start-plan (headless captcha flow, refused)"
+          }
+        }
+      }
+    }
+  },
+  "session/new": {
+    "sessionId": "zcode-1",
+    "configOptions": [
+      {
+        "id": "mode",
+        "name": "Mode",
+        "type": "select",
+        "currentValue": "yolo",
+        "options": [
+          {
+            "value": "plan",
+            "name": "Plan"
+          },
+          {
+            "value": "build",
+            "name": "Build"
+          },
+          {
+            "value": "edit",
+            "name": "Edit"
+          },
+          {
+            "value": "yolo",
+            "name": "Yolo"
+          },
+          {
+            "value": "auto",
+            "name": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "model",
+        "name": "Model",
+        "type": "select",
+        "options": [
+          {
+            "value": "builtin:bigmodel-coding-plan\\GLM-5.3",
+            "name": "GLM-5.3 (BigModel - Coding Plan)"
+          },
+          {
+            "value": "builtin:bigmodel-coding-plan\\GLM-5.3-Flash",
+            "name": "GLM-5.3-Flash (BigModel - Coding Plan)"
+          }
+        ]
+      },
+      {
+        "id": "thoughtLevel",
+        "name": "Thought level",
+        "type": "select",
+        "options": [
+          {
+            "value": "low",
+            "name": "Low"
+          },
+          {
+            "value": "high",
+            "name": "High"
+          },
+          {
+            "value": "max",
+            "name": "Max"
+          }
+        ]
+      }
+    ]
+  },
+  "first_update": "native_session_identity",
+  "steer_reply": {
+    "outcome": "injected",
+    "confirmation": "agent-confirmed",
+    "reason": "the backend drained this input into the running turn it targeted",
+    "pendingInputId": "queue_kpr-steer-34ce1ee9e684",
+    "targetTurnId": "turn_c2b44765-615a-44f2-bef8-7b3651ffe379",
+    "injectedMessageIds": [
+      "msg_mu7j7r0n_8f43b44c-6e5f-4034-8afe-7de4cae7e7e9"
+    ]
+  },
+  "prompt_reply": {
+    "stopReason": "end_turn",
+    "usage": {
+      "source": "provider",
+      "modelRequestCount": 2,
+      "inputTokens": 31858,
+      "outputTokens": 40,
+      "totalTokens": 31898,
+      "cacheReadTokens": 25408,
+      "cacheWriteTokens": 0,
+      "reasoningTokens": 0,
+      "webFetchRequests": 0,
+      "webSearchRequests": 0
+    }
+  },
+  "session_updates": [
+    {
+      "sessionUpdate": "native_session_identity",
+      "acpSessionId": "zcode-1",
+      "nativeSessionId": "sess_5f7775a2-1572-4365-80fd-4ceebab7b144"
+    },
+    {
+      "sessionUpdate": "native_session_identity",
+      "acpSessionId": "zcode-1",
+      "nativeSessionId": "sess_5f7775a2-1572-4365-80fd-4ceebab7b144"
+    },
+    {
+      "sessionUpdate": "config_option_update",
+      "configOptions": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "type": "select",
+          "currentValue": "yolo",
+          "options": [
+            {
+              "value": "plan",
+              "name": "Plan"
+            },
+            {
+              "value": "build",
+              "name": "Build"
+            },
+            {
+              "value": "edit",
+              "name": "Edit"
+            },
+            {
+              "value": "yolo",
+              "name": "Yolo"
+            },
+            {
+              "value": "auto",
+              "name": "Auto"
+            }
+          ]
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "type": "select",
+          "options": [
+            {
+              "value": "builtin:bigmodel-coding-plan\\GLM-5.3",
+              "name": "GLM-5.3 (BigModel - Coding Plan)"
+            },
+            {
+              "value": "builtin:bigmodel-coding-plan\\GLM-5.3-Flash",
+              "name": "GLM-5.3-Flash (BigModel - Coding Plan)"
+            },
+            {
+              "value": "account:bigmodel-individual-coding-plan\\GLM-5.3",
+              "name": "GLM-5.3"
+            }
+          ],
+          "currentValue": "account:bigmodel-individual-coding-plan\\GLM-5.3"
+        },
+        {
+          "id": "thoughtLevel",
+          "name": "Thought level",
+          "type": "select",
+          "options": [
+            {
+              "value": "low",
+              "name": "Low"
+            },
+            {
+              "value": "high",
+              "name": "High"
+            },
+            {
+              "value": "max",
+              "name": "Max"
+            }
+          ],
+          "currentValue": "low"
+        }
+      ]
+    },
+    {
+      "sessionUpdate": "current_mode_update",
+      "currentModeId": "yolo"
+    },
+    {
+      "sessionUpdate": "usage_update",
+      "usage": {
+        "inputTokens": 15901,
+        "outputTokens": 28,
+        "totalTokens": 15929,
+        "cacheReadTokens": 9536,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "sessionUpdate": "usage_update",
+      "usage": {
+        "inputTokens": 15901,
+        "outputTokens": 28,
+        "totalTokens": 15929,
+        "cacheReadTokens": 9536,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_0d22cacccc0e46a880753f1d",
+      "title": "Bash",
+      "kind": "execute",
+      "status": "pending"
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_0d22cacccc0e46a880753f1d",
+      "title": "Bash",
+      "kind": "execute",
+      "status": "in_progress"
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_0d22cacccc0e46a880753f1d",
+      "title": "Bash",
+      "kind": "execute",
+      "status": "in_progress"
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_0d22cacccc0e46a880753f1d",
+      "title": "Bash",
+      "kind": "execute",
+      "status": "in_progress"
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_0d22cacccc0e46a880753f1d",
+      "title": "Bash",
+      "kind": "execute",
+      "status": "in_progress"
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_0d22cacccc0e46a880753f1d",
+      "title": "Bash",
+      "kind": "execute",
+      "status": "completed"
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "content": {
+        "type": "text",
+        "text": "STE"
+      }
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "content": {
+        "type": "text",
+        "text": "ERED-ADAPTER-81-OK"
+      }
+    },
+    {
+      "sessionUpdate": "usage_update",
+      "usage": {
+        "inputTokens": 15957,
+        "outputTokens": 12,
+        "totalTokens": 15969,
+        "cacheReadTokens": 15872,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "sessionUpdate": "usage_update",
+      "usage": {
+        "inputTokens": 15957,
+        "outputTokens": 12,
+        "totalTokens": 15969,
+        "cacheReadTokens": 15872,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "sessionUpdate": "usage_update",
+      "usage": {
+        "source": "provider",
+        "modelRequestCount": 2,
+        "inputTokens": 31858,
+        "outputTokens": 40,
+        "totalTokens": 31898,
+        "cacheReadTokens": 25408,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 0,
+        "webFetchRequests": 0,
+        "webSearchRequests": 0
+      }
+    }
+  ],
+  "session/cancel": {},
+  "teardown": "terminated",
+  "stderr_tail": []
+}

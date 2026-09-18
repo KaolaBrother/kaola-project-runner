@@ -1,0 +1,35 @@
+1:  8816309 ! 1:  e8359e8 feat(zcode): native mid-turn steering via the v4 command surface (Issue #81)
+    @@ CHANGELOG.md
+     +  sendText ack is a measured trap (`result.delivery` reads `"queue"` even for an
+     +  admitted guide input) — so `injected` is reported only when
+     +  `turn.steerQueued{delivery:"guide"}` and `turn.steerDrained{injectedMessageIds}`
+    -+  name the same `targetTurnId`, and that turn is the one the steer targeted.
+    -+  Queue-only admission maps to `not_consumed` with `mutation_performed` true
+    -+  (the text is durably queued for a later turn), a turn-end race or silence maps
+    -+  to `unknown`, a platform rejection surfaces its `reasonCode`, and a pre-0.16
+    -+  backend's `-32601` reports `unsupported`. No second lifecycle, scheduler, or
+    -+  stdin writer is added; `--steer-mode interrupt` remains the explicit fallback.
+    -+  Hermetic contract tests cover guide/drain, queue-only, rejection, silence,
+    -+  turn-end race, a cross-turn drain that must never claim `injected`, and the
+    -+  missing-v4-surface build.
+    -+
+    - - **Standalone ACP contract suites now stop the sessions they start (Issue #82).**
+    -   `Issue34ModelSelectionAcpTests` starts codex/cursor-cli/devin holders but the
+    -   shared fixture's `tearDown` always stopped the default grok session, so a
+    ++  name the same `targetTurnId`, and that turn is provably the one the steer
+    ++  targeted (when the backend never names the running turn, an otherwise-matching
+    ++  pair reports `unknown`, not `injected`). Queue-only admission maps to
+    ++  `not_consumed` with `mutation_performed` true (the text is durably queued for
+    ++  a later turn), a turn-end race or silence maps to `unknown`, a platform
+    ++  rejection surfaces its `reasonCode`, and a pre-0.16 backend's `-32601` reports
+    ++  `unsupported`. No second lifecycle, scheduler, or stdin writer is added;
+    ++  `--steer-mode interrupt` remains the explicit fallback. Hermetic contract
+    ++  tests cover guide/drain, queue-only, rejection, silence, turn-end race,
+    ++  cross-turn and unattributable drains that must never claim `injected`, and
+    ++  the missing-v4-surface build.
+    + - **Native `sess_*` resume keeps the session's own Coding Plan model on ZCode 3.12+ (Issue #84).**
+    +   A faithful `--resume sess_*` failed outright with `resume-failed` / "resumed session reports no
+    +   persisted model", because five things were wrong at once on the 3.12 wire. `session/read` on
+     
+      ## platforms/zcode.yaml ##
+     @@ platforms/zcode.yaml: acp_fast_config_id: ""

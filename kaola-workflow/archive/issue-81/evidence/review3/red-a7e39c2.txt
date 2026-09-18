@@ -1,0 +1,41 @@
+# Failure-first evidence: 7 new adversarial tests against a7e39c2 (pre-fix adapter)
+# Commands run with scripts/kaola-zcode-acp.py checked out at HEAD (a7e39c2);
+# fake/tests carried the new legs. Exact observed failures:
+
+python3 tests/contract/test-zcode-acp-contract.py \
+  ZcodeAcpSteerContractTests.test_mixed_drain_injected_ids_must_be_ours \
+  ZcodeAcpSteerContractTests.test_queue_admission_with_same_turn_drain_is_never_injected
+# Ran 2 tests in 0.515s — FAILED (failures=2)
+#   steer_mixed : outcome 'injected' (expected 'unknown')
+#     batch {ours p1->msg_fake_mixed_ours, other p2->msg_fake_mixed_other},
+#     injectedMessageIds=['msg_fake_mixed_other'] — batch-level match claimed
+#     someone else's injection as ours. Defect (1) reproduced.
+#   steer_qdrain: outcome 'injected' (expected 'unknown')
+#     queue admission (delivery+admittedDelivery 'queue') + same-turn drain
+#     with our messageId in injectedMessageIds — a queue-admitted input was
+#     reported as this turn's guide injection. Defect (2) reproduced.
+
+python3 tests/contract/test-zcode-acp-contract.py \
+  ZcodeAcpSteerContractTests.test_ack_timeout_with_staged_queue_is_never_rejected \
+  ZcodeAcpSteerContractTests.test_ack_timeout_without_evidence_reports_unknown
+# Ran 2 tests in 30.220s — FAILED (failures=2)
+#   steer_timeout_staged / steer_timeout_silent : reply carried
+#     {'error': {'code': -32000, 'message': 'zcode call timed out: v4/command'}}
+#     — the -32000 path is exactly what the holder maps to rejected /
+#     steer_consumed=False. Defect (3) reproduced at adapter level.
+
+python3 tests/contract/test-zcode-acp-contract.py \
+  ZcodeAcpSteerHolderTests.test_mixed_drain_receipt_is_never_injected \
+  ZcodeAcpSteerHolderTests.test_queue_admission_drain_receipt_is_never_injected \
+  ZcodeAcpSteerHolderTests.test_ack_timeout_receipt_is_undecided_not_rejected
+# Ran 3 tests in 17.390s — FAILED (failures=3)
+#   steer_mixed   : steer_outcome 'injected'  (expected 'unknown')
+#   steer_qdrain  : steer_outcome 'injected'  (expected 'unknown')
+#   steer_timeout_silent : steer_outcome 'rejected' (expected 'unknown')
+#     — the lost-ack receipt surfaced as a definite rejection. Defect (3)
+#     reproduced at the #65 receipt level.
+
+# Post-fix green runs (fix restored):
+#   4 adapter tests:  Ran 4 tests in 30.798s — OK
+#   3 holder tests:   Ran 3 tests in 17.319s — OK
+#   full suite:       Ran 62 tests in 87.867s — OK (55 -> 62, +7 new)

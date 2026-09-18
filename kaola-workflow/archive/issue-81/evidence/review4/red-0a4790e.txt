@@ -1,0 +1,102 @@
+Issue #81 review-round-4 failure-first evidence — all new adversarial legs
+RED on the rejected frozen candidate 0a4790e786c9380d632c3099c3b385eaf4208e7a.
+Adapter restored from `git checkout HEAD -- scripts/kaola-zcode-acp.py`;
+fake/test legs are the new working-tree versions (the scenarios did not
+exist on 0a4790e, which is the point — the defects were untested).
+
+======================================================================
+$ python3 tests/contract/test-zcode-acp-contract.py \
+    ZcodeAcpSteerContractTests.test_target_turn_ended_aborts_before_send \
+    ZcodeAcpSteerContractTests.test_target_turn_replaced_aborts_before_send \
+    ZcodeAcpSteerContractTests.test_process_death_staged_queue_is_never_rejected
+======================================================================
+
+FAIL: test_target_turn_ended_aborts_before_send
+AssertionError: Lists differ: [{'id': 6, 'method': 'v4/command', ...}] != []
+The sendText WENT OUT after the steer's target turn had already completed.
+
+FAIL: test_target_turn_replaced_aborts_before_send
+AssertionError: Lists differ: [{'id': 6, 'method': 'v4/command', ...}] != []
+First extra element:
+{'id': 6, 'method': 'v4/command',
+ 'params': {'clientId': 'kaola-zcode-acp',
+            'commandId': 'kpr-steer-21b942bde85f',
+            'issuedAt': 1789765543190,
+            'payload': {'expectedTurnId': 'turn_sess_fake1_1',
+                        'requestedDelivery': 'guide',
+                        'text': 'reply with exactly STEERED'},
+            'sessionId': 'sess_fake1', 'type': 'sendText'}}
+>> The exact reviewer reproduction: expectedTurnId=turn_sess_fake1_1 — the
+>> CAS bound to SUCCESSOR turn B (turn ..._1) for a steer meant for the dead
+>> turn A (turn ..._0). The adapter learned the successor's active_turn_id
+>> and sent the text into the wrong turn.
+
+FAIL: test_process_death_staged_queue_is_never_rejected
+AssertionError: 'error' unexpectedly found in
+{'jsonrpc': '2.0', 'id': 4,
+ 'error': {'code': -32000,
+           'message': "zcode error for v4/command: {'code': -32000,
+                        'message': 'zcode app-server exited'}"}}
+>> Process death surfaced as a -32000 error reply -> holder maps it to
+>> steer_outcome:"rejected" — exactly defect 3.
+
+Ran 3 tests in 4.418s — FAILED (failures=3)
+
+======================================================================
+$ python3 tests/contract/test-zcode-acp-contract.py \
+    ZcodeAcpSteerContractTests.test_process_death_silent_reports_unknown \
+    ZcodeAcpSteerContractTests.test_steer_deadline_blocks_command_after_budget
+======================================================================
+
+FAIL: test_process_death_silent_reports_unknown
+AssertionError: 'error' unexpectedly found in
+{'jsonrpc': '2.0', 'id': 4,
+ 'error': {'code': -32000,
+           'message': "zcode error for v4/command: {'code': -32000,
+                        'message': 'zcode app-server exited'}"}}
+
+FAIL: test_steer_deadline_blocks_command_after_budget
+AssertionError: Lists differ: [{'id': 6, 'method': 'v4/command', ...}] != []
+>> KAOLA_ZCODE_STEER_BUDGET=5 has no effect on 0a4790e (the env knob is part
+>> of the fix); the sendText went out anyway — no deadline check exists.
+
+Ran 2 tests in 6.367s — FAILED (failures=2)
+
+======================================================================
+$ python3 tests/contract/test-zcode-acp-contract.py \
+    ZcodeAcpSteerContractTests.test_steer_deadline_bounds_slow_exchange \
+    ZcodeAcpSteerHolderTests.test_process_death_receipt_is_undecided_not_rejected
+======================================================================
+
+FAIL: test_steer_deadline_bounds_slow_exchange
+AssertionError: 31.060748209012672 not less than 30.0
+>> The exact budget defect: subscribe ~14s + expected-id wait ~2s +
+>> independent 15s command timeout = 31.06s — past the holder's 30s steer
+>> timeout, because no single deadline bounded the phases.
+
+FAIL: test_process_death_receipt_is_undecided_not_rejected
+AssertionError: 'rejected' != 'unknown'
+- rejected
++ unknown
+>> Holder-level: app-server exit inside v4/command produced
+>> steer_outcome:"rejected" — a possibly-staged steer misclassified as a
+>> business refusal.
+
+Ran 2 tests in 61.885s — FAILED (failures=2)
+
+======================================================================
+GREEN (post-fix, same commands): all 7 legs pass.
+  test_target_turn_ended_aborts_before_send     -> promptRequired, 0 sendText
+  test_target_turn_replaced_aborts_before_send  -> unknown,        0 sendText
+  test_process_death_staged_queue_is_never_rejected -> queued + sendUncertain
+  test_process_death_silent_reports_unknown     -> unknown + sendUncertain
+                                                   + do-not-resend reason
+  test_steer_deadline_blocks_command_after_budget -> unknown, 0 sendText,
+                                                   elapsed ~5s (budget 5s)
+  test_steer_deadline_bounds_slow_exchange      -> unknown + sendUncertain,
+                                                   elapsed ~26s < 30s
+  test_process_death_receipt_is_undecided_not_rejected -> unknown,
+                                                   steer_consumed null,
+                                                   steer-undecided
+Full suite on the repaired tree: 69 tests OK.
+======================================================================

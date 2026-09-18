@@ -1,0 +1,197 @@
+diff --git a/scripts/kaola-zcode-acp.py b/scripts/kaola-zcode-acp.py
+index 3410a95..25ba33e 100755
+--- a/scripts/kaola-zcode-acp.py
++++ b/scripts/kaola-zcode-acp.py
+@@ -68,8 +68,9 @@ ADAPTER_VERSION = "0.3.3"
+ STEER_DRAIN_WINDOW = 20.0
+ # Issue #81: hard cap on the whole steer exchange (subscribe + send + evidence
+ # wait), kept under the holder's 30 s steer timeout so a slow or lost v4 ack
+-# can never push the reply past the holder's own deadline.
+-STEER_TOTAL_BUDGET = 26.0
++# can never push the reply past the holder's own deadline. The env override
++# exists so contract tests can exercise the deadline without a 26 s wait.
++STEER_TOTAL_BUDGET = float(os.environ.get("KAOLA_ZCODE_STEER_BUDGET", "26"))
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+@@ -674,6 +675,12 @@ def persisted_model_from_messages(payload: Any) -> dict[str, str] | None:
+ # --------------------------------------------------------------------------
+ 
+ 
++class BackendTransportError(RuntimeError_):
++    """A backend call failed without a server answer — timeout, app-server
++    exit, or a write failure. The request may already have been processed
++    server-side, so it must never be read as a business rejection."""
++
++
+ class ZCodeBackend:
+     """Talks the private ZCode Protocol to an `app-server --stdio` child."""
+ 
+@@ -720,6 +727,7 @@ class ZCodeBackend:
+             self._pending.clear()
+         for slot in pending:
+             slot["error"] = {"code": -32000, "message": "zcode app-server exited"}
++            slot["transport"] = True
+             slot["event"].set()
+ 
+     def _dispatch(self, msg: dict[str, Any]) -> None:
+@@ -756,8 +764,14 @@ class ZCodeBackend:
+         if not slot["event"].wait(timeout):
+             with self._lock:
+                 self._pending.pop(rid, None)
+-            raise RuntimeError_(f"zcode call timed out: {method}")
++            raise BackendTransportError(f"zcode call timed out: {method}")
+         if slot.get("error"):
++            if slot.get("transport"):
++                # The backend died mid-call: the request may already have
++                # been processed server-side — transport-uncertain, not a
++                # business rejection.
++                raise BackendTransportError(
++                    f"zcode transport failed for {method}: {slot['error']}")
+             raise RuntimeError_(f"zcode error for {method}: {slot['error']}")
+         return slot.get("result")
+ 
+@@ -1663,10 +1677,20 @@ class ZCodeAcpAgent:
+                 "turn_ended": False,
+             }
+             session.steer = steer
++            # The turn this steer is FOR: the running turn at request entry.
++            # A later recheck must find this same request id still running —
++            # otherwise the original turn ended (or a successor replaced it)
++            # and a CAS learned from `active_turn_id` would steer whoever
++            # happens to run now instead of the intended turn.
++            target_request_id = session.turn_request_id
+         backend_id = session.backend_id
+         send_uncertain = False
+         ack: dict[str, Any] | None = None
+-        steer_start = time.monotonic()
++        # One deadline for the whole steer exchange — subscribe, the
++        # expected-id wait, the send, and the drain wait each get only what is
++        # left of it, so a slow phase can never push the reply past the
++        # holder's own 30 s steer timeout.
++        deadline_total = time.monotonic() + STEER_TOTAL_BUDGET
+         try:
+             backend = self.ensure_backend()
+             if not session.v4_subscribed:
+@@ -1676,20 +1700,73 @@ class ZCodeAcpAgent:
+                     "topic": f"conversation/{backend_id}",
+                     "connectionId": f"kpr-{uuid.uuid4()}",
+                     "clientMode": "desktop-continuous",
+-                }, timeout=15.0)
++                }, timeout=max(0.1, min(15.0, deadline_total - time.monotonic())))
+                 session.v4_subscribed = True
+             # `turn.started` (params-level `turnId`) can lag the prompt
+             # acknowledgement slightly on the backend reader thread; a short
+             # bounded wait lets the expectedTurnId CAS protect the common
+             # early-steer case. A build that never reports it just skips the
+             # CAS — the same-turn event check still guards the result.
+-            expected_deadline = time.monotonic() + 2.0
++            expected_deadline = min(time.monotonic() + 2.0, deadline_total)
+             while time.monotonic() < expected_deadline:
+                 with self.lock:
++                    if session.turn_request_id != target_request_id:
++                        # The targeted turn ended (or a successor replaced it)
++                        # mid-wait — never learn a successor's turnId as the
++                        # CAS for a steer meant for the dead turn.
++                        break
+                     steer["expected_turn_id"] = session.active_turn_id
+                 if steer["expected_turn_id"] is not None:
+                     break
+                 time.sleep(0.05)
++            # Recheck the captured target immediately before the send: the
++            # original turn can end and a successor start during subscribe +
++            # the expected-id wait — a CAS learned from the successor would
++            # inject this steer into the wrong turn. If the target is gone,
++            # do not send any text.
++            with self.lock:
++                target_alive = session.turn_request_id == target_request_id
++                # A successor can arrive two ways: a new ACP prompt (rebinding
++                # turn_request_id) or a server-side follow-up turn (only
++                # active_turn_id moves — no request of ours is pending).
++                successor_running = (
++                    not target_alive
++                    and (session.turn_request_id is not None
++                         or session.active_turn_id is not None)
++                )
++            if not target_alive:
++                with self.lock:
++                    session.steer = None
++                if successor_running:
++                    self.respond(rid, {
++                        "outcome": "unknown",
++                        "confirmation": "none",
++                        "reason": "the turn this steer targeted ended and a "
++                                  "successor started before the command could "
++                                  "be sent; no text was sent — re-issue "
++                                  "against the running turn if still wanted",
++                    })
++                else:
++                    self.respond(rid, {
++                        "outcome": "promptRequired",
++                        "reason": "the turn this steer targeted ended before "
++                                  "the command could be sent; nothing was sent",
++                    })
++                return
++            remaining = deadline_total - time.monotonic()
++            if remaining <= 0:
++                # The budget expired before the send could go out — never
++                # send after the deadline; nothing was sent, so this is
++                # undecided, never a rejection.
++                with self.lock:
++                    session.steer = None
++                self.respond(rid, {
++                    "outcome": "unknown",
++                    "confirmation": "none",
++                    "reason": "the steer budget expired before the command "
++                              "could be sent; no text was sent",
++                })
++                return
+             command_payload: dict[str, Any] = {
+                 "text": text,
+                 "requestedDelivery": "guide",
+@@ -1706,8 +1783,8 @@ class ZCodeAcpAgent:
+                 "type": "sendText",
+                 "payload": command_payload,
+                 "issuedAt": int(time.time() * 1000),
+-            }, timeout=15.0)
+-        except RuntimeError_ as exc:
++            }, timeout=min(15.0, remaining))
++        except (RuntimeError_, OSError) as exc:
+             # A pre-0.16 backend has no v4 surface at all: preserve the real
+             # -32601 so the holder reports `unsupported`, not `rejected`.
+             if "-32601" in str(exc) or "method not found" in str(exc):
+@@ -1718,17 +1795,19 @@ class ZCodeAcpAgent:
+                     "message": "this ZCode backend exposes no v4 command surface",
+                 })
+                 return
+-            if "timed out" not in str(exc):
++            if (not isinstance(exc, BackendTransportError)
++                    and "zcode error for" in str(exc)):
+                 # A definitive server-side refusal: the request was evaluated
+                 # and rejected, so an error here is honest.
+                 with self.lock:
+                     session.steer = None
+                 self.respond(rid, error={"code": -32000, "message": str(exc)})
+                 return
+-            # Transport-uncertain: the request may already have been staged
+-            # server-side — a staged turn.steerQueued can still arrive — so an
+-            # error would lie about a possibly-consumed steer. Fall through
+-            # and let the remaining event window decide; never resend blindly.
++            # Transport-uncertain (timeout, app-server exit, write failure):
++            # the request may already have been staged server-side — a staged
++            # turn.steerQueued can still arrive — so an error would lie about
++            # a possibly-consumed steer. Fall through and let the remaining
++            # event window decide; never resend blindly.
+             send_uncertain = True
+ 
+         if not send_uncertain:
+@@ -1745,8 +1824,7 @@ class ZCodeAcpAgent:
+                 })
+                 return
+ 
+-        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW,
+-                       steer_start + STEER_TOTAL_BUDGET)
++        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW, deadline_total)
+         try:
+             while True:
+                 with self.lock:

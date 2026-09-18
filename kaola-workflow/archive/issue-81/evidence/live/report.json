@@ -1,0 +1,1057 @@
+{
+  "legs": {
+    "C_rejections": {
+      "setFollowupMode_no_baseRevision": {
+        "commandId": "i81-setFollowupMode-6-19da3b8d",
+        "status": "rejected",
+        "reasonCode": "proto.invalidPayload",
+        "message": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"baseRevision\"\n    ],\n    \"message\": \"CAS commands require baseRevision and baseLogEpoch\"\n  }\n]",
+        "revisionAtDecision": 0
+      },
+      "sendText_bogus_session": {
+        "commandId": "i81-sendText-7-a9547c3d",
+        "status": "rejected",
+        "reasonCode": "proto.sessionNotFound",
+        "revisionAtDecision": 0
+      }
+    },
+    "A_guide": {
+      "session/send": {
+        "accepted": true,
+        "sessionId": "sess_65701998-354c-4174-957d-d685684756ff",
+        "stateRevision": 2
+      },
+      "turn_started": {
+        "turnNumber": 0,
+        "input": "Use the shell tool to run this exact loop: for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo step-$i; sleep 3; done. When the loop finishes, reply with exactly: DONE-FIRST-81. Do not reply before the loop finishes.",
+        "messageId": "msg_mu76l3z5_2b7f5005-fff5-47b6-a120-e926110e0717",
+        "foregroundExecutionId": "runtime_command_1",
+        "queryId": "query_57f6a411-dd6e-4072-83b5-8b2b5afa3a75"
+      },
+      "setFollowupMode_cas": [
+        {
+          "attempt": 0,
+          "baseRevision": 0,
+          "baseLogEpoch": "mu76l3wy-u3m5w14e",
+          "ack": {
+            "commandId": "i81-setFollowupMode-9-3c6eec54",
+            "status": "stale",
+            "reasonCode": "proto.staleRevision",
+            "revisionAtDecision": 2
+          }
+        },
+        {
+          "attempt": 1,
+          "baseRevision": 0,
+          "baseLogEpoch": "mu76l3wy-u3m5w14e",
+          "ack": {
+            "commandId": "i81-setFollowupMode-10-23f97989",
+            "status": "stale",
+            "reasonCode": "proto.staleRevision",
+            "revisionAtDecision": 6
+          }
+        },
+        {
+          "attempt": 2,
+          "baseRevision": 0,
+          "baseLogEpoch": "mu76l3wy-u3m5w14e",
+          "ack": {
+            "commandId": "i81-setFollowupMode-11-5b1c22c7",
+            "status": "stale",
+            "reasonCode": "proto.staleRevision",
+            "revisionAtDecision": 6
+          }
+        }
+      ],
+      "steer_sendText_ack": {
+        "commandId": "i81-sendText-12-5eed67c9",
+        "status": "accepted",
+        "revisionAtDecision": 6,
+        "result": {
+          "type": "inputAccepted",
+          "delivery": "queue",
+          "inputId": "i81-sendText-12-5eed67c9"
+        }
+      },
+      "turn_end": [
+        "turn.completed",
+        {
+          "response": "DONE-FIRST-81",
+          "tokenCount": 31617,
+          "usage": {
+            "source": "provider",
+            "modelRequestCount": 2,
+            "inputTokens": 31539,
+            "outputTokens": 78,
+            "totalTokens": 31617,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0,
+            "reasoningTokens": 0,
+            "webFetchRequests": 0,
+            "webSearchRequests": 0
+          },
+          "toolCallCount": 1,
+          "historyRoundCount": 2,
+          "duration": 47495,
+          "resultType": "success",
+          "cacheStats": {
+            "totalMessages": 9,
+            "cachedMessages": 5,
+            "lastCacheHit": false
+          }
+        }
+      ],
+      "event_summary": [
+        {
+          "session_event": "turn.steerQueued",
+          "targetTurnId": "turn_3b38b461-3e33-4470-aac1-2705ea98c6e1",
+          "delivery": "queue",
+          "queueLength": 1,
+          "pendingInputId": "queue_i81-sendText-12-5eed67c9",
+          "inputPreview": "Stop the loop immediately and reply with exactly: STEERED-81-OK"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "session_event": "streamRecovery.updated"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "computer-use/operation-event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "turn.completed",
+          "resultType": "success",
+          "response": "DONE-FIRST-81"
+        }
+      ]
+    },
+    "B_queue": {
+      "session/send": {
+        "accepted": true,
+        "sessionId": "sess_65701998-354c-4174-957d-d685684756ff",
+        "stateRevision": 4
+      },
+      "turn2_started": {
+        "turnNumber": 1,
+        "input": "Use the shell tool to run this exact loop: for i in 1 2 3 4 5 6 7 8; do echo loopb-$i; sleep 3; done. When the loop finishes, reply with exactly: DONE-SECOND-81. Do not reply before the loop finishes.",
+        "messageId": "msg_mu76m5co_c556264e-a90c-49d8-b6e2-d1d5da4893e0",
+        "foregroundExecutionId": "runtime_command_2",
+        "queryId": "query_5f90f974-5ea6-403f-ad01-4e12f5b2e5b4"
+      },
+      "queue_sendText_ack": {
+        "commandId": "i81-sendText-14-3dcb412b",
+        "status": "accepted",
+        "revisionAtDecision": 17,
+        "result": {
+          "type": "inputAccepted",
+          "delivery": "queue",
+          "inputId": "i81-sendText-14-3dcb412b"
+        }
+      },
+      "turn2_end": [
+        "turn.completed",
+        {
+          "response": "DONE-SECOND-81",
+          "tokenCount": 31990,
+          "usage": {
+            "source": "provider",
+            "modelRequestCount": 2,
+            "inputTokens": 31918,
+            "outputTokens": 72,
+            "totalTokens": 31990,
+            "cacheReadTokens": 31680,
+            "cacheWriteTokens": 0,
+            "reasoningTokens": 0,
+            "webFetchRequests": 0,
+            "webSearchRequests": 0
+          },
+          "toolCallCount": 1,
+          "historyRoundCount": 2,
+          "duration": 29843,
+          "resultType": "success",
+          "cacheStats": {
+            "totalMessages": 13,
+            "cachedMessages": 12,
+            "lastCacheHit": true,
+            "cacheReadTokens": 15872
+          }
+        }
+      ],
+      "queued_input_next_turn": null,
+      "event_summary": [
+        {
+          "session_event": "turn.steerQueued",
+          "targetTurnId": "turn_4ef5c38e-9ea8-4eca-9b5b-906abedd517c",
+          "delivery": "queue",
+          "queueLength": 2,
+          "pendingInputId": "queue_i81-sendText-14-3dcb412b",
+          "inputPreview": "Reply with exactly: QUEUED-81-OK"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "process/resourceSample"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "session_event": "streamRecovery.updated"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_65701998-354c-4174-957d-d685684756ff",
+          "kind": "deltas"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "computer-use/operation-event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "turn.completed",
+          "resultType": "success",
+          "response": "DONE-SECOND-81"
+        }
+      ]
+    }
+  },
+  "verdicts": {},
+  "bootstrap": {
+    "updateAccountConfig": {
+      "receivedRevision": "account:probe:1789749405061",
+      "providerCount": 8,
+      "status": "received"
+    },
+    "session/create": {
+      "sessionId": "sess_65701998-354c-4174-957d-d685684756ff",
+      "error": null
+    },
+    "session/setModel": {
+      "messages": [],
+      "projection": {
+        "activeToolCalls": [],
+        "backgroundJobs": [],
+        "contextUsed": 0,
+        "contextWindow": 200000,
+        "mode": "build",
+        "pendingPermissions": [],
+        "sessionId": "unknown",
+        "status": "idle",
+        "target": null,
+        "totalTokenCount": 0,
+        "turnCount": 0
+      },
+      "protocol": {
+        "name": "ZCode Protocol",
+        "version": 1
+      },
+      "runtime": {
+        "eventSeq": 0,
+        "pendingRequestIds": [],
+        "goalVerifications": [],
+        "goalVerificationTimeline": [],
+        "stateRevision": 1
+      },
+      "session": {
+        "createdAt": 1789749405864,
+        "mode": "build",
+        "model": {
+          "providerId": "account:bigmodel-individual-coding-plan",
+          "modelId": "GLM-5.3-Flash"
+        },
+        "traceId": "d5707940-bb49-41df-aedd-78ed4aca64c7",
+        "sessionId": "sess_65701998-354c-4174-957d-d685684756ff",
+        "sessionKind": "interactive",
+        "status": "idle",
+        "target": null,
+        "title": "",
+        "updatedAt": 1789749405864,
+        "workspace": {
+          "workspacePath": "/tmp/kpr-i81-live/repo",
+          "workspaceKey": "/tmp/kpr-i81-live/repo"
+        }
+      },
+      "settings": {
+        "mode": {
+          "current": "yolo"
+        },
+        "model": {
+          "available": [
+            {
+              "ref": {
+                "providerId": "account:bigmodel-individual-coding-plan",
+                "modelId": "GLM-5.3-Flash"
+              },
+              "label": "GLM-5.3-Flash",
+              "providerLabel": "BigModel Individual Coding Plan",
+              "contextWindow": 200000,
+              "maxOutputTokens": 128000,
+              "reasoning": {
+                "levels": [
+                  {
+                    "value": "low",
+                    "label": "low"
+                  },
+                  {
+                    "value": "high",
+                    "label": "high"
+                  },
+                  {
+                    "value": "max",
+                    "label": "max"
+                  }
+                ],
+                "defaultLevel": "max"
+              },
+              "properties": {
+                "inputFormat": {
+                  "supportsText": true,
+                  "supportsImage": true,
+                  "supportsVideo": true,
+                  "supportsAudio": false,
+                  "supportsPdf": true
+                },
+                "outputFormat": {
+                  "supportsText": true
+                }
+              }
+            }
+          ],
+          "current": {
+            "providerId": "account:bigmodel-individual-coding-plan",
+            "modelId": "GLM-5.3-Flash",
+            "options": {
+              "reasoningLevel": "low"
+            }
+          },
+          "lastUsed": {
+            "providerId": "account:bigmodel-individual-coding-plan",
+            "modelId": "GLM-5.3-Flash"
+          }
+        },
+        "permission": {
+          "mode": "yolo"
+        },
+        "thoughtLevel": {
+          "available": [
+            {
+              "label": "low",
+              "value": "low"
+            },
+            {
+              "label": "high",
+              "value": "high"
+            },
+            {
+              "label": "max",
+              "value": "max"
+            }
+          ],
+          "current": "low",
+          "enabled": true
+        }
+      },
+      "slashCommands": [
+        {
+          "description": "Show or set the current session goal.",
+          "inputHint": "/goal [pause|resume|clear|replace <objective>|<objective>]",
+          "name": "goal",
+          "source": "builtin"
+        },
+        {
+          "description": "Compact the current conversation with optional instructions.",
+          "inputHint": "/compact [instructions]",
+          "name": "compact",
+          "source": "builtin"
+        },
+        {
+          "description": "Create or update workspace AGENTS.md instructions.",
+          "inputHint": "/init [notes]",
+          "name": "init",
+          "source": "builtin"
+        },
+        {
+          "description": "Switch to Plan mode and optionally send a task.",
+          "inputHint": "/plan [task]",
+          "name": "plan",
+          "source": "builtin"
+        },
+        {
+          "description": "Kaola-Workflow Finalization. Final validation, documentation docking, closure, archive, commit, and sink.",
+          "inputHint": "/kaola-workflow-finalize <project name>",
+          "name": "kaola-workflow-finalize",
+          "source": "custom"
+        },
+        {
+          "description": "Initialize a project for Kaola-Workflow with CLAUDE.md guidance, docs structure, and Git/GitHub issue conventions.",
+          "inputHint": "/workflow-init (optional project context)",
+          "name": "workflow-init",
+          "source": "custom"
+        },
+        {
+          "description": "Workflow Next. Claims the work, writes the run's mission list, and runs it. Resumable from that one file.",
+          "inputHint": "/workflow-next (optional project name, issue number, or task description)",
+          "name": "workflow-next",
+          "source": "custom"
+        }
+      ],
+      "todos": [],
+      "todoGroups": []
+    },
+    "session/subscribe": {
+      "eventSeq": 0,
+      "events": [],
+      "sessionId": "sess_65701998-354c-4174-957d-d685684756ff"
+    },
+    "v4/conversation/subscribe": {
+      "ack": {
+        "subscriptionId": "sub-mu76l3wy-u3m5w14e-1",
+        "mode": "snapshot",
+        "logEpoch": "mu76l3wy-u3m5w14e",
+        "openTiming": {
+          "version": 1,
+          "initialFrameEncodeMs": 0,
+          "sessionRuntimeState": "warm",
+          "snapshotRowCount": 0
+        }
+      }
+    },
+    "v4_snapshot": {
+      "revision": 0,
+      "logEpoch": "mu76l3wy-u3m5w14e"
+    }
+  },
+  "teardown": {
+    "session/close": {
+      "closed": true
+    },
+    "proc": "terminated"
+  }
+}

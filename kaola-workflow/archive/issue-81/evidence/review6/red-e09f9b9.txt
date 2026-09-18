@@ -1,0 +1,22 @@
+=== RED on e09f9b9: hostile KAOLA_ZCODE_STEER_BUDGET ===
+--- KAOLA_ZCODE_STEER_BUDGET=invalid python3 scripts/kaola-zcode-acp.py --help ---
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-81/scripts/kaola-zcode-acp.py", line 73, in <module>
+    STEER_TOTAL_BUDGET = float(os.environ.get("KAOLA_ZCODE_STEER_BUDGET", "26"))
+ValueError: could not convert string to float: 'invalid'
+--- unittest: static parse table ---
+AttributeError: module 'kaola_zcode_acp' has no attribute '_steer_budget_seconds'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.005s
+
+FAILED (errors=1)
+--- unittest: invalid-env startup leg ---
+    self.assertIsNotNone(driver.wait_result(1))
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 1 test in 0.062s
+
+FAILED (failures=1)

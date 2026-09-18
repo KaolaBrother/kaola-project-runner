@@ -1,0 +1,49 @@
+PASS no fake secret in any record 
+PASS no fake token in any record 
+PASS no fake bearer in any record 
+PASS no steer text in any record 
+PASS no raw turn id in any record 
+PASS no raw command id in any record 
+PASS no raw pending id in any record 
+PASS no raw message id in any record 
+PASS no unexpectedField/secretField/accountBlob keys 
+PASS secret_json -> other 
+PASS secret_json carries only dir/kind/bytes ['bytes', 'dir', 'kind']
+PASS secret_json bytes is a bounded count 
+PASS ack_with_secret -> other 
+PASS ack_with_secret carries only dir/kind/bytes ['bytes', 'dir', 'kind']
+PASS ack_with_secret bytes is a bounded count 
+PASS stderr_like -> nonjson 
+PASS stderr_like carries only dir/kind/bytes ['bytes', 'dir', 'kind']
+PASS stderr_like bytes is a bounded count 
+PASS nonjson_secret -> nonjson 
+PASS nonjson_secret carries only dir/kind/bytes ['bytes', 'dir', 'kind']
+PASS nonjson_secret bytes is a bounded count 
+PASS sendText kind 
+PASS sendText fields ['commandId_sha256', 'dir', 'expectedTurnId_sha256', 'kind', 'requestedDelivery', 'text_sha256']
+PASS sendText commandId hash 
+PASS sendText expectedTurnId hash 
+PASS sendText requestedDelivery enum 
+PASS sendText text hash 
+PASS queued kind 
+PASS queued fields ['admittedDelivery', 'commandId_sha256', 'delivery', 'dir', 'injectedMessageIds_sha256', 'kind', 'pendingInputId_sha256', 'pendingInputIds_sha256', 'queryIds_sha256', 'sourceCommandIds_sha256', 'targetTurnId_sha256', 'text_sha256s']
+PASS queued commandId hash correlates 
+PASS queued targetTurnId hash 
+PASS queued pendingInputId hash 
+PASS queued delivery enum 
+PASS queued admittedDelivery enum 
+PASS queued carries the steer text hash 
+PASS drained kind 
+PASS drained fields ['admittedDelivery', 'commandId_sha256', 'delivery', 'dir', 'injectedMessageIds_sha256', 'kind', 'pendingInputId_sha256', 'pendingInputIds_sha256', 'queryIds_sha256', 'sourceCommandIds_sha256', 'targetTurnId_sha256', 'text_sha256s']
+PASS drained targetTurnId hash 
+PASS drained sourceCommandIds hashes correlate 
+PASS drained queryIds hashes correlate 
+PASS drained injectedMessageIds are hashes only 
+PASS drained pendingInputIds are hashes only 
+PASS drained carries the steer text hash 
+PASS chain: same commandId hash end-to-end 
+PASS chain: expectedTurn == queued turn == drained turn (hashes) 
+PASS chain: same text hash end-to-end 
+PASS chain: pending id admitted then drained (hashes) 
+
+ALL FIXTURE CHECKS PASS — persisted evidence is hash-only whitelist and the steer chain binds commandId + turn + text-hash end to end.

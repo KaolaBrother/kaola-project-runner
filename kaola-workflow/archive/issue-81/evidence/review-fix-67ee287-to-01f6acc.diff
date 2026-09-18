@@ -1,0 +1,200 @@
+diff --git a/scripts/kaola-zcode-acp.py b/scripts/kaola-zcode-acp.py
+index eb25e25..3573d93 100755
+--- a/scripts/kaola-zcode-acp.py
++++ b/scripts/kaola-zcode-acp.py
+@@ -1476,14 +1476,20 @@ class ZCodeAcpAgent:
+                 return
+             pending_id = steer.get("pending_input_id")
+             drained = payload.get("drainedInputs") or []
+-            ours = (
+-                pending_id in (payload.get("pendingInputIds") or [])
+-                or any(item.get("pendingInputId") == pending_id for item in drained)
+-                or any(
+-                    (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
+-                    for item in drained
+-                )
++            # Issue #81 review: `pending_id` can be unknown (the admission
++            # event omitted `pendingInputId`), and a `None == None` match
++            # against an unrelated drained item that also omits the field must
++            # never count as ours. Only a nonempty known pending id or the
++            # exact sourceCommandId proves this drain consumed our input.
++            ours = any(
++                (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
++                for item in drained
+             )
++            if not ours and pending_id:
++                ours = (
++                    pending_id in (payload.get("pendingInputIds") or [])
++                    or any(item.get("pendingInputId") == pending_id for item in drained)
++                )
+             if not ours:
+                 return
+             steer["drained"] = payload
+diff --git a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+index eb25e25..3573d93 100755
+--- a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
++++ b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+@@ -1476,14 +1476,20 @@ class ZCodeAcpAgent:
+                 return
+             pending_id = steer.get("pending_input_id")
+             drained = payload.get("drainedInputs") or []
+-            ours = (
+-                pending_id in (payload.get("pendingInputIds") or [])
+-                or any(item.get("pendingInputId") == pending_id for item in drained)
+-                or any(
+-                    (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
+-                    for item in drained
+-                )
++            # Issue #81 review: `pending_id` can be unknown (the admission
++            # event omitted `pendingInputId`), and a `None == None` match
++            # against an unrelated drained item that also omits the field must
++            # never count as ours. Only a nonempty known pending id or the
++            # exact sourceCommandId proves this drain consumed our input.
++            ours = any(
++                (item.get("intent") or {}).get("sourceCommandId") == steer["command_id"]
++                for item in drained
+             )
++            if not ours and pending_id:
++                ours = (
++                    pending_id in (payload.get("pendingInputIds") or [])
++                    or any(item.get("pendingInputId") == pending_id for item in drained)
++                )
+             if not ours:
+                 return
+             steer["drained"] = payload
+diff --git a/tests/contract/fake-zcode-app-server.py b/tests/contract/fake-zcode-app-server.py
+index f70457c..ebe4cc6 100755
+--- a/tests/contract/fake-zcode-app-server.py
++++ b/tests/contract/fake-zcode-app-server.py
+@@ -41,6 +41,10 @@ Scenarios (argv ``--scenario``):
+   steer_queue  v4 sendText admitted to the queue only: steerQueued, no drain
+   steer_turnend steerQueued{guide} then the turn ends without a drain
+   steer_xturn  steerQueued{targetTurnId:A} then steerDrained{targetTurnId:B}
++  steer_phantom adversarial: queued omits pendingInputId; an UNRELATED drain
++              also omits it but names our turn — must never report injected
++  steer_guide_nopid guide drain correlating by sourceCommandId only — the
++              pending-id-free happy path that must still report injected
+   steer_silent v4 sendText accepted but no steer events at all
+   steer_reject v4 sendText answered status:"rejected" with a reasonCode
+   steer_unsupported no v4 methods at all (pre-0.16 build parity): -32601
+@@ -524,26 +528,52 @@ class FakeAppServer:
+                         "queue" if scenario == "steer_queue" else "guide"),
+                 },
+             }
++            if scenario in ("steer_phantom", "steer_guide_nopid"):
++                # The adversarial review leg: our admission carries no
++                # pendingInputId, so the ledger has no id to match on.
++                queued_payload.pop("pendingInputId", None)
+             if scenario in ("steer_guide", "steer_queue", "steer_turnend",
+-                            "steer_xturn"):
++                            "steer_xturn", "steer_phantom", "steer_guide_nopid"):
+                 self.event(session_id, "turn.steerQueued", queued_payload)
+-            if scenario in ("steer_guide", "steer_xturn"):
++            if scenario in ("steer_guide", "steer_xturn", "steer_guide_nopid"):
+                 time.sleep(0.15)
+                 # steer_xturn drains into a DIFFERENT turn id — a same-turn
+                 # claim off this pair would be a lie, so the adapter must not
+                 # report injected.
+-                drained_turn = (turn_id if scenario == "steer_guide"
++                drained_turn = (turn_id if scenario != "steer_xturn"
+                                 else f"{turn_id}_other")
+-                self.event(session_id, "turn.steerDrained", {
++                drained_item = {
++                    "messageId": "msg_fake_injected_1",
++                    "text": text, "delivery": "guide",
++                    "intent": queued_payload["intent"],
++                }
++                drained_payload = {
+                     "injectedMessageIds": ["msg_fake_injected_1"],
+                     "pendingInputIds": [pending_id],
+                     "queryIds": [command_id],
+                     "targetTurnId": drained_turn,
++                    "drainedInputs": [dict(drained_item, pendingInputId=pending_id)],
++                }
++                if scenario == "steer_guide_nopid":
++                    # Correlation only by intent.sourceCommandId: no
++                    # pendingInputId field anywhere in this drain.
++                    drained_payload["pendingInputIds"] = []
++                    drained_payload["drainedInputs"] = [drained_item]
++                self.event(session_id, "turn.steerDrained", drained_payload)
++            if scenario == "steer_phantom":
++                time.sleep(0.15)
++                # Adversarial: an unrelated input drains into our turn while
++                # our steer is pending. Neither side carries pendingInputId,
++                # so a None==None match would claim this drain is ours —
++                # the adapter must ignore it entirely.
++                self.event(session_id, "turn.steerDrained", {
++                    "injectedMessageIds": ["msg_fake_unrelated"],
++                    "pendingInputIds": ["queue_cmd-unrelated-1"],
++                    "targetTurnId": turn_id,
+                     "drainedInputs": [{
+-                        "pendingInputId": pending_id,
+-                        "messageId": "msg_fake_injected_1",
+-                        "text": text, "delivery": "guide",
+-                        "intent": queued_payload["intent"],
++                        "messageId": "msg_fake_unrelated",
++                        "text": "someone else's input", "delivery": "guide",
++                        "intent": {"sourceCommandId": "cmd-unrelated-1"},
+                     }],
+                 })
+             # steer_silent emits nothing: accepted ack, then only the turn end.
+@@ -573,7 +603,7 @@ class FakeAppServer:
+                        {"kind": "text_delta", "delta": "working"})
+             self.v4_seen.wait(20)
+             self.turn_gate.wait(20)
+-            if scenario == "steer_guide":
++            if scenario in ("steer_guide", "steer_guide_nopid"):
+                 response = "STEERED-FAKE-OK"
+             else:
+                 response = "DONE-FAKE-TURN"
+diff --git a/tests/contract/test-zcode-acp-contract.py b/tests/contract/test-zcode-acp-contract.py
+index 1514ec4..361f2b9 100644
+--- a/tests/contract/test-zcode-acp-contract.py
++++ b/tests/contract/test-zcode-acp-contract.py
+@@ -1561,6 +1561,30 @@ class ZcodeAcpSteerContractTests(unittest.TestCase):
+         self.assertEqual(result.get("outcome"), "unknown")
+         self.assertNotEqual(result.get("targetTurnId"), None)
+ 
++    def test_unrelated_drain_without_pending_ids_is_never_injected(self) -> None:
++        # Outer-review adversarial leg: our steerQueued omitted pendingInputId,
++        # so the ledger holds pending_input_id=None; an unrelated drain item
++        # that also omits it must NOT match on `None == None` — even with our
++        # targetTurnId and nonempty injectedMessageIds.
++        driver, session_id = self._session("steer_phantom")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id)
++        result = reply.get("result") or {}
++        self.assertNotEqual(result.get("outcome"), "injected")
++        # Our own admission stayed guide-queued when the turn ended — the
++        # unrelated drain was ignored, so this is the honest queued outcome.
++        self.assertEqual(result.get("outcome"), "queued")
++
++    def test_source_command_match_still_injects_without_pending_ids(self) -> None:
++        # The other half of the fix: pending-id-free events must still report
++        # injected when intent.sourceCommandId proves the drain is ours.
++        driver, session_id = self._session("steer_guide_nopid")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "injected")
++        self.assertTrue(result.get("injectedMessageIds"))
++
+     def test_accepted_then_silence_reports_unknown(self) -> None:
+         driver, session_id = self._session("steer_silent")
+         self._prompt_running(driver, session_id)
+@@ -1685,6 +1709,15 @@ class ZcodeAcpSteerHolderTests(unittest.TestCase):
+         self.assertIs(receipt.get("steer_consumed"), None)
+         self.assertNotEqual(receipt.get("steer_native_outcome"), "injected")
+ 
++    def test_unrelated_drain_receipt_is_not_consumed(self) -> None:
++        # The adversarial None==None pending-id match must never reach the
++        # receipt: the unrelated drain is ignored, our admission stayed queued.
++        turn, receipt = self._steer_receipt("steer_phantom")
++        self.assertEqual(receipt.get("steer_outcome"), "not_consumed")
++        self.assertEqual(receipt.get("steer_native_outcome"), "queued")
++        self.assertIs(receipt.get("steer_consumed"), False)
++        self.assertIs(receipt.get("mutation_performed"), True)
++
+     def test_unsupported_backend_receipt(self) -> None:
+         turn, receipt = self._steer_receipt("steer_unsupported")
+         self.assertEqual(receipt.get("steer_outcome"), "unsupported")

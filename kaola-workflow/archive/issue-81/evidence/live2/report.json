@@ -1,0 +1,1564 @@
+{
+  "legs": {
+    "C_rejections": {
+      "setFollowupMode_no_cas": {
+        "commandId": "i81-setFollowupMode-6-25348810",
+        "status": "rejected",
+        "reasonCode": "proto.invalidPayload",
+        "message": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"baseRevision\"\n    ],\n    \"message\": \"CAS commands require baseRevision and baseLogEpoch\"\n  }\n]",
+        "revisionAtDecision": 0
+      },
+      "sendText_bogus_session": {
+        "commandId": "i81-sendText-7-4b3a9470",
+        "status": "rejected",
+        "reasonCode": "proto.sessionNotFound",
+        "revisionAtDecision": 0
+      }
+    },
+    "G1_requestedDelivery_guide": {
+      "turn_started": {
+        "turnNumber": 0,
+        "input": "Use the shell tool to run this exact loop: for i in 1 2 3 4 5 6 7 8 9 10; do echo g1step-$i; sleep 4; done. When the loop finishes, reply with exactly: DONE-TURN1-81. Do not reply before the loop finishes.",
+        "messageId": "msg_mu76skuf_38b272be-dbe7-4d91-9a7c-275dd85ce3a5",
+        "foregroundExecutionId": "runtime_command_1",
+        "queryId": "query_e8ea8110-da17-425b-ad02-d4623e718b0d"
+      },
+      "revision_before_steer": 2,
+      "steer_sendText_ack": {
+        "commandId": "i81-sendText-9-7c1b2233",
+        "status": "accepted",
+        "revisionAtDecision": 2,
+        "result": {
+          "type": "inputAccepted",
+          "delivery": "queue",
+          "inputId": "i81-sendText-9-7c1b2233"
+        }
+      },
+      "turn_end": [
+        "turn.completed",
+        {
+          "response": "STEERED-G1-81-OK",
+          "tokenCount": 31654,
+          "usage": {
+            "source": "provider",
+            "modelRequestCount": 2,
+            "inputTokens": 31573,
+            "outputTokens": 81,
+            "totalTokens": 31654,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0,
+            "reasoningTokens": 0,
+            "webFetchRequests": 0,
+            "webSearchRequests": 0
+          },
+          "toolCallCount": 1,
+          "historyRoundCount": 2,
+          "duration": 65910,
+          "resultType": "success",
+          "cacheStats": {
+            "totalMessages": 10,
+            "cachedMessages": 5,
+            "lastCacheHit": false
+          }
+        }
+      ],
+      "event_summary": [
+        {
+          "session_event": "turn.steerQueued",
+          "targetTurnId": "turn_a3774f10-f83d-4a4f-b114-d819cf98c613",
+          "delivery": "guide",
+          "queueLength": 1,
+          "pendingInputId": "queue_i81-sendText-9-7c1b2233",
+          "inputPreview": "Abandon the loop now and reply with exactly: STEERED-G1-81-OK",
+          "intent_delivery": null,
+          "intent_admittedDelivery": "guide",
+          "intent_fallbackReasonCode": null
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "state.updated"
+          ],
+          "delta_revisions": [
+            3
+          ]
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "row.appended",
+            "state.updated",
+            "row.upserted",
+            "state.updated"
+          ],
+          "delta_revisions": [
+            4,
+            5
+          ]
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "computer-use/operation-event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "other_notification": "computer-use/operation-event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "state.updated",
+            "row.upserted",
+            "state.updated",
+            "row.upserted",
+            "state.updated"
+          ],
+          "delta_revisions": [
+            6,
+            7
+          ]
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "session_event": "streamRecovery.updated"
+        },
+        {
+          "session_event": "session.updated",
+          "pendingInputId": "queue_i81-sendText-9-7c1b2233"
+        },
+        {
+          "session_event": "turn.steerDrained",
+          "targetTurnId": "turn_a3774f10-f83d-4a4f-b114-d819cf98c613",
+          "pendingInputIds": [
+            "queue_i81-sendText-9-7c1b2233"
+          ],
+          "injectedMessageIds": [
+            "msg_mu76tmoz_a49f9ccb-222f-4b37-ab1b-8602897a2218"
+          ],
+          "drainedInputs": [
+            {
+              "pendingInputId": "queue_i81-sendText-9-7c1b2233",
+              "messageId": "msg_mu76tmoz_a49f9ccb-222f-4b37-ab1b-8602897a2218",
+              "delivery": "guide",
+              "text": "Abandon the loop now and reply with exactly: STEERED-G1-81-OK"
+            }
+          ]
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "row.upserted",
+            "state.updated",
+            "row.upserted",
+            "row.appended",
+            "row.upserted",
+            "row.upserted",
+            "state.updated"
+          ],
+          "delta_revisions": [
+            9,
+            10
+          ]
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "process/resourceSample"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "row.appended",
+            "state.updated",
+            "row.delta"
+          ],
+          "delta_revisions": [
+            11
+          ]
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "row.delta"
+          ],
+          "delta_revisions": []
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "computer-use/operation-event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "turn.completed",
+          "resultType": "success",
+          "response": "STEERED-G1-81-OK"
+        }
+      ]
+    },
+    "G2_cas_guide": {
+      "turn_started": {
+        "turnNumber": 1,
+        "input": "Use the shell tool to run this exact loop: for i in 1 2 3 4 5 6 7 8 9 10; do echo g2step-$i; sleep 4; done. When the loop finishes, reply with exactly: DONE-TURN2-81. Do not reply before the loop finishes.",
+        "messageId": "msg_mu76u0to_ab7f9676-475c-4e60-ae8c-547ef3cdb1dc",
+        "foregroundExecutionId": "runtime_command_2",
+        "queryId": "query_538a7f84-1f1e-40d7-8e8c-eeafc277a8c3"
+      },
+      "setFollowupMode_cas": [
+        {
+          "attempt": 0,
+          "baseRevision": 14,
+          "baseLogEpoch": "mu76sjm3-f8ja7lv9",
+          "ack": {
+            "commandId": "i81-setFollowupMode-11-97ca0c34",
+            "status": "accepted",
+            "revisionAtDecision": 14
+          }
+        }
+      ],
+      "steer_sendText_ack": {
+        "commandId": "i81-sendText-12-1b23eb8b",
+        "status": "accepted",
+        "revisionAtDecision": 15,
+        "result": {
+          "type": "inputAccepted",
+          "delivery": "queue",
+          "inputId": "i81-sendText-12-1b23eb8b"
+        }
+      },
+      "turn_end": [
+        "turn.completed",
+        {
+          "response": "STEERED-G2-81-OK",
+          "tokenCount": 32130,
+          "usage": {
+            "source": "provider",
+            "modelRequestCount": 2,
+            "inputTokens": 32049,
+            "outputTokens": 81,
+            "totalTokens": 32130,
+            "cacheReadTokens": 28160,
+            "cacheWriteTokens": 0,
+            "reasoningTokens": 0,
+            "webFetchRequests": 0,
+            "webSearchRequests": 0
+          },
+          "toolCallCount": 1,
+          "historyRoundCount": 2,
+          "duration": 69907,
+          "resultType": "success",
+          "cacheStats": {
+            "totalMessages": 15,
+            "cachedMessages": 14,
+            "lastCacheHit": true,
+            "cacheReadTokens": 15936
+          }
+        }
+      ],
+      "event_summary": [
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "session_event": "turn.steerQueued",
+          "targetTurnId": "turn_530e207d-0b8b-47af-a2e8-202fd6784ea9",
+          "delivery": "guide",
+          "queueLength": 1,
+          "pendingInputId": "queue_i81-sendText-12-1b23eb8b",
+          "inputPreview": "Abandon the loop now and reply with exactly: STEERED-G2-81-OK",
+          "intent_delivery": null,
+          "intent_admittedDelivery": "guide",
+          "intent_fallbackReasonCode": null
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "state.updated"
+          ],
+          "delta_revisions": [
+            16
+          ]
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.titleUpdated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "state.updated"
+          ],
+          "delta_revisions": [
+            17
+          ]
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "row.appended",
+            "state.updated",
+            "row.upserted",
+            "state.updated"
+          ],
+          "delta_revisions": [
+            18,
+            19
+          ]
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "computer-use/operation-event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "other_notification": "computer-use/operation-event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "state.updated",
+            "row.upserted",
+            "state.updated",
+            "row.upserted",
+            "state.updated"
+          ],
+          "delta_revisions": [
+            20,
+            21
+          ]
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [],
+          "delta_revisions": []
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "session_event": "tool.updated"
+        },
+        {
+          "session_event": "streamRecovery.updated"
+        },
+        {
+          "session_event": "session.updated",
+          "pendingInputId": "queue_i81-sendText-12-1b23eb8b"
+        },
+        {
+          "session_event": "turn.steerDrained",
+          "targetTurnId": "turn_530e207d-0b8b-47af-a2e8-202fd6784ea9",
+          "pendingInputIds": [
+            "queue_i81-sendText-12-1b23eb8b"
+          ],
+          "injectedMessageIds": [
+            "msg_mu76v2d1_c5ba22e6-36f0-4d0e-99e8-c804400de0fe"
+          ],
+          "drainedInputs": [
+            {
+              "pendingInputId": "queue_i81-sendText-12-1b23eb8b",
+              "messageId": "msg_mu76v2d1_c5ba22e6-36f0-4d0e-99e8-c804400de0fe",
+              "delivery": "guide",
+              "text": "Abandon the loop now and reply with exactly: STEERED-G2-81-OK"
+            }
+          ]
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "row.upserted",
+            "state.updated",
+            "row.upserted",
+            "row.appended",
+            "row.upserted",
+            "row.upserted",
+            "state.updated"
+          ],
+          "delta_revisions": [
+            23,
+            24
+          ]
+        },
+        {
+          "other_notification": "process/resourceSample"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "v4_frame": "conversation/sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+          "kind": "deltas",
+          "delta_ops": [
+            "row.appended",
+            "state.updated",
+            "row.delta"
+          ],
+          "delta_revisions": [
+            25
+          ]
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "model.streaming"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "session.updated"
+        },
+        {
+          "other_notification": "computer-use/operation-event"
+        },
+        {
+          "other_notification": "v4/telemetry/event"
+        },
+        {
+          "session_event": "turn.completed",
+          "resultType": "success",
+          "response": "STEERED-G2-81-OK"
+        }
+      ]
+    }
+  },
+  "verdicts": {},
+  "bootstrap": {
+    "updateAccountConfig": {
+      "receivedRevision": "account:probe:1789749751996",
+      "providerCount": 8,
+      "status": "received"
+    },
+    "session/create": {
+      "sessionId": "sess_ea58ef9a-e2d5-4f44-ae29-9d94edef2cc4",
+      "error": null
+    },
+    "session/setModel": {
+      "ok": true,
+      "stateRevision": 1
+    },
+    "session/subscribe": {
+      "ok": true
+    },
+    "v4/conversation/subscribe": {
+      "subscriptionId": "sub-mu76sjm3-f8ja7lv9-1",
+      "mode": "snapshot",
+      "logEpoch": "mu76sjm3-f8ja7lv9",
+      "openTiming": {
+        "version": 1,
+        "initialFrameEncodeMs": 0,
+        "sessionRuntimeState": "warm",
+        "snapshotRowCount": 0
+      }
+    }
+  },
+  "teardown": {
+    "session/close": {
+      "closed": true
+    },
+    "proc": "terminated"
+  }
+}

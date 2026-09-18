@@ -1,0 +1,197 @@
+diff --git a/scripts/kaola-zcode-acp.py b/scripts/kaola-zcode-acp.py
+index 3573d93..72205d4 100755
+--- a/scripts/kaola-zcode-acp.py
++++ b/scripts/kaola-zcode-acp.py
+@@ -1643,8 +1643,10 @@ class ZCodeAcpAgent:
+         if drained is not None:
+             # `injected` needs the full same-turn chain (Issue #81): the guide
+             # admission AND the drain must name one targetTurnId, that id must
+-            # be the turn this steer targeted, and the drain must carry the
+-            # injectedMessageIds. Anything shorter is evidence, not injection.
++            # equal the turn this steer targeted, and the drain must carry the
++            # injectedMessageIds. When the backend never named the running turn
++            # (expected is None), a self-consistent pair still cannot prove it
++            # hit the targeted turn — the steer may have landed in a successor.
+             injected_ids = drained.get("injectedMessageIds") or []
+             queued_turn = (queued or {}).get("targetTurnId")
+             drained_turn = drained.get("targetTurnId")
+@@ -1652,7 +1654,8 @@ class ZCodeAcpAgent:
+                 queued is not None
+                 and queued_turn is not None
+                 and queued_turn == drained_turn
+-                and (expected is None or drained_turn == expected)
++                and expected is not None
++                and drained_turn == expected
+             )
+             if same_turn and injected_ids:
+                 self.respond(rid, {
+@@ -1672,7 +1675,12 @@ class ZCodeAcpAgent:
+                     gaps.append(
+                         f"admission targeted {queued_turn} but drained into "
+                         f"{drained_turn}")
+-                if expected is not None and drained_turn != expected:
++                if expected is None:
++                    gaps.append(
++                        "the backend never named the turn running when the "
++                        "steer was sent, so the drain cannot be proven to "
++                        "belong to the targeted turn")
++                elif drained_turn != expected:
+                     gaps.append(f"drained turn {drained_turn} is not the "
+                                 f"steered turn {expected}")
+                 if not injected_ids:
+diff --git a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+index 3573d93..72205d4 100755
+--- a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
++++ b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+@@ -1643,8 +1643,10 @@ class ZCodeAcpAgent:
+         if drained is not None:
+             # `injected` needs the full same-turn chain (Issue #81): the guide
+             # admission AND the drain must name one targetTurnId, that id must
+-            # be the turn this steer targeted, and the drain must carry the
+-            # injectedMessageIds. Anything shorter is evidence, not injection.
++            # equal the turn this steer targeted, and the drain must carry the
++            # injectedMessageIds. When the backend never named the running turn
++            # (expected is None), a self-consistent pair still cannot prove it
++            # hit the targeted turn — the steer may have landed in a successor.
+             injected_ids = drained.get("injectedMessageIds") or []
+             queued_turn = (queued or {}).get("targetTurnId")
+             drained_turn = drained.get("targetTurnId")
+@@ -1652,7 +1654,8 @@ class ZCodeAcpAgent:
+                 queued is not None
+                 and queued_turn is not None
+                 and queued_turn == drained_turn
+-                and (expected is None or drained_turn == expected)
++                and expected is not None
++                and drained_turn == expected
+             )
+             if same_turn and injected_ids:
+                 self.respond(rid, {
+@@ -1672,7 +1675,12 @@ class ZCodeAcpAgent:
+                     gaps.append(
+                         f"admission targeted {queued_turn} but drained into "
+                         f"{drained_turn}")
+-                if expected is not None and drained_turn != expected:
++                if expected is None:
++                    gaps.append(
++                        "the backend never named the turn running when the "
++                        "steer was sent, so the drain cannot be proven to "
++                        "belong to the targeted turn")
++                elif drained_turn != expected:
+                     gaps.append(f"drained turn {drained_turn} is not the "
+                                 f"steered turn {expected}")
+                 if not injected_ids:
+diff --git a/tests/contract/fake-zcode-app-server.py b/tests/contract/fake-zcode-app-server.py
+index ebe4cc6..1f4bb11 100755
+--- a/tests/contract/fake-zcode-app-server.py
++++ b/tests/contract/fake-zcode-app-server.py
+@@ -45,6 +45,9 @@ Scenarios (argv ``--scenario``):
+               also omits it but names our turn — must never report injected
+   steer_guide_nopid guide drain correlating by sourceCommandId only — the
+               pending-id-free happy path that must still report injected
++  steer_noexpect adversarial: turn.started never carries turnId, then a
++              queue/drain pair agrees on a successor-turn id — with the
++              steered turn's identity unknown it must never report injected
+   steer_silent v4 sendText accepted but no steer events at all
+   steer_reject v4 sendText answered status:"rejected" with a reasonCode
+   steer_unsupported no v4 methods at all (pre-0.16 build parity): -32601
+@@ -532,16 +535,26 @@ class FakeAppServer:
+                 # The adversarial review leg: our admission carries no
+                 # pendingInputId, so the ledger has no id to match on.
+                 queued_payload.pop("pendingInputId", None)
++            if scenario == "steer_noexpect":
++                # Queue/drain agree on a SUCCESSOR-turn id — but turn.started
++                # never named any turn, so the adapter cannot prove this pair
++                # belongs to the turn it steered.
++                queued_payload["targetTurnId"] = f"{turn_id}_later"
+             if scenario in ("steer_guide", "steer_queue", "steer_turnend",
+-                            "steer_xturn", "steer_phantom", "steer_guide_nopid"):
++                            "steer_xturn", "steer_phantom", "steer_guide_nopid",
++                            "steer_noexpect"):
+                 self.event(session_id, "turn.steerQueued", queued_payload)
+-            if scenario in ("steer_guide", "steer_xturn", "steer_guide_nopid"):
++            if scenario in ("steer_guide", "steer_xturn", "steer_guide_nopid",
++                            "steer_noexpect"):
+                 time.sleep(0.15)
+                 # steer_xturn drains into a DIFFERENT turn id — a same-turn
+                 # claim off this pair would be a lie, so the adapter must not
+                 # report injected.
+-                drained_turn = (turn_id if scenario != "steer_xturn"
+-                                else f"{turn_id}_other")
++                drained_turn = turn_id
++                if scenario == "steer_xturn":
++                    drained_turn = f"{turn_id}_other"
++                elif scenario == "steer_noexpect":
++                    drained_turn = f"{turn_id}_later"
+                 drained_item = {
+                     "messageId": "msg_fake_injected_1",
+                     "text": text, "delivery": "guide",
+@@ -589,9 +602,16 @@ class FakeAppServer:
+         # Live parity: `turn.started` carries the platform's own `turnId` at
+         # params level (sibling of `type`), not inside `payload` — the adapter
+         # reads it for the sendText expectedTurnId CAS.
+-        self.event(session_id, "turn.started",
+-                   {"queryId": f"query_{session_id}"},
+-                   params_extra={"turnId": self.active_turn_id})
++        if scenario == "steer_noexpect":
++            # Adversarial: a build whose turn.started never surfaces the
++            # platform turnId. The adapter's expected-turn CAS stays unlearned,
++            # so no queue/drain pair can ever be confirmed same-turn.
++            self.event(session_id, "turn.started",
++                       {"queryId": f"query_{session_id}"})
++        else:
++            self.event(session_id, "turn.started",
++                       {"queryId": f"query_{session_id}"},
++                       params_extra={"turnId": self.active_turn_id})
+ 
+         if scenario.startswith("steer_"):
+             # The turn stays alive until the steer's v4 activity resolved: the
+diff --git a/tests/contract/test-zcode-acp-contract.py b/tests/contract/test-zcode-acp-contract.py
+index 361f2b9..13b21ed 100644
+--- a/tests/contract/test-zcode-acp-contract.py
++++ b/tests/contract/test-zcode-acp-contract.py
+@@ -1585,6 +1585,26 @@ class ZcodeAcpSteerContractTests(unittest.TestCase):
+         self.assertEqual(result.get("outcome"), "injected")
+         self.assertTrue(result.get("injectedMessageIds"))
+ 
++    def test_unknown_turn_identity_never_reports_injected(self) -> None:
++        # Outer-review adversarial leg: turn.started never carried turnId, so
++        # the expected-turn CAS stayed unlearned and the sendText went out
++        # without it. Queue/drain then agreed on a successor-turn id — a
++        # self-consistent pair still cannot prove it hit the steered turn.
++        driver, session_id = self._session("steer_noexpect")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "unknown")
++        self.assertNotEqual(result.get("outcome"), "injected")
++        # The successor-turn id the drain named is still disclosed honestly.
++        self.assertTrue((result.get("targetTurnId") or "").endswith("_later"))
++        # The CAS-less send is the adversarial condition under test: prove the
++        # command really left without expectedTurnId.
++        sends = self._v4_send_texts(driver)
++        self.assertEqual(len(sends), 1)
++        payload = (sends[0].get("params") or {}).get("payload") or {}
++        self.assertIsNone(payload.get("expectedTurnId"))
++
+     def test_accepted_then_silence_reports_unknown(self) -> None:
+         driver, session_id = self._session("steer_silent")
+         self._prompt_running(driver, session_id)
+@@ -1718,6 +1738,18 @@ class ZcodeAcpSteerHolderTests(unittest.TestCase):
+         self.assertIs(receipt.get("steer_consumed"), False)
+         self.assertIs(receipt.get("mutation_performed"), True)
+ 
++    def test_unknown_turn_identity_receipt_is_never_injected(self) -> None:
++        # Second outer-review leg: no turnId was ever learned, so a matched
++        # queue/drain pair on a successor turn must reach the receipt as
++        # undecided — never as injected, and never as an invitation to resend.
++        turn, receipt = self._steer_receipt("steer_noexpect")
++        self.assertEqual(receipt.get("steer_outcome"), "unknown")
++        self.assertIsNot(receipt.get("steer_outcome"), "injected")
++        self.assertIs(receipt.get("steer_consumed"), None)
++        self.assertEqual(receipt.get("steer_native_outcome"), "unknown")
++        self.assertEqual((receipt.get("error") or {}).get("code"),
++                         "steer-undecided")
++
+     def test_unsupported_backend_receipt(self) -> None:
+         turn, receipt = self._steer_receipt("steer_unsupported")
+         self.assertEqual(receipt.get("steer_outcome"), "unsupported")

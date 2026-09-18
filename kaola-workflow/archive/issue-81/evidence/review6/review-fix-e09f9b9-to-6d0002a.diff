@@ -1,0 +1,139 @@
+diff --git a/scripts/kaola-zcode-acp.py b/scripts/kaola-zcode-acp.py
+index 25ba33e..346d49c 100755
+--- a/scripts/kaola-zcode-acp.py
++++ b/scripts/kaola-zcode-acp.py
+@@ -49,6 +49,7 @@ import argparse
+ import atexit
+ import hashlib
+ import json
++import math
+ import os
+ import re
+ import signal
+@@ -70,7 +71,22 @@ STEER_DRAIN_WINDOW = 20.0
+ # wait), kept under the holder's 30 s steer timeout so a slow or lost v4 ack
+ # can never push the reply past the holder's own deadline. The env override
+ # exists so contract tests can exercise the deadline without a 26 s wait.
+-STEER_TOTAL_BUDGET = float(os.environ.get("KAOLA_ZCODE_STEER_BUDGET", "26"))
++def _steer_budget_seconds(raw: str | None) -> float:
++    """Resolve the test-only steer-budget override fail-safe: invalid,
++    non-finite, or non-positive input yields the 26 s default and any value
++    is capped at 26 s, so no env content can crash startup or push the steer
++    deadline past the holder's 30 s timeout."""
++    try:
++        value = float(raw) if raw is not None else 26.0
++    except (TypeError, ValueError):
++        return 26.0
++    if not math.isfinite(value) or value <= 0:
++        return 26.0
++    return min(value, 26.0)
++
++
++STEER_TOTAL_BUDGET = _steer_budget_seconds(
++    os.environ.get("KAOLA_ZCODE_STEER_BUDGET"))
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+diff --git a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+index 25ba33e..346d49c 100755
+--- a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
++++ b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+@@ -49,6 +49,7 @@ import argparse
+ import atexit
+ import hashlib
+ import json
++import math
+ import os
+ import re
+ import signal
+@@ -70,7 +71,22 @@ STEER_DRAIN_WINDOW = 20.0
+ # wait), kept under the holder's 30 s steer timeout so a slow or lost v4 ack
+ # can never push the reply past the holder's own deadline. The env override
+ # exists so contract tests can exercise the deadline without a 26 s wait.
+-STEER_TOTAL_BUDGET = float(os.environ.get("KAOLA_ZCODE_STEER_BUDGET", "26"))
++def _steer_budget_seconds(raw: str | None) -> float:
++    """Resolve the test-only steer-budget override fail-safe: invalid,
++    non-finite, or non-positive input yields the 26 s default and any value
++    is capped at 26 s, so no env content can crash startup or push the steer
++    deadline past the holder's 30 s timeout."""
++    try:
++        value = float(raw) if raw is not None else 26.0
++    except (TypeError, ValueError):
++        return 26.0
++    if not math.isfinite(value) or value <= 0:
++        return 26.0
++    return min(value, 26.0)
++
++
++STEER_TOTAL_BUDGET = _steer_budget_seconds(
++    os.environ.get("KAOLA_ZCODE_STEER_BUDGET"))
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+diff --git a/tests/contract/test-zcode-acp-contract.py b/tests/contract/test-zcode-acp-contract.py
+index 6bed171..df8ce9f 100644
+--- a/tests/contract/test-zcode-acp-contract.py
++++ b/tests/contract/test-zcode-acp-contract.py
+@@ -468,6 +468,32 @@ class ZcodeAcpStaticTests(unittest.TestCase):
+         with self.assertRaises(module.RuntimeError_):
+             module.resolve_runtime(missing, sys.executable)
+ 
++    def test_steer_budget_env_is_fail_safe_and_bounded(self) -> None:
++        # Outer-review knob leg: KAOLA_ZCODE_STEER_BUDGET is a test-only
++        # override. No value may crash the module or push the steer deadline
++        # past the 26 s cap (holder timeout is 30 s): invalid, non-finite,
++        # and non-positive input yields the safe default, valid input clamps.
++        module = load_adapter_module()
++        for raw in ("invalid", "", " ", "nan", "-nan", "NaN", "inf", "-inf",
++                    "1e309", "-1e309", "-5", "0", "-0.0", "0x10", "null",
++                    "1,5", "26extra", "100", "1e9", "27", "26.0001", "26",
++                    "25.9", "5.5", " 10 ", None):
++            value = module._steer_budget_seconds(raw)
++            self.assertTrue(0 < value <= 26.0, f"{raw!r} -> {value}")
++            self.assertTrue(value == value, f"{raw!r} -> NaN")
++        # The safe default must apply to invalid/non-positive input and the
++        # cap must apply to oversized valid input.
++        for raw in ("invalid", "", " ", "nan", "-nan", "NaN", "inf", "-inf",
++                    "1e309", "-1e309", "-5", "0", "-0.0", "0x10", "null",
++                    "1,5", "26extra", None):
++            self.assertEqual(module._steer_budget_seconds(raw), 26.0, raw)
++        for raw, expected in (("100", 26.0), ("1e9", 26.0), ("27", 26.0),
++                              ("26.0001", 26.0), ("26", 26.0),
++                              ("25.9", 25.9), ("5.5", 5.5), (" 10 ", 10.0)):
++            self.assertEqual(module._steer_budget_seconds(raw), expected,
++                             raw)
++        self.assertEqual(module.STEER_TOTAL_BUDGET, 26.0)
++
+ 
+ class ZcodeAcpContractTests(unittest.TestCase):
+     def setUp(self) -> None:
+@@ -1767,6 +1793,29 @@ class ZcodeAcpSteerContractTests(unittest.TestCase):
+         self.assertIs(result.get("sendUncertain"), True)
+         self.assertLess(elapsed, 30.0)
+ 
++    def test_invalid_budget_env_still_starts_and_steers(self) -> None:
++        # Outer-review knob leg: a garbage KAOLA_ZCODE_STEER_BUDGET must not
++        # kill module load — the adapter starts, answers ACP, and steers on
++        # the safe 26 s default. Previously `float()` at import crashed the
++        # process outright (exit 1) for exactly this input.
++        driver = AdapterDriver(
++            self.tmp, scenario="steer_guide",
++            extra_env={"KAOLA_ZCODE_STEER_BUDGET": "invalid"})
++        self.driver = driver
++        driver.request(1, "initialize", {"protocolVersion": 1})
++        self.assertIsNotNone(driver.wait_result(1))
++        driver.request(2, "session/new", {
++            "cwd": str(driver.cwd), "mcpServers": []})
++        created = driver.wait_result(2)
++        self.assertIsNotNone(created)
++        assert created is not None
++        session_id = (created.get("result") or {}).get("sessionId")
++        self.assertTrue(session_id)
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "injected")
++
+     def test_accepted_then_silence_reports_unknown(self) -> None:
+         driver, session_id = self._session("steer_silent")
+         self._prompt_running(driver, session_id)

@@ -1,0 +1,701 @@
+diff --git a/scripts/kaola-zcode-acp.py b/scripts/kaola-zcode-acp.py
+index 3410a95..25ba33e 100755
+--- a/scripts/kaola-zcode-acp.py
++++ b/scripts/kaola-zcode-acp.py
+@@ -68,8 +68,9 @@ ADAPTER_VERSION = "0.3.3"
+ STEER_DRAIN_WINDOW = 20.0
+ # Issue #81: hard cap on the whole steer exchange (subscribe + send + evidence
+ # wait), kept under the holder's 30 s steer timeout so a slow or lost v4 ack
+-# can never push the reply past the holder's own deadline.
+-STEER_TOTAL_BUDGET = 26.0
++# can never push the reply past the holder's own deadline. The env override
++# exists so contract tests can exercise the deadline without a 26 s wait.
++STEER_TOTAL_BUDGET = float(os.environ.get("KAOLA_ZCODE_STEER_BUDGET", "26"))
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+@@ -674,6 +675,12 @@ def persisted_model_from_messages(payload: Any) -> dict[str, str] | None:
+ # --------------------------------------------------------------------------
+ 
+ 
++class BackendTransportError(RuntimeError_):
++    """A backend call failed without a server answer — timeout, app-server
++    exit, or a write failure. The request may already have been processed
++    server-side, so it must never be read as a business rejection."""
++
++
+ class ZCodeBackend:
+     """Talks the private ZCode Protocol to an `app-server --stdio` child."""
+ 
+@@ -720,6 +727,7 @@ class ZCodeBackend:
+             self._pending.clear()
+         for slot in pending:
+             slot["error"] = {"code": -32000, "message": "zcode app-server exited"}
++            slot["transport"] = True
+             slot["event"].set()
+ 
+     def _dispatch(self, msg: dict[str, Any]) -> None:
+@@ -756,8 +764,14 @@ class ZCodeBackend:
+         if not slot["event"].wait(timeout):
+             with self._lock:
+                 self._pending.pop(rid, None)
+-            raise RuntimeError_(f"zcode call timed out: {method}")
++            raise BackendTransportError(f"zcode call timed out: {method}")
+         if slot.get("error"):
++            if slot.get("transport"):
++                # The backend died mid-call: the request may already have
++                # been processed server-side — transport-uncertain, not a
++                # business rejection.
++                raise BackendTransportError(
++                    f"zcode transport failed for {method}: {slot['error']}")
+             raise RuntimeError_(f"zcode error for {method}: {slot['error']}")
+         return slot.get("result")
+ 
+@@ -1663,10 +1677,20 @@ class ZCodeAcpAgent:
+                 "turn_ended": False,
+             }
+             session.steer = steer
++            # The turn this steer is FOR: the running turn at request entry.
++            # A later recheck must find this same request id still running —
++            # otherwise the original turn ended (or a successor replaced it)
++            # and a CAS learned from `active_turn_id` would steer whoever
++            # happens to run now instead of the intended turn.
++            target_request_id = session.turn_request_id
+         backend_id = session.backend_id
+         send_uncertain = False
+         ack: dict[str, Any] | None = None
+-        steer_start = time.monotonic()
++        # One deadline for the whole steer exchange — subscribe, the
++        # expected-id wait, the send, and the drain wait each get only what is
++        # left of it, so a slow phase can never push the reply past the
++        # holder's own 30 s steer timeout.
++        deadline_total = time.monotonic() + STEER_TOTAL_BUDGET
+         try:
+             backend = self.ensure_backend()
+             if not session.v4_subscribed:
+@@ -1676,20 +1700,73 @@ class ZCodeAcpAgent:
+                     "topic": f"conversation/{backend_id}",
+                     "connectionId": f"kpr-{uuid.uuid4()}",
+                     "clientMode": "desktop-continuous",
+-                }, timeout=15.0)
++                }, timeout=max(0.1, min(15.0, deadline_total - time.monotonic())))
+                 session.v4_subscribed = True
+             # `turn.started` (params-level `turnId`) can lag the prompt
+             # acknowledgement slightly on the backend reader thread; a short
+             # bounded wait lets the expectedTurnId CAS protect the common
+             # early-steer case. A build that never reports it just skips the
+             # CAS — the same-turn event check still guards the result.
+-            expected_deadline = time.monotonic() + 2.0
++            expected_deadline = min(time.monotonic() + 2.0, deadline_total)
+             while time.monotonic() < expected_deadline:
+                 with self.lock:
++                    if session.turn_request_id != target_request_id:
++                        # The targeted turn ended (or a successor replaced it)
++                        # mid-wait — never learn a successor's turnId as the
++                        # CAS for a steer meant for the dead turn.
++                        break
+                     steer["expected_turn_id"] = session.active_turn_id
+                 if steer["expected_turn_id"] is not None:
+                     break
+                 time.sleep(0.05)
++            # Recheck the captured target immediately before the send: the
++            # original turn can end and a successor start during subscribe +
++            # the expected-id wait — a CAS learned from the successor would
++            # inject this steer into the wrong turn. If the target is gone,
++            # do not send any text.
++            with self.lock:
++                target_alive = session.turn_request_id == target_request_id
++                # A successor can arrive two ways: a new ACP prompt (rebinding
++                # turn_request_id) or a server-side follow-up turn (only
++                # active_turn_id moves — no request of ours is pending).
++                successor_running = (
++                    not target_alive
++                    and (session.turn_request_id is not None
++                         or session.active_turn_id is not None)
++                )
++            if not target_alive:
++                with self.lock:
++                    session.steer = None
++                if successor_running:
++                    self.respond(rid, {
++                        "outcome": "unknown",
++                        "confirmation": "none",
++                        "reason": "the turn this steer targeted ended and a "
++                                  "successor started before the command could "
++                                  "be sent; no text was sent — re-issue "
++                                  "against the running turn if still wanted",
++                    })
++                else:
++                    self.respond(rid, {
++                        "outcome": "promptRequired",
++                        "reason": "the turn this steer targeted ended before "
++                                  "the command could be sent; nothing was sent",
++                    })
++                return
++            remaining = deadline_total - time.monotonic()
++            if remaining <= 0:
++                # The budget expired before the send could go out — never
++                # send after the deadline; nothing was sent, so this is
++                # undecided, never a rejection.
++                with self.lock:
++                    session.steer = None
++                self.respond(rid, {
++                    "outcome": "unknown",
++                    "confirmation": "none",
++                    "reason": "the steer budget expired before the command "
++                              "could be sent; no text was sent",
++                })
++                return
+             command_payload: dict[str, Any] = {
+                 "text": text,
+                 "requestedDelivery": "guide",
+@@ -1706,8 +1783,8 @@ class ZCodeAcpAgent:
+                 "type": "sendText",
+                 "payload": command_payload,
+                 "issuedAt": int(time.time() * 1000),
+-            }, timeout=15.0)
+-        except RuntimeError_ as exc:
++            }, timeout=min(15.0, remaining))
++        except (RuntimeError_, OSError) as exc:
+             # A pre-0.16 backend has no v4 surface at all: preserve the real
+             # -32601 so the holder reports `unsupported`, not `rejected`.
+             if "-32601" in str(exc) or "method not found" in str(exc):
+@@ -1718,17 +1795,19 @@ class ZCodeAcpAgent:
+                     "message": "this ZCode backend exposes no v4 command surface",
+                 })
+                 return
+-            if "timed out" not in str(exc):
++            if (not isinstance(exc, BackendTransportError)
++                    and "zcode error for" in str(exc)):
+                 # A definitive server-side refusal: the request was evaluated
+                 # and rejected, so an error here is honest.
+                 with self.lock:
+                     session.steer = None
+                 self.respond(rid, error={"code": -32000, "message": str(exc)})
+                 return
+-            # Transport-uncertain: the request may already have been staged
+-            # server-side — a staged turn.steerQueued can still arrive — so an
+-            # error would lie about a possibly-consumed steer. Fall through
+-            # and let the remaining event window decide; never resend blindly.
++            # Transport-uncertain (timeout, app-server exit, write failure):
++            # the request may already have been staged server-side — a staged
++            # turn.steerQueued can still arrive — so an error would lie about
++            # a possibly-consumed steer. Fall through and let the remaining
++            # event window decide; never resend blindly.
+             send_uncertain = True
+ 
+         if not send_uncertain:
+@@ -1745,8 +1824,7 @@ class ZCodeAcpAgent:
+                 })
+                 return
+ 
+-        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW,
+-                       steer_start + STEER_TOTAL_BUDGET)
++        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW, deadline_total)
+         try:
+             while True:
+                 with self.lock:
+diff --git a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+index 3410a95..25ba33e 100755
+--- a/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
++++ b/skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py
+@@ -68,8 +68,9 @@ ADAPTER_VERSION = "0.3.3"
+ STEER_DRAIN_WINDOW = 20.0
+ # Issue #81: hard cap on the whole steer exchange (subscribe + send + evidence
+ # wait), kept under the holder's 30 s steer timeout so a slow or lost v4 ack
+-# can never push the reply past the holder's own deadline.
+-STEER_TOTAL_BUDGET = 26.0
++# can never push the reply past the holder's own deadline. The env override
++# exists so contract tests can exercise the deadline without a 26 s wait.
++STEER_TOTAL_BUDGET = float(os.environ.get("KAOLA_ZCODE_STEER_BUDGET", "26"))
+ 
+ # Desktop provider registry (read-only) and plan-status cache, relative to HOME.
+ DESKTOP_CONFIG_RELPATH = os.path.join(".zcode", "v2", "config.json")
+@@ -674,6 +675,12 @@ def persisted_model_from_messages(payload: Any) -> dict[str, str] | None:
+ # --------------------------------------------------------------------------
+ 
+ 
++class BackendTransportError(RuntimeError_):
++    """A backend call failed without a server answer — timeout, app-server
++    exit, or a write failure. The request may already have been processed
++    server-side, so it must never be read as a business rejection."""
++
++
+ class ZCodeBackend:
+     """Talks the private ZCode Protocol to an `app-server --stdio` child."""
+ 
+@@ -720,6 +727,7 @@ class ZCodeBackend:
+             self._pending.clear()
+         for slot in pending:
+             slot["error"] = {"code": -32000, "message": "zcode app-server exited"}
++            slot["transport"] = True
+             slot["event"].set()
+ 
+     def _dispatch(self, msg: dict[str, Any]) -> None:
+@@ -756,8 +764,14 @@ class ZCodeBackend:
+         if not slot["event"].wait(timeout):
+             with self._lock:
+                 self._pending.pop(rid, None)
+-            raise RuntimeError_(f"zcode call timed out: {method}")
++            raise BackendTransportError(f"zcode call timed out: {method}")
+         if slot.get("error"):
++            if slot.get("transport"):
++                # The backend died mid-call: the request may already have
++                # been processed server-side — transport-uncertain, not a
++                # business rejection.
++                raise BackendTransportError(
++                    f"zcode transport failed for {method}: {slot['error']}")
+             raise RuntimeError_(f"zcode error for {method}: {slot['error']}")
+         return slot.get("result")
+ 
+@@ -1663,10 +1677,20 @@ class ZCodeAcpAgent:
+                 "turn_ended": False,
+             }
+             session.steer = steer
++            # The turn this steer is FOR: the running turn at request entry.
++            # A later recheck must find this same request id still running —
++            # otherwise the original turn ended (or a successor replaced it)
++            # and a CAS learned from `active_turn_id` would steer whoever
++            # happens to run now instead of the intended turn.
++            target_request_id = session.turn_request_id
+         backend_id = session.backend_id
+         send_uncertain = False
+         ack: dict[str, Any] | None = None
+-        steer_start = time.monotonic()
++        # One deadline for the whole steer exchange — subscribe, the
++        # expected-id wait, the send, and the drain wait each get only what is
++        # left of it, so a slow phase can never push the reply past the
++        # holder's own 30 s steer timeout.
++        deadline_total = time.monotonic() + STEER_TOTAL_BUDGET
+         try:
+             backend = self.ensure_backend()
+             if not session.v4_subscribed:
+@@ -1676,20 +1700,73 @@ class ZCodeAcpAgent:
+                     "topic": f"conversation/{backend_id}",
+                     "connectionId": f"kpr-{uuid.uuid4()}",
+                     "clientMode": "desktop-continuous",
+-                }, timeout=15.0)
++                }, timeout=max(0.1, min(15.0, deadline_total - time.monotonic())))
+                 session.v4_subscribed = True
+             # `turn.started` (params-level `turnId`) can lag the prompt
+             # acknowledgement slightly on the backend reader thread; a short
+             # bounded wait lets the expectedTurnId CAS protect the common
+             # early-steer case. A build that never reports it just skips the
+             # CAS — the same-turn event check still guards the result.
+-            expected_deadline = time.monotonic() + 2.0
++            expected_deadline = min(time.monotonic() + 2.0, deadline_total)
+             while time.monotonic() < expected_deadline:
+                 with self.lock:
++                    if session.turn_request_id != target_request_id:
++                        # The targeted turn ended (or a successor replaced it)
++                        # mid-wait — never learn a successor's turnId as the
++                        # CAS for a steer meant for the dead turn.
++                        break
+                     steer["expected_turn_id"] = session.active_turn_id
+                 if steer["expected_turn_id"] is not None:
+                     break
+                 time.sleep(0.05)
++            # Recheck the captured target immediately before the send: the
++            # original turn can end and a successor start during subscribe +
++            # the expected-id wait — a CAS learned from the successor would
++            # inject this steer into the wrong turn. If the target is gone,
++            # do not send any text.
++            with self.lock:
++                target_alive = session.turn_request_id == target_request_id
++                # A successor can arrive two ways: a new ACP prompt (rebinding
++                # turn_request_id) or a server-side follow-up turn (only
++                # active_turn_id moves — no request of ours is pending).
++                successor_running = (
++                    not target_alive
++                    and (session.turn_request_id is not None
++                         or session.active_turn_id is not None)
++                )
++            if not target_alive:
++                with self.lock:
++                    session.steer = None
++                if successor_running:
++                    self.respond(rid, {
++                        "outcome": "unknown",
++                        "confirmation": "none",
++                        "reason": "the turn this steer targeted ended and a "
++                                  "successor started before the command could "
++                                  "be sent; no text was sent — re-issue "
++                                  "against the running turn if still wanted",
++                    })
++                else:
++                    self.respond(rid, {
++                        "outcome": "promptRequired",
++                        "reason": "the turn this steer targeted ended before "
++                                  "the command could be sent; nothing was sent",
++                    })
++                return
++            remaining = deadline_total - time.monotonic()
++            if remaining <= 0:
++                # The budget expired before the send could go out — never
++                # send after the deadline; nothing was sent, so this is
++                # undecided, never a rejection.
++                with self.lock:
++                    session.steer = None
++                self.respond(rid, {
++                    "outcome": "unknown",
++                    "confirmation": "none",
++                    "reason": "the steer budget expired before the command "
++                              "could be sent; no text was sent",
++                })
++                return
+             command_payload: dict[str, Any] = {
+                 "text": text,
+                 "requestedDelivery": "guide",
+@@ -1706,8 +1783,8 @@ class ZCodeAcpAgent:
+                 "type": "sendText",
+                 "payload": command_payload,
+                 "issuedAt": int(time.time() * 1000),
+-            }, timeout=15.0)
+-        except RuntimeError_ as exc:
++            }, timeout=min(15.0, remaining))
++        except (RuntimeError_, OSError) as exc:
+             # A pre-0.16 backend has no v4 surface at all: preserve the real
+             # -32601 so the holder reports `unsupported`, not `rejected`.
+             if "-32601" in str(exc) or "method not found" in str(exc):
+@@ -1718,17 +1795,19 @@ class ZCodeAcpAgent:
+                     "message": "this ZCode backend exposes no v4 command surface",
+                 })
+                 return
+-            if "timed out" not in str(exc):
++            if (not isinstance(exc, BackendTransportError)
++                    and "zcode error for" in str(exc)):
+                 # A definitive server-side refusal: the request was evaluated
+                 # and rejected, so an error here is honest.
+                 with self.lock:
+                     session.steer = None
+                 self.respond(rid, error={"code": -32000, "message": str(exc)})
+                 return
+-            # Transport-uncertain: the request may already have been staged
+-            # server-side — a staged turn.steerQueued can still arrive — so an
+-            # error would lie about a possibly-consumed steer. Fall through
+-            # and let the remaining event window decide; never resend blindly.
++            # Transport-uncertain (timeout, app-server exit, write failure):
++            # the request may already have been staged server-side — a staged
++            # turn.steerQueued can still arrive — so an error would lie about
++            # a possibly-consumed steer. Fall through and let the remaining
++            # event window decide; never resend blindly.
+             send_uncertain = True
+ 
+         if not send_uncertain:
+@@ -1745,8 +1824,7 @@ class ZCodeAcpAgent:
+                 })
+                 return
+ 
+-        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW,
+-                       steer_start + STEER_TOTAL_BUDGET)
++        deadline = min(time.monotonic() + STEER_DRAIN_WINDOW, deadline_total)
+         try:
+             while True:
+                 with self.lock:
+diff --git a/tests/contract/fake-zcode-app-server.py b/tests/contract/fake-zcode-app-server.py
+index a7a1f14..68f2a63 100755
+--- a/tests/contract/fake-zcode-app-server.py
++++ b/tests/contract/fake-zcode-app-server.py
+@@ -58,6 +58,22 @@ Scenarios (argv ``--scenario``):
+               the server had already staged a steerQueued{queue} admission
+   steer_timeout_silent v4/command ack withheld and no steer events — the
+               request may or may not have reached the server
++  steer_exit_staged app-server process dies inside v4/command AFTER a
++              steerQueued{queue} was already emitted — transport loss, never
++              a business rejection
++  steer_exit_silent app-server process dies inside v4/command with no events
++              — the request may or may not have been processed
++  steer_race_end the steer's target turn COMPLETES inside the subscribe call,
++              before v4/command can be sent — no text may go out
++  steer_race_replaced the target turn completes inside subscribe and a
++              successor turn starts before v4/command — the adapter must not
++              learn the successor's turnId nor send any text
++  steer_slow_subscribe subscribe answers after ~4 s but turn.started carries
++              no turnId — with a short budget the global deadline must fire
++              before v4/command is sent
++  steer_slow_exchange subscribe answers after ~14 s, no turnId, and the
++              v4/command ack never arrives — the whole exchange must stay
++              bounded by the global deadline, not stacked per-phase timeouts
+   steer_silent v4 sendText accepted but no steer events at all
+   steer_reject v4 sendText answered status:"rejected" with a reasonCode
+   steer_unsupported no v4 methods at all (pre-0.16 build parity): -32601
+@@ -231,6 +247,13 @@ class FakeAppServer:
+         self.v4_seen = threading.Event()
+         self.turn_gate = threading.Event()
+         self.active_turn_id: str | None = None
++        # Distinct platform turn ids per prompt so a successor turn can never
++        # be confused with the one the steer targeted.
++        self.turn_seq = 0
++        # Turn ids already completed out-of-band (the steer target-change legs
++        # end the running turn inside the subscribe call) — run_turn must not
++        # emit a second completion for them.
++        self.early_completed_turns: set[str] = set()
+ 
+     def register_overlay(self, rid: Any, params: dict[str, Any], method: str) -> dict[str, Any] | None:
+         overlay = params.get("runtimeModel")
+@@ -455,6 +478,43 @@ class FakeAppServer:
+             if self.scenario == "steer_unsupported":
+                 self.error(rid, -32601, f"method not found: {method}")
+                 return
++            if self.scenario in ("steer_race_end", "steer_race_replaced"):
++                # Adversarial target-change race: the turn the steer targeted
++                # ENDS while the steer is being set up — before v4/command can
++                # be sent. Emitting the completion BEFORE this subscribe ack
++                # keeps causal order on the adapter's event stream (the
++                # adapter sees turn A die, then gets its subscription).
++                session_id = (params.get("topic") or "").rsplit("/", 1)[-1]
++                if self.active_turn_id:
++                    self.early_completed_turns.add(self.active_turn_id)
++                self.event(session_id, "turn.completed",
++                           {"response": "DONE-FAKE-TURN"})
++                if self.scenario == "steer_race_replaced":
++                    # ...and a queued follow-up turn starts SERVER-SIDE while
++                    # the steer is still in flight (the realistic succession —
++                    # a second ACP prompt could not even be dispatched while
++                    # the steer holds the request loop). A buggy adapter
++                    # learns B's turnId and CASes expectedTurnId=turn-B — the
++                    # reviewer's exact false-injection shape.
++                    self.turn_seq += 1
++                    self.active_turn_id = (
++                        f"turn_{session_id}_{self.turn_seq - 1}")
++                    self.event(session_id, "turn.started",
++                               {"queryId": f"query_{session_id}_successor"},
++                               params_extra={"turnId": self.active_turn_id})
++                else:
++                    self.turn_gate.set()
++            if self.scenario == "steer_slow_subscribe":
++                # Budget adversarial: the subscribe phase eats most of a
++                # short steer budget — the adapter must never send v4/command
++                # after the global deadline.
++                time.sleep(4.0)
++            elif self.scenario == "steer_slow_exchange":
++                # Budget adversarial: subscribe answers inside its own cap
++                # but consumes ~14 s of the whole-operation budget; the
++                # command then never answers, so the total exchange must stay
++                # bounded by the global deadline, not per-phase timeouts.
++                time.sleep(14.0)
+             self.result(rid, {
+                 "ack": {"subscriptionId": "sub-v4-1", "mode": "delta",
+                         "logEpoch": "log-epoch-1"},
+@@ -520,7 +580,8 @@ class FakeAppServer:
+         # Queue-admission legs: the steerQueued reports delivery `queue` on
+         # both the top-level and intent.admittedDelivery fields.
+         queue_admission = scenario in (
+-            "steer_queue", "steer_qdrain", "steer_timeout_staged")
++            "steer_queue", "steer_qdrain", "steer_timeout_staged",
++            "steer_exit_staged")
+ 
+         def emit_leg() -> None:
+             queued_payload = {
+@@ -551,10 +612,12 @@ class FakeAppServer:
+             if scenario in ("steer_guide", "steer_queue", "steer_turnend",
+                             "steer_xturn", "steer_phantom", "steer_guide_nopid",
+                             "steer_noexpect", "steer_mixed", "steer_qdrain",
+-                            "steer_timeout_staged"):
++                            "steer_timeout_staged", "steer_exit_staged",
++                            "steer_race_replaced"):
+                 self.event(session_id, "turn.steerQueued", queued_payload)
+             if scenario in ("steer_guide", "steer_xturn", "steer_guide_nopid",
+-                            "steer_noexpect", "steer_mixed", "steer_qdrain"):
++                            "steer_noexpect", "steer_mixed", "steer_qdrain",
++                            "steer_race_replaced"):
+                 time.sleep(0.15)
+                 # steer_xturn drains into a DIFFERENT turn id — a same-turn
+                 # claim off this pair would be a lie, so the adapter must not
+@@ -619,7 +682,8 @@ class FakeAppServer:
+             # steer_silent emits nothing: accepted ack, then only the turn end.
+             self.turn_gate.set()
+ 
+-        if scenario in ("steer_timeout_staged", "steer_timeout_silent"):
++        if scenario in ("steer_timeout_staged", "steer_timeout_silent",
++                        "steer_slow_exchange"):
+             # The ack is withheld entirely: the adapter's `v4/command` call
+             # must time out. `steer_timeout_staged` still emits the
+             # steerQueued the server had already recorded; the request
+@@ -628,6 +692,14 @@ class FakeAppServer:
+             # the request may or may not have arrived.
+             emit_leg()
+             return
++        if scenario in ("steer_exit_staged", "steer_exit_silent"):
++            # The app-server process DIES mid-request: the command was
++            # received (the staged variant even queued the input first) but
++            # the ack never leaves. The adapter must classify this as
++            # transport-uncertain — never a business rejection.
++            emit_leg()
++            sys.stdout.flush()
++            os._exit(0)
+         if scenario == "steer_qdrain":
+             # Stage the queue admission AND the same-turn drain before the
+             # ack reaches the adapter: its ledger then holds both when the
+@@ -648,11 +720,14 @@ class FakeAppServer:
+ 
+     def run_turn(self, session_id: str) -> None:
+         scenario = self.scenario
+-        self.active_turn_id = f"turn_{session_id}_0"
++        self.turn_seq += 1
++        turn_id = f"turn_{session_id}_{self.turn_seq - 1}"
++        self.active_turn_id = turn_id
+         # Live parity: `turn.started` carries the platform's own `turnId` at
+         # params level (sibling of `type`), not inside `payload` — the adapter
+         # reads it for the sendText expectedTurnId CAS.
+-        if scenario == "steer_noexpect":
++        if scenario in ("steer_noexpect", "steer_slow_subscribe",
++                        "steer_slow_exchange"):
+             # Adversarial: a build whose turn.started never surfaces the
+             # platform turnId. The adapter's expected-turn CAS stays unlearned,
+             # so no queue/drain pair can ever be confirmed same-turn.
+@@ -672,7 +747,15 @@ class FakeAppServer:
+             self.event(session_id, "model.streaming",
+                        {"kind": "text_delta", "delta": "working"})
+             self.v4_seen.wait(20)
+-            self.turn_gate.wait(20)
++            # Successor turns in the race legs must not linger the full 20 s —
++            # the adapter under test has already answered by then; 6 s keeps
++            # turn B alive long enough to expose a buggy expectedTurnId CAS.
++            self.turn_gate.wait(6 if self.turn_seq > 1 else 20)
++            if turn_id in self.early_completed_turns:
++                # The steer target-change legs already completed THIS turn
++                # inside the subscribe call — a second completion would be
++                # a protocol violation no real server emits.
++                return
+             if scenario in ("steer_guide", "steer_guide_nopid"):
+                 response = "STEERED-FAKE-OK"
+             else:
+diff --git a/tests/contract/test-zcode-acp-contract.py b/tests/contract/test-zcode-acp-contract.py
+index 1734085..6bed171 100644
+--- a/tests/contract/test-zcode-acp-contract.py
++++ b/tests/contract/test-zcode-acp-contract.py
+@@ -1660,6 +1660,113 @@ class ZcodeAcpSteerContractTests(unittest.TestCase):
+         self.assertIs(result.get("sendUncertain"), True)
+         self.assertIn("do not resend blindly", result.get("reason") or "")
+ 
++    def test_target_turn_ended_aborts_before_send(self) -> None:
++        # Outer-review race leg: the turn the steer targeted COMPLETES inside
++        # the subscribe call, before v4/command can be sent. The adapter must
++        # never send the text — nothing was staged, so this is non-consumed.
++        driver, session_id = self._session("steer_race_end")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id)
++        result = reply.get("result") or {}
++        self.assertNotEqual(result.get("outcome"), "injected")
++        self.assertIn(result.get("outcome"), ("promptRequired", "unknown"))
++        # The decisive assertion: no sendText ever went out.
++        self.assertEqual(self._v4_send_texts(driver), [])
++        done = driver.wait_result(3, timeout=8)
++        self.assertIsNotNone(done)
++
++    def test_target_turn_replaced_aborts_before_send(self) -> None:
++        # Outer-review race leg: the targeted turn ends inside subscribe and a
++        # SUCCESSOR turn starts server-side before v4/command (the realistic
++        # succession — a second ACP prompt could not even dispatch while the
++        # steer holds the request loop). The adapter must not learn the
++        # successor's turnId nor send — a CAS bound to turn B would inject
++        # this steer into the wrong turn.
++        driver, session_id = self._session("steer_race_replaced")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id)
++        result = reply.get("result") or {}
++        self.assertNotEqual(result.get("outcome"), "injected")
++        # A successor turn IS running, so this is undecided — the steer
++        # provably did not reach its target but B is live for a re-issue.
++        self.assertEqual(result.get("outcome"), "unknown")
++        # The decisive assertion: no sendText went out — and certainly none
++        # with a CAS bound to the successor turn B.
++        sends = self._v4_send_texts(driver)
++        self.assertEqual(sends, [])
++        done_a = driver.wait_result(3, timeout=10)
++        self.assertIsNotNone(done_a)
++
++    def test_process_death_staged_queue_is_never_rejected(self) -> None:
++        # Outer-review leg: the app-server process dies inside v4/command
++        # after a steerQueued{queue} admission was already emitted. Transport
++        # loss is not a business rejection — the staged admission decides
++        # (queued), and a blind resend is still forbidden.
++        driver, session_id = self._session("steer_exit_staged")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id, wait=45)
++        self.assertNotIn("error", reply)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "queued")
++        self.assertIs(result.get("sendUncertain"), True)
++
++    def test_process_death_silent_reports_unknown(self) -> None:
++        # Outer-review leg: the app-server process dies inside v4/command
++        # with no steer evidence — the request may or may not have been
++        # processed. The honest outcome is unknown/undecided, never a
++        # -32000 business rejection, and never an invitation to resend.
++        driver, session_id = self._session("steer_exit_silent")
++        self._prompt_running(driver, session_id)
++        reply = self._steer(driver, session_id, wait=45)
++        self.assertNotIn("error", reply)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "unknown")
++        self.assertIs(result.get("sendUncertain"), True)
++        self.assertIn("do not resend blindly", result.get("reason") or "")
++
++    def test_steer_deadline_blocks_command_after_budget(self) -> None:
++        # Outer-review budget leg: subscribe eats most of a short budget and
++        # the turn never names its id — the GLOBAL deadline must fire before
++        # v4/command is sent. No text may go out past the deadline.
++        driver = AdapterDriver(
++            self.tmp, scenario="steer_slow_subscribe",
++            extra_env={"KAOLA_ZCODE_STEER_BUDGET": "5"})
++        self.driver = driver
++        driver.request(1, "initialize", {"protocolVersion": 1})
++        self.assertIsNotNone(driver.wait_result(1))
++        driver.request(2, "session/new", {
++            "cwd": str(driver.cwd), "mcpServers": []})
++        created = driver.wait_result(2)
++        self.assertIsNotNone(created)
++        assert created is not None
++        session_id = (created.get("result") or {}).get("sessionId")
++        self.assertTrue(session_id)
++        self._prompt_running(driver, session_id)
++        t0 = time.monotonic()
++        reply = self._steer(driver, session_id, wait=20)
++        elapsed = time.monotonic() - t0
++        result = reply.get("result") or {}
++        self.assertNotIn("error", reply)
++        self.assertEqual(result.get("outcome"), "unknown")
++        self.assertLess(elapsed, 12.0)
++        # The deadline fired before the send — nothing may have gone out.
++        self.assertEqual(self._v4_send_texts(driver), [])
++
++    def test_steer_deadline_bounds_slow_exchange(self) -> None:
++        # Outer-review budget leg: a ~14 s subscribe + a v4/command that never
++        # answers must stay bounded by the ONE global deadline (26 s), not by
++        # stacked per-phase timeouts that could exceed the holder's 30 s.
++        driver, session_id = self._session("steer_slow_exchange")
++        self._prompt_running(driver, session_id)
++        t0 = time.monotonic()
++        reply = self._steer(driver, session_id, wait=45)
++        elapsed = time.monotonic() - t0
++        self.assertNotIn("error", reply)
++        result = reply.get("result") or {}
++        self.assertEqual(result.get("outcome"), "unknown")
++        self.assertIs(result.get("sendUncertain"), True)
++        self.assertLess(elapsed, 30.0)
++
+     def test_accepted_then_silence_reports_unknown(self) -> None:
+         driver, session_id = self._session("steer_silent")
+         self._prompt_running(driver, session_id)
+@@ -1839,6 +1946,19 @@ class ZcodeAcpSteerHolderTests(unittest.TestCase):
+         self.assertNotEqual(receipt.get("steer_outcome"), "rejected")
+         self.assertIsNot(receipt.get("steer_consumed"), False)
+ 
++    def test_process_death_receipt_is_undecided_not_rejected(self) -> None:
++        # Outer-review leg: an app-server exit inside v4/command is transport
++        # loss — the request may already have been staged server-side — so
++        # the receipt must be undecided (steer_consumed None) and forbid a
++        # blind resend, never `rejected` / steer_consumed False.
++        turn, receipt = self._steer_receipt("steer_exit_silent")
++        self.assertEqual(receipt.get("steer_outcome"), "unknown")
++        self.assertNotEqual(receipt.get("steer_outcome"), "rejected")
++        self.assertIs(receipt.get("steer_consumed"), None)
++        self.assertIsNot(receipt.get("steer_consumed"), False)
++        self.assertEqual((receipt.get("error") or {}).get("code"),
++                         "steer-undecided")
++
+     def test_unsupported_backend_receipt(self) -> None:
+         turn, receipt = self._steer_receipt("steer_unsupported")
+         self.assertEqual(receipt.get("steer_outcome"), "unsupported")
