@@ -9,7 +9,10 @@ Two release-review defects on the frozen ``f39d940`` line, both prompt-level:
    (claude-code/codex/devin ``mode``, droid ``autonomy_level``, kimi-cli/zcode
    ``mode``), but cursor-cli and grok only carry a launch flag with
    ``acp_mode_config_id`` empty, and OpenCode's ACP surface has no skip-all of
-   any kind. A host reading that row as an all-platform guarantee stops
+   any kind. Issue #98 added a fourth member with the opposite safety posture:
+   dsh advertises no skip-all because its ACP composition sends no permission
+   request at all, so for dsh there is no gate to skip and no request to
+   settle -- see ``DshHasNoApprovalGateAtAll`` below. A host reading that row as an all-platform guarantee stops
    expecting the permission request that ``test-issue-76-permission-wake.py``
    already models, and stops settling it with ``permit``. The correction states
    a possibility, not a certainty: a launch flag can still suppress the request,
@@ -46,6 +49,8 @@ OPENCODE_STEERING = (
 )
 PLATFORMS = PROJECT / "platforms"
 README = PROJECT / "README.md"
+DSH_MANIFEST = PROJECT / "platforms" / "dsh.yaml"
+DSH_ACP_REF = PROJECT / "skills" / "dsh-kaola-project-runner" / "references" / "acp.md"
 OPENCODE_SKILL = PROJECT / "skills" / "opencode-kaola-project-runner" / "SKILL.md"
 TMUX = PROJECT / "scripts" / "kaola-tmux.sh"
 API_DOC = PROJECT / "docs" / "api.md"
@@ -55,7 +60,7 @@ RETIRED_SENTENCE = "Existing Runner default bypass start"
 
 # Platforms whose ACP surface advertises no skip-all option. Derived, not
 # asserted from memory: see ``test_no_skip_all_platforms_are_still_the_derived_set``.
-NO_ADVERTISED_ACP_SKIP_ALL = {"cursor-cli", "grok", "opencode"}
+NO_ADVERTISED_ACP_SKIP_ALL = {"cursor-cli", "dsh", "grok", "opencode"}
 
 
 def manifest_values(path: Path) -> dict[str, str]:
@@ -101,7 +106,7 @@ def permissions_row(text: str) -> str:
 
 
 class MainSkillStatesAPerPlatformDefault(unittest.TestCase):
-    """The main Skill must not promise one bypass for all nine platforms."""
+    """The main Skill must not promise one bypass for all ten platforms."""
 
     def test_retired_all_platform_bypass_sentence_is_gone(self) -> None:
         for label, path in (("generated main Skill", MAIN_SKILL), ("orchestrator template", MAIN_TMPL)):
@@ -155,8 +160,9 @@ class MainSkillHandlesTheNoSkipAllCase(unittest.TestCase):
             )
 
     def test_the_claim_is_possibility_not_certainty(self) -> None:
-        """Cursor's and Grok's launch flags do suppress approvals; only OpenCode is
-        certain to have no skip-all, and even there a request is not guaranteed."""
+        """Cursor's and Grok's launch flags do suppress approvals. OpenCode is certain
+        to have no skip-all and even there a request is not guaranteed; dsh is certain
+        to have no gate at all, which the README carries per-platform."""
         text = flowed(MAIN_SKILL.read_text(encoding="utf-8"))
         self.assertIn(
             "permission may still arise",
@@ -210,7 +216,7 @@ class ReadmeCarriesThePerPlatformSplit(unittest.TestCase):
     def test_readme_states_the_three_classes(self) -> None:
         text = flowed(README.read_text(encoding="utf-8"))
         self.assertIn(
-            "the default is per platform, not one guarantee across all nine",
+            "the default is per platform, not one guarantee across all ten",
             text,
             "README must deny the all-platform reading",
         )
@@ -542,6 +548,87 @@ class ApiDocDefersToTheManifests(unittest.TestCase):
         self.assertIn("1.18.29", text)
         self.assertIn("steer-capability-unknown", text)
         self.assertIn("instead of a proven absence", text)
+
+
+class DshHasNoApprovalGateAtAll(unittest.TestCase):
+    """Issue #98. dsh is in ``NO_ADVERTISED_ACP_SKIP_ALL`` for the opposite reason to
+    the other three, and that difference is safety-relevant: OpenCode, Cursor and Grok
+    still ask, dsh never does. Measured twice over raw ACP and once through the Runner:
+    two tool-using turns, including a bash write to an absolute path *outside* the
+    session workspace, produced zero ``session/request_permission`` calls and both
+    writes landed.
+
+    Without this class the wording is unguarded: the roster check above is satisfied by
+    the word "dsh" appearing anywhere in README, so softening the paragraph into
+    OpenCode's weaker "no skip-all" shape keeps the suite green. These assertions pin
+    the claim itself on every surface that carries it.
+    """
+
+    #: The distinguishing claim, in the three places a reader meets it.
+    SURFACES = (
+        ("platforms/dsh.yaml", DSH_MANIFEST),
+        ("generated dsh references/acp.md", DSH_ACP_REF),
+        ("README.md", README),
+    )
+
+    def test_every_surface_states_that_no_permission_request_is_sent(self) -> None:
+        for label, path in self.SURFACES:
+            with self.subTest(surface=label):
+                text = flowed(path.read_text(encoding="utf-8"))
+                self.assertRegex(
+                    text,
+                    r"(?:never sends? (?:a )?(?:`?session/request_permission`?|permission request)"
+                    r"|sends no `?session/request_permission`? at all)",
+                    f"{label} must state that dsh never sends a permission request",
+                )
+
+    def test_every_surface_states_there_is_no_gate_to_skip(self) -> None:
+        for label, path in self.SURFACES:
+            with self.subTest(surface=label):
+                text = flowed(path.read_text(encoding="utf-8"))
+                self.assertIn(
+                    "no approval gate to skip",
+                    text,
+                    f"{label} must say there is no approval gate to skip, not merely "
+                    "that no skip-all option is advertised",
+                )
+
+    def test_readme_keeps_the_measured_outside_workspace_write(self) -> None:
+        """The fact that makes the default consequential, not a technicality."""
+        text = flowed(README.read_text(encoding="utf-8"))
+        self.assertIn("outside the session workspace", text)
+
+    def test_the_operator_brief_carries_it_before_first_dispatch(self) -> None:
+        """It is useless 370 lines away from the dsh subsection an operator reads."""
+        text = README.read_text(encoding="utf-8")
+        start = text.index("dsh is driven through its shipped automation-only ACP profile")
+        brief = flowed(text[start:start + 1600])
+        self.assertIn(
+            "no approval gate to skip",
+            brief,
+            "the dsh operator brief must carry the no-gate fact itself; a reader who "
+            "stops after the pre-dispatch facts must not miss it",
+        )
+
+    def test_dsh_is_never_described_with_opencodes_weaker_shape(self) -> None:
+        """"No ACP skip-all" is OpenCode's fact and understates dsh's."""
+        for label, path in self.SURFACES:
+            with self.subTest(surface=label):
+                text = flowed(path.read_text(encoding="utf-8"))
+                for sentence in re.split(r"(?<=[.;]) ", text):
+                    if "dsh" not in sentence.lower():
+                        continue
+                    self.assertNotRegex(
+                        sentence,
+                        r"dsh[^.;]*\bno (?:ACP )?skip-all\b",
+                        f"{label} describes dsh with OpenCode's weaker shape: "
+                        f"{sentence!r}",
+                    )
+
+    def test_the_manifest_advertises_no_mode_option_to_match(self) -> None:
+        values = manifest_values(DSH_MANIFEST)
+        self.assertEqual(values["acp_mode_config_id"], "")
+        self.assertEqual(values["acp_command"], "dsh --profile acp")
 
 
 if __name__ == "__main__":

@@ -65,7 +65,7 @@ make_fixture() {
   mkdir -p "$root/skills/kaola-delegator"
   printf '%s\n' 'kaola-delegator' >"$root/skills/kaola-delegator/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-delegator/SKILL.md"
-  for id in grok claude-code opencode kimi-cli cursor-cli devin droid codex zcode; do
+  for id in grok claude-code opencode kimi-cli cursor-cli devin droid dsh codex zcode; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;
       claude-code) name=claude-code-kaola-project-runner ;;
@@ -74,6 +74,7 @@ make_fixture() {
       cursor-cli) name=cursor-cli-kaola-project-runner ;;
       devin) name=devin-kaola-project-runner ;;
       droid) name=droid-kaola-project-runner ;;
+      dsh) name=dsh-kaola-project-runner ;;
       codex) name=codex-kaola-project-runner ;;
       zcode) name=zcode-kaola-project-runner ;;
     esac

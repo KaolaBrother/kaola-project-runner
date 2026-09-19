@@ -142,6 +142,9 @@ def probes_for(platform: str) -> list[list[str]]:
         # Droid: `--version` plus read-only ~/.factory/settings.json model /
         # reasoningEffort facts surface in the adapter preflight detail.
         "droid": [["--version"]],
+        # dsh has no read-only catalog command: the model catalog is an ACP
+        # config option declared in the session/new result, not a CLI dump.
+        "dsh": [["--version"]],
     }[platform]
 
 

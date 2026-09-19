@@ -73,6 +73,7 @@ platform's default transport is ACP:
 | cursor-cli | `cursor-cli-kaola-project-runner` | Cursor CLI Kaola Project Runner |
 | devin | `devin-kaola-project-runner` | Devin CLI Kaola Project Runner |
 | droid | `droid-kaola-project-runner` | Droid Kaola Project Runner |
+| dsh | `dsh-kaola-project-runner` | dsh Kaola Project Runner |
 | grok | `grok-kaola-project-runner` | Grok Kaola Project Runner |
 | kimi-cli | `kimi-cli-kaola-project-runner` | Kimi CLI Kaola Project Runner |
 | opencode | `opencode-kaola-project-runner` | OpenCode Kaola Project Runner |

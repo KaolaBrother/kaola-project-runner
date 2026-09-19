@@ -7,10 +7,10 @@ scripts/render-skills.py --write
 scripts/render-skills.py --check
 ```
 
-`--write` deterministically rebuilds nine managed worker Skill directories plus
-`skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not a tenth
+`--write` deterministically rebuilds ten managed worker Skill directories plus
+`skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eleventh
 platform), `skills/kaola-delegator/` from `templates/kaola-delegator/` (external
-delegation Skill; not a tenth platform), and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-delegator.md` (the one
+delegation Skill; not an eleventh platform), and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-delegator.md` (the one
 thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revision.json`; at
 the pinned stage it carries the accepted 40-hex commit and its label or release, the locator
 command, and the one canonical entry path `ROOT/skills/kaola-delegator`, and no canonical content), `bridge.json`
@@ -104,8 +104,8 @@ scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
                          [--bin-links | --no-bin-links] [--uninstall]
 ```
 
-Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, and `droid`.
-Omit `--platform` for all nine workers. `--platform` never selects the main Skill;
+Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, `droid`, and `dsh`.
+Omit `--platform` for all ten workers. `--platform` never selects the main Skill;
 `kaola-project-runner` is not a platform ID. The orchestrator is installed for every `--runtime`
 and `--skills-dir` destination unless `--no-orchestrator` is passed. Every selected destination is
 preflighted before mutation; foreign paths are never replaced.

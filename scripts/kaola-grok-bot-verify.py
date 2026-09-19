@@ -43,7 +43,9 @@ from pathlib import Path
 
 ROOT_SKILL = "kaola-project-runner"
 EXTERNAL_SKILL = "kaola-delegator"
-WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode")
+WORKER_IDS = (
+    "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli", "opencode", "zcode",
+)
 WORKER_SKILL_NAMES = tuple(f"{wid}-{ROOT_SKILL}" for wid in WORKER_IDS)
 MARKER = ".generated-by-kaola-project-runner"
 HOST_MARKER = "grok-bot\n"
