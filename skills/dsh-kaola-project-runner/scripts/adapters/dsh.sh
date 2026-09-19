@@ -45,11 +45,13 @@ adapter_preflight() {
 
 adapter_build_launch() {
   local launch_repo="$1" resume_id="$2" continue_mode="$3"
-  # dsh ships no terminal UI in this platform's scope: `dsh --profile acp` is a
-  # JSON-RPC stdio server, and `--profile web` opens a browser app rather than a
-  # pane conversation. Explicit --transport pty is therefore a known-unsupported
-  # diagnostic entry that shows the server waiting on stdin, not a conversation
-  # channel or a fallback. ACP is the manifest default and the real transport.
+  # dsh ships no terminal UI. Its shipped profile templates are exactly acp,
+  # headless, sdk, sdk-minimal and web (@deepseek-ai/dsh-app-boot's
+  # PROFILE_TEMPLATES): web is a browser app, headless answers one task and
+  # exits, sdk/sdk-minimal are programmatic, and acp is a JSON-RPC stdio
+  # server. None is a pane conversation, so explicit --transport pty is a
+  # known-unsupported diagnostic entry that shows the server waiting on stdin,
+  # not a conversation channel or a fallback. ACP is the real transport.
   ADAPTER_LAUNCH_ARGS=(--profile acp)
   # The acp profile accepts no application arguments: resume is the protocol
   # call session/resume, and --continue is unsupported because session/list

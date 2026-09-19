@@ -197,7 +197,7 @@ passed, and then only exact-owned links.
 
 ## Session ownership
 
-The core accepts `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, or `droid`. New sessions
+The core accepts `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, `droid`, or `dsh`. New sessions
 receive:
 
 ```text

@@ -100,6 +100,7 @@ python_suites_all=(
   "test-issue-92-permission-wake-recovery.py"
   "test-issue-95-reader-exception.py"
   "test-issue-97-codex-user-compact-hook.py"
+  "test-issue-98-dsh-acp.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -122,6 +123,7 @@ python_suites_a=(
   "test-issue-88-permission-defaults.py"
   "test-issue-92-permission-wake-recovery.py"
   "test-issue-97-codex-user-compact-hook.py"
+  "test-issue-98-dsh-acp.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"

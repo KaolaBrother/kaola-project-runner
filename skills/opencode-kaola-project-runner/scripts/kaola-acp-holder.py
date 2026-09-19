@@ -381,29 +381,36 @@ def scrub(value: Any) -> Any:
     return value
 
 
-def config_option_values(option: dict) -> list[Any]:
-    """Every selectable value of an ACP ``select`` config option.
+def config_option_choices(option: dict) -> list[dict]:
+    """Every selectable leaf choice of an ACP ``select`` config option.
 
     An agent may present its choices flat or grouped: dsh's ``model`` option
     lists one entry per provider, each holding the real choices in its own
-    nested ``options``. Reading ``value`` off a group entry yields ``None``,
-    which would report a nameless choice per group instead of the routes the
-    Agent can actually select. One level of nesting is expanded; a value that
-    is absent is omitted rather than reported as null.
+    nested ``options``. A group entry carries no ``value``, so reading one as a
+    choice reports a nameless option per group instead of the routes the Agent
+    can actually select. The ACP schema nests exactly one level
+    (``SessionConfigSelectOptions`` is a list of options *or* a list of
+    groups), so one level is expanded and a choice with no ``value`` is
+    omitted rather than reported as null.
     """
-    values: list[Any] = []
+    choices: list[dict] = []
     for entry in option.get("options") or []:
         if not isinstance(entry, dict):
             continue
         nested = entry.get("options")
         if isinstance(nested, list):
-            values.extend(
-                member.get("value") for member in nested
+            choices.extend(
+                member for member in nested
                 if isinstance(member, dict) and member.get("value") is not None
             )
         elif entry.get("value") is not None:
-            values.append(entry["value"])
-    return values
+            choices.append(entry)
+    return choices
+
+
+def config_option_values(option: dict) -> list[Any]:
+    """Every selectable value of an ACP ``select`` config option."""
+    return [choice["value"] for choice in config_option_choices(option)]
 
 
 def capability_supported(container: dict, key: str) -> bool:
@@ -3533,8 +3540,12 @@ class Holder:
                     evidence["option_description"] = option["description"]
                 if option.get("currentValue") is not None:
                     evidence["current_value"] = option["currentValue"]
-                for choice in option.get("options") or []:
-                    if isinstance(choice, dict) and choice.get("value") == params["value"]:
+                # Grouped options nest their real choices one level down, so
+                # the selected value is found through the same flattening the
+                # probe uses -- otherwise a grouped platform silently loses
+                # value_name/value_description from its receipt.
+                for choice in config_option_choices(option):
+                    if choice.get("value") == params["value"]:
                         if choice.get("name") is not None:
                             evidence["value_name"] = choice["name"]
                         if choice.get("description") is not None:
