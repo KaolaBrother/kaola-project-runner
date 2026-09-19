@@ -21,9 +21,9 @@ close/push until it lands.
 
 ## 3. Prove the flip and the preserved boundaries
 - item: Re-run `./scripts/validate.sh` under the same explicit outer binding and show it now passes; confirm the #73 canonical-root suite still exercises both the accepted and the refused case explicitly; run `./scripts/render-skills.py --check` and produce no generated diff. Dock the real exit lines as this run's evidence.
-- status: in-flight
-- dispatched: self (inline). Targeted and boundary evidence already landed under `kaola-workflow/issue-96/evidence/validate/`; the full `validate.sh` leg is held until Issue #95 sinks to `main` so it runs on the synced tree, and lands in the same directory.
-- result:
+- status: done
+- dispatched: self (inline). Evidence under `kaola-workflow/issue-96/evidence/validate/`.
+- result: PASS on the recorded baseline. `fixed-full-validate-bound.log`: `./scripts/validate.sh` with `KAOLA_PROJECT_RUNNER_CANONICAL_REPO` explicitly exported to the outer KPR root gives `VALIDATE_EXIT=0` with no `FAILED:` line, against `VALIDATE_EXIT`-less-but-`FAILED: test-acp-contract.py` at baseline. No operator needs `env -u`. `fixed-targeted-bound-pass.log`: both Kimi classes EXIT 0 (1 test, then 2 tests), flipping the `baseline-targeted-bound-fail.log` failures. `issue-73-boundary-and-render.log`: `test-issue-73-canonical-root.py` all 29 tests OK under the binding, covering the accepted, refused, invalid-binding, and preserved-standalone cases unweakened; `./scripts/render-skills.py --check` PASS with no generated diff. `refusal-receipt-shape.log`: the untouched production guard still refuses a foreign repo under the binding with `result=refused`, `reason=canonical-root-mismatch`, `mutation_performed=false`, exit 1, and **no** `error` key -- which is exactly why the old `assertIsNone(error)` passed and why the added `assertNotEqual(result,'refused')` is the assertion that now fires and prints the receipt. A re-run on the post-#95 synced tree is mission 4's.
 
 ## 4. Freeze the candidate and establish review readiness
 - item: Commit claim, mission list, the fix, and the original evidence onto `workflow/issue-96` so the run is not a main-root-only record; freeze the SHA and hand the outer parent a report it can verify. Readiness only — finalization is not this list's to perform.
