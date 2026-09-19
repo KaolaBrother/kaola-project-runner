@@ -68,6 +68,28 @@
   cover the absent-host recovery on Host restart, the repeated offer, the
   settled and agent-exited stale drops, the busy Host staging then flushing, and
   the unchanged idle/unbound paths.
+- **ZCode Host loads Project Runner through the native `/kaola-project-runner`
+  Skill invocation on every prompt (Issue #94).** First handoff, resume or
+  attach update, worker-event notification, and the round after any
+  compaction now share one entry: the command as the prompt's own first
+  line, resolved through ZCode's Skill tool against the installed
+  `kaola-project-runner` Skill (`<repo>/.zcode/skills/` or
+  `~/.zcode/skills/`). The host holder prepends that line to the
+  `kaola-host-notify/1` envelope; the Host's `heartbeat-prompt.json` `body`
+  still carries only the working prompt — never the entry line or the Skill
+  body. This replaces the Issue #75 compact-recovery path: no durable
+  `AGENTS.md` block is planted in consuming projects, ordinary Agents carry
+  no Host recovery instruction, and no role filtering, compaction
+  detection, or manual `SKILL.md` reread is required. Verified live on
+  ZCode 3.12.3 / adapter 0.3.3: `/kaola-project-runner` produces a native
+  `Skill` tool_call, a real `/compact` then the command produces a new one,
+  command-plus-trailing-text beats invoke the Skill and process the text,
+  and post-auto-compaction requests (isolated mock provider) still carry
+  the skill metadata on the wire. `references/zcode-compact-recovery.md` is
+  superseded by `references/zcode-native-skill-entry.md`; its runtime facts
+  (no compact hook, silent ACP compaction, `part`-table rows) are kept
+  there. Not verified: real-model behaviour after a genuine auto-compaction
+  (1M-window catalog models) and any compact-specific ACP event.
 
 - **Native mid-turn steering on ZCode 3.12+ through the v4 command surface,
   event-proven on the installed 3.12.3 (Issue #81).** The retired `session/steer`

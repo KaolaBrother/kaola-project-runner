@@ -164,6 +164,11 @@ HEARTBEAT_DEFECT_CHARS = 200
 # cannot dump an arbitrary body into session/prompt.
 HEARTBEAT_PROMPT_MAX_BYTES = 65536
 OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
+# Issue #94: every prompt addressed to a ZCode Host opens with the native Skill
+# command on its own first line so the Skill tool reloads the Project Runner
+# body for this turn - startup, resume, heartbeat, and post-compaction alike.
+# The envelope owns this line; the Host's heartbeat `body` does not carry it.
+HOST_SKILL_ENTRY = "/kaola-project-runner"
 # Issue #90: how many recently confirmed worker event ids stay remembered, so a
 # worker retrying the same deterministic event_id after a confirmed Host turn is
 # answered as a duplicate instead of prompting the Host again. A retry follows
@@ -2193,6 +2198,7 @@ class Holder:
                         "authorization and field state from the consuming project records, "
                         "then run one full pass.")
         lines = [
+            HOST_SKILL_ENTRY,
             "kaola-host-notify/1: event-driven heartbeat carrier (ZCode Host)",
             "worker events (structured, one JSON object per line):",
         ]

@@ -367,9 +367,12 @@ def assert_overflow_full_check(content: str) -> None:
 
 def assert_delivered_notification(sandbox: Sandbox, host: str, content: str,
                                   event_ids: list[str], body: str) -> None:
-    """The delivered prompt is one literal text: fixed metadata, the event
-    lines, the current full heartbeat body verbatim, and the one-pass
-    instruction per PROJECT_RUNNER_HEARTBEAT_V2."""
+    """The delivered prompt is one literal text: the native Skill entry line,
+    fixed metadata, the event lines, the current full heartbeat body verbatim,
+    and the one-pass instruction per PROJECT_RUNNER_HEARTBEAT_V2."""
+    first_line = content.split("\n", 1)[0]
+    check(first_line == "/kaola-project-runner",
+          f"notification payload opens with the native Skill entry line (got {first_line!r})")
     check("kaola-host-notify/1" in content, "notification payload carries its schema marker")
     check("<<<heartbeat-prompt" in content and "heartbeat-prompt>>>" in content,
           "notification payload delimits the heartbeat body verbatim")

@@ -107,8 +107,8 @@ active Host turn is exactly what keeps events undelivered. Do not `stop` or
 
 ### When an event wakes you
 
-The next beat is an ordinary prompt beginning `kaola-host-notify/1`, one JSON
-object per event —
+The next beat is an ordinary prompt: first line `/kaola-project-runner`,
+then `kaola-host-notify/1`, one JSON object per event —
 
 ```json
 {"event_cursor":19,"event_id":"codex/codex-KT-i274-parser/idle/19","kind":"idle",
@@ -135,9 +135,9 @@ updates. Read from an earlier anchor:
 
 Confirm you read the turn you dispatched: `observe`'s
 `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
-and `turn_outcome`/`stop_reason` must show it finished. A capture with no
-assistant text means the window was wrong — widen it. Then accept, fix, or
-dispatch more, update the heartbeat prompt, and end the turn.
+and `turn_outcome`/`stop_reason` must show it finished. No assistant text
+means the window was wrong — widen it. Then accept, fix, or dispatch more,
+update the heartbeat prompt, and end the turn.
 
 `kind` is `idle` when the worker's turn ended and `terminated` when its
 process exited; a finished turn is a full trigger, and you never kill a

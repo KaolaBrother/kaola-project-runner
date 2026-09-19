@@ -273,6 +273,16 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("delegator-host.json" not in handoff_doc and "delegator-host.json" not in skill,
           "no Delegator continuation pointer file")
     check("prompt-in-progress" in handoff_doc, "busy send is not claimed delivered")
+    check("```text\n/kaola-project-runner\n" in handoff_doc,
+          "handoff text opens with the native Skill entry as its own first line")
+    check("Load " not in handoff_doc.split("```text", 1)[1].split("```", 1)[0],
+          "handoff text no longer tells the Host to Load a SKILL.md path")
+    check("Skill` tool_call" in handoff_doc or "Skill tool_call" in handoff_doc,
+          "first-beat check requires the native Skill tool_call evidence")
+    check("No `AGENTS.md` block or manual `SKILL.md` read" in handoff_one,
+          "handoff states the AGENTS.md block is not the carrier")
+    check("later updates alike" in handoff_one,
+          "later updates reuse the same native entry line")
     check("status --repo" in handoff_one, "live recover uses existing Runner status")
     check("A Git worktree is not an ACP session id" in handoff_one
           or "A Git worktree is not an ACP id" in skill_one,
@@ -440,7 +450,7 @@ def test_fake_acp_host_worker_event_and_live_status() -> None:
         check(live_before_prompt.get("session") == host, "live attach names the original Host")
 
         handoff = (
-            f"Load {RUNNER / 'SKILL.md'} (Project Runner) and follow it.\n"
+            "/kaola-project-runner\n"
             f"You are the ZCode Host for this run.\n"
             f"platform=zcode session={host} repo={sandbox.repo}\n"
             f"{ORIGINAL_TASK}\n"
