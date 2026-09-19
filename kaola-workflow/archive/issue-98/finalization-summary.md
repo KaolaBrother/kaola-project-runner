@@ -220,3 +220,34 @@ archived_paths:
 - kaola-workflow/archive/issue-98/finalization-summary.md
 - kaola-workflow/archive/issue-98/mission-list.md
 - kaola-workflow/archive/issue-98/workflow-state.md
+
+## Sink receipt (appended after the sink)
+
+The sink ran after this summary was written, so the SHAs cited above are the **pre-sink** ones. The
+sink could not fast-forward `main` — another run's `chore: archive issue-99 [sink]` (`78dba05`) had
+landed in between — so it **rebased** the three commits onto it and republished them under new ids.
+The pre-sink ids remain valid in PR #100's refs; on `main` they read:
+
+| Pre-sink | Published on `main` | Commit |
+|---|---|---|
+| `cb689a7` | **`b70db19`** | feat(dsh): add dsh as the tenth worker platform, ACP only |
+| `45f6c68` | **`d0e19b3`** | fix(dsh): close the Issue #98 review findings — *the accepted tip* |
+| `27f3fe6` | **`33a8971`** | docs(conventions): dock the worker count to ten — *the validated candidate* |
+| — | **`b3f9dcf`** | chore: archive issue-98 [sink] — this archive |
+
+Each pair was verified with `git patch-id --stable`: **all three patch-ids match**, so the rebase
+moved the commits without altering their content.
+
+The validation evidence still binds the published tree. `git diff 27f3fe6 33a8971` is **8 files,
++719/−0, all of them `kaola-workflow/archive/issue-99/**`** — the concurrent run's archive and
+nothing else. Zero source, test, skill, or documentation bytes differ between the tree that was
+validated at `VALIDATE_EXIT=0` and the tree published on `main`.
+
+- `main` head after sink: **`b3f9dcf`**, local and `origin/main` identical (`git rev-list
+  --left-right --count main...origin/main` → `0  0`).
+- Issue **#98 closed** by the sink; `remote_closed_after_publish: verified`.
+- Branch `workflow/issue-98` deleted locally and on the remote; worktree
+  `.kw/worktrees/issue-98` removed.
+- **PR #100** was auto-closed (state `CLOSED`, `mergedAt: null`) when the sink deleted its head
+  branch, at 2026-09-19T16:47:48Z. It is residue, not the delivery; a closing note on the PR points
+  at the published commits above.
