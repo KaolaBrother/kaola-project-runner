@@ -72,6 +72,15 @@ legacy Codex destination is used. Existing foreign paths are never replaced.
 kaola-project-runner-locate locator link; it is on by default only for the
 Codex runtime destination. Uninstall never removes bin
 links unless --bin-links is passed explicitly.
+The Codex runtime destination (--runtime codex, or no destination flag) also
+installs one Runner-owned user-level SessionStart(compact) recovery entry in
+${CODEX_HOME:-$HOME/.codex}/hooks.json (id kaola-project-runner:user-compact-context,
+assets under ${CODEX_HOME:-$HOME/.codex}/kaola-project-runner/hooks/) whenever
+the control-plane Skills are in the plan; --no-orchestrator skips it, and
+--uninstall removes only that entry and those assets. Foreign hook entries are
+never changed. --skills-dir never touches any hooks.json. Codex still asks you
+to review and trust the new entry in /hooks, and hooks load at session start,
+so recovery is not active in the session that ran the install.
 EOF
 }
 
@@ -502,6 +511,26 @@ if [[ "$want_bin_links" == true ]]; then
   done
 fi
 
+# Issue #97: the Codex runtime destination owns one user-level
+# SessionStart(compact) recovery entry beside the control-plane Skills. The
+# hook tool refuses a malformed user hooks.json before any write, so that
+# refusal is planned here, before the first Skill write, and aborts the run.
+# A generic --skills-dir destination is never a Codex user-level install.
+hook_tool="$script_dir/kaola-codex-compact-hook.py"
+codex_home="${CODEX_HOME:-$HOME/.codex}"
+want_user_hook=false
+if [[ "$resolved_runtime" == codex && "$install_orchestrator" == true ]]; then
+  want_user_hook=true
+  if [[ -d "$codex_home" ]]; then
+    hook_status="$("$installer_python" "$hook_tool" user-status --codex-home "$codex_home")" || {
+      printf 'refusing: Codex user-level hooks.json cannot be merged: %s\n' "$hook_status" >&2
+      exit 1
+    }
+  elif [[ "$mode" == uninstall ]]; then
+    want_user_hook=false
+  fi
+fi
+
 [[ "$mode" == install ]] && mkdir -p "$target_parent"
 [[ "$want_bin_links" == true && "$mode" == install ]] && mkdir -p "$bin_dir"
 
@@ -589,6 +618,23 @@ for row in "${actions[@]}"; do
   esac
 done
 [[ "$mode" == uninstall ]] && rmdir "$receipts_dir" 2>/dev/null || true
+
+if [[ "$want_user_hook" == true ]]; then
+  if [[ "$mode" == install ]]; then
+    hook_receipt="$("$installer_python" "$hook_tool" user-install --codex-home "$codex_home")" || {
+      printf 'Codex user-level compact-recovery hook install failed: %s\n' "$hook_receipt" >&2
+      exit 1
+    }
+    printf 'codex user hook: %s\n' "$hook_receipt"
+    printf 'codex user hook: review and trust the new entry in /hooks; it loads from the next Codex session\n'
+  else
+    hook_receipt="$("$installer_python" "$hook_tool" user-uninstall --codex-home "$codex_home")" || {
+      printf 'Codex user-level compact-recovery hook uninstall failed: %s\n' "$hook_receipt" >&2
+      exit 1
+    }
+    printf 'codex user hook: %s\n' "$hook_receipt"
+  fi
+fi
 
 for row in ${bin_actions[@]+"${bin_actions[@]}"}; do
   IFS='|' read -r action source target <<<"$row"

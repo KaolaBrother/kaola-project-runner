@@ -53,6 +53,12 @@ make_fixture() {
   cp "$project_root/scripts/kaola-acp.py" "$root/scripts/kaola-acp.py"
   cp "$project_root/scripts/kaola-acp-holder.py" "$root/scripts/kaola-acp-holder.py"
   cp "$project_root/scripts/kaola-locate.py" "$root/scripts/kaola-locate.py"
+  # Issue #97: the Codex destination installs the user-level compact hook
+  # through this tool and its payload templates.
+  cp "$project_root/scripts/kaola-codex-compact-hook.py" "$root/scripts/kaola-codex-compact-hook.py"
+  mkdir -p "$root/templates/codex-host"
+  cp "$project_root/templates/codex-host/compact-recovery.md" \
+    "$project_root/templates/codex-host/compact-recovery-user.md" "$root/templates/codex-host/"
   mkdir -p "$root/skills/kaola-project-runner"
   printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
@@ -742,6 +748,129 @@ assert_link "test_locator_bin_link_install" "$home/.local/bin/kaola-project-runn
 output="$(run_installer "$repo" "$home" --runtime codex --platform grok --uninstall --bin-links 2>&1)" \
   || fail "test_locator_bin_link_uninstall" "uninstall failed: $output"
 assert_absent "test_locator_bin_link_uninstall" "$home/.local/bin/kaola-project-runner-locate"
+
+# --- Codex user-level compact-recovery hook (Issue #97) ------------------------
+user_hook_id="kaola-project-runner:user-compact-context"
+hook_ids() {
+  python3 - "$1" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+print(",".join(str(e.get("id")) for e in (doc.get("hooks") or {}).get("SessionStart") or []))
+PY
+}
+foreign_entries() {
+  # Every SessionStart entry that is not ours, plus every other event list,
+  # canonically serialized.
+  python3 - "$1" "$user_hook_id" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+entries = (doc.get("hooks") or {}).get("SessionStart") or []
+print(json.dumps([e for e in entries if not (isinstance(e, dict) and e.get("id") == sys.argv[2])], sort_keys=True))
+print(json.dumps({k: v for k, v in (doc.get("hooks") or {}).items() if k != "SessionStart"}, sort_keys=True))
+PY
+}
+repo="$tmp_root/repo-user-hook"
+make_fixture "$repo"
+home="$tmp_root/home-user-hook"
+codex_home="$tmp_root/user-hook-codex"
+mkdir -p "$codex_home"
+cat >"$codex_home/hooks.json" <<'JSON'
+{
+  "hooks": {
+    "PreToolUse": [],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [{"type": "command", "command": "cat \"/x/kaola-workflow-codex-compact-recovery.md\"", "timeout": 5}],
+        "description": "Inject the generated Codex compact-recovery prompt after context compaction",
+        "id": "kaola-workflow:compact-context"
+      },
+      {"hooks": [{"type": "command", "command": "/bin/true"}], "id": "user-owned:startup-notes"}
+    ]
+  }
+}
+JSON
+foreign_before="$(foreign_entries "$codex_home/hooks.json")"
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok,zcode --method link 2>&1)" \
+  || fail "test_user_hook_codex_install" "install failed: $output"
+[[ "$(hook_ids "$codex_home/hooks.json")" == "kaola-workflow:compact-context,user-owned:startup-notes,$user_hook_id" ]] \
+  || fail "test_user_hook_codex_install_entry" "expected our entry appended after foreign ones, got: $(hook_ids "$codex_home/hooks.json")"
+[[ "$(foreign_entries "$codex_home/hooks.json")" == "$foreign_before" ]] \
+  || fail "test_user_hook_codex_install_foreign_kept" "foreign entries changed"
+assert_file "test_user_hook_codex_install_payload" "$codex_home/kaola-project-runner/hooks/compact-recovery-user.md"
+assert_file "test_user_hook_codex_install_emitter" "$codex_home/kaola-project-runner/hooks/kaola-codex-compact-hook.py"
+[[ "$output" == *"codex user hook: "*'"result": "ok"'* && "$output" == *"review and trust"* ]] \
+  || fail "test_user_hook_codex_install_output" "expected hook receipt and trust note, got: $output"
+[[ ! -e "$repo/.codex" ]] || fail "test_user_hook_codex_install_no_project_layer" "project-level .codex must not appear"
+hooks_before="$(cat "$codex_home/hooks.json")"
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok,zcode --method link 2>&1)" \
+  || fail "test_user_hook_codex_reinstall" "reinstall failed: $output"
+[[ "$(cat "$codex_home/hooks.json")" == "$hooks_before" ]] || fail "test_user_hook_codex_reinstall_idempotent" "hooks.json changed on reinstall"
+[[ "$output" == *'"changed": false'* ]] || fail "test_user_hook_codex_reinstall_receipt" "expected changed:false, got: $output"
+[[ -z "$(ls "$codex_home" | grep -i backup || true)" ]] || fail "test_user_hook_codex_no_backup" "a backup copy of hooks.json was made"
+
+# the legacy no-destination default is the Codex destination and installs it too
+codex_home_legacy="$tmp_root/user-hook-codex-legacy"
+output="$(CODEX_HOME="$codex_home_legacy" run_installer "$repo" "$home" --platform grok,zcode --method link 2>&1)" \
+  || fail "test_user_hook_legacy_default_install" "install failed: $output"
+[[ "$(hook_ids "$codex_home_legacy/hooks.json")" == "$user_hook_id" ]] \
+  || fail "test_user_hook_legacy_default_entry" "expected our entry alone in a fresh Codex home, got: $(hook_ids "$codex_home_legacy/hooks.json" 2>&1)"
+
+# --no-orchestrator: workers only, no hook
+codex_home_workers="$tmp_root/user-hook-codex-workers"
+output="$(CODEX_HOME="$codex_home_workers" run_installer "$repo" "$home" --runtime codex --platform grok --method link --no-orchestrator 2>&1)" \
+  || fail "test_user_hook_no_orchestrator" "install failed: $output"
+assert_absent "test_user_hook_no_orchestrator_hooks" "$codex_home_workers/hooks.json"
+assert_absent "test_user_hook_no_orchestrator_assets" "$codex_home_workers/kaola-project-runner"
+
+# --skills-dir is a generic destination: never a Codex user-level install
+home_generic="$tmp_root/home-user-hook-generic"
+dest="$tmp_root/user-hook-generic-dest"
+output="$(run_installer "$repo" "$home_generic" --skills-dir "$dest" --platform grok,zcode --method link 2>&1)" \
+  || fail "test_user_hook_skills_dir" "install failed: $output"
+assert_absent "test_user_hook_skills_dir_no_codex_home" "$home_generic/codex-default"
+assert_absent "test_user_hook_skills_dir_no_dest_hooks" "$dest/hooks.json"
+[[ "$output" != *"codex user hook"* ]] || fail "test_user_hook_skills_dir_silent" "generic destination mentioned the Codex hook: $output"
+for rt in claude-code cursor devin zcode; do
+  output="$(run_installer "$repo" "$home_generic" --runtime "$rt" --platform grok --method link 2>&1)" \
+    || fail "test_user_hook_other_runtime_$rt" "install failed: $output"
+  assert_absent "test_user_hook_other_runtime_${rt}_no_hooks" "$home_generic/codex-default/hooks.json"
+done
+
+# uninstall removes only our entry and assets; foreign entries and file survive
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok,zcode --uninstall 2>&1)" \
+  || fail "test_user_hook_codex_uninstall" "uninstall failed: $output"
+[[ "$(hook_ids "$codex_home/hooks.json")" == "kaola-workflow:compact-context,user-owned:startup-notes" ]] \
+  || fail "test_user_hook_codex_uninstall_entry" "expected only foreign entries, got: $(hook_ids "$codex_home/hooks.json")"
+[[ "$(foreign_entries "$codex_home/hooks.json")" == "$foreign_before" ]] \
+  || fail "test_user_hook_codex_uninstall_foreign_kept" "foreign entries changed"
+assert_absent "test_user_hook_codex_uninstall_assets" "$codex_home/kaola-project-runner"
+assert_absent "test_user_hook_codex_uninstall_skill" "$codex_home/skills/kaola-project-runner"
+# a Codex home that held nothing but our entry ends with no hooks.json at all
+output="$(CODEX_HOME="$codex_home_legacy" run_installer "$repo" "$home" --platform grok,zcode --uninstall 2>&1)" \
+  || fail "test_user_hook_legacy_uninstall" "uninstall failed: $output"
+assert_absent "test_user_hook_legacy_uninstall_hooks" "$codex_home_legacy/hooks.json"
+# --no-orchestrator uninstall leaves the hook in place with the main Skill
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok,zcode --method link 2>&1)" \
+  || fail "test_user_hook_codex_reinstall_for_partial" "install failed: $output"
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok --uninstall --no-orchestrator 2>&1)" \
+  || fail "test_user_hook_partial_uninstall" "uninstall failed: $output"
+[[ "$(hook_ids "$codex_home/hooks.json")" == *"$user_hook_id"* ]] || fail "test_user_hook_partial_uninstall_keeps_hook" "hook removed by a --no-orchestrator uninstall"
+[[ -L "$codex_home/skills/kaola-project-runner" ]] || fail "test_user_hook_partial_uninstall_keeps_main" "main Skill removed"
+
+# a malformed user hooks.json aborts before any Skill write
+codex_home_bad="$tmp_root/user-hook-codex-bad"
+mkdir -p "$codex_home_bad"
+printf '%s\n' '{"hooks": null}' >"$codex_home_bad/hooks.json"
+set +e
+output="$(CODEX_HOME="$codex_home_bad" run_installer "$repo" "$home" --runtime codex --platform grok,zcode --method link 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_user_hook_malformed_refused" "unexpected success: $output"
+[[ "$output" == *"refusing: Codex user-level hooks.json cannot be merged"* ]] || fail "test_user_hook_malformed_message" "expected refusal, got: $output"
+assert_absent "test_user_hook_malformed_no_skill_write" "$codex_home_bad/skills"
+[[ "$(cat "$codex_home_bad/hooks.json")" == '{"hooks": null}' ]] || fail "test_user_hook_malformed_untouched" "malformed hooks.json was rewritten"
+assert_absent "test_user_hook_malformed_no_assets" "$codex_home_bad/kaola-project-runner"
 
 # --- generated payload stays valid under the neutral validator ----------------
 for skill_dir in "$project_root"/skills/*kaola-project-runner "$project_root"/skills/kaola-delegator; do

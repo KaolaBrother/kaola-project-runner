@@ -39,6 +39,11 @@ make_fixture() {
   cp "$project_root/scripts/kaola-acp.py" "$root/scripts/kaola-acp.py"
   cp "$project_root/scripts/kaola-acp-holder.py" "$root/scripts/kaola-acp-holder.py"
   cp "$project_root/scripts/kaola-locate.py" "$root/scripts/kaola-locate.py"
+  # Issue #97: the Codex destination installs the user-level compact hook.
+  cp "$project_root/scripts/kaola-codex-compact-hook.py" "$root/scripts/kaola-codex-compact-hook.py"
+  mkdir -p "$root/templates/codex-host"
+  cp "$project_root/templates/codex-host/compact-recovery.md" \
+    "$project_root/templates/codex-host/compact-recovery-user.md" "$root/templates/codex-host/"
   mkdir -p "$root/skills/kaola-project-runner"
   printf '%s\n' 'kaola-project-runner' >"$root/skills/kaola-project-runner/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-project-runner/SKILL.md"
