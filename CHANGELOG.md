@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Kimi Code CLI 2.0.1 ACP compatibility reverified.** An isolated live run
+  confirmed `initialize`, session creation, model/thinking/YOLO selection, a
+  completed prompt, exact stop, and resume of the same native session with
+  prior context. The four candidate native steering methods still return
+  `-32601`, so the explicit interrupt-and-continue path remains the supported
+  steering fallback. This updates the versioned capability description only;
+  no transport behaviour changes.
+
 - **Native mid-turn steering on ZCode 3.12+ through the v4 command surface,
   event-proven on the installed 3.12.3 (Issue #81).** The retired `session/steer`
   surface was correctly declared unsupported (Issue #65), but 3.12+ moved the

@@ -1,7 +1,7 @@
 # Kimi CLI steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unsupported** (entry ``). No steering entry on the ACP surface: all four candidate methods answer JSON-RPC -32601 on Kimi Code CLI 2.0.0 (cli 0.41.0) and `initialize` advertises no steering `_meta`.
+**unsupported** (entry ``). Kimi Code CLI 2.0.1 advertises no steering `_meta`; all four candidate ACP methods (`_session/steering`, `session/steering`, `session/steer`, `_session/steer`) answer JSON-RPC -32601. Use explicit `--steer-mode interrupt` to cancel the active turn and continue on the same session; this is not mid-turn injection.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
