@@ -99,6 +99,7 @@ python_suites_all=(
   "test-issue-90-event-confirmation-race.py"
   "test-issue-92-permission-wake-recovery.py"
   "test-issue-95-reader-exception.py"
+  "test-issue-97-codex-user-compact-hook.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -120,6 +121,7 @@ python_suites_a=(
   "test-issue-83-lane-failure-visibility.py"
   "test-issue-88-permission-defaults.py"
   "test-issue-92-permission-wake-recovery.py"
+  "test-issue-97-codex-user-compact-hook.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"
