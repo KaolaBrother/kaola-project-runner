@@ -76,15 +76,15 @@
   installed `kaola-project-runner` Skill. A busy `steer` guide is forwarded
   into the running turn verbatim — it keeps the already-loaded context and
   is not a new `Skill` invocation. The composite `steer --steer-mode
-  interrupt` resends on a genuinely new turn, so on an entry Host (a session
-  whose prompts open with the command) the holder keeps the entry as that
-  resend's first line and reports `host_skill_entry_prepended`; unmarked
-  worker sessions resend verbatim. Verified install-time default discovery
+  interrupt` resends on a genuinely new turn but is not a Host recovery
+  entry — it carries the Agent's text verbatim on every session and adds
+  no entry line, so a caller that uses it to open a Host round supplies
+  `/kaola-project-runner` itself. Verified install-time default discovery
   roots on ZCode 3.12.3: `<repo>/.zcode/skills/`, `<repo>/.agents/skills/`,
   `~/.zcode/skills/`, `~/.agents/skills/` (plus both roots on ancestor
-  directories; configured `plugins.dirs` plugin roots scan too — a plugin
-  skill surfaces as `<plugin>:<skill>` and stays loadable by its plain
-  name). The host holder prepends that line to the
+  directories; configured `skills.roots` and `plugins.dirs` roots scan
+  too — a plugin skill surfaces as `<plugin>:<skill>` and stays loadable
+  by its plain name). The host holder prepends that line to the
   `kaola-host-notify/1` envelope; the Host's `heartbeat-prompt.json` `body`
   still carries only the working prompt — never the entry line or the Skill
   body. This replaces the Issue #75 compact-recovery path: no durable

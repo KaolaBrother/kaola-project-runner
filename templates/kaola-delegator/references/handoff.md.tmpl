@@ -47,7 +47,6 @@ kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
 `$HOST` is the exact session about to be used: the standard name, or a
 uniquely adopted live nonstandard name — never any other session. Refuse any
 `refused` receipt; do not operate the Host.
-Tmux presence is evidence, not a start gate.
 
 ## Recover
 
@@ -105,8 +104,9 @@ project complete; a first `end_turn` is only that beat.
 
 Busy Host (`prompt-in-progress` / turn active): never claim a `--no-wait`
 send consumed — `steer` injects the running turn verbatim (no new `Skill`
-invocation) or hold for a safe idle send; `steer --steer-mode interrupt`
-resends on a new turn and keeps the entry line on an entry Host.
+invocation) or wait for idle; `steer --steer-mode interrupt`
+resends verbatim on a new turn — not a Host entry; supply the first line
+yourself to open a Host round.
 `unknown`/`not_consumed` is not a resend. No queue.
 
 ```bash
@@ -120,8 +120,8 @@ with `/kaola-project-runner` as its own first line: the native Skill entry,
 idempotent across re-invocation and after compaction. Install the generated
 Skill under a discovered root — default `<repo>/.zcode/skills/`,
 `<repo>/.agents/skills/`, `~/.zcode/skills/`, or `~/.agents/skills/`
-(configured `plugins.dirs` roots also scan); elsewhere the line arrives as
-plain text. No `AGENTS.md` block or manual `SKILL.md` read is the carrier.
+(configured `skills.roots`/`plugins.dirs` roots also scan); elsewhere the
+line arrives as plain text. No `AGENTS.md` block or manual `SKILL.md` read is the carrier.
 
 Handoff text (quota units never merge; `unspecified` is not unlimited):
 

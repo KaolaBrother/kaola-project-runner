@@ -48,8 +48,8 @@ handling does not. Do not take that over session by session.
    `steer` guide is not a new prompt: it enters the running turn verbatim,
    keeps the already-loaded context, and is no new Skill invocation. The
    composite `steer --steer-mode interrupt` ends the turn and resends on a
-   new one — on this entry Host the holder keeps the entry as that resend's
-   first line. That
+   new one verbatim — not a Host recovery entry; supply the first line
+   yourself if a resend must open a Host round. That
    native invocation is the whole recovery mechanism; no `AGENTS.md` block,
    role check, or compact detection is involved. Facts and boundaries:
    [zcode-native-skill-entry.md](zcode-native-skill-entry.md).

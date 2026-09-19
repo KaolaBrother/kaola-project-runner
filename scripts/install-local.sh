@@ -36,7 +36,7 @@ Consuming runtimes (verified native skill directories):
                discovery roots are the workspace .zcode/skills and
                .agents/skills — --skills-dir covers either — and the
                user-level ~/.zcode/skills and ~/.agents/skills; configured
-               plugins.dirs roots also scan, see docs/zcode-host.md)
+               skills.roots/plugins.dirs roots also scan — docs/zcode-host.md)
 Grok Bot is a bridge host, not an installer destination: the account holds one
 thin generated Skill (hosts/grok-bot/kaola-delegator.md) that loads the
 Kaola-Delegator Skill from this checkout on the bound execution target

@@ -8,8 +8,11 @@ first line. ZCode resolves it through the Skill tool against the installed
 ``kaola-project-runner`` Skill; re-invocation is idempotent. A busy ``steer``
 guide is different: it enters the already-running turn verbatim, keeps the
 loaded context, and is no new ``Skill`` invocation — none is promised. The
-composite ``steer --steer-mode interrupt`` resends on a new turn, so on an
-entry Host the holder keeps the entry as that resend's first line. This
+composite ``steer --steer-mode interrupt`` resends on a new turn but is NOT
+a Host recovery entry: the holder sends the Agent's text verbatim on every
+session, infers no Host identity from prompt content, and adds no entry
+line — a caller wanting the resend to open a Host round supplies
+``/kaola-project-runner`` itself. This
 replaces the Issue #75 carrier: no durable ``AGENTS.md`` block is planted in
 a consuming project, ordinary Agents carry no Host instruction, and no role
 filtering, compaction detection, or manual ``SKILL.md`` read is required.
@@ -93,15 +96,19 @@ class Templates(unittest.TestCase):
                       "promised", text)
         self.assertIn("a `Skill` tool_call from a busy `steer` guide", text)
 
-    def test_reference_interrupt_steer_is_an_entry_on_entry_hosts(self) -> None:
+    def test_reference_interrupt_steer_is_not_a_host_entry(self) -> None:
         text = flat(self.entry_ref)
         self.assertIn("Composite `steer --steer-mode interrupt`", text)
         self.assertIn("its resend *is* a turn-opening prompt", text)
         self.assertIn("cancels the running turn", text)
-        self.assertIn("host_skill_entry_prepended", text)
-        self.assertIn("resent text goes out verbatim", text)
+        self.assertIn("**not** a Host recovery entry", text)
+        self.assertIn("verbatim", text)
+        self.assertIn("never infers Host identity from prompt content", text)
+        self.assertIn("the caller supplies `/kaola-project-runner`", text)
         self.assertIn("Composite interrupt steer", text)
         self.assertIn("contract-tested", text)
+        self.assertNotIn("host_skill_entry_prepended", text)
+        self.assertNotIn("entry Host", text)
 
     def test_reference_discovery_roots_cover_agents_skills(self) -> None:
         text = flat(self.entry_ref)
@@ -116,9 +123,11 @@ class Templates(unittest.TestCase):
         self.assertIn("plugin cache", text)
         self.assertIn("createSkillsService", text)
 
-    def test_reference_names_configured_plugin_roots(self) -> None:
+    def test_reference_names_configured_roots(self) -> None:
         text = flat(self.entry_ref)
-        self.assertIn("`plugins.dirs` in `~/.zcode/cli/config.json`", text)
+        self.assertIn("`skills.roots` in `~/.zcode/cli/config.json`", text)
+        self.assertIn("extraRoots", text)
+        self.assertIn("`plugins.dirs`", text)
         self.assertIn("`<plugin>:<skill>`", text)
         self.assertIn("kpr-extra:kaola-project-runner", text)
         self.assertIn("outside every discovered root", text)
@@ -132,7 +141,8 @@ class Templates(unittest.TestCase):
         self.assertIn("ordinary Agents in the same repo carry no Host "
                       "instruction at all", text)
         self.assertIn("no hook, plugin, command registry, scheduler, "
-                      "polling loop, cursor ledger, or state machine", text)
+                      "polling loop, role classifier, session marker, "
+                      "cursor ledger, or state machine", text)
 
     def test_reference_keeps_honest_runtime_facts_and_bounds(self) -> None:
         text = flat(self.entry_ref)
@@ -156,7 +166,7 @@ class Templates(unittest.TestCase):
         self.assertIn("keeps the already-loaded context", text)
         self.assertIn("no new Skill invocation", text)
         self.assertIn("steer --steer-mode interrupt", text)
-        self.assertIn("keeps the entry as that resend's first line", text)
+        self.assertIn("not a Host recovery entry", text)
         self.assertIn("never `read` a `SKILL.md` path by hand", text)
         self.assertIn("zcode-native-skill-entry.md](zcode-native-skill-entry.md)", text)
         self.assertNotIn("AGENTS.md` instruction planted", text)
@@ -185,7 +195,8 @@ class Templates(unittest.TestCase):
         for needle in ("`<repo>/.zcode/skills/`", "`<repo>/.agents/skills/`",
                        "`~/.zcode/skills/`", "`~/.agents/skills/`"):
             self.assertIn(needle, text)
-        self.assertIn("configured `plugins.dirs` roots also scan", text)
+        self.assertIn("configured `skills.roots`/`plugins.dirs` roots also scan",
+                      text)
         self.assertIn("No `AGENTS.md` block or manual `SKILL.md` read is the "
                       "carrier", text)
         self.assertIn("`Skill` tool_call for that entry", text)
@@ -196,7 +207,9 @@ class Templates(unittest.TestCase):
         self.assertIn("`steer` injects the running turn verbatim", text)
         self.assertIn("no new `Skill` invocation", text)
         self.assertIn("steer --steer-mode interrupt", text)
-        self.assertIn("keeps the entry line on an entry Host", text)
+        self.assertIn("resends verbatim on a new turn", text)
+        self.assertIn("not a Host entry", text)
+        self.assertNotIn("entry Host", text)
 
 
 class HolderEnvelope(unittest.TestCase):
@@ -219,17 +232,34 @@ class HolderEnvelope(unittest.TestCase):
                        "zcode-compact-recovery", "UserPromptSubmit"):
             self.assertNotIn(banned, self.src)
 
-    def test_interrupt_resend_is_host_scoped(self) -> None:
-        """The composite interrupt resend keeps the entry only on a session
-        marked as an entry Host; the mark is set by observing an admitted
-        prompt's first line and by the Host-only worker-event surface."""
-        self.assertIn("self.host_entry_session = False", self.src)
-        self.assertIn("self.host_entry_session = True", self.src)
-        self.assertIn('text.split("\\n", 1)[0].strip() == HOST_SKILL_ENTRY',
+    def test_interrupt_resend_is_verbatim_with_no_host_marker(self) -> None:
+        """The composite interrupt resend carries the Agent's text verbatim
+        on every session. The holder has no Host marker, no role classifier,
+        no persistent flag: nothing infers Host identity from literal prompt
+        content, and a stop/resume cannot lose or restore a marker that does
+        not exist. The only use of HOST_SKILL_ENTRY is the worker-event
+        notification envelope's own first line."""
+        self.assertNotIn("host_entry_session", self.src)
+        self.assertNotIn("host_skill_entry_prepended", self.src)
+        self.assertNotIn("entry Host", self.src)
+        # the resend goes through op_prompt with the caller's text unchanged
+        m = re.search(r'self\.op_prompt\(\{"text": text, "wait": False\}\)',
                       self.src)
-        self.assertIn("if host_entry and text.split", self.src)
-        self.assertIn('send_text = HOST_SKILL_ENTRY + "\\n" + text', self.src)
-        self.assertIn('"host_skill_entry_prepended"', self.src)
+        self.assertIsNotNone(m, "interrupt resend must send text verbatim")
+        # HOST_SKILL_ENTRY is used exactly twice: its definition and the
+        # notification payload's first line — never as prompt-content
+        # inspection or a resend prepend.
+        uses = [ln for ln in self.src.splitlines()
+                if "HOST_SKILL_ENTRY" in ln]
+        self.assertEqual(len(uses), 2, uses)
+        self.assertIn('HOST_SKILL_ENTRY = "/kaola-project-runner"', uses[0])
+        self.assertRegex(uses[1], r"^\s+HOST_SKILL_ENTRY,$")
+
+    def test_holder_documents_interrupt_is_no_recovery_entry(self) -> None:
+        text = flat(self.src)
+        self.assertIn("NOT a Host recovery entry", text)
+        self.assertIn("never infers a Host", text)
+        self.assertIn("never adds the native Skill entry line", text)
 
 
 class GeneratedSurface(unittest.TestCase):
@@ -262,7 +292,8 @@ class GeneratedSurface(unittest.TestCase):
         self.assertIn("`~/.agents/skills/`", text)
         self.assertIn("`steer` injects the running turn verbatim", text)
         self.assertIn("steer --steer-mode interrupt", text)
-        self.assertIn("configured `plugins.dirs` roots also scan", text)
+        self.assertIn("configured `skills.roots`/`plugins.dirs` roots also scan",
+                      text)
         self.assertIn("busy `steer` guide is not a new prompt", flat(self.startup))
         self.assertIn("steer --steer-mode interrupt", flat(self.startup))
 
@@ -293,11 +324,13 @@ class Doc(unittest.TestCase):
         self.assertIn("no new `Skill` tool_call", self.text)
         self.assertIn("no re-invocation is claimed", self.text)
 
-    def test_doc_interrupt_steer_keeps_the_entry_on_entry_hosts(self) -> None:
+    def test_doc_interrupt_steer_is_not_a_host_entry(self) -> None:
         self.assertIn("steer --steer-mode interrupt", self.text)
-        self.assertIn("entry Host", self.text)
-        self.assertIn("host_skill_entry_prepended", self.text)
-        self.assertIn("unmarked worker sessions resend verbatim", self.text)
+        self.assertIn("not a Host recovery entry", self.text)
+        self.assertIn("verbatim on every session", self.text)
+        self.assertIn("caller supplies `/kaola-project-runner`", self.text)
+        self.assertNotIn("host_skill_entry_prepended", self.text)
+        self.assertNotIn("entry Host", self.text)
 
     def test_doc_discovery_roots_cover_agents_skills(self) -> None:
         for needle in ("`<repo>/.zcode/skills/`", "`<repo>/.agents/skills/`",
@@ -306,6 +339,8 @@ class Doc(unittest.TestCase):
         self.assertIn("ancestor", self.text)
         self.assertIn("plugin cache", self.text)
         self.assertIn("plugins.dirs", self.text)
+        self.assertIn("skills.roots", self.text)
+        self.assertIn("extraRoots", self.text)
         self.assertIn("`~/.zcode/cli/config.json`", self.text)
         self.assertIn("kpr-extra:kaola-project-runner", self.text)
         self.assertIn("default roots", self.text)

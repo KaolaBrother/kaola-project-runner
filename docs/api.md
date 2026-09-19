@@ -309,9 +309,9 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
   confirm it actually stopped, then send the text **once** as the next prompt on the same ACP
   session, so the conversation keeps its context. It is interrupted-then-continued, never injection —
   the running turn is ended, and work it already did (files written, commands run) is not undone.
-  The resend opens a new turn, so on a ZCode entry Host — a session whose prompts open with
-  `/kaola-project-runner` — it keeps that entry as its own first line (`host_skill_entry_prepended`
-  on the receipt); every other session's text goes out verbatim.
+  The resend opens a new turn carrying the Agent's text verbatim on every session — it is not a
+  Host recovery entry and adds no native Skill entry line; a caller wanting the resend to open a
+  ZCode Host round supplies `/kaola-project-runner` as the text's own first line.
 - With no `--steer-mode`, a native platform uses `native`, and a platform without a native entry
   **refuses** with `steer-mode-required`, `available_steer_modes: ["interrupt"]`, and writes nothing.
   The Runner never interrupts a worker on its own initiative, and never silently degrades from

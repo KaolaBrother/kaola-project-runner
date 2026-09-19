@@ -367,10 +367,10 @@ turn verbatim (the Issue #65/#81 transport), so it produces no new prompt
 and no new `Skill` tool_call — the running turn keeps the Skill body it
 loaded at its own first line, and no re-invocation is claimed or required
 there. The composite `steer --steer-mode interrupt` is different again: its
-cancel-then-resend creates a genuinely new turn, so on an entry Host — a
-session whose prompts open with the command — the holder keeps
-`/kaola-project-runner` as that resend's own first line and reports
-`host_skill_entry_prepended`; unmarked worker sessions resend verbatim.
+cancel-then-resend creates a genuinely new turn and carries the Agent's
+text verbatim on every session — it is not a Host recovery entry and adds
+no entry line, so do not use it to open a Host round unless the caller
+supplies `/kaola-project-runner` as the steering text's own first line.
 Verified live on ZCode 3.12.3 with the repo adapter 0.3.3:
 
 - Real GLM model: `/kaola-project-runner` produces a native `Skill`
@@ -389,22 +389,24 @@ Verified live on ZCode 3.12.3 with the repo adapter 0.3.3:
   resolves workspace `.zcode/skills` and `.agents/skills`, user
   `~/.zcode/skills` and `~/.agents/skills`, plus both roots on ancestor
   directories up to the workspace boundary — the defaults. Configured
-  roots add more: `plugins.dirs` in `~/.zcode/cli/config.json` makes the
-  runtime scan a plugin dir's `skills/`; a scratch-HOME live probe
-  injected the `kaola-project-runner` metadata from each `.agents/skills`
-  root and discovered `kpr-extra:kaola-project-runner` (loadable as
+  roots add more: `skills.roots` in `~/.zcode/cli/config.json` is passed
+  to the skills service as `extraRoots`, and `plugins.dirs` in the same
+  file makes the runtime scan a plugin dir's `skills/`; a scratch-HOME
+  live probe injected the `kaola-project-runner` metadata from each
+  `.agents/skills` root, from a `skills.roots` root (`file:` at the
+  configured dir), and `kpr-extra:kaola-project-runner` (loadable as
   `kaola-project-runner`) from a configured plugin dir.
-- Composite interrupt steer (Issue #94 review fix): on an entry Host the
-  holder's `--steer-mode interrupt` resend carries the entry as its first
-  line — contract-tested end-to-end; an unmarked worker session's resend
-  is verbatim.
+- Composite interrupt steer (Issue #94 re-review): the holder's
+  `--steer-mode interrupt` resend carries the Agent's text verbatim on a
+  genuinely new turn — contract-tested end-to-end on a Host-shaped
+  session and an ordinary worker alike; it is not a Host recovery entry.
 
 The discovery precondition is the install: the generated
 `kaola-project-runner` Skill must sit where the Host session discovers
 skills — default roots `<repo>/.zcode/skills/`, `<repo>/.agents/skills/`,
 `~/.zcode/skills/`, or `~/.agents/skills/` (ancestor-directory roots are
-also scanned; configured `plugins.dirs` plugin roots scan too; plugin
-cache roots are a separate mechanism). A `--skills-dir` outside every
+also scanned; configured `skills.roots` and `plugins.dirs` roots scan
+too; plugin cache roots are a separate mechanism). A `--skills-dir` outside every
 discovered root — default or configured — still works for an agent that
 reads the file itself, but a ZCode Host does not read the file; if a
 beat's `capture`
@@ -413,8 +415,8 @@ a manual read.
 
 Boundaries held: no project `AGENTS.md` block is planted, ordinary Agents
 in a consuming repo carry no Host recovery instruction, and no hook,
-plugin, command registry, scheduler, polling loop, cursor ledger, or state
-machine was added. The superseded Issue #75 design (durable `AGENTS.md`
+plugin, command registry, scheduler, polling loop, role classifier,
+session marker, cursor ledger, or state machine was added. The superseded Issue #75 design (durable `AGENTS.md`
 carrier, per-send carrier text, manual `SKILL.md` reread) is removed from
 the generated Skill; its runtime findings stay true and are kept in
 `references/zcode-native-skill-entry.md`: ZCode 0.16.5/3.12.3 has no
