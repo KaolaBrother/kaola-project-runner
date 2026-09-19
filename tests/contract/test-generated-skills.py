@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Independent acceptance checks for the generated Skill distribution.
 
-Nine platform worker packages remain transport-only. Issue #41 adds one
+Ten platform worker packages remain transport-only. Issue #41 adds one
 control-plane package, ``kaola-project-runner``, which is generated through
 the same byte inventory/write/check path and is not an eleventh platform.
 """

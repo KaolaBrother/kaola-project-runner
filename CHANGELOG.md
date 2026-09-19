@@ -5,7 +5,10 @@
 - **dsh (DeepSeek Harness) is the tenth worker platform, ACP only (Issue #98).** `dsh` ships its
   own automation-only ACP v1 stdio server, `dsh --profile acp`, so the Runner binds to it directly
   with no bridge, proxy, or translator: `platforms/dsh.yaml` plus `scripts/adapters/dsh.sh` and the
-  roster registrations are the whole change, and the transport code is untouched. dsh negotiates
+  roster registrations are the whole change. No transport *mechanism* was added — the holder
+  already branches on `agentCapabilities.sessionCapabilities.resume` and already sends `configId` —
+  but two shared receipt bugs that only dsh's shapes expose are fixed with it, and those change
+  receipts on every platform; see the end of this entry. dsh negotiates
   `protocolVersion 1` as `deepseek-harness-acp/0.0.1` and advertises
   `sessionCapabilities {close, list, resume}`, so the holder's existing capability branch already
   takes `session/resume`; `session/load`, `session/set_mode`, `session/delete`, `session/fork` and
@@ -23,10 +26,17 @@
   first `session/prompt` with `no API key for provider route "deepseek-official"`; supply
   `DEEPSEEK_API_KEY` or pass `--model` to select a credentialed route through the existing
   `set_config_option` path. Because dsh's model option values are JSON-encoded `[provider, model]`
-  arrays serialized as strings, `acp_model_map` carries the shipped catalog keyed by plain ids, and
-  `acp_value_params()` no longer reads a value that is bracketed end to end as a trailing
-  `[k=v,...]` descriptor — a descriptor qualifies a base value and can never be the whole value.
-  Native steering is unsupported (all four candidate methods `-32601`), and the existing composite
+  arrays serialized as strings, `acp_model_map` carries the shipped catalog keyed by plain ids.
+  That exposed the first shared bug: `acp_value_params()` read a value bracketed end to end as a
+  trailing `[k=v,...]` descriptor and invented a `declared` map from the array's elements. It now
+  declines a value that opens with the bracket — a descriptor qualifies a base value and can never
+  be the whole value — and Cursor's genuine `grok-4.6[effort=high,fast=true]` still parses. The
+  second: dsh is the first platform whose select options are **grouped** by provider, and the
+  holder read `value` off the group entry, so the preflight probe reported one nameless choice per
+  group and the `set_config_option` receipt lost its `value_name`/`value_description`. A new
+  `config_option_values()` expands one level of grouping and both sites use it; on flat-option
+  platforms the only change is that an entry carrying no `value` is omitted instead of reported as
+  `null`. Native steering is unsupported (all four candidate methods `-32601`), and the existing composite
   `--steer-mode interrupt` needs no raised timeout: `session/cancel` settles the running turn in
   about 0.01 s with `stopReason: cancelled`. Nothing under `$DSH_HOME` is ever written — creating
   an `acp` profile with `--from-default-profile` is an operator act the Runner does not perform —

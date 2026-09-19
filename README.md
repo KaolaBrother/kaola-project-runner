@@ -49,7 +49,7 @@ every layer. Each layer finishes its own job and does not repeat the next.
 **Status.** Kaola-Delegator is included in this repository and the v0.4.0 release; installation
 on any particular machine still requires verification. The current Host adapter uses
 **ZCode ACP**; the delegation and project-control layers are not tied to that backend.
-Grok Bot account-side live UAT has not been run. Nine Platform Runners and Project Runner
+Grok Bot account-side live UAT has not been run. Ten Platform Runners and Project Runner
 remain the communication and control-plane Skills.
 
 **One project, one Project Runner Agent.** Several workers on one project are not several
@@ -111,15 +111,22 @@ Auto Model and full bypass defaults on both transports. Its explicit PTY fallbac
 native TUI with `/quit` and `--resume --last`; login remains native through TUI `/login` or
 `FACTORY_API_KEY`.
 
-dsh is driven through its shipped automation-only ACP profile, `dsh --profile acp`; there is no
-terminal UI for it, so `--transport pty` is a diagnostic entry rather than a conversation channel.
-It needs no login (`authMethods` is empty), resumes with `session/resume` rather than
-`session/load`, and has no `--continue`: `session/list` carries no timestamp to order candidates
-by. Two facts an operator should know before the first dispatch. The shipped profile pins the
-`deepseek-official` route and ignores the user's own default-model setting, so a session can start
-`ready` and still fail its first prompt with `no API key for provider route "deepseek-official"` —
-supply `DEEPSEEK_API_KEY` or pass `--model` to select a credentialed route. And the profile itself
-must already exist under `$DSH_HOME`; creating one writes there, which the Runner never does.
+dsh is driven through its shipped automation-only ACP profile, `dsh --profile acp`. It needs no
+login (`authMethods` is empty), resumes with `session/resume` rather than `session/load`, and has
+no `--continue`: `session/list` carries no timestamp to order candidates by. dsh ships no terminal
+UI — its profile templates are `acp`, `headless`, `sdk`, `sdk-minimal` and `web`, none of which is
+a pane conversation — so `--transport pty` is a diagnostic entry rather than a conversation
+channel.
+
+Three facts an operator should know before the first dispatch. **dsh runs unattended.** Its ACP
+composition never sends a permission request, so a tool call — including a measured `bash` write to
+an absolute path outside the session workspace — executes without the client being consulted; there
+is no approval gate to skip, and `--permission-mode` has nothing to act on. **A ready session can
+still be unable to answer.** The shipped profile pins the `deepseek-official` route and ignores the
+user's own default-model setting, so `start` reports `ready` and the first prompt fails with
+`no API key for provider route "deepseek-official"` — supply `DEEPSEEK_API_KEY` or pass `--model`
+to select a credentialed route. **The profile must already exist** under `$DSH_HOME`; creating one
+writes there, which the Runner never does.
 
 ACP returns structured replies and events. PTY preserves the native terminal UI, including
 terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
