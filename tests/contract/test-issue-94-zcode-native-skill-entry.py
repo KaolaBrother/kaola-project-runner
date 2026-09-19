@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Issue #94: the ZCode Host's one native Skill entry, end to end.
 
-Every prompt addressed to a ZCode Host — first handoff, resume or live
+Every turn-opening prompt to a ZCode Host — first handoff, resume or live
 attach, a new Host continuing the run, every worker-event heartbeat, and the
 round after any compaction — opens with ``/kaola-project-runner`` on its own
 first line. ZCode resolves it through the Skill tool against the installed
-``kaola-project-runner`` Skill; re-invocation is idempotent. This replaces
-the Issue #75 carrier: no durable ``AGENTS.md`` block is planted in a
-consuming project, ordinary Agents carry no Host instruction, and no role
+``kaola-project-runner`` Skill; re-invocation is idempotent. A busy ``steer``
+guide is different: it enters the already-running turn verbatim, keeps the
+loaded context, and is no new ``Skill`` invocation — none is promised. This
+replaces the Issue #75 carrier: no durable ``AGENTS.md`` block is planted in
+a consuming project, ordinary Agents carry no Host instruction, and no role
 filtering, compaction detection, or manual ``SKILL.md`` read is required.
 
 These tests pin the contract across the authoritative templates, the
@@ -72,6 +74,34 @@ class Templates(unittest.TestCase):
         self.assertIn("opens with the native Skill command\n"
                       "`/kaola-project-runner` on its own first line", self.entry_ref)
 
+    def test_reference_scopes_the_entry_to_turn_opening_prompts(self) -> None:
+        text = flat(self.entry_ref)
+        self.assertIn("Every prompt that opens a Host turn", text)
+        for needle in ("idle `send`", "first handoff", "resume or attach update",
+                       "worker-event notification", "round after any compaction"):
+            self.assertIn(needle, text)
+        self.assertNotIn("send`/`steer`", text)
+
+    def test_reference_busy_steer_is_no_skill_reentry(self) -> None:
+        text = flat(self.entry_ref)
+        self.assertIn("Busy `steer`", text)
+        self.assertIn("forwards its guide text into the already-running turn "
+                      "verbatim", text)
+        self.assertIn("no new `Skill` tool_call is produced, needed, or "
+                      "promised", text)
+        self.assertIn("a `Skill` tool_call from a busy `steer` guide", text)
+
+    def test_reference_discovery_roots_cover_agents_skills(self) -> None:
+        text = flat(self.entry_ref)
+        for needle in ("`<repo>/.zcode/skills/`", "`<repo>/.agents/skills/`",
+                       "`~/.zcode/skills/`", "`~/.agents/skills/`"):
+            self.assertIn(needle, text)
+        # the verified root set is stated, not implied exhaustive: ancestors
+        # are scanned too and plugin cache roots are named separate
+        self.assertIn("ancestor", text)
+        self.assertIn("plugin cache", text)
+        self.assertIn("createSkillsService", text)
+
     def test_reference_denies_the_old_dependencies(self) -> None:
         text = flat(self.entry_ref)
         self.assertIn("No `AGENTS.md` block, no role-scoping judgement, "
@@ -100,6 +130,9 @@ class Templates(unittest.TestCase):
         self.assertIn("first handoff, a resume or attach update, a "
                       "worker-event notification, and the round after any "
                       "compaction", text)
+        self.assertIn("busy `steer` guide is not a new prompt", text)
+        self.assertIn("keeps the already-loaded context", text)
+        self.assertIn("no new Skill invocation", text)
         self.assertIn("never `read` a `SKILL.md` path by hand", text)
         self.assertIn("zcode-native-skill-entry.md](zcode-native-skill-entry.md)", text)
         self.assertNotIn("AGENTS.md` instruction planted", text)
@@ -122,13 +155,21 @@ class Templates(unittest.TestCase):
     def test_delegator_handoff_uses_the_same_entry(self) -> None:
         self.assertIn("```text\n" + ENTRY + "\nYou are the ZCode Host", self.handoff)
         text = flat(self.handoff)
+        self.assertIn("turn-opening Host prompt", text)
         self.assertIn("opens with `/kaola-project-runner` as its own first line", text)
         self.assertIn("idempotent across re-invocation and after compaction", text)
-        self.assertIn("`<repo>/.zcode/skills/` or `~/.zcode/skills/`", text)
+        for needle in ("`<repo>/.zcode/skills/`", "`<repo>/.agents/skills/`",
+                       "`~/.zcode/skills/`", "`~/.agents/skills/`"):
+            self.assertIn(needle, text)
         self.assertIn("No `AGENTS.md` block or manual `SKILL.md` read is the "
                       "carrier", text)
         self.assertIn("`Skill` tool_call for that entry", text)
         self.assertNotIn("Load <skills>", self.handoff)
+
+    def test_delegator_handoff_marks_busy_steer_as_no_reentry(self) -> None:
+        text = flat(self.handoff)
+        self.assertIn("`steer` injects the running turn verbatim", text)
+        self.assertIn("no new `Skill` invocation", text)
 
 
 class HolderEnvelope(unittest.TestCase):
@@ -176,6 +217,13 @@ class GeneratedSurface(unittest.TestCase):
         self.assertNotIn("Load <skills>", self.handoff)
         self.assertNotIn("{{", self.handoff)
 
+    def test_generated_surface_carries_steer_and_root_facts(self) -> None:
+        text = flat(self.handoff)
+        self.assertIn("`<repo>/.agents/skills/`", text)
+        self.assertIn("`~/.agents/skills/`", text)
+        self.assertIn("`steer` injects the running turn verbatim", text)
+        self.assertIn("busy `steer` guide is not a new prompt", flat(self.startup))
+
     def test_generated_skeleton_body_has_no_entry_line(self) -> None:
         self.assertIn("不重复入口行，也不复制 Skill 正文", flat(self.skeleton))
 
@@ -197,11 +245,25 @@ class Doc(unittest.TestCase):
                        "worker-event notification", "round after any compaction"):
             self.assertIn(needle, self.text)
 
+    def test_doc_marks_busy_steer_as_no_reentry(self) -> None:
+        self.assertIn("busy `steer` guide", self.text)
+        self.assertIn("forwards it into the already-running turn verbatim", self.text)
+        self.assertIn("no new `Skill` tool_call", self.text)
+        self.assertIn("no re-invocation is claimed", self.text)
+
+    def test_doc_discovery_roots_cover_agents_skills(self) -> None:
+        for needle in ("`<repo>/.zcode/skills/`", "`<repo>/.agents/skills/`",
+                       "`~/.zcode/skills/`", "`~/.agents/skills/`"):
+            self.assertIn(needle, self.text)
+        self.assertIn("ancestor", self.text)
+        self.assertIn("plugin cache", self.text)
+
     def test_doc_bounds_the_evidence(self) -> None:
         self.assertIn("isolated mock provider", self.text)
         self.assertIn("1M-window", self.text)
         self.assertIn("no `Skill` tool_call, the install is wrong", self.text)
         self.assertIn("no project `AGENTS.md` block is planted", self.text)
+        self.assertIn("a `Skill` tool_call from a busy `steer` guide", self.text)
         self.assertNotIn("KPR-SKILL-RELOAD-V1", self.text)
         self.assertNotIn("trigger-agnostic carrier", self.text)
 

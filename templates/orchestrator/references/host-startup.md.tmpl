@@ -42,11 +42,13 @@ and its `references/handoff.md`. This section exists only so a Host that loaded
 this Skill does not copy a second outer procedure. Exceptions reach you; worker
 handling does not. Do not take that over session by session.
 
-   Every prompt to the Host — the first handoff, a resume or attach update, a
-   worker-event notification, and the round after any compaction — opens with
-   `/kaola-project-runner` as its first line. That native invocation is the
-   whole recovery mechanism; no `AGENTS.md` block, role check, or compact
-   detection is involved. Facts and boundaries:
+   Every turn-opening prompt to the Host — the first handoff, a resume or
+   attach update, a worker-event notification, and the round after any
+   compaction — opens with `/kaola-project-runner` as its first line. A busy
+   `steer` guide is not a new prompt: it enters the running turn verbatim,
+   keeps the already-loaded context, and is no new Skill invocation. That
+   native invocation is the whole recovery mechanism; no `AGENTS.md` block,
+   role check, or compact detection is involved. Facts and boundaries:
    [zcode-native-skill-entry.md](zcode-native-skill-entry.md).
 
 ## C. The Host's own startup and beat

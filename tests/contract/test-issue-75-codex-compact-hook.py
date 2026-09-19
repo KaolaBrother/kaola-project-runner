@@ -842,11 +842,12 @@ class ZcodeNativeEntrySurface(unittest.TestCase):
     """Issue #94: the native Skill entry reference renders into the Skill.
 
     ZCode has no compact hook and surfaces no compaction through ACP, so the
-    durable carrier is the runtime's own Skill discovery: every prompt to the
-    Host opens with ``/kaola-project-runner`` and the Skill tool reloads the
-    body — startup, resume, heartbeat, and post-compaction alike. These tests
-    pin the rendered reference and the host-startup pointer that leads an
-    Agent to it; the focused #94 suite pins the rest of the contract.
+    durable carrier is the runtime's own Skill discovery: every turn-opening
+    prompt to the Host opens with ``/kaola-project-runner`` and the Skill tool
+    reloads the body — startup, resume, heartbeat, and post-compaction alike
+    (a busy ``steer`` guide keeps the running turn's loaded context instead).
+    These tests pin the rendered reference and the host-startup pointer that
+    leads an Agent to it; the focused #94 suite pins the rest of the contract.
     """
 
     def setUp(self) -> None:

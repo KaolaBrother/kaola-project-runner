@@ -9,7 +9,9 @@ role-scoping judgement, no compaction detection, and no manual `read` of a
 
 ## The one entry
 
-Every prompt addressed to the Host **opens with the native Skill command
+Every prompt that opens a Host turn — an idle `send`, the first handoff, a
+resume or attach update, a worker-event notification, and the round after
+any compaction — **opens with the native Skill command
 `/kaola-project-runner` on its own first line**, followed by that prompt's
 own content. ZCode keeps each enabled Skill's metadata (name and
 description) visible to the model in every request — injected per request
@@ -27,7 +29,7 @@ Where each entry point gets the line:
   `/kaola-project-runner`, then the Host role, identity and authorization
   fields (see `references/handoff.md` in `kaola-delegator`).
 - **Resume and live attach** — the continuation prompt after
-  `start --resume`, or the update `send`/`steer` to an attached live Host,
+  `start --resume`, or the update `send` to an attached live Host,
   opens the same way. Resumed history may still carry the body; the
   re-invocation is harmless.
 - **Worker-event heartbeat** — the host holder's notification prompt
@@ -39,19 +41,29 @@ Where each entry point gets the line:
   the same native channel. There is no carrier text to compose, no
   detection step, and no "reload now" instruction — a compacted Host is
   indistinguishable from any other Host at the prompt boundary.
+- **Busy `steer`** — not a prompt, and not an entry. A mid-turn steer
+  forwards its guide text into the already-running turn verbatim; the turn
+  keeps the Skill body it loaded at its own first line, so no new `Skill`
+  tool_call is produced, needed, or promised. A fresh invocation is only
+  meaningful at a turn boundary — end the turn and use an ordinary prompt.
 
 ## Discovery precondition
 
 Native invocation needs the generated `kaola-project-runner` Skill installed
-where the Host session discovers skills: the consuming project's
-`<repo>/.zcode/skills/` workspace directory or the user-level
-`~/.zcode/skills/`. `--runtime zcode` installs to the user level;
-`--skills-dir <repo>/.zcode/skills` installs into the workspace. A
-`--skills-dir` outside those roots still works for an agent that reads the
-file itself — but a ZCode Host does not read the file. If the first beat's
-`capture` shows no `Skill` tool_call, the Skill is not installed where this
-session discovers it: report that fact and install it properly; do not fall
-back to reading `SKILL.md` by hand.
+where the Host session discovers skills. Verified against the installed
+ZCode 3.12.3 — in its `createSkillsService` binary code and live through
+injected skill metadata — the install-relevant roots are the workspace
+`<repo>/.zcode/skills/` and `<repo>/.agents/skills/`, the user-level
+`~/.zcode/skills/` and `~/.agents/skills/`, plus the same two roots on each
+ancestor directory up to the workspace boundary (plugin cache roots are a
+separate mechanism, not an install target). `--runtime zcode` installs to
+`~/.zcode/skills/`; `--skills-dir` accepts any of these, e.g.
+`<repo>/.agents/skills`. A `--skills-dir` outside the discovered roots
+still works for an agent that reads the file itself — but a ZCode Host does
+not read the file. If the first beat's `capture` shows no `Skill` tool_call,
+the Skill is not installed where this session discovers it: report that
+fact and install it properly; do not fall back to reading `SKILL.md` by
+hand.
 
 ## Facts that did not change
 
@@ -84,10 +96,17 @@ Verified live (installed ZCode 3.12.3, repo adapter 0.3.3):
   `contextWindow`, scratch `HOME`): the request after each completed
   compaction still carries the `/<skill-name>` invocation rule and the
   `kaola-project-runner` skill metadata on the wire.
+- Discovery roots (Issue #94 review fix): the installed 3.12.3 binary
+  resolves workspace `.zcode/skills` and `.agents/skills`, user
+  `~/.zcode/skills` and `~/.agents/skills`, plus both roots on ancestor
+  directories; a scratch-HOME live probe injected the
+  `kaola-project-runner` metadata from each `.agents/skills` root.
 
 Not verified: real-model *behaviour* after a genuine auto-compaction — the
 catalog GLM models are 1M-window and forcing one is beyond bounded cost —
-and any compact-specific ACP event, because none exists. The pre-0.3.3
+any compact-specific ACP event, because none exists, and a `Skill`
+tool_call from a busy `steer` guide, because steer forwards the guide into
+the running turn and no re-invocation is claimed. The pre-0.3.3
 installed adapter exits against ZCode 3.12.3; update the install rather
 than the mechanism.
 

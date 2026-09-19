@@ -14,9 +14,10 @@ Runner sessions end to end. Phase 2 adds the event-driven heartbeat carrier
   form. `./scripts/install-local.sh --runtime zcode --method copy` installs
   the generated Skills into `$HOME/.zcode/skills`, sibling `kaola-project-runner`
   plus the nine `<platform>-kaola-project-runner` workers. A **workspace**
-  `.zcode/skills` destination — the live-verified discovery layout — is the
-  same payload reached through the explicit `--skills-dir /abs/path`, because
-  `--skills-dir` accepts any absolute destination parent. The two layouts are
+  skills destination — `.zcode/skills` and `.agents/skills` are both
+  live-verified discovery roots — is the same payload reached through the
+  explicit `--skills-dir /abs/path`, because
+  `--skills-dir` accepts any absolute destination parent. The layouts are
   the same Skill payload; only the discovery root differs.
 
 ## The generic ACP entry
@@ -353,15 +354,19 @@ approval gate was added for either flow.
 
 ## The native Skill entry, including across compaction (Issue #94)
 
-Every prompt addressed to a ZCode Host — the first handoff, a resume or
-attach update, a worker-event notification, and the round after any
+Every turn-opening prompt to a ZCode Host — the first handoff, a resume or
+attach update `send`, a worker-event notification, and the round after any
 compaction — opens with `/kaola-project-runner` on its own first line. ZCode
 keeps each enabled Skill's metadata visible to the model per request
 (injected alongside the `AGENTS.md` prefix, outside the history compaction
 rewrites) and instructs it to invoke `/<skill-name>` through the Skill tool,
 so the first line produces a native `Skill` tool_call that loads the body
-while the rest of the prompt is handled normally. Verified live on ZCode
-3.12.3 with the repo adapter 0.3.3:
+while the rest of the prompt is handled normally. A busy `steer` guide is
+different by construction: the holder forwards it into the already-running
+turn verbatim (the Issue #65/#81 transport), so it produces no new prompt
+and no new `Skill` tool_call — the running turn keeps the Skill body it
+loaded at its own first line, and no re-invocation is claimed or required
+there. Verified live on ZCode 3.12.3 with the repo adapter 0.3.3:
 
 - Real GLM model: `/kaola-project-runner` produces a native `Skill`
   tool_call; a manual `/compact` then `/kaola-project-runner` produces a
@@ -375,14 +380,22 @@ while the rest of the prompt is handled normally. Verified live on ZCode
   `contextWindow`, scratch `HOME`): the request after each completed
   compaction still carries the `/<skill-name>` invocation rule and the
   `kaola-project-runner` skill metadata on the wire.
+- Discovery roots (Issue #94 review fix): the installed 3.12.3 binary
+  resolves workspace `.zcode/skills` and `.agents/skills`, user
+  `~/.zcode/skills` and `~/.agents/skills`, plus both roots on ancestor
+  directories up to the workspace boundary; a scratch-HOME live probe
+  injected the `kaola-project-runner` metadata from each `.agents/skills`
+  root.
 
 The discovery precondition is the install: the generated
 `kaola-project-runner` Skill must sit where the Host session discovers
-skills — `<repo>/.zcode/skills/` or `~/.zcode/skills/`. A `--skills-dir`
-outside those roots still works for an agent that reads the file itself,
-but a ZCode Host does not read the file; if a beat's `capture` shows no
-`Skill` tool_call, the install is wrong — fix it, never substitute a manual
-read.
+skills — `<repo>/.zcode/skills/`, `<repo>/.agents/skills/`,
+`~/.zcode/skills/`, or `~/.agents/skills/` (ancestor-directory roots are
+also scanned; plugin cache roots are a separate mechanism). A `--skills-dir`
+outside the discovered roots still works for an agent that reads the file
+itself, but a ZCode Host does not read the file; if a beat's `capture`
+shows no `Skill` tool_call, the install is wrong — fix it, never substitute
+a manual read.
 
 Boundaries held: no project `AGENTS.md` block is planted, ordinary Agents
 in a consuming repo carry no Host recovery instruction, and no hook,
@@ -398,8 +411,10 @@ the same `compaction`/`context_compaction` `part` rows, auto-compaction
 writes the same rows, and a read-only `part`-table cursor stays an optional
 diagnostic — never a per-send gate. Not verified: real-model behaviour
 after a genuine auto-compaction (the catalog GLM models are 1M-window, so
-forcing one is beyond bounded cost), and any compact-specific ACP event,
-because none exists.
+forcing one is beyond bounded cost), any compact-specific ACP event,
+because none exists, and a `Skill` tool_call from a busy `steer` guide —
+steer forwards the guide into the running turn and no re-invocation is
+claimed there.
 
 ## Verification
 

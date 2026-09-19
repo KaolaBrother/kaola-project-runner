@@ -164,10 +164,12 @@ HEARTBEAT_DEFECT_CHARS = 200
 # cannot dump an arbitrary body into session/prompt.
 HEARTBEAT_PROMPT_MAX_BYTES = 65536
 OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
-# Issue #94: every prompt addressed to a ZCode Host opens with the native Skill
-# command on its own first line so the Skill tool reloads the Project Runner
-# body for this turn - startup, resume, heartbeat, and post-compaction alike.
-# The envelope owns this line; the Host's heartbeat `body` does not carry it.
+# Issue #94: every turn-opening prompt to a ZCode Host opens with the native
+# Skill command on its own first line so the Skill tool reloads the Project
+# Runner body for this turn - startup, resume, heartbeat, and post-compaction
+# alike. A busy `steer` guide is forwarded into the running turn instead and
+# is no new Skill invocation. The envelope owns this line; the Host's
+# heartbeat `body` does not carry it.
 HOST_SKILL_ENTRY = "/kaola-project-runner"
 # Issue #90: how many recently confirmed worker event ids stay remembered, so a
 # worker retrying the same deterministic event_id after a confirmed Host turn is

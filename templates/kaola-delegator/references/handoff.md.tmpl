@@ -12,11 +12,11 @@ HOST="zcode-<PROJECT_CODE>-orchestrator-main"    # e.g. zcode-KPR-orchestrator-m
 ```
 
 `<skills>` is the sibling Skill directory, or `ROOT/skills` after the Grok Bot
-bridge located ROOT. A missing `$ZCODE` means stop: this Skill is not
-executable without the ZCode Runner.
+bridge located ROOT. A missing `$ZCODE` is a hard stop — no ZCode Runner, no
+Host.
 
-`<PROJECT_CODE>` is the project's established short code. Ask once if none is
-recorded. Inner workers keep `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>`
+`<PROJECT_CODE>` is the project's established short code. Ask once if
+unrecorded. Inner workers keep `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>`
 (#72). The Host name is not an Issue worker and does not use `i0`.
 
 Three identities stay separate — read them from existing Runner `status`,
@@ -29,9 +29,9 @@ second store:
 | `acp_session_id` | start / `status` receipt | ACP bridge id |
 | native `sess_*` | `native_session_identity.nativeSessionId` | `start --resume` after the holder stopped |
 
-`session_meta` does not automatically hold `sess_*`. Native `sess_*` is lazy:
-a successful `start` has no `native_session_identity` before the first prompt.
-Do not imply a stopped app-server will auto-restore that id.
+`session_meta` does not automatically hold `sess_*`; native `sess_*` is lazy —
+a successful `start` has no `native_session_identity` before the first prompt,
+and a stopped app-server does not auto-restore it.
 
 ## Grok Bot co-location (account bridge only)
 
@@ -47,8 +47,8 @@ kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
 ```
 
 `$HOST` is the exact session about to be used: the standard name, or a
-uniquely adopted live nonstandard name — never a session other than the Host
-command that follows. Refuse any `refused` receipt; do not operate the Host.
+uniquely adopted live nonstandard name — never any other session. Refuse any
+`refused` receipt; do not operate the Host.
 Tmux presence is evidence, not a start gate.
 
 ## Recover
@@ -101,14 +101,15 @@ Tmux presence is evidence, not a start gate.
 
 ## Handoff and updates
 
-Do not set `KAOLA_ACP_HEARTBEAT_HOST`; do not start any other platform.
+Do not set `KAOLA_ACP_HEARTBEAT_HOST` or start another platform.
 
 Idle Host: `send` is enough — `--no-wait` is admitted, not delivered, not
 project complete; a first `end_turn` is only that beat.
 
 Busy Host (`prompt-in-progress` / turn active): never claim a `--no-wait`
-send consumed — use the existing `steer` or hold the change for a safe idle
-send; `unknown`/`not_consumed` is not a resend. No queue.
+send consumed — `steer` injects the running turn verbatim (no new `Skill`
+invocation) or hold for a safe idle send;
+`unknown`/`not_consumed` is not a resend. No queue.
 
 ```bash
 "$ZCODE" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
@@ -116,12 +117,12 @@ send; `unknown`/`not_consumed` is not a resend. No queue.
 "$ZCODE" capture --repo "$PROJECT" --session "$HOST" --lines 200
 ```
 
-Every Host prompt — handoff and later updates alike — opens with
-`/kaola-project-runner` as its own first line: the native Skill entry,
-idempotent across re-invocation and after compaction. The
-generated Skill must be installed under `<repo>/.zcode/skills/` or
-`~/.zcode/skills/`; elsewhere the line arrives as plain text. No `AGENTS.md`
-block or manual `SKILL.md` read is the carrier.
+Every turn-opening Host prompt — handoff and later updates alike — opens
+with `/kaola-project-runner` as its own first line: the native Skill entry,
+idempotent across re-invocation and after compaction. Install the generated
+Skill under `<repo>/.zcode/skills/`, `<repo>/.agents/skills/`,
+`~/.zcode/skills/`, or `~/.agents/skills/`; elsewhere the line arrives as
+plain text. No `AGENTS.md` block or manual `SKILL.md` read is the carrier.
 
 Handoff text (quota units never merge; `unspecified` is not unlimited):
 
@@ -147,7 +148,7 @@ do not expand it.
 ## After the first Host beat
 
 Do not trust the Host's self-description. After the first `end_turn`, check the
-Project Plan and current authorization against Host file-read or work-product
+Project Plan and current authorization against file-read or work-product
 evidence and the first worker dispatch receipt — including
 `<project>/.kaola/heartbeat-prompt.json` with a usable `body`. The beat's
 `capture` shows a `Skill` tool_call for that entry; none means the install

@@ -31,8 +31,8 @@ continue that Host through Kaola-Delegator (`kaola-delegator`); do not copy that
 outer procedure here. Role, authorization and lifecycle boundary come from the
 project's existing Project Plan or already-authorized task plan - never a new
 schema, never this session's claim of having loaded this Skill. Your own startup
-receipt, beat, and the one native entry every Host prompt shares - including
-the round after any compaction:
+receipt, beat, and the one native entry every turn-opening Host prompt shares
+- including the round after any compaction:
 [host-startup.md](references/host-startup.md),
 [zcode-native-skill-entry.md](references/zcode-native-skill-entry.md).
 

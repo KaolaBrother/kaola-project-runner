@@ -124,8 +124,8 @@ passed only when explicitly requested.
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
 `cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`,
-`zcode` → `$HOME/.zcode/skills` (ZCode Host install; the live-verified discovery form is the
-workspace `.zcode/skills`, which `--skills-dir` covers — see [ZCode host](zcode-host.md)),
+`zcode` → `$HOME/.zcode/skills` (ZCode Host install; verified discovery roots are the workspace
+`.zcode/skills` and `.agents/skills`, which `--skills-dir` covers — see [ZCode host](zcode-host.md)),
 `--runtime grok-bot` (and `grokbot`) is refused: Grok Bot is a bridge host with no installer
 destination (see [Grok Bot host](grok-bot-host.md)). `--runtime grok` is not a host alias;
 `--platform grok` is the Grok CLI worker.
