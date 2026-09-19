@@ -70,8 +70,14 @@ and **no `error` key**. That is what the added `assertNotEqual(result, "refused"
 
 ## Changed Paths
 
-Reported by the finalize transaction; source-scoped, so it omits docs and run records. The full
-branch diff against `main` is 15 paths: 2 test files, `CHANGELOG.md`, and 12 run records under
+Reported by the finalize transaction (`checks.changed_paths`), source-scoped, so it omits docs
+and run records:
+
+- `tests/contract/test-acp-contract.py`
+- `tests/contract/test-issue-22-bypass-all-approvals.py`
+
+`dirty_paths` empty; `validation: chains_green`; `staging_guard: ok`. The full branch diff
+against `main` is 16 paths: those 2 test files, `CHANGELOG.md`, and 13 run records under
 `kaola-workflow/issue-96/`.
 
 ## Documentation Docking
