@@ -376,6 +376,7 @@ spawn -> initialize(protocolVersion=1, clientCapabilities=manifest 值)
 | `fs/*`、`terminal/*` | 默认 `clientCapabilities = {fs:{false,false}, terminal:false}`（规范默认，**非** Paseo 取值——Paseo 为 `terminal:true`）。仍被调用时返回 `-32601`。若某平台 wrapper（如 claude-agent-acp）需要 client terminal，在 manifest `acp_client_capabilities` 按平台开启并实现最小 terminal 服务（PoC 决定） |
 | `elicitation/create` 及任何未知方法 | 返回 `-32601`，事件日志记录 |
 | 未知 `sessionUpdate` 变体 | 计数、落盘，不报错（实测：Grok 发私有 `session_info_update`；Grok 不发 `usage_update`，Kimi 发） |
+| 处理入站消息时处理器抛异常（Issue #95） | 异常只作用于该条消息：reader 线程继续读，其后的 `session/update` 与 JSON-RPC 回执照常处理。计数 `agent_message_errors`（`status` 与 record 均报告），事件日志记 `agent_message_error{method, id, error_type, at}`——只有定位事实，不写原始消息，也不写 `str(exc)`（两者都可能引用 agent 载荷）。该消息**不**应答、不重试、不批准；未应答的 agent 请求保持未应答，由控制 Agent 依 `status` 决定。记录是尽力而为：`EventLog.append` 本就吞 `OSError`，计数在记录之前自增，所以丢的是日志行时 `status` 仍报告该失败 |
 
 ### 7.4 超时与死进程
 

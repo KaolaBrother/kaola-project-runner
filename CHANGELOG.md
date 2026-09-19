@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **One unhandleable agent message no longer kills the ACP holder's reader thread
+  (Issue #95).** `AgentConnection._read_loop` called `on_agent_message` unguarded, so the
+  first exception that escaped a handler ended the thread while the agent process stayed
+  alive: every later `session/update` was dropped, every later JSON-RPC response was never
+  resolved, the turn stayed `active` forever, and nothing said so. Issue #92 removed the one
+  trigger then known; the structure that turned any such exception into a silent, permanent
+  wedge remained, and a malformed `session/update` still reached it. The reader now
+  scopes a handler failure to the message that caused it and keeps reading, so what follows
+  is delivered normally. The failure is recorded as an `agent_message_error` event and counted
+  in `status` and the holder record as `agent_message_errors`. It is a failure, not a success:
+  the message is not answered, not retried, and never approved on the agent's behalf, so an
+  unanswered agent request stays unanswered and the controlling Agent decides from `status`.
+  The event carries locator facts only — method, JSON-RPC id, exception class, and the
+  innermost frame; the raw message and the exception's own text are both withheld because
+  either can quote agent payload. There is no new thread, restart, watchdog, scheduler, or
+  retry mechanism.
+
 - **Kimi Code CLI 2.0.1 ACP compatibility reverified.** An isolated live run
   confirmed `initialize`, session creation, model/thinking/YOLO selection, a
   completed prompt, exact stop, and resume of the same native session with

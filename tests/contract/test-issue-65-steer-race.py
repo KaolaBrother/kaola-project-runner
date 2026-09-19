@@ -44,6 +44,7 @@ class StubAgent:
         self.exit_signal = None
         self.stderr_pump = None
         self.malformed_lines = 0
+        self.handler_errors = 0
         self.pending_out: dict[int, str] = {}
         self.sent: list[dict] = []
         self.next_id = 0
