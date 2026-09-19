@@ -134,6 +134,35 @@ Ordinary `idle`/`terminated`, unbound workers and non-ZCode Hosts stay unchanged
     STILL NOT DONE and deliberately so: Workflow finalize, archive, sink, issue close, main push,
     rebase.
 
+- item: OUTER RE-REVIEW 2 REJECTED dbd7644 on focused evidence/docs issues; code classification
+  accepted. (1) Remove or narrow every claim that a settled/exited wake can never become a Host
+  prompt — candidate-report 93-94, CHANGELOG 49-52, test module docstring 23-24, and any similar.
+  (2) The synthetic `pending_permissions.pop` race is not a real permit/lock/ACP response: add one
+  bounded real `op_permit` interleaving regression or label the synthetic scope explicitly, keeping
+  the actual probe evidence and adding no broad harness. (3) Reconcile the candidate report's code
+  SHA, test count and `delivered_stale` event, with no impossible self-SHA.
+  status: done
+  dispatched: self. A new mission; the results above stay as written.
+  result: TESTED CODE SHA `151602f3ceea29daeaf7542df9c82dae9df95e47`; the candidate report is a
+    separate commit on top of it, so it names the code it describes instead of a self-SHA.
+    (1) A sweep found five instances, not three: the two the reviewer cited plus the test module
+    docstring, the exited-worker test docstring and `_flush_undelivered_wakes`'s own docstring. All
+    now state the BEFORE-the-write boundary and what happens after it.
+    (2) Both stub-driven tests now declare their synthetic scope in terms, and
+    `test_a_real_permit_during_an_offer_is_a_stale_delivery` is the real article: live holder and
+    agent, the real watchdog retry, a peer withholding its receipt, and the ordinary `kaola-acp
+    permit` CLI through `op_permit` inside that window. No new harness — existing Sandbox and
+    FakePeer. It FAILS on f5bb239 after twelve passing checks
+    (`evidence/08-real-permit-custody.log`); the synthetic probe evidence is retained.
+    (3) Report reconciled: explicit tested SHA, 17/17 with the suite's captured exit status,
+    `heartbeat_carrier_delivered_stale` listed among the record kinds, and the validate provenance
+    stated plainly.
+    Verification: 17/17 (`evidence/16-issue-92-contract-r6.log`, `suite_exit_status=0`),
+    render --check PASS after re-render, `git diff --check` clean. Full `validate.sh` exit 0 belongs
+    to the OUTER verification's run on dbd7644; the interrupted attempt is not a pass, and
+    `validate.sh` has NOT been run on 151602f — recorded as outstanding rather than implied.
+    STILL NOT DONE and deliberately so: rebase, Workflow finalize, archive, sink, issue close, push.
+
 ## Record-keeping correction (2026-09-19)
 
 Missions 1, 3 and 4 were carried out in order, but their `status`/`result` lines were never

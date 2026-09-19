@@ -7,14 +7,14 @@ The Issue stays open and `main` is untouched at `aa5fdad`.
 
 | | |
 |---|---|
-| Frozen SHA | tip of `workflow/issue-92` (the commit carrying this report) |
-| Code candidate | `0ed31b76c68368127506446b7fa355bd69bccc00` |
-| Previously rejected | `f2d141c` (outer review), then `f5bb239` (outer re-review) — see below |
+| **Tested code SHA** | **`151602f3ceea29daeaf7542df9c82dae9df95e47`** — every result below was produced against this exact tree |
+| This report | committed separately, on top of the tested SHA. A report cannot carry its own commit id, so it names the code it describes instead of a self-SHA. |
+| Previously rejected | `f2d141c`, `f5bb239`, `dbd7644` — all by outer review; see below |
 | Branch | `workflow/issue-92` |
 | Worktree | `.kw/worktrees/issue-92` |
 | Base | `aa5fdad990bf5f4b278853e2de0bd664a0c584b6` (= `origin/main` at claim) |
-| `main` now | `cf8a5ec` — another session sank Issue #75 while this ran; see *Merge compatibility* |
-| Commits | `6c9e3a3` production, `3b6b616` review-1 repair, `f2d141c` review-2 repair, `0ed31b7` OUTER-review repair |
+| `main` now | `7e98ea4` (Kimi docs) — `main` has moved twice during this run and is not touched by it |
+| Commits | `6c9e3a3` production, `3b6b616` / `f2d141c` internal-review repairs, `0ed31b7` outer-review repair, `dbd7644` outer re-review repair, `151602f` outer re-review 2 |
 
 Not squashed, by design: each repair stays legible against the artifact that was reviewed, so what
 each round actually found is still readable in the history — including the round that rejected the
@@ -90,17 +90,58 @@ registry, ledger, or transport gate was added.
   narrows the window; it does not close it, and nothing here claims otherwise — a settlement after
   the write leaves the Host holding a locator for something already gone, recorded as
   `heartbeat_carrier_delivered_stale`, and handled by the Host's own freshness re-read.
-- **Stale is dropped worker-side.** A settled request or an exited agent never becomes a Host
-  prompt; a Host that still acts on the locator gets the ordinary `no-pending-permission` refusal.
+- **Stale is dropped worker-side when the worker still owns the decision.** A request settled, or
+  an agent exited, before the offer is written aborts that offer. Once the bytes are out the worker
+  has no say: a settlement landing after the write leaves the Host holding a locator for something
+  already gone, and it WILL be prompted for it. That case is recorded as
+  `heartbeat_carrier_delivered_stale` and is caught on the Host side, not here — the Host re-observes
+  the worker's live `pending_permissions` before approving, and a Host that acts on the stale locator
+  anyway gets the ordinary `no-pending-permission` refusal.
 - **Locator only, approves nothing.** `platform`, `session`, `repo`, `reason`, `event_cursor`,
   `request_id`. No title, options, tool input, command, or credential. The Host decides
   `permit`/reject inside its own authorization; the ordinary turn-end `idle` follows a permit.
 - **Observable instead of silent.** `observe`/`status` report `undelivered_worker_events`
   (locator + attempts + last error). Event kinds: `heartbeat_carrier_undelivered`,
-  `heartbeat_carrier_recovered`, `heartbeat_carrier_dropped`.
+  `heartbeat_carrier_recovered`, `heartbeat_carrier_dropped`, and
+  `heartbeat_carrier_delivered_stale` — the wake reached the Host, but its approval was already gone
+  when the receipt landed. That last one is the whole point of separating carrier delivery from a
+  live pending approval; it is never reported as a recovery.
 - **Out of scope is unchanged.** Ordinary `idle`/`terminated` stay one-shot, unbound workers
   (`heartbeat_host is None`) early-return, non-ZCode Hosts are untouched, the 600 s idle-exit is
   intact.
+
+## Outer re-review 2 REJECTED `dbd7644` — evidence and wording, not classification
+
+The reviewer accepted the code classification and rejected three focused things. All three are
+fixed in `151602f`.
+
+**1. The absolutes had survived in prose.** "A settled request or an exited agent never becomes a
+Host prompt" was still standing in this report (the *Stale is dropped worker-side* bullet), in the
+CHANGELOG, in the test module docstring, in the exited-worker test docstring, and in
+`_flush_undelivered_wakes`'s own docstring. It is true only BEFORE the offer is written. A sweep
+found every instance; each now states the boundary and what happens on the other side of it — the
+Host does get that locator, it is recorded as `heartbeat_carrier_delivered_stale`, and the Host
+re-observes the worker's live `pending_permissions` before approving.
+
+**2. The race evidence was synthetic and did not say so.** `pending_permissions.pop` on a stub is
+not an `op_permit`: no holder lock, no ACP response. Both stub-driven tests now declare that scope
+in terms, and a bounded end-to-end regression was added —
+`test_a_real_permit_during_an_offer_is_a_stale_delivery`. Live holder, live agent, the real watchdog
+retry, a peer that takes the offer and withholds its receipt, and the ordinary `kaola-acp permit`
+CLI running through `op_permit` inside that window before the receipt is released. No new harness:
+the existing `Sandbox` and `FakePeer` carry it, and the synthetic probe evidence is retained rather
+than replaced.
+
+It FAILS on `f5bb239` (`evidence/08-real-permit-custody.log`) at "the delivery is recorded as stale,
+not as a recovery" — after twelve checks that DO pass there, including "the real permit settles the
+request" and "nothing is pending any more, while the receipt is still withheld". The interleaving is
+genuinely reached on both candidates; only the recording differs.
+
+**3. The report's own bookkeeping.** It now names an explicit tested code SHA rather than an
+impossible self-SHA, carries the real 17/17 count with the suite's captured exit status, lists
+`heartbeat_carrier_delivered_stale` among the record kinds, and states plainly that the full
+`validate.sh` exit 0 belongs to the outer verification's run on `dbd7644` — the interrupted attempt
+is not a pass — and that `validate.sh` has not been run on `151602f`.
 
 ## Outer RE-review REJECTED `f5bb239` — the claim was false, and is withdrawn
 
@@ -249,15 +290,17 @@ measured at a 14.1 s gap against the unattended 15 s tick.
 
 | command | result |
 |---|---|
-| `python3 tests/contract/test-issue-92-permission-wake-recovery.py` | **PASS 16/16** — `evidence/15-issue-92-contract-r5.log` |
+| `python3 tests/contract/test-issue-92-permission-wake-recovery.py` | **PASS 17/17**, exit status captured in the log — `evidence/16-issue-92-contract-r6.log` (`suite_exit_status=0`) |
 | same suite, baseline `aa5fdad` holder | **5/6 then-existing tests FAIL** on the new behaviour; `test_idle_and_unbound_paths_are_unchanged` passes by design (regression guard, not failure-first) — `evidence/00-baseline-failure.log` |
 | same suite, previous candidate `6c9e3a3` | both new regression tests **FAIL** — `evidence/02-prev-candidate-regression.log` |
 | `./scripts/render-skills.py --check` | **PASS** (budgets OK) |
-| `./scripts/validate.sh` on this r5 candidate | **EXIT=0, run and reported by the OUTER verification**, incl. 16/16 and the render check. My own two attempts were killed by session teardown and produced no exit status; provenance and the truncated log are in `evidence/25-validate-r5-RESULT.md`. |
+| `./scripts/validate.sh` on `dbd7644` | **EXIT=0, run and reported by the OUTER verification.** My own two attempts on that candidate were killed by session teardown and produced no exit status; the first interrupted attempt is explicitly NOT a pass. Provenance and the truncated log: `evidence/25-validate-r5-RESULT.md`. |
+| `./scripts/validate.sh` on `151602f` | **not yet run.** The delta from `dbd7644` is docstring/comment wording, one added contract test, and the re-rendered generated copies. I was asked not to start it; it is outstanding and named here rather than implied. |
 | `./scripts/validate.sh` up to `f5bb239` (mine) | **EXIT=0, 413 s** — `evidence/24-validate-r4.log` |
 | `git diff --check` and `--cached` | **clean** |
 | same suite, rejected candidate `f2d141c` | both outer-defect tests **FAIL** — `evidence/05-f2d141c-outer-defect-regression.log` |
 | same suite, rejected candidate `f5bb239` | both re-review tests **FAIL** — `evidence/06-f5bb239-rerereview-regression.log` |
+| the REAL-permit interleaving, on `f5bb239` | **FAILS** at "the delivery is recorded as stale, not as a recovery", after 12 checks that pass there — `evidence/08-real-permit-custody.log` |
 | the re-review's own race, on `f5bb239` vs now | `evidence/07-post-write-race-probe.{py,log}` |
 | `bash evidence/04-no-cap-mutation-probe.sh <checkout>` | three injected give-up caps all **FAIL** the no-cap test — `evidence/04-no-cap-mutation-probe.log` |
 | neighbours #76 / #90 / #88 / #65 / zcode-heartbeat | **PASS** — `evidence/11-*.log` |
