@@ -1,6 +1,0 @@
-PASS test_permission_required_wakes_idle_host_while_turn_active (25 checks)
-PASS test_permission_event_stages_on_busy_host_then_flushes (12 checks)
-PASS test_droid_worker_wake_is_metadata_only_and_idempotent (22 checks)
-PASS test_unbound_worker_permission_is_unchanged (7 checks)
-PASS test_worker_event_validation_accepts_permission_required (11 checks)
-PASS: issue-76 permission wake contract (5 tests)
