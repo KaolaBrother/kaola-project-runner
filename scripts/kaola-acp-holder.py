@@ -28,6 +28,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -582,6 +583,7 @@ class AgentConnection:
         self.exit_signal: int | None = None
         self.malformed_lines = 0
         self.unknown_updates = 0
+        self.handler_errors = 0
 
     def spawn(self, command: str, cwd: str, env: dict[str, str] | None = None) -> None:
         argv = shlex.split(command)
@@ -638,7 +640,15 @@ class AgentConnection:
             if not isinstance(message, dict):
                 self.malformed_lines += 1
                 continue
-            self.holder.on_agent_message(message)
+            try:
+                self.holder.on_agent_message(message)
+            except Exception as exc:  # noqa: BLE001
+                # Issue #95: one message's handler failure is that message's
+                # failure. Without this the thread ends here, the agent stays
+                # alive, and every later update and response is dropped in
+                # silence. The failure is recorded, never answered.
+                self.handler_errors += 1
+                self.holder.note_agent_message_error(message, exc)
 
     # -- JSON-RPC out ---------------------------------------------------------
 
@@ -1294,6 +1304,7 @@ class Holder:
             "last_prompt": self.last_prompt,
             "event_cursor": self.events.cursor,
             "malformed_stdout_lines": self.agent.malformed_lines,
+            "agent_message_errors": self.agent.handler_errors,
             "fatal_error": self.fatal_error,
             "created_at": getattr(self, "created_at", None),
             "updated_at": round(time.time(), 3),
@@ -1477,6 +1488,28 @@ class Holder:
                 self.on_agent_notification(message)
         else:
             self.agent.resolve_response(message)
+
+    def note_agent_message_error(self, message: dict[str, Any],
+                                 exc: BaseException) -> None:
+        """Record a handler failure the reader refused to die on (Issue #95).
+
+        Locator facts only: the method, the JSON-RPC id, the exception class,
+        and the innermost frame. The message itself and ``str(exc)`` are both
+        withheld because either can quote agent payload, which is where a
+        credential would be; the frame is what makes the failure diagnosable
+        without it. The message is not answered, not retried, and not counted
+        as handled - an unanswered agent request stays unanswered, and the
+        controlling Agent decides what to do from ``status``.
+        """
+        frames = traceback.extract_tb(exc.__traceback__)
+        self.events.append({
+            "kind": "agent_message_error",
+            "method": message.get("method"),
+            "id": message.get("id"),
+            "error_type": type(exc).__name__,
+            "at": f"{os.path.basename(frames[-1].filename)}:{frames[-1].lineno}"
+                  if frames else None,
+        })
 
     def on_agent_notification(self, message: dict[str, Any]) -> None:
         method = message["method"]
@@ -1699,6 +1732,7 @@ class Holder:
             "event_cursor": self.events.cursor,
             "malformed_stdout_lines": self.agent.malformed_lines,
             "unknown_update_variants": self.agent.unknown_updates,
+            "agent_message_errors": self.agent.handler_errors,
             "fatal_error": self.fatal_error,
         }
 

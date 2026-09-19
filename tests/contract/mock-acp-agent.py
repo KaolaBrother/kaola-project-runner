@@ -545,6 +545,20 @@ class MockAgent:
                 self.pending[outbound] = method
                 request(outbound, method, params)
             return  # finishes in on_response once all four answered
+        if scenario == "handler_raises":
+            # Issue #95: by-position `params` is legal JSON-RPC, and the
+            # client's session/update handler reads `params` as an object, so
+            # this array raises inside on_agent_message. It is one reachable
+            # trigger, not the contract: what is under test is that the reader
+            # survives it and still delivers what follows.
+            send_raw(json.dumps({
+                "jsonrpc": "2.0",
+                "method": "session/update",
+                "params": ["kaola-i95-payload-secret", session_id],
+            }).encode("utf-8") + b"\n")
+            message_chunk(session_id, "MOCK-REPLY after handler failure")
+            self.finish_turn(request_id)
+            return
         if scenario == "hang_until_cancel":
             message_chunk(session_id, "MOCK-REPLY working")
             return  # only session/cancel resolves this turn
