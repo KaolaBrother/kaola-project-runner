@@ -185,7 +185,8 @@ The installer provides native skill-directory destinations for **Codex, Claude C
 Cursor, Devin, and ZCode** (`--runtime zcode` → `~/.zcode/skills`; a workspace
 `.zcode/skills` or `.agents/skills` works through `--skills-dir` — see
 [ZCode host](docs/zcode-host.md);
-for Codex's `SessionStart(compact)` recovery hook see [Codex host](docs/codex-host.md)).
+for Codex's user-level and project-level `SessionStart(compact)` recovery hooks see
+[Codex host](docs/codex-host.md)).
 **Grok Bot** is a **bridge host** for **Kaola-Delegator**, not a Project Runner
 host. Its generated account Skill is included in this release, but account-side live UAT is
 not yet verified. The account
@@ -388,6 +389,14 @@ On Codex and generic destinations, `kaola-delegator` is control-plane: a first
 install still needs `zcode` in this `--platform` (or no `--platform`); an
 already-installed Delegator is included on later reinstall/uninstall even when
 this `--platform` omits `zcode`, so a filtered pass does not leave a stale copy.
+The Codex destination (`--runtime codex`, or no destination flag) also installs one
+Runner-owned user-level `SessionStart(compact)` recovery entry in
+`${CODEX_HOME:-$HOME/.codex}/hooks.json` whenever the control-plane Skills are in the plan,
+so an outer Codex Agent using `kaola-delegator` or `kaola-project-runner` re-reads that
+installed Skill after a compaction from any repository; `--no-orchestrator` skips it,
+`--uninstall` removes only it, and `--skills-dir` never touches a `hooks.json`. Codex still
+asks you to review and trust the new entry in `/hooks`, and it loads from the next session —
+see [Codex host](docs/codex-host.md).
 `--runtime` and `--skills-dir` are mutually exclusive. Copies work without this checkout;
 `--method link` requires it to remain in place. Reinstalling the default over an owned
 source link migrates that Skill to a copy. The installer preserves foreign files and

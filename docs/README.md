@@ -4,9 +4,10 @@
 - [API](api.md): renderer, installer, tmux core, status, adapter contracts, and the `steer`
   operation (native and composite modes, receipt vocabulary)
 - [Grok Bot host](grok-bot-host.md): one thin Kaola-Delegator bridge Skill, execution-target binding (Local Computer vs cloud), device-local locator and fail-closed attestation, one-write install, read-only Mac UAT boundary, token-cost comparison; Grok Bot is not a Project Runner host
-- [Codex Host](codex-host.md): Codex as consuming runtime — skill install plus the
-  merge-safe `SessionStart(compact)` recovery hook, its trust/coexistence boundary,
-  and the isolated real-compact verification result
+- [Codex Host](codex-host.md): Codex as consuming runtime — skill install plus the two
+  merge-safe `SessionStart(compact)` recovery entries (user-level default for the
+  cross-repository Delegator, project-level bound Host), their trust, coexistence, and
+  migration boundary, and the isolated real-compact verification results
 - [ZCode Host](zcode-host.md): ZCode as worker platform and as native skill-directory host, the
   generic ACP entry, the event-driven heartbeat carrier and its prompt-file defect receipt, and
   the two startup flows (ordinary worker supervision vs Orchestrator/Host supervision)

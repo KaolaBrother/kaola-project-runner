@@ -1,160 +1,193 @@
-# Codex Host (Issue #75)
+# Codex Host (Issues #75, #97)
 
-Codex is a first-class consuming runtime for the generated Skills and the only
-host this issue adapts for post-compaction recovery. This page covers the Codex
-host surface: skill installation and the Runner-owned compact-recovery hook.
+Codex is a first-class consuming runtime for the generated Skills and the host
+whose post-compaction recovery this page adapts. It covers the Codex host
+surface: skill installation and the two Runner-owned `SessionStart(compact)`
+recovery entries — the **user-level** entry that `--runtime codex` installs
+(Issue #97, the default) and the **project-level** bound-Host entry (Issue #75,
+kept for direct Project Runner Hosts).
 
 ## Skill installation
 
 `./scripts/install-local.sh --runtime codex` installs the generated Skills into
-`${CODEX_HOME:-~/.codex}/skills` — `kaola-project-runner` plus the nine
-`<platform>-kaola-project-runner` workers as sibling directories. `--method
-link|copy` and `--bin-links` behave as documented in the installer reference.
+`${CODEX_HOME:-~/.codex}/skills` — `kaola-project-runner`, `kaola-delegator`
+(when `zcode` is in the plan), plus the nine `<platform>-kaola-project-runner`
+workers as sibling directories — and, whenever the control-plane Skills are in
+the plan, the user-level recovery entry described next. `--method link|copy`
+and `--bin-links` behave as documented in the installer reference. A generic
+`--skills-dir` destination is never a Codex user-level install: it touches no
+`hooks.json` anywhere, even when the path happens to be under `~/.codex`.
 
 ## Compact recovery: `SessionStart(source=compact)`
 
-A Codex host Agent runs across many issues and worker rounds; after context
-compaction the previously read Skill text cannot be assumed present. Codex
-fires `SessionStart` hooks with source `compact` after a compaction and drains
-the queued `additionalContext` before the next model request — the verified,
-host-native re-entry point (codex-cli ≥ 0.153.x; see
-developers.openai.com/codex/hooks).
+A Codex Agent that uses Project Runner or Kaola-Delegator runs across many
+issues and worker rounds; after context compaction the previously read Skill
+text cannot be assumed present. Codex fires `SessionStart` hooks with source
+`compact` after a compaction — including an automatic one in the middle of a
+turn — and delivers each hook's stdout as developer `additionalContext` before
+the next model request (codex-cli 0.153.4 and 0.155.1 verified live;
+developers.openai.com/codex/hooks). Codex discovers hooks beside every active
+config layer — `~/.codex/hooks.json`, project `.codex/hooks.json`, plugins,
+`config.toml` — and merges them: a higher layer never replaces a lower one.
 
-The carrier is deliberately thin: one `SessionStart` matcher group whose
-command prints a short recovery prompt
-(`templates/codex-host/compact-recovery.md`) — only when the hook input on
-stdin matches the bound Host session (see the filter below). The prompt
-tells the host to
-confirm its role (`kaola-project-runner`, or `kaola-delegator` when that is the
-installed Skill in use), completely re-read that installed Skill, then recover
-the live scene from current authorization, the effective-now heartbeat, and
-project run records — without re-intake, re-claim, restarting sessions, or
-re-dispatching in-flight work. The hook performs no dispatch, mutates no
-project state, and keeps no copy of the Skill.
+### User-level entry (Issue #97) — the default
 
-### Install / uninstall
+An outer Codex Agent that loaded the installed `kaola-delegator` delegates
+projects from whatever repository it happens to be in, and may delegate several
+projects in one session. A per-project hook cannot follow it, and asking the
+operator to install a hook into every delegated repository is not a contract.
+The installer therefore places **one** Runner-owned entry, id
+`kaola-project-runner:user-compact-context`, into the official user-level
+`${CODEX_HOME:-~/.codex}/hooks.json`, with private asset copies under
+`${CODEX_HOME:-~/.codex}/kaola-project-runner/hooks/` (`compact-recovery-user.md`
+and the emitter copy `kaola-codex-compact-hook.py`).
+
+The entry's command runs `user-emit`, which prints the short payload
+(`templates/codex-host/compact-recovery-user.md`, about 1.2 KB, far below the
+default 2500-token `additionalContext` threshold) on **every**
+`SessionStart(compact)`. The payload, not a session filter, carries the
+condition: a session that was already using `kaola-delegator` or
+`kaola-project-runner` before the compaction re-reads that installed Skill
+completely from its installed directory and continues from existing records —
+current authorization, the live ACP session and Runner `status` receipts, and
+Git, worktree, Workflow, and Issue records — without re-intake, re-claim, a
+second Host, resent prompts, or re-dispatch of in-flight work. Every other
+session ignores it: no delegation or project work starts, and neither a role
+nor a project is ever inferred from the working directory. The user layer keeps
+no binding table, session registry, cwd map, or heartbeat.
 
 ```bash
-# Two-phase bootstrap — covers the FIRST Host session (hooks load at
-# session start, so the entry must exist before launch; the session id can
-# only be bound afterwards):
-python3 scripts/kaola-codex-compact-hook.py prepare --project-root <canonical project root>
-#   → writes entry + assets with an inert binding (session_id null = silent)
+# Installed and removed by the Codex destination of the installer:
+./scripts/install-local.sh --runtime codex               # … plus "codex user hook: {…}" receipt
+./scripts/install-local.sh --runtime codex --uninstall   # removes only that entry and its assets
+
+# The same actions directly (default target ${CODEX_HOME:-~/.codex}; --codex-home overrides):
+python3 scripts/kaola-codex-compact-hook.py user-status    [--codex-home DIR]   # read-only, echo-safe
+python3 scripts/kaola-codex-compact-hook.py user-install   [--codex-home DIR]
+python3 scripts/kaola-codex-compact-hook.py user-uninstall [--codex-home DIR]
+```
+
+- **Merge by owned id.** The entry is matched by id only. The Kaola Workflow
+  user hook (`kaola-workflow:compact-context`), user-owned entries, and every
+  other event list keep their JSON content untouched; the document is
+  re-serialized canonically on write, so byte formatting is not preserved (and
+  not claimed). Re-install is idempotent (`changed: false`, byte-identical
+  file). No backup copy of `hooks.json` is ever made; `user-status` reports
+  presence and counts but never any entry's `command`. A malformed
+  `hooks.json` — including JSON-null `hooks` or `hooks.SessionStart` — is
+  refused before any write, and the installer plans that refusal before its
+  first Skill write, so a broken user configuration aborts the whole install.
+- **Boundaries.** The Codex home must already exist; the filesystem root and
+  the user home directory itself are refused, as is any managed path whose
+  real path escapes the Codex home (a symlinked `hooks.json` pointing
+  elsewhere). `--project-root` and `--session-id` are refused at the user
+  layer; `--codex-home` is refused by the project actions. Nothing scans or
+  rewrites other repositories.
+- **Trust is the host owner's step, and it is not silent.** Codex requires a
+  non-managed hook to be reviewed and trusted against its current definition
+  before it runs; a new or changed entry is marked for review and skipped
+  until trusted, and hooks load at session start. So recovery is **not**
+  active before the install, not while the entry is untrusted, and not in the
+  session that ran the install. Observed live on a fresh Codex home: the next
+  `codex` launch shows *"Hooks need review — N hooks are new or changed"* with
+  *Review hooks / Trust all and continue / Continue without trusting*, the
+  `/hooks` browser lists our entry as *User config … hooks.json*, command
+  `python3 …/kaola-project-runner/hooks/kaola-codex-compact-hook.py user-emit`,
+  and `t` trusts it; afterwards only a *modified* entry is flagged again, and
+  ours stays trusted across sessions. Until then the Skill can always be
+  re-invoked explicitly. The installer prints exactly this: *review and trust
+  the new entry in /hooks; it loads from the next Codex session*. Vetted
+  automation may pass `--dangerously-bypass-hook-trust` for one invocation.
+
+### Project-level entry (Issue #75) — direct Hosts, legacy
+
+The project layer stays fully supported for a **direct Project Runner Host**
+that lives in one repository: `prepare` writes the entry
+`kaola-project-runner:compact-context` plus assets into
+`<project_root>/.codex/hooks.json` and
+`<project_root>/.codex/kaola-project-runner/hooks/` with an inert binding,
+`bind`/`install` bind the exact designated Host session id, and its `emit`
+prints the project payload (`templates/codex-host/compact-recovery.md`) only
+for `SessionStart(compact)` on that bound session at that canonical root.
+
+```bash
+python3 scripts/kaola-codex-compact-hook.py prepare   --project-root <canonical project root>
 # … start the designated Codex Host …
-python3 scripts/kaola-codex-compact-hook.py bind \
-    --project-root <canonical project root> --session-id <host session id>
-#   → writes ONLY binding.json; the loaded/reviewed entry is untouched
-
-# One-shot form when the session id is already known:
-python3 scripts/kaola-codex-compact-hook.py install \
-    --project-root <canonical project root> --session-id <host session id>
-
-python3 scripts/kaola-codex-compact-hook.py status    --project-root <root> # read-only
-python3 scripts/kaola-codex-compact-hook.py uninstall --project-root <root> # ours only
+python3 scripts/kaola-codex-compact-hook.py bind      --project-root <root> --session-id <host session id>
+python3 scripts/kaola-codex-compact-hook.py install   --project-root <root> --session-id <host session id>  # prepare+bind
+python3 scripts/kaola-codex-compact-hook.py status    --project-root <root>   # read-only
+python3 scripts/kaola-codex-compact-hook.py uninstall --project-root <root>   # ours only
 ```
 
 Inside the Codex host's own shell, `CODEX_SESSION_ID` and `CODEX_THREAD_ID`
-both carry the session identity and equal the `session_id` the hook input
-delivers on stdin — verified live (the values themselves are never printed
-by this tooling). The id is bound only by an explicit operator `bind`/
-`install` call; nothing auto-claims the first session, and ordinary Workers
-are never bound.
+both carry the session identity that the hook input delivers as `session_id`
+(verified live; never printed by this tooling). The id is bound only by an
+explicit operator `bind`/`install`; nothing auto-claims a session and Workers
+are never bound. Everything else the project layer guarantees is unchanged:
+project-only writes (`--project-root` refuses the filesystem root, the home
+directory, and the effective `CODEX_HOME` layer), symlink containment inside
+the project root, echo-safe `status`, `prepare` never silently unbinding a live
+Host, atomic refusal on malformed config, and no backup copies.
 
-- Edits `<project_root>/.codex/hooks.json` — the official **project-level**
-  hooks layer — only. It never writes `${CODEX_HOME}` or `~/.codex`: a single
-  user-global file could hold only one project binding, so two designated
-  Hosts would overwrite each other. Each repository keeps its own binding, so
-  projects A and B coexist and removing B leaves A fully intact.
-  `--project-root` must name an existing directory, and explicit
-  global/ancestor danger paths are refused before any write — the filesystem
-  root, the user home directory, and the effective `CODEX_HOME` layer — so a
-  mistaken `--project-root $HOME` can never write `~/.codex/hooks.json`.
-  Containment is enforced inside the project too: before any read, write, or
-  delete, the real paths of `.codex`, the Runner-owned asset parents, and
-  each owned leaf (`hooks.json`, `compact-recovery.md`, the emitter copy,
-  `binding.json`) are resolved, and a symlink that escapes the canonical
-  project root (for example `.codex` or a `binding.json` pointing into
-  `CODEX_HOME`) is refused; symlinks that stay inside the project remain
-  legal.
-- `status` is read-only **and echo-safe**: it reports safe metadata
-  (installed/bound presence, counts, paths) but never a matched entry's
-  `command` or arbitrary config, which could carry a credential. `bound` is
-  true only for a non-empty `session_id` whose `project_root` equals this
-  project's canonical root; `install`/`bind` refuse a missing or blank
-  `--session-id`.
-- **Host-only filter (required binding).** `install`/`bind` refuse without
-  `--session-id`: the entry is bound to the exact designated Codex Host
-  session, not to a runtime. The binding is written to
-  `<project_root>/.codex/kaola-project-runner/hooks/binding.json`; the hook
-  command runs a copied `emit` action that reads the binding plus the
-  official hook input on stdin (`session_id`, `cwd`, `hook_event_name`,
-  `source`) and prints the payload only for `SessionStart(compact)` on the
-  bound session at the bound root — an ordinary Worker session, a session in
-  another repository, or a non-compact source emits nothing. `codex resume`
-  keeps the session id, so the binding survives resume; for a brand-new Host
-  session, re-run `bind` (or `install`) with the new id — only `binding.json`
-  changes, so the already-reviewed hook entry is not disturbed. `prepare` is
-  safe to re-run: a `binding.json` is left byte-for-byte only when it holds a
-  non-empty `session_id` AND this project's canonical `project_root` — the
-  exact pair `emit` matches on (`binding_preserved` in the receipt), so a
-  live Host is never silently unbound; an id without the matching root, an
-  empty/whitespace id, or any other unclassifiable shape is refused before
-  any write.
-- Owns exactly one entry, id `kaola-project-runner:compact-context`, under
-  `hooks.SessionStart` — matched by id, so foreign entries (Workflow-owned,
-  user-owned) keep their JSON content untouched. The document is
-  re-serialized canonically on write, so byte-level formatting of the file
-  is not preserved (and is not claimed); entry content is. Re-install is
-  idempotent; uninstall removes only that entry and our copies — a
-  `hooks.json` that held nothing else is removed, and `.codex/` itself is
-  left only while other content remains.
-- Copies the payload to
-  `<project_root>/.codex/kaola-project-runner/hooks/compact-recovery.md`, the
-  emitter to `kaola-codex-compact-hook.py`, and the binding to
-  `binding.json` beside them, so the hook does not depend on a checkout
-  path; and never copies `hooks.json` — foreign content, which may carry
-  credentials, stays only in the file it already lived in. The hook
-  command quotes its path with `shlex.quote`, so a project root containing
-  shell metacharacters cannot change what the hook executes.
-- Refuses atomically (no write of any file) on a malformed `hooks.json`,
-  including JSON-null `hooks` or `hooks.SessionStart`.
+### Coexistence and migration
 
-### Trust and coexistence
+Both layers can be installed at once, and one compaction must not inject two
+Runner blocks. The user-level `user-emit` therefore stays silent **exactly**
+when the session's `cwd` holds a Runner project entry whose `binding.json`
+names that very `session_id` with `cwd` as the canonical root — the same
+predicate the project `emit` fires on. A bound direct Host receives only the
+project block; a Worker session, a session in any other repository, a
+subdirectory of the bound root, an inert (`prepare`-only) binding, a binding
+that names another root, or an unreadable binding all receive the user block.
+The Kaola Workflow user hook fires alongside either, untouched.
 
-Codex merges hook sources from all config layers (`~/.codex/hooks.json`,
-project `.codex/hooks.json`, plugin-bundled, `config.toml`); our entry adds to
-that set, never replaces it — the existing Workflow compact hook keeps firing
-alongside it. Project-layer hooks load only while the project directory is
-trusted, and entries added or changed under a trusted directory surface in
-the Codex `/hooks` browser for review before they run — observed live: an
-unreviewed project entry is installed but inactive. That approval is the host
-owner's deliberate step, not something this installer performs; vetted
-automation may instead launch Codex with `--dangerously-bypass-hook-trust`
-for a single invocation without persisting trust. Two further live facts:
-hooks are loaded at session start (an entry written mid-session applies from
-the next session), and `codex resume` preserves the session id a binding is
-tied to.
+Migration is per repository and explicit — nothing is scanned or rewritten in
+bulk: once the user-level entry is installed and trusted, a project whose
+project-level entry is no longer wanted runs
+`python3 scripts/kaola-codex-compact-hook.py uninstall --project-root <root>`
+and the user layer carries that project from the next compaction on. The one
+gap to know about is trust, which the emitters cannot observe: if a project
+entry is bound but still unreviewed in `/hooks`, that bound session gets the
+project block only after the entry is trusted (the user block yields to the
+binding) — trust it or uninstall it.
 
 ## Verified boundary
 
-- Mechanism and live behavior proven in an isolated real `/compact` run
-  against a scratch repository's project-layer `.codex/hooks.json`:
-  `SessionStart(compact)` fired, the payload reached the model as
-  `additionalContext` before the next reasoning turn (the model quoted
-  `KPR-COMPACT-RECOVERY-V1`), and a foreign Workflow hook fired alongside
-  ours. Unbound-session silence is proven by the contract suite; live it was
-  additionally observed that an unreviewed project entry stays inactive —
-  the trust gate, not the filter (evidence:
-  `kaola-workflow/bundle-75/evidence/codex-compact-live/`).
-- The installer itself performs no user-global write — the contract suite
-  (`tests/contract/test-issue-75-codex-compact-hook.py`) proves merge safety,
-  idempotency, two-project coexistence with local uninstall, the required
-  Host binding (payload emitted only for the bound `session_id` + project
-  root; silent for Worker, other repo, or non-compact sources), atomic
-  refusal on malformed/null config, `prepare` preserving a live binding
-  (`binding_preserved`) while refusing an ambiguous one before any write,
-  that no copy of `hooks.json` is ever created beside a secret-bearing
-  foreign config, and payload content.
-- Out of scope here: ZCode's compact carrier (see `docs/zcode-host.md` and the
-  Issue #75 capability matrix — its 0.16.5 `SessionStart` has no `compact`
-  call site), Grok Bot, and other native hosts.
+- **User layer, live (evidence
+  `kaola-workflow/archive/issue-97/evidence/codex-user-compact-live/`).**
+  Isolated `CODEX_HOME` (auth linked, never read) preset with the Kaola
+  Workflow user hook and a user-owned entry, then the real installer
+  (`--runtime codex --platform zcode`): only our entry and assets were added.
+  First launch (codex-cli 0.153.4): *Hooks need review — 3 hooks are new or
+  changed*; reviewed and trusted in `/hooks` (`Installed 3 / Active 3`); a
+  later modification of the foreign entry flagged only that hook, ours stayed
+  trusted. Real `/compact` runs, each with the `compacted` record and the
+  developer `additionalContext` messages in the rollout: an ordinary session
+  (0.153.4, no Skill in use) received the Workflow block and ours and answered
+  that no Skill file was read, no delegation or Host started, no action taken;
+  two outer Delegator sessions in two unrelated scratch repositories (0.155.1)
+  received both blocks and each re-read the installed
+  `<CODEX_HOME>/skills/kaola-delegator/SKILL.md` — a real `CommandExecution`
+  after the `compacted` record — and contacted no Host; a Project Runner
+  session (0.155.1) re-read `<CODEX_HOME>/skills/kaola-project-runner/SKILL.md`
+  the same way (its final self-report was cut short by the operator's `/quit`,
+  recorded as `turn_aborted`; the re-read itself is in the rollout); and in a
+  repository carrying a legacy project-level entry bound to that session
+  (0.155.1) the rollout holds the Workflow block plus the **project** block and
+  no user block — one Runner block, none lost. Codex self-updated 0.153.4 →
+  0.155.1 between the first and second live session.
+- **User layer, contract** (`tests/contract/test-issue-97-codex-user-compact-hook.py`,
+  `tests/contract/test-installer-runtimes.sh`): merge safety and idempotency
+  against a preset Workflow + user-owned `hooks.json`, no backup copy,
+  malformed/null refusal before any write, option refusals across layers,
+  symlink escape refusal, `user-emit` on `SessionStart(compact)` only from any
+  cwd, the deferral predicate above in every direction, payload pins, and the
+  installer boundary (`--runtime codex` and the legacy default install it;
+  `--no-orchestrator`, `--skills-dir`, and every other runtime never do; a
+  malformed user `hooks.json` aborts before any Skill write).
+- **Project layer** — mechanism and live behavior proven in the Issue #75
+  isolated real `/compact` runs (`kaola-workflow/archive/bundle-75/evidence/codex-compact-live/`)
+  and the contract suite `tests/contract/test-issue-75-codex-compact-hook.py`.
+- Out of scope here: ZCode's compact carrier (see `docs/zcode-host.md` — its
+  native `/kaola-project-runner` Skill entry, no hook), Grok Bot, and other
+  native hosts.

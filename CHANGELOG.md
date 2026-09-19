@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased
+
+- **Codex installs a user-level `SessionStart(compact)` recovery entry, so an outer
+  Codex Delegator recovers from any repository (Issue #97).** The Issue #75 hook lived
+  only in a consuming project's `.codex/hooks.json`, bound to one Host session at one
+  canonical root; an outer Codex Agent that loaded the installed `kaola-delegator`
+  delegates from whatever repository it is in, so after a compaction it could not be
+  told to re-read the Skill, and installing the Delegator installed no hook at all.
+  `./scripts/install-local.sh --runtime codex` (and the legacy no-flag Codex default)
+  now merges one Runner-owned entry, `kaola-project-runner:user-compact-context`, into
+  `${CODEX_HOME:-~/.codex}/hooks.json` with private asset copies under
+  `${CODEX_HOME:-~/.codex}/kaola-project-runner/hooks/`, whenever the control-plane
+  Skills are in the plan. Its `user-emit` prints a short conditional payload (about
+  1.2 KB) on every `SessionStart(compact)`: a session already using `kaola-delegator`
+  or `kaola-project-runner` completely re-reads that installed Skill and continues
+  from current authorization, live ACP/Runner receipts, and Git/worktree/Workflow/Issue
+  records; every other session does nothing, and no role or project is ever inferred
+  from the working directory. There is no binding table, session registry, cwd map, or
+  heartbeat. Merge is by owned id and idempotent; the Kaola Workflow user hook and
+  user-owned entries are preserved, never echoed or copied; no backup copy is made; a
+  malformed user `hooks.json` is refused during installer planning, before the first
+  Skill write. `--no-orchestrator` skips the entry, `--uninstall` removes only it,
+  and `--skills-dir` or any other runtime never touches a `hooks.json`. Coexistence
+  with the legacy project-level entry: `user-emit` stays silent exactly when the
+  session's cwd holds a Runner project entry bound to that same session and root — the
+  predicate the project `emit` fires on — so one compaction never carries two Runner
+  blocks; migration is an explicit per-repository `uninstall --project-root`, and the
+  project actions are unchanged for direct Hosts. The installer and the docs say
+  plainly that Codex still requires the owner to review and trust the new entry in
+  `/hooks` and loads hooks at session start, so recovery is not active before the
+  install, while untrusted, or in the installing session. Verified live in an isolated
+  `CODEX_HOME` preset with the Workflow hook and a user-owned entry: real `/compact`
+  runs in two unrelated scratch repositories re-read the installed Delegator Skill
+  (real `CommandExecution` after the `compacted` record) and contacted no Host, an
+  ordinary session received the block and took no action, a Project Runner session
+  re-read its Skill, and a repository with a bound legacy project entry received the
+  project block and not the user block; the `/hooks` review and trust flow was
+  captured on codex-cli 0.153.4 and the compaction runs on 0.153.4/0.155.1.
+  Contract: `tests/contract/test-issue-97-codex-user-compact-hook.py` and new
+  `test-installer-runtimes.sh` cases.
+
 ## 0.4.0 — 2026-09-19
 
 - **`./scripts/validate.sh` no longer has to be run with the canonical-root binding

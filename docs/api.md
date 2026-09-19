@@ -150,6 +150,21 @@ to this repository's scripts. It defaults on only for the Codex runtime destinat
 leaves shared links alone unless `--bin-links` is passed explicitly, and removes only exact-owned
 links.
 
+The Codex runtime destination (`--runtime codex`, or no destination flag) also installs one
+Runner-owned user-level `SessionStart(compact)` recovery entry — id
+`kaola-project-runner:user-compact-context` in `${CODEX_HOME:-$HOME/.codex}/hooks.json`, assets
+under `${CODEX_HOME:-$HOME/.codex}/kaola-project-runner/hooks/` — whenever the control-plane Skills
+are in the plan (Issue #97). `--no-orchestrator` skips it; `--uninstall` removes only that entry
+and those assets; a generic `--skills-dir` destination and every other `--runtime` never touch a
+`hooks.json`. Foreign entries are merged around by id and never changed, echoed, or copied; a
+malformed user `hooks.json` is refused during planning, before the first Skill write. The
+installer prints the hook receipt (`codex user hook: {…}`) and the trust note: Codex still asks
+the owner to review and trust the new entry in `/hooks`, and hooks load at session start, so
+recovery is not active in the session that ran the install. Direct actions:
+`scripts/kaola-codex-compact-hook.py user-install|user-uninstall|user-status [--codex-home DIR]`;
+the project-level `prepare|install|bind|uninstall|status --project-root ROOT` actions are
+unchanged. See [Codex host](codex-host.md).
+
 ## Locator and host-target attestation
 
 ```text
