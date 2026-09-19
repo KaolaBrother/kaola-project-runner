@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-09-19
 
 - **Codex installs a user-level `SessionStart(compact)` recovery entry, so an outer
   Codex Delegator recovers from any repository (Issue #97).** The Issue #75 hook lived
