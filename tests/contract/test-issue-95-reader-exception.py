@@ -10,17 +10,18 @@ dropped, every later JSON-RPC response is never resolved, and the turn stays
 
 The mock agent's ``handler_raises`` scenario emits, in order:
 
-1. a ``session/update`` notification whose ``params`` is a JSON array — legal
-   JSON-RPC by-position params that the client's handler reads as an object,
-   so it raises ``AttributeError`` inside ``on_agent_message``;
+1. a malformed ``session/update`` whose ``params`` is a JSON array instead of
+   the object ACP defines, which the client's handler reads as an object, so
+   it raises ``AttributeError`` inside ``on_agent_message``;
 2. a well-formed ``agent_message_chunk`` carrying ``MOCK-REPLY after handler
    failure``;
 3. the JSON-RPC response that ends the prompt turn.
 
-That array payload is one reachable trigger, not the contract. The contract is
-the boundary: (2) and (3) must still arrive, the failure on (1) must be visible
-in ``status`` and in the event log, and neither the raw message nor the
-exception's own text may be written there.
+That malformed message is one reachable trigger, not the contract. The
+contract is the boundary: an exception on ANY handler path must be scoped to
+the message that caused it. So (2) and (3) must still arrive, the failure on
+(1) must be visible in ``status`` and in the event log, and neither the raw
+message nor the exception's own text may be written there.
 """
 
 from __future__ import annotations

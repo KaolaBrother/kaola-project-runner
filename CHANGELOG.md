@@ -8,7 +8,7 @@
   alive: every later `session/update` was dropped, every later JSON-RPC response was never
   resolved, the turn stayed `active` forever, and nothing said so. Issue #92 removed the one
   trigger then known; the structure that turned any such exception into a silent, permanent
-  wedge remained, and by-position `params` on a notification still reached it. The reader now
+  wedge remained, and a malformed `session/update` still reached it. The reader now
   scopes a handler failure to the message that caused it and keeps reading, so what follows
   is delivered normally. The failure is recorded as an `agent_message_error` event and counted
   in `status` and the holder record as `agent_message_errors`. It is a failure, not a success:

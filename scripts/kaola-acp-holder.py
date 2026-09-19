@@ -1500,6 +1500,11 @@ class Holder:
         without it. The message is not answered, not retried, and not counted
         as handled - an unanswered agent request stays unanswered, and the
         controlling Agent decides what to do from ``status``.
+
+        Recording is best effort, not a guarantee: ``EventLog.append`` already
+        absorbs an ``OSError``, so an unwritable or full log drops this line.
+        The caller increments its counter BEFORE calling here, so ``status``
+        still reports the failure when the line is the thing that is lost.
         """
         frames = traceback.extract_tb(exc.__traceback__)
         self.events.append({

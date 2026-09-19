@@ -546,11 +546,11 @@ class MockAgent:
                 request(outbound, method, params)
             return  # finishes in on_response once all four answered
         if scenario == "handler_raises":
-            # Issue #95: by-position `params` is legal JSON-RPC, and the
-            # client's session/update handler reads `params` as an object, so
-            # this array raises inside on_agent_message. It is one reachable
-            # trigger, not the contract: what is under test is that the reader
-            # survives it and still delivers what follows.
+            # Issue #95: a MALFORMED session/update - `params` is an array
+            # where ACP defines an object - so the client's handler raises
+            # inside on_agent_message. It is one reachable trigger, not the
+            # contract: what is under test is that the reader survives it and
+            # still delivers what follows.
             send_raw(json.dumps({
                 "jsonrpc": "2.0",
                 "method": "session/update",
