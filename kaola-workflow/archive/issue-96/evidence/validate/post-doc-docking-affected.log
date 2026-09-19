@@ -1,0 +1,24 @@
+# Affected-evidence re-run after the CHANGELOG entry mutated bytes post-freeze.
+# Only CHANGELOG.md changed; test-issue-49-grok-bot-host.py is the one suite that reads it.
+# KAOLA_PROJECT_RUNNER_CANONICAL_REPO=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner
+# 2026-09-19T06:23:49Z
+
+### test-issue-49-grok-bot-host.py
+...........................................
+----------------------------------------------------------------------
+Ran 43 tests in 25.730s
+
+OK
+EXIT_49=0
+
+### test-issue-24-opencode-pty-bypass.py (mentions CHANGELOG in prose only)
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 0.042s
+
+OK
+EXIT_24=0
+
+### render-skills.py --check
+render-skills: PASS (9 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2536 B, content stage, unpinned (not saveable); budgets OK)
+EXIT_RENDER=0
