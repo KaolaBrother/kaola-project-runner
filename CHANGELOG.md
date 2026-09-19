@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **`./scripts/validate.sh` no longer has to be run with the canonical-root binding
+  unset (Issue #96).** Two contract classes start a worker through
+  `scripts/kaola-tmux.sh` against their own throwaway repository, but built the child
+  environment from a bare `dict(os.environ)`. An operator shell that is itself bound as
+  a Project Runner control plane therefore leaked `KAOLA_PROJECT_RUNNER_CANONICAL_REPO`
+  into those starts, and the Issue #73 guard refused them — correctly — before the mock
+  ACP agent was spawned. Because a refusal receipt carries `result`/`reason` and no
+  `error`, the suites' `assertIsNone(receipt.get("error"))` passed and the run died one
+  line later on an unrelated `FileNotFoundError` for the mock log, or on `[] is not true`
+  and `no-session`. Both suites now drop the binding, which is what
+  `test-issue-73-canonical-root.py` and `test-issue-88-permission-defaults.py` already
+  did, and each start asserts the receipt is not `refused` first, so a future refusal
+  reports its own receipt instead of a misleading downstream error. This is a test-harness
+  change only: the Issue #73 guard is untouched, production Runner commands still require
+  the binding, and nothing is unset globally.
+
 - **One unhandleable agent message no longer kills the ACP holder's reader thread
   (Issue #95).** `AgentConnection._read_loop` called `on_agent_message` unguarded, so the
   first exception that escaped a handler ended the thread while the agent process stayed
