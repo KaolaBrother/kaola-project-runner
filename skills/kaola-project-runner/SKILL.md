@@ -25,14 +25,16 @@ with the loop below; that worker carries no Host obligation, no event binding an
 no extra gate. Direct Project Runner use does not require a ZCode Host.
 
 **ZCode Host** - you are already a named ZCode Host session that loaded this
-Skill and supervises workers on event-driven beats. Outer Agents start or
+Skill through the native `/kaola-project-runner` Skill invocation and
+supervises workers on event-driven beats. Outer Agents start or
 continue that Host through Kaola-Delegator (`kaola-delegator`); do not copy that
 outer procedure here. Role, authorization and lifecycle boundary come from the
 project's existing Project Plan or already-authorized task plan - never a new
 schema, never this session's claim of having loaded this Skill. Your own startup
-receipt, beat, and post-compact recovery:
+receipt, beat, and the one native entry every turn-opening Host prompt shares
+- including the round after any compaction:
 [host-startup.md](references/host-startup.md),
-[zcode-compact-recovery.md](references/zcode-compact-recovery.md).
+[zcode-native-skill-entry.md](references/zcode-native-skill-entry.md).
 
 ## Consumer-project boundary
 

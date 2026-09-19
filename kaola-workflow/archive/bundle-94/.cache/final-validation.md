@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: env -u KAOLA_PROJECT_RUNNER_CANONICAL_REPO ./scripts/validate.sh
+validated_candidate_hash: cf41617c84c5d5d1f9bfff35f87a4912621c3d17f83e4ea6ab425f61554b8b76

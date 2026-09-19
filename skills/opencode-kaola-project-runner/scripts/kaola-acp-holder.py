@@ -165,6 +165,13 @@ HEARTBEAT_DEFECT_CHARS = 200
 # cannot dump an arbitrary body into session/prompt.
 HEARTBEAT_PROMPT_MAX_BYTES = 65536
 OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
+# Issue #94: every turn-opening prompt to a ZCode Host opens with the native
+# Skill command on its own first line so the Skill tool reloads the Project
+# Runner body for this turn - startup, resume, heartbeat, and post-compaction
+# alike. A busy `steer` guide is forwarded into the running turn instead and
+# is no new Skill invocation. The envelope owns this line; the Host's
+# heartbeat `body` does not carry it.
+HOST_SKILL_ENTRY = "/kaola-project-runner"
 # Issue #90: how many recently confirmed worker event ids stay remembered, so a
 # worker retrying the same deterministic event_id after a confirmed Host turn is
 # answered as a duplicate instead of prompting the Host again. A retry follows
@@ -2232,6 +2239,7 @@ class Holder:
                         "authorization and field state from the consuming project records, "
                         "then run one full pass.")
         lines = [
+            HOST_SKILL_ENTRY,
             "kaola-host-notify/1: event-driven heartbeat carrier (ZCode Host)",
             "worker events (structured, one JSON object per line):",
         ]
@@ -2877,7 +2885,12 @@ class Holder:
           rather than pretending an interruption happened;
         * if the cancel is not confirmed, NOTHING is sent and the outcome is
           `unknown` - the Agent verifies before deciding;
-        * the steering text is sent at most once, whatever the send returns.
+        * the steering text is sent at most once, whatever the send returns;
+        * the resend opens a new turn carrying the Agent's text verbatim.
+          This composite path is NOT a Host recovery entry (Issue #94): it
+          never infers a Host and never adds the native Skill entry line -
+          a caller that wants the resend to open a Host round must include
+          `/kaola-project-runner` as the text's own first line.
         """
         text = params.get("text") or ""
         base: dict[str, Any] = {
@@ -3008,7 +3021,10 @@ class Holder:
                          "cancelled_turn_stop_reason": None,
                          "cancelled_turn_mutation_status": None})
 
-        # Exactly one send, through the ordinary admission path.
+        # Exactly one send, through the ordinary admission path, carrying the
+        # Agent's text verbatim. This send opens a NEW turn; the composite
+        # path is not a Host recovery entry (Issue #94) and adds no native
+        # Skill entry line - the caller supplies it when wanted.
         prompt = self.op_prompt({"text": text, "wait": False})
         base["send_receipt"] = {
             key: prompt.get(key) for key in

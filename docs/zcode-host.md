@@ -14,9 +14,10 @@ Runner sessions end to end. Phase 2 adds the event-driven heartbeat carrier
   form. `./scripts/install-local.sh --runtime zcode --method copy` installs
   the generated Skills into `$HOME/.zcode/skills`, sibling `kaola-project-runner`
   plus the nine `<platform>-kaola-project-runner` workers. A **workspace**
-  `.zcode/skills` destination — the live-verified discovery layout — is the
-  same payload reached through the explicit `--skills-dir /abs/path`, because
-  `--skills-dir` accepts any absolute destination parent. The two layouts are
+  skills destination — `.zcode/skills` and `.agents/skills` are both
+  live-verified default discovery roots — is the same payload reached
+  through the explicit `--skills-dir /abs/path`, because
+  `--skills-dir` accepts any absolute destination parent. The layouts are
   the same Skill payload; only the discovery root differs.
 
 ## The generic ACP entry
@@ -226,8 +227,11 @@ worker agent terminated / worker turn ended (one idle episode)
   worker's live `pending_permissions` before acting, ignore a vanished request
   idempotently, and approve nothing from the event itself. A stale approval
   attempt is refused with `no-pending-permission`.
-- **Payload.** One literal prompt: fixed structured event metadata (one JSON
-  object per event: id, kind, platform, session, repo, reason, event cursor,
+- **Payload.** One literal prompt: the native Skill entry
+  `/kaola-project-runner` as its own first line (Issue #94 — the holder
+  prepends it; the `body` never carries it), then fixed structured event
+  metadata (one JSON object per event: id, kind, platform, session, repo,
+  reason, event cursor,
   and `request_id` when the kind carries one),
   the current **full** heartbeat prompt body read at delivery time from
   `<repo>/.kaola/heartbeat-prompt.json` — the single file the ZCode Host agent
@@ -348,57 +352,86 @@ any of the machinery above:
 No role parameter, launcher, state machine, config system, scheduler, or
 approval gate was added for either flow.
 
-## Context compaction recovery (Issue #75)
+## The native Skill entry, including across compaction (Issue #94)
 
-ZCode 0.16.5 has no compaction hook: `SessionStart` fires only on `startup`
-and `resume`, the hook event enum carries no compact event, and nothing about
-compaction reaches the ACP session stream — `observe`/`capture` expose no
-compaction field and `context_usage` stays null. Recovery is a
-Host/Skill-layer carrier, verified live on ZCode 3.12.3:
+Every turn-opening prompt to a ZCode Host — the first handoff, a resume or
+attach update `send`, a worker-event notification, and the round after any
+compaction — opens with `/kaola-project-runner` on its own first line. ZCode
+keeps each enabled Skill's metadata visible to the model per request
+(injected alongside the `AGENTS.md` prefix, outside the history compaction
+rewrites) and instructs it to invoke `/<skill-name>` through the Skill tool,
+so the first line produces a native `Skill` tool_call that loads the body
+while the rest of the prompt is handled normally. A busy `steer` guide is
+different by construction: the holder forwards it into the already-running
+turn verbatim (the Issue #65/#81 transport), so it produces no new prompt
+and no new `Skill` tool_call — the running turn keeps the Skill body it
+loaded at its own first line, and no re-invocation is claimed or required
+there. The composite `steer --steer-mode interrupt` is different again: its
+cancel-then-resend creates a genuinely new turn and carries the Agent's
+text verbatim on every session — it is not a Host recovery entry and adds
+no entry line, so do not use it to open a Host round unless the caller
+supplies `/kaola-project-runner` as the steering text's own first line.
+Verified live on ZCode 3.12.3 with the repo adapter 0.3.3:
 
-- **Trigger.** A `session/prompt` whose text is `/compact` routes through the
-  runtime's normal turn-command path into a real manual compaction, persisted
-  as `compaction` and `context_compaction` rows in `db.sqlite`'s `part` table
-  with `trigger:"manual"`, `auto:false` — verified against a live session.
-  The runtime also exposes a programmatic `session/compact` RPC that produces
-  the identical record family mid-run (verified live); it is not reachable
-  through the adapter's fixed method dispatch today. Auto-compaction writes
-  the same record family — verified live on an isolated MOCK provider with a
-  declared small `contextWindow` (personal-provider model rule, scratch
-  `HOME` only): real `trigger:"auto"` / `compactReason:"context_limit"` /
-  `phase:"pre_request"` / `status:"completed"` part rows committed by the
-  installed runtime. Both catalog models report a 1M context window, so
-  auto-compaction on a real GLM account stays beyond bounded cost.
-- **Carrier.** The controlling Agent puts the recovery carrier —
-  `references/zcode-compact-recovery.md` inside the installed main Skill —
-  once at the head of the next prompt to the compacted Host. Verified:
-  post-compact, the model executed a real `read` of the installed Skill and
-  quoted the reload marker planted in its payload (`KPR-SKILL-RELOAD-7931`
-  in the experiment; `KPR-SKILL-RELOAD-V1` ships in the reference).
-- **Detection honesty.** An Agent-requested compaction is self-evident; any
-  other compaction is silent in the ACP stream. A read-only `part`-table
-  cursor on `db.sqlite` confirms it (verified live: the rows are committed
-  synchronously) but stays a diagnostic the Agent may run — never a per-send
-  transport gate, a cursor ledger, or a hooks/config change. A
-  `UserPromptSubmit` hook could carry recovery too — live-verified in
-  isolated scope (project `plugins.dirs` + plugin `hooks/hooks.json`, zero
-  user-global writes): the hook fires on every prompt, a read-only `part`
-  cursor detects the episode, and the injected `additionalContext` made the
-  model re-read the Skill after both `/compact` and `session/compact`. It
-  adds a process per prompt and runtime state under `$ZCODE_PLUGIN_DATA`;
-  adoption is a boundary decision for outer review, not shipped here.
-- **Durable prefix.** Workspace `AGENTS.md` content is resolved once per
-  session into the per-request context prefix — outside the history
-  compaction rewrites — verified live: an AGENTS-only marker was still
-  quoted after a real `/compact`, and a standing "reload the Skill if its
-  text is gone" instruction drove a real `read` plus the reload marker
-  with no carrier in the prompt. That makes a planted AGENTS block the
-  trigger-agnostic carrier — verified end-to-end for `trigger:"auto"` too:
-  on the MOCK-provider session, every conversation inference after each
-  real auto-compaction still carried the `# agentsMd` section and the
-  standing instruction on the wire. SessionStart/hook `additionalContext`
-  lands in history instead and is not durable. Adoption is a boundary
-  decision for outer review, not shipped here.
+- Real GLM model: `/kaola-project-runner` produces a native `Skill`
+  tool_call; a manual `/compact` then `/kaola-project-runner` produces a
+  **new** `Skill` tool_call returning a Skill-body marker — not a manual
+  `read` of a `SKILL.md` path.
+- Command plus trailing prompt text: the `Skill` tool_call fires and the
+  rest of the prompt is handled normally — the exact form the notification
+  envelope uses (`kaola-acp-holder` prepends the line; the Host's
+  `heartbeat-prompt.json` `body` never carries it).
+- Real `trigger:"auto"` compactions (isolated mock provider, declared small
+  `contextWindow`, scratch `HOME`): the request after each completed
+  compaction still carries the `/<skill-name>` invocation rule and the
+  `kaola-project-runner` skill metadata on the wire.
+- Discovery roots (Issue #94 review fix): the installed 3.12.3 binary
+  resolves workspace `.zcode/skills` and `.agents/skills`, user
+  `~/.zcode/skills` and `~/.agents/skills`, plus both roots on ancestor
+  directories up to the workspace boundary — the defaults. Configured
+  roots add more: `skills.roots` in `~/.zcode/cli/config.json` is passed
+  to the skills service as `extraRoots`, and `plugins.dirs` in the same
+  file makes the runtime scan a plugin dir's `skills/`; a scratch-HOME
+  live probe injected the `kaola-project-runner` metadata from each
+  `.agents/skills` root, from a `skills.roots` root (`file:` at the
+  configured dir), and `kpr-extra:kaola-project-runner` (loadable as
+  `kaola-project-runner`) from a configured plugin dir.
+- Composite interrupt steer (Issue #94 re-review): the holder's
+  `--steer-mode interrupt` resend carries the Agent's text verbatim on a
+  genuinely new turn — contract-tested end-to-end on a Host-shaped
+  session and an ordinary worker alike; it is not a Host recovery entry.
+
+The discovery precondition is the install: the generated
+`kaola-project-runner` Skill must sit where the Host session discovers
+skills — default roots `<repo>/.zcode/skills/`, `<repo>/.agents/skills/`,
+`~/.zcode/skills/`, or `~/.agents/skills/` (ancestor-directory roots are
+also scanned; configured `skills.roots` and `plugins.dirs` roots scan
+too; plugin cache roots are a separate mechanism). A `--skills-dir` outside every
+discovered root — default or configured — still works for an agent that
+reads the file itself, but a ZCode Host does not read the file; if a
+beat's `capture`
+shows no `Skill` tool_call, the install is wrong — fix it, never substitute
+a manual read.
+
+Boundaries held: no project `AGENTS.md` block is planted, ordinary Agents
+in a consuming repo carry no Host recovery instruction, and no hook,
+plugin, command registry, scheduler, polling loop, role classifier,
+session marker, cursor ledger, or state machine was added. The superseded Issue #75 design (durable `AGENTS.md`
+carrier, per-send carrier text, manual `SKILL.md` reread) is removed from
+the generated Skill; its runtime findings stay true and are kept in
+`references/zcode-native-skill-entry.md`: ZCode 0.16.5/3.12.3 has no
+compaction hook (`SessionStart` fires on `startup`/`resume` only), no
+compaction reaches the ACP stream (`observe`/`capture` show none,
+`context_usage` stays null), `/compact` and the `session/compact` RPC write
+the same `compaction`/`context_compaction` `part` rows, auto-compaction
+writes the same rows, and a read-only `part`-table cursor stays an optional
+diagnostic — never a per-send gate. Not verified: real-model behaviour
+after a genuine auto-compaction (the catalog GLM models are 1M-window, so
+forcing one is beyond bounded cost), any compact-specific ACP event,
+because none exists, and a `Skill` tool_call from a busy `steer` guide —
+steer forwards the guide into the running turn and no re-invocation is
+claimed there (the interrupt resend's first line is contract-tested; its
+`Skill` tool_call follows the same verified entry mechanism).
 
 ## Verification
 

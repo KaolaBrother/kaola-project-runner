@@ -838,18 +838,21 @@ class DocMaintenanceSurface(unittest.TestCase):
         self.assertLessEqual(self.ref_path.stat().st_size, self.ref_budget)
 
 
-class ZcodeCompactCarrierSurface(unittest.TestCase):
-    """The ZCode Host/Skill-layer carrier renders into the orchestrator Skill.
+class ZcodeNativeEntrySurface(unittest.TestCase):
+    """Issue #94: the native Skill entry reference renders into the Skill.
 
-    ZCode has no compact hook (verified: SessionStart fires on
-    startup/resume only), so recovery rides the controlling Agent's next
-    prompt. These tests pin the rendered carrier and the host-startup
-    pointer that leads an Agent to it.
+    ZCode has no compact hook and surfaces no compaction through ACP, so the
+    durable carrier is the runtime's own Skill discovery: every turn-opening
+    prompt to the Host opens with ``/kaola-project-runner`` and the Skill tool
+    reloads the body — startup, resume, heartbeat, and post-compaction alike
+    (a busy ``steer`` guide keeps the running turn's loaded context instead).
+    These tests pin the rendered reference and the host-startup pointer that
+    leads an Agent to it; the focused #94 suite pins the rest of the contract.
     """
 
     def setUp(self) -> None:
         orch = PROJECT / "skills" / "kaola-project-runner"
-        self.ref_path = orch / "references" / "zcode-compact-recovery.md"
+        self.ref_path = orch / "references" / "zcode-native-skill-entry.md"
         self.ref = self.ref_path.read_text(encoding="utf-8")
         self.host_startup = (
             orch / "references" / "host-startup.md"
@@ -859,79 +862,41 @@ class ZcodeCompactCarrierSurface(unittest.TestCase):
         )
         self.ref_budget = limits["reference_bytes"]
 
-    def test_carrier_renders_with_markers_and_boundaries(self) -> None:
+    def test_reference_renders_with_entry_and_boundaries(self) -> None:
         for needle in (
-            "KPR-ZCODE-RECOVERY-V1",
-            "KPR-SKILL-RELOAD-V1",
-            "never re-intake, re-claim, restart sessions, or re-dispatch",
-            "never a per-send check, never a",
-            "transport gate, never a cursor ledger",
-            "UserPromptSubmit",
+            "/kaola-project-runner",
+            "native `Skill` tool_call",
+            "trigger:\"auto\"",
+            "no compaction hook",
+            "No `AGENTS.md` block",
+            "never a per-send check",
+            "Not verified",
+            "real-model",
         ):
             self.assertIn(needle, self.ref)
 
-    def test_proof_detail_exists_for_each_installed_skill(self) -> None:
-        """The block's proof detail must live in a file each Skill ships.
-
-        Regression pin for the Delegator-path defect: the durable block and
-        per-send carrier must not send a kaola-delegator Host to quote a
-        marker inside references/zcode-compact-recovery.md — the generated
-        kaola-delegator ships no such file. Its checkable detail lives in
-        references/handoff.md.
-        """
-        blocks = self.ref.split("```text")
-        self.assertGreaterEqual(len(blocks), 3, "durable block + carrier")
-        durable = blocks[1]
-        carrier = blocks[2]
-
-        # kaola-project-runner path: named file exists in the generated
-        # surface and carries the reload marker.
-        self.assertIn("kaola-project-runner", durable)
-        self.assertIn("references/zcode-compact-recovery.md", durable)
-        runner_ref = (
-            PROJECT
-            / "skills"
-            / "kaola-project-runner"
-            / "references"
-            / "zcode-compact-recovery.md"
+    def test_old_carrier_file_is_gone(self) -> None:
+        self.assertFalse(
+            (
+                PROJECT
+                / "skills"
+                / "kaola-project-runner"
+                / "references"
+                / "zcode-compact-recovery.md"
+            ).exists(),
+            "the Issue #75 carrier reference is superseded, not shipped",
         )
-        self.assertTrue(runner_ref.is_file())
-        self.assertIn("KPR-SKILL-RELOAD-V1", runner_ref.read_text())
+        self.assertNotIn("KPR-ZCODE-RECOVERY", self.ref)
+        self.assertNotIn("KPR-SKILL-RELOAD", self.ref)
+        self.assertNotIn("UserPromptSubmit", self.ref)
 
-        # kaola-delegator path: the block points at references/handoff.md —
-        # a file the Delegator genuinely ships — and names its checkable
-        # detail. A delegator is never sent to zcode-compact-recovery.md.
-        for text, name in ((durable, "durable block"), (carrier, "carrier")):
-            self.assertIn("kaola-delegator", text, name)
-            self.assertIn("references/handoff.md", text, name)
-            self.assertIn("orchestrator-main", text, name)
-            self.assertNotIn(
-                "kaola-delegator's references/zcode-compact-recovery.md",
-                text,
-                name,
-            )
-
-        # Generated-surface check when the Delegator ships on this branch
-        # (it lands via main's #74/#86 — absent before rebase).
-        for cand in (
-            PROJECT / "skills" / "kaola-delegator" / "references" / "handoff.md",
-            PROJECT
-            / "templates"
-            / "kaola-delegator"
-            / "references"
-            / "handoff.md.tmpl",
-        ):
-            if cand.is_file():
-                self.assertIn(
-                    "orchestrator-main", cand.read_text(encoding="utf-8"), cand
-                )
-
-    def test_host_startup_points_at_the_carrier(self) -> None:
+    def test_host_startup_points_at_the_entry_reference(self) -> None:
         self.assertIn(
-            "zcode-compact-recovery.md](zcode-compact-recovery.md)",
+            "zcode-native-skill-entry.md](zcode-native-skill-entry.md)",
             self.host_startup,
         )
-        self.assertIn("compacted mid-run", self.host_startup)
+        self.assertIn("/kaola-project-runner", self.host_startup)
+        self.assertNotIn("zcode-compact-recovery", self.host_startup)
 
     def test_budget_holds(self) -> None:
         self.assertLessEqual(self.ref_path.stat().st_size, self.ref_budget)

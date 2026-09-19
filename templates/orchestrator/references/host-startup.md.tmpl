@@ -42,18 +42,24 @@ and its `references/handoff.md`. This section exists only so a Host that loaded
 this Skill does not copy a second outer procedure. Exceptions reach you; worker
 handling does not. Do not take that over session by session.
 
-   A Host whose own context was compacted mid-run cannot re-read this Skill
-   itself — ZCode has no compact hook. The only carrier verified through a
-   real `trigger:"auto"` is an owner-authorized `AGENTS.md` instruction
-   planted before session start; adopted, recovery is already durable.
-   Otherwise it rides your next `send`: the carrier in
-   [zcode-compact-recovery.md](zcode-compact-recovery.md) once at its head —
-   covers a known compaction, never the automatic same-turn case — then
-   continue the same frontier.
+   Every turn-opening prompt to the Host — the first handoff, a resume or
+   attach update, a worker-event notification, and the round after any
+   compaction — opens with `/kaola-project-runner` as its first line. A busy
+   `steer` guide is not a new prompt: it enters the running turn verbatim,
+   keeps the already-loaded context, and is no new Skill invocation. The
+   composite `steer --steer-mode interrupt` ends the turn and resends on a
+   new one verbatim — not a Host recovery entry; supply the first line
+   yourself if a resend must open a Host round. That
+   native invocation is the whole recovery mechanism; no `AGENTS.md` block,
+   role check, or compact detection is involved. Facts and boundaries:
+   [zcode-native-skill-entry.md](zcode-native-skill-entry.md).
 
 ## C. The Host's own startup and beat
 
-Load the main Skill, read the plan and the project's recovery records, and answer
+The prompt that woke you already loaded the main Skill through its first-line
+`/kaola-project-runner` invocation — startup, resume and post-compaction rounds
+alike; never `read` a `SKILL.md` path by hand. Read the plan and the project's
+recovery records, and answer
 with a short startup receipt: role, authorization (platforms, count, implement or
 supervise-only), lifecycle target and stop boundary, where those facts came from,
 whether notification binding is in place, and every unresolved conflict. Then,

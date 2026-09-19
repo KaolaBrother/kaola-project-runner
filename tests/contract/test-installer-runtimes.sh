@@ -171,8 +171,10 @@ assert_link "test_skills_dir_with_spaces_codex" "$dest/codex-kaola-project-runne
   "$(source_for "$repo" codex-kaola-project-runner)"
 assert_absent "test_skills_dir_no_bin_links" "$home/.local/bin/kaola-acp"
 
-# A workspace .zcode/skills destination (the live-verified ZCode Host
-# discovery form) goes through --skills-dir; the payload is identical.
+# A workspace .zcode/skills destination (a live-verified ZCode Host default
+# discovery root; .agents/skills is verified too, and configured
+# skills.roots/plugins.dirs roots also scan) goes through --skills-dir; the
+# payload is identical.
 ws="$tmp_root/workspace-zcode/.zcode/skills"
 output="$(run_installer "$repo" "$home" --skills-dir "$ws" --method link --platform zcode 2>&1)" \
   || fail "test_workspace_zcode_skills_dir" "install failed: $output"

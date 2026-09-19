@@ -119,8 +119,8 @@ still selects the Grok CLI worker. A saved bridge is not live adoption; the owne
 Local Computer UAT is the boundary. See [Grok Bot host](grok-bot-host.md).
 
 ZCode is additionally a native skill-directory **Host** (Issue #62): `--runtime zcode` installs
-to `~/.zcode/skills`, and the live-verified workspace `.zcode/skills` discovery form goes
-through `--skills-dir`; see [ZCode host](zcode-host.md). Nested Host→Worker isolation is a
+to `~/.zcode/skills`, and the live-verified default workspace `.zcode/skills` and `.agents/skills`
+discovery roots go through `--skills-dir`; see [ZCode host](zcode-host.md). Nested Host→Worker isolation is a
 process/session **contract** verified by an offline harness: an inner Runner session started
 under an outer holder is a separate session with its own record-root entry and process
 group. When the outer holder's agent starts the inner session, the nested start appends the

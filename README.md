@@ -149,7 +149,8 @@ historical evidence, not this Skill's contract.
 
 The installer provides native skill-directory destinations for **Codex, Claude Code,
 Cursor, Devin, and ZCode** (`--runtime zcode` → `~/.zcode/skills`; a workspace
-`.zcode/skills` works through `--skills-dir` — see [ZCode host](docs/zcode-host.md);
+`.zcode/skills` or `.agents/skills` works through `--skills-dir` — see
+[ZCode host](docs/zcode-host.md);
 for Codex's `SessionStart(compact)` recovery hook see [Codex host](docs/codex-host.md)).
 **Grok Bot** is a **bridge host** for **Kaola-Delegator**, not a Project Runner
 host (in development on this candidate; not a released account Skill). The account
@@ -322,8 +323,9 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime devin
 
 # ZCode is both a worker platform and a native skill-directory Host:
-# --runtime zcode installs to ~/.zcode/skills; a workspace .zcode/skills
-# destination (the live-verified discovery form) goes through --skills-dir.
+# --runtime zcode installs to ~/.zcode/skills; a workspace .zcode/skills or
+# .agents/skills destination (both live-verified default roots) goes through
+# --skills-dir.
 ./scripts/install-local.sh --runtime zcode
 ./scripts/install-local.sh --skills-dir "$PWD/.zcode/skills"
 

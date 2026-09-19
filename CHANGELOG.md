@@ -85,6 +85,39 @@
   cover the absent-host recovery on Host restart, the repeated offer, the
   settled and agent-exited stale drops, the busy Host staging then flushing, and
   the unchanged idle/unbound paths.
+- **ZCode Host loads Project Runner through the native `/kaola-project-runner`
+  Skill invocation on every turn-opening prompt (Issue #94).** First
+  handoff, resume or attach update `send`, worker-event notification, and
+  the round after any compaction share one entry: the command as the
+  prompt's own first line, resolved through ZCode's Skill tool against the
+  installed `kaola-project-runner` Skill. A busy `steer` guide is forwarded
+  into the running turn verbatim — it keeps the already-loaded context and
+  is not a new `Skill` invocation. The composite `steer --steer-mode
+  interrupt` resends on a genuinely new turn but is not a Host recovery
+  entry — it carries the Agent's text verbatim on every session and adds
+  no entry line, so a caller that uses it to open a Host round supplies
+  `/kaola-project-runner` itself. Verified install-time default discovery
+  roots on ZCode 3.12.3: `<repo>/.zcode/skills/`, `<repo>/.agents/skills/`,
+  `~/.zcode/skills/`, `~/.agents/skills/` (plus both roots on ancestor
+  directories; configured `skills.roots` and `plugins.dirs` roots scan
+  too — a plugin skill surfaces as `<plugin>:<skill>` and stays loadable
+  by its plain name). The host holder prepends that line to the
+  `kaola-host-notify/1` envelope; the Host's `heartbeat-prompt.json` `body`
+  still carries only the working prompt — never the entry line or the Skill
+  body. This replaces the Issue #75 compact-recovery path: no durable
+  `AGENTS.md` block is planted in consuming projects, ordinary Agents carry
+  no Host recovery instruction, and no role filtering, compaction
+  detection, or manual `SKILL.md` reread is required. Verified live on
+  ZCode 3.12.3 / adapter 0.3.3: `/kaola-project-runner` produces a native
+  `Skill` tool_call, a real `/compact` then the command produces a new one,
+  command-plus-trailing-text beats invoke the Skill and process the text,
+  and post-auto-compaction requests (isolated mock provider) still carry
+  the skill metadata on the wire. `references/zcode-compact-recovery.md` is
+  superseded by `references/zcode-native-skill-entry.md`; its runtime facts
+  (no compact hook, silent ACP compaction, `part`-table rows) are kept
+  there. Not verified: real-model behaviour after a genuine auto-compaction
+  (1M-window catalog models), any compact-specific ACP event, and a `Skill`
+  tool_call from a busy `steer` guide — none is claimed there.
 
 - **Native mid-turn steering on ZCode 3.12+ through the v4 command surface,
   event-proven on the installed 3.12.3 (Issue #81).** The retired `session/steer`

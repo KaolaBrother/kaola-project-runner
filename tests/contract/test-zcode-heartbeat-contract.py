@@ -367,9 +367,12 @@ def assert_overflow_full_check(content: str) -> None:
 
 def assert_delivered_notification(sandbox: Sandbox, host: str, content: str,
                                   event_ids: list[str], body: str) -> None:
-    """The delivered prompt is one literal text: fixed metadata, the event
-    lines, the current full heartbeat body verbatim, and the one-pass
-    instruction per PROJECT_RUNNER_HEARTBEAT_V2."""
+    """The delivered prompt is one literal text: the native Skill entry line,
+    fixed metadata, the event lines, the current full heartbeat body verbatim,
+    and the one-pass instruction per PROJECT_RUNNER_HEARTBEAT_V2."""
+    first_line = content.split("\n", 1)[0]
+    check(first_line == "/kaola-project-runner",
+          f"notification payload opens with the native Skill entry line (got {first_line!r})")
     check("kaola-host-notify/1" in content, "notification payload carries its schema marker")
     check("<<<heartbeat-prompt" in content and "heartbeat-prompt>>>" in content,
           "notification payload delimits the heartbeat body verbatim")
@@ -1236,6 +1239,81 @@ def test_issue_87_restore_seeds_generation_from_confirmed_after_rotation() -> No
           f"the continued generation still delivers a full-check ({overflow})")
     check(OVERFLOW_FULL_CHECK_MARK in str(prompts[0].get("text") or "") if prompts else False,
           "the delivered prompt is the full-check")
+
+
+def test_issue_94_interrupt_steer_resends_verbatim_on_every_session() -> None:
+    """Issue #94 re-review: `steer --steer-mode interrupt` resends on a NEW
+    turn but is NOT a Host recovery entry — the holder sends the Agent's
+    text verbatim on every session, infers no Host identity from literal
+    prompt content, and nothing is created or restored across a restart.
+    A caller wanting the resend to open a Host round supplies the entry
+    line itself."""
+    sandbox = Sandbox("i94-interrupt")
+    try:
+        host = sandbox.session()
+        host_start = sandbox.start(host, "slow")
+        # A Host-shaped session — an admitted prompt opened with the native
+        # entry line — still gets a byte-verbatim resend: no prepend, no
+        # marker. `slow` keeps the turn active so the composite cancels for real.
+        sandbox.cli("send", "--no-wait", "--text",
+                    "/kaola-project-runner\nI94-HOST-BODY", session=host)
+        steer = sandbox.cli("steer", "--steer-mode", "interrupt",
+                            "--text", "I94-STEER-BODY", session=host)
+        check(steer.get("steer_outcome") == "interrupted_and_resent",
+              f"the running turn was really interrupted and resent ({steer.get('steer_outcome')})")
+        check("host_skill_entry_prepended" not in steer,
+              f"no prepend receipt exists ({steer})")
+        sends = rpc_sends(sandbox.rpcs[host])
+        check(sends[-1] == "I94-STEER-BODY",
+              f"the resend is byte-verbatim even on a Host-shaped session ({sends[-1][:80]!r})")
+
+        # A caller that supplies the entry line gets it back unchanged —
+        # transport is verbatim in both directions, never inferred.
+        sandbox.cli("send", "--no-wait", "--text", "I94-BUSY-2", session=host)
+        steer2 = sandbox.cli("steer", "--steer-mode", "interrupt",
+                             "--text", "/kaola-project-runner\nI94-ROUND",
+                             session=host)
+        check(steer2.get("steer_outcome") == "interrupted_and_resent",
+              f"an explicit-entry resend also interrupts ({steer2.get('steer_outcome')})")
+        sends = rpc_sends(sandbox.rpcs[host])
+        check(sends[-1] == "/kaola-project-runner\nI94-ROUND",
+              f"a caller-supplied entry passes through unchanged ({sends[-1][:80]!r})")
+
+        # Restart boundary: stop, resume, interrupt again — the resend is
+        # still verbatim; no implicit Host marker exists to lose or restore.
+        sandbox.cli("stop", "--force", session=host)
+        resumed = sandbox.cli("start", "--mode", "yolo", "--resume",
+                              str(host_start["acp_session_id"]),
+                              session=host, scenario="slow")
+        check(resumed.get("state") == "ready", f"host resumes ({resumed.get('error')})")
+        sandbox.cli("send", "--no-wait", "--text", "I94-AFTER-RESUME",
+                    session=host)
+        steer3 = sandbox.cli("steer", "--steer-mode", "interrupt",
+                             "--text", "I94-POST-RESTART", session=host)
+        check(steer3.get("steer_outcome") == "interrupted_and_resent",
+              f"post-restart interrupt resends ({steer3.get('steer_outcome')})")
+        sends = rpc_sends(sandbox.rpcs[host])
+        check(sends[-1] == "I94-POST-RESTART",
+              f"after stop/resume the resend is still verbatim ({sends[-1][:80]!r})")
+
+        worker = sandbox.session()
+        sandbox.start(worker, "slow")
+        sandbox.cli("send", "--no-wait", "--text", "I94-WORKER-BODY",
+                    session=worker)
+        wsteer = sandbox.cli("steer", "--steer-mode", "interrupt",
+                             "--text", "I94-WORKER-STEER", session=worker)
+        check(wsteer.get("steer_outcome") == "interrupted_and_resent",
+              f"the worker interrupt also resends ({wsteer.get('steer_outcome')})")
+        wsends = rpc_sends(sandbox.rpcs[worker])
+        check(wsends[-1] == "I94-WORKER-STEER",
+              f"an ordinary worker resend is verbatim ({wsends[-1][:80]!r})")
+
+        host_stop = sandbox.cli("stop", "--force", session=host)
+        check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
+        worker_stop = sandbox.cli("stop", "--force", session=worker)
+        check(worker_stop.get("residual_pids") == [], "worker stop leaves no residue")
+    finally:
+        sandbox.cleanup()
 
 
 def test_canonical_heartbeat_spec_stays_one_set() -> None:
