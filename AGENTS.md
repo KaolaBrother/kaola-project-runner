@@ -52,8 +52,8 @@ layer. Each layer finishes its own job and does not repeat the next. Detail: `RE
 - **Kaola-Delegator** (`kaola-delegator`): external delegation (Grok Bot / generic / Codex).
   Hand off goal, progress, authorized platforms/quota/priority, and stop boundary to **one**
   ZCode ACP Host that must load Project Runner. The outer Agent does not bind workers or run
-  the inner heartbeat. In development on this candidate; not a released install; Grok Bot live
-  UAT has not been run.
+  the inner heartbeat. Included in v0.4.0; installation on a consuming machine and Grok Bot
+  account-side live UAT require separate verification.
 - **Project Runner** (`kaola-project-runner`): project control plane (Codex / generic / ZCode).
   Recover authorization, plan, dispatch, heartbeat, accept before finalize, close-out. **One
   project has only one Agent running this Skill.**

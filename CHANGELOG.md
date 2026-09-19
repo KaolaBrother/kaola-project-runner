@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-19
 
 - **`./scripts/validate.sh` no longer has to be run with the canonical-root binding
   unset (Issue #96).** Two contract classes start a worker through

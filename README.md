@@ -2,21 +2,55 @@
 
 **Let one agent work through another agent's CLI.**
 
+One outer Agent can coordinate **multiple projects at once**. With Kaola-Delegator, each
+project gets its **own delegated Host** running **one Project Runner Agent**; that Runner
+assigns the project's authorized workers to separate issues. Each worker can use Kaola
+Workflow to autonomously advance its issue, verify the result, and report back. Project
+records and worktrees stay within that project's canonical repository; workers and
+authorization are not pooled across projects.
+
+```mermaid
+flowchart TB
+    U[User: goals and worker limits] --> O[One outer Agent]
+    subgraph A[Project A · canonical repository]
+        DA[Kaola-Delegator: project A]
+        DA --> HA[Delegated Host A]
+        HA --> RA[Project Runner A · sole project orchestrator]
+        RA --> WA1[Claude Code worker] --> IA1[Issue A1 · Workflow run and worktree]
+        RA --> WA2[Cursor worker] --> IA2[Issue A2 · Workflow run and worktree]
+    end
+    subgraph B[Project B · canonical repository]
+        DB[Kaola-Delegator: project B]
+        DB --> HB[Delegated Host B]
+        HB --> RB[Project Runner B · sole project orchestrator]
+        RB --> WB1[Codex worker] --> IB1[Issue B1 · Workflow run and worktree]
+        RB --> WB2[Droid worker] --> IB2[Issue B2 · Workflow run and worktree]
+    end
+    O --> DA
+    O --> DB
+```
+
+This is the **hands-off** path, not a mandatory chain: you can instead load Project Runner
+directly for one project's orchestration, use a Platform Runner to coordinate one or a few
+issues yourself, or use Workflow Next in the current Agent for one issue. A worker's result
+returns to its project's Runner for review and close-out; the outer Agent supervises the
+project-level delegation, not each inner worker.
+
 Pick the most direct entry for how much you want to control. Do not force every task through
 every layer. Each layer finishes its own job and does not repeat the next.
 
 | If you want | Use | What it does | What it does not do |
 |---|---|---|---|
-| Hands-off: delegate the whole project | **Kaola-Delegator** (`kaola-delegator`) | Extract goal, progress, authorized platforms/quota/priority, and stop boundary; start or resume **one** ZCode Host that must load Project Runner | Dispatch workers, copy a Mission List, maintain the inner heartbeat, or bind per-worker variables |
+| Hands-off: delegate the whole project | **Kaola-Delegator** (`kaola-delegator`) | Extract goal, progress, authorized platforms/quota/priority, and stop boundary; start or resume **one** delegated Host that must load Project Runner | Dispatch workers, copy a Mission List, maintain the inner heartbeat, or bind per-worker variables |
 | Control the orchestration | **Project Runner** (`kaola-project-runner`) | Recover authorization, plan, dispatch, heartbeat, accept before finalize, and own close-out | Run as a second orchestrator on the same project |
 | Coordinate one or a few issues yourself | **Platform Runner** (`<platform>-kaola-project-runner`) | Exact-session start, send, read, and stop | Task planning or completion judgment |
 | Do one issue in this Agent | **Workflow Next** | Claim or resume that issue and advance it | Finalize, archive, and sink — those are Workflow finalize |
 
-**Status.** Kaola-Delegator is **in development** on this candidate. It is not a released
-install, and this repository does not claim it is already available on your machine. The only
-orchestration backend it opens today is a **ZCode ACP Host**. Grok Bot live UAT has not been
-run. Nine Platform Runners and Project Runner remain the shipped communication and control-plane
-Skills.
+**Status.** Kaola-Delegator is included in this repository and the v0.4.0 release; installation
+on any particular machine still requires verification. The current Host adapter uses
+**ZCode ACP**; the delegation and project-control layers are not tied to that backend.
+Grok Bot account-side live UAT has not been run. Nine Platform Runners and Project Runner
+remain the communication and control-plane Skills.
 
 **One project, one Project Runner Agent.** Several workers on one project are not several
 orchestrators, and several issues are not a bundle. Start and stop use the bound canonical
@@ -153,7 +187,8 @@ Cursor, Devin, and ZCode** (`--runtime zcode` → `~/.zcode/skills`; a workspace
 [ZCode host](docs/zcode-host.md);
 for Codex's `SessionStart(compact)` recovery hook see [Codex host](docs/codex-host.md)).
 **Grok Bot** is a **bridge host** for **Kaola-Delegator**, not a Project Runner
-host (in development on this candidate; not a released account Skill). The account
+host. Its generated account Skill is included in this release, but account-side live UAT is
+not yet verified. The account
 holds exactly one very small generated Skill,
 `hosts/grok-bot/kaola-delegator.md` (≈ 2 KB), that binds an
 execution target first (Local Computer, or the cloud Agent Computer), asks that target's
