@@ -17,8 +17,34 @@ runs enabled hooks without review). A single user-global ``hooks.json``
 cannot hold two projects' bindings -- installing project B would overwrite
 project A's designated-Host binding, and uninstalling B would strip A. The
 project layer keeps each binding inside the repository it describes, so any
-number of bound Hosts coexist and removal stays strictly local. Nothing here
-ever writes to ``${CODEX_HOME}`` or ``~/.codex``.
+number of bound Hosts coexist and removal stays strictly local. The project
+actions never write to ``${CODEX_HOME}`` or ``~/.codex``.
+
+User layer (Issue #97): an outer Codex Agent that uses the installed
+``kaola-delegator`` may delegate several projects from any repository, so a
+per-project hook cannot cover it. ``user-install`` writes ONE Runner-owned
+entry -- id ``kaola-project-runner:user-compact-context`` -- into the
+official user-level ``${CODEX_HOME:-~/.codex}/hooks.json`` plus private
+asset copies under ``<CODEX_HOME>/kaola-project-runner/hooks/`` (payload
+``compact-recovery-user.md`` and the emitter copy). Its command runs
+``user-emit``, which prints the short CONDITIONAL payload on every
+``SessionStart(compact)``: the text itself tells a session that was already
+using ``kaola-delegator`` or ``kaola-project-runner`` to re-read that
+installed Skill and continue from existing records, and tells every other
+session to do nothing. No session filter, binding table, session registry,
+cwd-based role guess, or heartbeat exists at the user layer. The one
+suppression is coexistence with a legacy project-level entry: when the
+session's ``cwd`` holds a Runner project entry whose ``binding.json`` names
+this exact ``session_id`` and canonical root -- precisely the predicate the
+project ``emit`` fires on -- ``user-emit`` stays silent so one compaction
+never injects two Runner blocks. ``user-uninstall`` and ``user-status``
+touch or report only that entry and those copies; the Kaola Workflow user
+hook and any user-owned entry are preserved and never echoed or copied.
+``user-install`` is idempotent, and it does not change the host's trust
+review: Codex marks a new or changed non-managed hook for review in
+``/hooks`` and loads hooks at session start, so nothing here promises silent
+activation. ``--runtime codex`` (or the legacy Codex default) is the only
+installer path that reaches this layer; ``--skills-dir`` never does.
 
 Host-only filter: the hook command runs a copy of this script (``emit``)
 that reads ``binding.json`` plus the official hook input on stdin --
@@ -92,13 +118,18 @@ import tempfile
 from pathlib import Path
 
 ENTRY_ID = "kaola-project-runner:compact-context"
+USER_ENTRY_ID = "kaola-project-runner:user-compact-context"
 ASSETS_REL = Path(".codex") / "kaola-project-runner" / "hooks"
+USER_ASSETS_REL = Path("kaola-project-runner") / "hooks"
 PAYLOAD_SOURCE = (
     Path(__file__).resolve().parents[1]
     / "templates"
     / "codex-host"
     / "compact-recovery.md"
 )
+USER_PAYLOAD_SOURCE = PAYLOAD_SOURCE.with_name("compact-recovery-user.md")
+PROJECT_ACTIONS = ("prepare", "install", "bind", "uninstall", "status")
+USER_ACTIONS = ("user-install", "user-uninstall", "user-status")
 RECEIPT_LIMIT = 4096
 
 
@@ -602,6 +633,297 @@ def cmd_status(root: Path) -> int:
     return 0
 
 
+# --- user layer (Issue #97) -------------------------------------------------
+
+
+def effective_codex_home(raw: str | None = None) -> Path:
+    """The Codex home the user layer targets, unresolved (may not exist)."""
+    if raw:
+        return Path(raw).expanduser()
+    env = os.environ.get("CODEX_HOME")
+    return Path(env).expanduser() if env else Path.home() / ".codex"
+
+
+def resolve_codex_home(raw: str | None) -> tuple[Path | None, str | None]:
+    """Canonicalize the user-level target, or return a refusal reason.
+
+    The directory must already exist (Codex creates it on first run; the
+    installer creates ``<CODEX_HOME>/skills`` before this runs), and the
+    filesystem root or the user home directory itself is refused so a
+    mistaken ``CODEX_HOME=$HOME`` can never write ``~/hooks.json``.
+    """
+    home = effective_codex_home(raw)
+    if not home.is_dir():
+        return None, f"Codex home is not a directory: {home}"
+    home = Path(os.path.realpath(home))
+    if home == Path(home.anchor):
+        return None, f"Codex home resolves to the filesystem root: {home}"
+    if home == Path(os.path.realpath(Path.home())):
+        return None, f"Codex home resolves to the user home directory: {home}"
+    return home, None
+
+
+def user_hooks_path_for(home: Path) -> Path:
+    return home / "hooks.json"
+
+
+def user_assets_dir_for(home: Path) -> Path:
+    return home / USER_ASSETS_REL
+
+
+def user_payload_path_for(home: Path) -> Path:
+    return user_assets_dir_for(home) / "compact-recovery-user.md"
+
+
+def user_emitter_path_for(home: Path) -> Path:
+    return user_assets_dir_for(home) / "kaola-codex-compact-hook.py"
+
+
+def user_containment_reason(home: Path) -> str | None:
+    """Refuse when a managed user-layer path would escape CODEX_HOME."""
+    for path in (
+        user_hooks_path_for(home),
+        user_assets_dir_for(home),
+        user_assets_dir_for(home).parent,
+        user_payload_path_for(home),
+        user_emitter_path_for(home),
+    ):
+        real = Path(os.path.realpath(path))
+        if real != home and home not in real.parents:
+            return f"{path}: resolves outside the Codex home ({real})"
+    return None
+
+
+def user_hook_entry(emitter: Path) -> dict:
+    command = f"python3 {shlex.quote(str(emitter))} user-emit"
+    return {
+        "matcher": "compact",
+        "hooks": [
+            {
+                "type": "command",
+                "command": command,
+                "timeout": 5,
+            }
+        ],
+        "description": (
+            "Inject the Project Runner conditional compact-recovery prompt "
+            "after context compaction (acted on only by a session already "
+            "using kaola-delegator or kaola-project-runner)"
+        ),
+        "id": USER_ENTRY_ID,
+    }
+
+
+def user_entries(session: object) -> list:
+    return [
+        e
+        for e in (session if isinstance(session, list) else [])
+        if isinstance(e, dict) and e.get("id") == USER_ENTRY_ID
+    ]
+
+
+def cmd_user_install(home: Path) -> int:
+    """Merge the user-level entry and write its private asset copies."""
+    action = "user-install"
+    if not USER_PAYLOAD_SOURCE.is_file():
+        receipt(
+            action,
+            "refused",
+            reasons=[f"missing payload source: {USER_PAYLOAD_SOURCE}"],
+        )
+        return 1
+    hooks_path = user_hooks_path_for(home)
+    payload_path = user_payload_path_for(home)
+    emitter = user_emitter_path_for(home)
+    try:
+        data = load_hooks(hooks_path)
+    except ValueError as exc:
+        receipt(action, "refused", reasons=[str(exc)])
+        return 1
+
+    payload_path.parent.mkdir(parents=True, exist_ok=True)
+    payload_bytes = USER_PAYLOAD_SOURCE.read_bytes()
+    payload_changed = (
+        not payload_path.exists() or payload_path.read_bytes() != payload_bytes
+    )
+    if payload_changed:
+        atomic_write(payload_path, payload_bytes)
+    emitter_bytes = Path(__file__).resolve().read_bytes()
+    emitter_changed = not emitter.exists() or emitter.read_bytes() != emitter_bytes
+    if emitter_changed:
+        atomic_write(emitter, emitter_bytes)
+
+    hooks = data.setdefault("hooks", {})
+    session = hooks.setdefault("SessionStart", [])
+    foreign = [
+        e
+        for e in session
+        if not (isinstance(e, dict) and e.get("id") == USER_ENTRY_ID)
+    ]
+    merged = foreign + [user_hook_entry(emitter)]
+    changed = session != merged
+    if changed:
+        session[:] = merged
+        write_hooks(hooks_path, data)
+    receipt(
+        action,
+        "ok",
+        changed=changed or payload_changed or emitter_changed,
+        codex_home=str(home),
+        hooks_json=str(hooks_path),
+        payload=str(payload_path),
+        emitter=str(emitter),
+        entry_id=USER_ENTRY_ID,
+        foreign_session_start=len(foreign),
+        trust_review_required=True,
+    )
+    return 0
+
+
+def cmd_user_uninstall(home: Path) -> int:
+    action = "user-uninstall"
+    hooks_path = user_hooks_path_for(home)
+    payload_path = user_payload_path_for(home)
+    emitter = user_emitter_path_for(home)
+    try:
+        data = load_hooks(hooks_path)
+    except ValueError as exc:
+        receipt(action, "refused", reasons=[str(exc)])
+        return 1
+    removed = 0
+    hooks = data.get("hooks") or {}
+    session = hooks.get("SessionStart")
+    if isinstance(session, list):
+        kept = [
+            e
+            for e in session
+            if not (isinstance(e, dict) and e.get("id") == USER_ENTRY_ID)
+        ]
+        removed = len(session) - len(kept)
+        if removed:
+            session[:] = kept
+            if not session:
+                del hooks["SessionStart"]
+            if not hooks:
+                del data["hooks"]
+            if not data:
+                hooks_path.unlink()
+            else:
+                write_hooks(hooks_path, data)
+    payload_removed = payload_path.is_file()
+    emitter_removed = emitter.is_file()
+    for path in (payload_path, emitter):
+        if path.is_file():
+            path.unlink()
+    for parent in (payload_path.parent, payload_path.parent.parent):
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+    receipt(
+        action,
+        "ok",
+        changed=bool(removed or payload_removed or emitter_removed),
+        removed_entries=removed,
+        payload_removed=payload_removed,
+        emitter_removed=emitter_removed,
+        codex_home=str(home),
+        hooks_json=str(hooks_path),
+    )
+    return 0
+
+
+def cmd_user_status(home: Path) -> int:
+    hooks_path = user_hooks_path_for(home)
+    try:
+        data = load_hooks(hooks_path)
+    except ValueError as exc:
+        receipt("user-status", "refused", reasons=[str(exc)])
+        return 1
+    hooks = data.get("hooks") or {}
+    session = hooks.get("SessionStart")
+    ours = user_entries(session)
+    receipt(
+        "user-status",
+        "ok",
+        installed=bool(ours),
+        entry_id=USER_ENTRY_ID if ours else None,
+        entry_hook_count=(len(ours[0].get("hooks") or []) if ours else 0),
+        codex_home=str(home),
+        hooks_json=str(hooks_path),
+        hooks_json_exists=hooks_path.exists(),
+        session_start_entries=len(session) if isinstance(session, list) else 0,
+        payload=str(user_payload_path_for(home)),
+        payload_present=user_payload_path_for(home).is_file(),
+        emitter_present=user_emitter_path_for(home).is_file(),
+    )
+    return 0
+
+
+def legacy_project_entry_bound(cwd: object, session_id: object) -> bool:
+    """True exactly when the project-level ``emit`` in ``cwd`` would fire.
+
+    Mirrors ``cmd_emit``: the repository at ``cwd`` carries the Runner
+    project entry in its ``.codex/hooks.json`` and its ``binding.json`` names
+    this ``session_id`` with ``cwd`` as the canonical root. Any unreadable or
+    unmatched shape is False -- the user layer then speaks.
+    """
+    if not isinstance(cwd, str) or not cwd or not isinstance(session_id, str):
+        return False
+    try:
+        root = Path(os.path.realpath(cwd))
+        project_hooks = json.loads(
+            (root / ".codex" / "hooks.json").read_text(encoding="utf-8")
+        )
+        binding = json.loads(
+            (root / ASSETS_REL / "binding.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return False
+    if not isinstance(project_hooks, dict) or not isinstance(binding, dict):
+        return False
+    hooks = project_hooks.get("hooks")
+    session = hooks.get("SessionStart") if isinstance(hooks, dict) else None
+    if not any(
+        isinstance(e, dict) and e.get("id") == ENTRY_ID
+        for e in (session if isinstance(session, list) else [])
+    ):
+        return False
+    bound_root = binding.get("project_root")
+    if binding.get("session_id") != session_id or not isinstance(bound_root, str):
+        return False
+    try:
+        return Path(os.path.realpath(bound_root)) == root
+    except OSError:
+        return False
+
+
+def cmd_user_emit() -> int:
+    """Print the conditional payload for every ``SessionStart(compact)``.
+
+    Reads the official hook input on stdin. The payload beside this script
+    copy is printed unless a legacy project-level Runner entry in the
+    session's ``cwd`` is bound to this exact session -- then that entry
+    carries the recovery and this one stays silent. Always exits 0.
+    """
+    here = Path(__file__).resolve().parent
+    try:
+        event = json.loads(sys.stdin.read() or "null")
+    except json.JSONDecodeError:
+        return 0
+    if not isinstance(event, dict):
+        return 0
+    if event.get("hook_event_name") != "SessionStart" or event.get("source") != "compact":
+        return 0
+    if legacy_project_entry_bound(event.get("cwd"), event.get("session_id")):
+        return 0
+    try:
+        sys.stdout.buffer.write((here / "compact-recovery-user.md").read_bytes())
+    except OSError:
+        pass
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -615,12 +937,23 @@ def main(argv: list[str] | None = None) -> int:
             "writes only binding.json with the designated Host session id; "
             "install is prepare+bind in one step. The entry emits the "
             "recovery payload only for the bound session at the canonical "
-            "--project-root."
+            "--project-root. user-install/user-uninstall/user-status manage "
+            f"the one {USER_ENTRY_ID!r} entry in the user-level "
+            "${CODEX_HOME:-~/.codex}/hooks.json whose user-emit prints a short "
+            "conditional payload on every SessionStart(compact)."
         )
     )
     parser.add_argument(
         "action",
-        choices=("prepare", "install", "bind", "uninstall", "status", "emit"),
+        choices=PROJECT_ACTIONS + ("emit",) + USER_ACTIONS + ("user-emit",),
+    )
+    parser.add_argument(
+        "--codex-home",
+        default=None,
+        help=(
+            "Codex home holding the user-level hooks.json (user-install, "
+            "user-uninstall, user-status; default ${CODEX_HOME:-~/.codex})"
+        ),
     )
     parser.add_argument(
         "--project-root",
@@ -641,6 +974,46 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.action == "emit":
         return cmd_emit()
+    if args.action == "user-emit":
+        return cmd_user_emit()
+    if args.action in USER_ACTIONS:
+        # The user layer binds nothing and takes no project: refuse the
+        # project-only options outright rather than silently ignoring them.
+        stray = [
+            flag
+            for flag, value in (
+                ("--project-root", args.project_root),
+                ("--session-id", args.session_id),
+            )
+            if value is not None
+        ]
+        if stray:
+            receipt(
+                args.action,
+                "refused",
+                reasons=[f"{' '.join(stray)}: not applicable to {args.action}"],
+            )
+            return 1
+        home, reason = resolve_codex_home(args.codex_home)
+        if home is None:
+            receipt(args.action, "refused", reasons=[reason])
+            return 1
+        reason = user_containment_reason(home)
+        if reason:
+            receipt(args.action, "refused", reasons=[reason])
+            return 1
+        if args.action == "user-install":
+            return cmd_user_install(home)
+        if args.action == "user-uninstall":
+            return cmd_user_uninstall(home)
+        return cmd_user_status(home)
+    if args.codex_home is not None:
+        receipt(
+            args.action,
+            "refused",
+            reasons=[f"--codex-home: not applicable to {args.action}"],
+        )
+        return 1
     root, reason = resolve_root(args.project_root)
     if root is None:
         receipt(args.action, "refused", reasons=[reason])
