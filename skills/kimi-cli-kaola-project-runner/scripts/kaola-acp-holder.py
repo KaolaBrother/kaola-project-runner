@@ -2066,9 +2066,11 @@ class Holder:
         Driven by the holder's existing watchdog tick - the one timer this
         process already runs - so there is no second scheduler and no retry
         deadline to outlive. A Host absent for an hour still gets the wake when
-        it comes back, and a wake whose request died meanwhile is dropped here
-        instead of arriving as a prompt nobody can answer. Nothing approves
-        anything; only the locator travels.
+        it comes back, and a wake whose request died before the offer is written
+        is dropped here rather than sent. A request that dies AFTER the write is
+        past this point: the Host has it, the delivery is recorded as stale, and
+        the Host's own re-read of the worker's live ``pending_permissions`` is
+        what keeps it safe. Nothing approves anything; only the locator travels.
         """
         if self.heartbeat_host is None:
             return

@@ -20,8 +20,10 @@ What this file pins:
 * the recovered event reuses the ORIGINAL ``event_cursor``, so its deterministic
   ``event_id`` is the same one the Host would have seen: a repeat is answered by
   the existing Issue #90 dedup, never a second Host prompt or a second approval;
-* a request that was settled, or a worker whose agent exited, before the Host
-  returns is dropped as stale and never wakes the Host;
+* a request that was settled, or a worker whose agent exited, BEFORE the offer is
+  written is dropped as stale and never wakes the Host — while one settled AFTER
+  the write is a stale delivery the Host does receive, recorded as such and left
+  to the Host's own freshness re-read;
 * after the recovered wake the Host permits within its own authorization and the
   ordinary turn-end ``idle`` still follows;
 * a Host that is busy when the wake recovers stages it and flushes at its next
@@ -702,8 +704,9 @@ def test_settled_request_is_stale_and_never_wakes_the_host() -> None:
 
 
 def test_exited_worker_wake_is_stale() -> None:
-    """The worker's agent dies before the host returns: the wake is moot and
-    must not wake the host with a request nobody can answer."""
+    """The worker's agent dies before the host returns, and before any offer is
+    written: that wake is moot and must not be sent. (An agent that dies after a
+    write is the stale-delivery case, not this one.)"""
     sandbox = Sandbox("exited")
     try:
         host = sandbox.session()
@@ -1283,6 +1286,13 @@ def test_a_wake_that_dies_before_the_write_is_not_sent() -> None:
     time the send takes its last look before writing. The proof is the peer:
     it must receive NOTHING.
 
+    SCOPE: SYNTHETIC. The causes are injected into the stub's own state — a
+    pending-permissions map that drops its entry on the second read, an
+    Event-shaped flag that flips. No real ``op_permit``, no holder lock, no ACP
+    response is involved. It pins the branch, at an interleaving a wall-clock
+    race cannot hit reliably. The end-to-end article is
+    ``test_a_real_permit_during_an_offer_is_a_stale_delivery``.
+
     This is the NARROWED window, not a closed one. A settlement landing after
     the write is a different fact and is covered by
     ``test_a_late_settlement_is_a_stale_delivery_not_a_recovery``.
@@ -1344,11 +1354,16 @@ def test_a_late_settlement_is_a_stale_delivery_not_a_recovery() -> None:
     """The window the pre-write check cannot close, told honestly.
 
     Check, write, and the Host's own staging are three steps across two
-    processes. The peer here takes the offer, WITHHOLDS its receipt while a real
-    settlement empties ``pending_permissions``, and only then answers with the
-    exact ``event_id``. The wake really was delivered — claiming otherwise would
-    be a lie — but no approval is waiting any more, and recording that as a
-    recovery is the false semantics this pins against.
+    processes. The peer here takes the offer, WITHHOLDS its receipt while the
+    request is settled, and only then answers with the exact ``event_id``. The
+    wake really was delivered — claiming otherwise would be a lie — but no
+    approval is waiting any more, and recording that as a recovery is the false
+    semantics this pins against.
+
+    SCOPE: SYNTHETIC settlement. ``pending_permissions.pop`` on the stub is not
+    an ``op_permit``: no holder lock is taken and no ACP response is written.
+    What it pins precisely is the post-write branch. The same outcome through a
+    real ``permit`` is ``test_a_real_permit_during_an_offer_is_a_stale_delivery``.
     """
     holder_module = load_holder_module()
     key = "zc-1"
@@ -1395,6 +1410,79 @@ def test_a_late_settlement_is_a_stale_delivery_not_a_recovery() -> None:
           "and keeping the Host's own receipt, so the delivery is not hidden")
     check(str(stale[0]["request_id"]) == key and stale[0]["event_cursor"] == 11,
           "with the same locator the Host was given")
+
+
+def test_a_real_permit_during_an_offer_is_a_stale_delivery() -> None:
+    """The same post-write race, driven by a REAL ``permit`` end to end.
+
+    No stub: a live worker holder, a live ACP agent, a real retry from the real
+    watchdog tick. A peer bound at the absent Host's socket takes that offer and
+    WITHHOLDS its receipt; while it is withheld the test runs the ordinary
+    ``kaola-acp permit`` CLI, which goes through ``op_permit``, takes the holder
+    lock and writes a real JSON-RPC response to the agent. Only then is the
+    receipt released, naming the exact event the worker sent.
+
+    The wake IS delivered — the peer holds the bytes — and no approval is
+    waiting by the time the receipt lands. That must be recorded as a stale
+    delivery, never as a recovery.
+    """
+    sandbox = Sandbox("realpermit")
+    try:
+        host = sandbox.session()
+        worker = sandbox.session()
+        arm_pending_wake_with_absent_host(sandbox, host, worker)
+        worker_dir = sandbox.record_dir(worker)
+        wait_until(lambda: events_of_kind(worker_dir, "heartbeat_carrier_undelivered"), 25,
+                   "the worker retains the undelivered wake")
+
+        offered = threading.Event()
+        release = threading.Event()
+
+        def responder(index: int, request: bytes) -> bytes:
+            params = (json.loads(request.decode("utf-8")) or {}).get("params") or {}
+            receipt = json.dumps({"event_id": expected_event_id(params),
+                                  "staged": True, "pending": 1}) + "\n"
+            if index == 0:
+                offered.set()      # the Host HAS the wake now
+                release.wait(60)   # ... the real permit happens in here ...
+            return receipt.encode()
+
+        with FakePeer(holder_socket(sandbox.record_dir(host)), responder) as peer:
+            wait_until(offered.is_set, RECOVERY_TIMEOUT,
+                       "the watchdog's retry reaches the peer")
+            check(peer.count() == 1, f"exactly one offer is in flight ({peer.count()})")
+            status = sandbox.cli("status", session=worker)
+            check(len(status.get("pending_permissions") or []) == 1,
+                  "the request is still pending as the offer sits in flight")
+
+            # A REAL permit: the ordinary CLI, op_permit, the holder lock, and a
+            # genuine JSON-RPC answer to the waiting agent.
+            permit = sandbox.cli("permit", "--option", "allow", session=worker)
+            check(permit.get("permitted") is not None,
+                  f"the real permit settles the request ({permit.get('error')})")
+            check(not (sandbox.cli("status", session=worker).get("pending_permissions") or []),
+                  "nothing is pending any more, while the receipt is still withheld")
+            release.set()
+
+            wait_until(lambda: events_of_kind(worker_dir, "heartbeat_carrier_delivered_stale"),
+                       30, "the delivery is recorded as stale, not as a recovery")
+
+        stale = events_of_kind(worker_dir, "heartbeat_carrier_delivered_stale")
+        check(len(stale) == 1 and stale[0].get("reason") == "permission-settled",
+              f"a real permit is what overtook it ({stale})")
+        check(stale[0].get("event_kind") == "permission_required",
+              f"and it is the permission wake ({stale[0]})")
+        check((stale[0].get("receipt") or {}).get("staged") is True,
+              "the Host's own receipt is kept — the delivery is not hidden")
+        check(not events_of_kind(worker_dir, "heartbeat_carrier_recovered"),
+              "no recovery is claimed for a wake whose approval was already gone")
+        check(not (sandbox.cli("status", session=worker).get("undelivered_worker_events")),
+              "nothing is still owed to the Host")
+
+        stop = sandbox.cli("stop", "--force", session=worker)
+        check(stop.get("residual_pids") == [], "worker stop leaves no residue")
+    finally:
+        sandbox.cleanup()
 
 
 def test_the_host_contract_requires_fresh_verification() -> None:
@@ -1460,6 +1548,7 @@ TESTS = (
     test_an_accepting_receipt_must_name_the_event_that_was_sent,
     test_a_wake_that_dies_before_the_write_is_not_sent,
     test_a_late_settlement_is_a_stale_delivery_not_a_recovery,
+    test_a_real_permit_during_an_offer_is_a_stale_delivery,
     test_the_host_contract_requires_fresh_verification,
 )
 

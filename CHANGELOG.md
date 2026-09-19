@@ -53,10 +53,12 @@
   dispatch reference and heartbeat prompt already require and now pin by test:
   the event is a LOCATOR, the Host re-reads the worker's live
   `pending_permissions` before acting, a vanished request is ignored
-  idempotently, and nothing is ever approved from the event itself. A wake whose request was settled, or whose worker agent
-  exited, before the Host returns is dropped as stale and never becomes a prompt;
-  a Host that still acts on the stale locator gets the ordinary
-  `no-pending-permission` refusal. Only the exact locator and `request_id`
+  idempotently, and nothing is ever approved from the event itself. A wake whose
+  request was settled, or whose worker agent exited, BEFORE the offer is written
+  is dropped as stale and never becomes a prompt; one settled after the write is
+  a stale delivery the Host does see, and what protects it there is that
+  re-observation plus the ordinary `no-pending-permission` refusal on any stale
+  approval. Only the exact locator and `request_id`
   travel — never a title, option, tool input, command, or credential — and the
   event still approves nothing: the Host decides `permit`/reject inside its own
   authorization, after which the ordinary turn-end `idle` arrives as before.
