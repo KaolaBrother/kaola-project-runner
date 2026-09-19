@@ -652,6 +652,8 @@ def resolve_codex_home(raw: str | None) -> tuple[Path | None, str | None]:
     filesystem root or the user home directory itself is refused so a
     mistaken ``CODEX_HOME=$HOME`` can never write ``~/hooks.json``.
     """
+    if raw is not None and not raw.strip():
+        return None, "--codex-home is empty"
     home = effective_codex_home(raw)
     if not home.is_dir():
         return None, f"Codex home is not a directory: {home}"
@@ -694,6 +696,29 @@ def user_containment_reason(home: Path) -> str | None:
     return None
 
 
+def user_install_blockers(home: Path) -> list[str]:
+    """Reasons a user-install would fail before or during its writes.
+
+    Reported by ``user-status`` (``install_blockers``) so the installer can
+    refuse during planning, before its first Skill write, and re-checked by
+    ``user-install`` itself so every failure is a receipt, never a traceback.
+    """
+    blockers: list[str] = []
+    if not USER_PAYLOAD_SOURCE.is_file():
+        blockers.append(f"missing payload source: {USER_PAYLOAD_SOURCE}")
+    for path in (user_assets_dir_for(home).parent, user_assets_dir_for(home)):
+        if path.exists() and not path.is_dir():
+            blockers.append(f"{path}: exists and is not a directory")
+    for path in (user_payload_path_for(home), user_emitter_path_for(home)):
+        if path.exists() and not path.is_file():
+            blockers.append(f"{path}: exists and is not a regular file")
+    if user_hooks_path_for(home).exists() and not user_hooks_path_for(home).is_file():
+        blockers.append(f"{user_hooks_path_for(home)}: exists and is not a regular file")
+    if not os.access(home, os.W_OK):
+        blockers.append(f"{home}: not writable")
+    return blockers
+
+
 def user_hook_entry(emitter: Path) -> dict:
     command = f"python3 {shlex.quote(str(emitter))} user-emit"
     return {
@@ -725,12 +750,9 @@ def user_entries(session: object) -> list:
 def cmd_user_install(home: Path) -> int:
     """Merge the user-level entry and write its private asset copies."""
     action = "user-install"
-    if not USER_PAYLOAD_SOURCE.is_file():
-        receipt(
-            action,
-            "refused",
-            reasons=[f"missing payload source: {USER_PAYLOAD_SOURCE}"],
-        )
+    blockers = user_install_blockers(home)
+    if blockers:
+        receipt(action, "refused", reasons=blockers)
         return 1
     hooks_path = user_hooks_path_for(home)
     payload_path = user_payload_path_for(home)
@@ -741,30 +763,37 @@ def cmd_user_install(home: Path) -> int:
         receipt(action, "refused", reasons=[str(exc)])
         return 1
 
-    payload_path.parent.mkdir(parents=True, exist_ok=True)
-    payload_bytes = USER_PAYLOAD_SOURCE.read_bytes()
-    payload_changed = (
-        not payload_path.exists() or payload_path.read_bytes() != payload_bytes
-    )
-    if payload_changed:
-        atomic_write(payload_path, payload_bytes)
-    emitter_bytes = Path(__file__).resolve().read_bytes()
-    emitter_changed = not emitter.exists() or emitter.read_bytes() != emitter_bytes
-    if emitter_changed:
-        atomic_write(emitter, emitter_bytes)
+    try:
+        payload_path.parent.mkdir(parents=True, exist_ok=True)
+        payload_bytes = USER_PAYLOAD_SOURCE.read_bytes()
+        payload_changed = (
+            not payload_path.exists() or payload_path.read_bytes() != payload_bytes
+        )
+        if payload_changed:
+            atomic_write(payload_path, payload_bytes)
+        emitter_bytes = Path(__file__).resolve().read_bytes()
+        emitter_changed = not emitter.exists() or emitter.read_bytes() != emitter_bytes
+        if emitter_changed:
+            atomic_write(emitter, emitter_bytes)
 
-    hooks = data.setdefault("hooks", {})
-    session = hooks.setdefault("SessionStart", [])
-    foreign = [
-        e
-        for e in session
-        if not (isinstance(e, dict) and e.get("id") == USER_ENTRY_ID)
-    ]
-    merged = foreign + [user_hook_entry(emitter)]
-    changed = session != merged
-    if changed:
-        session[:] = merged
-        write_hooks(hooks_path, data)
+        hooks = data.setdefault("hooks", {})
+        session = hooks.setdefault("SessionStart", [])
+        foreign = [
+            e
+            for e in session
+            if not (isinstance(e, dict) and e.get("id") == USER_ENTRY_ID)
+        ]
+        merged = foreign + [user_hook_entry(emitter)]
+        changed = session != merged
+        if changed:
+            session[:] = merged
+            write_hooks(hooks_path, data)
+    except OSError as exc:
+        # Asset writes are atomic-replace and hooks.json is written last, so
+        # a failure here leaves at most our own copies behind, never a
+        # half-written hooks.json; report it as a receipt, not a traceback.
+        receipt(action, "refused", reasons=[f"{exc.filename or home}: {exc.strerror or exc}"])
+        return 1
     receipt(
         action,
         "ok",
@@ -843,10 +872,12 @@ def cmd_user_status(home: Path) -> int:
     hooks = data.get("hooks") or {}
     session = hooks.get("SessionStart")
     ours = user_entries(session)
+    blockers = user_install_blockers(home)
     receipt(
         "user-status",
         "ok",
         installed=bool(ours),
+        install_blockers=blockers,
         entry_id=USER_ENTRY_ID if ours else None,
         entry_hook_count=(len(ours[0].get("hooks") or []) if ours else 0),
         codex_home=str(home),
@@ -972,10 +1003,13 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
-    if args.action == "emit":
-        return cmd_emit()
-    if args.action == "user-emit":
-        return cmd_user_emit()
+    if args.action in ("emit", "user-emit"):
+        # stdout of the emit modes becomes model context, so a stray option
+        # is never answered with a receipt: an option that the generated hook
+        # command never carries means this is not that command -- stay silent.
+        if args.project_root is not None or args.session_id is not None or args.codex_home is not None:
+            return 0
+        return cmd_emit() if args.action == "emit" else cmd_user_emit()
     if args.action in USER_ACTIONS:
         # The user layer binds nothing and takes no project: refuse the
         # project-only options outright rather than silently ignoring them.

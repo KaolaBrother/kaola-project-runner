@@ -807,7 +807,8 @@ output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex
   || fail "test_user_hook_codex_reinstall" "reinstall failed: $output"
 [[ "$(cat "$codex_home/hooks.json")" == "$hooks_before" ]] || fail "test_user_hook_codex_reinstall_idempotent" "hooks.json changed on reinstall"
 [[ "$output" == *'"changed": false'* ]] || fail "test_user_hook_codex_reinstall_receipt" "expected changed:false, got: $output"
-[[ -z "$(ls "$codex_home" | grep -i backup || true)" ]] || fail "test_user_hook_codex_no_backup" "a backup copy of hooks.json was made"
+[[ "$(ls -A "$codex_home" | sort | tr '\n' ' ')" == "hooks.json kaola-project-runner skills " ]] \
+  || fail "test_user_hook_codex_no_backup" "unexpected siblings in the Codex home: $(ls -A "$codex_home" | tr '\n' ' ')"
 
 # the legacy no-destination default is the Codex destination and installs it too
 codex_home_legacy="$tmp_root/user-hook-codex-legacy"
@@ -836,6 +837,38 @@ for rt in claude-code cursor devin zcode; do
     || fail "test_user_hook_other_runtime_$rt" "install failed: $output"
   assert_absent "test_user_hook_other_runtime_${rt}_no_hooks" "$home_generic/codex-default/hooks.json"
 done
+
+# --skills-dir under the Codex home is still a generic destination
+codex_home_under="$tmp_root/user-hook-codex-under"
+mkdir -p "$codex_home_under"
+output="$(CODEX_HOME="$codex_home_under" run_installer "$repo" "$home_generic" --skills-dir "$codex_home_under/skills" --platform grok,zcode --method link 2>&1)" \
+  || fail "test_user_hook_skills_dir_under_codex_home" "install failed: $output"
+assert_absent "test_user_hook_skills_dir_under_codex_home_no_hooks" "$codex_home_under/hooks.json"
+assert_absent "test_user_hook_skills_dir_under_codex_home_no_assets" "$codex_home_under/kaola-project-runner"
+
+# an asset-path collision or a missing payload template aborts before any Skill write
+codex_home_blocked="$tmp_root/user-hook-codex-blocked"
+mkdir -p "$codex_home_blocked/kaola-project-runner"
+: >"$codex_home_blocked/kaola-project-runner/hooks"
+set +e
+output="$(CODEX_HOME="$codex_home_blocked" run_installer "$repo" "$home" --runtime codex --platform grok,zcode --method link --no-bin-links 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_user_hook_blocked_refused" "unexpected success: $output"
+[[ "$output" == *"cannot be installed"* && "$output" == *"not a directory"* ]] || fail "test_user_hook_blocked_message" "expected blocker refusal, got: $output"
+assert_absent "test_user_hook_blocked_no_skill_write" "$codex_home_blocked/skills"
+repo_nopayload="$tmp_root/repo-user-hook-nopayload"
+make_fixture "$repo_nopayload"
+rm "$repo_nopayload/templates/codex-host/compact-recovery-user.md"
+codex_home_nopayload="$tmp_root/user-hook-codex-nopayload"
+mkdir -p "$codex_home_nopayload"
+set +e
+output="$(CODEX_HOME="$codex_home_nopayload" run_installer "$repo_nopayload" "$home" --runtime codex --platform grok,zcode --method link --no-bin-links 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_user_hook_nopayload_refused" "unexpected success: $output"
+[[ "$output" == *"missing payload source"* ]] || fail "test_user_hook_nopayload_message" "expected payload refusal, got: $output"
+assert_absent "test_user_hook_nopayload_no_skill_write" "$codex_home_nopayload/skills"
 
 # uninstall removes only our entry and assets; foreign entries and file survive
 output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok,zcode --uninstall 2>&1)" \

@@ -526,6 +526,13 @@ if [[ "$resolved_runtime" == codex && "$install_orchestrator" == true ]]; then
       printf 'refusing: Codex user-level hooks.json cannot be merged: %s\n' "$hook_status" >&2
       exit 1
     }
+    if [[ "$mode" == install ]]; then
+      hook_blockers="$("$installer_python" -c 'import json,sys; print("\n".join(json.loads(sys.argv[1]).get("install_blockers") or []))' "$hook_status")"
+      [[ -z "$hook_blockers" ]] || {
+        printf 'refusing: Codex user-level compact-recovery hook cannot be installed:\n%s\n' "$hook_blockers" >&2
+        exit 1
+      }
+    fi
   elif [[ "$mode" == uninstall ]]; then
     want_user_hook=false
   fi

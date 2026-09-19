@@ -297,6 +297,48 @@ class UserLayer(unittest.TestCase):
         self.assertEqual(receipt["result"], "ok")
         self.assertEqual(receipt["codex_home"], str(self.codex_home))
 
+    def test_install_blockers_are_receipts_not_tracebacks(self) -> None:
+        # A regular file where the asset directory must go: user-status
+        # reports it, user-install refuses with a receipt and writes nothing.
+        (self.codex_home / "kaola-project-runner").mkdir()
+        (self.codex_home / "kaola-project-runner" / "hooks").write_text("", encoding="utf-8")
+        status = self.user("user-status")
+        self.assertEqual(status["result"], "ok")
+        self.assertEqual(len(status["install_blockers"]), 1)
+        self.assertIn("not a directory", status["install_blockers"][0])
+        receipt = self.user("user-install")
+        self.assertEqual(receipt["result"], "refused")
+        self.assertEqual(receipt["_rc"], 1)
+        self.assertNotIn("Traceback", receipt["_stderr"])
+        self.assertIn("not a directory", receipt["reasons"][0])
+        self.assertFalse(self.hooks_path.exists())
+        # A clean home reports no blockers.
+        clean = Path(self.tmp.name) / "clean-home"
+        clean.mkdir()
+        self.assertEqual(run_hook("user-status", "--codex-home", str(clean))["install_blockers"], [])
+
+    def test_empty_codex_home_is_refused(self) -> None:
+        for action in ("user-status", "user-install", "user-uninstall"):
+            receipt = run_hook(action, "--codex-home", "", env={"CODEX_HOME": str(self.codex_home)})
+            self.assertEqual(receipt["result"], "refused", (action, receipt))
+            self.assertIn("empty", receipt["reasons"][0])
+        self.assertFalse(self.hooks_path.exists())
+
+    def test_emit_modes_stay_silent_on_stray_options(self) -> None:
+        self.user("user-install")
+        for cli in (
+            ("user-emit", "--codex-home", str(self.codex_home)),
+            ("user-emit", "--project-root", str(self.repo)),
+            ("emit", "--codex-home", str(self.codex_home)),
+        ):
+            with self.subTest(cli):
+                proc = subprocess.run(
+                    [sys.executable, str(SCRIPT), *cli], capture_output=True, text=True,
+                    input=hook_input(self.repo), timeout=30,
+                )
+                self.assertEqual(proc.returncode, 0)
+                self.assertEqual(proc.stdout, "", "a receipt on stdout would become model context")
+
     def test_hooks_json_symlink_cannot_escape_codex_home(self) -> None:
         outside = Path(self.tmp.name) / "outside-hooks.json"
         outside.write_text(json.dumps({"hooks": {"SessionStart": [FOREIGN_USER]}}), encoding="utf-8")

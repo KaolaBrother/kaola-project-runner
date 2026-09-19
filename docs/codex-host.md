@@ -75,8 +75,12 @@ python3 scripts/kaola-codex-compact-hook.py user-uninstall [--codex-home DIR]
   file). No backup copy of `hooks.json` is ever made; `user-status` reports
   presence and counts but never any entry's `command`. A malformed
   `hooks.json` — including JSON-null `hooks` or `hooks.SessionStart` — is
-  refused before any write, and the installer plans that refusal before its
-  first Skill write, so a broken user configuration aborts the whole install.
+  refused before any write. `user-status` also lists `install_blockers` (a
+  missing payload template, a non-directory where the asset directory must
+  go, a non-file at an owned leaf, an unwritable home), `user-install`
+  refuses on any of them with a receipt rather than a traceback, and the
+  installer plans both refusals before its first Skill write, so a broken
+  user configuration aborts the whole install with nothing written.
 - **Boundaries.** The Codex home must already exist; the filesystem root and
   the user home directory itself are refused, as is any managed path whose
   real path escapes the Codex home (a symlinked `hooks.json` pointing
