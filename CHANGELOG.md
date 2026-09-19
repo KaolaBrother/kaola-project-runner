@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 — 2026-09-20
 
 - **dsh (DeepSeek Harness) is the tenth worker platform, ACP only (Issue #98).** `dsh` ships its
   own automation-only ACP v1 stdio server, `dsh --profile acp`, so the Runner binds to it directly
