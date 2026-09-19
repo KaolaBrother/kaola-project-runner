@@ -3,13 +3,13 @@
 ## Change boundary
 
 The existing Grok Workflow contract is golden and live-proven historical evidence. Do not rewrite its
-bytes. It is not the active Runner authority: all nine worker Skills use the shared communication-only
+bytes. It is not the active Runner authority: all ten worker Skills use the shared communication-only
 template and do not impose task modes, prompts, PR handoff, heartbeat, scheduler, or closing policy.
 Project-level heartbeat, acceptance, Workflow merge preference with conditional open-PR priority, idle-session stop, and end-of-run close-out live in the generated main Skill `kaola-project-runner`.
 
 ## Source of truth
 
-- Active nine-platform worker Skill: `templates/SKILL.md.tmpl`.
+- Active ten-platform worker Skill: `templates/SKILL.md.tmpl`.
 - Main orchestrator Skill: `templates/orchestrator/` (English `SKILL.md.tmpl`; not a platform
   manifest or adapter).
 - One canonical Skill system, host adapters for packaging: every host output is derived by
@@ -126,7 +126,7 @@ verified in the start receipt and reused on later dispatches and same-issue rest
 Workflow run claims one real issue, and several workers may share that issue's run and Mission
 List under distinct names and native sessions. This is scheduling policy carried by the main
 Skill and the rendered heartbeat (`templates/orchestrator/references/issue-dispatch.md`): the
-nine worker Skills gain no classifier, the 1-80 `--session` syntax is the only validator, no
+ten worker Skills gain no classifier, the 1-80 `--session` syntax is the only validator, no
 registry, daemon, or Workflow state field is added, and a running session is never renamed or
 restarted to adopt the rule. Whether any consumer displays issue-run progress from these names
 is outside this repository and is not verified here.
