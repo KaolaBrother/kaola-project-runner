@@ -1,3 +1,0 @@
-verdict: pass
-validation_command: KAOLA_PROJECT_RUNNER_CANONICAL_REPO=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner ./scripts/validate.sh
-validated_candidate_hash: 0ccc2dd578c5c220896e8161061b2e62fb2f71f5edfd149df276d5931cbe6d6a
