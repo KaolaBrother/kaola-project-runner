@@ -148,6 +148,9 @@ worker agent terminated / worker turn ended (one idle episode)
   -> worker holder's existing on_agent_exit / turn-end /
      request-permission paths
      -> one socket op `worker_event` to the ZCode Host holder
+        (an UNDELIVERED permission_required is retained and re-offered from
+         the holder's existing 15s idle_watcher tick - no new thread, loop,
+         scheduler or deadline; Issue #92)
         -> bounded in-memory staging list (cap 32 detailed events, deduped by event id)
            -> if a later event cannot stage: one full-check generation in the
               same event log (not a 33rd detailed line)
@@ -196,7 +199,33 @@ worker agent terminated / worker turn ended (one idle episode)
   existing authorization or escalates), a re-sent request id stays one wake,
   and the ordinary turn-end `idle` still arrives after the request settles.
   The 600s `idle_watcher` stays a non-business exit timer and is never a
-  heartbeat event.
+  heartbeat event, though Issue #92 does re-offer an undelivered
+  `permission_required` from that same tick.
+- **Undelivered permission wakes (Issue #92).** A pending permission keeps the
+  worker turn ACTIVE, so no turn-end `idle` will ever carry it: if the bound
+  Host holder is not listening when it is raised, that single send is the only
+  chance the carrier gets. The worker holder therefore RETAINS an undelivered
+  `permission_required` and re-offers it, with the ORIGINAL `event_cursor` so
+  the deterministic `event_id` is unchanged and a repeat meets the existing
+  dedup. It is owed only while the Host never took it - `host-unreachable`,
+  `host-closed`, `host-reply-invalid`, `unknown-op`; any receipt the Host
+  produced settles it, refusal included. There is no attempt cap and no
+  expiry: the wake lives as long as the request it locates. `observe`/`status`
+  report what is still owed as `undelivered_worker_events` (locator, attempts,
+  last error).
+- **A delivered wake is not a live approval (Issue #92).** Staleness is
+  re-read immediately before the bytes go out, so a request settled, an agent
+  exited, or a stop begun BEFORE the write aborts that offer
+  (`heartbeat_carrier_dropped`). That narrows the window and does not close
+  it: check, write, and the Host's own staging are three steps across two
+  processes, so a settlement landing AFTER the write still leaves the Host
+  holding a locator for a request that is gone. That case is recorded as
+  `heartbeat_carrier_delivered_stale` - carrying the reason and the Host's own
+  receipt - and never as `heartbeat_carrier_recovered`. What keeps it safe is
+  the Host side, not the carrier: the event is a LOCATOR, so re-read the
+  worker's live `pending_permissions` before acting, ignore a vanished request
+  idempotently, and approve nothing from the event itself. A stale approval
+  attempt is refused with `no-pending-permission`.
 - **Payload.** One literal prompt: fixed structured event metadata (one JSON
   object per event: id, kind, platform, session, repo, reason, event cursor,
   and `request_id` when the kind carries one),
