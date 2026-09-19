@@ -1207,6 +1207,19 @@ class Holder:
         self.confirmed_worker_events_partial = False
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
+        # Issue #92: the one worker event that cannot be re-derived later. A
+        # pending permission keeps the turn ACTIVE, so no turn-end `idle` will
+        # ever carry it; if the bound ZCode Host holder is not listening at the
+        # moment it is raised, the single Issue #76 send is the only chance the
+        # carrier ever gets and the wake is lost for good. Undelivered
+        # `permission_required` events wait here, keyed by the request they
+        # locate, and are re-offered from the holder's existing watchdog tick.
+        # Not a second ledger and not a new scheduler: in-memory, no new thread,
+        # and no finite give-up window - a wake lives exactly as long as the
+        # request it belongs to and is dropped the moment that request stops
+        # being answerable. Ordinary `idle`/`terminated` stay one-shot.
+        self.undelivered_wakes: dict[str, dict[str, Any]] = {}
+        self.undelivered_wakes_lock = threading.Lock()
         self.heartbeat_host = parse_heartbeat_host()
 
     # -- record ---------------------------------------------------------------
@@ -1651,6 +1664,9 @@ class Holder:
             "capabilities": self.capabilities,
             "heartbeat_host": self.heartbeat_host,
             "pending_permissions": list(self.pending_permissions.values()),
+            # Issue #92: a wake this worker still owes its bound Host, so the
+            # loss is observable instead of silent. Locator facts only.
+            "undelivered_worker_events": self._undelivered_wake_facts(),
             "activity_hint": activity,
             "last_prompt": self.last_prompt,
             "turn_active": turn["active"],
@@ -1881,6 +1897,21 @@ class Holder:
                   "event_cursor": self.events.cursor}
         if extra:
             params.update(extra)
+        receipt = self._carrier_send(target, params)
+        self.events.append({"kind": "heartbeat_carrier_sent", "event_kind": kind,
+                            "reason": reason, "target_session": target["session"],
+                            "receipt": receipt})
+        if kind == "permission_required" and receipt.get("error"):
+            self._retain_undelivered_wake(params, receipt)
+
+    def _carrier_send(self, target: dict[str, str],
+                      params: dict[str, Any]) -> dict[str, Any]:
+        """One bounded carrier round trip, or an honest error receipt.
+
+        ``params`` is passed through verbatim - a retry offers the SAME
+        ``event_cursor``, so the Host's deterministic ``event_id`` and its
+        existing duplicate handling are what keep a repeat from prompting twice.
+        """
         receipt: dict[str, Any] = {}
         with self.heartbeat_notify_lock:
             try:
@@ -1907,9 +1938,96 @@ class Holder:
         if not receipt:
             receipt = {"error": {"code": "host-closed",
                                  "message": "heartbeat host closed without a receipt"}}
-        self.events.append({"kind": "heartbeat_carrier_sent", "event_kind": kind,
-                            "reason": reason, "target_session": target["session"],
-                            "receipt": receipt})
+        return receipt
+
+    def _retain_undelivered_wake(self, params: dict[str, Any],
+                                 receipt: dict[str, Any]) -> None:
+        """Hold a permission wake the bound Host never took (Issue #92).
+
+        One entry per pending request, carrying the ORIGINAL carrier params so
+        every later offer is the same event rather than a new one.
+        """
+        key = normalize_id(params.get("request_id"))
+        error = (receipt.get("error") or {}).get("code")
+        with self.undelivered_wakes_lock:
+            if key in self.undelivered_wakes:
+                self.undelivered_wakes[key]["last_error"] = error
+                return
+            self.undelivered_wakes[key] = {"params": params, "attempts": 1,
+                                           "last_error": error}
+        self.events.append({"kind": "heartbeat_carrier_undelivered",
+                            "event_kind": params["kind"],
+                            "request_id": params.get("request_id"),
+                            "event_cursor": params["event_cursor"],
+                            "error": error})
+
+    def _wake_stale_reason(self, key: str) -> str | None:
+        """Why this held wake is no longer worth waking a Host for, or None.
+
+        The worker is the authority on its own pending list: a request the Host
+        can no longer answer must never become a prompt, however long the Host
+        was away.
+        """
+        if self.agent.exited.is_set() or self.agent_exited.is_set():
+            return "agent-exited"
+        if key not in self.pending_permissions:
+            return "permission-settled"
+        return None
+
+    def _undelivered_wake_facts(self) -> list[dict[str, Any]]:
+        """What this worker still owes its bound Host: locator facts only."""
+        with self.undelivered_wakes_lock:
+            return [{"kind": wake["params"]["kind"],
+                     "request_id": wake["params"].get("request_id"),
+                     "event_cursor": wake["params"]["event_cursor"],
+                     "attempts": wake["attempts"],
+                     "last_error": wake["last_error"]}
+                    for wake in self.undelivered_wakes.values()]
+
+    def _flush_undelivered_wakes(self) -> None:
+        """Re-offer every permission wake the bound Host has not taken yet.
+
+        Driven by the holder's existing watchdog tick - the one timer this
+        process already runs - so there is no second scheduler and no retry
+        deadline to outlive. A Host absent for an hour still gets the wake when
+        it comes back, and a wake whose request died meanwhile is dropped here
+        instead of arriving as a prompt nobody can answer. Nothing approves
+        anything; only the locator travels.
+        """
+        if self.heartbeat_host is None:
+            return
+        with self.undelivered_wakes_lock:
+            held = list(self.undelivered_wakes.items())
+        for key, wake in held:
+            stale = self._wake_stale_reason(key)
+            if stale is not None:
+                with self.undelivered_wakes_lock:
+                    if self.undelivered_wakes.pop(key, None) is None:
+                        continue
+                self.events.append({"kind": "heartbeat_carrier_dropped",
+                                    "event_kind": wake["params"]["kind"],
+                                    "request_id": wake["params"].get("request_id"),
+                                    "event_cursor": wake["params"]["event_cursor"],
+                                    "reason": stale})
+                continue
+            receipt = self._carrier_send(self.heartbeat_host, wake["params"])
+            error = (receipt.get("error") or {}).get("code")
+            with self.undelivered_wakes_lock:
+                current = self.undelivered_wakes.get(key)
+                if current is None:
+                    continue
+                current["attempts"] += 1
+                current["last_error"] = error
+                attempts = current["attempts"]
+                if error is None:
+                    self.undelivered_wakes.pop(key, None)
+            if error is not None:
+                continue
+            self.events.append({"kind": "heartbeat_carrier_recovered",
+                                "event_kind": wake["params"]["kind"],
+                                "request_id": wake["params"].get("request_id"),
+                                "event_cursor": wake["params"]["event_cursor"],
+                                "attempts": attempts, "receipt": receipt})
 
     def _record_overflow_full_check(self) -> int:
         """Bump the one full-check generation and log the fact.
@@ -3331,6 +3449,16 @@ class Holder:
     def idle_watcher(self) -> None:
         while True:
             time.sleep(15)
+            # Issue #92: the holder's one existing tick also re-offers any
+            # permission wake the bound Host has not taken yet. No new thread,
+            # no new loop, no deadline - just this watchdog noticing that what
+            # the Host is owed is still owed.
+            try:
+                self._flush_undelivered_wakes()
+            except Exception:
+                # The watchdog outlives any single retry; a broken flush must
+                # not take the idle-exit timer down with it.
+                pass
             if self.agent.exited.is_set() and not self.turn["active"]:
                 if time.monotonic() - self.last_activity > IDLE_EXIT_SECONDS:
                     self.state = "stopped"

@@ -9,6 +9,33 @@
   `-32601`, so the explicit interrupt-and-continue path remains the supported
   steering fallback. This updates the versioned capability description only;
   no transport behaviour changes.
+- **A pending-approval wake survives a temporarily absent ZCode Host (Issue #92).**
+  Issue #76 gave a bound worker one `permission_required` carrier send per new
+  pending request. That send was the only chance the wake ever got: a pending
+  permission keeps the worker turn ACTIVE, so no turn-end `idle` follows it, and
+  when the bound Host holder was not listening the send recorded
+  `host-unreachable` in the worker's own log and nothing else happened — a Host
+  that later restarted was told nothing, forever. The worker holder now RETAINS
+  an undelivered `permission_required` and re-offers it from the watchdog tick it
+  already runs. There is no new thread, scheduler, registry, ledger, or transport
+  gate, and no retry deadline to outlive: the wake lives exactly as long as the
+  request it locates, so a Host absent far longer than any single attempt still
+  gets it when it comes back. The retry reuses the ORIGINAL `event_cursor`, so
+  the deterministic `event_id` is unchanged and a repeat is answered by the
+  existing Issue #90 dedup rather than prompting the Host twice or asking for a
+  second approval. A wake whose request was settled, or whose worker agent
+  exited, before the Host returns is dropped as stale and never becomes a prompt;
+  a Host that still acts on the stale locator gets the ordinary
+  `no-pending-permission` refusal. Only the exact locator and `request_id`
+  travel — never a title, option, tool input, command, or credential — and the
+  event still approves nothing: the Host decides `permit`/reject inside its own
+  authorization, after which the ordinary turn-end `idle` arrives as before.
+  `observe`/`status` now report `undelivered_worker_events` so the debt is
+  visible instead of silent. Ordinary `idle`/`terminated` sends stay one-shot,
+  unbound workers and non-ZCode Hosts are untouched. Hermetic contract tests
+  cover the absent-host recovery on Host restart, the repeated offer, the
+  settled and agent-exited stale drops, the busy Host staging then flushing, and
+  the unchanged idle/unbound paths.
 
 - **Native mid-turn steering on ZCode 3.12+ through the v4 command surface,
   event-proven on the installed 3.12.3 (Issue #81).** The retired `session/steer`

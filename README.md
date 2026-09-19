@@ -433,7 +433,10 @@ Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-al
 `--always-approve`) and advertise no ACP option; OpenCode's default ACP path has none at all. On
 any platform with no verified ACP skip-all - Cursor, Grok and OpenCode today - a permission request
 may still arise: it surfaces through the existing `permission_required` carrier event and is
-settled with `permit`. Neither forcing PTY nor adding a gate is the answer. Use
+settled with `permit`. That wake is not lost when the bound ZCode Host is temporarily away: the
+worker holds the undelivered event and re-offers the same one until that Host starts or
+reconnects, or until the request stops being answerable. Neither forcing PTY nor adding a gate is
+the answer. Use
 `--permission-mode` where supported and check the native semantics: Codex ACP's `read-only` mode
 can write workspace files;
 strict Codex read-only execution requires `--transport pty --permission-mode read-only`.
