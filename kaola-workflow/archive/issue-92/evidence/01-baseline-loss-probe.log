@@ -1,0 +1,29 @@
+{"armed_request": {"options": [{"id": "allow", "kind": "allow_once", "label": "Allow once"}, {"id": "deny", "kind": "deny_once", "label": "Deny"}], "request_id": "zc-1", "title": "Bash", "tool_call_id": "call_perm"}}
+{"worker_carrier_receipts": [{"event_kind": "permission_required", "receipt": {"error": {"code": "host-unreachable", "message": "[Errno 61] Connection refused"}}}]}
+host restarted: zcode-pr-0d0d19ce
+{
+  "host_delivered": [],
+  "host_prompts": [],
+  "host_staged_worker_events": [],
+  "worker_carrier_sends_total": 1,
+  "worker_pending_permissions": [
+    {
+      "options": [
+        {
+          "id": "allow",
+          "kind": "allow_once",
+          "label": "Allow once"
+        },
+        {
+          "id": "deny",
+          "kind": "deny_once",
+          "label": "Deny"
+        }
+      ],
+      "request_id": "zc-1",
+      "title": "Bash",
+      "tool_call_id": "call_perm"
+    }
+  ],
+  "worker_turn_active": true
+}

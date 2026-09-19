@@ -1,0 +1,16 @@
+# Custody for the REAL-permit interleaving regression.
+# Run against f5bb239 (the last candidate WITHOUT the delivered_stale distinction),
+# with only the new test file copied in. It must FAIL there and PASS on the candidate.
+
+  ok   the host stops cleanly before the request
+  ok   worker prompt admitted with the host absent (in_progress)
+  ok   worker turn is still active while pending — no turn end will come
+  ok   worker reports waiting (waiting)
+  ok   the carrier receipt is an honest absent-host error (host-unreachable)
+  ok   no idle was invented to carry the wake
+  ok   exactly one offer is in flight (1)
+  ok   the request is still pending as the offer sits in flight
+  ok   the real permit settles the request (None)
+  ok   nothing is pending any more, while the receipt is still withheld
+FAIL test_a_real_permit_during_an_offer_is_a_stale_delivery (after 12 checks): AssertionError: timeout: the delivery is recorded as stale, not as a recovery
+FAIL: issue-92 permission wake recovery contract (1/1 failed: test_a_real_permit_during_an_offer_is_a_stale_delivery)

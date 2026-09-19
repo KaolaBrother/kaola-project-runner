@@ -1,0 +1,24 @@
+  ok   zcode-pr-570b9a51 start reaches ready (None)
+  ok   zcode-pr-c6314a24 start reaches ready (None)
+  ok   the host stops cleanly before the request
+  ok   worker prompt admitted with the host absent (in_progress)
+  ok   worker turn is still active while pending — no turn end will come
+  ok   worker reports waiting (waiting)
+  ok   the carrier receipt is an honest absent-host error (host-unreachable)
+  ok   no idle was invented to carry the wake
+FAIL test_absent_host_recovers_the_wake_on_restart (after 8 checks)
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-92/tests/contract/test-issue-92-permission-wake-recovery.py", line 729, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-92/tests/contract/test-issue-92-permission-wake-recovery.py", line 715, in main
+    test()
+    ~~~~^^
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-92/tests/contract/test-issue-92-permission-wake-recovery.py", line 396, in test_absent_host_recovers_the_wake_on_restart
+    wait_until(lambda: events_of_kind(worker_dir, "heartbeat_carrier_undelivered"), 20,
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               "the worker records the undelivered permission wake")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-92/tests/contract/test-issue-92-permission-wake-recovery.py", line 100, in wait_until
+    raise AssertionError(f"timeout: {label}")
+AssertionError: timeout: the worker records the undelivered permission wake
