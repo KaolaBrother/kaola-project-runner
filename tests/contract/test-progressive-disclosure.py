@@ -40,7 +40,8 @@ MOCK_ACP_AGENT = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 BUDGETS = json.loads((PROJECT / "templates" / "budgets.json").read_text(encoding="utf-8"))
 ORCHESTRATOR_ID = "kaola-project-runner"
 EXTERNAL_ID = "kaola-delegator"
-WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode")
+WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
+               "kimi-cli", "opencode", "zcode")
 WORKER_SKILL_IDS = tuple(f"{wid}-{ORCHESTRATOR_ID}" for wid in WORKER_IDS)
 WORKER_BODY_MARKERS = ("## Communication loop", 'runtime-tmux.sh" send', 'runtime-tmux.sh" capture', "mutation_status", "raw_current_frame", "SKILL_DIR=")
 ORCHESTRATOR_MARKERS = ("## Heartbeat", "## Main execution loop", "Mission-frontier", "Allowed CLIs", "PROJECT_RUNNER_HEARTBEAT", "Accept the delivery")

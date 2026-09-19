@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+- **dsh (DeepSeek Harness) is the tenth worker platform, ACP only (Issue #98).** `dsh` ships its
+  own automation-only ACP v1 stdio server, `dsh --profile acp`, so the Runner binds to it directly
+  with no bridge, proxy, or translator: `platforms/dsh.yaml` plus `scripts/adapters/dsh.sh` and the
+  roster registrations are the whole change, and the transport code is untouched. dsh negotiates
+  `protocolVersion 1` as `deepseek-harness-acp/0.0.1` and advertises
+  `sessionCapabilities {close, list, resume}`, so the holder's existing capability branch already
+  takes `session/resume`; `session/load`, `session/set_mode`, `session/delete`, `session/fork` and
+  `terminal/*` all answer `-32601`. Three platform facts are recorded rather than papered over.
+  **There is no `--continue`:** `session/list` entries carry only `sessionId` and `cwd` with no
+  `updatedAt`, so no latest session can be determined, and the manifest says `unsupported` instead
+  of advertising a flag. **There is no PTY transport:** no terminal UI exists for dsh, so
+  `--transport pty` is a diagnostic entry, not a fallback or a login channel. **There is no
+  approval gate:** dsh's ACP composition never sends `session/request_permission` — two live
+  tool-using turns, including a bash write to an absolute path outside the session workspace, ran
+  unattended with the client never consulted — so unlike OpenCode this is not "no skip-all", it is
+  nothing to skip, and README and the manifest say so. One operator precondition is documented
+  rather than worked around: the shipped `acp` bundle pins the `deepseek-official` route and
+  ignores the user's own default-model setting, so a session can start `ready` and still fail its
+  first `session/prompt` with `no API key for provider route "deepseek-official"`; supply
+  `DEEPSEEK_API_KEY` or pass `--model` to select a credentialed route through the existing
+  `set_config_option` path. Because dsh's model option values are JSON-encoded `[provider, model]`
+  arrays serialized as strings, `acp_model_map` carries the shipped catalog keyed by plain ids, and
+  `acp_value_params()` no longer reads a value that is bracketed end to end as a trailing
+  `[k=v,...]` descriptor — a descriptor qualifies a base value and can never be the whole value.
+  Native steering is unsupported (all four candidate methods `-32601`), and the existing composite
+  `--steer-mode interrupt` needs no raised timeout: `session/cancel` settles the running turn in
+  about 0.01 s with `stopReason: cancelled`. Nothing under `$DSH_HOME` is ever written — creating
+  an `acp` profile with `--from-default-profile` is an operator act the Runner does not perform —
+  and the adapter's preflight only reads that home to report whether the profile exists.
+
 ## 0.5.0 — 2026-09-19
 
 - **Codex installs a user-level `SessionStart(compact)` recovery entry, so an outer

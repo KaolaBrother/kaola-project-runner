@@ -38,7 +38,7 @@ DISPATCH = ORCHESTRATOR / "references" / "issue-dispatch.md"
 WORKTREE_REF = ORCHESTRATOR / "references" / "workflow-worktree.md"
 TEMPLATES = PROJECT / "templates" / "orchestrator"
 BUDGETS = PROJECT / "templates" / "budgets.json"
-WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok",
+WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
               "kimi-cli", "opencode", "zcode")
 
 # The contract's own grammar, read off references/issue-dispatch.md:

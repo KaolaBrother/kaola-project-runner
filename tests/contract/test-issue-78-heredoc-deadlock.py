@@ -122,8 +122,8 @@ class TestEntrypointCannotSelfDeadlock(unittest.TestCase):
     def test_every_generated_copy_is_covered(self) -> None:
         """The rule is worthless if it only guards the un-run source file."""
         copies = sorted((PROJECT / "skills").glob("*/scripts/kaola-tmux.sh"))
-        self.assertEqual(len(copies), 9,
-                         f"expected the nine generated platform copies, found {len(copies)}")
+        self.assertEqual(len(copies), 10,
+                         f"expected the ten generated platform copies, found {len(copies)}")
         source = ENTRYPOINT.read_bytes()
         for copy in copies:
             with self.subTest(copy=str(copy.relative_to(PROJECT))):

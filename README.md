@@ -74,8 +74,9 @@ stop a live Host or re-claim issues. Grok Bot, after the account bridge, attests
 `status`/`start`/`resume`/`send`/`stop` on that bound target with the existing locator
 `--project` `--worker zcode` `--session` (the exact live name); Codex and generic do not.
 
-Kaola Project Runner also provides nine self-contained **worker** Agent Skills for **Claude Code,
-Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, and Droid CLI**. A
+Kaola Project Runner also provides ten self-contained **worker** Agent Skills for **Claude Code,
+Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, Droid CLI, and dsh
+(DeepSeek Harness)**. A
 controlling agent can start a session in a Git repository, send instructions, read replies and
 runtime evidence, and stop that exact owned session. Communication uses structured ACP (Agent
 Client Protocol) or a tmux terminal. Pair a chosen entry with
@@ -90,7 +91,7 @@ For example, Claude Code can load the Codex Runner Skill to work through Codex C
 ### Target CLIs
 
 Each target has its own generated **worker** Skill, platform manifest, and launch adapter.
-The main orchestrator Skill is generated separately and is not a tenth platform.
+The main orchestrator Skill is generated separately and is not an eleventh platform.
 
 | Target runtime | Skill | CLI executable | Default transport |
 |---|---|---|---|
@@ -103,11 +104,22 @@ The main orchestrator Skill is generated separately and is not a tenth platform.
 | OpenCode | `opencode-kaola-project-runner` | `opencode` | ACP |
 | ZCode | `zcode-kaola-project-runner` | explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` | ACP (PTY unsupported) |
 | Droid CLI | `droid-kaola-project-runner` | `droid` | ACP |
+| dsh (DeepSeek Harness) | `dsh-kaola-project-runner` | `dsh` | ACP (PTY unsupported) |
 
 Droid is driven through its native ACP agent command, `droid exec --output-format acp`, with
 Auto Model and full bypass defaults on both transports. Its explicit PTY fallback uses the
 native TUI with `/quit` and `--resume --last`; login remains native through TUI `/login` or
 `FACTORY_API_KEY`.
+
+dsh is driven through its shipped automation-only ACP profile, `dsh --profile acp`; there is no
+terminal UI for it, so `--transport pty` is a diagnostic entry rather than a conversation channel.
+It needs no login (`authMethods` is empty), resumes with `session/resume` rather than
+`session/load`, and has no `--continue`: `session/list` carries no timestamp to order candidates
+by. Two facts an operator should know before the first dispatch. The shipped profile pins the
+`deepseek-official` route and ignores the user's own default-model setting, so a session can start
+`ready` and still fail its first prompt with `no API key for provider route "deepseek-official"` —
+supply `DEEPSEEK_API_KEY` or pass `--model` to select a credentialed route. And the profile itself
+must already exist under `$DSH_HOME`; creating one writes there, which the Runner never does.
 
 ACP returns structured replies and events. PTY preserves the native terminal UI, including
 terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
@@ -166,7 +178,7 @@ diagnostic entry, and login happens in the ZCode desktop App.
 ### Main orchestrator Skill
 
 `kaola-project-runner` (display name Project Runner) is a control-plane Skill for a host Agent
-that already has explicit CLI authorization. It recovers live work, dispatches through the nine
+that already has explicit CLI authorization. It recovers live work, dispatches through the ten
 worker Skills, reviews evidence before finalize, and keeps close-out ownership after a session
 stops. Prefer the selected authorized Workflow sync/merge when a PR is not required; a PR
 is not opened merely for handoff when that sink is suitable. If PRs exist, advance actionable
@@ -200,7 +212,7 @@ loads Project Runner internally. The bridge carries no policy, transport, refere
 credential; a release changes only its accepted-revision line, and an accepted content/pin
 pair is never rebased or squashed. Nothing on one target reaches
 the other, and the cloud never installs or updates the Mac. Grok Bot is a packaging adapter
-inside the renderer, not a transport platform; still nine worker platforms, and `--platform grok`
+inside the renderer, not a transport platform; still ten worker platforms, and `--platform grok`
 remains the Grok CLI worker. Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
 automated account-Skill creation, so one native skill write is the only account operation and
 the owner's read-only Local Computer UAT is the live boundary — this repository does not claim
@@ -320,7 +332,7 @@ This combination gives you:
 - **Verifiable handoffs:** replies show what the CLI says; repository changes, validation evidence,
   and forge state establish what it delivered. A delivered PR is distinct from a merged change.
 
-All nine worker Skills include this optional Workflow guidance. Starting a worker Skill alone does
+All ten worker Skills include this optional Workflow guidance. Starting a worker Skill alone does
 not install Workflow, claim an issue, send `workflow-next`, or create a heartbeat. The main
 orchestrator Skill may register a host heartbeat after an authorized CLI allowlist exists. Runtime
 coverage is also independent: Workflow's support for a runtime does not imply a Runner adapter
@@ -347,7 +359,7 @@ cd kaola-project-runner
 ./scripts/install-local.sh
 ```
 
-The default installs all nine worker Skills plus the main orchestrator Skill into
+The default installs all ten worker Skills plus the main orchestrator Skill into
 `${CODEX_HOME:-$HOME/.codex}/skills` as standalone copies. Use `--method link` to symlink
 Skills to this checkout for Project Runner development. Select another host, a worker
 subset, or skip the orchestrator:
@@ -473,11 +485,14 @@ Droid is the exception to the upgrade policy: both tiers remain Auto Model, and 
 is passed only when explicitly selected. Its `-fast` catalog IDs are explicit `--model` choices,
 not a separate Fast toggle.
 
-**Permission defaults matter:** the default is per platform, not one guarantee across all nine.
+**Permission defaults matter:** the default is per platform, not one guarantee across all ten.
 Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-all option at start
 (`mode`, or `autonomy_level` for Droid). Cursor and Grok carry only a launch flag (`--yolo`,
-`--always-approve`) and advertise no ACP option; OpenCode's default ACP path has none at all. On
-any platform with no verified ACP skip-all - Cursor, Grok and OpenCode today - a permission request
+`--always-approve`) and advertise no ACP option; OpenCode's default ACP path has none at all. dsh
+advertises none either, but for the opposite reason: its ACP composition never sends a permission
+request at all, so tool calls - including a measured write to an absolute path outside the session
+workspace - run unattended with no approval gate to skip. On any of the remaining platforms with no
+verified ACP skip-all - Cursor, Grok and OpenCode today - a permission request
 may still arise: it surfaces through the existing `permission_required` carrier event and is
 settled with `permit`. That wake is not lost when the bound ZCode Host is temporarily away: the
 worker holds the undelivered event and re-offers the same one until that Host takes it, or until

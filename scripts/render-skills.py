@@ -837,11 +837,13 @@ def main() -> int:
 
     manifests = [parse_manifest(path) for path in sorted(PLATFORMS.glob("*.yaml"))]
     expected_ids = [
-        "claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode",
+        "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli",
+        "opencode", "zcode",
     ]
     if [m["id"] for m in manifests] != expected_ids:
         raise ValueError(
-            "platform inventory must be exactly claude-code,codex,cursor-cli,devin,droid,grok,kimi-cli,opencode,zcode"
+            "platform inventory must be exactly "
+            "claude-code,codex,cursor-cli,devin,droid,dsh,grok,kimi-cli,opencode,zcode"
         )
 
     findings: list[str] = []

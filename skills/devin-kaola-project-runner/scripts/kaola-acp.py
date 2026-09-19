@@ -31,7 +31,7 @@ HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
 MODEL_POLICY_HELPER = SCRIPT_DIR / "kaola-model-policy.py"
 FAST_VARIANT_SUFFIXES = ("-fast", "-priority")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
-PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "grok", "kimi-cli", "opencode", "zcode")
+PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli", "opencode", "zcode")
 START_WAIT = 20.0
 SESSION_PREFIX = "kaola"
 # Issue #22: default start sets session/set_config_option configId=mode to each
@@ -1143,7 +1143,15 @@ def acp_value_params(value: str) -> dict[str, str]:
     Cursor-style values carry their declared settings in the value itself
     (``grok-4.6[effort=high,fast=true]``); the bracket is the agent's own
     statement of what selecting that value does.
+
+    A *descriptor* qualifies a base value, so it can never be the whole value.
+    dsh's model option values are JSON arrays serialized as strings
+    (``["deepseek-official","deepseek-v4-pro"]``), which are bracketed end to
+    end; reading one as a descriptor would invent a ``declared`` map out of the
+    array's elements. A value that opens with the bracket declares nothing.
     """
+    if (value or "").lstrip().startswith("["):
+        return {}
     match = re.search(r"\[([^\]]+)\]\s*$", value or "")
     params: dict[str, str] = {}
     if match:

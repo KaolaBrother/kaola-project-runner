@@ -28,6 +28,7 @@ WORKER_IDS = (
     "cursor-cli",
     "devin",
     "droid",
+    "dsh",
     "grok",
     "kimi-cli",
     "opencode",
