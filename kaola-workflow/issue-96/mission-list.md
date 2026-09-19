@@ -27,6 +27,6 @@ close/push until it lands.
 
 ## 4. Freeze the candidate and establish review readiness
 - item: Commit claim, mission list, the fix, and the original evidence onto `workflow/issue-96` so the run is not a main-root-only record; freeze the SHA and hand the outer parent a report it can verify. Readiness only — finalization is not this list's to perform.
-- status: todo
-- dispatched:
-- result:
+- status: done
+- dispatched: self (inline). Custody records, fix, and raw evidence committed to `workflow/issue-96`; the frozen SHA is reported to the outer parent.
+- result: READY_FOR_REVIEW. The run's own claim (`workflow-state.md`), mission list, and every raw log live on the candidate branch, so nothing about this run exists only as a main-root record (`*.log` is gitignored, so each log needed `git add -f`). Issue #95 sank to `main` at `baf12f0` and was merged into this candidate at `7d24be7`, following this repository's own precedent commit `5cb461d` rather than a rebase, which keeps the original claim and evidence commits byte-identical. Because #95 changed `scripts/kaola-acp.py`, the bound evidence was re-measured on the synced tree: `post-sync-full-validate-bound.log` gives `VALIDATE_EXIT=0`, 34 `OK` suites, no `FAILED`/`SKIPPED`, `render-skills.py --check` PASS with no generated diff, and both Kimi classes EXIT 0. The new `test-issue-95-reader-exception.py` was checked against the inventory and drives `kaola-acp.py` directly, so it is not gated and needs no change. Not finalized, archived, sunk, closed, or pushed -- the outer parent holds ACCEPT.
