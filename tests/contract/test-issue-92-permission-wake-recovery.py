@@ -35,6 +35,8 @@ No real ZCode install, no login, no network, no auto-approval.
 from __future__ import annotations
 
 import hashlib
+import importlib.machinery
+import importlib.util
 import json
 import os
 import re
@@ -45,6 +47,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import uuid
 from pathlib import Path
 
@@ -230,7 +233,7 @@ class FakePeer:
                 reply = self.responder(index, request)
                 if reply is not None:
                     connection.sendall(reply)
-            except OSError:
+            except Exception:  # noqa: BLE001 - one bad reply must not end the peer
                 pass
             finally:
                 try:
@@ -970,28 +973,189 @@ def test_a_lost_receipt_retries_into_the_hosts_own_dedup() -> None:
         sandbox.cleanup()
 
 
+def load_holder_module():
+    """The holder as an importable module (its filename is not an identifier)."""
+    path = ROOT / "scripts" / "kaola-acp-holder.py"
+    loader = importlib.machinery.SourceFileLoader("kaola_acp_holder", str(path))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+class CarrierOnlyHolder:
+    """The smallest object the retention path really touches.
+
+    Deliberately NOT a whole Holder: this drives the real
+    ``_retain_undelivered_wake`` / ``_flush_undelivered_wakes`` /
+    ``_carrier_send`` code against a host socket that will never exist, so a
+    give-up cap can be looked for across hundreds of offers instead of hundreds
+    of watchdog ticks. If the retention ever starts needing more holder state
+    than this, that is a real change and this fails loudly rather than quietly
+    testing a stub.
+    """
+
+    def __init__(self, holder_module, request_key: str):
+        self.heartbeat_host = {"platform": "zcode", "session": "absent-host",
+                               "repo": "/nonexistent",
+                               "socket": "/nonexistent/kaola-issue-92-absent.sock"}
+        self.undelivered_wakes: dict[str, dict] = {}
+        self.undelivered_wakes_lock = threading.Lock()
+        self.heartbeat_notify_lock = threading.Lock()
+        self.agent = types.SimpleNamespace(exited=threading.Event())
+        self.agent_exited = threading.Event()
+        self.pending_permissions = {request_key: {"request_id": request_key}}
+        self.recorded: list[dict] = []
+        self.events = types.SimpleNamespace(append=self.recorded.append)
+        holder = holder_module.Holder
+        self._carrier_send = holder._carrier_send.__get__(self)
+        self._carrier_error_code = holder._carrier_error_code
+        self._wake_stale_reason = holder._wake_stale_reason.__get__(self)
+        self.retain = holder._retain_undelivered_wake.__get__(self)
+        self.flush = holder._flush_undelivered_wakes.__get__(self)
+
+
 def test_the_retention_has_no_retry_deadline() -> None:
-    """Duration cannot prove the ABSENCE of a give-up cap, and the issue is
-    explicit that a finite retry which can still silently lose the wake is not
-    acceptance. Pin it structurally instead: the only reasons this holder stops
-    owing a permission wake are the three that mean it is no longer owed."""
+    """The issue is explicit that a finite retry which can still silently lose
+    the wake is not acceptance — so the ABSENCE of a give-up cap has to be
+    pinned, and elapsed wall-clock cannot pin it. Two pins that can actually
+    fail: hundreds of real offers never exhaust the wake, and the retained
+    entry carries no time state for a clock cutoff to read.
+    """
+    holder_module = load_holder_module()
+    key = "zc-1"
+    stub = CarrierOnlyHolder(holder_module, key)
+    params = {"schema": "kaola-worker-event/1", "kind": "permission_required",
+              "platform": "zcode", "session": "w-1", "repo": "/nonexistent",
+              "reason": "session/request_permission pending", "event_cursor": 11,
+              "request_id": key}
+    stub.retain(params, {"error": {"code": "host-unreachable", "message": "gone"}})
+    check(list(stub.undelivered_wakes) == [key],
+          f"the wake is retained ({stub.undelivered_wakes})")
+
+    offers = 250
+    for _ in range(offers):
+        stub.flush()
+    held = stub.undelivered_wakes.get(key)
+    check(held is not None,
+          f"{offers} offers later the wake is STILL owed — no attempt cap ({held})")
+    check(held["attempts"] == offers + 1,
+          f"every offer was really made ({held and held['attempts']} of {offers + 1})")
+    check(held["params"]["event_cursor"] == 11,
+          "every offer reused the original event cursor")
+    check(not [entry for entry in stub.recorded
+               if entry["kind"] == "heartbeat_carrier_dropped"],
+          "nothing was dropped while the request stayed pending")
+    check(len([entry for entry in stub.recorded
+               if entry["kind"] == "heartbeat_carrier_undelivered"]) == 1,
+          f"an unchanging failure is logged once, not per offer ({stub.recorded})")
+
+    # A clock cutoff needs somewhere to remember when the wake started.
+    check(set(held) == {"params", "attempts", "last_error", "logged_error"},
+          f"the retained wake holds no time state to expire against ({sorted(held)})")
+
+    # It ends only when it stops being owed — here, when the request settles.
+    stub.pending_permissions.pop(key)
+    stub.flush()
+    dropped = [entry for entry in stub.recorded
+               if entry["kind"] == "heartbeat_carrier_dropped"]
+    check(not stub.undelivered_wakes and len(dropped) == 1
+          and dropped[0]["reason"] == "permission-settled",
+          f"the wake ends when it is no longer owed, not on a timer ({dropped})")
+
+    # And the vocabulary of ending stays exactly three reasons.
     source = (ROOT / "scripts" / "kaola-acp-holder.py").read_text(encoding="utf-8")
     region = source.split("def _retain_undelivered_wake")[1].split("\n    def _record_")[0]
-    # Prose explaining the absence of a deadline is not a deadline: match the
-    # code, with docstrings and comments removed.
     region = re.sub(r'"""(?:.|\n)*?"""', "", region)
     region = re.sub(r"(?m)#.*$", "", region)
     reasons = sorted(set(re.findall(r'"reason": "([a-z-]+)"', region))
                      | set(re.findall(r'return "([a-z-]+)"', region)))
     check(reasons == ["agent-exited", "host-answered", "permission-settled"],
           f"a wake is dropped only when it is no longer owed ({reasons})")
-    check(not re.search(r"attempts\s*[<>]=?\s*\d", region),
-          "no attempt count is ever compared against a threshold")
-    check(not re.search(r"\b(deadline|expire|expires|expired|give_up|max_attempts|"
-                        r"retry_limit|timeout_at)\b", region),
-          "the retention holds no deadline, expiry, or attempt limit")
-    check("CARRIER_UNDELIVERED_CODES" in region,
-          "the retry condition is which END failed, not which error code it was")
+
+
+def test_only_a_receipt_that_names_the_event_counts_as_delivered() -> None:
+    """The last "undelivered misread as delivered" hole: absence of an `error`
+    key is not proof the Host took the event. `op_worker_event` names the event
+    it took on every accepting path, so a reply that names none must leave the
+    wake owed rather than silently retiring it."""
+    holder_module = load_holder_module()
+    key = "zc-1"
+    stub = CarrierOnlyHolder(holder_module, key)
+    sock = Path(tempfile.mkdtemp(prefix="kaola-i92-receipt-")) / "peer.sock"
+    stub.heartbeat_host = dict(stub.heartbeat_host, socket=str(sock))
+    params = {"schema": "kaola-worker-event/1", "kind": "permission_required",
+              "platform": "zcode", "session": "w-1", "repo": "/nonexistent",
+              "reason": "session/request_permission pending", "event_cursor": 11,
+              "request_id": key}
+
+    # Shapes that carry no error and name no event: never proof of delivery.
+    for label, reply in (("empty error object", b'{"error":{}}\n'),
+                         ("null error code", b'{"error":{"code":null}}\n'),
+                         ("no error key at all", b'{"ok":1}\n')):
+        stub.undelivered_wakes.clear()
+        stub.recorded.clear()
+        with FakePeer(sock, lambda _i, _r, reply=reply: reply):
+            stub.retain(params, {"error": {"code": "host-unreachable"}})
+            stub.flush()
+        held = stub.undelivered_wakes.get(key)
+        check(held is not None, f"a reply naming no event leaves the wake owed ({label})")
+        check(held["last_error"] == "host-reply-invalid",
+              f"and says why ({label}: {held and held['last_error']})")
+        check(not [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_recovered"],
+              f"no false recovery is recorded ({label})")
+
+    # A receipt that does name the event is delivery, staged or deduped alike.
+    for label, reply in (("staged", b'{"event_id":"zcode/w-1/permission_required/11",'
+                                    b'"staged":true,"pending":1}\n'),
+                         ("duplicate", b'{"event_id":"zcode/w-1/permission_required/11",'
+                                       b'"duplicate":true,"pending":1}\n')):
+        stub.undelivered_wakes.clear()
+        stub.recorded.clear()
+        with FakePeer(sock, lambda _i, _r, reply=reply: reply):
+            stub.retain(params, {"error": {"code": "host-unreachable"}})
+            stub.flush()
+        check(not stub.undelivered_wakes,
+              f"a receipt naming the event settles the wake ({label})")
+        recovered = [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_recovered"]
+        check(len(recovered) == 1 and recovered[0]["request_id"] == key,
+              f"and records the recovery ({label}: {recovered})")
+
+
+def test_an_older_host_build_keeps_the_wake_owed() -> None:
+    """A Host holder too old to know `worker_event` never TOOK the event, so
+    the wake stays owed — a restart on a newer build can still take it. Any
+    refusal the Host made knowing what it refused settles it instead."""
+    holder_module = load_holder_module()
+    key = "zc-1"
+    sock = Path(tempfile.mkdtemp(prefix="kaola-i92-skew-")) / "peer.sock"
+    params = {"schema": "kaola-worker-event/1", "kind": "permission_required",
+              "platform": "zcode", "session": "w-1", "repo": "/nonexistent",
+              "reason": "session/request_permission pending", "event_cursor": 11,
+              "request_id": key}
+    cases = (
+        (b'{"error":{"code":"unknown-op","message":"unknown op worker_event"}}\n',
+         True, "an older Host build never took it"),
+        (b'{"error":{"code":"worker-event-queue-full","capacity":32},'
+         b'"overflow_full_check":true}\n', False, "a queue-full refusal settles it"),
+        (b'{"error":{"code":"worker-event-invalid","message":"bad"}}\n',
+         False, "an invalid refusal settles it"),
+        (b'{"error":{"code":"worker-event-unsupported","message":"not zcode"}}\n',
+         False, "an unsupported refusal settles it"),
+    )
+    for reply, still_owed, label in cases:
+        stub = CarrierOnlyHolder(holder_module, key)
+        stub.heartbeat_host = dict(stub.heartbeat_host, socket=str(sock))
+        with FakePeer(sock, lambda _i, _r, reply=reply: reply):
+            stub.retain(params, {"error": {"code": "host-unreachable"}})
+            stub.flush()
+        held = stub.undelivered_wakes.get(key)
+        check((held is not None) == still_owed, f"{label} ({held})")
+        dropped = [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_dropped"]
+        check(bool(dropped) == (not still_owed), f"{label}: drop record matches ({dropped})")
+        if dropped:
+            check(dropped[0]["reason"] == "host-answered",
+                  f"{label}: the drop names the Host's answer ({dropped[0]})")
 
 
 TESTS = (
@@ -1005,6 +1169,8 @@ TESTS = (
     test_a_host_answer_settles_the_debt_even_when_it_refuses,
     test_a_lost_receipt_retries_into_the_hosts_own_dedup,
     test_the_retention_has_no_retry_deadline,
+    test_only_a_receipt_that_names_the_event_counts_as_delivered,
+    test_an_older_host_build_keeps_the_wake_owed,
 )
 
 

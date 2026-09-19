@@ -434,10 +434,12 @@ Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-al
 any platform with no verified ACP skip-all - Cursor, Grok and OpenCode today - a permission request
 may still arise: it surfaces through the existing `permission_required` carrier event and is
 settled with `permit`. That wake is not lost when the bound ZCode Host is temporarily away: the
-worker holds the undelivered event and re-offers the same one until that Host answers, or until
-the request stops being answerable. Only a send that never reached the Host leaves the wake owed;
-any receipt the Host produced for itself, refusal included, settles it. Neither forcing PTY nor
-adding a gate is the answer. Use
+worker holds the undelivered event and re-offers the same one until that Host takes it, or until
+the request stops being answerable. Only a send the Host never took leaves the wake owed — it was
+not listening, hung up, answered something that is not a worker-event receipt, or is an older build
+with no such op; each of those can still come good when the Host comes back. A receipt that names
+the event settles it, and so does a refusal the Host made knowing what it refused. Neither forcing
+PTY nor adding a gate is the answer. Use
 `--permission-mode` where supported and check the native semantics: Codex ACP's `read-only` mode
 can write workspace files;
 strict Codex read-only execution requires `--transport pty --permission-mode read-only`.

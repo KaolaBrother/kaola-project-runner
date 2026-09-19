@@ -132,12 +132,17 @@ CHILD_RECORD_NAME = "children.jsonl"
 HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
 HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
 HEARTBEAT_EVENT_CAP = 32
-# Issue #92: the three codes that mean THIS END never handed the event over -
-# the Host was not listening, hung up, or answered something that is not a
-# receipt. Only these leave a permission wake owed. Every other receipt is the
-# Host's own answer (staged, duplicate, or a refusal it recorded for itself),
-# and an answered event is settled whether or not the answer was a yes.
-CARRIER_UNDELIVERED_CODES = ("host-unreachable", "host-closed", "host-reply-invalid")
+# Issue #92: the codes that mean the Host never TOOK the event - it was not
+# listening, hung up, answered something that is not a worker_event receipt, or
+# is an older build with no such op at all. Only these leave a permission wake
+# owed, and each of them can still come good when the Host comes back. Any
+# other receipt is the Host's own answer - it staged the event, recognised it
+# as a duplicate, or refused it knowing what it refused - and an answered event
+# is settled whether or not the answer was a yes. Of the refusals only
+# `worker-event-queue-full` records anything Host-side, and what it records is
+# the overflow full-check that drives a full pending-approval pass anyway.
+CARRIER_UNDELIVERED_CODES = ("host-unreachable", "host-closed", "host-reply-invalid",
+                            "unknown-op")
 HEARTBEAT_NOTIFY_TIMEOUT = 5.0
 HEARTBEAT_NOTIFY_GRACE = 6.0
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
@@ -1951,8 +1956,16 @@ class Holder:
         # normalised here into an honest carrier failure rather than raising on
         # the agent reader thread that called us.
         error = receipt.get("error") if isinstance(receipt, dict) else receipt
-        if not isinstance(receipt, dict) or (error is not None
-                                             and not isinstance(error, dict)):
+        code = error.get("code") if isinstance(error, dict) else None
+        taken = (isinstance(receipt, dict)
+                 and isinstance(receipt.get("event_id"), str))
+        if not isinstance(receipt, dict) or (
+                error is not None and not isinstance(error, dict)) or (
+                not isinstance(code, str) and not taken):
+            # Absence of an `error` key is not proof of delivery: `op_worker_event`
+            # names the event it took on every accepting path (staged, duplicate,
+            # confirmed duplicate), so a reply that names none never proves the
+            # wake got through and must leave it owed.
             receipt = {"error": {
                 "code": "host-reply-invalid",
                 "message": "heartbeat host reply is not a worker_event receipt",
