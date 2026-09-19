@@ -1250,6 +1250,13 @@ class Holder:
         self.undelivered_wakes: dict[str, dict[str, Any]] = {}
         self.undelivered_wakes_lock = threading.Lock()
         self.heartbeat_host = parse_heartbeat_host()
+        # Issue #94: an "entry Host" - a session whose prompts open with the
+        # native Skill entry line. Marked when an admitted prompt carries
+        # that first line, and when this holder's Host-only worker-event
+        # surface shows it is a Host. The composite interrupt steer's resend
+        # opens a NEW turn, so on an entry Host it keeps that first line;
+        # every other session's resent text goes out verbatim.
+        self.host_entry_session = False
 
     # -- record ---------------------------------------------------------------
 
@@ -1805,6 +1812,10 @@ class Holder:
                         "active_turn_request_id": self.turn.get("request_id"),
                         "mutation_status": self.turn["mutation_status"]}
             text = params.get("text") or ""
+            if text.split("\n", 1)[0].strip() == HOST_SKILL_ENTRY:
+                # Issue #94: this session's prompts open with the native
+                # Skill entry line - it is an entry Host.
+                self.host_entry_session = True
             # Read before anything is written: every event this turn produces
             # has a cursor strictly greater than this one.
             dispatch_cursor = self.events.cursor
@@ -2412,6 +2423,10 @@ class Holder:
                               "message": "the event-driven heartbeat carrier is a ZCode "
                                          f"Host capability; this session's platform is "
                                          f"{self.args.platform}"}}
+        # Issue #94: only a ZCode Host holder serves this op, so mark the
+        # session an entry Host - a composite interrupt resend keeps the
+        # native entry line even before this holder saw an entry prompt.
+        self.host_entry_session = True
         kind = params.get("kind")
         platform = params.get("platform")
         session = params.get("session")
@@ -2526,6 +2541,10 @@ class Holder:
                 overflow_confirmed = (max(overflow_confirmed, generation)
                                       if generation is not None
                                       else overflow_confirmed + 1)
+        if staged:
+            # Issue #94: a holder whose own log staged worker events is a
+            # resumed entry Host even before its first new entry prompt.
+            self.host_entry_session = True
         pending: list[dict[str, Any]] = []
         seen: set[str] = set()
         for event in staged:
@@ -2846,7 +2865,11 @@ class Holder:
           rather than pretending an interruption happened;
         * if the cancel is not confirmed, NOTHING is sent and the outcome is
           `unknown` - the Agent verifies before deciding;
-        * the steering text is sent at most once, whatever the send returns.
+        * the steering text is sent at most once, whatever the send returns;
+        * the resend opens a new turn, so on an entry Host (a session whose
+          prompts open with the native Skill entry line) it keeps that first
+          line - the receipt reports `host_skill_entry_prepended`; every
+          other session's text is sent verbatim.
         """
         text = params.get("text") or ""
         base: dict[str, Any] = {
@@ -2883,6 +2906,7 @@ class Holder:
             was_active = bool(target_turn["active"])
             cancelled_request_id = target_turn["request_id"] if was_active else None
             mutation_before = target_turn.get("mutation_status")
+            host_entry = self.host_entry_session
         base.update({
             "turn_was_active": was_active,
             "cancelled_turn_request_id": cancelled_request_id,
@@ -2977,8 +3001,16 @@ class Holder:
                          "cancelled_turn_stop_reason": None,
                          "cancelled_turn_mutation_status": None})
 
-        # Exactly one send, through the ordinary admission path.
-        prompt = self.op_prompt({"text": text, "wait": False})
+        # Exactly one send, through the ordinary admission path. This send
+        # opens a NEW turn, so on an entry Host it keeps the native Skill
+        # entry as its own first line (Issue #94); every other session's
+        # steering text goes out verbatim - ordinary worker prompts are
+        # never touched.
+        send_text = text
+        if host_entry and text.split("\n", 1)[0].strip() != HOST_SKILL_ENTRY:
+            send_text = HOST_SKILL_ENTRY + "\n" + text
+            base["host_skill_entry_prepended"] = True
+        prompt = self.op_prompt({"text": send_text, "wait": False})
         base["send_receipt"] = {
             key: prompt.get(key) for key in
             ("outcome", "mutation_status", "prompt_fingerprint",

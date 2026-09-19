@@ -324,7 +324,8 @@ subset, or skip the orchestrator:
 
 # ZCode is both a worker platform and a native skill-directory Host:
 # --runtime zcode installs to ~/.zcode/skills; a workspace .zcode/skills or
-# .agents/skills destination (both live-verified roots) goes through --skills-dir.
+# .agents/skills destination (both live-verified default roots) goes through
+# --skills-dir.
 ./scripts/install-local.sh --runtime zcode
 ./scripts/install-local.sh --skills-dir "$PWD/.zcode/skills"
 

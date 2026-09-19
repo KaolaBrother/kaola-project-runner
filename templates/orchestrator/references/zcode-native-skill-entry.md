@@ -46,24 +46,37 @@ Where each entry point gets the line:
   keeps the Skill body it loaded at its own first line, so no new `Skill`
   tool_call is produced, needed, or promised. A fresh invocation is only
   meaningful at a turn boundary — end the turn and use an ordinary prompt.
+- **Composite `steer --steer-mode interrupt`** — its resend *is* a
+  turn-opening prompt, so on an entry Host it is an entry. The path
+  cancels the running turn, confirms it stopped, then sends the steering
+  text once as the next turn; on a session whose prompts open with the
+  command the holder keeps `/kaola-project-runner` as that resend's own
+  first line and reports `host_skill_entry_prepended` on the steer
+  receipt. Ordinary worker sessions are never marked, so their resent
+  text goes out verbatim.
 
 ## Discovery precondition
 
 Native invocation needs the generated `kaola-project-runner` Skill installed
 where the Host session discovers skills. Verified against the installed
 ZCode 3.12.3 — in its `createSkillsService` binary code and live through
-injected skill metadata — the install-relevant roots are the workspace
-`<repo>/.zcode/skills/` and `<repo>/.agents/skills/`, the user-level
-`~/.zcode/skills/` and `~/.agents/skills/`, plus the same two roots on each
-ancestor directory up to the workspace boundary (plugin cache roots are a
-separate mechanism, not an install target). `--runtime zcode` installs to
-`~/.zcode/skills/`; `--skills-dir` accepts any of these, e.g.
-`<repo>/.agents/skills`. A `--skills-dir` outside the discovered roots
-still works for an agent that reads the file itself — but a ZCode Host does
-not read the file. If the first beat's `capture` shows no `Skill` tool_call,
-the Skill is not installed where this session discovers it: report that
-fact and install it properly; do not fall back to reading `SKILL.md` by
-hand.
+injected skill metadata — the install-relevant **default** roots are the
+workspace `<repo>/.zcode/skills/` and `<repo>/.agents/skills/`, the
+user-level `~/.zcode/skills/` and `~/.agents/skills/`, plus the same two
+roots on each ancestor directory up to the workspace boundary. The defaults
+are not the whole discovery surface: `plugins.dirs` in
+`~/.zcode/cli/config.json` adds configured plugin roots whose `skills/`
+directories are scanned too (a plugin skill surfaces namespaced as
+`<plugin>:<skill>` and stays loadable by its plain name — live-verified);
+plugin cache roots remain a separate mechanism, not an install target.
+`--runtime zcode` installs to `~/.zcode/skills/`; `--skills-dir` accepts
+any of these roots, e.g. `<repo>/.agents/skills`. A `--skills-dir` outside
+every discovered root — default or configured — still works for an agent
+that reads the file itself, but a ZCode Host does not read the file: the
+first line then arrives as plain text. If the first beat's `capture` shows
+no `Skill` tool_call, the Skill is not installed where this session
+discovers it: report that fact and install it properly; do not fall back
+to reading `SKILL.md` by hand.
 
 ## Facts that did not change
 
@@ -101,12 +114,23 @@ Verified live (installed ZCode 3.12.3, repo adapter 0.3.3):
   `~/.zcode/skills` and `~/.agents/skills`, plus both roots on ancestor
   directories; a scratch-HOME live probe injected the
   `kaola-project-runner` metadata from each `.agents/skills` root.
+  Configured roots add more: `plugins.dirs` in `~/.zcode/cli/config.json`
+  makes the runtime scan a plugin dir's `skills/` — the same probe
+  discovered `kpr-extra:kaola-project-runner` there, loadable as
+  `kaola-project-runner`.
+- Composite interrupt steer (Issue #94 review fix): on an entry Host the
+  holder's `--steer-mode interrupt` resend carries
+  `/kaola-project-runner` as its first line — contract-tested end-to-end
+  (cancel confirmed, new prompt admitted, entry first); on an unmarked
+  worker session the same resend is verbatim.
 
 Not verified: real-model *behaviour* after a genuine auto-compaction — the
 catalog GLM models are 1M-window and forcing one is beyond bounded cost —
 any compact-specific ACP event, because none exists, and a `Skill`
 tool_call from a busy `steer` guide, because steer forwards the guide into
-the running turn and no re-invocation is claimed. The pre-0.3.3
+the running turn and no re-invocation is claimed (the interrupt resend's
+first line is contract-tested; its `Skill` tool_call follows the same
+verified entry mechanism). The pre-0.3.3
 installed adapter exits against ZCode 3.12.3; update the install rather
 than the mechanism.
 

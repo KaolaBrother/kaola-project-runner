@@ -1241,6 +1241,60 @@ def test_issue_87_restore_seeds_generation_from_confirmed_after_rotation() -> No
           "the delivered prompt is the full-check")
 
 
+def test_issue_94_interrupt_steer_keeps_entry_on_entry_host() -> None:
+    """Issue #94: `steer --steer-mode interrupt` resends on a NEW turn. On an
+    entry Host — a session whose admitted prompts open with the native entry
+    line — the holder keeps that line on the resend; an ordinary worker
+    session's resend goes out verbatim."""
+    sandbox = Sandbox("i94-interrupt")
+    try:
+        host = sandbox.session()
+        sandbox.start(host, "slow")
+        # Mark the session the way every Host flow does: an admitted prompt
+        # whose first line is the native entry. `slow` keeps the turn active
+        # until session/stop, so the composite path cancels for real.
+        sandbox.cli("send", "--no-wait", "--text",
+                    "/kaola-project-runner\nI94-HOST-BODY", session=host)
+        steer = sandbox.cli("steer", "--steer-mode", "interrupt",
+                            "--text", "I94-STEER-BODY", session=host)
+        check(steer.get("steer_outcome") == "interrupted_and_resent",
+              f"the running turn was really interrupted and resent ({steer.get('steer_outcome')})")
+        check(steer.get("host_skill_entry_prepended") is True,
+              f"an entry Host resend reports the prepend ({steer})")
+        sends = rpc_sends(sandbox.rpcs[host])
+        check(len(sends) >= 2,
+              f"the resend reached the agent as its own prompt ({sends})")
+        check(sends[0].split("\n", 1)[0] == "/kaola-project-runner",
+              "the marking prompt carried the entry first")
+        check(sends[-1].split("\n", 1)[0] == "/kaola-project-runner",
+              f"the new turn opens with the entry line ({sends[-1][:80]!r})")
+        check("I94-STEER-BODY" in sends[-1],
+              "the steering text rode the same prompt")
+        check(sends[-1].split("\n", 1)[1].startswith("I94-STEER-BODY"),
+              "the Agent's text is untouched below the entry line")
+
+        worker = sandbox.session()
+        sandbox.start(worker, "slow")
+        sandbox.cli("send", "--no-wait", "--text", "I94-WORKER-BODY",
+                    session=worker)
+        wsteer = sandbox.cli("steer", "--steer-mode", "interrupt",
+                             "--text", "I94-WORKER-STEER", session=worker)
+        check(wsteer.get("steer_outcome") == "interrupted_and_resent",
+              f"the worker interrupt also resends ({wsteer.get('steer_outcome')})")
+        check(not wsteer.get("host_skill_entry_prepended"),
+              f"an unmarked session reports no prepend ({wsteer})")
+        wsends = rpc_sends(sandbox.rpcs[worker])
+        check(wsends[-1] == "I94-WORKER-STEER",
+              f"an ordinary worker resend is verbatim ({wsends[-1][:80]!r})")
+
+        host_stop = sandbox.cli("stop", "--force", session=host)
+        check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
+        worker_stop = sandbox.cli("stop", "--force", session=worker)
+        check(worker_stop.get("residual_pids") == [], "worker stop leaves no residue")
+    finally:
+        sandbox.cleanup()
+
+
 def test_canonical_heartbeat_spec_stays_one_set() -> None:
     skeleton = ROOT / "templates" / "orchestrator" / "references" / "heartbeat-skeleton.txt"
     text = skeleton.read_text(encoding="utf-8")

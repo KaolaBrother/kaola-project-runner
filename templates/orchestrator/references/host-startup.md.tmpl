@@ -46,7 +46,10 @@ handling does not. Do not take that over session by session.
    attach update, a worker-event notification, and the round after any
    compaction — opens with `/kaola-project-runner` as its first line. A busy
    `steer` guide is not a new prompt: it enters the running turn verbatim,
-   keeps the already-loaded context, and is no new Skill invocation. That
+   keeps the already-loaded context, and is no new Skill invocation. The
+   composite `steer --steer-mode interrupt` ends the turn and resends on a
+   new one — on this entry Host the holder keeps the entry as that resend's
+   first line. That
    native invocation is the whole recovery mechanism; no `AGENTS.md` block,
    role check, or compact detection is involved. Facts and boundaries:
    [zcode-native-skill-entry.md](zcode-native-skill-entry.md).

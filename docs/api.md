@@ -124,8 +124,9 @@ passed only when explicitly requested.
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
 `cursor` → `$HOME/.cursor/skills`, `devin` → `${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills`,
-`zcode` → `$HOME/.zcode/skills` (ZCode Host install; verified discovery roots are the workspace
-`.zcode/skills` and `.agents/skills`, which `--skills-dir` covers — see [ZCode host](zcode-host.md)),
+`zcode` → `$HOME/.zcode/skills` (ZCode Host install; verified default discovery roots are the
+workspace `.zcode/skills` and `.agents/skills`, which `--skills-dir` covers — see
+[ZCode host](zcode-host.md)),
 `--runtime grok-bot` (and `grokbot`) is refused: Grok Bot is a bridge host with no installer
 destination (see [Grok Bot host](grok-bot-host.md)). `--runtime grok` is not a host alias;
 `--platform grok` is the Grok CLI worker.
@@ -308,6 +309,9 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
   confirm it actually stopped, then send the text **once** as the next prompt on the same ACP
   session, so the conversation keeps its context. It is interrupted-then-continued, never injection —
   the running turn is ended, and work it already did (files written, commands run) is not undone.
+  The resend opens a new turn, so on a ZCode entry Host — a session whose prompts open with
+  `/kaola-project-runner` — it keeps that entry as its own first line (`host_skill_entry_prepended`
+  on the receipt); every other session's text goes out verbatim.
 - With no `--steer-mode`, a native platform uses `native`, and a platform without a native entry
   **refuses** with `steer-mode-required`, `available_steer_modes: ["interrupt"]`, and writes nothing.
   The Runner never interrupts a worker on its own initiative, and never silently degrades from

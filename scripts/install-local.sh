@@ -32,10 +32,11 @@ Consuming runtimes (verified native skill directories):
   claude-code  ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
   cursor       $HOME/.cursor/skills
   devin        ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
-  zcode        $HOME/.zcode/skills (ZCode Host install; verified discovery
-               roots are the workspace .zcode/skills and .agents/skills —
-               --skills-dir covers either — and the user-level ~/.zcode/skills
-               and ~/.agents/skills, see docs/zcode-host.md)
+  zcode        $HOME/.zcode/skills (ZCode Host install; verified default
+               discovery roots are the workspace .zcode/skills and
+               .agents/skills — --skills-dir covers either — and the
+               user-level ~/.zcode/skills and ~/.agents/skills; configured
+               plugins.dirs roots also scan, see docs/zcode-host.md)
 Grok Bot is a bridge host, not an installer destination: the account holds one
 thin generated Skill (hosts/grok-bot/kaola-delegator.md) that loads the
 Kaola-Delegator Skill from this checkout on the bound execution target
