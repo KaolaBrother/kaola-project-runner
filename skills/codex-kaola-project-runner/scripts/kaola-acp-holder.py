@@ -1936,9 +1936,13 @@ class Holder:
         existing duplicate handling are what keep a repeat from prompting twice.
 
         ``still_owed`` is re-read immediately before the bytes go out, which is
-        as late as this transport allows. A permission settled, an agent gone,
-        or a stop begun while the offer was in flight therefore never reaches
-        the Host as a prompt nobody can answer (Issue #92, outer review).
+        as late as this transport allows. That NARROWS the window - it does not
+        close it. Check, write, and the Host's own staging are three steps on
+        two processes, so a settlement landing after the write still leaves the
+        Host holding an event whose request is gone. The carrier cannot fix
+        that; the Host re-reads the worker's live ``pending_permissions`` before
+        acting, and the caller here records a late settlement honestly instead
+        of calling the delivery a recovery (Issue #92, outer re-review).
         """
         receipt: dict[str, Any] = {}
         with self.heartbeat_notify_lock:
@@ -2117,8 +2121,19 @@ class Holder:
                       "event_cursor": wake["params"]["event_cursor"],
                       "attempts": attempts}
             if error is None:
-                self.events.append({"kind": "heartbeat_carrier_recovered",
-                                    **record, "receipt": receipt})
+                # The bytes are out and the Host has the event. Whether an
+                # APPROVAL is still waiting is a SEPARATE fact, and the round
+                # trip is long enough for it to change. Re-read it now: a wake
+                # that lost its request in flight was still delivered, and
+                # saying so is not the same as saying it recovered one.
+                stale_now = self._wake_stale_reason(key)
+                if stale_now is None:
+                    self.events.append({"kind": "heartbeat_carrier_recovered",
+                                        **record, "receipt": receipt})
+                else:
+                    self.events.append({"kind": "heartbeat_carrier_delivered_stale",
+                                        **record, "reason": stale_now,
+                                        "receipt": receipt})
             elif not owed:
                 # The Host answered and refused. It recorded that refusal for
                 # itself - a queue-full receipt already schedules its own full

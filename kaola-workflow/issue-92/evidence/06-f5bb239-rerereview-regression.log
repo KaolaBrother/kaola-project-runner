@@ -1,0 +1,18 @@
+# Failure-first custody for the OUTER RE-REVIEW findings, run against the rejected
+# candidate f5bb239cf348945062cc87902beafaf1d1fe2648 with only the NEW test file copied in.
+# Both FAIL there and PASS on the new candidate.
+
+=== test_a_late_settlement ===
+  ok   the wake really WAS delivered — it is not un-sent (1)
+  ok   the request settled while the receipt was still in flight
+  ok   nothing is still owed to the Host
+FAIL test_a_late_settlement_is_a_stale_delivery_not_a_recovery (after 3 checks): AssertionError: a delivery with no live approval is NOT recorded as a recovery ([{'kind': 'heartbeat_carrier_recovered', 'event_kind': 'permission_required', 'request_id': 'zc-1', 'event_cursor': 11, 'attempts': 2, 'receipt': {'event_id': 'zcode/w-1/permission_required/11', 'staged': True, 'pending': 1}}])
+FAIL: issue-92 permission wake recovery contract (1/1 failed: test_a_late_settlement_is_a_stale_delivery_not_a_recovery)
+
+=== test_the_host_contract_requires_fresh ===
+  ok   the Host dispatch reference makes the event a locator, decided from live state
+  ok   the heartbeat prompt tells the Host to re-read the worker's CURRENT pending_permissions
+  ok   the heartbeat prompt tells the Host to idempotently ignore a request that has vanished
+  ok   the heartbeat prompt tells the Host to the event itself approves nothing
+FAIL test_the_host_contract_requires_fresh_verification (after 4 checks): AssertionError: the heartbeat prompt tells the Host to the arriving event is only a locator
+FAIL: issue-92 permission wake recovery contract (1/1 failed: test_the_host_contract_requires_fresh_verification)

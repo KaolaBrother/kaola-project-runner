@@ -9,7 +9,7 @@ The Issue stays open and `main` is untouched at `aa5fdad`.
 |---|---|
 | Frozen SHA | tip of `workflow/issue-92` (the commit carrying this report) |
 | Code candidate | `0ed31b76c68368127506446b7fa355bd69bccc00` |
-| Previously rejected | `f2d141c` — REJECTED by outer review; two correctness defects, both fixed |
+| Previously rejected | `f2d141c` (outer review), then `f5bb239` (outer re-review) — see below |
 | Branch | `workflow/issue-92` |
 | Worktree | `.kw/worktrees/issue-92` |
 | Base | `aa5fdad990bf5f4b278853e2de0bd664a0c584b6` (= `origin/main` at claim) |
@@ -85,9 +85,11 @@ registry, ledger, or transport gate was added.
 - **Delivery is proved positively, by the EXACT event.** `op_worker_event` names the event it took
   on every accepting path, so a reply carrying neither a usable string error `code` nor the exact
   `event_id` that was sent leaves the wake owed instead of silently retiring it.
-- **A wake that dies in flight is never sent.** `still_owed` is re-read immediately before the
-  socket write, so a settled request, an exited agent, or a begun stop aborts the offer rather than
-  prompting the Host for something nobody can answer.
+- **A wake that dies BEFORE the write is not sent.** `still_owed` is re-read immediately before the
+  socket write, so a settled request, an exited agent, or a begun stop aborts that offer. This
+  narrows the window; it does not close it, and nothing here claims otherwise — a settlement after
+  the write leaves the Host holding a locator for something already gone, recorded as
+  `heartbeat_carrier_delivered_stale`, and handled by the Host's own freshness re-read.
 - **Stale is dropped worker-side.** A settled request or an exited agent never becomes a Host
   prompt; a Host that still acts on the locator gets the ordinary `no-pending-permission` refusal.
 - **Locator only, approves nothing.** `platform`, `session`, `repo`, `reason`, `event_cursor`,
@@ -99,6 +101,49 @@ registry, ledger, or transport gate was added.
 - **Out of scope is unchanged.** Ordinary `idle`/`terminated` stay one-shot, unbound workers
   (`heartbeat_host is None`) early-return, non-ZCode Hosts are untouched, the 600 s idle-exit is
   intact.
+
+## Outer RE-review REJECTED `f5bb239` — the claim was false, and is withdrawn
+
+**The reviewer is right, and I reproduced their race on my own tree before changing anything**
+(`evidence/07-post-write-race-probe.{py,log}`). The peer takes the offer, withholds its receipt
+while a real settlement empties `pending_permissions`, then answers with the exact `event_id`.
+Result on `f5bb239`: `peer_offers: 1`, `pending_permissions: {}`, `undelivered_wakes: {}`, and a
+`heartbeat_carrier_recovered` — a delivery with no live approval, recorded as a recovery.
+
+**My `still_owed` check cannot be atomic and I should not have written as if it were.** Check,
+write, and the Host's own staging are three steps across two processes. The pre-write re-read
+narrows the window; it cannot close it. The README and CHANGELOG sentence "A wake that stops being
+owed while an offer is in flight is never sent" was **false** and has been removed, not softened.
+No no-stale-send semantics are claimed anywhere now.
+
+**What replaces it — two facts kept apart.** Carrier delivery is not a live approval. A delivery
+whose request died in flight is recorded as `heartbeat_carrier_delivered_stale`, carrying the reason
+that overtook it and the Host's own receipt, and is never recorded as
+`heartbeat_carrier_recovered`. The wake really was delivered and the record says so; what it no
+longer says is that an approval is waiting.
+
+**Safety lives on the Host side, and is now pinned by test.** The dispatch reference already said
+"The event carries only `request_id`: decide it from the worker's live `pending_permissions`", and
+the heartbeat prompt already said to re-read current `pending_permissions`, ignore a vanished
+request idempotently, and approve nothing from the event itself. What was missing — and what my own
+earlier sentence overclaimed — is that an arriving wake may already be settled; the prompt now says
+so, and `test_the_host_contract_requires_fresh_verification` pins all five obligations on the
+generated surfaces plus the behaviour: acting on a stale locator is refused with
+`no-pending-permission`, never re-approved. At-least-once and the `event_id` dedup are untouched.
+
+**No atomic boundary was attempted.** It is not reachable across this transport without a withdrawal
+op and Host-side un-staging — new surface, and the wrong trade for a Host that must re-verify
+freshness anyway. Recording the truth is the honest fix.
+
+**Failure-first custody:** both new tests FAIL on `f5bb239` —
+`evidence/06-f5bb239-rerereview-regression.log`. Note that the first three checks of the
+late-settlement test PASS there too: the delivery genuinely happened on both candidates. Only the
+recording was false.
+
+**The missing claim record.** `kaola-workflow/issue-92/workflow-state.md` is now in the frozen tree,
+copied byte-for-byte from the existing main-root record written at claim time
+(sha256 `123fa0ab…`, verified identical). Nothing in it was authored, edited, or reconstructed by
+me, and no other run's state was touched.
 
 ## Outer review REJECTED `f2d141c` — both defects fixed in `0ed31b7`
 
@@ -204,13 +249,16 @@ measured at a 14.1 s gap against the unattended 15 s tick.
 
 | command | result |
 |---|---|
-| `python3 tests/contract/test-issue-92-permission-wake-recovery.py` | **PASS 14/14** — `evidence/14-issue-92-contract-r4.log` |
+| `python3 tests/contract/test-issue-92-permission-wake-recovery.py` | **PASS 16/16** — `evidence/15-issue-92-contract-r5.log` |
 | same suite, baseline `aa5fdad` holder | **5/6 then-existing tests FAIL** on the new behaviour; `test_idle_and_unbound_paths_are_unchanged` passes by design (regression guard, not failure-first) — `evidence/00-baseline-failure.log` |
 | same suite, previous candidate `6c9e3a3` | both new regression tests **FAIL** — `evidence/02-prev-candidate-regression.log` |
 | `./scripts/render-skills.py --check` | **PASS** (budgets OK) |
-| `./scripts/validate.sh` | **EXIT=0, 413 s** — `evidence/24-validate-r4.log` |
+| `./scripts/validate.sh` on this r5 candidate | **EXIT=0, run and reported by the OUTER verification**, incl. 16/16 and the render check. My own two attempts were killed by session teardown and produced no exit status; provenance and the truncated log are in `evidence/25-validate-r5-RESULT.md`. |
+| `./scripts/validate.sh` up to `f5bb239` (mine) | **EXIT=0, 413 s** — `evidence/24-validate-r4.log` |
 | `git diff --check` and `--cached` | **clean** |
 | same suite, rejected candidate `f2d141c` | both outer-defect tests **FAIL** — `evidence/05-f2d141c-outer-defect-regression.log` |
+| same suite, rejected candidate `f5bb239` | both re-review tests **FAIL** — `evidence/06-f5bb239-rerereview-regression.log` |
+| the re-review's own race, on `f5bb239` vs now | `evidence/07-post-write-race-probe.{py,log}` |
 | `bash evidence/04-no-cap-mutation-probe.sh <checkout>` | three injected give-up caps all **FAIL** the no-cap test — `evidence/04-no-cap-mutation-probe.log` |
 | neighbours #76 / #90 / #88 / #65 / zcode-heartbeat | **PASS** — `evidence/11-*.log` |
 

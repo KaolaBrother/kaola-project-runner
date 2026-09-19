@@ -439,8 +439,11 @@ the request stops being answerable. Only a send the Host never took leaves the w
 not listening, hung up, answered something that is not a worker-event receipt, or is an older build
 with no such op; each of those can still come good when the Host comes back. A receipt that names
 the exact event sent settles it, and so does a refusal the Host made knowing what it refused. A wake
-that stops being owed while an offer is in flight is never sent. Neither forcing PTY nor adding a
-gate is the answer. Use
+that stops being owed is re-checked immediately before the bytes go out, but check, write and the
+Host's own staging are three steps across two processes: a request settled after the write still
+leaves the Host holding a locator for something already gone. That is why the event is only a
+locator — the Host re-reads the worker's live `pending_permissions` and approves nothing from the
+event itself. Neither forcing PTY nor adding a gate is the answer. Use
 `--permission-mode` where supported and check the native semantics: Codex ACP's `read-only` mode
 can write workspace files;
 strict Codex read-only execution requires `--transport pty --permission-mode read-only`.

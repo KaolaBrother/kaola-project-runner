@@ -1274,14 +1274,18 @@ def test_an_accepting_receipt_must_name_the_event_that_was_sent() -> None:
           f"worker and Host derive the same id ({holder_module.worker_event_id(params)})")
 
 
-def test_a_wake_that_dies_mid_flight_is_never_sent() -> None:
-    """Settlement, agent exit, or a begun stop that lands while an offer is
-    already in flight must not reach the Host.
+def test_a_wake_that_dies_before_the_write_is_not_sent() -> None:
+    """Settlement, agent exit, or a begun stop that lands BEFORE the bytes go
+    out must not reach the Host.
 
     Each case is injected deterministically at the exact interleaving: the
     flush's own staleness check still sees a live request, and it is gone by the
     time the send takes its last look before writing. The proof is the peer:
     it must receive NOTHING.
+
+    This is the NARROWED window, not a closed one. A settlement landing after
+    the write is a different fact and is covered by
+    ``test_a_late_settlement_is_a_stale_delivery_not_a_recovery``.
     """
     holder_module = load_holder_module()
     key = "zc-1"
@@ -1336,6 +1340,110 @@ def test_a_wake_that_dies_mid_flight_is_never_sent() -> None:
           "control: the recovery is recorded")
 
 
+def test_a_late_settlement_is_a_stale_delivery_not_a_recovery() -> None:
+    """The window the pre-write check cannot close, told honestly.
+
+    Check, write, and the Host's own staging are three steps across two
+    processes. The peer here takes the offer, WITHHOLDS its receipt while a real
+    settlement empties ``pending_permissions``, and only then answers with the
+    exact ``event_id``. The wake really was delivered — claiming otherwise would
+    be a lie — but no approval is waiting any more, and recording that as a
+    recovery is the false semantics this pins against.
+    """
+    holder_module = load_holder_module()
+    key = "zc-1"
+    params = carrier_params(key)
+    stub = CarrierOnlyHolder(holder_module, key)
+    sock = Path(tempfile.mkdtemp(prefix="kaola-i92-late-")) / "peer.sock"
+    stub.heartbeat_host = dict(stub.heartbeat_host, socket=str(sock))
+    exact = ('{"event_id":"%s","staged":true,"pending":1}\n'
+             % expected_event_id(params)).encode()
+
+    offered = threading.Event()
+    release = threading.Event()
+
+    def responder(_index, _request):
+        offered.set()        # the Host HAS the event now
+        release.wait(15)     # ... the settlement happens in here ...
+        return exact         # ... and only now does the receipt come home
+
+    def settle_once_offered():
+        if offered.wait(15):
+            stub.pending_permissions.pop(key, None)   # a real permit
+        release.set()
+
+    stub.retain(params, {"error": {"code": "host-unreachable"}})
+    settler = threading.Thread(target=settle_once_offered, daemon=True)
+    settler.start()
+    with FakePeer(sock, responder) as peer:
+        stub.flush()
+        offers = peer.count()
+    settler.join(15)
+
+    check(offers == 1, f"the wake really WAS delivered — it is not un-sent ({offers})")
+    check(key not in stub.pending_permissions,
+          "the request settled while the receipt was still in flight")
+    check(not stub.undelivered_wakes, "nothing is still owed to the Host")
+    recovered = [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_recovered"]
+    check(not recovered,
+          f"a delivery with no live approval is NOT recorded as a recovery ({recovered})")
+    stale = [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_delivered_stale"]
+    check(len(stale) == 1, f"it is recorded as a stale delivery ({stub.recorded})")
+    check(stale[0]["reason"] == "permission-settled",
+          f"naming what overtook it ({stale[0]})")
+    check(stale[0].get("receipt", {}).get("event_id") == expected_event_id(params),
+          "and keeping the Host's own receipt, so the delivery is not hidden")
+    check(str(stale[0]["request_id"]) == key and stale[0]["event_cursor"] == 11,
+          "with the same locator the Host was given")
+
+
+def test_the_host_contract_requires_fresh_verification() -> None:
+    """Because a delivered wake can arrive already settled, the Host side is
+    what keeps it safe: the event is a LOCATOR, the Host re-reads the worker's
+    live state before acting, a vanished request is ignored, and nothing is
+    approved by the event itself. Pin that on the surfaces the Host actually
+    reads, and prove a stale approval is refused rather than honoured."""
+    dispatch = (ROOT / "skills" / "kaola-project-runner" / "references"
+                / "zcode-host-dispatch.md").read_text(encoding="utf-8")
+    check("The event carries only `request_id`:" in dispatch
+          and "decide it from the worker's live `pending_permissions`" in dispatch,
+          "the Host dispatch reference makes the event a locator, decided from live state")
+
+    skeleton = (ROOT / "skills" / "kaola-project-runner" / "references"
+                / "heartbeat-skeleton.md").read_text(encoding="utf-8")
+    for fragment, label in (
+            ("读当前 pending_permissions", "re-read the worker's CURRENT pending_permissions"),
+            ("已消失的请求幂等忽略", "idempotently ignore a request that has vanished"),
+            ("事件本身不批准任何操作", "the event itself approves nothing"),
+            ("只是定位符", "the arriving event is only a locator"),
+            ("可能在送达途中就已被批准或结束", "and may already have been settled in flight")):
+        check(fragment in skeleton, f"the heartbeat prompt states: {label}")
+
+    # Behaviour, not just wording: a stale request cannot be approved.
+    sandbox = Sandbox("freshness")
+    try:
+        worker = sandbox.session()
+        sandbox.start(worker, "permission")
+        sandbox.cli("send", "--no-wait", "--text", "do work", session=worker)
+        wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
+                            or []), 20, "the worker waits on a permission")
+        request_id = (sandbox.cli("status", session=worker)
+                      .get("pending_permissions") or [])[0].get("request_id")
+        permit = sandbox.cli("permit", "--option", "allow", session=worker)
+        check(permit.get("permitted") is not None, "the live request is settled once")
+        again = sandbox.invoke("permit", "--request-id", str(request_id),
+                               "--option", "allow", session=worker)[1] or {}
+        code = (again.get("error") or {}).get("code")
+        check(code in ("no-pending-permission", "unknown-request"),
+              f"acting on the stale locator is REFUSED, never re-approved ({again})")
+        check(not (sandbox.cli("status", session=worker).get("pending_permissions") or []),
+              "and nothing is left pending for a stale event to act on")
+        stop = sandbox.cli("stop", "--force", session=worker)
+        check(stop.get("residual_pids") == [], "worker stop leaves no residue")
+    finally:
+        sandbox.cleanup()
+
+
 TESTS = (
     test_absent_host_recovers_the_wake_on_restart,
     test_recovered_wake_is_not_prompted_twice,
@@ -1350,7 +1458,9 @@ TESTS = (
     test_only_a_receipt_that_names_the_event_counts_as_delivered,
     test_an_older_host_build_keeps_the_wake_owed,
     test_an_accepting_receipt_must_name_the_event_that_was_sent,
-    test_a_wake_that_dies_mid_flight_is_never_sent,
+    test_a_wake_that_dies_before_the_write_is_not_sent,
+    test_a_late_settlement_is_a_stale_delivery_not_a_recovery,
+    test_the_host_contract_requires_fresh_verification,
 )
 
 

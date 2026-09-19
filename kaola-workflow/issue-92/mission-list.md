@@ -96,6 +96,44 @@ Ordinary `idle`/`terminated`, unbound workers and non-ZCode Hosts stay unchanged
     413 s (`evidence/24-validate-r4.log`), `git diff --check` clean.
     STILL NOT DONE and deliberately so: Workflow finalize, archive, sink, issue close, main push.
 
+- item: OUTER RE-REVIEW REJECTED f5bb239 — a remaining High race, and a missing claim record. The
+  reviewer reproduced, on f5, a peer that takes the offer, withholds its receipt while a real
+  settlement empties `pending_permissions`, then answers with the exact receipt: result
+  `pending={}`, `undelivered={}`, `heartbeat_carrier_recovered`, one offer delivered. The pre-write
+  `still_owed` check cannot make check+send+Host-staging atomic, so the README/CHANGELOG "never
+  sent" claim was false. Resolve honestly against the Issue acceptance, distinguish carrier delivery
+  from a live pending approval, pin the Host-side freshness obligation, and put the real
+  `workflow-state.md` in the frozen tree.
+  status: done
+  dispatched: self. A new mission: an outer verdict is a custody change, and the result above stays
+    as the record of what I concluded before it.
+  result: Reproduced the race on my own tree FIRST (`evidence/07-post-write-race-probe.{py,log}`)
+    and confirmed the reviewer exactly. No atomic boundary was attempted — it is unreachable across
+    this transport without a withdrawal op and Host-side un-staging, which is new surface and the
+    wrong trade for a Host that must re-verify freshness anyway.
+    Withdrew the false claim: the "never sent" sentence is REMOVED from README and CHANGELOG, not
+    softened, and the pre-write test is renamed to what it really proves
+    (`test_a_wake_that_dies_before_the_write_is_not_sent`).
+    Kept the two facts apart: a delivery whose request died in flight is now recorded as
+    `heartbeat_carrier_delivered_stale` with the reason that overtook it and the Host's own receipt,
+    never as `heartbeat_carrier_recovered`.
+    Pinned the Host side, which is where safety can actually live: the heartbeat prompt now also
+    says an arriving event is only a locator that may already have been settled in flight, and
+    `test_the_host_contract_requires_fresh_verification` pins five obligations on the generated
+    surfaces plus the behaviour — acting on a stale locator is refused with `no-pending-permission`.
+    At-least-once and the `event_id` dedup are untouched.
+    Failure-first custody: both new tests FAIL on f5bb239 —
+    `evidence/06-f5bb239-rerereview-regression.log`.
+    Claim record: `workflow-state.md` copied byte-for-byte from the existing main-root record
+    (sha256 `123fa0ab…`, verified identical). Nothing authored or edited; no foreign run touched.
+    Verification: 16/16 suite (`evidence/15-issue-92-contract-r5.log`), render --check PASS.
+    Full `validate.sh` for this candidate is the OUTER verification's exit 0, not a run of mine —
+    both of my attempts were killed by session teardown with no exit status, and
+    `evidence/25-validate-r5-RESULT.md` records that provenance rather than dressing a truncated log
+    up as a pass.
+    STILL NOT DONE and deliberately so: Workflow finalize, archive, sink, issue close, main push,
+    rebase.
+
 ## Record-keeping correction (2026-09-19)
 
 Missions 1, 3 and 4 were carried out in order, but their `status`/`result` lines were never

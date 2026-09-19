@@ -1,0 +1,31 @@
+{
+  "peer_offers": 1,
+  "pending_permissions": {},
+  "undelivered_wakes": {},
+  "recorded_kinds": [
+    "heartbeat_carrier_undelivered",
+    "heartbeat_carrier_delivered_stale"
+  ],
+  "records": [
+    {
+      "kind": "heartbeat_carrier_undelivered",
+      "event_kind": "permission_required",
+      "request_id": "zc-1",
+      "event_cursor": 11,
+      "error": "host-unreachable"
+    },
+    {
+      "kind": "heartbeat_carrier_delivered_stale",
+      "event_kind": "permission_required",
+      "request_id": "zc-1",
+      "event_cursor": 11,
+      "attempts": 2,
+      "reason": "permission-settled",
+      "receipt": {
+        "event_id": "zcode/w-1/permission_required/11",
+        "staged": true,
+        "pending": 1
+      }
+    }
+  ]
+}

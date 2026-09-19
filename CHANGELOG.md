@@ -41,9 +41,19 @@
   recovery. And a wake that stops being owed while an offer is already in
   flight — a `permit` settling it, the agent exiting, a stop beginning — is
   re-checked immediately before the bytes go out, as late as the transport
-  allows, so a dead request never reaches the Host as a prompt nobody can
-  answer; `stopping` joins `permission-settled` and `agent-exited` as a reason a
-  wake ends. A wake whose request was settled, or whose worker agent
+  allows; `stopping` joins `permission-settled` and `agent-exited` as a reason a
+  wake ends. That NARROWS the window and does not close it: check, write and the
+  Host's own staging are three steps across two processes, so a settlement
+  landing after the write still leaves the Host holding an event whose request
+  is gone. No claim is made that such a wake is never sent. Instead the two
+  facts are kept apart — carrier delivery is not a live approval: a delivery
+  whose request died in flight is recorded as `heartbeat_carrier_delivered_stale`
+  with the reason that overtook it and the Host's own receipt, never as
+  `heartbeat_carrier_recovered`. Safety comes from the Host side, which the
+  dispatch reference and heartbeat prompt already require and now pin by test:
+  the event is a LOCATOR, the Host re-reads the worker's live
+  `pending_permissions` before acting, a vanished request is ignored
+  idempotently, and nothing is ever approved from the event itself. A wake whose request was settled, or whose worker agent
   exited, before the Host returns is dropped as stale and never becomes a prompt;
   a Host that still acts on the stale locator gets the ordinary
   `no-pending-permission` refusal. Only the exact locator and `request_id`
