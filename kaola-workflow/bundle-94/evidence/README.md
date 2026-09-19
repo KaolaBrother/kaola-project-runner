@@ -11,6 +11,7 @@ receipts those results cite, docked into the run so the archive keeps them.
 | `NATIVE-SKILL-LIVE-MATRIX.md` | `/tmp/kpr-zcode-native-live-cMR6oa/` (verbatim copy, including addenda 1-3) | The live ZCode 3.12.3 / real GLM ACP matrix, the two binary-source discovery readings, and the explicitly NOT-CLAIMED items |
 | `zcode-acp-live/*.json` | same fixture, the receipts the matrix's "Evidence receipts" section names | Real `runtime-tmux.sh` ACP receipts: start, the pre/post `/compact` sends, the captures carrying the `Skill` `tool_call` events, the dollar-form leg, and the exact stop |
 | `skill-discovery-wire.md` | distilled from `/tmp/kpr-i94-mock/req-{1,10,11,13,15,17}-head.json` | Which discovery root put `kaola-project-runner` metadata on the wire, per one-prompt probe session |
+| `validate/` | this run's three raw validation captures | The passing `validate.sh` run, the first run that failed on an inherited control-plane binding, and the same failure reproduced on unmodified `main` — see `validate/README.md` for the exact commands |
 
 ## Why the discovery evidence is distilled, not copied
 
