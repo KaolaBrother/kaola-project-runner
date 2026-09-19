@@ -1,0 +1,12 @@
+╭────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.155.1)                 │
+│                                            │
+│ model:     gpt-5.6-sol   /model to change  │
+│ directory: /private/tmp/…/codex-live/repoE │
+╰────────────────────────────────────────────╯
+  Tip: Try the Desktop app. Run 'codex app' or visit
+  https://chatgpt.com/codex?app-landing-page=true
+⚠ Heads up, you have less than 10% of your weekly
+  limit left. Run /status for a breakdown.
+› Ask Codex to do anything
+  gpt-5.6-sol default · /private/tmp/claude-501/-Vo…

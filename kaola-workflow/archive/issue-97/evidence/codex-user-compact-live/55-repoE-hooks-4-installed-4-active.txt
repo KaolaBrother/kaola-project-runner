@@ -1,0 +1,26 @@
+╭────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.155.1)                 │
+│                                            │
+│ model:     gpt-5.6-sol   /model to change  │
+│ directory: /private/tmp/…/codex-live/repoE │
+╰────────────────────────────────────────────╯
+  Tip: Try the Desktop app. Run 'codex app' or visit
+  https://chatgpt.com/codex?app-landing-page=true
+⚠ Heads up, you have less than 10% of your weekly
+  limit left. Run /status for a breakdown.
+  Hooks
+  Lifecycle hooks from config and enabled plugins.
+  Event                 Installed   Active      De
+  PreToolUse            0           0           Be
+  PermissionRequest     0           0           Wh
+  PostToolUse           0           0           Af
+  PreCompact            0           0           Be
+  PostCompact           0           0           Af
+  SessionStart          4           4           Wh
+  SessionEnd            0           0           Ri
+  UserPromptSubmit      0           0           Wh
+  SubagentStart         0           0           Wh
+  SubagentStop          0           0           Ri
+  Stop                  0           0           Ri
+  Interrupt             0           0           Ri
+  Press enter to view hooks; esc to close
