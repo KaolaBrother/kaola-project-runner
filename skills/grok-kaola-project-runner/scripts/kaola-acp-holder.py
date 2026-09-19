@@ -132,6 +132,12 @@ CHILD_RECORD_NAME = "children.jsonl"
 HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
 HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
 HEARTBEAT_EVENT_CAP = 32
+# Issue #92: the three codes that mean THIS END never handed the event over -
+# the Host was not listening, hung up, or answered something that is not a
+# receipt. Only these leave a permission wake owed. Every other receipt is the
+# Host's own answer (staged, duplicate, or a refusal it recorded for itself),
+# and an answered event is settled whether or not the answer was a yes.
+CARRIER_UNDELIVERED_CODES = ("host-unreachable", "host-closed", "host-reply-invalid")
 HEARTBEAT_NOTIFY_TIMEOUT = 5.0
 HEARTBEAT_NOTIFY_GRACE = 6.0
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
@@ -1901,7 +1907,8 @@ class Holder:
         self.events.append({"kind": "heartbeat_carrier_sent", "event_kind": kind,
                             "reason": reason, "target_session": target["session"],
                             "receipt": receipt})
-        if kind == "permission_required" and receipt.get("error"):
+        if (kind == "permission_required"
+                and self._carrier_error_code(receipt) in CARRIER_UNDELIVERED_CODES):
             self._retain_undelivered_wake(params, receipt)
 
     def _carrier_send(self, target: dict[str, str],
@@ -1938,7 +1945,25 @@ class Holder:
         if not receipt:
             receipt = {"error": {"code": "host-closed",
                                  "message": "heartbeat host closed without a receipt"}}
+        # Whatever is bound at the host socket answered; it is not trusted to
+        # have answered in the receipt shape. Callers read `error.code`, so a
+        # reply that is not an object, or whose `error` is not an object, is
+        # normalised here into an honest carrier failure rather than raising on
+        # the agent reader thread that called us.
+        error = receipt.get("error") if isinstance(receipt, dict) else receipt
+        if not isinstance(receipt, dict) or (error is not None
+                                             and not isinstance(error, dict)):
+            receipt = {"error": {
+                "code": "host-reply-invalid",
+                "message": "heartbeat host reply is not a worker_event receipt",
+                "reply_head": str(receipt)[:HEARTBEAT_DEFECT_CHARS]}}
         return receipt
+
+    @staticmethod
+    def _carrier_error_code(receipt: dict[str, Any]) -> Any:
+        """The receipt's error code, or None when the Host accepted the event."""
+        error = receipt.get("error")
+        return error.get("code") if isinstance(error, dict) else None
 
     def _retain_undelivered_wake(self, params: dict[str, Any],
                                  receipt: dict[str, Any]) -> None:
@@ -1948,13 +1973,13 @@ class Holder:
         every later offer is the same event rather than a new one.
         """
         key = normalize_id(params.get("request_id"))
-        error = (receipt.get("error") or {}).get("code")
+        error = self._carrier_error_code(receipt)
         with self.undelivered_wakes_lock:
             if key in self.undelivered_wakes:
                 self.undelivered_wakes[key]["last_error"] = error
                 return
             self.undelivered_wakes[key] = {"params": params, "attempts": 1,
-                                           "last_error": error}
+                                           "last_error": error, "logged_error": error}
         self.events.append({"kind": "heartbeat_carrier_undelivered",
                             "event_kind": params["kind"],
                             "request_id": params.get("request_id"),
@@ -2011,23 +2036,40 @@ class Holder:
                                     "reason": stale})
                 continue
             receipt = self._carrier_send(self.heartbeat_host, wake["params"])
-            error = (receipt.get("error") or {}).get("code")
+            error = self._carrier_error_code(receipt)
+            owed = error in CARRIER_UNDELIVERED_CODES
             with self.undelivered_wakes_lock:
                 current = self.undelivered_wakes.get(key)
                 if current is None:
                     continue
                 current["attempts"] += 1
-                current["last_error"] = error
                 attempts = current["attempts"]
-                if error is None:
+                previous = current["logged_error"]
+                current["last_error"] = error
+                if owed:
+                    current["logged_error"] = error
+                else:
                     self.undelivered_wakes.pop(key, None)
-            if error is not None:
-                continue
-            self.events.append({"kind": "heartbeat_carrier_recovered",
-                                "event_kind": wake["params"]["kind"],
-                                "request_id": wake["params"].get("request_id"),
-                                "event_cursor": wake["params"]["event_cursor"],
-                                "attempts": attempts, "receipt": receipt})
+            record = {"event_kind": wake["params"]["kind"],
+                      "request_id": wake["params"].get("request_id"),
+                      "event_cursor": wake["params"]["event_cursor"],
+                      "attempts": attempts}
+            if error is None:
+                self.events.append({"kind": "heartbeat_carrier_recovered",
+                                    **record, "receipt": receipt})
+            elif not owed:
+                # The Host answered and refused. It recorded that refusal for
+                # itself - a queue-full receipt already schedules its own full
+                # pending-approval pass - so re-offering it forever would drive
+                # the Host, not recover the wake.
+                self.events.append({"kind": "heartbeat_carrier_dropped",
+                                    **record, "reason": "host-answered",
+                                    "receipt": receipt})
+            elif error != previous:
+                # A long absence is not logged once per tick; a CHANGE in how
+                # it is failing is the receipt worth keeping.
+                self.events.append({"kind": "heartbeat_carrier_undelivered",
+                                    **record, "error": error})
 
     def _record_overflow_full_check(self) -> int:
         """Bump the one full-check generation and log the fact.

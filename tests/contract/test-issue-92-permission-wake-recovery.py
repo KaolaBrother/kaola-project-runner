@@ -37,7 +37,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import signal
+import threading
 import socket
 import subprocess
 import sys
@@ -174,6 +176,83 @@ def worker_event_entries(record_dir: Path) -> list[dict]:
 def failed_carrier(record_dir: Path, event_kind: str) -> list[dict]:
     return [entry for entry in carrier_entries(record_dir, event_kind)
             if (entry.get("receipt") or {}).get("error")]
+
+
+class FakePeer:
+    """Something bound at the absent Host's own socket path.
+
+    The worker resolves its carrier target once, at start, from the Host's
+    deterministic record directory - so binding here is how a test decides what
+    a carrier send actually gets back: a reply that is not a receipt, a refusal
+    the Host itself would record, or a forwarded round trip to a real Host
+    holder whose first reply is lost on the way home.
+
+    ``responder(index, request_bytes)`` returns the bytes to answer with, or
+    None to hang up without answering.
+    """
+
+    def __init__(self, path: Path, responder):
+        self.path = Path(path)
+        self.responder = responder
+        self.requests: list[bytes] = []
+        self.lock = threading.Lock()
+        self.stop = threading.Event()
+        self.server: socket.socket | None = None
+
+    def __enter__(self) -> "FakePeer":
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists() or self.path.is_symlink():
+            self.path.unlink()
+        self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.server.bind(str(self.path))
+        os.chmod(self.path, 0o600)
+        self.server.listen(8)
+        threading.Thread(target=self._serve, daemon=True).start()
+        return self
+
+    def _serve(self) -> None:
+        while not self.stop.is_set():
+            try:
+                connection, _ = self.server.accept()
+            except OSError:
+                return
+            try:
+                buffer = bytearray()
+                while b"\n" not in buffer:
+                    data = connection.recv(65536)
+                    if not data:
+                        break
+                    buffer.extend(data)
+                request = bytes(buffer.partition(b"\n")[0])
+                with self.lock:
+                    index = len(self.requests)
+                    self.requests.append(request)
+                reply = self.responder(index, request)
+                if reply is not None:
+                    connection.sendall(reply)
+            except OSError:
+                pass
+            finally:
+                try:
+                    connection.close()
+                except OSError:
+                    pass
+
+    def count(self) -> int:
+        with self.lock:
+            return len(self.requests)
+
+    def __exit__(self, *exc: object) -> None:
+        self.stop.set()
+        if self.server is not None:
+            try:
+                self.server.close()
+            except OSError:
+                pass
+        try:
+            self.path.unlink()
+        except OSError:
+            pass
 
 
 class Sandbox:
@@ -416,6 +495,7 @@ def test_absent_host_recovers_the_wake_on_restart() -> None:
         still = sandbox.cli("status", session=worker).get("undelivered_worker_events") or []
         check(len(still) == 1 and still[0].get("attempts", 0) >= 2,
               f"the wake is still owed after repeated attempts ({still})")
+        attempts_while_absent = still[0]["attempts"]
         check(sandbox.cli("status", session=worker).get("turn_active") is True,
               "the worker turn is still blocked on approval")
         check(not worker_event_entries(host_dir),
@@ -443,7 +523,7 @@ def test_absent_host_recovers_the_wake_on_restart() -> None:
         recovered = events_of_kind(worker_dir, "heartbeat_carrier_recovered")
         check(len(recovered) == 1
               and str(recovered[0].get("request_id")) == str(request_id)
-              and recovered[0].get("attempts", 0) >= 1,
+              and recovered[0].get("attempts", 0) > attempts_while_absent,
               f"the worker records the recovery and what it took ({recovered})")
         check(not (sandbox.cli("status", session=worker).get("undelivered_worker_events")),
               "nothing is owed to the host once the wake lands")
@@ -620,6 +700,12 @@ def test_busy_host_stages_the_recovered_wake() -> None:
         arm_pending_wake_with_absent_host(sandbox, host, worker, host_scenario="permission")
         host_dir = sandbox.record_dir(host)
 
+        # Wait for a retry to land first: that pins the watchdog phase, so the
+        # host has a whole tick to become busy in rather than whatever was left
+        # of one. Without this the wake can deliver into the ~0.5s start window.
+        wait_until(lambda: (sandbox.cli("status", session=worker)
+                            .get("undelivered_worker_events") or [{}])[0]
+                   .get("attempts", 0) >= 2, 40, "a retry attempt has just been made")
         sandbox.start(host, "permission")
         sandbox.cli("send", "--no-wait", "--text", "host busy turn", session=host)
         wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions")
@@ -695,6 +781,219 @@ def test_idle_and_unbound_paths_are_unchanged() -> None:
         sandbox.cleanup()
 
 
+def test_a_reply_that_is_not_a_receipt_never_wedges_the_worker() -> None:
+    """Whatever is bound at the host socket is not trusted to answer in the
+    receipt shape. A reply that is not one must become an honest carrier
+    failure — it must not raise on the agent reader thread that sent it, which
+    would leave the turn active forever with no way back."""
+    sandbox = Sandbox("badreply")
+    try:
+        host = sandbox.session()
+        worker = sandbox.session()
+        sandbox.start(host, "basic")
+        sandbox.write_prompt_file("HEARTBEAT V1: malformed carrier reply body.")
+        sandbox.start(worker, "permission", heartbeat_host=sandbox.host_binding(host))
+        sandbox.cli("stop", "--force", session=host)
+        worker_dir = sandbox.record_dir(worker)
+        host_dir = sandbox.record_dir(host)
+
+        # Two different non-receipt shapes: a JSON object whose `error` is a
+        # string, and a reply that is not an object at all.
+        replies = [b'{"error":"boom"}\n', b'"not-a-receipt"\n']
+        with FakePeer(holder_socket(host_dir),
+                      lambda index, _r: replies[min(index, 1)]) as peer:
+            send = sandbox.cli("send", "--no-wait", "--text", "do work", session=worker)
+            check(send.get("outcome") == "in_progress", "worker prompt admitted")
+            wait_until(lambda: events_of_kind(worker_dir, "heartbeat_carrier_undelivered"),
+                       25, "the non-receipt reply is recorded as a carrier failure")
+            undelivered = events_of_kind(worker_dir, "heartbeat_carrier_undelivered")
+            check(undelivered[0].get("error") == "host-reply-invalid",
+                  f"the failure names the bad reply ({undelivered[0]})")
+            check(peer.count() >= 1, "the worker really did reach the peer")
+            # Still owed, and still retrying past the second bad shape.
+            wait_until(lambda: peer.count() >= 2, 40,
+                       "the wake is re-offered despite the bad reply")
+            held = sandbox.cli("status", session=worker).get("undelivered_worker_events")
+            check(isinstance(held, list) and len(held) == 1,
+                  f"the wake is still owed after a bad reply ({held})")
+
+        # The real host comes back and takes the wake.
+        sandbox.start(host, "basic")
+        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"),
+                   RECOVERY_TIMEOUT, "the restarted host receives the recovered wake")
+
+        # The proof the reader thread survived: the worker still answers ACP.
+        # A dead reader would leave the turn active forever after the permit.
+        permit = sandbox.cli("permit", "--option", "allow", session=worker)
+        check(permit.get("permitted") is not None,
+              f"permit settles the request ({permit.get('error')})")
+        wait_until(lambda: sandbox.cli("status", session=worker).get("turn_active") is False,
+                   30, "the worker turn ends — its agent reader thread is alive")
+        wait_until(lambda: any(e["kind"] == "idle"
+                               for e in worker_event_entries(host_dir)), 30,
+                   "the ordinary turn-end idle still arrives")
+
+        for session in (worker, host):
+            stop = sandbox.cli("stop", "--force", session=session)
+            check(stop.get("residual_pids") == [], f"{session} stop leaves no residue")
+    finally:
+        sandbox.cleanup()
+
+
+def test_a_host_answer_settles_the_debt_even_when_it_refuses() -> None:
+    """The wake is owed only while the Host never answered.
+
+    A refusal the Host produced for itself — `worker-event-queue-full` already
+    schedules its own full pending-approval pass — must END the retry. Re-offering
+    it every tick would drive the Host, not recover the wake.
+    """
+    sandbox = Sandbox("refused")
+    try:
+        host = sandbox.session()
+        worker = sandbox.session()
+        sandbox.start(host, "basic")
+        sandbox.write_prompt_file("HEARTBEAT V1: refused carrier body.")
+        sandbox.start(worker, "permission", heartbeat_host=sandbox.host_binding(host))
+        sandbox.cli("stop", "--force", session=host)
+        worker_dir = sandbox.record_dir(worker)
+
+        refusal = (b'{"error":{"code":"worker-event-queue-full","capacity":32},'
+                   b'"overflow_full_check":true,"generation":3,"pending":32}\n')
+        # First offer hangs up (nothing was handed over, so the wake is owed);
+        # every later offer is the Host's own refusal.
+        with FakePeer(holder_socket(sandbox.record_dir(host)),
+                      lambda index, _r: None if index == 0 else refusal) as peer:
+            sandbox.cli("send", "--no-wait", "--text", "do work", session=worker)
+            wait_until(lambda: events_of_kind(worker_dir, "heartbeat_carrier_undelivered"),
+                       25, "the hung-up first offer leaves the wake owed")
+            wait_until(lambda: events_of_kind(worker_dir, "heartbeat_carrier_dropped"),
+                       40, "the Host's own refusal settles the debt")
+            dropped = events_of_kind(worker_dir, "heartbeat_carrier_dropped")
+            check(len(dropped) == 1 and dropped[0].get("reason") == "host-answered",
+                  f"the drop names the Host's answer ({dropped})")
+            check((dropped[0].get("receipt") or {}).get("overflow_full_check") is True,
+                  f"the Host's own receipt is kept as evidence ({dropped[0]})")
+            check(not (sandbox.cli("status", session=worker)
+                       .get("undelivered_worker_events")),
+                  "nothing is still owed once the Host has answered")
+
+            # The storm test: no further offers, however long we wait.
+            settled = peer.count()
+            time.sleep(35)
+            check(peer.count() == settled,
+                  f"an answered wake is never re-offered ({settled} -> {peer.count()})")
+            check(sandbox.cli("status", session=worker).get("turn_active") is True,
+                  "the worker is still blocked; the refusal approved nothing")
+
+        stop = sandbox.cli("stop", "--force", session=worker)
+        check(stop.get("residual_pids") == [], "worker stop leaves no residue")
+    finally:
+        sandbox.cleanup()
+
+
+def test_a_lost_receipt_retries_into_the_hosts_own_dedup() -> None:
+    """The real duplicate path, driven end to end through production code.
+
+    The Host DID stage the wake, but the receipt never got home, so the worker
+    still owes it. The retry it then makes — same params, same `event_cursor` —
+    must land on the Host's existing dedup: one prompt, one pending request, no
+    second approval.
+    """
+    sandbox = Sandbox("lostreceipt")
+    try:
+        bound = sandbox.session()
+        live = sandbox.session()
+        worker = sandbox.session()
+        sandbox.start(bound, "basic")
+        sandbox.write_prompt_file("HEARTBEAT V1: lost receipt body.")
+        sandbox.start(worker, "permission", heartbeat_host=sandbox.host_binding(bound))
+        sandbox.cli("stop", "--force", session=bound)
+        # A real Host holder to forward to; the worker's carrier target stays
+        # the socket path it resolved at start.
+        sandbox.start(live, "basic")
+        live_sock = holder_socket(sandbox.record_dir(live))
+        worker_dir = sandbox.record_dir(worker)
+        live_dir = sandbox.record_dir(live)
+
+        def forward(index: int, request: bytes) -> bytes | None:
+            connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                connection.settimeout(15.0)
+                connection.connect(str(live_sock))
+                connection.sendall(request + b"\n")
+                buffer = bytearray()
+                while b"\n" not in buffer:
+                    data = connection.recv(65536)
+                    if not data:
+                        break
+                    buffer.extend(data)
+            finally:
+                connection.close()
+            # The first receipt is lost on the way home: the Host staged it,
+            # the worker never learned that.
+            return None if index == 0 else bytes(buffer.partition(b"\n")[0]) + b"\n"
+
+        with FakePeer(holder_socket(sandbox.record_dir(bound)), forward) as peer:
+            sandbox.cli("send", "--no-wait", "--text", "do work", session=worker)
+            wait_until(lambda: events_of_kind(live_dir, "worker_event_delivered"), 30,
+                       "the host staged and delivered the wake it did receive")
+            wait_until(lambda: events_of_kind(worker_dir, "heartbeat_carrier_undelivered"),
+                       25, "the worker still owes the wake, its receipt was lost")
+            staged_once = worker_event_entries(live_dir)
+            prompts_once = len(rpc_sends(sandbox.rpcs[live]))
+            check(len(staged_once) == 1 and prompts_once == 1,
+                  f"the host saw it exactly once so far ({len(staged_once)}/{prompts_once})")
+
+            wait_until(lambda: events_of_kind(worker_dir, "heartbeat_carrier_recovered"),
+                       RECOVERY_TIMEOUT, "the retry reaches the host")
+            recovered = events_of_kind(worker_dir, "heartbeat_carrier_recovered")
+            receipt = recovered[0].get("receipt") or {}
+            check(receipt.get("duplicate") is True and receipt.get("staged") is not True,
+                  f"the retry landed on the host's own dedup ({receipt})")
+            check(receipt.get("event_id") == staged_once[0]["event_id"],
+                  f"the retry resolved to the SAME event id ({receipt.get('event_id')})")
+            check(peer.count() >= 2, f"the retry really was a second offer ({peer.count()})")
+
+            time.sleep(3)
+            check(len(worker_event_entries(live_dir)) == 1,
+                  "the retry staged no second event")
+            check(len(rpc_sends(sandbox.rpcs[live])) == prompts_once,
+                  "the retry produced no second host prompt")
+            check(len(sandbox.cli("status", session=worker)
+                      .get("pending_permissions") or []) == 1,
+                  "the retry approved nothing; one request is still pending")
+
+        for session in (worker, live):
+            stop = sandbox.cli("stop", "--force", session=session)
+            check(stop.get("residual_pids") == [], f"{session} stop leaves no residue")
+    finally:
+        sandbox.cleanup()
+
+
+def test_the_retention_has_no_retry_deadline() -> None:
+    """Duration cannot prove the ABSENCE of a give-up cap, and the issue is
+    explicit that a finite retry which can still silently lose the wake is not
+    acceptance. Pin it structurally instead: the only reasons this holder stops
+    owing a permission wake are the three that mean it is no longer owed."""
+    source = (ROOT / "scripts" / "kaola-acp-holder.py").read_text(encoding="utf-8")
+    region = source.split("def _retain_undelivered_wake")[1].split("\n    def _record_")[0]
+    # Prose explaining the absence of a deadline is not a deadline: match the
+    # code, with docstrings and comments removed.
+    region = re.sub(r'"""(?:.|\n)*?"""', "", region)
+    region = re.sub(r"(?m)#.*$", "", region)
+    reasons = sorted(set(re.findall(r'"reason": "([a-z-]+)"', region))
+                     | set(re.findall(r'return "([a-z-]+)"', region)))
+    check(reasons == ["agent-exited", "host-answered", "permission-settled"],
+          f"a wake is dropped only when it is no longer owed ({reasons})")
+    check(not re.search(r"attempts\s*[<>]=?\s*\d", region),
+          "no attempt count is ever compared against a threshold")
+    check(not re.search(r"\b(deadline|expire|expires|expired|give_up|max_attempts|"
+                        r"retry_limit|timeout_at)\b", region),
+          "the retention holds no deadline, expiry, or attempt limit")
+    check("CARRIER_UNDELIVERED_CODES" in region,
+          "the retry condition is which END failed, not which error code it was")
+
+
 TESTS = (
     test_absent_host_recovers_the_wake_on_restart,
     test_recovered_wake_is_not_prompted_twice,
@@ -702,26 +1001,43 @@ TESTS = (
     test_exited_worker_wake_is_stale,
     test_busy_host_stages_the_recovered_wake,
     test_idle_and_unbound_paths_are_unchanged,
+    test_a_reply_that_is_not_a_receipt_never_wedges_the_worker,
+    test_a_host_answer_settles_the_debt_even_when_it_refuses,
+    test_a_lost_receipt_retries_into_the_hosts_own_dedup,
+    test_the_retention_has_no_retry_deadline,
 )
 
 
 def main() -> int:
     only = sys.argv[1] if len(sys.argv) > 1 else None
-    for test in TESTS:
-        if only and only not in test.__name__:
-            continue
+    selected = [test for test in TESTS if not only or only in test.__name__]
+    if not selected:
+        print(f"no test matches {only!r}")
+        return 2
+    failures: list[str] = []
+    for test in selected:
         CHECKS.clear()
         try:
             test()
-        except BaseException:
+        except BaseException as exc:  # noqa: BLE001 - every failure is reported
             # The checks that DID hold before the failure are the evidence of
-            # what the baseline reproduces; print them before re-raising.
+            # what a baseline reproduces; print them before moving on. One
+            # failing case must not hide the others from validate.sh.
             for label in CHECKS:
                 print(f"  ok   {label}")
-            print(f"FAIL {test.__name__} (after {len(CHECKS)} checks)")
-            raise
+            print(f"FAIL {test.__name__} (after {len(CHECKS)} checks): "
+                  f"{type(exc).__name__}: {exc}")
+            failures.append(test.__name__)
+            if isinstance(exc, KeyboardInterrupt):
+                raise
+            continue
         print(f"PASS {test.__name__} ({len(CHECKS)} checks)")
-    print(f"PASS: issue-92 permission wake recovery contract ({len(TESTS)} tests)")
+    if failures:
+        print(f"FAIL: issue-92 permission wake recovery contract "
+              f"({len(failures)}/{len(selected)} failed: {', '.join(failures)})")
+        return 1
+    print(f"PASS: issue-92 permission wake recovery contract "
+          f"({len(selected)}/{len(TESTS)} tests)")
     return 0
 
 

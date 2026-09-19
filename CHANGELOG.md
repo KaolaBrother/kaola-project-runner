@@ -23,7 +23,15 @@
   gets it when it comes back. The retry reuses the ORIGINAL `event_cursor`, so
   the deterministic `event_id` is unchanged and a repeat is answered by the
   existing Issue #90 dedup rather than prompting the Host twice or asking for a
-  second approval. A wake whose request was settled, or whose worker agent
+  second approval. What is owed is decided by which end failed, not by an
+  error-code allowlist: only `host-unreachable`, `host-closed`, and a reply that
+  is not a receipt at all mean the event was never handed over. Any receipt the
+  Host produced for itself settles the debt, refusal included — a
+  `worker-event-queue-full` answer already schedules the Host's own full
+  pending-approval pass, so re-offering it would drive the Host instead of
+  recovering the wake. A reply that is not a worker-event receipt is normalised
+  into a `host-reply-invalid` carrier failure rather than raising on the agent
+  reader thread that sent it. A wake whose request was settled, or whose worker agent
   exited, before the Host returns is dropped as stale and never becomes a prompt;
   a Host that still acts on the stale locator gets the ordinary
   `no-pending-permission` refusal. Only the exact locator and `request_id`
