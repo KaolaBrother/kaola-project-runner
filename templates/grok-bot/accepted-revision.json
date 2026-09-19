@@ -1,4 +1,6 @@
 {
   "_comment": "Accepted pinned revision carried by the Grok Bot bridge (two-commit content/pin model, see scripts/render-skills.py). stage \"content\": the content commit R; no commit/release/label; the bridge renders an unpinned placeholder line and must not be saved. stage \"pinned\": the pin commit P that follows R; commit = R (40-hex) plus exactly one of release (a vX.Y.Z tag at R) or label (honest pre-release text, 3-80 plain characters). render-skills.py --write then changes exactly one line of the bridge; --check verifies the pin against this Git checkout and --require-pinned is the gate for P.",
-  "stage": "content"
+  "stage": "pinned",
+  "commit": "a92257ff4da41e79a1762fafe929355770046388",
+  "release": "v0.5.1"
 }
