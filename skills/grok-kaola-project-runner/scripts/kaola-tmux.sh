@@ -61,7 +61,7 @@ print(json.dumps(d,ensure_ascii=False,sort_keys=True))' "$@"
 }
 
 platform="${1:-}"; [[ -n "$platform" ]] || { usage; exit 2; }; shift
-case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode|droid) ;; *) die "unknown platform: $platform" ;; esac
+case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode|droid|dsh) ;; *) die "unknown platform: $platform" ;; esac
 adapter_file="$script_dir/adapters/$platform.sh"; [[ -f "$adapter_file" ]] || die "adapter not installed"
 [[ -f "$OBSERVATION_HELPER" && -f "$RELAY" && -f "$RELAY_CLIENT" && -f "$MODEL_POLICY_HELPER" ]] || die "relay control plane is incomplete"
 # shellcheck source=/dev/null

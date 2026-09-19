@@ -55,7 +55,7 @@ RETIRED_SENTENCE = "Existing Runner default bypass start"
 
 # Platforms whose ACP surface advertises no skip-all option. Derived, not
 # asserted from memory: see ``test_no_skip_all_platforms_are_still_the_derived_set``.
-NO_ADVERTISED_ACP_SKIP_ALL = {"cursor-cli", "grok", "opencode"}
+NO_ADVERTISED_ACP_SKIP_ALL = {"cursor-cli", "dsh", "grok", "opencode"}
 
 
 def manifest_values(path: Path) -> dict[str, str]:
@@ -101,7 +101,7 @@ def permissions_row(text: str) -> str:
 
 
 class MainSkillStatesAPerPlatformDefault(unittest.TestCase):
-    """The main Skill must not promise one bypass for all nine platforms."""
+    """The main Skill must not promise one bypass for all ten platforms."""
 
     def test_retired_all_platform_bypass_sentence_is_gone(self) -> None:
         for label, path in (("generated main Skill", MAIN_SKILL), ("orchestrator template", MAIN_TMPL)):
@@ -210,7 +210,7 @@ class ReadmeCarriesThePerPlatformSplit(unittest.TestCase):
     def test_readme_states_the_three_classes(self) -> None:
         text = flowed(README.read_text(encoding="utf-8"))
         self.assertIn(
-            "the default is per platform, not one guarantee across all nine",
+            "the default is per platform, not one guarantee across all ten",
             text,
             "README must deny the all-platform reading",
         )

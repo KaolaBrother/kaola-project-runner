@@ -381,6 +381,31 @@ def scrub(value: Any) -> Any:
     return value
 
 
+def config_option_values(option: dict) -> list[Any]:
+    """Every selectable value of an ACP ``select`` config option.
+
+    An agent may present its choices flat or grouped: dsh's ``model`` option
+    lists one entry per provider, each holding the real choices in its own
+    nested ``options``. Reading ``value`` off a group entry yields ``None``,
+    which would report a nameless choice per group instead of the routes the
+    Agent can actually select. One level of nesting is expanded; a value that
+    is absent is omitted rather than reported as null.
+    """
+    values: list[Any] = []
+    for entry in option.get("options") or []:
+        if not isinstance(entry, dict):
+            continue
+        nested = entry.get("options")
+        if isinstance(nested, list):
+            values.extend(
+                member.get("value") for member in nested
+                if isinstance(member, dict) and member.get("value") is not None
+            )
+        elif entry.get("value") is not None:
+            values.append(entry["value"])
+    return values
+
+
 def capability_supported(container: dict, key: str) -> bool:
     """ACP capability presence means support: a present object (even ``{}``) or
     ``true`` is supported; absent, ``null``, or ``false`` is not."""
@@ -3821,11 +3846,7 @@ def run_probe(args: argparse.Namespace) -> int:
                             "name": option.get("name"),
                             "type": option.get("type"),
                             "current": option.get("currentValue"),
-                            "values": [
-                                entry.get("value")
-                                for entry in option.get("options") or []
-                                if isinstance(entry, dict)
-                            ],
+                            "values": config_option_values(option),
                         }
                         for option in options
                         if isinstance(option, dict)
