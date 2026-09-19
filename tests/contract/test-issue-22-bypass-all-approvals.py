@@ -39,6 +39,10 @@ DEVIN_ADAPTER = PROJECT / "scripts" / "adapters" / "devin.sh"
 GROK_ADAPTER = PROJECT / "scripts" / "adapters" / "grok.sh"
 KIMI_ADAPTER = PROJECT / "scripts" / "adapters" / "kimi-cli.sh"
 OPENCODE_ADAPTER = PROJECT / "scripts" / "adapters" / "opencode.sh"
+# Issue #73 binds Orchestrator dispatch to one canonical root. This suite starts
+# against its own throwaway repository, which is an ordinary standalone
+# invocation, so it states that intent instead of inheriting the operator shell.
+CANONICAL_KEY = "KAOLA_PROJECT_RUNNER_CANONICAL_REPO"
 
 
 class Issue22StaticSkipKnobs(unittest.TestCase):
@@ -120,6 +124,7 @@ class Issue22KimiAcpDefaultYolo(unittest.TestCase):
 
     def env(self) -> dict[str, str]:
         env = dict(os.environ)
+        env.pop(CANONICAL_KEY, None)
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         env["KAOLA_ACP_COMMAND"] = (
@@ -156,6 +161,7 @@ class Issue22KimiAcpDefaultYolo(unittest.TestCase):
     def test_default_start_sets_kimi_mode_yolo(self) -> None:
         start = self._tmux("start")
         self._started = True
+        self.assertNotEqual(start.get("result"), "refused", f"start was refused: {start}")
         self.assertIsNone(start.get("error"), f"start failed: {start}")
         configured = [
             event
@@ -227,6 +233,7 @@ class Issue22KimiAcpDefaultYolo(unittest.TestCase):
     def test_default_send_wait_completes_without_permit(self) -> None:
         start = self._tmux("start")
         self._started = True
+        self.assertNotEqual(start.get("result"), "refused", f"start was refused: {start}")
         self.assertIsNone(start.get("error"), f"start failed: {start}")
         send = self._tmux(
             "send", "--text", "write a file then run a shell", "--timeout", "15"

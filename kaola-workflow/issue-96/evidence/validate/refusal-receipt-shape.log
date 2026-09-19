@@ -1,0 +1,14 @@
+# The production guard is unchanged and still refuses a foreign repo under the binding.
+# KAOLA_PROJECT_RUNNER_CANONICAL_REPO=/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner
+# 2026-09-19T06:01:23Z
+
+{"action": "start", "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner", "mutation_performed": false, "mutation_status": "not_started", "platform": "kimi-cli", "reason": "canonical-root-mismatch", "repo": "/private/tmp/i96-refusal-rzAZ/repo", "result": "refused", "schema_version": 3, "session": "i96-refusal-demo", "transport": {"alternatives": ["pty"], "default": "acp", "reason": "manifest-default", "selected": "acp"}}
+
+# (an earlier EXIT line here was clobbered by the capture script and has been removed as unreliable; the entrypoint exits 1 on refusal, re-measured below)
+
+result      = 'refused'
+reason      = 'canonical-root-mismatch'
+error       = None <- absent, so assertIsNone(error) PASSES on a refusal
+mutation    = False
+=> the added assertNotEqual(result,'refused') is what fires, and it prints this receipt
+re-measured refusal exit code = 1

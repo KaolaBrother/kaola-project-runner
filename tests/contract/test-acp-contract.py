@@ -37,6 +37,10 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[2]
 CLI = PROJECT / "scripts" / "kaola-acp.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
+# Issue #73 binds Orchestrator dispatch to one canonical root. Suites here start
+# against their own throwaway repository, which is an ordinary standalone
+# invocation, so they state that intent instead of inheriting the operator shell.
+CANONICAL_KEY = "KAOLA_PROJECT_RUNNER_CANONICAL_REPO"
 
 SESSION_RE = "acpt"
 
@@ -1336,6 +1340,7 @@ class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
 
     def env(self) -> dict[str, str]:
         env = dict(os.environ)
+        env.pop(CANONICAL_KEY, None)
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         env["KAOLA_ACP_COMMAND"] = (
@@ -1363,6 +1368,7 @@ class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
     def test_public_default_start_sets_mode_yolo(self) -> None:
         receipt = self._run("start")
         self._started = True
+        self.assertNotEqual(receipt.get("result"), "refused", f"start was refused: {receipt}")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         events = [
             json.loads(line)
