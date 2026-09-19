@@ -54,6 +54,17 @@ def normalize_id(value: Any) -> str:
     return str(value)
 
 
+def worker_event_id(params: dict[str, Any]) -> str:
+    """The ``event_id`` the Host derives from these carrier params.
+
+    The same four fields ``op_worker_event`` builds it from, so a worker can
+    check that an accepting receipt names the event it actually sent instead of
+    trusting any string that happens to be there (Issue #92).
+    """
+    return (f"{params.get('platform')}/{params.get('session')}"
+            f"/{params.get('kind')}/{params.get('event_cursor')}")
+
+
 def process_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -1916,13 +1927,18 @@ class Holder:
                 and self._carrier_error_code(receipt) in CARRIER_UNDELIVERED_CODES):
             self._retain_undelivered_wake(params, receipt)
 
-    def _carrier_send(self, target: dict[str, str],
-                      params: dict[str, Any]) -> dict[str, Any]:
+    def _carrier_send(self, target: dict[str, str], params: dict[str, Any],
+                      still_owed: Any = None) -> dict[str, Any]:
         """One bounded carrier round trip, or an honest error receipt.
 
         ``params`` is passed through verbatim - a retry offers the SAME
         ``event_cursor``, so the Host's deterministic ``event_id`` and its
         existing duplicate handling are what keep a repeat from prompting twice.
+
+        ``still_owed`` is re-read immediately before the bytes go out, which is
+        as late as this transport allows. A permission settled, an agent gone,
+        or a stop begun while the offer was in flight therefore never reaches
+        the Host as a prompt nobody can answer (Issue #92, outer review).
         """
         receipt: dict[str, Any] = {}
         with self.heartbeat_notify_lock:
@@ -1931,18 +1947,23 @@ class Holder:
                 try:
                     connection.settimeout(HEARTBEAT_NOTIFY_TIMEOUT)
                     connection.connect(target["socket"])
-                    connection.sendall(canonical(
-                        {"op": "worker_event", "request_id": secrets.token_hex(8),
-                         "params": params}) + b"\n")
-                    buffer = bytearray()
-                    while b"\n" not in buffer:
-                        data = connection.recv(65536)
-                        if not data:
-                            break
-                        buffer.extend(data)
-                    line = buffer.partition(b"\n")[0]
-                    if line.strip():
-                        receipt = json.loads(line.decode("utf-8", "replace"))
+                    if still_owed is not None and not still_owed():
+                        receipt = {"error": {
+                            "code": "carrier-aborted",
+                            "message": "the wake stopped being owed before it was sent"}}
+                    else:
+                        connection.sendall(canonical(
+                            {"op": "worker_event", "request_id": secrets.token_hex(8),
+                             "params": params}) + b"\n")
+                        buffer = bytearray()
+                        while b"\n" not in buffer:
+                            data = connection.recv(65536)
+                            if not data:
+                                break
+                            buffer.extend(data)
+                        line = buffer.partition(b"\n")[0]
+                        if line.strip():
+                            receipt = json.loads(line.decode("utf-8", "replace"))
                 finally:
                     connection.close()
             except (OSError, ValueError) as exc:
@@ -1957,15 +1978,19 @@ class Holder:
         # the agent reader thread that called us.
         error = receipt.get("error") if isinstance(receipt, dict) else receipt
         code = error.get("code") if isinstance(error, dict) else None
+        # The receipt must name the event that was actually SENT. Any other
+        # string - a blank one, a stale one, one for somebody else's event -
+        # proves nothing about this wake and leaves it owed (Issue #92, outer
+        # review).
         taken = (isinstance(receipt, dict)
-                 and isinstance(receipt.get("event_id"), str))
+                 and receipt.get("event_id") == worker_event_id(params))
         if not isinstance(receipt, dict) or (
                 error is not None and not isinstance(error, dict)) or (
                 not isinstance(code, str) and not taken):
             # Absence of an `error` key is not proof of delivery: `op_worker_event`
             # names the event it took on every accepting path (staged, duplicate,
-            # confirmed duplicate), so a reply that names none never proves the
-            # wake got through and must leave it owed.
+            # confirmed duplicate), so a reply that names a different event, or
+            # none, never proves this wake got through and must leave it owed.
             receipt = {"error": {
                 "code": "host-reply-invalid",
                 "message": "heartbeat host reply is not a worker_event receipt",
@@ -2006,11 +2031,20 @@ class Holder:
         can no longer answer must never become a prompt, however long the Host
         was away.
         """
+        if self.stop_requested:
+            return "stopping"
         if self.agent.exited.is_set() or self.agent_exited.is_set():
             return "agent-exited"
         if key not in self.pending_permissions:
             return "permission-settled"
         return None
+
+    def _wake_still_owed(self, key: str) -> bool:
+        """Re-read, never cached: is this wake worth sending RIGHT NOW?"""
+        with self.undelivered_wakes_lock:
+            if key not in self.undelivered_wakes:
+                return False
+        return self._wake_stale_reason(key) is None
 
     def _undelivered_wake_facts(self) -> list[dict[str, Any]]:
         """What this worker still owes its bound Host: locator facts only."""
@@ -2048,8 +2082,23 @@ class Holder:
                                     "event_cursor": wake["params"]["event_cursor"],
                                     "reason": stale})
                 continue
-            receipt = self._carrier_send(self.heartbeat_host, wake["params"])
+            receipt = self._carrier_send(
+                self.heartbeat_host, wake["params"],
+                still_owed=lambda key=key: self._wake_still_owed(key))
             error = self._carrier_error_code(receipt)
+            if error == "carrier-aborted":
+                # Nothing was sent, so there is nothing for the Host to ignore.
+                # Record why this wake ended, exactly as the pre-send check does.
+                stale = self._wake_stale_reason(key) or "permission-settled"
+                with self.undelivered_wakes_lock:
+                    if self.undelivered_wakes.pop(key, None) is None:
+                        continue
+                self.events.append({"kind": "heartbeat_carrier_dropped",
+                                    "event_kind": wake["params"]["kind"],
+                                    "request_id": wake["params"].get("request_id"),
+                                    "event_cursor": wake["params"]["event_cursor"],
+                                    "reason": stale})
+                continue
             owed = error in CARRIER_UNDELIVERED_CODES
             with self.undelivered_wakes_lock:
                 current = self.undelivered_wakes.get(key)

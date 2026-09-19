@@ -164,6 +164,46 @@ def rpc_sends(rpc_path: Path) -> list[str]:
     return sends
 
 
+def expected_event_id(params: dict) -> str:
+    """The id `op_worker_event` derives — the test's own copy of the formula, so
+    a change to either side is caught rather than mirrored."""
+    return (f"{params['platform']}/{params['session']}"
+            f"/{params['kind']}/{params['event_cursor']}")
+
+
+class LosesEntryAfter(dict):
+    """A pending-permissions map whose entry disappears after ``looks`` reads.
+
+    This is the interleaving a real ``permit`` produces: the flush's own
+    staleness check still sees the request, and it is gone by the time the send
+    takes its last look. Deterministic, where a wall-clock race is not.
+    """
+
+    def __init__(self, *args, looks: int = 1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.allowed = looks
+        self.seen = 0
+
+    def __contains__(self, key: object) -> bool:
+        self.seen += 1
+        if self.seen > self.allowed:
+            return False
+        return super().__contains__(key)
+
+
+class SetAfter:
+    """An Event-shaped flag that reads false once, then true — an agent that
+    exits while an offer is already in flight."""
+
+    def __init__(self, looks: int = 1):
+        self.allowed = looks
+        self.seen = 0
+
+    def is_set(self) -> bool:
+        self.seen += 1
+        return self.seen > self.allowed
+
+
 def carrier_entries(record_dir: Path, event_kind: str | None = None) -> list[dict]:
     entries = [entry for entry in read_events(record_dir)
                if entry.get("kind") == "heartbeat_carrier_sent"]
@@ -227,6 +267,11 @@ class FakePeer:
                         break
                     buffer.extend(data)
                 request = bytes(buffer.partition(b"\n")[0])
+                if not request.strip():
+                    # A connection that carried no line is not an offer. An
+                    # aborted send still connects, so counting it would hide
+                    # exactly the thing these tests measure.
+                    continue
                 with self.lock:
                     index = len(self.requests)
                     self.requests.append(request)
@@ -1004,6 +1049,7 @@ class CarrierOnlyHolder:
         self.heartbeat_notify_lock = threading.Lock()
         self.agent = types.SimpleNamespace(exited=threading.Event())
         self.agent_exited = threading.Event()
+        self.stop_requested = False
         self.pending_permissions = {request_key: {"request_id": request_key}}
         self.recorded: list[dict] = []
         self.events = types.SimpleNamespace(append=self.recorded.append)
@@ -1011,6 +1057,12 @@ class CarrierOnlyHolder:
         self._carrier_send = holder._carrier_send.__get__(self)
         self._carrier_error_code = holder._carrier_error_code
         self._wake_stale_reason = holder._wake_stale_reason.__get__(self)
+        # Bound only if the holder under test has it, so this harness can be
+        # pointed at an earlier holder to show what these tests catch. A holder
+        # that lacks it simply cannot pass the tests that need it.
+        still_owed = getattr(holder, "_wake_still_owed", None)
+        if still_owed is not None:
+            self._wake_still_owed = still_owed.__get__(self)
         self.retain = holder._retain_undelivered_wake.__get__(self)
         self.flush = holder._flush_undelivered_wakes.__get__(self)
 
@@ -1070,7 +1122,7 @@ def test_the_retention_has_no_retry_deadline() -> None:
     region = re.sub(r"(?m)#.*$", "", region)
     reasons = sorted(set(re.findall(r'"reason": "([a-z-]+)"', region))
                      | set(re.findall(r'return "([a-z-]+)"', region)))
-    check(reasons == ["agent-exited", "host-answered", "permission-settled"],
+    check(reasons == ["agent-exited", "host-answered", "permission-settled", "stopping"],
           f"a wake is dropped only when it is no longer owed ({reasons})")
 
 
@@ -1158,6 +1210,132 @@ def test_an_older_host_build_keeps_the_wake_owed() -> None:
                   f"{label}: the drop names the Host's answer ({dropped[0]})")
 
 
+def carrier_params(key: str = "zc-1") -> dict:
+    return {"schema": "kaola-worker-event/1", "kind": "permission_required",
+            "platform": "zcode", "session": "w-1", "repo": "/nonexistent",
+            "reason": "session/request_permission pending", "event_cursor": 11,
+            "request_id": key}
+
+
+def test_an_accepting_receipt_must_name_the_event_that_was_sent() -> None:
+    """An accepting receipt is trusted only when it names THIS event.
+
+    `event_id` is deterministic, so a reply carrying a blank one, somebody
+    else's, or one for a different cursor proves nothing about this wake — and
+    retiring it on that basis loses the wake while claiming it recovered.
+    """
+    holder_module = load_holder_module()
+    key = "zc-1"
+    params = carrier_params(key)
+    mine = expected_event_id(params)
+    sock = Path(tempfile.mkdtemp(prefix="kaola-i92-eventid-")) / "peer.sock"
+
+    wrong = (
+        ("a blank event id", b'{"event_id":"","staged":true}\n'),
+        ("somebody else's event", b'{"event_id":"zcode/other-worker/permission_required/11",'
+                                 b'"staged":true}\n'),
+        ("this worker, a different cursor",
+         b'{"event_id":"zcode/w-1/permission_required/12","staged":true}\n'),
+        ("this worker, a different kind",
+         b'{"event_id":"zcode/w-1/idle/11","duplicate":true}\n'),
+        ("an event id that is not a string", b'{"event_id":7,"staged":true}\n'),
+    )
+    for label, reply in wrong:
+        stub = CarrierOnlyHolder(holder_module, key)
+        stub.heartbeat_host = dict(stub.heartbeat_host, socket=str(sock))
+        with FakePeer(sock, lambda _i, _r, reply=reply: reply):
+            stub.retain(params, {"error": {"code": "host-unreachable"}})
+            stub.flush()
+        held = stub.undelivered_wakes.get(key)
+        check(held is not None, f"the wake is STILL owed — {label}")
+        check(held["last_error"] == "host-reply-invalid",
+              f"and says the reply was not a receipt for it — {label} "
+              f"({held and held['last_error']})")
+        check(not [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_recovered"],
+              f"no recovery is claimed — {label}")
+
+    # The exact id, and only the exact id, is delivery.
+    for label, reply in (("staged", ('{"event_id":"%s","staged":true,"pending":1}\n' % mine)
+                          .encode()),
+                         ("duplicate", ('{"event_id":"%s","duplicate":true}\n' % mine)
+                          .encode())):
+        stub = CarrierOnlyHolder(holder_module, key)
+        stub.heartbeat_host = dict(stub.heartbeat_host, socket=str(sock))
+        with FakePeer(sock, lambda _i, _r, reply=reply: reply):
+            stub.retain(params, {"error": {"code": "host-unreachable"}})
+            stub.flush()
+        check(not stub.undelivered_wakes,
+              f"the exact event id settles the wake ({label})")
+        recovered = [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_recovered"]
+        check(len(recovered) == 1, f"and records one recovery ({label}: {recovered})")
+
+    # The worker's own formula must still agree with the Host's.
+    check(holder_module.worker_event_id(params) == mine,
+          f"worker and Host derive the same id ({holder_module.worker_event_id(params)})")
+
+
+def test_a_wake_that_dies_mid_flight_is_never_sent() -> None:
+    """Settlement, agent exit, or a begun stop that lands while an offer is
+    already in flight must not reach the Host.
+
+    Each case is injected deterministically at the exact interleaving: the
+    flush's own staleness check still sees a live request, and it is gone by the
+    time the send takes its last look before writing. The proof is the peer:
+    it must receive NOTHING.
+    """
+    holder_module = load_holder_module()
+    key = "zc-1"
+    params = carrier_params(key)
+    sock = Path(tempfile.mkdtemp(prefix="kaola-i92-midflight-")) / "peer.sock"
+    accepting = ('{"event_id":"%s","staged":true}\n' % expected_event_id(params)).encode()
+
+    def settled(stub):
+        # `permit` between the flush's check and the send's last look.
+        stub.pending_permissions = LosesEntryAfter(
+            {key: {"request_id": key}}, looks=1)
+
+    def exited(stub):
+        stub.agent = types.SimpleNamespace(exited=SetAfter(looks=1))
+
+    def stopping(stub):
+        class FlipsOnRead:
+            def __init__(self): self.seen = 0
+            def __bool__(self):
+                self.seen += 1
+                return self.seen > 1
+        stub.stop_requested = FlipsOnRead()
+
+    for label, arrange, reason in (("a permit settles it", settled, "permission-settled"),
+                                   ("the agent exits", exited, "agent-exited"),
+                                   ("a stop begins", stopping, "stopping")):
+        stub = CarrierOnlyHolder(holder_module, key)
+        stub.heartbeat_host = dict(stub.heartbeat_host, socket=str(sock))
+        stub.retain(params, {"error": {"code": "host-unreachable"}})
+        arrange(stub)
+        with FakePeer(sock, lambda _i, _r: accepting) as peer:
+            stub.flush()
+            check(peer.count() == 0,
+                  f"the Host received NOTHING — {label} ({peer.count()} offers)")
+        check(not stub.undelivered_wakes, f"the wake ends rather than lingering — {label}")
+        recovered = [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_recovered"]
+        check(not recovered, f"no recovery is claimed for a wake never sent — {label}")
+        dropped = [e for e in stub.recorded if e["kind"] == "heartbeat_carrier_dropped"]
+        check(len(dropped) == 1 and dropped[0]["reason"] == reason,
+              f"the drop names why — {label} ({dropped})")
+
+    # Control: with nothing racing it, the very same setup DOES send.
+    stub = CarrierOnlyHolder(holder_module, key)
+    stub.heartbeat_host = dict(stub.heartbeat_host, socket=str(sock))
+    stub.retain(params, {"error": {"code": "host-unreachable"}})
+    with FakePeer(sock, lambda _i, _r: accepting) as peer:
+        stub.flush()
+        check(peer.count() == 1,
+              f"control: an undisturbed wake is still offered ({peer.count()})")
+    check(not stub.undelivered_wakes, "control: and it settles as recovered")
+    check([e for e in stub.recorded if e["kind"] == "heartbeat_carrier_recovered"],
+          "control: the recovery is recorded")
+
+
 TESTS = (
     test_absent_host_recovers_the_wake_on_restart,
     test_recovered_wake_is_not_prompted_twice,
@@ -1171,6 +1349,8 @@ TESTS = (
     test_the_retention_has_no_retry_deadline,
     test_only_a_receipt_that_names_the_event_counts_as_delivered,
     test_an_older_host_build_keeps_the_wake_owed,
+    test_an_accepting_receipt_must_name_the_event_that_was_sent,
+    test_a_wake_that_dies_mid_flight_is_never_sent,
 )
 
 

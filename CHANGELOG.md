@@ -34,7 +34,16 @@
   event it took on every accepting path, so a reply that carries neither a usable
   error code nor an `event_id` leaves the wake owed rather than silently retiring
   it, and a reply that is not a receipt at all becomes a `host-reply-invalid`
-  carrier failure instead of raising on the agent reader thread that sent it. A wake whose request was settled, or whose worker agent
+  carrier failure instead of raising on the agent reader thread that sent it.
+  An accepting receipt must name the event that was actually SENT: `event_id` is
+  deterministic, so a blank one, somebody else's, or one for a different cursor
+  or kind leaves the wake owed rather than retiring it while claiming a
+  recovery. And a wake that stops being owed while an offer is already in
+  flight — a `permit` settling it, the agent exiting, a stop beginning — is
+  re-checked immediately before the bytes go out, as late as the transport
+  allows, so a dead request never reaches the Host as a prompt nobody can
+  answer; `stopping` joins `permission-settled` and `agent-exited` as a reason a
+  wake ends. A wake whose request was settled, or whose worker agent
   exited, before the Host returns is dropped as stale and never becomes a prompt;
   a Host that still acts on the stale locator gets the ordinary
   `no-pending-permission` refusal. Only the exact locator and `request_id`

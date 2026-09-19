@@ -438,8 +438,9 @@ worker holds the undelivered event and re-offers the same one until that Host ta
 the request stops being answerable. Only a send the Host never took leaves the wake owed — it was
 not listening, hung up, answered something that is not a worker-event receipt, or is an older build
 with no such op; each of those can still come good when the Host comes back. A receipt that names
-the event settles it, and so does a refusal the Host made knowing what it refused. Neither forcing
-PTY nor adding a gate is the answer. Use
+the exact event sent settles it, and so does a refusal the Host made knowing what it refused. A wake
+that stops being owed while an offer is in flight is never sent. Neither forcing PTY nor adding a
+gate is the answer. Use
 `--permission-mode` where supported and check the native semantics: Codex ACP's `read-only` mode
 can write workspace files;
 strict Codex read-only execution requires `--transport pty --permission-mode read-only`.
