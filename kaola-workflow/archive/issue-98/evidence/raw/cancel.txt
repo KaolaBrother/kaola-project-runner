@@ -1,0 +1,8 @@
+@@initialize {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": 1, "agentInfo": {"name": "deepseek-harness-acp", "version": "0.0.1"}, "agentCapabilities": {"mcpCapabilities": {"http": true}, "promptCapabilities": {"image": false, "audio": false, "embeddedContext": false}, "sessionCapabilities": {"close": {}, "list": {}, "resume": {}}}, "authMethods": []}}
+@@session_id "6d4dca32-67fe-4d73-8bb3-a655b2771868"
+@@cancel_settle_s 0.01
+@@prompt_response_after_cancel {"jsonrpc": "2.0", "id": 4, "result": {"stopReason": "cancelled"}}
+@@steer_probe_session_steering {"jsonrpc": "2.0", "id": 5, "error": {"code": -32601, "message": "\"Method not found\": _session/steering", "data": {"method": "_session/steering"}}}
+@@steer_probe_session_steer {"jsonrpc": "2.0", "id": 6, "error": {"code": -32601, "message": "\"Method not found\": session/steer", "data": {"method": "session/steer"}}}
+@@session_close {"jsonrpc": "2.0", "id": 7, "result": {}}
+@@exit_code 0

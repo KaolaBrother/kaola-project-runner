@@ -1,0 +1,31 @@
+source: /opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+
+PROFILE_TEMPLATES = {
+	acp: {
+		bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-acp-app"],
+		patchReload: "startup"
+	},
+	web: {
+		bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"],
+		patchReload: "live"
+	},
+	headless: {
+		bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"],
+		patchReload: "startup"
+	},
+	sdk: {
+		bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-sdk-app"],
+		patchReload: "startup"
+	},
+	"sdk-minimal": {
+		bundles: ["@deepseek-ai/dsh-sdk-minimal"],
+		patchReload: "startup"
+	}
+};
+
+shipped template names: ['acp', 'headless', 'sdk', 'sdk-minimal', 'web']
+
+There is no `tui` template. The `--profile tui` in `dsh --help` examples names a CUSTOM
+profile a user would create, not a shipped one. Of the five shipped apps, web is a browser
+app, headless answers one task and exits, sdk/sdk-minimal are programmatic, and acp is the
+JSON-RPC stdio server. None is a terminal-pane conversation UI.

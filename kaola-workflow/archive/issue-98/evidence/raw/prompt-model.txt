@@ -1,0 +1,12 @@
+@@initialize {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": 1, "agentInfo": {"name": "deepseek-harness-acp", "version": "0.0.1"}, "agentCapabilities": {"mcpCapabilities": {"http": true}, "promptCapabilities": {"image": false, "audio": false, "embeddedContext": false}, "sessionCapabilities": {"close": {}, "list": {}, "resume": {}}}, "authMethods": []}}
+@@session_id "e1995cb7-7199-4ba5-8e44-df98a8c911b1"
+@@set_model {"jsonrpc": "2.0", "id": 3, "result": {"configOptions": [{"id": "model", "name": "Model", "category": "model", "type": "select", "currentValue": "[\"opencode-go\",\"deepseek-v4.1-flash\"]", "options": [{"group": "deepseek-official", "name": "DeepSeek", "options": [{"value": "[\"deepseek-official\",\"deepseek-flash\"]", "name": "DeepSeek-V41-Flash"}, {"value": "[\"deepseek-official\",\"deepseek-v4-flash\"]", "name": "DeepSeek-V4-Flash", "description": "Fast, efficient, and economical; suited to focused, routine, or parallel tasks."}, {"value": "[\"deepseek-official\",\"deepseek-v4-pro\"]", "name": "DeepSeek-V4-Pro", "description": "Stronger agentic coding, knowledge, and difficult reasoning; suited to complex or quality-critical tasks at higher cost."}, {"value": "[\"deepseek-official\",\"deepseek-v4-flash-vision-exp\"]", "name": "DeepSeek-V4-Flash-Vision-Exp"}]}, {"group": "opencode-go", "name": "OpenCode Go", "options": [{"value": "[\"opencode-go\",\"deepseek-v4.1-flash\"]", "name": "deepseek-v4.1-flash"}, {"value": "[\"opencode-go\",\"deepseek-v4-pro\"]", "name": "DeepSeek V4 Pro (New)"}, {"value": "[\"opencode-go\",\"deepseek-v4-flash\"]", "name": "DeepSeek V4 Flash"}, {"value": "[\"opencode-go\",\"deepseek-v4-flash-vision-exp\"]", "name": "DeepSeek V4 Flash Vision Exp"}]}]}]}}
+@@prompt_elapsed_s 2.52
+@@prompt_response {"jsonrpc": "2.0", "id": 4, "result": {"stopReason": "end_turn"}}
+@@update_count 2
+@@update_kinds ["agent_message_chunk", "usage_update"]
+@@updates [{"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "e1995cb7-7199-4ba5-8e44-df98a8c911b1", "update": {"sessionUpdate": "agent_message_chunk", "messageId": "a282ee51-bb5d-49ca-b39b-6412ead7a8be", "content": {"type": "text", "text": "PROBE-98-OK"}}}}, {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "e1995cb7-7199-4ba5-8e44-df98a8c911b1", "update": {"sessionUpdate": "usage_update", "used": 7476, "size": 1000000}}}]
+@@session_close {"jsonrpc": "2.0", "id": 5, "result": {}}
+@@stderr []
+@@exit_code 0
+@@resume_candidate "e1995cb7-7199-4ba5-8e44-df98a8c911b1"

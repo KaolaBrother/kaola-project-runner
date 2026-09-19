@@ -1,0 +1,15 @@
+@@initialize {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": 1, "agentInfo": {"name": "deepseek-harness-acp", "version": "0.0.1"}, "agentCapabilities": {"mcpCapabilities": {"http": true}, "promptCapabilities": {"image": false, "audio": false, "embeddedContext": false}, "sessionCapabilities": {"close": {}, "list": {}, "resume": {}}}, "authMethods": []}}
+@@session_id "d5487c3d-9937-434a-98de-0b9acf7149a4"
+@@method {"method": "session/load", "code": -32601, "message": "\"Method not found\": session/load", "has_result": false}
+@@method {"method": "session/set_mode", "code": -32601, "message": "\"Method not found\": session/set_mode", "has_result": false}
+@@method {"method": "session/delete", "code": -32601, "message": "\"Method not found\": session/delete", "has_result": false}
+@@method {"method": "session/fork", "code": -32601, "message": "\"Method not found\": session/fork", "has_result": false}
+@@method {"method": "terminal/create", "code": -32601, "message": "\"Method not found\": terminal/create", "has_result": false}
+@@method {"method": "terminal/output", "code": -32601, "message": "\"Method not found\": terminal/output", "has_result": false}
+@@method {"method": "_session/steering", "code": -32601, "message": "\"Method not found\": _session/steering", "has_result": false}
+@@method {"method": "session/steering", "code": -32601, "message": "\"Method not found\": session/steering", "has_result": false}
+@@method {"method": "session/steer", "code": -32601, "message": "\"Method not found\": session/steer", "has_result": false}
+@@method {"method": "_session/steer", "code": -32601, "message": "\"Method not found\": _session/steer", "has_result": false}
+@@session_close {"jsonrpc": "2.0", "id": 13, "result": {}}
+@@stderr []
+@@exit_code 0
