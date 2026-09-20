@@ -31,9 +31,13 @@ userinfo), HEAD, clean state, and -- when attesting a dispatch -- the consumer p
 identity, the selected worker's script path under the same root, and whether the tmux server
 reachable from this environment reports a session of the exact requested name (presence on
 that server only: not proof that the session exists elsewhere, and never ownership, which the
-worker preflight proves). ``root.path`` and ``project.path`` are real local paths and may
-include the user's home directory: bounded local evidence for the bound target, never to be
-stored in any account Skill. Revision and clean-state facts are what the target's own Git
+worker preflight proves). A ZCode Host runs as an ACP holder with no same-named tmux session,
+so for ``--worker zcode`` the receipt also carries ``session.acp_holder_alive``: whether the
+holder record that ``kaola-acp status`` reads for that platform, session, and project names a
+live holder pid (``null`` when no project checkout is named). For an ACP Host
+``session.present`` alone is never aliveness (Issue #102). ``root.path`` and ``project.path``
+are real local paths and may include the user's home directory: bounded local evidence for
+the bound target, never to be stored in any account Skill. Revision and clean-state facts are what the target's own Git
 reports (``rev-parse``, ``status --porcelain``); index tricks such as ``assume-unchanged`` or
 ``skip-worktree`` and a tampered ``.git`` on the executing host are outside this boundary --
 the target host is trusted and no content hashing is attempted. ``result`` is ``ok`` or
@@ -52,6 +56,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 SCHEMA = "kaola-project-runner-locator/1"
@@ -221,6 +226,34 @@ def session_facts(name: str) -> dict[str, object]:
     return {"name": name, "present": present}
 
 
+ACP_RECORD_ROOT_ENV = "KAOLA_ACP_RECORD_ROOT"
+
+
+def acp_holder_alive(platform: str, session: str, repo: str) -> bool:
+    """Issue #102: does the ACP holder record that ``kaola-acp status`` reads for this exact
+    platform, session, and repo name a live holder pid? Same record path as kaola-acp.py
+    ``record_dir`` (root, ``<platform>/<session>/<sha256(repo)[:16]>/record.json``); one exact
+    path, never a scan, and a missing or unreadable record is simply not alive."""
+    root = os.environ.get(ACP_RECORD_ROOT_ENV)
+    base = Path(root) if root else (
+        Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / f"kaola-{os.getuid()}")
+    digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
+    try:
+        record = json.loads((base / platform / session / digest / "record.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    pid = record.get("holder_pid") if isinstance(record, dict) else None
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def registration_dir(bin_dir: str | None) -> Path:
     """The directory holding the locator link and its registration receipt."""
     if bin_dir:
@@ -326,7 +359,13 @@ def receipt_command(args: argparse.Namespace) -> int:
         receipt["project"] = pf
         reasons.extend(more)
     if args.session is not None:
-        receipt["session"] = session_facts(args.session)
+        session = session_facts(args.session)
+        if args.worker == "zcode":
+            project = receipt.get("project")
+            toplevel = project.get("toplevel") if isinstance(project, dict) else None
+            session["acp_holder_alive"] = (
+                acp_holder_alive("zcode", args.session, toplevel) if isinstance(toplevel, str) else None)
+        receipt["session"] = session
     receipt["result"] = "ok" if not reasons else "refused"
     if reasons:
         receipt["reasons"] = reasons

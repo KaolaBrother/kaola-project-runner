@@ -28,6 +28,7 @@ the owner's read-only Local Computer UAT is the boundary.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.util
 import json
@@ -255,10 +256,11 @@ class LocatorFixture:
         shutil.copy2(LOCATOR, seed / "scripts" / "kaola-locate.py")
         (seed / "platforms").mkdir()
         (seed / "platforms" / "claude-code.yaml").write_text("id: \"claude-code\"\n", encoding="utf-8")
-        worker = seed / "skills" / "claude-code-kaola-project-runner" / "scripts"
-        worker.mkdir(parents=True)
-        (worker / "runtime-tmux.sh").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-        (worker / "runtime-tmux.sh").chmod(0o755)
+        for worker_id in ("claude-code", "zcode"):
+            worker = seed / "skills" / f"{worker_id}-kaola-project-runner" / "scripts"
+            worker.mkdir(parents=True)
+            (worker / "runtime-tmux.sh").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            (worker / "runtime-tmux.sh").chmod(0o755)
         git(seed, "add", "-A")
         git(seed, "commit", "-q", "-m", "seed")
         git(seed, "push", "-q", str(self.bare), "HEAD:refs/heads/main")
@@ -1043,6 +1045,58 @@ class Issue49LocatorAttestation(unittest.TestCase):
             self.assertEqual(fx.register("--expect-revision", fx.revision)[0], 0)
             rc, receipt = fx.via_link("--target", "local", "--session", "kaola-issue-49-no-such-session")
             self.assertEqual(set(receipt["session"]), {"name", "present"}, "no ownership or existence claim in the receipt")
+
+    def test_zcode_session_reports_acp_holder_aliveness_beside_tmux_presence(self) -> None:
+        """Issue #102: a ZCode Host is an ACP holder with no tmux session; present=false is not Host-down."""
+        spec = importlib.util.spec_from_file_location("kaola_acp_for_locator", PROJECT / "scripts" / "kaola-acp.py")
+        kaola_acp = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(kaola_acp)
+        session = "zcode-kaola-issue-102"
+        with tempfile.TemporaryDirectory() as temporary:
+            fx = LocatorFixture(temporary)
+            self.assertEqual(fx.register("--expect-revision", fx.revision)[0], 0)
+            record_root = Path(temporary) / "acp-records"
+            env = {"KAOLA_ACP_RECORD_ROOT": str(record_root)}
+            common = ("--target", "local", "--bin-dir", str(fx.bin), "--project", str(fx.project))
+            repo = str(fx.project.resolve())
+            # The locator reads exactly the record path kaola-acp status reads: no second registry.
+            old = os.environ.get("KAOLA_ACP_RECORD_ROOT")
+            os.environ["KAOLA_ACP_RECORD_ROOT"] = str(record_root)
+            try:
+                record_dir = kaola_acp.record_dir(argparse.Namespace(platform="zcode", session=session, record_root=None), repo)
+            finally:
+                if old is None:
+                    del os.environ["KAOLA_ACP_RECORD_ROOT"]
+                else:
+                    os.environ["KAOLA_ACP_RECORD_ROOT"] = old
+            self.assertEqual(record_dir, record_root / "zcode" / session / hashlib.sha256(repo.encode()).hexdigest()[:16])
+
+            rc, receipt = fx.locate(*common, "--worker", "zcode", "--session", session, env=env)
+            self.assertEqual(receipt["result"], "ok", receipt)
+            self.assertIn(receipt["session"]["present"], (False, None))
+            self.assertIs(receipt["session"]["acp_holder_alive"], False, "no record: not alive")
+
+            record_dir.mkdir(parents=True)
+            (record_dir / "record.json").write_text(json.dumps({"holder_pid": os.getpid(), "repo": repo, "platform": "zcode", "session": session}), encoding="utf-8")
+            rc, receipt = fx.locate(*common, "--worker", "zcode", "--session", session, env=env)
+            self.assertEqual(receipt["result"], "ok", receipt)
+            self.assertIn(receipt["session"]["present"], (False, None), "still no tmux session")
+            self.assertIs(receipt["session"]["acp_holder_alive"], True, "live holder record beside present=false")
+            self.assertEqual(set(receipt["session"]), {"name", "present", "acp_holder_alive"})
+            self.assertLessEqual(len(json.dumps(receipt).encode("utf-8")), BUDGETS["locator_receipt_bytes"])
+
+            (record_dir / "record.json").write_text(json.dumps({"holder_pid": 99999, "repo": repo}), encoding="utf-8")
+            rc, receipt = fx.locate(*common, "--worker", "zcode", "--session", session, env=env)
+            self.assertIs(receipt["session"]["acp_holder_alive"], False, "dead holder pid: not alive")
+
+            # No project checkout named: the record path cannot be formed, so the fact is unknown.
+            rc, receipt = fx.locate("--target", "local", "--bin-dir", str(fx.bin), "--worker", "zcode", "--session", session, env=env)
+            self.assertIsNone(receipt["session"]["acp_holder_alive"])
+            # tmux-only workers are unchanged: no ACP field at all.
+            rc, receipt = fx.locate(*common, "--worker", "claude-code", "--session", session, env=env)
+            self.assertEqual(receipt["result"], "ok", receipt)
+            self.assertEqual(set(receipt["session"]), {"name", "present"})
 
     def test_registration_receipt_is_durable_across_conversations_and_fails_closed_on_tampering(self) -> None:
         """A fresh process with no memory runs the link and the locator compares the receipt itself."""
