@@ -309,6 +309,22 @@ different Host than the dispatcher is `heartbeat-host-conflict`. Runner dispatch
 exported, is refused by `kaola-tmux.sh` with `heartbeat-host-pty-unsupported` before any preflight or
 tmux session. Every refusal carries `mutation_performed: false`; standalone starts are unchanged.
 
+A ZCode `start` also checks, before anything is spawned, that the worker Skill copies its agent will
+load are the same build as the Skill tree this CLI was loaded from (Issue #105). The Issue #104
+binding lives in the copy a worker `start` executes, so a Host on a new build with an older installed
+worker Skill dispatches unbound workers and exits 0. The check hashes `kaola-acp.py`,
+`kaola-acp-holder.py`, `kaola-tmux.sh` (and `kaola-zcode-acp.py` where both sides ship it) in every
+Skill directory under the four default ZCode discovery roots — `<repo>/.zcode/skills`,
+`<repo>/.agents/skills`, `~/.zcode/skills`, `~/.agents/skills` — that contains
+`scripts/kaola-acp.py`. Any difference is `{"result":"refused","reason":"worker-skill-build-skew"}`,
+exit 1, nothing created; `worker_skill_skew` names the differing paths with both 12-hex digests and
+`worker_skill_skew_count` the total. A passing `start` reports `worker_skill_build` (this build's
+`kaola-acp.py` digest) and `worker_skill_roots` (each root and the Skill names compared), so `status`
+reconciliation has the fact. Both are `null` when the CLI ran from a repository checkout rather than
+an installed Skill tree: no Skill build to be the baseline, so the answer is unknown, not aligned.
+Roots that ZCode reaches only through ancestor directories, `skills.roots`, or `plugins.dirs` are not
+compared.
+
 ### `steer` — Agent-chosen steering of a running turn (Issue #65)
 
 `steer --repo ABS_PATH --session NAME [--text TEXT | --stdin] [--steer-mode native|interrupt]

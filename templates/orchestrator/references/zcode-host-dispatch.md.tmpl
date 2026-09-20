@@ -43,6 +43,9 @@ is only the request; `observe` reports the binding any time.
 
 - `heartbeat_host_known: false` — a holder or record older than the field:
   unknown; treat it as unbound.
+- No `heartbeat_host_source` key at all — the worker Skill copy that ran this
+  `start` predates automatic binding. Exact-`stop` it, report `BLOCKED` with the
+  install as the cause, and dispatch again only after it is refreshed.
 - `"error": {"code": "session-exists"}` — you reused a live holder, which keeps
   its binding; a `null` there predates automatic binding.
 

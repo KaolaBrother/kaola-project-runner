@@ -199,6 +199,12 @@ worker agent terminated / worker turn ended (one idle episode)
   then exact-stops and restarts it at that idle point; the new `start` binds
   by itself. Only a refused `start` or a session that is gone is reported as
   an exception with the decision it needs.
+  A `start` receipt with no `heartbeat_host_source` key **at all** is a
+  different fact from `heartbeat_host_known: false`: the worker Skill copy
+  that ran that `start` predates Issue #104, so it ignored the dispatcher
+  fact entirely. Treat it as a pre-#104 worker — exact-stop it, report the
+  install as the blocker, and refresh the install before dispatching again
+  (Issue #105).
 - **Events.** `terminated` fires once from the worker holder's existing
   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
   out the send; `idle` fires once per ended turn with the agent still alive
@@ -423,6 +429,56 @@ reads the file itself, but a ZCode Host does not read the file; if a
 beat's `capture`
 shows no `Skill` tool_call, the install is wrong — fix it, never substitute
 a manual read.
+
+### Refreshing the install is part of every pin upgrade (Issue #105)
+
+Registering an accepted checkout does **not** refresh an installed Skill
+tree. A ZCode Host started from the newly accepted checkout while
+`~/.zcode/skills` still holds the previous build dispatches workers whose
+`start` runs the *old* copy, and that copy carries no automatic binding: the
+worker opens unbound and exits 0. Every pin bump therefore ends with:
+
+1. Register the accepted checkout (the existing pin flow, unchanged).
+2. From that accepted checkout, `./scripts/install-local.sh --runtime zcode
+   --method copy` (a project with a workspace `.zcode/skills` or
+   `.agents/skills` root installs there with the matching `--skills-dir`).
+3. Verify alignment — every installed copy's `scripts/kaola-acp.py`,
+   `kaola-acp-holder.py` and `kaola-tmux.sh` equal the accepted checkout's,
+   `scripts/kaola-zcode-acp.py` too for the ZCode Skill, and every
+   `.kaola-install-receipts/*.json` `source` names the accepted checkout:
+
+   ```bash
+   A=/abs/path/to/accepted-checkout
+   for d in "$HOME"/.zcode/skills/*-kaola-project-runner; do
+     for f in kaola-acp.py kaola-acp-holder.py kaola-tmux.sh; do
+       cmp -s "$A/skills/$(basename "$d")/scripts/$f" "$d/scripts/$f" \
+         || echo "SKEW $(basename "$d")/$f"
+     done
+   done
+   diff -rq "$A/skills/kaola-project-runner" "$HOME/.zcode/skills/kaola-project-runner"
+   ```
+
+4. Restart what still runs the old code. A live holder is never hot-replaced:
+   workers exact-`stop` and `start` again at an idle point (the recovery rule
+   above), and a Host started on an older build needs the same treatment.
+
+A Host `start` now refuses this skew mechanically instead of trusting the
+step: run from an installed Skill tree, it hashes those same files in every
+Skill directory under the four default discovery roots and answers
+`{"result": "refused", "reason": "worker-skill-build-skew"}` with exit 1 and
+nothing created (`worker_skill_skew` names the differing paths). A passing
+`start` reports `worker_skill_build` and `worker_skill_roots`. Residuals it
+does not cover: roots ZCode reaches only through ancestor directories,
+`skills.roots` or `plugins.dirs`; a checkout invocation of
+`scripts/kaola-acp.py`, which has no Skill build to compare and reports both
+fields `null`; and an already running holder, which keeps the code it started
+with either way.
+
+Skew has two directions and they are not symmetric. An old Host with a new
+worker Skill is the Issue #104 transitional case: the Host never sets the
+dispatcher fact, so its workers start unbound rather than refused, and
+restarting the Host fixes it. A new Host with an old worker Skill is this
+one: the fact is set and ignored, which is why the Host start refuses first.
 
 Boundaries held: no project `AGENTS.md` block is planted, ordinary Agents
 in a consuming repo carry no Host recovery instruction, and no hook,

@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- **A pin upgrade is not finished until the Skill install is refreshed, and a Host `start` now
+  refuses the skew (Issue #105).** Registering an accepted checkout does not touch
+  `~/.zcode/skills`: a ZCode Host started from the new checkout while the installed worker Skills
+  are the previous build dispatches workers whose `start` runs the *old* copy, and that copy has
+  no Issue #104 binding — the worker opens unbound and exits 0, so the mechanical guarantee fails
+  silently. Every pin bump now ends with `./scripts/install-local.sh --runtime zcode --method copy`
+  from the accepted checkout, a file-by-file alignment check, and a restart of whatever still runs
+  the old code; `docs/zcode-host.md` carries the four steps and the verification command, and
+  `AGENTS.md`'s release rule already requires the per-platform check. As the backstop when the step
+  is skipped, a ZCode `start` run from an installed Skill tree hashes `kaola-acp.py`,
+  `kaola-acp-holder.py`, `kaola-tmux.sh` (and `kaola-zcode-acp.py` where both sides ship it) in
+  every Skill directory under the four default ZCode discovery roots and refuses
+  `{"result": "refused", "reason": "worker-skill-build-skew"}` with exit 1 before anything is
+  created — no record directory, no socket, no holder — naming the differing paths with both
+  12-hex digests in `worker_skill_skew`. A passing `start` reports `worker_skill_build` and
+  `worker_skill_roots`; both are `null` when the CLI ran from a repository checkout, which has no
+  Skill build to be the baseline. Skew has two directions and only one is new: an *old* Host with
+  a *new* worker Skill stays the Issue #104 transitional case (unbound, not refused, fixed by
+  restarting the Host). The Host prose adds one rule: a `start` receipt with no
+  `heartbeat_host_source` key at all is a pre-#104 worker Skill — exact-stop it and refresh the
+  install rather than reading it as an ordinary unbound worker. Roots reached only through
+  ancestor directories, `skills.roots`, or `plugins.dirs` are a documented residual.
+
 ## 0.5.2 — 2026-09-20
 
 - **Worker binding on the Project Runner dispatch path is mechanical (Issue #104, design

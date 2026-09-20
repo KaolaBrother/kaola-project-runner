@@ -77,6 +77,12 @@ session has run a turn; a freshly created one carries the bridge `zcode-N` id in
 `session_meta`. No verified id means no `--resume`: start the session without
 history and say so, rather than passing `acp_session_id` or `--continue`.
 
+A Host `start` refuses `worker-skill-build-skew` (exit 1, nothing created) when
+the installed worker Skills are a different build from the Skill this Host runs:
+their `start` would be the copy without automatic binding. Nothing is recoverable
+from inside the Host — report it with the `worker_skill_skew` paths and ask for
+the install to be refreshed from the accepted checkout.
+
 The beat itself - starting workers from this session, non-blocking dispatch,
 the `dispatch_event_cursor` reading anchor, ending
 the turn as the wait, and reading the worker's real reply when an event wakes you
