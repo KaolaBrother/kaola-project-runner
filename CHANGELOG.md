@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.4 — 2026-09-20
 
 - **An unreadable ZCode discovery root is a typed refusal, not a traceback (Issue #106).** The
   Issue #105 build-skew scan listed each default discovery root with `root.iterdir()` and `is_file()`
