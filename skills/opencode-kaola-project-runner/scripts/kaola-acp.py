@@ -1427,6 +1427,8 @@ def heartbeat_host_refusal(args: argparse.Namespace, repo: str,
 # before anything is spawned. These are the four ZCode default Skill discovery
 # roots (docs/zcode-host.md); ancestor-directory roots and configured
 # `skills.roots` / `plugins.dirs` roots are out of scope and documented there.
+# A root that exists but cannot be listed is refused by name (Issue #106): the
+# comparison cannot prove alignment, so it must never degrade to a traceback.
 SKILL_DISCOVERY_DIRS = (".zcode/skills", ".agents/skills")
 # Verbatim copies of this checkout's scripts/ in every generated worker Skill,
 # so the running tree is the baseline and any byte difference is a build skew.
@@ -1458,12 +1460,17 @@ def invoking_skill_tree() -> Path | None:
     return tree if (tree / "SKILL.md").is_file() else None
 
 
-def installed_worker_skills(repo: str) -> list[tuple[Path, list[Path]]]:
-    """``(root, worker Skill directories)`` for each default discovery root that
-    exists, in the documented order and without duplicates. A worker Skill is a
-    Skill directory that ships ``scripts/kaola-acp.py``; the main orchestrator
-    Skill ships no scripts and is not compared here."""
+def installed_worker_skills(repo: str) -> tuple[list[tuple[Path, list[Path]]], list[str]]:
+    """``(found, unreadable)`` for the default discovery roots that exist.
+
+    ``found`` is ``(root, worker Skill directories)`` in the documented order
+    and without duplicates. A worker Skill is a Skill directory that ships
+    ``scripts/kaola-acp.py``; the main orchestrator Skill ships no scripts and
+    is not compared here. ``unreadable`` names every existing root that could
+    not be listed, so ``start`` refuses it by name instead of dying with a
+    traceback (Issue #106)."""
     found: list[tuple[Path, list[Path]]] = []
+    unreadable: list[str] = []
     seen: set[str] = set()
     for base in (Path(repo), Path.home()):
         for relative in SKILL_DISCOVERY_DIRS:
@@ -1473,17 +1480,22 @@ def installed_worker_skills(repo: str) -> list[tuple[Path, list[Path]]]:
             try:
                 key = str(root.resolve())
             except OSError:
+                unreadable.append(str(root))
                 continue
             if key in seen:
                 continue
             seen.add(key)
-            skills = sorted(
-                path for path in root.iterdir()
-                if (path / "scripts" / "kaola-acp.py").is_file()
-            )
+            try:
+                skills = sorted(
+                    path for path in root.iterdir()
+                    if (path / "scripts" / "kaola-acp.py").is_file()
+                )
+            except OSError:
+                unreadable.append(str(root))
+                continue
             if skills:
                 found.append((root, skills))
-    return found
+    return found, unreadable
 
 
 def worker_skill_alignment(repo: str) -> dict[str, Any]:
@@ -1491,17 +1503,21 @@ def worker_skill_alignment(repo: str) -> dict[str, Any]:
 
     Returns ``applies`` (False for a checkout invocation, which has no Skill
     build to be the baseline), ``build`` (the baseline ``kaola-acp.py`` digest,
-    12 hex), ``roots`` (what was compared, for the receipt) and ``skew`` (the
-    differing files). Read-only: nothing is written, probed, or spawned."""
+    12 hex), ``roots`` (what was compared, for the receipt), ``skew`` (the
+    differing files) and ``unreadable_roots`` (Issue #106: existing default
+    roots that could not be listed, so no comparison was possible). Read-only:
+    nothing is written, probed, or spawned."""
     tree = invoking_skill_tree()
     if tree is None:
-        return {"applies": False, "build": None, "roots": None, "skew": []}
+        return {"applies": False, "build": None, "roots": None, "skew": [],
+                "unreadable_roots": []}
     baseline_dir = tree / "scripts"
     baseline = {name: file_sha256(baseline_dir / name)
                 for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS}
     roots: list[dict[str, Any]] = []
     skew: list[dict[str, Any]] = []
-    for root, skills in installed_worker_skills(repo):
+    installed, unreadable = installed_worker_skills(repo)
+    for root, skills in installed:
         roots.append({"root": str(root), "skills": [skill.name for skill in skills]})
         for skill in skills:
             for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS:
@@ -1521,7 +1537,31 @@ def worker_skill_alignment(repo: str) -> dict[str, Any]:
                     "expected": expected[:12],
                 })
     return {"applies": True, "build": (baseline.get("kaola-acp.py") or "")[:12] or None,
-            "roots": roots, "skew": skew}
+            "roots": roots, "skew": skew, "unreadable_roots": unreadable}
+
+
+def worker_skill_root_refusal(args: argparse.Namespace, repo: str,
+                              alignment: dict[str, Any]) -> dict[str, Any]:
+    """Issue #106: an existing default discovery root could not be listed, so
+    the installed worker Skills could not be compared with this build. A typed
+    pre-mutation refusal in the Issue #105 shape - the caller gets the root
+    names, not a traceback, and nothing is created."""
+    roots = alignment["unreadable_roots"]
+    receipt = base_receipt(args, repo)
+    receipt.pop("git", None)
+    receipt.update({
+        "result": "refused",
+        "reason": "worker-skill-root-unreadable",
+        "action": "start",
+        "detail": ("cannot verify installed worker Skills: ZCode discovery "
+                   f"root(s) not readable: {', '.join(roots)}. Make the root "
+                   "readable or remove it, then start again."),
+        "worker_skill_build": alignment["build"],
+        "worker_skill_unreadable_roots": roots,
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    return receipt
 
 
 def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
@@ -1592,6 +1632,10 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         # build before anything exists, rather than letting the binding fail
         # silently one dispatch later.
         alignment = worker_skill_alignment(repo)
+        # Issue #106: an existing default root that cannot be listed means no
+        # comparison was possible at all; refuse it by name, never a traceback.
+        if alignment["unreadable_roots"]:
+            return worker_skill_root_refusal(args, repo, alignment)
         if alignment["skew"]:
             return worker_skill_skew_refusal(args, repo, alignment)
         # What this Host would load into a dispatched worker. `null` means the

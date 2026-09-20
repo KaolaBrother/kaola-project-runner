@@ -1853,6 +1853,54 @@ def test_issue_105_worker_skill_build_skew_refuses_before_spawn() -> None:
         sandbox.cleanup()
 
 
+def test_issue_106_unreadable_discovery_root_is_a_typed_refusal() -> None:
+    """Issue #106: an existing default ZCode discovery root that cannot be
+    listed makes the Issue #105 comparison impossible, so a Host `start` refuses
+    it by name with nothing created - never a raw traceback. The refusal is the
+    Issue #105 shape: ``result: refused``, exit 1, ``mutation_performed: false``
+    and the unreadable root in both the detail and a dedicated field."""
+    sandbox = Sandbox("i106-unreadable")
+    blocked = sandbox.home / ".agents" / "skills"
+    try:
+        host_tree = sandbox.dir / "installed" / "zcode-kaola-project-runner"
+        shutil.copytree(ROOT / "skills" / "zcode-kaola-project-runner", host_tree)
+        host_cli = host_tree / "scripts" / "kaola-acp.py"
+        blocked.mkdir(parents=True)
+        (blocked / "some-worker").mkdir()
+        os.chmod(blocked, 0o000)
+        if os.geteuid() == 0:
+            # root ignores the mode bits, so there is nothing to prove here.
+            check(True, "running as root; chmod-000 unreadable-root probe skipped")
+            return
+        session = sandbox.session()
+        result, receipt = sandbox.invoke(
+            "start", "--mode", "yolo", session=session, scenario="basic",
+            cli_path=host_cli)
+        check("Traceback" not in (result.stderr or ""),
+              f"the unreadable root is not a traceback ({(result.stderr or '')[-300:]})")
+        check(result.returncode == 1, f"unreadable-root start exits 1 ({result.returncode})")
+        check(isinstance(receipt, dict) and receipt.get("result") == "refused"
+              and receipt.get("reason") == "worker-skill-root-unreadable"
+              and receipt.get("mutation_performed") is False
+              and receipt.get("mutation_status") == "not_started",
+              f"the unreadable root is a typed refusal ({receipt})")
+        check(receipt.get("worker_skill_unreadable_roots") == [str(blocked)],
+              f"the refusal names the unreadable root "
+              f"({receipt.get('worker_skill_unreadable_roots')})")
+        check(str(blocked) in (receipt.get("detail") or ""),
+              f"the refusal detail names the unreadable root ({receipt.get('detail')})")
+        record_dir = sandbox.record_dir(session)
+        check(not record_dir.exists() and not holder_socket(record_dir).exists(),
+              "the refused start created no record directory and no holder socket")
+        check(subprocess.run(["tmux", "has-session", "-t", f"={session}"],
+                             capture_output=True).returncode != 0,
+              "the refused start created no tmux session")
+    finally:
+        if blocked.is_dir():
+            os.chmod(blocked, 0o755)
+        sandbox.cleanup()
+
+
 def main() -> int:
     tests = [
         value for name, value in sorted(globals().items())
