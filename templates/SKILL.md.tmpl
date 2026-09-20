@@ -51,7 +51,7 @@ SESSION="{{SESSION_PREFIX}}-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**{{DEFAULT_MODEL_NAME}}**: `{{DEFAULT_MODEL_ID}}`,
 {{DEFAULT_MODEL_PARAMETERS}}) and `--tier upgrade` (**{{UPGRADE_MODEL_NAME}}**:
 `{{UPGRADE_MODEL_ID}}`, {{UPGRADE_MODEL_PARAMETERS}}) — and `default` applies whenever the user did
@@ -59,7 +59,7 @@ not explicitly choose otherwise. Select `upgrade` only when the user explicitly 
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.
 
-An explicit user model choice always wins: pass it with `--model ID`, adding `--effort LEVEL` only
+{{TIER_BLOCK}}An explicit user model choice always wins: pass it with `--model ID`, adding `--effort LEVEL` only
 when the user also named an effort. A bare explicit `--model` leaves the runtime's native effort
 alone — never attach a preset's effort to a different model. If the user picks a model ID that
 already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the Runner does not

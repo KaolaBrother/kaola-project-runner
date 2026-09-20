@@ -39,7 +39,9 @@ ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 hol
 
 Main-model choice is a per-run transport fact. A current-request `--model` wins; otherwise
 `--tier default|upgrade` selects the manifest's declared preset (`default` when unset), resolved
-against the current catalog. `--effort` applies only to the model selected in the same request, and
+against the current catalog; a platform may declare one further preset under its own word
+(`alt_tier_label`, e.g. `--tier alternative`, `--tier fable`), and a tier the platform does not
+declare is refused by name rather than resolved to `default`. `--effort` applies only to the model selected in the same request, and
 `--fast on` is an explicit per-run opt-in applied through the native mechanism (config option,
 `-c service_tier`, `-fast` model variant, or process-scoped `--settings '{"fastMode": ...}'`) —
 reported `unsupported` where none exists; where a mechanism exists the native CLI determines

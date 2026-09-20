@@ -51,7 +51,7 @@ SESSION="opencode-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**CLI native opening model**: ``,
 no Runner model or effort override) and `--tier upgrade` (**CLI native opening model**:
 ``, no Runner model or effort override) — and `default` applies whenever the user did

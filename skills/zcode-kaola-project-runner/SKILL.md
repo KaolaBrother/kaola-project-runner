@@ -51,10 +51,10 @@ SESSION="zcode-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
-presets — `--tier default` (**enabled Coding Plan, first listed model**: ``,
-) and `--tier upgrade` (**enabled Coding Plan, first listed model**:
-``, ) — and `default` applies whenever the user did
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
+presets — `--tier default` (**GLM 5.3 Max**: `GLM-5.3`,
+thought=max) and `--tier upgrade` (**GLM 5.3 Max**:
+`GLM-5.3`, thought=max) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.

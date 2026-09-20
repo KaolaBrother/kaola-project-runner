@@ -51,13 +51,15 @@ SESSION="devin-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**SWE-2 Max**: `swe-2-max`,
 effort=max (encoded in model ID)) and `--tier upgrade` (**Fusion High (Fable 5.1 High + SWE-2 Medium)**:
 `fusion-claude-fable-5-1-high-sidekick-swe-2-medium`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.
+
+A third preset, `--tier fable` (**Fable 5.1 High**: `claude-fable-5-1-high`), needs the same explicit user request as `upgrade`.
 
 An explicit user model choice always wins: pass it with `--model ID`, adding `--effort LEVEL` only
 when the user also named an effort. A bare explicit `--model` leaves the runtime's native effort

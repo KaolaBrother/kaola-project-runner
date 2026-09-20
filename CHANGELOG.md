@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.5.5 — unreleased
+
+- **Five platforms' model presets re-pointed at live-verified ids (Issue #111).** Every id below
+  was read from the live ACP catalog on 2026-09-21 (`initialize` → `session/new` → `configOptions`,
+  read-only, session closed immediately); no user configuration was written. Kimi CLI's default
+  becomes **Kimi K3 Max** (`kimi-code/k3` at `thinking=max`) — a composition, since the catalog
+  carries no "Max" in any display name — and the previous default `kimi-code/kimi-for-coding`
+  ("K2.8 Preview") moves to the new alternative tier. Droid's default becomes the same
+  composition through its own first-class catalog id, `kimi-k3` at `reasoning_effort=max`, so
+  `acp_model_map` stays empty and nothing is hardcoded; its alternative tier is `kimi-k2.7-code`,
+  the nearest Kimi-family analogue because Droid's 51-model catalog carries no K2.8 at all. dsh
+  becomes a model-selecting platform for the first time, defaulting to
+  `opencode-go/deepseek-v4.1-flash` — note that "DeepSeek V4.1 Flash (OpenCode Go)" is a
+  Runner-side display name and the catalog's own is the bare lowercase `deepseek-v4.1-flash`, and
+  that the similarly spelled `deepseek-official/deepseek-flash` (displayed "DeepSeek-V41-Flash")
+  is a different route. ZCode's `default_model_*` is pinned to **GLM-5.3 at `thought=max`**,
+  generalising the Issue #108 Host gate to the ordinary preset path so a plain worker start lands
+  on the same pair; a test asserts the manifest equals `ZCODE_HOST_MODEL_ID`/`ZCODE_HOST_EFFORT`
+  so the two do not become separate sources of truth. Devin gains a third preset without losing
+  either existing one. Both transports are re-pointed together: `platforms/*.yaml` feeds the ACP
+  path and `scripts/adapters/*.sh` feeds the PTY path, and a new test makes them agree.
+
+- **A third, optional model preset per platform (Issue #111).** `--tier` was a closed two-value
+  vocabulary. A platform may now declare one further preset under **its own word** —
+  `alt_tier_label` plus `alt_model_name`/`alt_model_id`/`alt_model_parameters`/`alt_model_effort`
+  in the manifest — so Kimi CLI and Droid offer `--tier alternative` and Devin offers
+  `--tier fable`, while the other seven platforms declare none and show no trace of the slot in
+  their generated Skills. The slot is all-or-nothing: a label without a model, a model without a
+  label, or a label shadowing `default`/`upgrade` is a render-time error. Because the template
+  engine has no conditional syntax, the prose renders through computed `TIER_BLOCK` and
+  `ALT_TIER_LINE` blocks (the established `steering_block()` pattern) rather than an
+  unconditional template sentence, with the detail spent in `references/platform.md` where there
+  is room — an unconditional `SKILL.md` sentence would have overflowed `worker_skill_bytes` on
+  cursor-cli first. **Asking a platform for a tier it does not declare is a typed refusal**
+  (`{"result": "refused", "reason": "tier-not-declared"}`, exit 1, `available_tiers` named,
+  nothing spawned or written) on the ACP path and a named `die` on the PTY path — never a silent
+  fallback to `default`. Two latent defects surfaced and were fixed with it: `kaola-model-policy.py`
+  rejected a `runner-<tier>` selection source with an argparse usage error because the vocabulary
+  was a closed four-value list, and the shell's refusal message doubled the tier label.
+
 ## 0.5.4 — 2026-09-20
 
 - **An unreadable ZCode discovery root is a typed refusal, not a traceback (Issue #106).** The

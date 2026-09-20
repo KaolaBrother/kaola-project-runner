@@ -51,7 +51,7 @@ SESSION="claude-code-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Opus High**: `opus`,
 effort=high) and `--tier upgrade` (**Fable High**:
 `fable`, effort=high) — and `default` applies whenever the user did

@@ -33,9 +33,7 @@ is reported as `budget: <surface> is N B > M B (<key>)` and nothing is written (
 pin is likewise never written). `--check` returns nonzero for any missing, stale,
 or unexpected file, Skill directory, or host bundle file. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
-Transport fields are `default_transport`,
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
-`acp_effort_config_id`, `acp_fast_config_id`, `acp_fast_values`, `acp_model_map`, and
 `acp_effort_config_id`, `acp_mode_config_id`, `acp_fast_config_id`, `acp_fast_values`, `acp_model_map`, and
 `clientCapabilities._meta` during `initialize` — Cursor's `parameterizedModelPicker=true` makes
 its ACP surface advertise separate `model`/`effort`/`fast` options with base model IDs and string
@@ -45,8 +43,14 @@ model; an effort encoded in the picker ID suffix travels through the effort opti
 through `acp_fast_values`-converted values, so semantics are never substituted — an unmapped ID
 is sent literally and a rejection is reported as a limitation. Model-selection fields are
 `default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`,
-`upgrade_model_name`/`upgrade_model_id`/`upgrade_model_parameters`/`upgrade_model_effort`, and
-`fast_support`/`fast_summary`. They render as `DEFAULT_TRANSPORT`,
+`upgrade_model_name`/`upgrade_model_id`/`upgrade_model_parameters`/`upgrade_model_effort`,
+`alt_tier_label`/`alt_model_name`/`alt_model_id`/`alt_model_parameters`/`alt_model_effort`, and
+`fast_support`/`fast_summary`. The `alt_*` group is the optional third preset: `alt_tier_label`
+carries the platform's own word for the tier (`alternative`, `fable`) and an empty label means
+the platform declares no third tier, in which case the whole group must be empty and nothing
+about it is rendered. It reaches the generated Skill through the computed `TIER_BLOCK`
+(SKILL.md) and `ALT_TIER_LINE` (references/platform.md) blocks, never an unconditional
+template sentence. They render as `DEFAULT_TRANSPORT`,
 `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY` template variables.
 
 An `acp_command` word may start with `$SKILL_DIR/scripts/` to name a file shipped inside the
@@ -218,7 +222,7 @@ account Skill.
 ```text
 scripts/kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] \
-  [--tier default|upgrade] [--model ID --effort low|medium|high|xhigh|max] [--fast on|off]
+  [--tier default|upgrade|PLATFORM_TIER] [--model ID --effort low|medium|high|xhigh|max] [--fast on|off]
 scripts/kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N]
@@ -444,7 +448,10 @@ configuration health, or materialization does not block the CLI communication ch
 
 Preflight also resolves the declared Runner default without starting a session. `start` gives an
 explicit user model/effort precedence; otherwise `--tier default|upgrade` selects the manifest preset
-(`default` when `--tier` is omitted). A bare `--model` wins over the tier preset and does not inherit
+(`default` when `--tier` is omitted). A platform may declare one further preset under its own word
+(`alt_tier_label`); requesting a tier the platform does not declare is the typed refusal
+`{"result": "refused", "reason": "tier-not-declared"}` at exit 1, naming `available_tiers`,
+never a silent fallback to `default`. A bare `--model` wins over the tier preset and does not inherit
 its effort; `--effort` only applies to the model selected in the same request. Model IDs that already
 encode effort or Fast variants get no invented extra effort/configuration calls. `--fast` defaults to
 `off`; `--fast on` is the per-run opt-in and is applied through the platform's native mechanism (Codex
@@ -466,8 +473,10 @@ Model evidence under `model` includes `requested_model_source`, `requested_model
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
 
-Droid's default is Auto Model (`auto`) with no effort pin; `--tier upgrade` mirrors the default
-and is a no-op. Effort is passed only when explicitly selected. Its native ACP mode option is
+Droid's default is Kimi K3 Max (`kimi-k3` at `reasoning_effort=max`, both first-class catalog
+values, so `acp_model_map` stays empty); `--tier upgrade` mirrors the default and is a no-op, and
+`--tier alternative` selects `kimi-k2.7-code` with no Runner effort, because the agent states the
+available `reasoning_effort` values depend on the selected model. Its native ACP mode option is
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
 

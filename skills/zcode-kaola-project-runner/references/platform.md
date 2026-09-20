@@ -6,8 +6,8 @@
 - Default tmux session prefix: `zcode-kaola`
 - Continue: `--continue`
 - Exact resume: `--resume <session-id>`
-- Runner default preset (`--tier default`): **enabled Coding Plan, first listed model** — `` with ``
-- Runner upgrade preset (`--tier upgrade`): **enabled Coding Plan, first listed model** — `` with ``
+- Runner default preset (`--tier default`): **GLM 5.3 Max** — `GLM-5.3` with `thought=max`
+- Runner upgrade preset (`--tier upgrade`): **GLM 5.3 Max** — `GLM-5.3` with `thought=max`
 - Fast support: no native Fast toggle; thought level is a separate config option (low/high/max)
 
 ## Preflight

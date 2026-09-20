@@ -987,6 +987,51 @@ def force_kill_from_record(args: argparse.Namespace, repo: str,
     return receipt
 
 
+def tier_prefix(manifest: dict[str, str], tier: str) -> str:
+    """The manifest key prefix a `--tier` value selects.
+
+    Issue #111: `default` and `upgrade` are universal; the optional third slot
+    answers to the platform's own word, carried by `alt_tier_label`.
+    """
+    if tier == "upgrade":
+        return "upgrade"
+    label = (manifest.get("alt_tier_label") or "").strip()
+    if label and tier == label:
+        return "alt"
+    return "default"
+
+
+def tier_declared(manifest: dict[str, str], tier: str | None) -> bool:
+    """Whether this platform declares the requested tier at all."""
+    if not tier:
+        return True
+    label = (manifest.get("alt_tier_label") or "").strip()
+    return tier in {"default", "upgrade"} or (bool(label) and tier == label)
+
+
+def tier_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any]:
+    """Issue #111 typed refusal, in the Issue #105 shape: a tier this platform
+    does not declare is named and rejected, never resolved to `default`."""
+    label = (args.manifest.get("alt_tier_label") or "").strip()
+    available = f"default, upgrade, or {label}" if label else "default or upgrade"
+    receipt = base_receipt(args, repo)
+    receipt.pop("git", None)
+    receipt.update({
+        "result": "refused",
+        "reason": "tier-not-declared",
+        "action": args.command,
+        "detail": (
+            f"{args.platform} declares no --tier {args.tier}; "
+            f"this platform's presets are {available}."
+        ),
+        "requested_tier": args.tier,
+        "available_tiers": ["default", "upgrade"] + ([label] if label else []),
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    return receipt
+
+
 def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     """Resolve tier/model/effort/Fast through the shared model-policy helper.
 
@@ -1011,8 +1056,8 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         candidate = ""
         effort = ""
     else:
-        prefix = "upgrade" if tier == "upgrade" else "default"
-        source = f"runner-{prefix}"
+        prefix = tier_prefix(manifest, tier)
+        source = f"runner-{tier if prefix == 'alt' else prefix}"
         requested = manifest.get(f"{prefix}_model_name") or ""
         candidate = manifest.get(f"{prefix}_model_id") or ""
         effort = args.effort or manifest.get(f"{prefix}_model_effort") or ""
@@ -2140,7 +2185,9 @@ def main() -> int:
     parser.add_argument("--inline", action="store_true")
     parser.add_argument("--model")
     parser.add_argument("--effort")
-    parser.add_argument("--tier", choices=("default", "upgrade"))
+    # Issue #111: validated against the manifest after it loads, so an
+    # undeclared third tier answers a typed refusal instead of argparse exit 2.
+    parser.add_argument("--tier")
     parser.add_argument("--fast", choices=("on", "off"), default="off")
     parser.add_argument("--mode")
     parser.add_argument("--steer-mode", choices=("native", "interrupt"))
@@ -2150,6 +2197,9 @@ def main() -> int:
 
     args.manifest = load_manifest(args.platform)
     repo = resolve_repo(args.repo)
+    if not tier_declared(args.manifest, args.tier):
+        print(json.dumps(tier_refusal(args, repo), ensure_ascii=False, sort_keys=True))
+        return 1
     if args.command != "preflight":
         if not args.session or not SESSION_PATTERN.match(args.session):
             die("invalid or missing --session name")

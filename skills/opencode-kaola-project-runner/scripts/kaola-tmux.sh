@@ -30,7 +30,7 @@ export OBSERVATION_HELPER
 usage() {
   printf '%s\n' 'Usage:
   kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
-  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|upgrade] [--model ID --effort LEVEL] [--fast on|off]
+  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|upgrade|PLATFORM_TIER] [--model ID --effort LEVEL] [--fast on|off]
   kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N] [--full]
@@ -272,8 +272,15 @@ TMUX_SESSION_TARGET="=$session"
 if [[ "$platform" != claude-code && "$platform" != devin && "$platform" != codex && "$platform" != zcode && "$platform" != droid && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
 if [[ "$command_name" != start && "$command_name" != preflight && ( "$model_given" == true || "$effort_given" == true || "$tier_given" == true || "$fast_given" == true ) ]]; then die "model, effort, tier, and fast are start/preflight-only"; fi
 if [[ "$command_name" != start && "$permission_mode_given" == true ]]; then die "permission mode is start-only"; fi
+# Issue #111: the optional third preset carries the platform's own word
+# (`alternative`, `fable`), declared by the adapter. A tier this platform does
+# not declare is refused by name -- never resolved silently to `default`.
+alt_tier="${ADAPTER_ALT_TIER_LABEL:-}"
 if [[ "$tier_given" == true ]]; then
-  case "$tier" in default|upgrade) ;; *) die "--tier must be default or upgrade" ;; esac
+  if [[ "$tier" != default && "$tier" != upgrade ]] && [[ -z "$alt_tier" || "$tier" != "$alt_tier" ]]; then
+    if [[ -n "$alt_tier" ]]; then die "$platform declares no --tier $tier; its presets are default, upgrade, or $alt_tier"; fi
+    die "$platform declares no --tier $tier; its presets are default or upgrade"
+  fi
 else
   tier=default
 fi
@@ -328,6 +335,8 @@ resolve_model_policy() {
   local source requested candidate chosen_effort fast_arg
   if [[ "$tier" == upgrade ]]; then
     source=runner-upgrade requested="$ADAPTER_UPGRADE_MODEL_NAME" candidate="$ADAPTER_UPGRADE_MODEL_ID" chosen_effort="$ADAPTER_UPGRADE_MODEL_EFFORT"
+  elif [[ -n "$alt_tier" && "$tier" == "$alt_tier" ]]; then
+    source="runner-$alt_tier" requested="${ADAPTER_ALT_MODEL_NAME:-}" candidate="${ADAPTER_ALT_MODEL_ID:-}" chosen_effort="${ADAPTER_ALT_MODEL_EFFORT:-}"
   else
     source=runner-default requested="$ADAPTER_DEFAULT_MODEL_NAME" candidate="$ADAPTER_DEFAULT_MODEL_ID" chosen_effort="$ADAPTER_DEFAULT_MODEL_EFFORT"
   fi

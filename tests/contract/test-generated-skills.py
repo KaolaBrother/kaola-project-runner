@@ -252,6 +252,28 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         # Devin's declared upgrade preset ID is a Fusion combo that literally
         # names the Claude Fable sidecar. Remove only that exact declared fact.
         text = text.replace("fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "devin-upgrade-model-id")
+        # Issue #111: the `fable` preset is a first-class model in Devin's own
+        # 385-entry catalog, carrying the vendor's name. Remove only the exact
+        # declared ID and the catalog name it is recorded under.
+        text = text.replace("claude-fable-5-1-high", "devin-fable-model-id")
+        text = text.replace("claude fable 5.1 high", "devin-fable-catalog-name")
+    if package_id == "droid-kaola-project-runner":
+        # Issue #111: Droid's catalog carries first-class Kimi-family models,
+        # and its Runner presets select two of them. That is a Factory catalog
+        # fact, not Kimi CLI adapter leakage -- remove only those exact
+        # declared preset strings, so a real kimi-cli fact would still fail.
+        text = text.replace("kimi k3 max", "droid-default-model")
+        text = text.replace("kimi k2.7 code", "droid-alternative-model")
+        text = text.replace("kimi-k2.7-code", "droid-alternative-model-id")
+        text = text.replace("kimi-k3", "droid-default-model-id")
+        text = text.replace("kimi-family", "same-vendor-family")
+    if package_id == "dsh-kaola-project-runner":
+        # Issue #111: dsh's model catalog is grouped by provider route, and one
+        # of its routes is literally named `opencode-go`. The default preset
+        # selects it, so the route name and the Runner-side display name built
+        # from it are declared facts, not OpenCode adapter leakage.
+        text = text.replace("opencode-go", "dsh-route-id")
+        text = text.replace("opencode go", "dsh-route-name")
     for other_id, tokens in forbidden.items():
         for token in tokens:
             # A common word such as "cursor" is intentionally not exempted: a

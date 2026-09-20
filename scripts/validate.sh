@@ -124,6 +124,7 @@ python_suites_all=(
   "test-issue-97-codex-user-compact-hook.py"
   "test-issue-98-dsh-acp.py"
   "test-issue-101-validate-watchdog.py"
+  "test-issue-111-model-tiers.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -176,6 +177,7 @@ python_suites_b=(
   "test-issue-86-delegator-quota.py"
   "test-issue-90-event-confirmation-race.py"
   "test-issue-95-reader-exception.py"
+  "test-issue-111-model-tiers.py"
 )
 run_suite_lane() {
   local status=0 rc

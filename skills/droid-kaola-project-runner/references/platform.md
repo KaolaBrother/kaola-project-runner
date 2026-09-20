@@ -6,8 +6,9 @@
 - Default tmux session prefix: `droid-kaola`
 - Continue: `--resume --last`
 - Exact resume: `--resume <session-id>`
-- Runner default preset (`--tier default`): **Auto Model** — `auto` with ``
-- Runner upgrade preset (`--tier upgrade`): **Auto Model** — `auto` with ``
+- Runner default preset (`--tier default`): **Kimi K3 Max** — `kimi-k3` with `reasoning_effort=max`
+- Runner upgrade preset (`--tier upgrade`): **Kimi K3 Max** — `kimi-k3` with `reasoning_effort=max`
+- Runner alternative preset (`--tier alternative`): **Kimi K2.7 Code** — `kimi-k2.7-code` with `no Runner effort override`
 - Fast support: no separate Fast toggle; `-fast` catalog ids are explicit `--model` choices
 
 ## Preflight
@@ -30,7 +31,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-PTY launches droid with --skip-permissions-unsafe (default bypass) plus a process-scoped --settings overlay pinning the resolved model (default Auto Model; reasoningEffort only when explicitly called; never writes ~/.factory). ACP runs the native `droid exec --output-format acp` agent; ACP start sets model=auto and autonomy_level=auto-high after initialize/session-new (the default ACP session is already auto-high; the native default model id is not auto, so Auto Model is applied explicitly). Login stays a native act (TUI /login or FACTORY_API_KEY).
+PTY launches droid with --skip-permissions-unsafe (default bypass) plus a process-scoped --settings overlay pinning the resolved model (default Kimi K3 Max; reasoningEffort only when the preset or the caller names one; never writes ~/.factory). ACP runs the native `droid exec --output-format acp` agent; ACP start sets the resolved model and autonomy_level=auto-high after initialize/session-new (the default ACP session is already auto-high; the live native model currentValue is none of the Runner presets, so the preset model is applied explicitly, never inherited). The default preset is the first-class catalog id kimi-k3 at reasoning_effort=max -- both accepted live on 0.220.0 against an agent that rejects an invalid effort with -32602 -- so no acp_model_map entry is needed; the --tier alternative preset kimi-k2.7-code is the Kimi-family analogue chosen because the 51-model catalog carries no K2.8 at all, and it declares no Runner effort because the agent states the available reasoning_effort options depend on the selected model. Login stays a native act (TUI /login or FACTORY_API_KEY).
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

@@ -51,10 +51,10 @@ SESSION="dsh-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
-presets — `--tier default` (**CLI native opening model**: ``,
-no Runner model or effort override) and `--tier upgrade` (**CLI native opening model**:
-``, no Runner model or effort override) — and `default` applies whenever the user did
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
+presets — `--tier default` (**DeepSeek V4.1 Flash (OpenCode Go)**: `opencode-go/deepseek-v4.1-flash`,
+no Runner effort override) and `--tier upgrade` (**DeepSeek V4.1 Flash (OpenCode Go)**:
+`opencode-go/deepseek-v4.1-flash`, no Runner effort override) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.

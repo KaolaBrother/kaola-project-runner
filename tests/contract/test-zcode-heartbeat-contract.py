@@ -2055,21 +2055,34 @@ def test_issue_108_host_requires_glm53_max() -> None:
 
 
 def test_issue_108_worker_names_are_never_pinned() -> None:
-    """Issue #108 boundary: the pin is scoped to the standard Host name. An
-    ordinary worker session keeps the plan default (the fixture's thoughtLevel
-    is ``high``, never silently max), and an issue-worker name that merely
-    contains "orchestrator" in its purpose is still a worker."""
+    """Issue #108 boundary: the *Host gate* is scoped to the standard Host
+    name, and an issue-worker name that merely contains "orchestrator" in its
+    purpose is still a worker.
+
+    Issue #111 changed what a worker lands on but not this boundary. The
+    ordinary ZCode preset now declares GLM 5.3 at thought=max, so a worker does
+    reach the same pair -- through `runner-default` preset resolution, which any
+    caller can override with `--model`/`--effort`. What must stay absent is the
+    Host machinery: no `host_selection` fact, and therefore no refusal and no
+    stop-on-unverified. The softer default underneath the hard gate, exactly as
+    the issue describes; the two agreeing is asserted in
+    tests/contract/test-issue-111-model-tiers.py.
+    """
     sandbox = Sandbox("i108-worker")
     try:
         worker = sandbox.session()
         receipt = sandbox.cli("start", "--mode", "yolo", session=worker, scenario="basic")
         check(receipt.get("state") == "ready" and "host_selection" not in receipt,
               f"a worker start carries no Host selection pin ({receipt.get('host_selection')})")
+        selection = receipt.get("model_selection") or {}
+        check(selection.get("source") == "runner-default" and selection.get("tier") == "default",
+              f"the worker's selection is the ordinary preset ({selection})")
         application = receipt.get("config_application") or {}
-        check(application.get("effort", {}).get("applied") is not True,
-              f"no effort was pinned onto the worker ({application.get('effort')})")
-        check(record_config_current(sandbox.record_dir(worker), "thoughtLevel") == "high",
-              "the worker keeps its own thought level (high), not the Host pin")
+        effort = application.get("effort") or {}
+        check(effort.get("applied") is True and effort.get("value") == "max",
+              f"the preset effort reached the worker ({effort})")
+        check(record_config_current(sandbox.record_dir(worker), "thoughtLevel") == "max",
+              "the worker runs the preset thought level")
         stop = sandbox.cli("stop", "--force", session=worker)
         check(stop.get("residual_pids") == [], "the worker stops cleanly")
 
@@ -2077,10 +2090,21 @@ def test_issue_108_worker_names_are_never_pinned() -> None:
         receipt = sandbox.cli("start", "--mode", "yolo", session=workerish, scenario="basic")
         check(receipt.get("state") == "ready" and "host_selection" not in receipt,
               f"the -i<issue>- marker keeps the name a worker ({receipt.get('host_selection')})")
-        check(record_config_current(sandbox.record_dir(workerish), "thoughtLevel") == "high",
-              "the issue-worker keeps its own thought level")
+        check(record_config_current(sandbox.record_dir(workerish), "thoughtLevel") == "max",
+              "the issue-worker takes the preset, not the Host pin")
         stop = sandbox.cli("stop", "--force", session=workerish)
         check(stop.get("residual_pids") == [], "the issue-worker stops cleanly")
+
+        # A worker is still free to choose otherwise; the Host is not.
+        explicit = sandbox.session()
+        receipt = sandbox.cli("start", "--mode", "yolo", "--effort", "high",
+                              session=explicit, scenario="basic")
+        check("host_selection" not in receipt and receipt.get("result") != "refused",
+              f"an explicit worker effort is not refused ({receipt.get('reason')})")
+        check(record_config_current(sandbox.record_dir(explicit), "thoughtLevel") == "high",
+              "an explicit worker effort still wins over the preset")
+        stop = sandbox.cli("stop", "--force", session=explicit)
+        check(stop.get("residual_pids") == [], "the explicit worker stops cleanly")
     finally:
         sandbox.cleanup()
 

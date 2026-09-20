@@ -51,7 +51,7 @@ SESSION="cursor-cli-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Grok 4.6 Extra High**: `cursor-grok-4.6-xhigh`,
 effort=xhigh (encoded in model ID), fast=false) and `--tier upgrade` (**Claude Fable 5.1 High**:
 `claude-fable-5-1-high`, effort=high (encoded in model ID)) — and `default` applies whenever the user did

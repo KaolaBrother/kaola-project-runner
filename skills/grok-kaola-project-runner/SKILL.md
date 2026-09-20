@@ -51,7 +51,7 @@ SESSION="grok-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Grok 4.6 Extra High**: `grok-4.6`,
 effort=xhigh, fast=false) and `--tier upgrade` (**Grok 4.6 Extra High**:
 `grok-4.6`, effort=xhigh, fast=false) — and `default` applies whenever the user did

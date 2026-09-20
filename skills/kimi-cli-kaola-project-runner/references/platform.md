@@ -6,8 +6,9 @@
 - Default tmux session prefix: `kimi-cli-kaola`
 - Continue: `--continue`
 - Exact resume: `--session <session-id>`
-- Runner default preset (`--tier default`): **Kimi 2.8 Max** — `kimi-code/kimi-for-coding` with `thinking=max`
+- Runner default preset (`--tier default`): **Kimi K3 Max** — `kimi-code/k3` with `thinking=max`
 - Runner upgrade preset (`--tier upgrade`): **Kimi K3 Max** — `kimi-code/k3` with `thinking=max`
+- Runner alternative preset (`--tier alternative`): **Kimi K2.8** — `kimi-code/kimi-for-coding` with `thinking=max`
 - Fast support: no native Fast toggle; speed-named catalog models such as kimi-code/kimi-for-coding-highspeed are explicit model choices, not a Fast switch
 
 ## Preflight
@@ -30,7 +31,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-Launch kimi --yolo from the canonical repository root. On Kimi Code CLI 2.x --yolo is Ask When Needed (routine edits and commands auto-run; risky actions, questions, and plans still ask) and is mutually exclusive with --auto (Never Ask), which the Runner no longer passes; --yes/--auto-approve are hidden aliases of --yolo. Runner --resume renders --session <session-id> (-r/--resume is a hidden alias) and Runner --continue renders --continue; 2.x rejects --session together with --continue at startup because both mean resume, so the Runner sends at most one. Thinking effort travels through thinking.effort (env KIMI_MODEL_THINKING_EFFORT: low/medium/high/xhigh/max), not a reasoning_effort wire parameter; ACP start sets mode=yolo and applies effort through the ACP thinking config option. Workspace-trust remains a separate TUI surface.
+Launch kimi --yolo from the canonical repository root. On Kimi Code CLI 2.x --yolo is Ask When Needed (routine edits and commands auto-run; risky actions, questions, and plans still ask) and is mutually exclusive with --auto (Never Ask), which the Runner no longer passes; --yes/--auto-approve are hidden aliases of --yolo. Runner --resume renders --session <session-id> (-r/--resume is a hidden alias) and Runner --continue renders --continue; 2.x rejects --session together with --continue at startup because both mean resume, so the Runner sends at most one. Thinking effort travels through thinking.effort (env KIMI_MODEL_THINKING_EFFORT: low/medium/high/xhigh/max), not a reasoning_effort wire parameter; ACP start sets mode=yolo and applies effort through the ACP thinking config option, whose ladder is the three values low/high/max rather than that five-level env ladder -- max is valid on both, but the two sets are not the same. The ACP model currentValue is kimi-code/kimi-for-coding, so the kimi-code/k3 default preset is applied, never inherited, and "Kimi K3 Max" names the composition model=kimi-code/k3 plus thinking=max: the catalog carries no "Max" in any display name. Workspace-trust remains a separate TUI surface.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

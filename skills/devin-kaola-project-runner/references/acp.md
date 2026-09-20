@@ -1,6 +1,6 @@
 # Devin CLI ACP transport
 
-Command: `devin acp`. Login requires a PTY: `false`. Platform quirks: agent reports affogato 0.0.0-dev; large model option catalog.
+Command: `devin acp`. Login requires a PTY: `false`. Platform quirks: agent reports affogato 0.0.0-dev; large model option catalog (385 model values read live on cli 3000.10.31); the --tier fable preset is the first-class pure model claude-fable-5-1-high, catalog name "Claude Fable 5.1 High", shortened here to "Fable 5.1 High" to match the existing fusion preset's wording; there is no effort config option, so every effort is encoded in the model id; the live native model currentValue is swe-2-high, so every preset is applied, never inherited.
 
 ## Command surface
 

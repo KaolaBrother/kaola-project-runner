@@ -43,7 +43,15 @@ REQUIRED = {
     "recurring_execution", "recurring_summary", "quit_text", "default_model_name",
     "default_model_id", "default_model_parameters", "default_model_effort",
     "upgrade_model_name", "upgrade_model_id", "upgrade_model_parameters",
-    "upgrade_model_effort", "fast_support", "fast_summary",
+    "upgrade_model_effort",
+    # Issue #111: the optional third preset slot. Its CLI token is the
+    # platform's own word (`alternative`, `fable`), so the label travels in the
+    # manifest instead of being hardcoded. All five keys are present in every
+    # manifest because parse_manifest rejects both missing and extra keys; an
+    # empty `alt_tier_label` means this platform declares no third tier.
+    "alt_tier_label", "alt_model_name", "alt_model_id", "alt_model_parameters",
+    "alt_model_effort",
+    "fast_support", "fast_summary",
     "default_transport", "acp_command",
     "acp_client_capabilities", "acp_quirks", "acp_verified_versions", "acp_env_allowlist",
     "acp_login_requires_pty", "acp_mode_config_id", "acp_model_config_id", "acp_effort_config_id",
@@ -51,6 +59,11 @@ REQUIRED = {
     "acp_init_meta", "acp_fast_values",
     "native_steering", "acp_steer_method", "steering_summary",
 }
+
+
+ALT_TIER_KEYS = (
+    "alt_model_name", "alt_model_id", "alt_model_parameters", "alt_model_effort",
+)
 
 
 def parse_manifest(path: Path) -> dict[str, str]:
@@ -98,6 +111,21 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: empty steering_summary")
     if not result["acp_command"]:
         raise ValueError(f"{path}: empty acp_command")
+    # Issue #111: the third preset slot is all-or-nothing. A label without a
+    # model would advertise a tier that resolves to nothing, and a model
+    # without a label would be unreachable from `--tier`.
+    alt_label = result["alt_tier_label"]
+    alt_declared = [key for key in ALT_TIER_KEYS if result[key]]
+    if alt_label:
+        if not re.fullmatch(r"[a-z][a-z0-9-]*", alt_label):
+            raise ValueError(f"{path}: invalid alt_tier_label {alt_label!r}")
+        if alt_label in {"default", "upgrade"}:
+            raise ValueError(f"{path}: alt_tier_label must not shadow {alt_label}")
+        for key in ("alt_model_name", "alt_model_id"):
+            if not result[key]:
+                raise ValueError(f"{path}: alt_tier_label needs {key}")
+    elif alt_declared:
+        raise ValueError(f"{path}: {sorted(alt_declared)} need alt_tier_label")
     return result
 
 
@@ -170,9 +198,43 @@ def steering_block(manifest: dict[str, str]) -> str:
     return template.format(runtime=manifest["runtime_name"]).rstrip()
 
 
+def tier_block(manifest: dict[str, str]) -> str:
+    """Issue #111: the third preset renders only where the platform declares
+    one. The engine has no conditional syntax, so an absent tier is the empty
+    string computed here rather than a token the template could leave behind.
+    SKILL.md is the expensive surface (cursor-cli ships 152 B under
+    `worker_skill_bytes`), so it gets one sentence and references/platform.md
+    carries the full preset line."""
+    label = manifest["alt_tier_label"]
+    if not label:
+        return ""
+    return (
+        f"A third preset, `--tier {label}` (**{manifest['alt_model_name']}**: "
+        f"`{manifest['alt_model_id']}`), needs the same explicit user request "
+        f"as `upgrade`.\n\n"
+    )
+
+
+def alt_tier_line(manifest: dict[str, str]) -> str:
+    """The references/platform.md bullet for the third preset, or nothing.
+
+    The trailing newline belongs to the block: the template holds the token at
+    the start of the following line, so an undeclared tier leaves no blank."""
+    label = manifest["alt_tier_label"]
+    if not label:
+        return ""
+    return (
+        f"- Runner {label} preset (`--tier {label}`): "
+        f"**{manifest['alt_model_name']}** — `{manifest['alt_model_id']}` "
+        f"with `{manifest['alt_model_parameters']}`\n"
+    )
+
+
 def variables(manifest: dict[str, str]) -> dict[str, str]:
     values = {key.upper(): value for key, value in manifest.items()}
     values["STEERING_BLOCK"] = steering_block(manifest)
+    values["TIER_BLOCK"] = tier_block(manifest)
+    values["ALT_TIER_LINE"] = alt_tier_line(manifest)
     return values
 
 

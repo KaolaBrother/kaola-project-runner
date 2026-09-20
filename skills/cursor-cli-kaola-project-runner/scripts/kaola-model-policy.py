@@ -518,6 +518,14 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     return policy
 
 
+def selection_source(value: str) -> str:
+    """A model-selection source: `user`, `resume-preserved`, or `runner-<tier>`."""
+    if value in ("user", "resume-preserved") or re.fullmatch(r"runner-[a-z][a-z0-9-]*", value):
+        return value
+    raise argparse.ArgumentTypeError(
+        f"invalid source {value!r}: expected user, resume-preserved, or runner-<tier>")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -527,14 +535,20 @@ def main() -> int:
     resolving.add_argument("--repo", required=True)
     resolving.add_argument(
         "--source",
-        choices=("user", "runner-default", "runner-upgrade", "resume-preserved"),
+        # Issue #111: `runner-<tier>` names the preset that was selected, and
+        # the third tier's word is the platform's own, so the closed four-value
+        # list became a shape. The source is pass-through evidence here; only
+        # `resume-preserved` changes any behaviour.
+        type=selection_source,
         required=True,
     )
     resolving.add_argument("--requested-name", required=True)
     resolving.add_argument("--candidate-id", required=True)
     resolving.add_argument("--effort", default="")
     resolving.add_argument("--fast", choices=("true", "false", "unknown"), default="unknown")
-    resolving.add_argument("--tier", choices=("default", "upgrade"), default="default")
+    # Issue #111: the tier is pass-through evidence here, and its third value is
+    # the platform's own word; the callers that own the vocabulary validate it.
+    resolving.add_argument("--tier", default="default")
     resolving.add_argument(
         "--fast-mechanism", choices=("none", "config", "model-suffix", "settings"), default="none"
     )

@@ -6,8 +6,8 @@
 - Default tmux session prefix: `dsh-kaola`
 - Continue: `unsupported`
 - Exact resume: `session/resume <session-id> over ACP`
-- Runner default preset (`--tier default`): **CLI native opening model** — `` with `no Runner model or effort override`
-- Runner upgrade preset (`--tier upgrade`): **CLI native opening model** — `` with `no Runner model or effort override`
+- Runner default preset (`--tier default`): **DeepSeek V4.1 Flash (OpenCode Go)** — `opencode-go/deepseek-v4.1-flash` with `no Runner effort override`
+- Runner upgrade preset (`--tier upgrade`): **DeepSeek V4.1 Flash (OpenCode Go)** — `opencode-go/deepseek-v4.1-flash` with `no Runner effort override`
 - Fast support: no native Fast toggle and no Fast config option on the ACP surface; the catalog's flash-named routes are explicit model choices, not a Fast switch
 
 ## Preflight
@@ -30,7 +30,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-Launch `dsh --profile acp`, the shipped automation-only ACP v1 stdio server; there is no PTY transport for this platform and the acp profile accepts no application arguments. The profile bundle pins provider deepseek-official and ignores the user's agent-default-model, so a session can start ready and still fail its first prompt with `no API key for provider route "deepseek-official"`: supply DEEPSEEK_API_KEY in the environment or pass --model to select a credentialed route. dsh's ACP composition never sends session/request_permission, so tool calls — including writes outside the session workspace — run unattended with no client approval gate.
+Launch `dsh --profile acp`, the shipped automation-only ACP v1 stdio server; there is no PTY transport for this platform and the acp profile accepts no application arguments. The profile bundle pins provider deepseek-official and ignores the user's agent-default-model, so a session can start ready and still fail its first prompt with `no API key for provider route "deepseek-official"`: supply DEEPSEEK_API_KEY in the environment or pass --model to select a credentialed route. The Runner default preset selects opencode-go/deepseek-v4.1-flash, whose ACP wire value is the JSON-encoded pair ["opencode-go","deepseek-v4.1-flash"] already carried by acp_model_map; "DeepSeek V4.1 Flash (OpenCode Go)" is a Runner-side display name, not a catalog string -- the catalog's own display name is the bare lowercase deepseek-v4.1-flash, and the similarly spelled deepseek-official/deepseek-flash (displayed "DeepSeek-V41-Flash") is a different route. Because the shipped profile pins deepseek-official, this opencode-go default now needs its own credentialed provider on the ordinary path. dsh's ACP composition never sends session/request_permission, so tool calls — including writes outside the session workspace — run unattended with no client approval gate.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

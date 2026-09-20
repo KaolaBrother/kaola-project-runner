@@ -51,7 +51,7 @@ SESSION="codex-kaola-<purpose>"
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
 ```
 
-The controlling Agent owns model selection for each `start`. This Skill declares two per-run
+The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**GPT-5.6 Sol High**: `gpt-5.6-sol`,
 effort=high) and `--tier upgrade` (**GPT-6 Astra High**:
 `gpt-6-astra`, effort=high) — and `default` applies whenever the user did

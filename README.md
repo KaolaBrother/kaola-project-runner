@@ -488,9 +488,12 @@ argument. Invoke it by absolute path; `--repo` identifies the project being work
 
 Model selection uses `--tier default|upgrade` or an explicit `--model ID` with optional
 `--effort LEVEL`. Presets live in the [platform manifests](platforms/); Fast is off unless requested.
+Some platforms declare one further preset under their own word — `--tier alternative` on Kimi CLI
+and Droid, `--tier fable` on Devin — and asking a platform for a tier it does not declare is a
+typed refusal, not a quiet fallback to `default`.
 Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the runtime supports it.
-Droid is the exception to the upgrade policy: both tiers remain Auto Model, and reasoning effort
-is passed only when explicitly selected. Its `-fast` catalog IDs are explicit `--model` choices,
+Droid is the exception to the upgrade policy: both tiers are Kimi K3 Max, with the cheaper
+`kimi-k2.7-code` on the alternative tier. Its `-fast` catalog IDs are explicit `--model` choices,
 not a separate Fast toggle.
 
 **Permission defaults matter:** the default is per platform, not one guarantee across all ten.
