@@ -1853,6 +1853,238 @@ def test_issue_105_worker_skill_build_skew_refuses_before_spawn() -> None:
         sandbox.cleanup()
 
 
+def test_issue_106_unreadable_discovery_root_is_a_typed_refusal() -> None:
+    """Issue #106: an existing default ZCode discovery root that cannot be
+    listed makes the Issue #105 comparison impossible, so a Host `start` refuses
+    it by name with nothing created - never a raw traceback. The refusal is the
+    Issue #105 shape: ``result: refused``, exit 1, ``mutation_performed: false``
+    and the unreadable root in both the detail and a dedicated field."""
+    sandbox = Sandbox("i106-unreadable")
+    blocked = sandbox.home / ".agents" / "skills"
+    try:
+        host_tree = sandbox.dir / "installed" / "zcode-kaola-project-runner"
+        shutil.copytree(ROOT / "skills" / "zcode-kaola-project-runner", host_tree)
+        host_cli = host_tree / "scripts" / "kaola-acp.py"
+        blocked.mkdir(parents=True)
+        (blocked / "some-worker").mkdir()
+        os.chmod(blocked, 0o000)
+        if os.geteuid() == 0:
+            # root ignores the mode bits, so there is nothing to prove here.
+            check(True, "running as root; chmod-000 unreadable-root probe skipped")
+            return
+        session = sandbox.session()
+        result, receipt = sandbox.invoke(
+            "start", "--mode", "yolo", session=session, scenario="basic",
+            cli_path=host_cli)
+        check("Traceback" not in (result.stderr or ""),
+              f"the unreadable root is not a traceback ({(result.stderr or '')[-300:]})")
+        check(result.returncode == 1, f"unreadable-root start exits 1 ({result.returncode})")
+        check(isinstance(receipt, dict) and receipt.get("result") == "refused"
+              and receipt.get("reason") == "worker-skill-root-unreadable"
+              and receipt.get("mutation_performed") is False
+              and receipt.get("mutation_status") == "not_started",
+              f"the unreadable root is a typed refusal ({receipt})")
+        check(receipt.get("worker_skill_unreadable_roots") == [str(blocked)],
+              f"the refusal names the unreadable root "
+              f"({receipt.get('worker_skill_unreadable_roots')})")
+        check(str(blocked) in (receipt.get("detail") or ""),
+              f"the refusal detail names the unreadable root ({receipt.get('detail')})")
+        record_dir = sandbox.record_dir(session)
+        check(not record_dir.exists() and not holder_socket(record_dir).exists(),
+              "the refused start created no record directory and no holder socket")
+        check(subprocess.run(["tmux", "has-session", "-t", f"={session}"],
+                             capture_output=True).returncode != 0,
+              "the refused start created no tmux session")
+    finally:
+        if blocked.is_dir():
+            os.chmod(blocked, 0o755)
+        sandbox.cleanup()
+
+
+def host_session_name(suffix: str) -> str:
+    """The documented Host session name shape the Issue #108 pin keys on."""
+    return f"zcode-KPR-orchestrator-{suffix}"
+
+
+def record_config_current(record_dir: Path, option_id: str) -> object:
+    """The holder-recorded currentValue for one advertised config option."""
+    record = json.loads((record_dir / "record.json").read_text(encoding="utf-8"))
+    options = ((record.get("session_meta") or {}).get("configOptions")) or []
+    for option in options:
+        if isinstance(option, dict) and option.get("id") == option_id:
+            return option.get("currentValue")
+    return None
+
+
+def test_issue_108_host_requires_glm53_max() -> None:
+    """Issue #108: a Host-shaped ZCode start must run GLM 5.3 at effort max.
+
+    An explicit contradicting --model/--effort is a typed pre-mutation
+    refusal that creates nothing; an absent one is pinned and then verified
+    against the holder's own advertised config state; a session that cannot
+    prove the required selection is stopped and refused; and an ordinary
+    worker name is never pinned.
+    """
+    sandbox = Sandbox("i108-host-model")
+    try:
+        host = host_session_name("main")
+
+        # 1. An explicit wrong model is refused before anything exists.
+        result, receipt = sandbox.invoke(
+            "start", "--mode", "yolo", "--model", "GLM-5.3-Flash",
+            session=host, scenario="basic")
+        check("Traceback" not in (result.stderr or ""),
+              f"the model mismatch is not a traceback ({(result.stderr or '')[-300:]})")
+        check(result.returncode == 1, f"the model mismatch exits 1 ({result.returncode})")
+        check(isinstance(receipt, dict) and receipt.get("result") == "refused"
+              and receipt.get("reason") == "host-model-mismatch"
+              and receipt.get("mutation_performed") is False
+              and receipt.get("mutation_status") == "not_started",
+              f"the model mismatch is a typed refusal ({receipt})")
+        fact = receipt.get("host_selection") or {}
+        check(fact.get("required_model") == "GLM-5.3"
+              and fact.get("required_effort") == "max"
+              and fact.get("requested_model") == "GLM-5.3-Flash",
+              f"the refusal names required and requested values ({fact})")
+        record_dir = sandbox.record_dir(host)
+        check(not record_dir.exists() and not holder_socket(record_dir).exists(),
+              "the refused start created no record directory and no holder socket")
+        check(subprocess.run(["tmux", "has-session", "-t", f"={host}"],
+                             capture_output=True).returncode != 0,
+              "the refused start created no tmux session")
+
+        # 2. An explicit wrong effort — and a qualified wrong model — refuse
+        #    the same way.
+        result, receipt = sandbox.invoke(
+            "start", "--mode", "yolo", "--effort", "high",
+            session=host, scenario="basic")
+        check(result.returncode == 1 and receipt.get("reason") == "host-model-mismatch",
+              f"the effort mismatch is refused ({receipt and receipt.get('reason')})")
+        check(not sandbox.record_dir(host).exists(),
+              "the effort refusal still created no record directory")
+        result, receipt = sandbox.invoke(
+            "start", "--mode", "yolo", "--model",
+            "account:bigmodel-individual-coding-plan\\GLM-5.3-Flash",
+            session=host, scenario="basic")
+        check(result.returncode == 1 and receipt.get("reason") == "host-model-mismatch",
+              f"a provider-qualified non-GLM-5.3 model is refused "
+              f"({receipt and receipt.get('reason')})")
+        check(not sandbox.record_dir(host).exists(),
+              "the qualified-model refusal still created no record directory")
+
+        # 3. An absent selection is corrected: the pin lands GLM 5.3 + max and
+        #    the receipt proves it from the holder's advertised state.
+        receipt = sandbox.cli("start", "--mode", "yolo", session=host, scenario="basic")
+        check(receipt.get("error") is None and receipt.get("state") == "ready",
+              f"the pinned Host start reaches ready ({receipt.get('error')})")
+        fact = receipt.get("host_selection") or {}
+        check(fact.get("verified") is True
+              and fact.get("required_model") == "GLM-5.3"
+              and fact.get("required_effort") == "max"
+              and fact.get("requested_model") is None
+              and fact.get("requested_effort") is None
+              and fact.get("applied_model") == "GLM-5.3"
+              and fact.get("applied_effort") == "max"
+              and fact.get("effective_effort") == "max"
+              and str(fact.get("effective_model") or "").endswith("\\GLM-5.3"),
+              f"the start receipt proves the enforced selection ({fact})")
+        application = receipt.get("config_application") or {}
+        check(application.get("model", {}).get("applied") is True
+              and application["model"].get("value") == "GLM-5.3"
+              and application.get("effort", {}).get("applied") is True
+              and application["effort"].get("value") == "max",
+              f"the config application shows the pin was sent ({application})")
+        check(record_config_current(sandbox.record_dir(host), "thoughtLevel") == "max",
+              "the holder record proves effective effort max")
+        stop = sandbox.cli("stop", "--force", session=host)
+        check(stop.get("residual_pids") == [], "the pinned host stops cleanly")
+
+        # 4. The correct explicit selection passes with the same evidence.
+        host_ok = host_session_name("explicit")
+        receipt = sandbox.cli(
+            "start", "--mode", "yolo", "--model", "GLM-5.3", "--effort", "max",
+            session=host_ok, scenario="basic")
+        fact = receipt.get("host_selection") or {}
+        check(receipt.get("state") == "ready" and fact.get("verified") is True
+              and fact.get("requested_model") == "GLM-5.3"
+              and fact.get("requested_effort") == "max",
+              f"an explicit GLM-5.3 + max start is verified ({fact})")
+        stop = sandbox.cli("stop", "--force", session=host_ok)
+        check(stop.get("residual_pids") == [], "the explicit host stops cleanly")
+
+        # 5. A resumed Host keeps its transcript but the pin still lands.
+        host_resume = host_session_name("resume")
+        receipt = sandbox.cli(
+            "start", "--mode", "yolo", "--resume", "sess_i108persisted",
+            session=host_resume, scenario="basic")
+        fact = receipt.get("host_selection") or {}
+        check(receipt.get("state") == "ready" and fact.get("verified") is True
+              and fact.get("effective_effort") == "max"
+              and str(fact.get("effective_model") or "").endswith("\\GLM-5.3"),
+              f"a resumed Host is corrected to GLM-5.3 + max ({fact})")
+        stop = sandbox.cli("stop", "--force", session=host_resume)
+        check(stop.get("residual_pids") == [], "the resumed host stops cleanly")
+
+        # 6. A plan that does not offer GLM 5.3 cannot satisfy the pin: the
+        #    just-created session is stopped and the start is refused.
+        config_path = sandbox.home / ".zcode" / "v2" / "config.json"
+        desktop = json.loads(config_path.read_text(encoding="utf-8"))
+        del desktop["provider"]["builtin:bigmodel-coding-plan"]["models"]["GLM-5.3"]
+        config_path.write_text(json.dumps(desktop), encoding="utf-8")
+        host_plan = host_session_name("noglm")
+        result, receipt = sandbox.invoke(
+            "start", "--mode", "yolo", session=host_plan, scenario="basic")
+        check(result.returncode == 1, f"an unverifiable Host exits 1 ({result.returncode})")
+        check(isinstance(receipt, dict) and receipt.get("result") == "refused"
+              and receipt.get("reason") == "host-model-unverified"
+              and receipt.get("host_session_stopped") is True
+              and receipt.get("holder_alive") is False
+              and receipt.get("residual_pids") == []
+              and receipt.get("mutation_performed") is False,
+              f"an unprovable pin refuses with the session stopped ({receipt})")
+        fact = receipt.get("host_selection") or {}
+        check(fact.get("verified") is False
+              and str(fact.get("effective_model") or "").endswith("\\GLM-5.3-Flash"),
+              f"the refusal names the effective wrong selection ({fact})")
+        stopped = json.loads(
+            (sandbox.record_dir(host_plan) / "record.json").read_text(encoding="utf-8"))
+        check(stopped.get("state") == "stopped" and not pid_alive(stopped.get("holder_pid")),
+              "the refused Host left only a stopped record")
+    finally:
+        sandbox.cleanup()
+
+
+def test_issue_108_worker_names_are_never_pinned() -> None:
+    """Issue #108 boundary: the pin is scoped to the standard Host name. An
+    ordinary worker session keeps the plan default (the fixture's thoughtLevel
+    is ``high``, never silently max), and an issue-worker name that merely
+    contains "orchestrator" in its purpose is still a worker."""
+    sandbox = Sandbox("i108-worker")
+    try:
+        worker = sandbox.session()
+        receipt = sandbox.cli("start", "--mode", "yolo", session=worker, scenario="basic")
+        check(receipt.get("state") == "ready" and "host_selection" not in receipt,
+              f"a worker start carries no Host selection pin ({receipt.get('host_selection')})")
+        application = receipt.get("config_application") or {}
+        check(application.get("effort", {}).get("applied") is not True,
+              f"no effort was pinned onto the worker ({application.get('effort')})")
+        check(record_config_current(sandbox.record_dir(worker), "thoughtLevel") == "high",
+              "the worker keeps its own thought level (high), not the Host pin")
+        stop = sandbox.cli("stop", "--force", session=worker)
+        check(stop.get("residual_pids") == [], "the worker stops cleanly")
+
+        workerish = "zcode-KPR-i42-orchestrator-fix"
+        receipt = sandbox.cli("start", "--mode", "yolo", session=workerish, scenario="basic")
+        check(receipt.get("state") == "ready" and "host_selection" not in receipt,
+              f"the -i<issue>- marker keeps the name a worker ({receipt.get('host_selection')})")
+        check(record_config_current(sandbox.record_dir(workerish), "thoughtLevel") == "high",
+              "the issue-worker keeps its own thought level")
+        stop = sandbox.cli("stop", "--force", session=workerish)
+        check(stop.get("residual_pids") == [], "the issue-worker stops cleanly")
+    finally:
+        sandbox.cleanup()
+
+
 def main() -> int:
     tests = [
         value for name, value in sorted(globals().items())

@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -432,6 +433,121 @@ def check_one(target: Path, expected: dict[str, bytes]) -> list[str]:
     return findings
 
 
+# ---------------------------------------------------------------------------
+# Installed-tree verification: the mechanical replacement for the manual
+# step-3 `diff -rq` (Issue #107). A rendered Skill and its installed copy are
+# compared byte-for-byte, prose (``SKILL.md`` and ``references/``) included, so
+# a stale main Skill or worker-Skill build is reported by name instead of being
+# caught only by a hand-run diff. The comparison is read-only: nothing is
+# written, swapped, or created.
+# ---------------------------------------------------------------------------
+VERIFY_SKEW_CAP = 50
+VERIFY_RECEIPT = "kaola-project-runner-install-verify/1"
+
+
+def installed_inventory(root: Path) -> dict[str, bytes]:
+    """A Skill directory's payload bytes. Python may write ``__pycache__`` and
+    ``.pyc``/``.pyo`` byproducts into an installed Skill at runtime; the
+    installer's ``tree_digest`` already excludes them and so does this."""
+    if not root.is_dir():
+        return {}
+    payload: dict[str, bytes] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        if "__pycache__" in relative.parts or path.suffix in (".pyc", ".pyo"):
+            continue
+        payload[relative.as_posix()] = path.read_bytes()
+    return payload
+
+
+def installed_skill_skew(skill: str, target: Path,
+                         expected: dict[str, bytes]) -> list[dict[str, Any]]:
+    """Per-file skew between one installed Skill and its render. ``state`` is
+    ``stale`` (both exist, bytes differ), ``missing`` (expected file absent) or
+    ``unexpected`` (installed file the render does not produce)."""
+    actual = installed_inventory(target)
+    skew: list[dict[str, Any]] = []
+    for name in sorted(expected.keys() | actual.keys()):
+        if name not in actual:
+            skew.append({"skill": skill, "path": name, "state": "missing",
+                         "expected": hash_bytes(expected[name])[:12], "actual": None})
+        elif name not in expected:
+            skew.append({"skill": skill, "path": name, "state": "unexpected",
+                         "expected": None, "actual": hash_bytes(actual[name])[:12]})
+        elif actual[name] != expected[name]:
+            skew.append({"skill": skill, "path": name, "state": "stale",
+                         "expected": hash_bytes(expected[name])[:12],
+                         "actual": hash_bytes(actual[name])[:12]})
+    return skew
+
+
+def verify_install(root: Path, bundles: dict[str, dict[str, bytes]]) -> int:
+    """Verify an installed Skills root against this render (Issue #107).
+
+    Every expected Skill that is present is compared byte-for-byte; an absent
+    Skill is skipped, so a partial install verifies without a false finding.
+    Prints one JSON receipt and exits 1 on any skew. Read-only."""
+    if not root.is_dir():
+        receipt = {
+            "receipt": VERIFY_RECEIPT,
+            "result": "refused",
+            "reason": "skill-install-root-missing",
+            "skills_root": str(root),
+            "detail": "the Skills root does not exist",
+            "skills": [],
+            "skew": [],
+            "skew_count": 0,
+            "mutation_performed": False,
+        }
+        print(json.dumps(receipt, sort_keys=True))
+        print(f"render-skills: skills root does not exist: {root}", file=sys.stderr)
+        return 1
+    present = sorted(name for name in bundles if (root / name).is_dir())
+    if not present:
+        receipt = {
+            "receipt": VERIFY_RECEIPT,
+            "result": "refused",
+            "reason": "skill-install-root-empty",
+            "skills_root": str(root),
+            "detail": "no generated Skill is installed at this root",
+            "skills": [],
+            "skew": [],
+            "skew_count": 0,
+            "mutation_performed": False,
+        }
+        print(json.dumps(receipt, sort_keys=True))
+        print(f"render-skills: no generated Skill found under {root}", file=sys.stderr)
+        return 1
+    skew: list[dict[str, Any]] = []
+    for name in present:
+        skew.extend(installed_skill_skew(name, root / name, bundles[name]))
+    receipt = {
+        "receipt": VERIFY_RECEIPT,
+        "result": "refused" if skew else "aligned",
+        "reason": "skill-install-skew" if skew else None,
+        "skills_root": str(root),
+        "skills": present,
+        "skew": skew[:VERIFY_SKEW_CAP],
+        "skew_count": len(skew),
+        "mutation_performed": False,
+    }
+    print(json.dumps(receipt, sort_keys=True))
+    for entry in skew:
+        print(f"{entry['skill']}: {entry['state']} {entry['path']}", file=sys.stderr)
+    if skew:
+        capped = "" if len(skew) <= VERIFY_SKEW_CAP else f" (+{len(skew) - VERIFY_SKEW_CAP} more)"
+        print(
+            f"render-skills: {len(skew)} installed file(s) do not match this render; "
+            f"re-run install-local.sh from the accepted checkout{capped}",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+
 def write_bundle(parent: Path, target: Path, expected: dict[str, bytes], kind: str) -> None:
     parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
@@ -828,6 +944,12 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--check", action="store_true")
+    mode.add_argument(
+        "--verify-install", metavar="DIR",
+        help="compare the generated Skills installed under DIR against a fresh render "
+             "(prose included) and print one JSON receipt; exit 1 on any skew. "
+             "The mechanical replacement for the manual step-3 diff (Issue #107)",
+    )
     parser.add_argument(
         "--require-pinned", action="store_true",
         help="fail unless templates/grok-bot/accepted-revision.json is at the pinned stage "
@@ -862,6 +984,13 @@ def main() -> int:
     worker_expected = {m["skill_name"]: expected_files(m) for m in manifests}
     orch_expected = expected_orchestrator_files(manifests)
     external_expected = expected_external_files()
+    if args.verify_install:
+        # Issue #107: compare an installed root against this render. Budget and
+        # pin findings are gates for writing this checkout, not facts about the
+        # installed tree, so verification does not wait on them.
+        bundles = {**worker_expected, ORCHESTRATOR_NAME: orch_expected,
+                   EXTERNAL_NAME: external_expected}
+        return verify_install(Path(args.verify_install), bundles)
     host_expected = expected_grok_bot_host_files()
     for name, expected in worker_expected.items():
         findings.extend(budget_findings(name, expected, "worker_skill_bytes", limits))

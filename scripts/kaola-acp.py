@@ -1427,6 +1427,8 @@ def heartbeat_host_refusal(args: argparse.Namespace, repo: str,
 # before anything is spawned. These are the four ZCode default Skill discovery
 # roots (docs/zcode-host.md); ancestor-directory roots and configured
 # `skills.roots` / `plugins.dirs` roots are out of scope and documented there.
+# A root that exists but cannot be listed is refused by name (Issue #106): the
+# comparison cannot prove alignment, so it must never degrade to a traceback.
 SKILL_DISCOVERY_DIRS = (".zcode/skills", ".agents/skills")
 # Verbatim copies of this checkout's scripts/ in every generated worker Skill,
 # so the running tree is the baseline and any byte difference is a build skew.
@@ -1435,6 +1437,121 @@ SKILL_DISCOVERY_DIRS = (".zcode/skills", ".agents/skills")
 WORKER_SKILL_SCRIPTS = ("kaola-acp.py", "kaola-acp-holder.py", "kaola-tmux.sh")
 WORKER_SKILL_OPTIONAL_SCRIPTS = ("kaola-zcode-acp.py",)
 SKEW_DETAIL_CAP = 12
+
+# Issue #108: a ZCode Host is the Project Runner control plane, so its model
+# is a dispatch requirement, not a preference — GLM 5.3 at effort max. The
+# discriminator is the documented standard Host session name
+# zcode-<PROJECT_CODE>-orchestrator-<purpose> (templates/kaola-delegator):
+# every new Host is started under it, while adopted live nonstandard names are
+# attached in place and never `start`ed, so they never reach this check. The
+# issue-worker marker -i<digits>- wins over a purpose token that happens to
+# contain "orchestrator", so an ordinary worker is never caught. There is no
+# host flag by design: an opt-in marker can be forgotten, which is exactly the
+# silent wrong-model start this removes.
+ZCODE_HOST_MODEL_ID = "GLM-5.3"
+ZCODE_HOST_EFFORT = "max"
+ZCODE_HOST_SESSION = re.compile(
+    r"^zcode-[A-Za-z0-9_.]+-orchestrator-[A-Za-z0-9][A-Za-z0-9_.-]*$")
+ZCODE_HOST_WORKER_MARKER = re.compile(r"-i[0-9]+-")
+
+
+def zcode_host_session(name: Any) -> bool:
+    if not isinstance(name, str):
+        return False
+    return bool(ZCODE_HOST_SESSION.match(name)) and not ZCODE_HOST_WORKER_MARKER.search(name)
+
+
+def zcode_host_model_match(value: Any) -> bool:
+    """An ACP model value names GLM 5.3 exactly — provider-qualified values
+    (``account:*\\GLM-5.3``, ``builtin:*\\GLM-5.3``) included; the distinct
+    GLM-5.3-Flash never matches."""
+    if not isinstance(value, str):
+        return False
+    tail = value.split("\\")[-1].split("/")[-1].strip()
+    return tail.lower() == ZCODE_HOST_MODEL_ID.lower()
+
+
+def zcode_host_request_problem(args: argparse.Namespace) -> str | None:
+    """Why an explicit selection contradicts the Host requirement, else None.
+
+    An absent --model/--effort is not a problem: the pin supplies it after
+    the session is ready and verifies it against the holder's advertised
+    state. Only an explicit wrong value is refused before anything exists.
+    """
+    problems = []
+    if args.model and not zcode_host_model_match(args.model):
+        problems.append(f"--model {args.model} is not {ZCODE_HOST_MODEL_ID}")
+    if args.effort and str(args.effort).strip().lower() != ZCODE_HOST_EFFORT:
+        problems.append(f"--effort {args.effort} is not {ZCODE_HOST_EFFORT}")
+    return "; ".join(problems) if problems else None
+
+
+def zcode_host_selection_fact(
+    args: argparse.Namespace,
+    applied_model: Any = None,
+    applied_effort: Any = None,
+    effective_model: Any = None,
+    effective_effort: Any = None,
+) -> dict[str, Any]:
+    """Receipt evidence for the Host model pin: what is required, what was
+    requested, what was sent, and the holder-advertised effective values."""
+    fact: dict[str, Any] = {
+        "required_model": ZCODE_HOST_MODEL_ID,
+        "required_effort": ZCODE_HOST_EFFORT,
+        "requested_model": args.model or None,
+        "requested_effort": args.effort or None,
+    }
+    if applied_model is not None or applied_effort is not None:
+        fact["applied_model"] = applied_model
+        fact["applied_effort"] = applied_effort
+    fact["effective_model"] = effective_model
+    fact["effective_effort"] = effective_effort
+    fact["verified"] = bool(
+        zcode_host_model_match(effective_model)
+        and isinstance(effective_effort, str)
+        and effective_effort.strip().lower() == ZCODE_HOST_EFFORT
+    )
+    return fact
+
+
+def zcode_host_config_state(state: dict[str, Any]) -> tuple[Any, Any]:
+    """The holder-advertised currentValue for model and thought level — the
+    agent's own answer, not the value this client asked for."""
+    options = (state.get("session_meta") or {}).get("configOptions")
+    model = effort = None
+    if isinstance(options, list):
+        for option in options:
+            if not isinstance(option, dict):
+                continue
+            option_id = option.get("id")
+            if option_id == "model":
+                model = option.get("currentValue")
+            elif option_id in ("thought", "thoughtLevel", "thought_level"):
+                effort = option.get("currentValue")
+    return model, effort
+
+
+def zcode_host_refusal(args: argparse.Namespace, repo: str,
+                       problem: str) -> dict[str, Any]:
+    """Issue #108 typed refusal — the Issue #105 shape: nothing was probed,
+    written, or spawned."""
+    receipt = base_receipt(args, repo)
+    receipt.pop("git", None)
+    receipt.update({
+        "result": "refused",
+        "reason": "host-model-mismatch",
+        "action": "start",
+        "detail": (
+            f"a ZCode Host session ({args.session}) must run "
+            f"{ZCODE_HOST_MODEL_ID} at effort {ZCODE_HOST_EFFORT}: {problem}. "
+            "Omit --model/--effort to take the enforced selection, or pass "
+            "the required values."
+        ),
+        "host_selection": zcode_host_selection_fact(args),
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    return receipt
 
 
 def file_sha256(path: Path) -> str | None:
@@ -1458,12 +1575,17 @@ def invoking_skill_tree() -> Path | None:
     return tree if (tree / "SKILL.md").is_file() else None
 
 
-def installed_worker_skills(repo: str) -> list[tuple[Path, list[Path]]]:
-    """``(root, worker Skill directories)`` for each default discovery root that
-    exists, in the documented order and without duplicates. A worker Skill is a
-    Skill directory that ships ``scripts/kaola-acp.py``; the main orchestrator
-    Skill ships no scripts and is not compared here."""
+def installed_worker_skills(repo: str) -> tuple[list[tuple[Path, list[Path]]], list[str]]:
+    """``(found, unreadable)`` for the default discovery roots that exist.
+
+    ``found`` is ``(root, worker Skill directories)`` in the documented order
+    and without duplicates. A worker Skill is a Skill directory that ships
+    ``scripts/kaola-acp.py``; the main orchestrator Skill ships no scripts and
+    is not compared here. ``unreadable`` names every existing root that could
+    not be listed, so ``start`` refuses it by name instead of dying with a
+    traceback (Issue #106)."""
     found: list[tuple[Path, list[Path]]] = []
+    unreadable: list[str] = []
     seen: set[str] = set()
     for base in (Path(repo), Path.home()):
         for relative in SKILL_DISCOVERY_DIRS:
@@ -1473,17 +1595,22 @@ def installed_worker_skills(repo: str) -> list[tuple[Path, list[Path]]]:
             try:
                 key = str(root.resolve())
             except OSError:
+                unreadable.append(str(root))
                 continue
             if key in seen:
                 continue
             seen.add(key)
-            skills = sorted(
-                path for path in root.iterdir()
-                if (path / "scripts" / "kaola-acp.py").is_file()
-            )
+            try:
+                skills = sorted(
+                    path for path in root.iterdir()
+                    if (path / "scripts" / "kaola-acp.py").is_file()
+                )
+            except OSError:
+                unreadable.append(str(root))
+                continue
             if skills:
                 found.append((root, skills))
-    return found
+    return found, unreadable
 
 
 def worker_skill_alignment(repo: str) -> dict[str, Any]:
@@ -1491,17 +1618,21 @@ def worker_skill_alignment(repo: str) -> dict[str, Any]:
 
     Returns ``applies`` (False for a checkout invocation, which has no Skill
     build to be the baseline), ``build`` (the baseline ``kaola-acp.py`` digest,
-    12 hex), ``roots`` (what was compared, for the receipt) and ``skew`` (the
-    differing files). Read-only: nothing is written, probed, or spawned."""
+    12 hex), ``roots`` (what was compared, for the receipt), ``skew`` (the
+    differing files) and ``unreadable_roots`` (Issue #106: existing default
+    roots that could not be listed, so no comparison was possible). Read-only:
+    nothing is written, probed, or spawned."""
     tree = invoking_skill_tree()
     if tree is None:
-        return {"applies": False, "build": None, "roots": None, "skew": []}
+        return {"applies": False, "build": None, "roots": None, "skew": [],
+                "unreadable_roots": []}
     baseline_dir = tree / "scripts"
     baseline = {name: file_sha256(baseline_dir / name)
                 for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS}
     roots: list[dict[str, Any]] = []
     skew: list[dict[str, Any]] = []
-    for root, skills in installed_worker_skills(repo):
+    installed, unreadable = installed_worker_skills(repo)
+    for root, skills in installed:
         roots.append({"root": str(root), "skills": [skill.name for skill in skills]})
         for skill in skills:
             for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS:
@@ -1521,7 +1652,31 @@ def worker_skill_alignment(repo: str) -> dict[str, Any]:
                     "expected": expected[:12],
                 })
     return {"applies": True, "build": (baseline.get("kaola-acp.py") or "")[:12] or None,
-            "roots": roots, "skew": skew}
+            "roots": roots, "skew": skew, "unreadable_roots": unreadable}
+
+
+def worker_skill_root_refusal(args: argparse.Namespace, repo: str,
+                              alignment: dict[str, Any]) -> dict[str, Any]:
+    """Issue #106: an existing default discovery root could not be listed, so
+    the installed worker Skills could not be compared with this build. A typed
+    pre-mutation refusal in the Issue #105 shape - the caller gets the root
+    names, not a traceback, and nothing is created."""
+    roots = alignment["unreadable_roots"]
+    receipt = base_receipt(args, repo)
+    receipt.pop("git", None)
+    receipt.update({
+        "result": "refused",
+        "reason": "worker-skill-root-unreadable",
+        "action": "start",
+        "detail": ("cannot verify installed worker Skills: ZCode discovery "
+                   f"root(s) not readable: {', '.join(roots)}. Make the root "
+                   "readable or remove it, then start again."),
+        "worker_skill_build": alignment["build"],
+        "worker_skill_unreadable_roots": roots,
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    return receipt
 
 
 def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
@@ -1592,6 +1747,10 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         # build before anything exists, rather than letting the binding fail
         # silently one dispatch later.
         alignment = worker_skill_alignment(repo)
+        # Issue #106: an existing default root that cannot be listed means no
+        # comparison was possible at all; refuse it by name, never a traceback.
+        if alignment["unreadable_roots"]:
+            return worker_skill_root_refusal(args, repo, alignment)
         if alignment["skew"]:
             return worker_skill_skew_refusal(args, repo, alignment)
         # What this Host would load into a dispatched worker. `null` means the
@@ -1599,6 +1758,14 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         # to compare - unknown, never reported as aligned.
         receipt["worker_skill_build"] = alignment["build"]
         receipt["worker_skill_roots"] = alignment["roots"]
+        # Issue #108: a Host-shaped session must run GLM 5.3 at effort max.
+        # An explicit --model/--effort that contradicts that is refused
+        # before anything exists; an absent one is pinned after the session
+        # is ready and verified against the holder's advertised state.
+        if zcode_host_session(args.session):
+            problem = zcode_host_request_problem(args)
+            if problem is not None:
+                return zcode_host_refusal(args, repo, problem)
     resolution = resolve_heartbeat_host(args, repo)
     if resolution["refusal"]:
         return heartbeat_host_refusal(args, repo, resolution)
@@ -1721,6 +1888,14 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         effort_value = resolved_effort or (
             picker_effort_suffix(resolved_model) if resolved_model in acp_model_map else ""
         )
+        host_required = args.platform == "zcode" and zcode_host_session(args.session)
+        if host_required:
+            # Issue #108: a Host's selection is a dispatch requirement, so the
+            # pin always lands the canonical pair — an absent request takes it
+            # and a matching explicit request resolves to the same values; a
+            # contradicting explicit request was refused before the spawn.
+            acp_model_value = ZCODE_HOST_MODEL_ID
+            effort_value = ZCODE_HOST_EFFORT
         application: dict[str, Any] = {}
         mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
         # A platform whose option values are not the Runner permission-mode
@@ -1751,7 +1926,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             record: dict[str, Any] = {"applied": not result.get("error"),
                                       "config_id": config_id, "value": value}
             if label == "model":
-                if value != resolved_model:
+                if resolved_model and value != resolved_model:
                     record["requested_id"] = resolved_model
                     record["mapped"] = True
                 declared = acp_value_params(value)
@@ -1877,6 +2052,53 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             receipt["configured_options"] = configured
         receipt["config_application"] = application
         receipt.setdefault("fast", fast_report(args, policy, "none", False))
+        if host_required:
+            # Issue #108: the pin is only real once the agent's own advertised
+            # state agrees — a rejected or silently ignored set must never
+            # leave a wrong-model Host running, so an unverifiable selection
+            # stops the just-created session and refuses.
+            verified_state = socket_request(sock, "state", {}, 10.0)
+            effective_model, effective_effort = zcode_host_config_state(
+                verified_state if isinstance(verified_state, dict) else {})
+            host_fact = zcode_host_selection_fact(
+                args, acp_model_value, effort_value,
+                effective_model, effective_effort)
+            receipt["host_selection"] = host_fact
+            if not host_fact["verified"]:
+                stop_reply = socket_request(sock, "stop", {"force": True}, 30.0)
+                # Reap through proc.wait: an exited holder stays a zombie under
+                # pid_alive until its own Popen object collects it.
+                try:
+                    proc.wait(timeout=10.0)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except OSError:
+                        pass
+                    try:
+                        proc.wait(timeout=5.0)
+                    except subprocess.TimeoutExpired:
+                        pass
+                receipt.pop("error", None)
+                receipt.update({
+                    "result": "refused",
+                    "reason": "host-model-unverified",
+                    "action": "start",
+                    "detail": (
+                        f"a ZCode Host session ({args.session}) must run "
+                        f"{ZCODE_HOST_MODEL_ID} at effort {ZCODE_HOST_EFFORT}; "
+                        "the applied session did not report it, so it was "
+                        "stopped before this start returned."
+                    ),
+                    "host_session_stopped": bool(
+                        isinstance(stop_reply, dict) and stop_reply.get("stopped")),
+                    "residual_pids": (stop_reply.get("residual_pids")
+                                      if isinstance(stop_reply, dict) else None),
+                    "holder_alive": proc.poll() is None,
+                    "mutation_performed": False,
+                    "mutation_status": "not_started",
+                })
+                return receipt
     return receipt
 
 

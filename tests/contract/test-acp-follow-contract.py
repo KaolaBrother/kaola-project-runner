@@ -622,8 +622,17 @@ class AcpFollowContractTests(unittest.TestCase):
                     json.dumps({"op": op, "params": {"text": "sneak", "option": "allow_once"}}).encode("utf-8")
                     + b"\n"
                 )
-                reply = _recv_json_line(connection)
-                self.assertEqual(reply.get("kind"), "error", f"{op} on follow FD: {reply}")
+                # A follow FD interleaves pushed deltas/snapshots with op
+                # replies; skip pushed frames until this op's rejection lands.
+                deadline = time.monotonic() + 8
+                while True:
+                    reply = _recv_json_line(connection)
+                    if reply.get("kind") == "error":
+                        break
+                    self.assertLess(time.monotonic(), deadline,
+                                    f"{op} on follow FD never answered error: {reply}")
+                self.assertEqual(follow_error_code(reply), "follow-readonly",
+                                 f"{op} on follow FD: {reply}")
             time.sleep(0.4)
             after = self.inbound_trace()
             self.assertEqual(

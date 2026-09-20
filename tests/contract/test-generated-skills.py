@@ -9,6 +9,7 @@ the same byte inventory/write/check path and is not an eleventh platform.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -722,6 +723,84 @@ def check_deterministic_renderer(assertions: Assertions) -> None:
             )
 
 
+def check_install_verify(assertions: Assertions, root: Path) -> None:
+    """Issue #107: an installed Skills tree is verified against this render
+    byte-for-byte, prose included. A stale ``SKILL.md`` — the main Skill or a
+    worker Skill — is reported by name with a typed receipt and exit 1 instead
+    of needing the manual step-3 ``diff -rq``. The comparison is read-only."""
+    renderer = root / "scripts" / "render-skills.py"
+    if not renderer.is_file():
+        assertions.check("test_install_verify_renderer_exists", False, f"missing {renderer}")
+        return
+    with tempfile.TemporaryDirectory(prefix="kaola-install-verify-") as temporary:
+        installed = Path(temporary) / "skills"
+        shutil.copytree(root / "skills", installed)
+        aligned = subprocess.run(
+            [sys.executable, str(renderer), "--verify-install", str(installed)],
+            cwd=root, text=True, capture_output=True,
+        )
+        ok = assertions.check(
+            "test_install_verify_aligned",
+            aligned.returncode == 0,
+            f"aligned install reported skew (exit {aligned.returncode}): "
+            f"{(aligned.stderr or '')[-400:]}",
+        )
+        if not ok:
+            return
+        receipt = json.loads((aligned.stdout or "").strip().splitlines()[-1])
+        assertions.check(
+            "test_install_verify_aligned_receipt",
+            receipt.get("result") == "aligned" and receipt.get("reason") is None
+            and receipt.get("skew_count") == 0 and receipt.get("mutation_performed") is False,
+            f"aligned receipt is wrong: {receipt}",
+        )
+
+        stale_main = installed / ORCHESTRATOR_ID / "SKILL.md"
+        worker_id = next(iter(PLATFORMS))
+        stale_worker = installed / worker_id / "SKILL.md"
+        main_original, worker_original = stale_main.read_bytes(), stale_worker.read_bytes()
+        main_stale_bytes = main_original + b"\n# an older prose build\n"
+        worker_stale_bytes = worker_original + b"\n# an older prose build\n"
+        stale_main.write_bytes(main_stale_bytes)
+        stale_worker.write_bytes(worker_stale_bytes)
+        skewed = subprocess.run(
+            [sys.executable, str(renderer), "--verify-install", str(installed)],
+            cwd=root, text=True, capture_output=True,
+        )
+        assertions.check(
+            "test_install_verify_rejects_prose_skew",
+            skewed.returncode == 1,
+            f"prose skew was not refused (exit {skewed.returncode})",
+        )
+        receipt = json.loads((skewed.stdout or "").strip().splitlines()[-1])
+        assertions.check(
+            "test_install_verify_prose_skew_receipt",
+            receipt.get("result") == "refused" and receipt.get("reason") == "skill-install-skew"
+            and receipt.get("mutation_performed") is False,
+            f"prose-skew receipt is wrong: {receipt}",
+        )
+        entries = {(entry["skill"], entry["path"]): entry for entry in receipt.get("skew", [])}
+        main_entry = entries.get((ORCHESTRATOR_ID, "SKILL.md"))
+        worker_entry = entries.get((worker_id, "SKILL.md"))
+        assertions.check(
+            "test_install_verify_names_stale_main_skill",
+            main_entry is not None and main_entry.get("state") == "stale"
+            and main_entry.get("expected") and main_entry.get("actual") != main_entry.get("expected"),
+            f"stale main SKILL.md not named with both digests: {main_entry}",
+        )
+        assertions.check(
+            "test_install_verify_names_stale_worker_skill",
+            worker_entry is not None and worker_entry.get("state") == "stale",
+            f"stale worker SKILL.md not named: {worker_entry}",
+        )
+        assertions.check(
+            "test_install_verify_is_read_only",
+            stale_main.read_bytes() == main_stale_bytes
+            and stale_worker.read_bytes() == worker_stale_bytes,
+            "install verification modified the installed bytes",
+        )
+
+
 def main() -> int:
     assertions = Assertions()
     check_deterministic_renderer(assertions)
@@ -730,6 +809,7 @@ def main() -> int:
         # package that was generated correctly in a temporary copy but is stale
         # in the checkout being tested.
         check_generated_tree(assertions, PROJECT, require_check=True)
+        check_install_verify(assertions, PROJECT)
     if assertions.failures:
         print(f"generated Skill acceptance: {len(assertions.failures)} failure(s)", file=sys.stderr)
         return 1
