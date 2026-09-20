@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.3 — 2026-09-20
 
 - **A pin upgrade is not finished until the Skill install is refreshed, and a Host `start` now
   refuses the skew (Issue #105).** Registering an accepted checkout does not touch
