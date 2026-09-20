@@ -1419,6 +1419,139 @@ def heartbeat_host_refusal(args: argparse.Namespace, repo: str,
     return receipt
 
 
+# Issue #105: the worker Skill trees a ZCode Host's agent will load. The
+# Issue #104 binding lives entirely in the copy a worker `start` executes, so a
+# Host running one build while an installed worker Skill is an older copy opens
+# an unbound worker and exits 0 - the mechanical guarantee fails silently. A
+# Host `start` therefore compares the installed copies against its own build
+# before anything is spawned. These are the four ZCode default Skill discovery
+# roots (docs/zcode-host.md); ancestor-directory roots and configured
+# `skills.roots` / `plugins.dirs` roots are out of scope and documented there.
+SKILL_DISCOVERY_DIRS = (".zcode/skills", ".agents/skills")
+# Verbatim copies of this checkout's scripts/ in every generated worker Skill,
+# so the running tree is the baseline and any byte difference is a build skew.
+# The three required names ship in every worker Skill; the ZCode bridge is
+# compared only where both sides have it.
+WORKER_SKILL_SCRIPTS = ("kaola-acp.py", "kaola-acp-holder.py", "kaola-tmux.sh")
+WORKER_SKILL_OPTIONAL_SCRIPTS = ("kaola-zcode-acp.py",)
+SKEW_DETAIL_CAP = 12
+
+
+def file_sha256(path: Path) -> str | None:
+    """The file's content digest, or None when it cannot be read (symlinked
+    installs resolve to their target's bytes, which is the build that runs)."""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def invoking_skill_tree() -> Path | None:
+    """The installed Skill tree this CLI was loaded from, or None when it was
+    run from a repository checkout (``scripts/kaola-acp.py`` with no sibling
+    ``SKILL.md``). Deterministic layout, never an activity observation: only a
+    Skill-mediated start can be compared against installed Skill copies, and a
+    checkout invocation is the project's own development and test path."""
+    if SCRIPT_DIR.name != "scripts":
+        return None
+    tree = SCRIPT_DIR.parent
+    return tree if (tree / "SKILL.md").is_file() else None
+
+
+def installed_worker_skills(repo: str) -> list[tuple[Path, list[Path]]]:
+    """``(root, worker Skill directories)`` for each default discovery root that
+    exists, in the documented order and without duplicates. A worker Skill is a
+    Skill directory that ships ``scripts/kaola-acp.py``; the main orchestrator
+    Skill ships no scripts and is not compared here."""
+    found: list[tuple[Path, list[Path]]] = []
+    seen: set[str] = set()
+    for base in (Path(repo), Path.home()):
+        for relative in SKILL_DISCOVERY_DIRS:
+            root = base / relative
+            if not root.is_dir():
+                continue
+            try:
+                key = str(root.resolve())
+            except OSError:
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            skills = sorted(
+                path for path in root.iterdir()
+                if (path / "scripts" / "kaola-acp.py").is_file()
+            )
+            if skills:
+                found.append((root, skills))
+    return found
+
+
+def worker_skill_alignment(repo: str) -> dict[str, Any]:
+    """Compare every installed worker Skill's shared scripts with this build.
+
+    Returns ``applies`` (False for a checkout invocation, which has no Skill
+    build to be the baseline), ``build`` (the baseline ``kaola-acp.py`` digest,
+    12 hex), ``roots`` (what was compared, for the receipt) and ``skew`` (the
+    differing files). Read-only: nothing is written, probed, or spawned."""
+    tree = invoking_skill_tree()
+    if tree is None:
+        return {"applies": False, "build": None, "roots": None, "skew": []}
+    baseline_dir = tree / "scripts"
+    baseline = {name: file_sha256(baseline_dir / name)
+                for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS}
+    roots: list[dict[str, Any]] = []
+    skew: list[dict[str, Any]] = []
+    for root, skills in installed_worker_skills(repo):
+        roots.append({"root": str(root), "skills": [skill.name for skill in skills]})
+        for skill in skills:
+            for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS:
+                expected = baseline.get(name)
+                if expected is None:
+                    continue
+                installed_path = skill / "scripts" / name
+                if name in WORKER_SKILL_OPTIONAL_SCRIPTS and not installed_path.is_file():
+                    continue
+                installed = file_sha256(installed_path)
+                if installed == expected:
+                    continue
+                skew.append({
+                    "path": str(installed_path),
+                    "file": name,
+                    "installed": installed[:12] if installed else None,
+                    "expected": expected[:12],
+                })
+    return {"applies": True, "build": (baseline.get("kaola-acp.py") or "")[:12] or None,
+            "roots": roots, "skew": skew}
+
+
+def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
+                              alignment: dict[str, Any]) -> dict[str, Any]:
+    """Issue #105: a typed pre-mutation refusal, the same shape as the
+    heartbeat-host refusals - no record directory, no socket, no holder."""
+    skew = alignment["skew"]
+    shown = skew[:SKEW_DETAIL_CAP]
+    listed = ", ".join(f"{entry['path']} ({entry['installed'] or 'missing'} "
+                       f"!= {entry['expected']})" for entry in shown)
+    more = "" if len(skew) == len(shown) else f" (+{len(skew) - len(shown)} more)"
+    receipt = base_receipt(args, repo)
+    receipt.pop("git", None)
+    receipt.update({
+        "result": "refused",
+        "reason": "worker-skill-build-skew",
+        "action": "start",
+        "detail": (f"{len(skew)} installed worker Skill script(s) do not match this "
+                   f"Host build {alignment['build']}: {listed}{more}. Re-run "
+                   "install-local.sh from the accepted checkout, then start again."),
+        "worker_skill_build": alignment["build"],
+        "worker_skill_roots": alignment["roots"],
+        "worker_skill_skew": shown,
+        "worker_skill_skew_count": len(skew),
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    return receipt
+
+
 def attach_binding_fact(receipt: dict[str, Any], facts: Any) -> dict[str, Any]:
     """Report the notification target the running holder really adopted.
 
@@ -1453,6 +1586,19 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             receipt["mutation_status"] = "not_started"
             receipt["mutation_performed"] = False
             return receipt
+        # Issue #105: this agent dispatches workers by running an installed
+        # worker Skill's own `start`, and that copy carries the Issue #104
+        # binding. Refuse a Host whose installed worker Skills are a different
+        # build before anything exists, rather than letting the binding fail
+        # silently one dispatch later.
+        alignment = worker_skill_alignment(repo)
+        if alignment["skew"]:
+            return worker_skill_skew_refusal(args, repo, alignment)
+        # What this Host would load into a dispatched worker. `null` means the
+        # CLI was not run from an installed Skill tree, so there was no build
+        # to compare - unknown, never reported as aligned.
+        receipt["worker_skill_build"] = alignment["build"]
+        receipt["worker_skill_roots"] = alignment["roots"]
     resolution = resolve_heartbeat_host(args, repo)
     if resolution["refusal"]:
         return heartbeat_host_refusal(args, repo, resolution)
