@@ -91,6 +91,14 @@ HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
 # first. Written only by this CLI at holder spawn; read only through the
 # identity-checked group resolution in this file and kaola-acp-holder.py.
 CHILD_RECORD_ENV = "KAOLA_ACP_CHILD_RECORD"
+# Issue #104 (design #99 §a.1): the second holder->agent fact. Every holder
+# names itself to the agent it hosts - identity only (holder_instance_id,
+# platform, repo, session), no socket, record path, or pid. A `start` run
+# inside that agent derives its KAOLA_ACP_HEARTBEAT_HOST binding from it
+# (ZCode dispatcher), verifies the named Host holder is live, and refuses
+# with a typed receipt when it is not, so a Runner-dispatched worker can
+# never open unbound by omission. Absent => standalone start, unchanged.
+DISPATCHER_ENV = "KAOLA_ACP_DISPATCHER"
 
 
 def record_holder_child_spawn(proc: subprocess.Popen) -> dict[str, Any] | None:
@@ -1252,37 +1260,163 @@ def holder_predates_steer(method: str, error: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def heartbeat_host_target(args: argparse.Namespace, repo: str) -> dict[str, Any] | None:
-    """Validate the declared heartbeat host (ZCode Host only) and resolve its
+def validate_heartbeat_target(target: Any, args: argparse.Namespace, repo: str,
+                              origin: str) -> dict[str, Any]:
+    """Validate one heartbeat host target (ZCode Host only) and resolve its
     holder socket. Fails closed: a malformed, non-ZCode, or self-referential
     target is a usage error, never a silently dropped event carrier."""
-    raw = os.environ.get(HEARTBEAT_HOST_ENV) or ""
-    if not raw:
-        return None
-    try:
-        target = json.loads(raw)
-    except ValueError:
-        die(f"{HEARTBEAT_HOST_ENV} is not valid JSON")
     if not isinstance(target, dict):
-        die(f"{HEARTBEAT_HOST_ENV} must be a JSON object")
+        die(f"{origin} must be a JSON object")
     platform = target.get("platform")
     session = target.get("session")
     host_repo = target.get("repo")
     if platform != "zcode":
-        die(f'{HEARTBEAT_HOST_ENV} target platform must be "zcode" (the event-driven '
+        die(f'{origin} target platform must be "zcode" (the event-driven '
             f"heartbeat carrier is a ZCode Host capability), got {platform!r}")
     if not isinstance(session, str) or not SESSION_PATTERN.match(session):
-        die(f"{HEARTBEAT_HOST_ENV} target session is missing or invalid")
+        die(f"{origin} target session is missing or invalid")
     if not isinstance(host_repo, str) or not host_repo:
-        die(f"{HEARTBEAT_HOST_ENV} target repo is missing")
+        die(f"{origin} target repo is missing")
     host_repo = resolve_repo(host_repo)
     if session == args.session and host_repo == repo:
-        die(f"{HEARTBEAT_HOST_ENV} names this worker's own session; "
+        die(f"{origin} names this worker's own session; "
             "a session cannot be its own heartbeat host")
     digest = hashlib.sha256(host_repo.encode("utf-8")).hexdigest()[:16]
     directory = record_root(args) / platform / session / digest
     return {"platform": platform, "session": session, "repo": host_repo,
             "socket": str(sock_path_for_directory(directory))}
+
+
+def dispatcher_identity() -> tuple[dict[str, Any] | None, str | None]:
+    """The holder-set KAOLA_ACP_DISPATCHER fact, or (None, None) when this
+    start runs under no holder. A present but unusable value is a problem
+    to report, never a reason to fall back to a standalone start."""
+    raw = os.environ.get(DISPATCHER_ENV) or ""
+    if not raw:
+        return None, None
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        return None, f"{DISPATCHER_ENV} is not valid JSON"
+    if not isinstance(value, dict):
+        return None, f"{DISPATCHER_ENV} must be a JSON object"
+    for key in ("holder_instance_id", "platform", "repo", "session"):
+        if not isinstance(value.get(key), str) or not value.get(key):
+            return None, f"{DISPATCHER_ENV} is missing {key}"
+    return value, None
+
+
+def repo_problem(raw: str) -> str | None:
+    """Why ``raw`` is not an existing Git root, or None (resolve_repo without die)."""
+    if not raw or not raw.startswith("/") or not os.path.isdir(raw):
+        return "is not an existing absolute path"
+    repo = canonical_dir(raw)
+    result = subprocess.run(["git", "-C", repo, "rev-parse", "--show-toplevel"],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        return "is not a Git repository"
+    if canonical_dir(result.stdout.strip()) != repo:
+        return "is not the Git root"
+    return None
+
+
+def verify_dispatcher_host_live(args: argparse.Namespace, dispatcher: dict[str, Any],
+                                target: dict[str, Any]) -> str | None:
+    """Design #99 §a.3: the four read-only checks that the dispatching Host
+    holder is the live one this worker would notify. Returns the failed
+    check as text, or None when every check passed."""
+    digest = hashlib.sha256(target["repo"].encode("utf-8")).hexdigest()[:16]
+    directory = record_root(args) / target["platform"] / target["session"] / digest
+    record = read_record(directory)
+    if not record:
+        return f"host holder record is missing at {directory / 'record.json'}"
+    holder_pid = record.get("holder_pid")
+    if not pid_alive(holder_pid):
+        return f"host holder record present but holder_pid {holder_pid} is not alive"
+    if record.get("holder_instance_id") != dispatcher["holder_instance_id"]:
+        return ("host holder record names holder_instance_id "
+                f"{record.get('holder_instance_id')!r}, not the dispatcher's "
+                f"{dispatcher['holder_instance_id']!r}")
+    if not Path(target["socket"]).exists():
+        return f"host holder admin socket is missing at {target['socket']}"
+    return None
+
+
+def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any]:
+    """Resolve the notification target of this start (design #99 §a.2).
+
+    Returns ``target`` (validated, socket-resolved, or None), ``source`` (``none``,
+    ``explicit``, ``dispatcher``, ``dispatcher-no-carrier``), ``dispatcher`` (the parsed identity fact when
+    present), and ``refusal`` ({"reason", "detail"}) when this start must
+    refuse before anything exists. Explicit-variable failures keep today's
+    ``die`` (stderr, exit 2)."""
+    raw = os.environ.get(HEARTBEAT_HOST_ENV) or ""
+    explicit: dict[str, Any] | None = None
+    if raw:
+        try:
+            explicit_value = json.loads(raw)
+        except ValueError:
+            die(f"{HEARTBEAT_HOST_ENV} is not valid JSON")
+        explicit = validate_heartbeat_target(explicit_value, args, repo, HEARTBEAT_HOST_ENV)
+    dispatcher, dispatcher_error = dispatcher_identity()
+    if dispatcher_error:
+        return {"target": explicit, "source": "explicit" if explicit else "dispatcher",
+                "dispatcher": None,
+                "refusal": {"reason": "heartbeat-host-unresolved", "detail": dispatcher_error}}
+    if dispatcher is None:
+        return {"target": explicit, "source": "explicit" if explicit else "none",
+                "dispatcher": None, "refusal": None}
+    if dispatcher.get("platform") != "zcode":
+        # Row 4: dispatched, but the carrier is a ZCode Host capability. An
+        # explicit target still binds as today.
+        return {"target": explicit, "source": "explicit" if explicit else "dispatcher-no-carrier",
+                "dispatcher": dispatcher, "refusal": None}
+    problem = repo_problem(dispatcher["repo"])
+    if problem:
+        return {"target": None, "source": "explicit" if explicit else "dispatcher",
+                "dispatcher": dispatcher, "requested": explicit,
+                "refusal": {"reason": "heartbeat-host-unresolved",
+                            "detail": f"dispatcher repo {dispatcher['repo']} {problem}"}}
+    derived = validate_heartbeat_target(
+        {"platform": "zcode", "session": dispatcher["session"], "repo": dispatcher["repo"]},
+        args, repo, DISPATCHER_ENV)
+    if explicit is not None:
+        if explicit["session"] == derived["session"] and explicit["repo"] == derived["repo"]:
+            return {"target": explicit, "source": "explicit", "dispatcher": dispatcher,
+                    "refusal": None}
+        return {"target": None, "source": "explicit", "dispatcher": dispatcher,
+                "requested": explicit,
+                "refusal": {"reason": "heartbeat-host-conflict",
+                            "detail": (f"{HEARTBEAT_HOST_ENV} names {explicit['session']} at "
+                                       f"{explicit['repo']} but this start is dispatched by "
+                                       f"{derived['session']} at {derived['repo']}; a Host "
+                                       "may only bind its workers to itself")}}
+    failed = verify_dispatcher_host_live(args, dispatcher, derived)
+    if failed:
+        return {"target": None, "source": "dispatcher", "dispatcher": dispatcher,
+                "requested": derived,
+                "refusal": {"reason": "heartbeat-host-unresolved", "detail": failed}}
+    return {"target": derived, "source": "dispatcher", "dispatcher": dispatcher, "refusal": None}
+
+
+def heartbeat_host_refusal(args: argparse.Namespace, repo: str,
+                           resolution: dict[str, Any]) -> dict[str, Any]:
+    """A typed pre-mutation refusal in the shape of the shell's canonical-root
+    refusal: nothing was probed, written, or spawned."""
+    receipt = base_receipt(args, repo)
+    receipt.pop("git", None)
+    receipt.update({
+        "result": "refused",
+        "reason": resolution["refusal"]["reason"],
+        "action": "start",
+        "detail": resolution["refusal"]["detail"],
+        "heartbeat_host_source": resolution["source"],
+        "heartbeat_host_requested": resolution.get("requested"),
+        "dispatcher": resolution["dispatcher"],
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    return receipt
 
 
 def attach_binding_fact(receipt: dict[str, Any], facts: Any) -> dict[str, Any]:
@@ -1319,10 +1453,16 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             receipt["mutation_status"] = "not_started"
             receipt["mutation_performed"] = False
             return receipt
-    heartbeat_host = heartbeat_host_target(args, repo)
-    # What this command asked for. The fact that decides whether a worker can
-    # wake a Host is the holder's own, read back below.
+    resolution = resolve_heartbeat_host(args, repo)
+    if resolution["refusal"]:
+        return heartbeat_host_refusal(args, repo, resolution)
+    heartbeat_host = resolution["target"]
+    # What this command asked for, and where that request came from. The fact
+    # that decides whether a worker can wake a Host is the holder's own, read
+    # back below.
     receipt["heartbeat_host_requested"] = heartbeat_host
+    receipt["heartbeat_host_source"] = resolution["source"]
+    receipt["dispatcher"] = resolution["dispatcher"]
     directory = record_dir(args, repo)
     tmux = subprocess.run(
         ["tmux", "has-session", "-t", f"={args.session}"], capture_output=True
@@ -1663,7 +1803,9 @@ def main() -> int:
     if args.command == "start":
         receipt = command_start(args, repo)
         print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
-        return 0
+        # A typed refusal is a pre-mutation decision, exit 1 like the shell's
+        # canonical-root refusal; transport errors stay exit-0 receipts.
+        return 1 if receipt.get("result") == "refused" else 0
     if args.command == "view":
         if directory is None:
             die("invalid or missing --session name")

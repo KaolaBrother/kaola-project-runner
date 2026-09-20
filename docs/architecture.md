@@ -131,7 +131,11 @@ inner holder's identity (`pid`, `pgid`, `spawned_at`) to the outer holder's `chi
 stop sweeps only recorded inner holders — the holder-lost `stop --force` path uses the same
 identity-checked record. `KAOLA_ACP_CHILD_RECORD` is a write handle to a holder record: only a
 holder sets it for its own agent, and the ZCode adapter never forwards it to the app-server
-child. Real model-driven Host dispatch (a Host Agent actually delegating a turn to a Worker)
+child. The second holder→agent fact, `KAOLA_ACP_DISPATCHER` (Issue #104), is identity only —
+`holder_instance_id`, `platform`, `repo`, `session` — and the ZCode adapter does forward it: the
+socket it implies is already deterministic from those strings, so it grants nothing, and it is
+what lets a worker `start` run inside the Host bind back to the Host mechanically (refusing,
+rather than opening unbound, when that holder is not live). Real model-driven Host dispatch (a Host Agent actually delegating a turn to a Worker)
 is deferred to controlled live E2E, not emulated by executing prompts. The three session
 layers stay separately trackable: the Runner session name, the ACP session id, and the native
 `sess_*` id (reported credential-free as `native_session_identity`).

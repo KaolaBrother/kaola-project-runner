@@ -84,6 +84,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import subprocess
 import sys
 import threading
 import time
@@ -447,6 +449,7 @@ class FakeAppServer:
                                         "not registered in this app-server (register a provider)")
                 return
             self.result(rid, {"accepted": True})
+            self.last_send_params = params
             threading.Thread(target=self.run_turn, args=(session_id,), daemon=True).start()
             return
 
@@ -950,6 +953,42 @@ class FakeAppServer:
             self.event(session_id, "tool.updated", {
                 "kind": "result", "toolCallId": "call_c1", "toolName": "Bash",
                 "output": "ok",
+            })
+            self.complete(session_id)
+            return
+
+        if scenario == "nested_start":
+            # Issue #104: the Host *agent* itself runs a Runner `start` from
+            # inside its own process, with exactly the environment the bridge
+            # handed it - the holder-set KAOLA_ACP_DISPATCHER is exercised for
+            # real, never injected by the test. One argv per turn, results
+            # appended as JSONL so the test reads the nested receipt back.
+            # Only a prompt carrying `NESTED:<n>` runs argv n; a Host wake
+            # notification turn (kaola-host-notify) completes like `basic`.
+            marker = re.search(r"NESTED:(\d+)",
+                               json.dumps(getattr(self, "last_send_params", {}) or {}))
+            if marker is None:
+                self.complete(session_id)
+                return
+            argvs = json.loads(os.environ.get("FAKE_ZCODE_NESTED_ARGV") or "[]")
+            out = os.environ.get("FAKE_ZCODE_NESTED_OUT")
+            argv = argvs[int(marker.group(1))]
+            self.event(session_id, "model.streaming", {
+                "kind": "tool_call", "toolCallId": "call_n1",
+                "toolName": "Bash", "input": {"command": " ".join(argv or [])},
+            })
+            entry = {"argv": argv, "dispatcher": os.environ.get("KAOLA_ACP_DISPATCHER"),
+                     "env_names": sorted(os.environ)}
+            if argv:
+                run = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+                entry.update({"returncode": run.returncode, "stdout": run.stdout,
+                              "stderr": run.stderr})
+            if out:
+                with open(out, "a", encoding="utf-8") as handle:
+                    handle.write(json.dumps(entry) + "\n")
+            self.event(session_id, "tool.updated", {
+                "kind": "result", "toolCallId": "call_n1", "toolName": "Bash",
+                "output": str(entry.get("returncode")),
             })
             self.complete(session_id)
             return

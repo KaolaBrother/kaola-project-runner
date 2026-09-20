@@ -309,6 +309,11 @@ DENIED_ENV = (
 # checks). The holder's child-record path (KAOLA_ACP_CHILD_RECORD) is
 # deliberately NOT forwarded: an external agent child must never gain a write
 # handle to another holder's record (Issue #62, trust boundary).
+# KAOLA_ACP_DISPATCHER (Issue #104) IS forwarded: it is an identity fact, not a
+# handle - the socket it implies is already deterministic from
+# (platform, session, repo) and reachable by any local process that knows
+# those three strings, so forwarding it grants nothing new; it is what lets a
+# worker `start` run inside this Host bind back to the Host mechanically.
 ENV_ALLOWLIST = (
     "HOME",
     "PATH",
@@ -323,6 +328,7 @@ ENV_ALLOWLIST = (
     "TERM",
     "KAOLA_ZCODE_ENTRY",
     "KAOLA_ZCODE_NODE",
+    "KAOLA_ACP_DISPATCHER",
 )
 
 # Protocol-documented backend modes / thought levels. These are vocabulary,

@@ -1391,6 +1391,9 @@ class ZcodeAcpContractTests(unittest.TestCase):
                 "KAOLA_ACP_CHILD_RECORD": str(child_record),
                 "KAOLA_ZCODE_ENTRY": "/tmp/kaola-zcode-explicit-entry.cjs",
                 "KAOLA_ZCODE_NODE": "/usr/bin/env python3",
+                "KAOLA_ACP_DISPATCHER": json.dumps({
+                    "holder_instance_id": "0" * 32, "platform": "zcode",
+                    "repo": "/abs/project", "session": "zcode-kaola-host"}, sort_keys=True),
             },
         )
         session_id = self.handshake(driver)
@@ -1412,6 +1415,10 @@ class ZcodeAcpContractTests(unittest.TestCase):
         # Trust boundary: the holder's child-record path is a write handle to a
         # holder record and must never reach an external agent child.
         self.assertNotIn("KAOLA_ACP_CHILD_RECORD", env_names)
+        # Issue #104 (P9): the holder's dispatcher identity fact is forwarded -
+        # identity only, never a handle - so a start run inside the Host can
+        # bind back to it; the write handle above still does not travel.
+        self.assertIn("KAOLA_ACP_DISPATCHER", env_names)
         self.assertNotIn(FIXTURE_SECRET, json.dumps(driver.messages))
         self.assertFalse(child_record.exists(), "no child was spawned by a bare prompt")
 

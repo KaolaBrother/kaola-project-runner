@@ -197,22 +197,27 @@ class Sandbox:
         self.rpcs: dict[tuple[str, str], Path] = {}
         self.sessions: list[str] = []
 
-    def entry_for(self, scenario: str, session: str) -> Path:
+    def entry_for(self, scenario: str, session: str,
+                  entry_env: dict[str, str] | None = None) -> Path:
         key = (scenario, session)
         if key in self.entries:
             return self.entries[key]
         # The fake record and rpc log are per SESSION (a resumed holder spawns
         # a fresh fake that appends to the same log); only the entry script
-        # differs per scenario.
+        # differs per scenario. ``entry_env`` is set inside the fake's own
+        # process (after the bridge allowlist), never through the holder.
         record = self.dir / f"fake-{session}.json"
         rpc = self.dir / f"rpc-{session}.jsonl"
         entry = self.dir / f"zcode-entry-{scenario}-{session}.py"
+        extra = "".join(f"os.environ[{name!r}] = {value!r}\n"
+                        for name, value in sorted((entry_env or {}).items()))
         entry.write_text(
             "#!/usr/bin/env python3\n"
             "import os, runpy, sys\n"
             f"os.environ['FAKE_ZCODE_SCENARIO'] = {scenario!r}\n"
             f"os.environ['FAKE_ZCODE_RECORD'] = {str(record)!r}\n"
             f"os.environ['FAKE_ZCODE_RPC_LOG'] = {str(rpc)!r}\n"
+            + extra +
             f"sys.argv = [{str(FAKE)!r}, *sys.argv[1:]]\n"
             f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
             encoding="utf-8",
@@ -881,6 +886,9 @@ def test_issue_66_unarmed_worker_stays_ungated() -> None:
               and start.get("heartbeat_host_requested") is None,
               "an unarmed start reports a known, unbound fact "
               f"({start.get('heartbeat_host')}, known={start.get('heartbeat_host_known')})")
+        # Issue #104 P6: no dispatcher and no variable is source "none".
+        check(start.get("heartbeat_host_source") == "none" and start.get("dispatcher") is None,
+              f"an unarmed start names its source as none ({start.get('heartbeat_host_source')})")
         reply = sandbox.cli("send", "--text", "ordinary blocking dispatch", session=worker)
         check(reply.get("error") is None and reply.get("outcome") == "turn_completed",
               f"blocking send on an unbound worker still completes ({reply.get('outcome')})")
@@ -1351,6 +1359,379 @@ def test_canonical_heartbeat_spec_stays_one_set() -> None:
     check("Grok Bot 不加载本 Skill" in text, "Grok Bot is not a Project Runner heartbeat host")
     rendered_text = rendered[0].read_text(encoding="utf-8")
     check("PROJECT_RUNNER_HEARTBEAT_V2" in rendered_text, "the generated skeleton matches the canonical marker")
+
+
+# ---------------------------------------------------------------------------
+# Issue #104: mechanical KAOLA_ACP_HEARTBEAT_HOST binding on the dispatch path
+# (design: kaola-workflow/archive/issue-99/evidence/heartbeat-auto-bind-design.md
+# §a.2 resolution table, §a.3 verification, §b failure shape, §e cases).
+
+DISPATCHER_ENV = "KAOLA_ACP_DISPATCHER"
+
+
+def host_record(sandbox: Sandbox, session: str) -> dict:
+    return json.loads((sandbox.record_dir(session) / "record.json").read_text(encoding="utf-8"))
+
+
+def dispatcher_of(sandbox: Sandbox, session: str, **override: str) -> dict:
+    """The identity fact a holder sets for its agent (design §a.1)."""
+    record = host_record(sandbox, session)
+    fact = {"holder_instance_id": record["holder_instance_id"], "platform": "zcode",
+            "repo": record["repo"], "session": session}
+    fact.update(override)
+    return fact
+
+
+def expected_fact(sandbox: Sandbox, host: str) -> dict:
+    return {"platform": "zcode", "session": host, "repo": os.path.realpath(str(sandbox.repo)),
+            "socket": str(holder_socket(sandbox.record_dir(host)))}
+
+
+def refused_start(sandbox: Sandbox, worker: str, reason: str, label: str,
+                  platform: str = "zcode", **env: str | None) -> dict:
+    """A refused start: exit 1, typed receipt, and nothing created (design §b)."""
+    result, payload = sandbox.invoke("start", "--mode", "yolo", session=worker,
+                                     scenario="basic", platform=platform, **env)
+    check(result.returncode == 1, f"{label}: refusal exits 1 ({result.returncode}: {result.stderr[-300:]})")
+    check(isinstance(payload, dict) and payload.get("result") == "refused"
+          and payload.get("reason") == reason and payload.get("action") == "start",
+          f"{label}: typed refusal {reason} ({payload})")
+    check(payload.get("mutation_performed") is False
+          and payload.get("mutation_status") == "not_started",
+          f"{label}: refusal performed no mutation")
+    check(payload.get("platform") == platform and payload.get("session") == worker
+          and "transport" in payload and "detail" in payload,
+          f"{label}: refusal names the worker and carries transport/detail")
+    worker_dir = sandbox.record_dir(worker, platform=platform)
+    check(not worker_dir.exists(), f"{label}: refusal wrote no record")
+    check(not holder_socket(worker_dir).exists(), f"{label}: refusal opened no socket")
+    check(len(json.dumps(payload).encode("utf-8")) <= 4096, f"{label}: refusal receipt stays bounded")
+    return payload
+
+
+def test_issue_104_dispatcher_refusals_open_nothing() -> None:
+    """Design §e N1-N5, N7 and the second form of N8: a provable dispatcher
+    whose Host holder cannot be bound is refused before anything exists."""
+    sandbox = Sandbox("i104-refuse")
+    try:
+        host_a = sandbox.session()
+        host_b = sandbox.session()
+        sandbox.start(host_a, "basic")
+        sandbox.start(host_b, "basic")
+        dispatcher_a = dispatcher_of(sandbox, host_a)
+
+        # N1: dispatcher names a ZCode session that has no record at all.
+        ghost = sandbox.session()
+        receipt = refused_start(
+            sandbox, sandbox.session(), "heartbeat-host-unresolved", "N1",
+            **{DISPATCHER_ENV: json.dumps(dict(dispatcher_a, session=ghost))})
+        check("record is missing" in receipt.get("detail", ""),
+              f"N1: detail names the missing record ({receipt.get('detail')})")
+        check(receipt.get("heartbeat_host_source") == "dispatcher"
+              and (receipt.get("dispatcher") or {}).get("session") == ghost
+              and (receipt.get("heartbeat_host_requested") or {}).get("session") == ghost,
+              "N1: refusal reports the source, the dispatcher, and the derived request")
+
+        # N3: the record is live but belongs to a different holder instance.
+        receipt = refused_start(
+            sandbox, sandbox.session(), "heartbeat-host-unresolved", "N3",
+            **{DISPATCHER_ENV: json.dumps(dict(dispatcher_a, holder_instance_id="0" * 32))})
+        check("holder_instance_id" in receipt.get("detail", ""),
+              f"N3: detail names the instance mismatch ({receipt.get('detail')})")
+
+        # N4: record live, admin socket file gone.
+        sock = holder_socket(sandbox.record_dir(host_a))
+        aside = sock.with_suffix(".aside")
+        os.rename(sock, aside)
+        try:
+            receipt = refused_start(
+                sandbox, sandbox.session(), "heartbeat-host-unresolved", "N4",
+                **{DISPATCHER_ENV: json.dumps(dispatcher_a)})
+        finally:
+            os.rename(aside, sock)
+        check("socket is missing" in receipt.get("detail", ""),
+              f"N4: detail names the missing socket ({receipt.get('detail')})")
+
+        # N5: dispatcher is live Host A, the explicit variable names live Host B.
+        receipt = refused_start(
+            sandbox, sandbox.session(), "heartbeat-host-conflict", "N5",
+            **{DISPATCHER_ENV: json.dumps(dispatcher_a),
+               HEARTBEAT_HOST_ENV: json.dumps({"platform": "zcode", "session": host_b,
+                                               "repo": str(sandbox.repo)})})
+        check(receipt.get("heartbeat_host_source") == "explicit"
+              and (receipt.get("heartbeat_host_requested") or {}).get("session") == host_b,
+              "N5: the conflict receipt shows the explicit request that lost")
+        check(not events_of_kind(sandbox.record_dir(host_a), "worker_event")
+              and not events_of_kind(sandbox.record_dir(host_b), "worker_event"),
+              "N5: neither Host holder received anything")
+
+        # A dispatcher value that is not the holder's fact shape is not a
+        # standalone start either.
+        receipt = refused_start(sandbox, sandbox.session(), "heartbeat-host-unresolved",
+                                "malformed", **{DISPATCHER_ENV: "not-json"})
+        check("not valid JSON" in receipt.get("detail", ""), "malformed dispatcher is named")
+
+        # N7: the dispatcher is this worker's own session: today's die, exit 2.
+        own = sandbox.session()
+        result, _ = sandbox.invoke(
+            "start", "--mode", "yolo", session=own, scenario="basic",
+            **{DISPATCHER_ENV: json.dumps(dict(dispatcher_a, session=own))})
+        check(result.returncode == 2 and "own session" in (result.stderr or ""),
+              f"N7: self-reference stays a usage error ({result.returncode})")
+        check(not sandbox.record_dir(own).exists(), "N7: nothing created")
+
+        # N2 / N8 second form: the dispatching Host holder is dead.
+        record_path = sandbox.record_dir(host_a) / "record.json"
+        kept = record_path.read_text(encoding="utf-8")
+        stop = sandbox.cli("stop", "--force", session=host_a)
+        check(stop.get("residual_pids") == [], "host A stops cleanly")
+        if not record_path.exists():
+            record_path.write_text(kept, encoding="utf-8")
+        receipt = refused_start(
+            sandbox, sandbox.session(), "heartbeat-host-unresolved", "N2",
+            **{DISPATCHER_ENV: json.dumps(dispatcher_a)})
+        check("not alive" in receipt.get("detail", ""),
+              f"N2: detail names the dead holder ({receipt.get('detail')})")
+        host_stop = sandbox.cli("stop", "--force", session=host_b)
+        check(host_stop.get("residual_pids") == [], "host B stops cleanly")
+    finally:
+        sandbox.cleanup()
+
+
+def test_issue_104_explicit_and_no_carrier_rows() -> None:
+    """Design §e P4, P5, P7: the explicit variable equal to the dispatcher
+    binds as before; a non-ZCode dispatcher starts unbound without refusal; a
+    reused live holder keeps its binding and exact stop/start binds."""
+    sandbox = Sandbox("i104-rows")
+    try:
+        host = sandbox.session()
+        sandbox.start(host, "basic")
+        dispatcher = dispatcher_of(sandbox, host)
+
+        # P4
+        worker = sandbox.session()
+        receipt = sandbox.cli(
+            "start", "--mode", "yolo", session=worker, scenario="basic",
+            **{DISPATCHER_ENV: json.dumps(dispatcher),
+               HEARTBEAT_HOST_ENV: json.dumps({"platform": "zcode", "session": host,
+                                               "repo": str(sandbox.repo)})})
+        check(receipt.get("state") == "ready" and receipt.get("heartbeat_host_source") == "explicit"
+              and receipt.get("heartbeat_host") == expected_fact(sandbox, host)
+              and (receipt.get("dispatcher") or {}).get("session") == host,
+              f"P4: explicit target equal to the dispatcher binds as explicit ({receipt.get('error')})")
+        sandbox.cli("stop", session=worker)
+
+        # P5
+        worker = sandbox.session()
+        receipt = sandbox.cli(
+            "start", "--mode", "yolo", session=worker, scenario="basic",
+            **{DISPATCHER_ENV: json.dumps(dict(dispatcher, platform="claude-code",
+                                               session="cc-host"))})
+        check(receipt.get("state") == "ready"
+              and receipt.get("heartbeat_host_source") == "dispatcher-no-carrier"
+              and receipt.get("heartbeat_host") is None
+              and receipt.get("heartbeat_host_known") is True
+              and (receipt.get("dispatcher") or {}).get("platform") == "claude-code",
+              f"P5: a non-ZCode dispatcher starts unbound, not refused ({receipt.get('error')})")
+        sandbox.cli("stop", session=worker)
+
+        # P7: a worker started before the change (no dispatcher, unbound).
+        worker = sandbox.session()
+        first = sandbox.start(worker, "basic")
+        check(first.get("heartbeat_host") is None and first.get("heartbeat_host_source") == "none",
+              "P7: the pre-change worker is unbound")
+        result, again = sandbox.invoke(
+            "start", "--mode", "yolo", session=worker, scenario="basic",
+            **{DISPATCHER_ENV: json.dumps(dispatcher)})
+        check(result.returncode == 0 and (again.get("error") or {}).get("code") == "session-exists",
+              f"P7: repeated start on the live holder is session-exists ({again})")
+        check(again.get("heartbeat_host") is None and again.get("heartbeat_host_known") is True
+              and again.get("heartbeat_host_source") == "dispatcher"
+              and (again.get("dispatcher") or {}).get("session") == host,
+              "P7: session-exists reports the reused null binding beside what a fresh start would do")
+        stop = sandbox.cli("stop", session=worker)
+        check(stop.get("stopped") is True, "P7: exact stop at idle")
+        rebound = sandbox.cli("start", "--mode", "yolo", session=worker, scenario="basic",
+                              **{DISPATCHER_ENV: json.dumps(dispatcher)})
+        check(rebound.get("state") == "ready"
+              and rebound.get("heartbeat_host_source") == "dispatcher"
+              and rebound.get("heartbeat_host") == expected_fact(sandbox, host),
+              f"P7: the new start binds by itself ({rebound.get('error')})")
+        sandbox.cli("stop", session=worker)
+        host_stop = sandbox.cli("stop", "--force", session=host)
+        check(host_stop.get("residual_pids") == [], "host stops cleanly")
+    finally:
+        sandbox.cleanup()
+
+
+def host_settled(sandbox: Sandbox, host: str) -> None:
+    """Every staged wake delivered and confirmed, and the Host turn ended, so
+    the next dispatch prompt is admitted rather than colliding with a wake."""
+    host_dir = sandbox.record_dir(host)
+
+    def settled() -> bool:
+        staged = {e["event"]["event_id"] for e in events_of_kind(host_dir, "worker_event")}
+        confirmed: set[str] = set()
+        for entry in events_of_kind(host_dir, "worker_event_confirmed"):
+            confirmed.update(entry.get("event_ids") or [])
+        if staged - confirmed:
+            return False
+        return sandbox.cli("status", session=host).get("turn_active") is False
+
+    wait_until(settled, 30, f"host {host} settles its wakes")
+
+
+def nested_receipts(path: Path) -> list[dict]:
+    if not path.is_file():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def test_issue_104_start_inside_host_agent_binds_mechanically() -> None:
+    """Design §e P1, P2, P3, P8, P9 and the first form of N8, end to end: the
+    Host holder names itself to its agent, the ZCode bridge forwards that fact
+    (and still not the child-record handle), and a `start` the agent runs
+    with NO variable binds the worker back to the Host; its idle and its
+    permission wake both reach the Host. Unsetting the fact inside the agent
+    is the documented residual (§d.2): unbound, not refused."""
+    sandbox = Sandbox("i104-nested")
+    try:
+        host = sandbox.session()
+        worker = f"claude-hb-{uuid.uuid4().hex[:8]}"
+        worker_zc = sandbox.session()
+        worker_unset = f"claude-hb-{uuid.uuid4().hex[:8]}"
+        fake_agent = sandbox.dir / "fake-acp-agent.py"
+        fake_agent.write_text(FAKE_ACP_AGENT, encoding="utf-8")
+        fake_agent.chmod(fake_agent.stat().st_mode | 0o755)
+        out = sandbox.dir / "nested.jsonl"
+        permission_entry = sandbox.entry_for("permission", worker_zc)
+        common = [str(CHECKOUT_CLI)]
+        argvs = [
+            # turn 1 (P1): a Claude Code ACP worker, no variable, no record root env
+            [PYTHON, *common, "claude-code", "start", "--repo", str(sandbox.repo),
+             "--session", worker, "--record-root", str(sandbox.record_root),
+             "--command", f"{PYTHON} {fake_agent}"],
+            # turn 2 (P3): a ZCode worker whose fake raises a permission
+            ["env", f"KAOLA_ZCODE_ENTRY={permission_entry}", PYTHON, *common, "zcode", "start",
+             "--repo", str(sandbox.repo), "--session", worker_zc, "--mode", "yolo",
+             "--record-root", str(sandbox.record_root)],
+            # turn 3 (N8 first form): the only mechanical source removed
+            ["env", "-u", DISPATCHER_ENV, PYTHON, *common, "claude-code", "start", "--repo",
+             str(sandbox.repo), "--session", worker_unset, "--record-root",
+             str(sandbox.record_root), "--command", f"{PYTHON} {fake_agent}"],
+        ]
+        sandbox.entry_for("nested_start", host, entry_env={
+            "FAKE_ZCODE_NESTED_ARGV": json.dumps(argvs), "FAKE_ZCODE_NESTED_OUT": str(out)})
+        sandbox.start(host, "nested_start")
+        sandbox.write_prompt_file("HEARTBEAT: issue 104 mechanical binding.")
+        host_dir = sandbox.record_dir(host)
+        record = host_record(sandbox, host)
+
+        # P8/P9: the holder set the fact and the bridge forwarded it, not the handle.
+        env_names = sandbox.fake(sandbox.records[host]).get("env_names") or []
+        check(DISPATCHER_ENV in env_names and "KAOLA_ACP_CHILD_RECORD" not in env_names,
+              f"P9: the bridge forwards the identity fact and drops the write handle ({env_names})")
+
+        # P1: the Host agent runs the worker start itself.
+        sandbox.sessions.append(("claude-code", worker))
+        turn = sandbox.cli("send", "--text", "NESTED:0 dispatch worker", session=host)
+        check(turn.get("outcome") == "turn_completed", f"host turn 1 completes ({turn.get('outcome')})")
+        entries = nested_receipts(out)
+        check(len(entries) == 1 and entries[0].get("returncode") == 0,
+              f"P1: nested start exited 0 ({entries and entries[0].get('stderr', '')[-400:]})")
+        expected_dispatcher = {"holder_instance_id": record["holder_instance_id"],
+                               "platform": "zcode", "repo": record["repo"], "session": host}
+        check(entries[0].get("dispatcher") == json.dumps(expected_dispatcher, sort_keys=True),
+              f"P8: the agent saw the holder's exact sort_keys identity fact ({entries[0].get('dispatcher')})")
+        nested = json.loads(entries[0]["stdout"].strip().splitlines()[-1])
+        check(nested.get("state") == "ready" and nested.get("error") is None,
+              f"P1: worker started ready ({nested.get('error')})")
+        check(nested.get("heartbeat_host") == expected_fact(sandbox, host)
+              and nested.get("heartbeat_host_known") is True
+              and nested.get("heartbeat_host_source") == "dispatcher"
+              and (nested.get("dispatcher") or {}).get("session") == host,
+              f"P1: worker bound to the Host mechanically ({nested.get('heartbeat_host')}, "
+              f"source={nested.get('heartbeat_host_source')})")
+        check(nested.get("heartbeat_host_requested") == expected_fact(sandbox, host),
+              "P1: the derived request equals the adopted fact")
+        worker_dir = sandbox.record_dir(worker, platform="claude-code")
+        stored = json.loads((worker_dir / "record.json").read_text(encoding="utf-8"))
+        check(stored.get("heartbeat_host") == expected_fact(sandbox, host),
+              "P1: the worker record stores the same target")
+        observed = sandbox.cli("observe", session=worker, platform="claude-code")
+        check(observed.get("heartbeat_host") == expected_fact(sandbox, host),
+              "P1: observe agrees")
+
+        # P2: the worker's turn end wakes the Host with the ordinary idle.
+        reply = sandbox.cli("send", "--text", "work", session=worker, platform="claude-code")
+        check(reply.get("outcome") == "turn_completed", f"worker turn completes ({reply.get('outcome')})")
+        wait_until(lambda: any(e["event"]["session"] == worker
+                               for e in events_of_kind(host_dir, "worker_event")), 15,
+                   "P2: the Host holder receives the worker idle")
+        staged = [e["event"] for e in events_of_kind(host_dir, "worker_event")
+                  if e["event"]["session"] == worker][0]
+        check(staged["kind"] == "idle" and staged["platform"] == "claude-code"
+              and staged["event_id"] == f"claude-code/{worker}/idle/{staged['event_cursor']}",
+              f"P2: idle event id names the worker ({staged})")
+        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
+                   "P2: the Host delivers the wake")
+
+        # P3: a ZCode worker started the same way raises a permission; the wake
+        # reaches the Host and permit settles it.
+        sandbox.sessions.append(("zcode", worker_zc))
+        host_settled(sandbox, host)
+        turn = sandbox.cli("send", "--text", "NESTED:1 dispatch zcode worker", session=host)
+        check(turn.get("outcome") == "turn_completed", f"host turn 2 completes ({turn.get('outcome')})")
+        entries = nested_receipts(out)
+        check(len(entries) == 2 and entries[1].get("returncode") == 0,
+              f"P3: nested zcode start exited 0 ({entries[1].get('stderr', '')[-400:]})")
+        nested_zc = json.loads(entries[1]["stdout"].strip().splitlines()[-1])
+        check(nested_zc.get("heartbeat_host_source") == "dispatcher"
+              and nested_zc.get("heartbeat_host") == expected_fact(sandbox, host),
+              "P3: the ZCode worker is bound mechanically too")
+        send = sandbox.cli("send", "--no-wait", "--text", "do work", session=worker_zc)
+        check(send.get("outcome") == "in_progress", "P3: worker prompt admitted")
+        wait_until(lambda: (sandbox.cli("status", session=worker_zc).get("pending_permissions")
+                            or []), 15, "P3: worker waits on a permission")
+        request_id = sandbox.cli("status", session=worker_zc)["pending_permissions"][0]["request_id"]
+        wait_until(lambda: any(e["event"]["kind"] == "permission_required"
+                               and e["event"]["session"] == worker_zc
+                               for e in events_of_kind(host_dir, "worker_event")), 15,
+                   "P3: permission_required reaches the Host")
+        wake = [e["event"] for e in events_of_kind(host_dir, "worker_event")
+                if e["event"]["kind"] == "permission_required"][0]
+        check(str(wake.get("request_id")) == str(request_id),
+              f"P3: the wake carries the request id ({wake.get('request_id')})")
+        permit = sandbox.cli("permit", "--option", "allow", session=worker_zc)
+        check(permit.get("permitted") is not None, f"P3: permit settles ({permit.get('error')})")
+        wait_until(lambda: any(e["event"]["kind"] == "idle" and e["event"]["session"] == worker_zc
+                               for e in events_of_kind(host_dir, "worker_event")), 15,
+                   "P3: the ordinary idle follows the permit")
+
+        # N8 first form: inside the Host agent, the only mechanical source is
+        # unset. This is the documented residual: unbound, not refused.
+        sandbox.sessions.append(("claude-code", worker_unset))
+        host_settled(sandbox, host)
+        turn = sandbox.cli("send", "--text", "NESTED:2 dispatch without fact", session=host)
+        check(turn.get("outcome") == "turn_completed", "host turn 3 completes")
+        entries = nested_receipts(out)
+        check(len(entries) == 3 and entries[2].get("returncode") == 0
+              and entries[2].get("dispatcher") == json.dumps(expected_dispatcher, sort_keys=True),
+              "N8: the agent still had the fact; only the nested command dropped it")
+        unset = json.loads(entries[2]["stdout"].strip().splitlines()[-1])
+        check(unset.get("state") == "ready" and unset.get("heartbeat_host") is None
+              and unset.get("heartbeat_host_source") == "none" and unset.get("dispatcher") is None,
+              f"N8: without the fact the start is a plain unbound start, not a refusal "
+              f"({unset.get('heartbeat_host_source')})")
+
+        for platform, name in (("claude-code", worker), ("claude-code", worker_unset),
+                               ("zcode", worker_zc)):
+            stop = sandbox.cli("stop", "--force", session=name, platform=platform)
+            check(stop.get("residual_pids") == [], f"{name} stops cleanly")
+        host_stop = sandbox.cli("stop", "--force", session=host)
+        check(host_stop.get("residual_pids") == [], "host stops cleanly")
+    finally:
+        sandbox.cleanup()
 
 
 def main() -> int:

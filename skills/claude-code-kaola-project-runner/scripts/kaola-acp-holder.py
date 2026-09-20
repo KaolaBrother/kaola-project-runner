@@ -143,6 +143,11 @@ CHILD_RECORD_NAME = "children.jsonl"
 # carrier op exists only for platform zcode.
 HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
 HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
+# Issue #104 (design #99 §a.1): set by this holder for the agent it hosts.
+# Identity only - holder_instance_id, platform, repo, session - so a nested
+# `kaola-acp start` run by that agent can derive and verify its notification
+# binding to this holder. Never a socket, record path, or pid.
+DISPATCHER_ENV = "KAOLA_ACP_DISPATCHER"
 HEARTBEAT_EVENT_CAP = 32
 # Issue #92: the codes that mean the Host never TOOK the event - it was not
 # listening, hung up, answered something that is not a worker_event receipt, or
@@ -634,6 +639,9 @@ class AgentConnection:
         spawn_record = self.holder.record_dir / CHILD_RECORD_NAME
         compact_spawn_record(spawn_record)
         env["KAOLA_ACP_CHILD_RECORD"] = str(spawn_record)
+        # Name this holder to its agent (identity only) so a Runner `start`
+        # the agent runs binds its worker back here mechanically (Issue #104).
+        env[DISPATCHER_ENV] = json.dumps(self.holder.dispatcher_identity(), sort_keys=True)
         self.proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,
@@ -1312,6 +1320,15 @@ class Holder:
             "failed_tools": [],
             "started_at": None,
             "cancel_requested": False,
+        }
+
+    def dispatcher_identity(self) -> dict[str, str]:
+        """The four identity facts a nested start needs to bind to this holder."""
+        return {
+            "holder_instance_id": self.holder_instance_id,
+            "platform": self.args.platform,
+            "repo": self.args.repo,
+            "session": self.args.session,
         }
 
     def write_record(self, **extra: Any) -> None:

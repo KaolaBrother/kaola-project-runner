@@ -97,7 +97,7 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
 
 ## Handoff and updates
 
-Do not set `KAOLA_ACP_HEARTBEAT_HOST` or start another platform.
+Do not start another platform.
 
 Idle Host: `send` is enough — `--no-wait` is admitted, not delivered, not
 project complete; a first `end_turn` is only that beat.
@@ -139,8 +139,8 @@ quota_token=<as given>
 priority=<as given>
 delivery_stop_boundary=<as given>
 project_context=<canonical root and other given facts>
-Finish planning, worker dispatch, notification binding, heartbeat, acceptance,
-and Workflow close-out internally. Missing authorization stays missing:
+Finish planning, worker dispatch, heartbeat, acceptance, and Workflow
+close-out internally. Missing authorization stays missing:
 do not expand it.
 ```
 
@@ -151,10 +151,9 @@ Project Plan and current authorization against file-read or work-product
 evidence and the first worker dispatch receipt — including
 `<project>/.kaola/heartbeat-prompt.json` with a usable `body`. The beat's
 `capture` shows a `Skill` tool_call for that entry; none means the install
-is wrong — fix it, never a manual `read`. That `start`
-receipt must echo `heartbeat_host` for this Host (`session` and `repo`); the
-worker `--session` is an issue-scoped worker name, not `$HOST`; platforms,
-counts, and the stop boundary must match. Mismatch or missing evidence:
+is wrong — fix it, never a manual `read`. In that `start`
+receipt the worker `--session` is an issue-scoped worker name, not `$HOST`;
+platforms, counts, and the stop boundary must match. Mismatch or missing evidence:
 correct on this Host; do not accept completion. No new script, gate, ledger,
 or store.
 

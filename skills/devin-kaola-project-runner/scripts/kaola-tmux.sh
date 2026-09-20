@@ -180,6 +180,26 @@ if [[ -n "$canonical_binding" && ( -z "$repo" || "$command_name" == start ) ]]; 
   export KPR_CANONICAL_REPO="$canonical_repo"
 fi
 
+# Issue #104 (design #99 §c.4, ruled 2026-09-19): worker dispatch on the Project
+# Runner path is ACP-only. The path is mechanically evident when a holder named
+# itself to this agent (KAOLA_ACP_DISPATCHER, any platform) or the Orchestrator
+# declared its context (KAOLA_PROJECT_RUNNER_CANONICAL_REPO, Issue #73). A PTY
+# worker under an event-driven Host has no wake source, so a `--transport pty`
+# start there is refused before any preflight, tmux session, or record exists.
+# It runs after the canonical-root guard so a drifted or unusable root keeps its
+# own refusal and an accepted one reports `canonical_repo` here.
+# Standalone PTY use - neither export - is unchanged, as is every other command
+# on an existing PTY session.
+if [[ "$command_name" == start && "$transport" == pty \
+      && ( -n "${KAOLA_ACP_DISPATCHER:-}" || -n "${KAOLA_PROJECT_RUNNER_CANONICAL_REPO:-}" ) ]]; then
+  emit_json "n:schema_version:3" "s:result:refused" "s:reason:heartbeat-host-pty-unsupported" \
+    "s:action:start" "s:platform:$platform" "s:session:$session" "s:repo:$repo" \
+    "s:detail:Project Runner dispatch is ACP-only; a pty worker under a Host has no wake source" \
+    "b:mutation_performed:false" \
+    "j:transport:{\"selected\":\"pty\",\"default\":\"$default_transport\",\"alternatives\":[\"acp\"],\"reason\":\"$transport_reason\"}"
+  exit 1
+fi
+
 if [[ "$transport" == acp ]]; then
   [[ -f "$script_dir/kaola-acp.py" ]] || die "ACP transport is not installed"
   acp_args=("$PYTHON_BIN" "$script_dir/kaola-acp.py" "$platform" "$command_name" --repo "$repo" --transport-reason "$transport_reason")

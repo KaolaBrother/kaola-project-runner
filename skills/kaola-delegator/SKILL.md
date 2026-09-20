@@ -10,8 +10,8 @@ account bridge), Codex, and generic Skill-directory hosts. It is not Project
 Runner and not a platform worker.
 
 Project Runner (`kaola-project-runner`) is the inner control-plane Skill. A
-ZCode Host loads it and owns planning, worker dispatch, notification binding,
-path binding, heartbeat, acceptance, and Workflow close-out. Do not copy that
+ZCode Host loads it and owns planning, worker dispatch, path binding,
+heartbeat, acceptance, and Workflow close-out. Do not copy that
 engine. One project has only one Agent running Project Runner.
 
 ## Extract once
@@ -49,8 +49,8 @@ full parameters (`--project`, `--worker zcode`, exact `--session`) and refuse
 `refused`. Codex and generic hosts do not. Commands, identities, and the
 prompt: [handoff.md](references/handoff.md).
 
-Do not pass per-worker notification bindings, per-worker `--repo`, scheduling, or
-heartbeat instructions. Do not rename, restart, or cancel an in-flight Host.
+Do not pass per-worker `--repo`, scheduling, or heartbeat instructions. Do not
+rename, restart, or cancel an in-flight Host.
 Exact Host `stop` and live attach use `holder_instance_id` from the existing
 receipt (`--expected-holder-instance-id`); a different holder is not that Host.
 

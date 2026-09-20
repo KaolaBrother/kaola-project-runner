@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **Worker binding on the Project Runner dispatch path is mechanical (Issue #104, design
+  Issue #99).** Every holder now names itself to the agent it hosts through one identity fact,
+  `KAOLA_ACP_DISPATCHER` (`holder_instance_id`, `platform`, `repo`, `session`; the ZCode bridge
+  forwards it and still never forwards `KAOLA_ACP_CHILD_RECORD`). A worker `start` run inside a
+  ZCode Host derives `KAOLA_ACP_HEARTBEAT_HOST` from that fact, verifies the Host holder is live
+  (record, `holder_pid`, same `holder_instance_id`, admin socket), and binds; the receipt reports
+  `heartbeat_host_source` (`none` / `explicit` / `dispatcher` / `dispatcher-no-carrier`) and
+  `dispatcher`. Three typed pre-mutation refusals, `result: refused` with exit 1 and nothing
+  created: `heartbeat-host-unresolved` (the named Host holder is not live),
+  `heartbeat-host-conflict` (an explicit variable names a different Host than the dispatcher),
+  and `heartbeat-host-pty-unsupported` (Runner dispatch is ACP-only: a `--transport pty` start
+  under any dispatcher, or with only the canonical-root export, is refused by `kaola-tmux.sh`).
+  Standalone starts, explicit-variable starts, and every existing PTY session are unchanged.
+  Host prose shrinks accordingly: the main Skill, `zcode-host-dispatch.md`, `host-startup.md`,
+  the Kaola-Delegator Skill and its handoff no longer instruct a manual bind or a per-worker
+  binding check. Transitional: a ZCode Host whose holder started on an older build never set
+  the fact, so its workers start unbound (not refused) until that Host is restarted on this build.
+
 ## 0.5.1 — 2026-09-20
 
 - **dsh (DeepSeek Harness) is the tenth worker platform, ACP only (Issue #98).** `dsh` ships its

@@ -62,7 +62,7 @@ alike; never `read` a `SKILL.md` path by hand. Read the plan and the project's
 recovery records, and answer
 with a short startup receipt: role, authorization (platforms, count, implement or
 supervise-only), lifecycle target and stop boundary, where those facts came from,
-whether notification binding is in place, and every unresolved conflict. Then,
+and every unresolved conflict. Then,
 **before the first dispatch**, write the working heartbeat prompt to
 `<project>/.kaola/heartbeat-prompt.json` as JSON with a non-empty string field
 named exactly `body` (see `references/heartbeat-skeleton.md`). Any other field
@@ -77,8 +77,8 @@ session has run a turn; a freshly created one carries the bridge `zcode-N` id in
 `session_meta`. No verified id means no `--resume`: start the session without
 history and say so, rather than passing `acp_session_id` or `--continue`.
 
-The beat itself - per-worker `KAOLA_ACP_HEARTBEAT_HOST` binding and its receipt
-check, non-blocking dispatch, the `dispatch_event_cursor` reading anchor, ending
+The beat itself - starting workers from this session, non-blocking dispatch,
+the `dispatch_event_cursor` reading anchor, ending
 the turn as the wait, and reading the worker's real reply when an event wakes you
 - is one procedure, written once in
 [zcode-host-dispatch.md](zcode-host-dispatch.md). Follow it from there rather

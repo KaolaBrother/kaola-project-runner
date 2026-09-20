@@ -297,6 +297,18 @@ no session at all stays silent. `start` keeps what it asked for separately in
 `heartbeat_host_requested`, and a `session-exists` start reports the reused holder's binding,
 so a later environment change or a repeated `start` can never look like a rebinding.
 
+A `start` receipt also says where its request came from (Issue #104): `heartbeat_host_source` is
+`none` (no dispatching holder, no variable), `explicit` (`KAOLA_ACP_HEARTBEAT_HOST` given),
+`dispatcher` (derived from the holder-set `KAOLA_ACP_DISPATCHER` identity fact: `holder_instance_id`,
+`platform`, `repo`, `session`, echoed as `dispatcher`), or `dispatcher-no-carrier` (a non-ZCode
+dispatcher; unbound). On the `dispatcher` path the script verifies the named Host holder is live
+before anything exists and otherwise refuses with `{"result":"refused","reason":
+"heartbeat-host-unresolved"}` (`detail` names the failed check), exit 1; an explicit variable naming a
+different Host than the dispatcher is `heartbeat-host-conflict`. Runner dispatch is ACP-only: a
+`--transport pty` `start` under any dispatcher, or with only `KAOLA_PROJECT_RUNNER_CANONICAL_REPO`
+exported, is refused by `kaola-tmux.sh` with `heartbeat-host-pty-unsupported` before any preflight or
+tmux session. Every refusal carries `mutation_performed: false`; standalone starts are unchanged.
+
 ### `steer` — Agent-chosen steering of a running turn (Issue #65)
 
 `steer --repo ABS_PATH --session NAME [--text TEXT | --stdin] [--steer-mode native|interrupt]

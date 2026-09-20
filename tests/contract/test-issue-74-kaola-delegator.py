@@ -359,8 +359,12 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("After the first Host beat" in handoff_doc, "handoff has a first-beat verification step")
     check("heartbeat-prompt.json" in handoff_doc, "first-beat check names the heartbeat work product")
     check("first worker dispatch receipt" in handoff_one, "first-beat check uses the first dispatch receipt")
-    check("echo `heartbeat_host`" in handoff_one or "echo heartbeat_host" in handoff_one,
-          "first-beat check requires heartbeat_host on the worker start receipt")
+    # Issue #104: the per-worker binding is mechanical (the script refuses an
+    # unbound dispatch-path start), so the Delegator no longer re-checks it.
+    check("echo `heartbeat_host`" not in handoff_one and "echo heartbeat_host" not in handoff_one,
+          "first-beat check no longer asks the Delegator to verify per-worker binding")
+    check("KAOLA_ACP_HEARTBEAT_HOST" not in handoff_doc,
+          "the handoff reference no longer names the per-worker variable")
     check("issue-scoped worker name" in handoff_one, "first-beat check requires an issue-scoped worker name")
     check("do not accept completion" in handoff_one, "mismatch is not accepted as complete")
     check("No new script, gate, ledger, or store" in handoff_one,
@@ -454,8 +458,8 @@ def test_fake_acp_host_worker_event_and_live_status() -> None:
             f"You are the ZCode Host for this run.\n"
             f"platform=zcode session={host} repo={sandbox.repo}\n"
             f"{ORIGINAL_TASK}\n"
-            "Finish planning, worker dispatch, notification binding, heartbeat, "
-            "acceptance, and Workflow close-out internally.\n"
+            "Finish planning, worker dispatch, heartbeat, acceptance, and Workflow "
+            "close-out internally.\n"
         )
         sandbox.dump("02-handoff.txt", handoff)
         send = sandbox.cli("send", "--no-wait", "--text", handoff, session=host)
@@ -479,13 +483,21 @@ def test_fake_acp_host_worker_event_and_live_status() -> None:
         sandbox.dump("05-inner-runner-loaded.txt", f"bytes={len(runner_text.encode())}\n")
 
         worker = f"zcode-KPR-i74-{uuid.uuid4().hex[:6]}"
-        heartbeat = json.dumps({"platform": "zcode", "session": host, "repo": str(sandbox.repo)})
+        # Issue #104: no variable is set. The worker start carries only the
+        # identity fact the Host holder hands its agent (read here from the
+        # Host record), and the script derives and verifies the binding.
+        host_record = json.loads((sandbox.record_dir(host) / "record.json").read_text(encoding="utf-8"))
+        dispatcher = json.dumps({"holder_instance_id": host_record["holder_instance_id"],
+                                 "platform": "zcode", "repo": host_record["repo"],
+                                 "session": host}, sort_keys=True)
         worker_start = sandbox.cli(
             "start", "--mode", "yolo", session=worker,
-            KAOLA_ACP_HEARTBEAT_HOST=heartbeat,
+            KAOLA_ACP_DISPATCHER=dispatcher,
         )
         sandbox.dump("06-worker-start.json", worker_start)
-        check(worker_start.get("heartbeat_host"), "inner worker is heartbeat-bound by the Host role")
+        check(worker_start.get("heartbeat_host"), "inner worker is heartbeat-bound mechanically")
+        check(worker_start.get("heartbeat_host_source") == "dispatcher",
+              f"binding source is the dispatcher, not a variable ({worker_start.get('heartbeat_host_source')})")
         check(worker_start.get("session") != host, "inner worker is a separate session")
         bound = worker_start.get("heartbeat_host") or {}
         check(bound.get("session") == host,

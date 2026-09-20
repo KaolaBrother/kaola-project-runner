@@ -159,12 +159,29 @@ worker agent terminated / worker turn ended (one idle episode)
               (the normal admission path; prompt-in-progress is never bypassed)
 ```
 
-- **Arming.** The ZCode Host agent exports `KAOLA_ACP_HEARTBEAT_HOST`
-  (`{"platform": "zcode", "session": ..., "repo": ...}`) when starting each
-  worker. `kaola-acp start` validates it (ZCode-only, fail closed: a
-  non-ZCode, self-referential, or malformed target is a usage error before
-  anything spawns), resolves the host holder's deterministic socket, and hands
-  the resolved target plus its socket to the worker holder.
+- **Arming (mechanical since Issue #104).** The Host's holder names itself to
+  its agent through `KAOLA_ACP_DISPATCHER` (identity only:
+  `holder_instance_id`, `platform`, `repo`, `session`; the ZCode bridge
+  forwards this one name and still not `KAOLA_ACP_CHILD_RECORD`). A worker
+  `start` run inside that agent derives `KAOLA_ACP_HEARTBEAT_HOST` from it,
+  verifies the Host holder is live (record present, `holder_pid` alive,
+  same `holder_instance_id`, admin socket on disk), resolves the socket, and
+  hands the target plus socket to the worker holder; the receipt says
+  `heartbeat_host_source: "dispatcher"`. If any check fails the start is
+  refused (`result: refused`, `reason: heartbeat-host-unresolved`, exit 1)
+  and nothing is created; an explicit variable naming a *different* Host
+  than the dispatcher is `heartbeat-host-conflict`. An explicit
+  `KAOLA_ACP_HEARTBEAT_HOST` still works as before (`source: "explicit"`,
+  ZCode-only, fail closed with a usage error on a non-ZCode,
+  self-referential, or malformed target); a start under a non-ZCode
+  dispatcher is `dispatcher-no-carrier` and unbound; a start under no holder
+  at all is `none` and unbound, exactly as before. Runner dispatch is
+  ACP-only: a `--transport pty` start under any dispatcher, or under the
+  Orchestrator's canonical-root export alone, is refused by
+  `kaola-tmux.sh` with `heartbeat-host-pty-unsupported`. Transitional: a
+  Host whose holder started on an older build never set the fact, so its
+  workers land on `none` (unbound, not refused) until that Host is
+  restarted on the new build.
 - **The binding fact (Issue #70).** The holder carries the target it really
   adopted in its own `state` and `record.json`, so `start`, `observe` and
   `status` report the running fact rather than the caller's input: a target, an
@@ -175,19 +192,13 @@ worker agent terminated / worker turn ended (one idle episode)
   its start: a later environment change, a `send`, or a repeat `start` (which
   returns `session-exists` together with the binding in force) cannot alter it,
   and there is no rebind operation — recovery is the existing exact
-  `stop`/`start` at a safe idle point. Because an unbound worker wakes nobody,
-  the guidance has the Host recover that case itself, with operations it already
-  has: when the unbound worker is its only wake source it reads the in-flight
-  result inside the beat with the existing bounded `wait --timeout` (a recovery
-  exception, explicitly not the ordinary event wait and not a poll loop), then
-  rebinds by exact `stop`/`start`. Recording the duty in the heartbeat body is
-  bookkeeping, not a trigger; per-worker reading and rebinding is not delegated
-  outward, and only a recovery that cannot be completed is reported as an
-  exception with the decision it needs. The rebinding `start --resume` needs a
-  real native id: for ZCode that `sess_*` is reported in the session's own
-  `native_session_identity` update (lazily, at materialisation) and is never
-  copied into `session_meta`, so the guidance sources it from that event and
-  forbids substituting `acp_session_id` or `--continue`.
+  `stop`/`start` at a safe idle point. A worker started before automatic
+  binding (`heartbeat_host: null`) wakes nobody, so the Host reads its
+  in-flight result inside the beat with the existing bounded `wait --timeout`
+  (a recovery exception, not the ordinary event wait and not a poll loop),
+  then exact-stops and restarts it at that idle point; the new `start` binds
+  by itself. Only a refused `start` or a session that is gone is reported as
+  an exception with the decision it needs.
 - **Events.** `terminated` fires once from the worker holder's existing
   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
   out the send; `idle` fires once per ended turn with the agent still alive
@@ -307,9 +318,9 @@ worker agent terminated / worker turn ended (one idle episode)
 - **The Host must end its turn (Issue #65).** Staging only clears at a turn
   boundary, so a Host that holds its turn open with `sleep`, a poll loop, or a
   blocking `wait` is exactly what keeps its own events undelivered. The
-  post-dispatch contract is therefore: bind `KAOLA_ACP_HEARTBEAT_HOST` per
-  worker `start`, check the receipt's `heartbeat_host` fact on every worker
-  including reused ones, dispatch with
+  post-dispatch contract is therefore: start workers from the Host's own
+  session (the binding is derived and verified by the script), read the
+  receipt's `heartbeat_host` fact, dispatch with
   `send --no-wait` and read the acceptance receipt (`in_progress` is accepted,
   not finished), settle the rest of the beat, update the one
   `.kaola/heartbeat-prompt.json`, then end the reply naturally — there is no

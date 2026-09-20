@@ -46,6 +46,7 @@ MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 # Enough for a typed refusal; a refusal that needs more than this is prose.
 REFUSAL_RECEIPT_BYTES = 4096
 CANONICAL_KEY = "KAOLA_PROJECT_RUNNER_CANONICAL_REPO"
+DISPATCHER_KEY = "KAOLA_ACP_DISPATCHER"
 
 PTY_PLATFORM = "codex"
 ACP_PLATFORM = "grok"
@@ -114,6 +115,9 @@ class CanonicalRootFixture(unittest.TestCase):
                 timeout: float = 60) -> subprocess.CompletedProcess:
         env = dict(os.environ)
         env.pop(CANONICAL_KEY, None)
+        # Issue #104: a suite run from inside a Runner-managed agent inherits
+        # the holder's dispatcher fact; each case here declares its own.
+        env.pop(DISPATCHER_KEY, None)
         if bound is not None:
             env[CANONICAL_KEY] = bound
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
@@ -171,34 +175,128 @@ class CanonicalRootFixture(unittest.TestCase):
         self.assertIn("tmux executable not found", result.stdout + result.stderr,
                       "the invocation must reach ordinary PTY transport setup")
 
+    def assert_accepted_under_binding(self, result: subprocess.CompletedProcess,
+                                      expected_repo: str | None = None) -> dict:
+        """The guard accepted (and completed) the root. Since Issue #104 a PTY
+        start in Orchestrator context is then refused as ACP-only by the gate
+        that runs right after the guard, so acceptance is proven by that
+        refusal carrying the bound root - no tmux, process, or record either way."""
+        self.assert_passed_guard(result)
+        receipt = self.assert_refused(result, "heartbeat-host-pty-unsupported")
+        self.assertEqual(receipt.get("canonical_repo"), str(self.main_repo), receipt)
+        if expected_repo is not None:
+            self.assertEqual(receipt.get("repo"), expected_repo, receipt)
+        return receipt
+
+
+class TestRunnerDispatchIsAcpOnly(CanonicalRootFixture):
+    """Issue #104 (design #99 §c.4, ruled 2026-09-19): on the Project Runner
+    dispatch path a `--transport pty` start is refused by the shared entrypoint
+    before any preflight, tmux session, or record exists. The path is evident
+    from a holder's dispatcher fact (any platform) or from the Orchestrator's
+    canonical-root export alone. Standalone PTY use is unchanged, as is every
+    other command on an existing PTY session. Cases N6, N6b, N6c, N6d."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.ZCODE_DISPATCHER = json.dumps({
+            "holder_instance_id": "0" * 32, "platform": "zcode",
+            "repo": str(cls.main_repo), "session": "zcode-kaola-host"})
+        cls.OTHER_DISPATCHER = json.dumps({
+            "holder_instance_id": "0" * 32, "platform": "claude-code",
+            "repo": str(cls.main_repo), "session": "claude-host"})
+
+    def assert_pty_refused(self, result: subprocess.CompletedProcess) -> dict:
+        receipt = self.assert_refused(result, "heartbeat-host-pty-unsupported")
+        self.assertEqual(receipt.get("transport", {}).get("selected"), "pty", receipt)
+        self.assertIn("ACP-only", receipt.get("detail", ""), receipt)
+        tmux = subprocess.run(["tmux", "has-session", "-t", f"={self.session}"],
+                              capture_output=True)
+        self.assertNotEqual(tmux.returncode, 0, "no tmux session may exist after the refusal")
+        return receipt
+
+    def test_n6_pty_start_under_a_zcode_dispatcher_is_refused(self) -> None:
+        result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.main_repo), bound=None,
+                              env_extra={DISPATCHER_KEY: self.ZCODE_DISPATCHER})
+        self.assert_pty_refused(result)
+
+    def test_n6b_pty_start_under_a_non_zcode_dispatcher_is_refused_too(self) -> None:
+        result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.main_repo), bound=None,
+                              env_extra={DISPATCHER_KEY: self.OTHER_DISPATCHER})
+        self.assert_pty_refused(result)
+
+    def test_n6c_pty_start_with_only_the_canonical_root_export_is_refused(self) -> None:
+        result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.main_repo),
+                              bound=str(self.main_repo))
+        receipt = self.assert_pty_refused(result)
+        # The canonical-root guard ran and accepted first: the refusal names it.
+        self.assertEqual(receipt.get("canonical_repo"), str(self.main_repo), receipt)
+        # An omitted --repo is completed by that guard, then refused the same way.
+        result = self.run_cli(PTY_PLATFORM, "start", bound=str(self.main_repo))
+        receipt = self.assert_pty_refused(result)
+        self.assertEqual(receipt.get("repo"), str(self.main_repo), receipt)
+
+    def test_a_drifted_root_keeps_its_own_refusal_ahead_of_the_pty_gate(self) -> None:
+        result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.child_a),
+                              bound=str(self.main_repo))
+        self.assert_refused(result, "canonical-root-mismatch")
+
+    def test_n6d_standalone_pty_start_proceeds_exactly_as_today(self) -> None:
+        result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.main_repo), bound=None)
+        self.assert_reached_pty_transport(result)
+        self.assertNotIn("heartbeat-host", result.stdout + result.stderr)
+
+    def test_other_pty_commands_under_a_dispatcher_are_not_gated(self) -> None:
+        for command in ("status", "observe", "stop"):
+            with self.subTest(command=command):
+                result = self.run_cli(PTY_PLATFORM, command, "--repo", str(self.main_repo),
+                                      bound=None,
+                                      env_extra={DISPATCHER_KEY: self.ZCODE_DISPATCHER})
+                self.assertNotIn("heartbeat-host", result.stdout + result.stderr)
+                self.assertIn("tmux executable not found", result.stdout + result.stderr)
+
+    def test_acp_start_under_a_dispatcher_passes_the_shell_to_the_acp_resolver(self) -> None:
+        """The shell gate is PTY-only: an ACP start reaches kaola-acp.py, whose
+        own resolver refuses this unverifiable dispatcher (no Host record) with
+        the typed ACP reason and exit 1, creating nothing."""
+        result = self.run_cli(ACP_PLATFORM, "start", "--repo", str(self.main_repo), bound=None,
+                              transport="acp",
+                              env_extra={DISPATCHER_KEY: self.ZCODE_DISPATCHER})
+        receipt = self.assert_refused(result, "heartbeat-host-unresolved")
+        self.assertEqual(result.returncode, 1, receipt)
+        self.assertEqual(receipt.get("heartbeat_host_source"), "dispatcher", receipt)
+        self.assertEqual(receipt.get("dispatcher", {}).get("session"), "zcode-kaola-host", receipt)
+        self.assertIn("record is missing", receipt.get("detail", ""), receipt)
+
 
 class TestBindingCompletesAndAccepts(CanonicalRootFixture):
 
     def test_omitted_repo_is_completed_from_the_binding(self) -> None:
         """No --repo at all: the bound root is used, not the current directory."""
         result = self.run_cli(PTY_PLATFORM, "start", bound=str(self.main_repo))
-        self.assert_reached_pty_transport(result)
+        self.assert_accepted_under_binding(result, expected_repo=str(self.main_repo))
 
     def test_explicit_repo_equal_to_the_binding_is_accepted(self) -> None:
         result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.main_repo),
                               bound=str(self.main_repo))
-        self.assert_passed_guard(result)
+        self.assert_accepted_under_binding(result, expected_repo=str(self.main_repo))
 
     def test_symlink_spelling_resolving_to_the_binding_is_accepted(self) -> None:
         result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.symlink),
                               bound=str(self.main_repo))
-        self.assert_passed_guard(result)
+        self.assert_accepted_under_binding(result, expected_repo=str(self.main_repo))
 
     def test_binding_spelled_through_a_symlink_accepts_the_real_root(self) -> None:
         result = self.run_cli(PTY_PLATFORM, "start", "--repo", str(self.main_repo),
                               bound=str(self.symlink))
-        self.assert_passed_guard(result)
+        self.assert_accepted_under_binding(result, expected_repo=str(self.main_repo))
 
     def test_dotted_path_spelling_resolving_to_the_binding_is_accepted(self) -> None:
         spelling = str(self.main_repo / "sub" / "..") + "/./"
         result = self.run_cli(PTY_PLATFORM, "start", "--repo", spelling,
                               bound=str(self.main_repo))
-        self.assert_passed_guard(result)
+        self.assert_accepted_under_binding(result, expected_repo=str(self.main_repo))
 
 
 class TestBindingRefusesDrift(CanonicalRootFixture):

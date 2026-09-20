@@ -3,9 +3,11 @@
 
 The delivery here is instruction an Agent can act on without reading Python:
 the outer Agent must hand the Host its real Runner identity and keep the Host
-while workers are in flight; the Host must bind `KAOLA_ACP_HEARTBEAT_HOST` per
-worker start and check the receipt, dispatch non-blocking, update the one
-heartbeat prompt, then end the turn naturally instead of sleeping or polling;
+while workers are in flight; a worker `start` run from the Host binds itself
+(Issue #104, `KAOLA_ACP_HEARTBEAT_HOST` derived from the holder's dispatcher
+fact) and the Host reads the receipt's binding fact, dispatches non-blocking,
+updates the one heartbeat prompt, then ends the turn naturally instead of
+sleeping or polling;
 and after an event it must read the worker's real reply through that worker's
 own Skill. These contracts pin that wording into the generated surface, so a
 template edit cannot quietly drop it.
@@ -84,10 +86,14 @@ class HostDispatchContract(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, self.ref)
 
-    def test_reference_binds_the_carrier_with_a_runnable_example(self) -> None:
-        self.assertIn("KAOLA_ACP_HEARTBEAT_HOST='{\"platform\":\"zcode\"", self.ref)
+    def test_reference_starts_the_worker_from_the_host_with_a_runnable_example(self) -> None:
+        # Issue #104: the binding is mechanical; the reference shows the start
+        # without the variable and the receipt that proves the source.
+        self.assertNotIn("KAOLA_ACP_HEARTBEAT_HOST='{", self.ref)
+        self.assertIn('"heartbeat_host_source": "dispatcher"', self.ref)
         self.assertIn('"session":"zcode-kaola-host"', self.ref)
         self.assertIn("start --repo", self.ref)
+        self.assertIn("heartbeat-host-pty-unsupported", self.ref)
         # the installed wrapper is platform-pinned: a platform argument in these
         # examples is a real error a live Host will hit (and did, on 2026-09-18)
         self.assertNotIn('"$W" codex ', self.ref)
@@ -142,6 +148,7 @@ class HostDispatchContract(unittest.TestCase):
         # Issue #70: the start receipt separates what was asked for from the
         # binding the holder really adopted, which is read back from its state.
         self.assertIn('receipt["heartbeat_host_requested"] = heartbeat_host', acp)
+        self.assertIn('receipt["heartbeat_host_source"] = resolution["source"]', acp)
         self.assertIn("attach_binding_fact(receipt, state)", acp)
         self.assertIn('"kaola-host-notify/1', holder)
         self.assertIn('".kaola" / "heartbeat-prompt.json"', holder.replace('"', '"'))

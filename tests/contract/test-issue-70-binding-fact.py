@@ -200,21 +200,22 @@ def test_recovery_is_internal_bounded_and_only_exceptions_go_outward() -> None:
     flat_ref = re.sub(r"\s+", " ", ref)
     flat_startup = re.sub(r"\s+", " ", startup)
 
-    check("Recovery is yours, along the boundary you already have — not work to push "
-          "onto the Agent that delegated to you" in flat_ref,
-          "recovery stays inside the Runner instead of being pushed outward")
-    check("a heartbeat note wakes nobody" in flat_ref,
-          "the reference denies that a recorded duty is a wake-up")
-    check("read its result here with the bounded `wait --timeout <seconds>`" in flat_ref,
+    # Issue #104: the binding is mechanical, so the reference keeps only the
+    # transitional case (a worker started before automatic binding) and the
+    # same recovery: bounded read, then exact stop/start at the idle point.
+    check("A worker started before automatic binding shows `heartbeat_host: null`" in flat_ref,
+          "the reference scopes a null binding to the pre-change worker")
+    check("read its in-flight result with the bounded `wait --timeout <seconds>`" in flat_ref,
           "the reference reuses the existing bounded wait to read the in-flight result")
-    check("That bounded read is the recovery exception" in flat_ref
-          and "never the ordinary wait, never a poll loop" in flat_ref,
+    check("the recovery exception, never the ordinary wait or a poll loop" in flat_ref,
           "the bounded read is scoped as an exception, not the event wait")
-    check("Rebind at that safe idle point" in flat_ref and "exact `stop`" in flat_ref,
+    check("then exact `stop` and `start` it at that idle point" in flat_ref,
           "rebinding stays the existing exact stop/start")
-    check("report the exception and the decision you need" in flat_ref
-          and "A heartbeat note claiming a wait you lack is no report" in flat_ref,
-          "only an unresolvable case is reported outward, and never as a fake wait")
+    check("A refused `start`, or a session that is gone, is the exception you report "
+          "with the decision you need" in flat_ref,
+          "only an unresolvable case is reported outward")
+    check("binds the worker to you and refuses" in flat_ref,
+          "the reference says the start binds by itself and refuses instead of starting unbound")
     check("Exceptions reach you; worker handling does not" in flat_startup
           and "Do not take that over session by session" in flat_startup,
           "startup keeps per-worker handling inside the Host")
@@ -277,14 +278,18 @@ def test_zcode_native_resume_id_comes_from_the_identity_event() -> None:
                    / "host-startup.md").read_text(encoding="utf-8")
         flat_ref = re.sub(r"\s+", " ", ref)
         flat_startup = re.sub(r"\s+", " ", startup)
-        check("ZCode reports `sess_…` in that session's `native_session_identity` event"
-              in flat_ref and "not `session_meta`" in flat_ref,
-              "the recovery step sources the native id from the identity event")
-        check("never `acp_session_id` or `--continue` instead" in flat_ref,
-              "the recovery step forbids substituting another id")
+        # Issue #104 (design #99 §f.2): the sourcing rule is written once, in
+        # host-startup; the dispatch reference no longer repeats it.
+        check("ZCode reports its `sess_…` in that session's own `native_session_identity` event"
+              in flat_startup and "no native id at all" in flat_startup,
+              "the startup reference sources the native id from the identity event")
+        check("rather than passing `acp_session_id` or `--continue`" in flat_startup,
+              "the startup reference forbids substituting another id")
         check("only once the session has run a turn" in flat_startup
               and "No verified id means no `--resume`" in flat_startup,
               "startup carries the platform sourcing rule")
+        check("`sess_…`" not in flat_ref or "native_session_identity" not in flat_ref,
+              "the dispatch reference does not carry a second copy of the sourcing rule")
     finally:
         sandbox.cleanup()
 

@@ -78,9 +78,9 @@ an inner worker it dispatches, ZCode or not, is a separate session with its own
 record entry and process group - an inner stop never reaches the outer Host, and
 the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop; it
 cannot discover its own `platform`/`session`/`repo` - give them in its first
-prompt. Each beat: set `KAOLA_ACP_HEARTBEAT_HOST` (a JSON object naming the Host)
-on every worker `start`, verify the receipt's `heartbeat_host`, dispatch with
-`send --no-wait`
+prompt. Each beat: a worker `start` run from this Host binds to it by itself
+(`KAOLA_ACP_HEARTBEAT_HOST` is derived; the receipt's `heartbeat_host` names you,
+and a refused `start` opened nothing and names why), dispatch with `send --no-wait`
 (`in_progress` is accepted, not done) keeping its `dispatch_event_cursor` as the
 reading anchor, update the project's `.kaola/heartbeat-prompt.json`, then **end
 the turn normally** - that is the wait. Never sleep, poll, blocking-`wait`, or

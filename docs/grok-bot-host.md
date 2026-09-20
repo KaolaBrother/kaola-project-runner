@@ -270,7 +270,7 @@ reference now carry no account-UI discussion at all, because the Agent needs onl
 the one save, the target binding, the locator, the read-only preflight, and the
 real-use boundary.
 
-Heartbeat, worker dispatch, notification binding, and acceptance-before-finalize
+Heartbeat, worker dispatch, and acceptance-before-finalize
 belong to Project Runner inside the ZCode Host. The outer Kaola-Delegator Skill
 does not copy that engine, does not create a Routine, and does not dispatch
 workers. An older in-flight Grok Bot Project Runner account Skill is not renamed,

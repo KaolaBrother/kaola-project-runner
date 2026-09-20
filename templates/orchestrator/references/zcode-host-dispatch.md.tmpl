@@ -15,69 +15,46 @@ commands below take **no** platform argument.
 
 ## 2. ZCode Host Agent — one beat
 
-### Bind the notification target on every worker `start`
-
-`KAOLA_ACP_HEARTBEAT_HOST` is read by the **worker's** `start` command, and only
-there: a JSON object naming *you*, the Host, set on that one command:
+### Start a worker from this Host
 
 ```bash
 W="/abs/path/to/codex-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
 WORK_REPO="/abs/path/to/project"      # the worker's repo
-HOST_REPO="/abs/path/to/project"      # the Host's own
-KAOLA_ACP_HEARTBEAT_HOST='{"platform":"zcode","session":"zcode-kaola-host","repo":"'"$HOST_REPO"'"}' \
-  "$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser
+"$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser
 ```
 
-`platform` must be `zcode`, `session`/`repo` the Host's own, never the worker's;
-anything else fails the start closed rather than dropping the carrier silently. Exporting it, or setting it on a later `send`,
-binds nothing. Worker names are issue-scoped:
-`<platform>-<CODE>-i<ISSUE>-<purpose>`.
+Run `start` from your own session: it binds the worker to you and refuses
+(`result: refused`, `reason: heartbeat-host-…`, exit 1) instead of starting
+unbound. `--transport pty` is refused the same way
+(`heartbeat-host-pty-unsupported`): Runner dispatch is ACP-only. Worker names
+are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
-### Verify the binding in force, new worker or reused
+### Read the binding in force, new worker or reused
 
 ```json
 "heartbeat_host_known": true,
-"heartbeat_host": {"platform":"zcode","session":"zcode-kaola-host","repo":"…","socket":"…"}
+"heartbeat_host": {"platform":"zcode","session":"zcode-kaola-host","repo":"…","socket":"…"},
+"heartbeat_host_source": "dispatcher",
+"dispatcher": {"holder_instance_id":"…","platform":"zcode","repo":"…","session":"zcode-kaola-host"}
 ```
 
 `heartbeat_host` is the running holder's own binding; `heartbeat_host_requested`
-is only the request. Check the fact's `session`/`repo` are **yours**; `observe`
-reports it any time, so verify reused workers too.
+is only the request; `observe` reports the binding any time.
 
-- `heartbeat_host: null` (known) — an ordinary unbound worker: legitimate, never
-  wakes you; another Host's binding wakes that Host.
 - `heartbeat_host_known: false` — a holder or record older than the field:
   unknown; treat it as unbound.
-- `"error": {"code": "session-exists"}` — you reused a live holder and bound
-  nothing; the `heartbeat_host` beside it is what is in force.
+- `"error": {"code": "session-exists"}` — you reused a live holder, which keeps
+  its binding; a `null` there predates automatic binding.
 
-### A missing or wrong binding
+### A worker without a binding
 
-Repeating `start` or `send` never rebinds a live holder. Recovery is yours,
-along the boundary you already have — not work to push onto the Agent that
-delegated to you:
-
-1. **Keep the in-flight work** — it runs on, readable with `observe` and
-   `capture` from your anchor. Cancel nothing.
-2. **Recover in this beat.** Another bound worker or confirmed wake source: end
-   the turn and read this one on that beat. The unbound worker is your only
-   wake source — ending the turn waits on nothing, a heartbeat note wakes
-   nobody — so read its result here with the bounded `wait --timeout
-   <seconds>` (`observe`/`capture` once its turn ended). That bounded read is
-   the recovery exception — never the ordinary wait, never a poll loop.
-3. **Rebind at that safe idle point** — turn ended, nothing in flight, result
-   read: exact `stop` of that one session, `start` again with the variable, and
-   verify the new receipt. `--resume` needs the real native id — ZCode reports
-   `sess_…` in that session's `native_session_identity` event (via `capture`),
-   not `session_meta`. No verified id: restart without history and say so, never
-   `acp_session_id` or `--continue` instead. The loop is then back: dispatch, end
-   the turn, wake on the event.
-4. **Never** auto-cancel, re-send work you cannot show was dropped, switch
-   platform, or stop the Host to force a wake-up.
-
-Only if that cannot be completed — the bounded read hits its deadline, the
-session is gone, the rebinding `start` refuses — report the exception and the
-decision you need. A heartbeat note claiming a wait you lack is no report.
+A worker started before automatic binding shows `heartbeat_host: null`: read
+its in-flight result with the bounded `wait --timeout <seconds>` (the recovery
+exception, never the ordinary wait or a poll loop), then exact `stop` and
+`start` it at that idle point. A refused `start`, or a session that is gone, is
+the exception you report with the decision you need. Never auto-cancel, re-send
+work you cannot show was dropped, switch platform, or stop the Host to force a
+wake-up.
 
 ### Dispatch without blocking
 
@@ -163,8 +140,8 @@ Delivery rules you can rely on:
   with the full current body.
 - Confirmation follows the notification turn *completing*; after a resume,
   unconfirmed events are redelivered at least once — keep each pass idempotent.
-- Dispatch failure, unknown acceptance, or an unverified binding means you are
-  **not** reliably event-driven: recover it this beat, or report the exception.
+- Dispatch failure or unknown acceptance means you are **not** reliably
+  event-driven: recover it this beat, or report the exception.
 
 Steering (`steer`, where supported) is a separate tool and does not alter this
 wake path.
