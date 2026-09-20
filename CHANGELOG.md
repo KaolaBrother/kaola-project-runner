@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 — 2026-09-20
 
 - **Worker binding on the Project Runner dispatch path is mechanical (Issue #104, design
   Issue #99).** Every holder now names itself to the agent it hosts through one identity fact,
@@ -19,6 +19,36 @@
   the Kaola-Delegator Skill and its handoff no longer instruct a manual bind or a per-worker
   binding check. Transitional: a ZCode Host whose holder started on an older build never set
   the fact, so its workers start unbound (not refused) until that Host is restarted on this build.
+
+- **The `kimi-cli` process and TUI matchers accept the Kimi Code 2.x pane-command shape
+  (Issue #103).** Kimi Code 2.x ships as a Node SEA standalone Mach-O, so the tmux pane command
+  (kernel `p_comm`) is `kimi`, not `node`, while the rewritten process title is still exactly
+  `kimi-code`. `adapter_process_matches` and `adapter_detect_tui` now accept `kimi` alongside the
+  legacy `node`, with both conditions still required and both still exact. Version stamps move to
+  `cli=2.0.2` only where that was verified live on this machine.
+
+- **`locate --worker zcode --session` reports ACP holder aliveness beside the tmux-only
+  `session.present` (Issue #102).** `session.present` comes from `tmux has-session` alone, so a
+  live ZCode Host — an ACP holder with no same-named tmux session — read as `present=false`
+  and looked like a Host that was down. The locator now also reads the one holder record that
+  `kaola-acp status` reads, at the same exact path, and adds `session.acp_holder_alive`: `true`
+  when that record names a live `holder_pid`, `false` when the record is absent, unreadable, or
+  names a dead pid, and `null` when no `--project` checkout is named so the path cannot be formed.
+  One exact path, no scan, no new registry, no schema version; tmux-only workers and calls without
+  `--worker` keep a byte-identical `session = {name, present}`.
+
+- **`install-local.sh` carries no here-document or here-string, and every validate suite runs
+  under a watchdog (Issue #101).** A `./scripts/validate.sh` run hung inside `place_staged`:
+  bash 5.3 serves a here-document body that fits `HEREDOC_PIPESIZE` through a pipe the forked
+  child fills before exec, and under pipe-KVA pressure macOS hands out a 512-byte pipe, so a
+  1066-byte body blocks in `write()` forever — the Issue #78 shape. All eleven feed sites are
+  now structural: the six `python3 -` feeds became `python3 -c '<same program>' <same argv>`,
+  the usage text is printed with `printf`, and the four `read <<<` here-strings read from a process
+  substitution; programs, argv order, exit codes, and error strings are unchanged, and `--help`
+  output is byte-identical. Alongside it, `scripts/validate-watchdog.sh` wraps every suite with a
+  600 s budget: on a trip it records the process tree, `lsof -p`, and a `/usr/bin/sample` of the
+  deepest childless process to a receipt that survives cleanup, kills the tree deepest-first,
+  names the receipt in the `FAILED` line, and exits 124. macOS ships no `timeout(1)`.
 
 ## 0.5.1 — 2026-09-20
 
