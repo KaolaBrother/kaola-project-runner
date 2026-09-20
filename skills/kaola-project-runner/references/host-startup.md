@@ -83,6 +83,13 @@ their `start` would be the copy without automatic binding. Nothing is recoverabl
 from inside the Host — report it with the `worker_skill_skew` paths and ask for
 the install to be refreshed from the accepted checkout.
 
+The same `start` pinned this Host's model (Issue #108): a
+`zcode-<PROJECT_CODE>-orchestrator-<purpose>` session must run GLM 5.3 at effort
+`max`, applied then verified against the holder's advertised config and reported
+in the receipt's `host_selection`. A `host-model-mismatch` /
+`host-model-unverified` refusal is the outer Agent's evidence — a Host reading
+this was verified before it ran.
+
 The beat itself - starting workers from this session, non-blocking dispatch,
 the `dispatch_event_cursor` reading anchor, ending
 the turn as the wait, and reading the worker's real reply when an event wakes you

@@ -518,6 +518,42 @@ steer forwards the guide into the running turn and no re-invocation is
 claimed there (the interrupt resend's first line is contract-tested; its
 `Skill` tool_call follows the same verified entry mechanism).
 
+## The Host's model is a dispatch requirement (Issue #108)
+
+A ZCode Host is the control plane: its model and effort are dispatch
+requirements, not preferences. A `start` whose Runner session name has the
+documented Host shape `zcode-<PROJECT_CODE>-orchestrator-<purpose>`
+(`templates/kaola-delegator/references/handoff.md`) therefore enforces
+**GLM 5.3 at effort `max`** mechanically, on a fresh start and `--resume`
+alike:
+
+- An explicit `--model`/`--effort` that contradicts the requirement is a
+  typed pre-mutation refusal — `{"result": "refused", "reason":
+  "host-model-mismatch"}`, exit 1, nothing created (no record directory, no
+  holder socket, no tmux session) — and `host_selection` names the required
+  and requested values. An absent selection is never refused: the pin
+  supplies it.
+- Once the session reports ready, the pin is applied through the ordinary
+  ACP config options (`model`, `thought`) and then **verified**: a fresh
+  holder `state` read must advertise model `…\GLM-5.3` and thoughtLevel
+  `max` as `currentValue`. A session that cannot prove the pair — for
+  example a Coding Plan that does not offer GLM 5.3 — is stopped on the
+  spot and the start is refused: `{"result": "refused", "reason":
+  "host-model-unverified"}` with `host_session_stopped`, `residual_pids`,
+  `holder_alive`, and the effective values it actually found.
+- A passing start reports `host_selection` — required, requested, applied,
+  and verified effective values — so the receipt itself is the evidence.
+
+The discriminator is the session-name shape, not a flag, so forgetting an
+opt-in marker cannot open a wrong-model Host. Every new Host is started
+under the standard name; a live nonstandard Host (`zcode-kaola-host`) is
+attached in place and never re-`start`ed — it keeps the selection its own
+start proved, and upgrading it means exact-stop plus a fresh
+standard-named start. The issue-worker marker `-i<digits>-` wins over a
+purpose token that happens to contain "orchestrator", so an ordinary worker
+is never pinned; PTY sessions never reach the check because it lives in the
+ACP `start` path only.
+
 ## Verification
 
 - `python3 tests/contract/test-zcode-acp-contract.py` — adapter contract, env
@@ -536,7 +572,10 @@ claimed there (the interrupt resend's first line is contract-tested; its
   (later overflow still wakes, idle-full delivers now, restore takes max
   generation, exact-stop resume, remind-only), 64KiB prompt-file bound,
   ZCode-only gates, and no periodic trigger without worker events. Also the
-  Issue #106 unreadable-root refusal.
+  Issue #106 unreadable-root refusal and the Issue #108 Host model pin:
+  explicit mismatch refused before anything exists, absent selection pinned
+  to GLM 5.3 + max and verified, an unprovable pin stopped and refused, and
+  worker names never pinned.
 - `bash tests/contract/test-installer-runtimes.sh` — `--runtime zcode` and
   workspace `.zcode/skills` installs.
 - `python3 tests/contract/test-issue-51-runner-integration.py` — ZCode worker

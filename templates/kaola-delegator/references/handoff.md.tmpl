@@ -27,9 +27,9 @@ start receipts, and Host events; never synthesize one from another:
 | `acp_session_id` | start / `status` receipt | ACP bridge id |
 | native `sess_*` | `native_session_identity.nativeSessionId` | `start --resume` after the holder stopped |
 
-`session_meta` does not automatically hold `sess_*` — a successful `start`
-has no `native_session_identity` before the first prompt, and a stopped
-app-server does not auto-restore it.
+`session_meta` does not automatically hold `sess_*`: `start` has no
+`native_session_identity` before the first prompt; a stopped app-server
+does not restore it.
 
 ## Grok Bot co-location (account bridge only)
 
@@ -93,7 +93,9 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    session: do not re-ask the full set.
 5. With step 4 complete and no live Host: start once under `$HOST` at
    `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/`holder_instance_id`
-   from the start receipt, then send the first handoff.
+   from the start receipt, then send the first handoff. `$HOST` `start` /
+   `--resume` pins GLM 5.3 + effort `max`, verified in `host_selection`;
+   a `host-model-*` refusal escalates.
 
 ## Handoff and updates
 
