@@ -30,7 +30,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-Launch kimi --auto from the canonical repository root. ACP start sets mode=yolo. Workspace-trust remains a separate TUI surface.
+Launch kimi --yolo from the canonical repository root. On Kimi Code CLI 2.x --yolo is Ask When Needed (routine edits and commands auto-run; risky actions, questions, and plans still ask) and is mutually exclusive with --auto (Never Ask), which the Runner no longer passes; --yes/--auto-approve are hidden aliases of --yolo. Runner --resume renders --session <session-id> (-r/--resume is a hidden alias) and Runner --continue renders --continue; 2.x rejects --session together with --continue at startup because both mean resume, so the Runner sends at most one. Thinking effort travels through thinking.effort (env KIMI_MODEL_THINKING_EFFORT: low/medium/high/xhigh/max), not a reasoning_effort wire parameter; ACP start sets mode=yolo and applies effort through the ACP thinking config option. Workspace-trust remains a separate TUI surface.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

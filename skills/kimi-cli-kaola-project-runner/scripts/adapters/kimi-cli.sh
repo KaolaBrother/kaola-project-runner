@@ -46,9 +46,13 @@ adapter_build_launch() {
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
   if [[ -n "$RESOLVED_MODEL_ID" ]]; then ADAPTER_LAUNCH_ARGS+=(--model "$RESOLVED_MODEL_ID"); fi
-  # Issue #22: `kimi --auto` is Never Ask (skip-all). `--yolo` still asks on
-  # risky actions. Workspace-trust remains a separate TUI surface.
-  ADAPTER_LAUNCH_ARGS+=(--auto)
+  # Issue #22: Kimi Code CLI 2.x makes `--yolo` and `--auto` mutually exclusive
+  # permission modes and rejects both together at startup. `--auto` is Never Ask;
+  # `--yolo` is Ask When Needed — routine edits and commands run unattended while
+  # risky actions, questions, and plans still ask. The Runner follows `--yolo` on
+  # PTY (the visible flag, not the hidden `--yes`/`--auto-approve` aliases); the
+  # ACP start is unchanged at mode=yolo. Workspace-trust stays a separate TUI surface.
+  ADAPTER_LAUNCH_ARGS+=(--yolo)
 }
 
 adapter_prepare_model_environment() {

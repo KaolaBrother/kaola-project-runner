@@ -287,8 +287,8 @@ else
         grep -Eq -- 'fastMode.{0,6}true' <<<"$log_text" && \
           fail "test_${platform}_fast_off_no_opt_in" "No-flag Claude PTY start must not enable fastMode: $log_text"
       else
-        grep -Fq -- '--auto' <<<"$log_text" || \
-          fail "test_${platform}_no_flag_skip_all" "No-flag Kimi PTY start must launch with --auto: $log_text"
+        grep -Fq -- '--yolo' <<<"$log_text" || \
+          fail "test_${platform}_no_flag_skip_all" "No-flag Kimi PTY start must launch with --yolo: $log_text"
       fi
     elif [[ "$platform" == opencode ]]; then
       grep -Fq "args=$canonical_repo --mini --auto" <<<"$log_text" || fail "test_${platform}_new_launch" "OpenCode launch lacks repo --mini --auto shape: $log_text"

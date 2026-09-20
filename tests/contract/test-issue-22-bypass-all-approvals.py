@@ -6,7 +6,7 @@ ACP and PTY/tmux. Known knobs:
 
 - Claude PTY: ``permission_mode=bypassPermissions``
 - Devin PTY: ``permission_mode=dangerous`` (workspace-trust false is not enough)
-- Kimi PTY: ``--auto``; Kimi ACP: ``mode=yolo``
+- Kimi PTY: ``--yolo``; Kimi ACP: ``mode=yolo``
 - Devin ACP: ``mode=bypass``
 - Cursor PTY/ACP: ``--yolo``
 - OpenCode PTY: ``--auto``
@@ -68,8 +68,8 @@ class Issue22StaticSkipKnobs(unittest.TestCase):
         self.assertIn('--permission-mode "$permission_mode"', body)
         self.assertIn("--respect-workspace-trust false", body)
 
-    def test_kimi_pty_launch_passes_auto(self) -> None:
-        self.assertIn("ADAPTER_LAUNCH_ARGS+=(--auto)", KIMI_ADAPTER.read_text(encoding="utf-8"))
+    def test_kimi_pty_launch_passes_yolo(self) -> None:
+        self.assertIn("ADAPTER_LAUNCH_ARGS+=(--yolo)", KIMI_ADAPTER.read_text(encoding="utf-8"))
 
     def test_cursor_pty_launch_passes_yolo(self) -> None:
         self.assertIn("ADAPTER_LAUNCH_ARGS+=(--yolo)", CURSOR_ADAPTER.read_text(encoding="utf-8"))
