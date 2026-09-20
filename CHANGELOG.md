@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+- **An unreadable ZCode discovery root is a typed refusal, not a traceback (Issue #106).** The
+  Issue #105 build-skew scan listed each default discovery root with `root.iterdir()` and `is_file()`
+  without handling `OSError`, so a permission-denied or otherwise unlistable root (for example a
+  `chmod 000` `~/.agents/skills`) made a ZCode `start` die with a Python traceback and exit 1 — no
+  typed receipt, no actionable message. A root that exists but cannot be listed now makes the same
+  comparison impossible and answers `{"result": "refused", "reason": "worker-skill-root-unreadable"}`
+  with exit 1 and nothing created, naming every unreadable root in `worker_skill_unreadable_roots`
+  and in `detail`. The refusal keeps the Issue #105 shape (`result: refused`,
+  `mutation_performed: false`, `mutation_status: not_started`) and applies to all ten generated
+  worker copies.
+
+- **Installed-Skill prose skew is mechanically verified instead of diffed by hand (Issue #107).**
+  The Issue #105 scan hashes only the shared worker scripts, so a stale main Skill
+  (`kaola-project-runner/SKILL.md` + references) or stale worker `SKILL.md` prose in an installed
+  tree was caught only by the manual step-3 `diff -rq`. `render-skills.py --verify-install DIR` now
+  compares every generated Skill present under `DIR` against a fresh render of the accepted
+  checkout — every byte, `SKILL.md` and `references/` included — and prints one JSON receipt
+  (`result: aligned|refused`, `reason: skill-install-skew`, a `skew` list naming each `stale` /
+  `missing` / `unexpected` path with both 12-hex digests), exiting 1 on any skew. It is read-only,
+  skips a Skill that is not installed so a partial install verifies cleanly, and replaces the manual
+  `diff -rq` in `docs/zcode-host.md`. The runtime `start` scan stays scripts-only because a worker
+  Skill copy carries only its own rendered prose; the accepted checkout is the one place every
+  Skill's render is available. `skills.roots` / `plugins.dirs` / `extraRoots` remain out of scope.
+
 ## 0.5.3 — 2026-09-20
 
 - **A pin upgrade is not finished until the Skill install is refreshed, and a Host `start` now

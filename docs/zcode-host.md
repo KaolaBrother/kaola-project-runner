@@ -442,20 +442,25 @@ worker opens unbound and exits 0. Every pin bump therefore ends with:
 2. From that accepted checkout, `./scripts/install-local.sh --runtime zcode
    --method copy` (a project with a workspace `.zcode/skills` or
    `.agents/skills` root installs there with the matching `--skills-dir`).
-3. Verify alignment — every installed copy's `scripts/kaola-acp.py`,
-   `kaola-acp-holder.py` and `kaola-tmux.sh` equal the accepted checkout's,
-   `scripts/kaola-zcode-acp.py` too for the ZCode Skill, and every
-   `.kaola-install-receipts/*.json` `source` names the accepted checkout:
+3. Verify alignment mechanically from the accepted checkout. `--verify-install`
+   compares every generated Skill present under the destination against a fresh
+   render of this checkout — every byte, `SKILL.md` prose and `references/`
+   included — and prints one JSON receipt (`result: aligned|refused`,
+   `reason: skill-install-skew`, a per-file `skew` list naming each `stale` /
+   `missing` / `unexpected` path with both 12-hex digests), exiting 1 on any
+   skew. It is read-only and skips a Skill that is not installed, so a partial
+   install verifies cleanly:
 
    ```bash
    A=/abs/path/to/accepted-checkout
-   for d in "$HOME"/.zcode/skills/*-kaola-project-runner; do
-     for f in kaola-acp.py kaola-acp-holder.py kaola-tmux.sh; do
-       cmp -s "$A/skills/$(basename "$d")/scripts/$f" "$d/scripts/$f" \
-         || echo "SKEW $(basename "$d")/$f"
-     done
-   done
-   diff -rq "$A/skills/kaola-project-runner" "$HOME/.zcode/skills/kaola-project-runner"
+   ( cd "$A" && ./scripts/render-skills.py --verify-install "$HOME/.zcode/skills" )
+   ```
+
+   Every `.kaola-install-receipts/*.json` `source` must still name the accepted
+   checkout — that is provenance, not content:
+
+   ```bash
+   grep -h '"source"' "$HOME/.zcode/skills"/.kaola-install-receipts/*.json
    ```
 
 4. Restart what still runs the old code. A live holder is never hot-replaced:
@@ -463,16 +468,29 @@ worker opens unbound and exits 0. Every pin bump therefore ends with:
    above), and a Host started on an older build needs the same treatment.
 
 A Host `start` now refuses this skew mechanically instead of trusting the
-step: run from an installed Skill tree, it hashes those same files in every
-Skill directory under the four default discovery roots and answers
+step: run from an installed Skill tree, it hashes the shared worker scripts in
+every Skill directory under the four default discovery roots and answers
 `{"result": "refused", "reason": "worker-skill-build-skew"}` with exit 1 and
 nothing created (`worker_skill_skew` names the differing paths). A passing
-`start` reports `worker_skill_build` and `worker_skill_roots`. Residuals it
-does not cover: roots ZCode reaches only through ancestor directories,
-`skills.roots` or `plugins.dirs`; a checkout invocation of
-`scripts/kaola-acp.py`, which has no Skill build to compare and reports both
-fields `null`; and an already running holder, which keeps the code it started
-with either way.
+`start` reports `worker_skill_build` and `worker_skill_roots`. A default
+discovery root that exists but cannot be listed makes that comparison
+impossible, so the same `start` refuses it by name —
+`{"result": "refused", "reason": "worker-skill-root-unreadable"}` with the root
+in `worker_skill_unreadable_roots` and `detail` (Issue #106); a permission
+problem is never a raw traceback. Residuals the start check does not cover:
+roots ZCode reaches only through ancestor directories, `skills.roots` or
+`plugins.dirs`; a checkout invocation of `scripts/kaola-acp.py`, which has no
+Skill build to compare and reports both fields `null`; and an already running
+holder, which keeps the code it started with either way.
+
+The runtime scan stays scripts-only, but prose is no longer manual: a worker
+Skill copy carries only its own rendered prose, so it cannot know another
+platform's `SKILL.md`, and the accepted checkout is the one place every Skill's
+render is available. `--verify-install` (Issue #107) therefore compares the
+whole installed tree — `SKILL.md` and `references/` included, main Skill and
+worker Skills alike — against that render, replacing the step-3 manual
+`diff -rq`. It reports the same default roots and shares their residual: it only
+verifies the root it is pointed at.
 
 Skew has two directions and they are not symmetric. An old Host with a new
 worker Skill is the Issue #104 transitional case: the Host never sets the
@@ -517,9 +535,14 @@ claimed there (the interrupt resend's first line is contract-tested; its
   staging and boundary flush, bounded deduped queue, 33rd-event full-check
   (later overflow still wakes, idle-full delivers now, restore takes max
   generation, exact-stop resume, remind-only), 64KiB prompt-file bound,
-  ZCode-only gates, and no periodic trigger without worker events.
+  ZCode-only gates, and no periodic trigger without worker events. Also the
+  Issue #106 unreadable-root refusal.
 - `bash tests/contract/test-installer-runtimes.sh` — `--runtime zcode` and
   workspace `.zcode/skills` installs.
 - `python3 tests/contract/test-issue-51-runner-integration.py` — ZCode worker
   offline Runner integration (unchanged).
 - `python3 scripts/render-skills.py --check` — generated Skills in sync.
+- `python3 tests/contract/test-generated-skills.py` — Issue #107: an installed
+  Skills tree is verified against this render byte-for-byte, prose included.
+- `python3 scripts/render-skills.py --verify-install /abs/skills-root` —
+  Issue #107: the same verification as a subcommand.
