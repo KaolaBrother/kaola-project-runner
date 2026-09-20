@@ -1,21 +1,21 @@
 {
-  "accepted_commit": null,
+  "accepted_commit": "654bcda73ee28362eda748430abb955661152466",
   "adapter": "grok-bot-bridge",
   "host": "grok-bot",
   "install_guide": "INSTALL.md",
   "label": null,
   "locator": "kaola-project-runner-locate",
-  "release": null,
+  "release": "v0.5.2",
   "repository": "github.com/KaolaBrother/kaola-project-runner",
-  "saveable": false,
+  "saveable": true,
   "skill": {
-    "body_sha256": "4c13db621a475e06bad00bd90c90d31d7792274e59a949ef9c8974b34ccedbd2",
-    "bytes": 2536,
+    "body_sha256": "738dfab6c811d61671749b7c384604080820af8e9e55233c7ca530ae487b9335",
+    "bytes": 2459,
     "description": "Use when Grok Bot should delegate a project run through Kaola-Delegator on a bound execution target: locate that target's verified kaola-project-runner checkout, then load the Kaola-Delegator Skill from it.",
-    "file_sha256": "c9a217449dae7a84daff625863ee448da8862a1f691d01732a7e2e3ce9b1cace",
+    "file_sha256": "4d179155e0ec236678416d4240b18969c44ec590af575b35b0bf2024bcbe971d",
     "name": "kaola-delegator",
     "source": "kaola-delegator.md"
   },
   "skill_count": 1,
-  "stage": "content"
+  "stage": "pinned"
 }
