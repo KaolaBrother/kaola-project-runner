@@ -62,17 +62,25 @@ adapter_prepare_model_environment() {
 
 adapter_process_matches() {
   local process_command="$1" pane_command="$2"
-  # Kimi CLI 0.39.x deliberately rewrites Node's process title to this fixed product identity.
-  # Require both the exact rewritten command and the live Node process reported by tmux; neither
-  # a later argv mention nor a shell with Kimi-looking scrollback satisfies this exception.
-  [[ "$process_command" =~ ^kimi-code[[:space:]]*$ && "$pane_command" == node ]]
+  # Kimi deliberately rewrites Node's process title to this fixed product identity, so `ps` reports
+  # exactly `kimi-code` on every packaging. The tmux pane command is the kernel `p_comm`, which argv
+  # rewriting never changes, so it varies by packaging: Kimi Code 2.x ships a Node SEA standalone
+  # Mach-O (`~/.kimi-code/bin/kimi`, `__NODE_SEA_BLOB`) and reports `kimi`, while the legacy 0.39.x
+  # `node <script>` launcher reports `node`. Live on 2.0.2: `ps -ww -o command=` => `kimi-code `,
+  # `#{pane_current_command}` => `kimi`, `file` => `Mach-O 64-bit executable arm64`.
+  # Both conditions stay required and both stay exact; neither a later argv mention nor a shell with
+  # Kimi-looking scrollback satisfies this exception.
+  [[ "$process_command" =~ ^kimi-code[[:space:]]*$ ]] || return 1
+  [[ "$pane_command" == kimi || "$pane_command" == node ]]
 }
 
 adapter_detect_tui() {
   local title="$1" command="$2" capture="$3"
-  # Kimi 0.39.x leaves the terminal title at the host name. The core has already required either
-  # the exact launcher argv path or the exact `kimi-code`/Node process-title identity above.
-  [[ "$title" =~ [Kk]imi || "$command" == node ]] || {
+  # Kimi leaves the terminal title at the host name (live on 2.0.2: `YLsdeMac-mini.local`). The core
+  # has already required either the exact launcher argv path or the exact `kimi-code` process-title
+  # identity above; the pane command is `kimi` on the 2.x Node SEA and `node` on the legacy script
+  # launcher, so accept both rather than the dead `node`-only disjunct.
+  [[ "$title" =~ [Kk]imi || "$command" == kimi || "$command" == node ]] || {
     [[ "$capture" == *'Trust this folder?'* && \
        "$capture" == *'Project-level MCP servers are disabled'* && \
        "$capture" == *'Enter select'* && \
