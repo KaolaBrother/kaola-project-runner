@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -255,9 +256,12 @@ class Sandbox:
 
     def invoke(self, command: str, *args: str, session: str | None = None,
                scenario: str | None = None, platform: str = "zcode",
-               timeout: float = 120,
+               timeout: float = 120, cli_path: Path | None = None,
                **env_overrides: str | None) -> tuple[subprocess.CompletedProcess[str], dict | None]:
-        argv = [PYTHON, str(CHECKOUT_CLI), platform, command, "--repo", str(self.repo)]
+        # ``cli_path`` runs an installed Skill tree's own copy instead of the
+        # checkout CLI (Issue #105 compares installed copies against the tree
+        # the running CLI came from, which a checkout invocation does not have).
+        argv = [PYTHON, str(cli_path or CHECKOUT_CLI), platform, command, "--repo", str(self.repo)]
         if session:
             argv += ["--session", session]
             if command == "start":
@@ -281,10 +285,10 @@ class Sandbox:
 
     def cli(self, command: str, *args: str, session: str | None = None,
             scenario: str | None = None, platform: str = "zcode", timeout: float = 120,
-            **env_overrides: str | None) -> dict:
+            cli_path: Path | None = None, **env_overrides: str | None) -> dict:
         result, payload = self.invoke(
             command, *args, session=session, scenario=scenario, platform=platform,
-            timeout=timeout, **env_overrides,
+            timeout=timeout, cli_path=cli_path, **env_overrides,
         )
         if result.returncode != 0:
             raise AssertionError(
@@ -338,7 +342,6 @@ class Sandbox:
                     os.kill(int(fake_pid), signal.SIGKILL)
                 except (OSError, TypeError):
                     pass
-        import shutil
         shutil.rmtree(self.dir, ignore_errors=True)
 
 
@@ -1634,6 +1637,10 @@ def test_issue_104_start_inside_host_agent_binds_mechanically() -> None:
 
         # P1: the Host agent runs the worker start itself.
         sandbox.sessions.append(("claude-code", worker))
+        # Issue #105 acceptance: this is the worker's FIRST start, not a
+        # restart - nothing of it exists yet - and it must bind by itself.
+        check(not sandbox.record_dir(worker, platform="claude-code").exists(),
+              "P1: the worker has no prior record, so this is its first start")
         turn = sandbox.cli("send", "--text", "NESTED:0 dispatch worker", session=host)
         check(turn.get("outcome") == "turn_completed", f"host turn 1 completes ({turn.get('outcome')})")
         entries = nested_receipts(out)
@@ -1730,6 +1737,118 @@ def test_issue_104_start_inside_host_agent_binds_mechanically() -> None:
             check(stop.get("residual_pids") == [], f"{name} stops cleanly")
         host_stop = sandbox.cli("stop", "--force", session=host)
         check(host_stop.get("residual_pids") == [], "host stops cleanly")
+    finally:
+        sandbox.cleanup()
+
+
+WORKER_SKILL_SCRIPTS = ("kaola-acp.py", "kaola-acp-holder.py", "kaola-tmux.sh")
+
+
+def install_worker_skill(root: Path, name: str) -> Path:
+    """A minimal installed worker Skill: what the Issue #105 comparison looks
+    for is a Skill directory shipping ``scripts/kaola-acp.py``."""
+    skill = root / name
+    (skill / "scripts").mkdir(parents=True)
+    (skill / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+    for script in WORKER_SKILL_SCRIPTS:
+        shutil.copy2(ROOT / "scripts" / script, skill / "scripts" / script)
+    return skill
+
+
+def sha12(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+
+
+def test_issue_105_worker_skill_build_skew_refuses_before_spawn() -> None:
+    """Issue #105: a ZCode Host `start` run from an installed Skill tree refuses
+    before anything exists when the worker Skills its agent would load are a
+    different build, because those copies are what carry the Issue #104
+    binding. Aligned copies start normally and report what was compared; an
+    empty root is not skew; and a checkout invocation answers `null` (unknown,
+    never "aligned") because it has no Skill build to be the baseline."""
+    sandbox = Sandbox("i105-skew")
+    try:
+        host_tree = sandbox.dir / "installed" / "zcode-kaola-project-runner"
+        shutil.copytree(ROOT / "skills" / "zcode-kaola-project-runner", host_tree)
+        host_cli = host_tree / "scripts" / "kaola-acp.py"
+        build = sha12(ROOT / "scripts" / "kaola-acp.py")
+        check(sha12(host_cli) == build,
+              "the rendered ZCode Skill ships this checkout's kaola-acp.py verbatim")
+
+        roots = sandbox.home / ".zcode" / "skills"
+        stale = install_worker_skill(roots, "claude-code-kaola-project-runner")
+        install_worker_skill(roots, "codex-kaola-project-runner")
+        stale_script = stale / "scripts" / "kaola-acp.py"
+        aligned_bytes = stale_script.read_bytes()
+        stale_script.write_bytes(aligned_bytes + b"\n# an older build\n")
+
+        # 1. Skew refuses, exit 1, and opens nothing.
+        refused_session = sandbox.session()
+        result, receipt = sandbox.invoke(
+            "start", "--mode", "yolo", session=refused_session, scenario="basic",
+            cli_path=host_cli)
+        check(result.returncode == 1, f"skew start exits 1 ({result.returncode})")
+        check(isinstance(receipt, dict) and receipt.get("result") == "refused"
+              and receipt.get("reason") == "worker-skill-build-skew"
+              and receipt.get("mutation_performed") is False,
+              f"skew is a typed refusal ({receipt})")
+        check(receipt.get("worker_skill_build") == build
+              and receipt.get("worker_skill_skew_count") == 1,
+              f"the refusal names this build and one skewed file ({receipt.get('worker_skill_build')}, "
+              f"{receipt.get('worker_skill_skew_count')})")
+        entry = (receipt.get("worker_skill_skew") or [{}])[0]
+        check(entry.get("path") == str(stale_script) and entry.get("file") == "kaola-acp.py"
+              and entry.get("expected") == build and entry.get("installed") != build,
+              f"the skewed copy is named with both digests ({entry})")
+        record_dir = sandbox.record_dir(refused_session)
+        check(not record_dir.exists() and not holder_socket(record_dir).exists(),
+              "the refused start created no record directory and no holder socket")
+        check(subprocess.run(["tmux", "has-session", "-t", f"={refused_session}"],
+                             capture_output=True).returncode != 0,
+              "the refused start created no tmux session")
+
+        # 2. The same command with the copy restored starts and reports what it
+        #    compared, so `status` reconciliation has the fact.
+        stale_script.write_bytes(aligned_bytes)
+        aligned_session = sandbox.session()
+        receipt = sandbox.cli("start", "--mode", "yolo", session=aligned_session,
+                              scenario="basic", cli_path=host_cli)
+        check(receipt.get("error") is None and receipt.get("state") == "ready",
+              f"the aligned start reaches ready ({receipt.get('error')})")
+        check(receipt.get("worker_skill_build") == build
+              and receipt.get("worker_skill_roots") == [
+                  {"root": str(roots),
+                   "skills": ["claude-code-kaola-project-runner",
+                              "codex-kaola-project-runner"]}],
+              f"the start reports the build and the roots it compared "
+              f"({receipt.get('worker_skill_roots')})")
+        stop = sandbox.cli("stop", "--force", session=aligned_session, cli_path=host_cli)
+        check(stop.get("residual_pids") == [], "the aligned host stops cleanly")
+
+        # 3. A discovery root with no worker Skill in it is not skew.
+        shutil.rmtree(stale)
+        shutil.rmtree(roots / "codex-kaola-project-runner")
+        empty_session = sandbox.session()
+        receipt = sandbox.cli("start", "--mode", "yolo", session=empty_session,
+                              scenario="basic", cli_path=host_cli)
+        check(receipt.get("state") == "ready" and receipt.get("worker_skill_roots") == []
+              and receipt.get("worker_skill_build") == build,
+              f"no installed worker Skill is not skew ({receipt.get('worker_skill_roots')})")
+        stop = sandbox.cli("stop", "--force", session=empty_session, cli_path=host_cli)
+        check(stop.get("residual_pids") == [], "the empty-root host stops cleanly")
+
+        # 4. A checkout invocation has no Skill build to compare: unknown.
+        install_worker_skill(roots, "claude-code-kaola-project-runner")
+        checkout_session = sandbox.session()
+        receipt = sandbox.cli("start", "--mode", "yolo", session=checkout_session,
+                              scenario="basic")
+        check(receipt.get("state") == "ready"
+              and receipt.get("worker_skill_build") is None
+              and receipt.get("worker_skill_roots") is None,
+              f"a checkout start answers unknown, not aligned "
+              f"({receipt.get('worker_skill_build')})")
+        stop = sandbox.cli("stop", "--force", session=checkout_session)
+        check(stop.get("residual_pids") == [], "the checkout host stops cleanly")
     finally:
         sandbox.cleanup()
 
