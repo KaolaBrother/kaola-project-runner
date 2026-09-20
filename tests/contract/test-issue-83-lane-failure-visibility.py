@@ -50,6 +50,22 @@ def lane_block() -> str:
     return block
 
 
+# Issue #101: run_suite_lane runs each suite through validate.sh's `watched`
+# wrapper (scripts/validate-watchdog.sh). Extract the real function too, so the
+# lane is measured with the watchdog it ships with rather than a stub of it.
+def watched_block() -> str:
+    lines = VALIDATE.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("watched()"))
+    end = next(i for i in range(start, len(lines)) if lines[i] == "}")
+    block = "\n".join(lines[start:end + 1])
+    if "validate-watchdog.sh" not in block:
+        raise AssertionError(
+            "extracted validate.sh `watched` block does not call "
+            "validate-watchdog.sh; the wrapper moved and this test's slice "
+            "boundaries need updating")
+    return block
+
+
 STUB_OK = 'print("SUITE-LOG-{name}")\n'
 STUB_FAIL = 'import sys\nprint("SUITE-LOG-{name}")\nsys.exit(1)\n'
 # Passes, but removes its own replay log: the abnormal "no log" case the
@@ -65,8 +81,12 @@ HARNESS = textwrap.dedent("""\
     #!/usr/bin/env bash
     set -euo pipefail
     repo_root="{repo}"
+    script_dir="{scripts}"
     validate_tmp="{tmp}"
+    suite_budget=600
+    watchdog_dir="$validate_tmp/watchdog"
     export EAT_ROOT="$validate_tmp"
+    {watched}
     python_suites_all=({all})
     python_suites_a=({a})
     python_suites_b=({b})
@@ -88,7 +108,8 @@ def run_lane(fixture: Path, suites: dict[str, str],
     validate_tmp.mkdir()
     harness = fixture / "harness.sh"
     harness.write_text(HARNESS.format(
-        repo=repo, tmp=validate_tmp, block=lane_block(),
+        repo=repo, scripts=PROJECT / "scripts", tmp=validate_tmp,
+        block=lane_block(), watched=watched_block(),
         all=" ".join(f'"{s}"' for s in lane_all),
         a=" ".join(f'"{s}"' for s in lane_a),
         b=" ".join(f'"{s}"' for s in lane_b)), encoding="utf-8")

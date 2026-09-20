@@ -389,8 +389,9 @@ set -e
 assert_link "test_foreign_bin_link_uninstall_refused" "$home/.local/bin/kaola-acp" "/foreign/path"
 
 # --- place_staged fault injection: second rename failure + failed rollback ---
-# PYTHON_BIN stub prepends an os.replace patch to every `python3 -` heredoc;
-# it raises only on the staged (.<name>.tmp.$$) and rollback (.<name>.old.$$)
+# PYTHON_BIN stub prepends an os.replace patch to every `python3 -c` program
+# (Issue #101: the installer feeds no interpreter from a here-document); it
+# raises only on the staged (.<name>.tmp.$$) and rollback (.<name>.old.$$)
 # source basenames, so only place_staged's second/third renames are faulted.
 repo="$tmp_root/repo-rollback"
 make_fixture "$repo"
@@ -402,12 +403,11 @@ printf '%s\n' '# updated fixture' >>"$repo/skills/grok-kaola-project-runner/SKIL
 
 pybin="$tmp_root/fault-python"
 real_python="$(command -v python3)"
-cat >"$pybin" <<EOF
-#!/usr/bin/env bash
-if [[ "\$1" == "-" ]]; then
-  shift
-  { printf '%s\n' \
-    'import os' \
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf 'real_python=%q\n' "$real_python"
+  printf '%s\n' \
+    "patch='import os" \
     '_orig_replace = os.replace' \
     'def _patched(src, dst):' \
     '    b = os.path.basename(str(src))' \
@@ -416,12 +416,12 @@ if [[ "\$1" == "-" ]]; then
     '    if ".old." in b and os.environ.get("KPR_TEST_FAIL_ROLLBACK"):' \
     '        raise OSError(13, "injected rollback rename failure")' \
     '    return _orig_replace(src, dst)' \
-    'os.replace = _patched'
-    cat; } | "$real_python" - "\$@"
-else
-  exec "$real_python" "\$@"
-fi
-EOF
+    "os.replace = _patched'" \
+    'if [[ "${1:-}" == "-c" ]]; then' \
+    '  exec "$real_python" -c "$patch"$'"'"'\n'"'"'"$2" "${@:3}"' \
+    'fi' \
+    'exec "$real_python" "$@"'
+} >"$pybin"
 chmod +x "$pybin"
 
 # staged->target rename fails once; rollback restores the previous install

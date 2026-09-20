@@ -21,67 +21,66 @@ command -v "$installer_python" >/dev/null 2>&1 || {
 }
 
 usage() {
-  cat <<'EOF'
-Usage: ./scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
-                                  [--method link|copy] [--platform ID[,ID...]]
-                                  [--no-orchestrator]
-                                  [--bin-links | --no-bin-links] [--uninstall]
-
-Consuming runtimes (verified native skill directories):
-  codex        ${CODEX_HOME:-$HOME/.codex}/skills
-  claude-code  ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
-  cursor       $HOME/.cursor/skills
-  devin        ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills
-  zcode        $HOME/.zcode/skills (ZCode Host install; verified default
-               discovery roots are the workspace .zcode/skills and
-               .agents/skills — --skills-dir covers either — and the
-               user-level ~/.zcode/skills and ~/.agents/skills; configured
-               skills.roots/plugins.dirs roots also scan — docs/zcode-host.md)
-Grok Bot is a bridge host, not an installer destination: the account holds one
-thin generated Skill (hosts/grok-bot/kaola-delegator.md) that loads the
-Kaola-Delegator Skill from this checkout on the bound execution target
-through the device-local locator kaola-project-runner-locate
-(scripts/kaola-locate.py register --target local|cloud, which validates the
-checkout, links the command, and writes its registration receipt beside the
-link; a bare --bin-links link carries no receipt). See docs/grok-bot-host.md.
-Grok CLI worker uses --platform grok, not --runtime grok.
-ZCode is both a worker platform (--platform zcode) and a native
-skill-directory Host (--runtime zcode installs to $HOME/.zcode/skills; a
-workspace .zcode/skills or .agents/skills destination goes through
---skills-dir; see docs/zcode-host.md).
-
---skills-dir installs into any explicit destination parent (including
-project-local paths) and is mutually exclusive with --runtime.
---method copy (default) installs a standalone copy tracked by a per-Skill
-receipt. --method link is an explicit development choice that symlinks each
-Skill to this checkout. An owned source link migrates to a copy on a default
-or --method copy reinstall.
-Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex, zcode, droid, dsh
---platform filters worker Skills only. The main Skill kaola-project-runner
-(display name Project Runner) is installed for every destination unless
---no-orchestrator is passed. Codex and generic destinations also plan
-kaola-delegator as control-plane unless that flag is passed: a first install
-requires zcode in this --platform (or no --platform); an already-installed
-Delegator stays in the plan on later reinstall/uninstall even when this
---platform omits zcode, so it is not left stale. Neither control-plane Skill
-is a platform ID.
-With no --platform, installs all nine worker Skills plus the control-plane
-Skills for that destination (unless skipped). With no destination flags the
-legacy Codex destination is used. Existing foreign paths are never replaced.
---bin-links also manages the $HOME/.local/bin/kaola-acp* helper links and the
-kaola-project-runner-locate locator link; it is on by default only for the
-Codex runtime destination. Uninstall never removes bin
-links unless --bin-links is passed explicitly.
-The Codex runtime destination (--runtime codex, or no destination flag) also
-installs one Runner-owned user-level SessionStart(compact) recovery entry in
-${CODEX_HOME:-$HOME/.codex}/hooks.json (id kaola-project-runner:user-compact-context,
-assets under ${CODEX_HOME:-$HOME/.codex}/kaola-project-runner/hooks/) whenever
-the control-plane Skills are in the plan; --no-orchestrator skips it, and
---uninstall removes only that entry and those assets. Foreign hook entries are
-never changed. --skills-dir never touches any hooks.json. Codex still asks you
-to review and trust the new entry in /hooks, and hooks load at session start,
-so recovery is not active in the session that ran the install.
-EOF
+  printf '%s\n' \
+    'Usage: ./scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]' \
+    '                                  [--method link|copy] [--platform ID[,ID...]]' \
+    '                                  [--no-orchestrator]' \
+    '                                  [--bin-links | --no-bin-links] [--uninstall]' \
+    '' \
+    'Consuming runtimes (verified native skill directories):' \
+    '  codex        ${CODEX_HOME:-$HOME/.codex}/skills' \
+    '  claude-code  ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills' \
+    '  cursor       $HOME/.cursor/skills' \
+    '  devin        ${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills' \
+    '  zcode        $HOME/.zcode/skills (ZCode Host install; verified default' \
+    '               discovery roots are the workspace .zcode/skills and' \
+    '               .agents/skills — --skills-dir covers either — and the' \
+    '               user-level ~/.zcode/skills and ~/.agents/skills; configured' \
+    '               skills.roots/plugins.dirs roots also scan — docs/zcode-host.md)' \
+    'Grok Bot is a bridge host, not an installer destination: the account holds one' \
+    'thin generated Skill (hosts/grok-bot/kaola-delegator.md) that loads the' \
+    'Kaola-Delegator Skill from this checkout on the bound execution target' \
+    'through the device-local locator kaola-project-runner-locate' \
+    '(scripts/kaola-locate.py register --target local|cloud, which validates the' \
+    'checkout, links the command, and writes its registration receipt beside the' \
+    'link; a bare --bin-links link carries no receipt). See docs/grok-bot-host.md.' \
+    'Grok CLI worker uses --platform grok, not --runtime grok.' \
+    'ZCode is both a worker platform (--platform zcode) and a native' \
+    'skill-directory Host (--runtime zcode installs to $HOME/.zcode/skills; a' \
+    'workspace .zcode/skills or .agents/skills destination goes through' \
+    '--skills-dir; see docs/zcode-host.md).' \
+    '' \
+    '--skills-dir installs into any explicit destination parent (including' \
+    'project-local paths) and is mutually exclusive with --runtime.' \
+    '--method copy (default) installs a standalone copy tracked by a per-Skill' \
+    'receipt. --method link is an explicit development choice that symlinks each' \
+    'Skill to this checkout. An owned source link migrates to a copy on a default' \
+    'or --method copy reinstall.' \
+    'Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex, zcode, droid, dsh' \
+    '--platform filters worker Skills only. The main Skill kaola-project-runner' \
+    '(display name Project Runner) is installed for every destination unless' \
+    '--no-orchestrator is passed. Codex and generic destinations also plan' \
+    'kaola-delegator as control-plane unless that flag is passed: a first install' \
+    'requires zcode in this --platform (or no --platform); an already-installed' \
+    'Delegator stays in the plan on later reinstall/uninstall even when this' \
+    '--platform omits zcode, so it is not left stale. Neither control-plane Skill' \
+    'is a platform ID.' \
+    'With no --platform, installs all nine worker Skills plus the control-plane' \
+    'Skills for that destination (unless skipped). With no destination flags the' \
+    'legacy Codex destination is used. Existing foreign paths are never replaced.' \
+    '--bin-links also manages the $HOME/.local/bin/kaola-acp* helper links and the' \
+    'kaola-project-runner-locate locator link; it is on by default only for the' \
+    'Codex runtime destination. Uninstall never removes bin' \
+    'links unless --bin-links is passed explicitly.' \
+    'The Codex runtime destination (--runtime codex, or no destination flag) also' \
+    'installs one Runner-owned user-level SessionStart(compact) recovery entry in' \
+    '${CODEX_HOME:-$HOME/.codex}/hooks.json (id kaola-project-runner:user-compact-context,' \
+    'assets under ${CODEX_HOME:-$HOME/.codex}/kaola-project-runner/hooks/) whenever' \
+    'the control-plane Skills are in the plan; --no-orchestrator skips it, and' \
+    '--uninstall removes only that entry and those assets. Foreign hook entries are' \
+    'never changed. --skills-dir never touches any hooks.json. Codex still asks you' \
+    'to review and trust the new entry in /hooks, and hooks load at session start,' \
+    'so recovery is not active in the session that ran the install.'
 }
 
 skill_name_for() {
@@ -113,7 +112,7 @@ runtime_skills_dir() {
 
 append_selection() {
   local raw="$1" item
-  IFS=',' read -r -a items <<<"$raw"
+  IFS=',' read -r -a items < <(printf '%s\n' "$raw")
   for item in "${items[@]}"; do
     skill_name_for "$item" >/dev/null || {
       printf 'unknown platform: %s\n' "$item" >&2
@@ -224,8 +223,7 @@ canonical_existing_target() {
 }
 
 tree_digest() {
-  "$installer_python" - "$1" <<'PY'
-import hashlib, os, sys
+  "$installer_python" -c 'import hashlib, os, sys
 root = sys.argv[1]
 entries = []
 for dirpath, dirnames, filenames in os.walk(root):
@@ -246,14 +244,12 @@ for path in sorted(entries, key=lambda p: os.path.relpath(p, root)):
         with open(path, "rb") as handle:
             content = hashlib.sha256(handle.read()).hexdigest()
         digest.update(b"F" + rel.encode() + b"=" + content.encode() + b"\n")
-print(digest.hexdigest())
-PY
+print(digest.hexdigest())' "$1"
 }
 
 receipt_digest() {
   # Print the recorded content hash when $1 is an exact-owned receipt for $2.
-  "$installer_python" - "$1" "$2" <<'PY'
-import json, sys
+  "$installer_python" -c 'import json, sys
 path, skill = sys.argv[1], sys.argv[2]
 try:
     with open(path, encoding="utf-8") as handle:
@@ -266,15 +262,13 @@ if (
     and data.get("method") == "copy"
     and isinstance(data.get("content_sha256"), str)
 ):
-    sys.stdout.write(data["content_sha256"])
-PY
+    sys.stdout.write(data["content_sha256"])' "$1" "$2"
 }
 
 write_receipt() {
   # $1 skill name, $2 source dir, $3 content digest
   mkdir -p "$receipts_dir"
-  "$installer_python" - "$receipts_dir/$1.json" "$1" "$2" "$3" <<'PY'
-import json, sys, time
+  "$installer_python" -c 'import json, sys, time
 path, skill, source, digest = sys.argv[1:5]
 data = {
     "receipt": "kaola-project-runner-install/1",
@@ -286,8 +280,7 @@ data = {
 }
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(data, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-PY
+    handle.write("\n")' "$receipts_dir/$1.json" "$1" "$2" "$3"
 }
 
 drop_owned_receipt() {
@@ -298,11 +291,9 @@ drop_owned_receipt() {
 }
 
 stage_copy() {
-  "$installer_python" - "$1" "$2" <<'PY'
-import shutil, sys
+  "$installer_python" -c 'import shutil, sys
 shutil.copytree(sys.argv[1], sys.argv[2], symlinks=True,
-                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
-PY
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))' "$1" "$2"
 }
 
 place_staged() {
@@ -311,8 +302,7 @@ place_staged() {
   # If the staged rename fails, the previous target is restored from backup;
   # if restoration itself fails, the backup is retained and its recovery path
   # is reported instead of being deleted.
-  "$installer_python" - "$1" "$2" "$3" "${4:-0}" <<'PY'
-import os, shutil, sys
+  "$installer_python" -c 'import os, shutil, sys
 staged, target, backup, keep_previous = sys.argv[1:5]
 moved = False
 if os.path.lexists(target):
@@ -341,8 +331,7 @@ if os.path.lexists(backup) and keep_previous != "1":
     if os.path.isdir(backup) and not os.path.islink(backup):
         shutil.rmtree(backup)
     else:
-        os.unlink(backup)
-PY
+        os.unlink(backup)' "$1" "$2" "$3" "${4:-0}"
 }
 
 # Plan every action before any write; a refusal anywhere aborts the whole run.
@@ -478,7 +467,7 @@ bin_specs=(
 bin_actions=()
 if [[ "$want_bin_links" == true ]]; then
   for spec in "${bin_specs[@]}"; do
-    IFS='|' read -r name source <<<"$spec"
+    IFS='|' read -r name source < <(printf '%s\n' "$spec")
     target="$bin_dir/$name"
     if [[ "$mode" == install ]]; then
       if [[ -L "$target" ]]; then
@@ -543,7 +532,7 @@ fi
 [[ "$want_bin_links" == true && "$mode" == install ]] && mkdir -p "$bin_dir"
 
 for row in "${actions[@]}"; do
-  IFS='|' read -r action name source target <<<"$row"
+  IFS='|' read -r action name source target < <(printf '%s\n' "$row")
   case "$action" in
     already)
       printf 'already installed: %s\n' "$target"
@@ -645,7 +634,7 @@ if [[ "$want_user_hook" == true ]]; then
 fi
 
 for row in ${bin_actions[@]+"${bin_actions[@]}"}; do
-  IFS='|' read -r action source target <<<"$row"
+  IFS='|' read -r action source target < <(printf '%s\n' "$row")
   case "$action" in
     already)
       printf 'already installed: %s -> %s\n' "$target" "$source"
@@ -654,10 +643,8 @@ for row in ${bin_actions[@]+"${bin_actions[@]}"}; do
       temp="$bin_dir/.${target##*/}.tmp.$$"
       [[ ! -e "$temp" && ! -L "$temp" ]] || { printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
       ln -s "$source" "$temp"
-      if ! "$installer_python" - "$temp" "$target" <<'PY'
-import os, sys
-os.replace(sys.argv[1], sys.argv[2])
-PY
+      if ! "$installer_python" -c 'import os, sys
+os.replace(sys.argv[1], sys.argv[2])' "$temp" "$target"
       then
         unlink "$temp" 2>/dev/null || true
         printf 'atomic symlink replacement failed: %s\n' "$target" >&2

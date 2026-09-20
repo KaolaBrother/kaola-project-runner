@@ -31,9 +31,15 @@ no here-document and no here-string at all. Python programs go in via ``-c`` and
 ``read`` is fed by a process substitution, whose writer is a separate process that
 drains concurrently and so cannot deadlock against its own reader.
 
-This rule covers the one shared entrypoint and its generated copies. Other shell
-files in the repository still hold bodies in the dangerous range and are tracked
-separately; they are deliberately out of this test's scope.
+This rule covers the one shared entrypoint and its generated copies, and since
+Issue #101 the installer and the validate chain as well: ``validate.sh`` hung
+for 13 minutes inside ``install-local.sh``'s ``place_staged`` - a leaf bash in
+state S with fds 3 and 4 as the two ends of one pipe and no interpreter child,
+the same pre-``exec`` here-document write - so ``scripts/install-local.sh``,
+``scripts/validate.sh`` and ``scripts/validate-watchdog.sh`` must carry no
+here-document or here-string either. Other shell files in the repository still
+hold bodies in the dangerous range and are tracked separately; they are
+deliberately out of this test's scope.
 """
 
 from __future__ import annotations
@@ -45,6 +51,13 @@ from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[2]
 ENTRYPOINT = PROJECT / "scripts" / "kaola-tmux.sh"
+# Issue #101: the installer that validate.sh hung in, plus the validate chain
+# that must be able to report that hang instead of joining it.
+VALIDATE_CHAIN = (
+    PROJECT / "scripts" / "install-local.sh",
+    PROJECT / "scripts" / "validate.sh",
+    PROJECT / "scripts" / "validate-watchdog.sh",
+)
 
 # Bash routes a body this size or smaller through a pipe instead of a temp file.
 HEREDOC_PIPESIZE = 4096
@@ -116,6 +129,22 @@ class TestEntrypointCannotSelfDeadlock(unittest.TestCase):
                     "a here-document in the shared entrypoint can deadlock against its "
                     "own pipe under load (Issue #78); pass Python programs with -c and "
                     "feed `read` from a process substitution instead. Found: "
+                    + ", ".join(f"line {line} <<{tag} ({size} bytes)"
+                                for line, tag, size in found))
+
+    def test_no_here_document_in_the_installer_or_validate_chain(self) -> None:
+        """Issue #101: place_staged deadlocked on its here-document under load."""
+        for path in VALIDATE_CHAIN:
+            with self.subTest(script=str(path.relative_to(PROJECT))):
+                self.assertTrue(path.is_file(), f"missing {path}")
+                found = redirections(path)
+                self.assertEqual(
+                    found, [],
+                    "a here-document or here-string here can block forever in the "
+                    "forked child's pre-exec write() under pipe-KVA pressure (Issue "
+                    "#101, the same mechanism as Issue #78); pass Python programs with "
+                    "-c, print usage with printf, and feed `read` from a process "
+                    "substitution instead. Found: "
                     + ", ".join(f"line {line} <<{tag} ({size} bytes)"
                                 for line, tag, size in found))
 

@@ -16,13 +16,35 @@ sandbox_home="$(mktemp -d "${TMPDIR:-/tmp}/kaola-validate-home.XXXXXX")"
 # to launchd. The root is short and flat because ACP admin sockets live
 # under it and AF_UNIX sun_path is ~104 bytes on macOS.
 validate_tmp="$(mktemp -d "/tmp/kaola-val.XXXXXX")"
+# Issue #101: every suite runs under scripts/validate-watchdog.sh, which kills
+# and diagnoses a suite that is still running after the budget instead of
+# letting validate hang forever (the observed hang sat 13 min before a manual
+# kill and left no stack). The budget is 600 s per suite: the slowest single
+# suite finishes well inside 400 s and the two Python lanes take ~200 s
+# combined, so a trip at 10 min is a hang, not a slow machine, while still
+# bounding the loss of a hit to one suite budget. Receipts (process tree,
+# lsof and sample of the stuck leaf) land under $watchdog_dir, and a run that
+# tripped keeps $validate_tmp so they survive cleanup.
+suite_budget="${KAOLA_VALIDATE_SUITE_BUDGET:-600}"
+watchdog_dir="$validate_tmp/watchdog"
+watched() {
+  local label="$1"
+  shift
+  "$script_dir/validate-watchdog.sh" --label "$label" --budget "$suite_budget" \
+    --receipt-dir "$watchdog_dir" -- "$@"
+}
 cleanup_done=""
 cleanup() {
   if [[ -z "$cleanup_done" ]]; then
     cleanup_done=1
     # Sweep before removal and never let a nonzero sweep block the removal.
     python3 "$repo_root/scripts/kaola-acp-sweep.py" --root "$validate_tmp" || true
-    rm -rf "$validate_tmp" "$sandbox_home" || true
+    if compgen -G "$watchdog_dir/*.watchdog.txt" >/dev/null; then
+      printf 'validate: watchdog receipt(s) retained under %s\n' "$watchdog_dir" >&2
+      rm -rf "$sandbox_home" || true
+    else
+      rm -rf "$validate_tmp" "$sandbox_home" || true
+    fi
   fi
 }
 trap cleanup EXIT
@@ -32,14 +54,14 @@ export HOME="$sandbox_home"
 export TMPDIR="$validate_tmp"
 unset CODEX_HOME CLAUDE_CONFIG_DIR DEVIN_CONFIG_DIR
 
-python3 "$repo_root/scripts/render-skills.py" --check
+watched render-check python3 "$repo_root/scripts/render-skills.py" --check
 for skill_dir in "$repo_root"/skills/*kaola-project-runner "$repo_root"/skills/kaola-delegator; do
-  python3 "$repo_root/scripts/validate-skill.py" "$skill_dir"
+  watched "validate-skill.${skill_dir##*/}" python3 "$repo_root/scripts/validate-skill.py" "$skill_dir"
 done
 bash -n "$repo_root/scripts/kaola-tmux.sh" "$repo_root"/scripts/adapters/*.sh \
-  "$repo_root/scripts/install-local.sh"
-bash "$repo_root/tests/contract/test-installer-migration.sh"
-bash "$repo_root/tests/contract/test-installer-runtimes.sh"
+  "$repo_root/scripts/install-local.sh" "$repo_root/scripts/validate-watchdog.sh"
+watched installer-migration bash "$repo_root/tests/contract/test-installer-migration.sh"
+watched installer-runtimes bash "$repo_root/tests/contract/test-installer-runtimes.sh"
 
 # The contract suites dominate validate wall time (measured ~200 s combined).
 # Every suite is a self-contained fixture under the validate-owned TMPDIR
@@ -101,6 +123,7 @@ python_suites_all=(
   "test-issue-95-reader-exception.py"
   "test-issue-97-codex-user-compact-hook.py"
   "test-issue-98-dsh-acp.py"
+  "test-issue-101-validate-watchdog.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -124,6 +147,7 @@ python_suites_a=(
   "test-issue-92-permission-wake-recovery.py"
   "test-issue-97-codex-user-compact-hook.py"
   "test-issue-98-dsh-acp.py"
+  "test-issue-101-validate-watchdog.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"
@@ -154,9 +178,15 @@ python_suites_b=(
   "test-issue-95-reader-exception.py"
 )
 run_suite_lane() {
-  local status=0
+  local status=0 rc
   for suite in "$@"; do
-    if ! python3 "$repo_root/tests/contract/$suite" >"$validate_tmp/$suite.log" 2>&1; then
+    rc=0
+    watched "$suite" python3 "$repo_root/tests/contract/$suite" >"$validate_tmp/$suite.log" 2>&1 || rc=$?
+    if (( rc == 124 )); then
+      printf 'FAILED: %s (watchdog: still running after %s s, killed; receipt %s)\n' \
+        "$suite" "$suite_budget" "$watchdog_dir/$suite.watchdog.txt"
+      status=1
+    elif (( rc != 0 )); then
       printf 'FAILED: %s\n' "$suite"
       status=1
     fi
@@ -179,7 +209,7 @@ done
 if (( python_status )); then
   exit 1
 fi
-python3 "$repo_root/scripts/kaola-grok-bot-verify.py" "$repo_root/hosts/grok-bot" --repo "$repo_root"
+watched grok-bot-verify python3 "$repo_root/scripts/kaola-grok-bot-verify.py" "$repo_root/hosts/grok-bot" --repo "$repo_root"
 
 # Acceptance line "git diff --check clean": tracked changes must carry no whitespace errors.
 if git -C "$repo_root" rev-parse --git-dir >/dev/null 2>&1; then
