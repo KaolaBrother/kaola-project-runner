@@ -313,8 +313,10 @@ so a later environment change or a repeated `start` can never look like a rebind
 A `start` receipt also says where its request came from (Issue #104): `heartbeat_host_source` is
 `none` (no dispatching holder, no variable), `explicit` (`KAOLA_ACP_HEARTBEAT_HOST` given),
 `dispatcher` (derived from the holder-set `KAOLA_ACP_DISPATCHER` identity fact: `holder_instance_id`,
-`platform`, `repo`, `session`, echoed as `dispatcher`), or `dispatcher-no-carrier` (a non-ZCode
-dispatcher; unbound). On the `dispatcher` path the script verifies the named Host holder is live
+`platform`, `repo`, `session`, echoed as `dispatcher`), or `dispatcher-no-carrier` (a dispatcher
+whose platform has no measured `host_skill_entry`, today codex). Issue #122: that row, an explicit
+variable naming such a platform, and a Host-named `start` on it are refused `host-entry-unsupported`
+(`detail` names the platform and the empty entry), exit 1, before anything exists. On the `dispatcher` path the script verifies the named Host holder is live
 before anything exists and otherwise refuses with `{"result":"refused","reason":
 "heartbeat-host-unresolved"}` (`detail` names the failed check), exit 1; an explicit variable naming a
 different Host than the dispatcher is `heartbeat-host-conflict`. Runner dispatch is ACP-only: a

@@ -172,9 +172,11 @@ worker agent terminated / worker turn ended (one idle episode)
   and nothing is created; an explicit variable naming a *different* Host
   than the dispatcher is `heartbeat-host-conflict`. An explicit
   `KAOLA_ACP_HEARTBEAT_HOST` still works as before (`source: "explicit"`,
-  ZCode-only, fail closed with a usage error on a non-ZCode,
-  self-referential, or malformed target); a start under a non-ZCode
-  dispatcher is `dispatcher-no-carrier` and unbound; a start under no holder
+  fail closed with a usage error on a self-referential or malformed
+  target); a start under a dispatcher, or naming a target, whose platform
+  has no measured `host_skill_entry` (codex) is refused
+  `host-entry-unsupported` (Issue #122), as is a Host-named start on that
+  platform; a start under no holder
   at all is `none` and unbound, exactly as before. Runner dispatch is
   ACP-only: a `--transport pty` start under any dispatcher, or under the
   Orchestrator's canonical-root export alone, is refused by

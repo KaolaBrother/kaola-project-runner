@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **An entry-less platform cannot be a Host (Issue #122, owner ruling: fail closed).** A platform
+  whose `host_skill_entry` is empty (today codex) is refused in every Host role with the typed
+  receipt `reason: host-entry-unsupported` (`detail` names the platform and the empty entry,
+  `mutation_performed: false`, exit 1) before any record, socket, or holder exists: a Host-named
+  `start` on it, a worker `start` it dispatches (`heartbeat_host_source: dispatcher-no-carrier`,
+  previously an unbound start), and a start whose `KAOLA_ACP_HEARTBEAT_HOST` names it (previously a
+  usage error). No plain-text first-line fallback exists. The holder's `worker_event` refusal stays
+  as depth, and codex as an ordinary worker is unchanged. Admission is measuring the entry and
+  filling the manifest.
 - **Droid Core is the third tier, not the upgrade (Issue #125, correcting #117).** #117 put Kimi
   K3 Max into Droid's `upgrade_*` slot, but Droid Core is a separate tier below the default, not a
   stronger one. Kimi K3 Max (`kimi-k3` at `reasoning_effort=max`) moves to `alt_*` as

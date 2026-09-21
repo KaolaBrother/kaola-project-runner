@@ -9,7 +9,7 @@ against a small fake ACP agent (no real CLI, login, or network). Covers:
   the ZCode carrier is byte-identical to main 5122468 (fixed digest).
 * AC2 - a worker dispatched by a non-ZCode Host binds to it and its idle
   event reaches that Host as a carrier prompt; an entry-less dispatcher
-  (codex today) still starts unbound without refusal.
+  (codex today) refuses host-entry-unsupported (Issue #122 T1..T5).
 * AC3 (H1) - no Host-only model table: a Host-named start resolves exactly
   what a worker-named start on the same platform resolves.
 * AC9 - #73 canonical root, #104's three refusals, and #105 build skew apply
@@ -331,16 +331,6 @@ def test_entryless_dispatcher_and_non_zcode_refusals() -> None:
         check(sandbox.cli("grok", "start", session=host).get("state") == "ready", "grok Host starts")
         dispatcher = sandbox.dispatcher("grok", host)
 
-        worker = "claude-code-KPR-i119-nocarrier"
-        receipt = sandbox.cli("claude-code", "start", session=worker,
-                              **{DISPATCHER_ENV: json.dumps(dict(dispatcher, platform="codex",
-                                                                 session="codex-KPR-orchestrator-x"))})
-        check(receipt.get("state") == "ready"
-              and receipt.get("heartbeat_host_source") == "dispatcher-no-carrier"
-              and receipt.get("heartbeat_host") is None,
-              "an entry-less (codex) dispatcher still starts unbound, not refused")
-        sandbox.cli("claude-code", "stop", session=worker)
-
         # #104 refusal 1: a non-ZCode dispatcher whose holder is not the live one.
         result, refused = sandbox.invoke(
             "claude-code", "start", session="claude-code-KPR-i119-stale",
@@ -427,6 +417,8 @@ def test_host_resolves_like_worker_h1() -> None:
         for platform in PLATFORMS:
             if platform == "zcode":
                 continue  # its Host pin equals the default preset (test-issue-111-model-tiers)
+            if not manifest(platform)["host_skill_entry"]:
+                continue  # Issue #122: cannot host (test_issue_122_entryless_host_fails_closed)
             receipts = []
             for session in (f"{platform}-KPR-orchestrator-h1", f"{platform}-KPR-i119-h1"):
                 receipt = sandbox.cli(platform, "start", "--tier", "default", session=session)
@@ -473,6 +465,105 @@ def test_opencode_explicit_selection_h2() -> None:
         sandbox.cleanup()
 
 
+def test_issue_122_entryless_host_fails_closed() -> None:
+    """Issue #122 (owner ruling, Fable T1..T5): an entry-less platform in any
+    Host role refuses host-entry-unsupported before anything exists; the
+    manifest entry (with its code-table twin) is the only admission switch."""
+    sandbox = Sandbox("i122")
+    fake_dispatcher = {"holder_instance_id": "1" * 32, "repo": str(sandbox.repo)}
+    try:
+        def refused_unsupported(result, receipt, session, label, platform="codex"):
+            receipt = receipt or {}
+            detail = receipt.get("detail") or ""
+            check(result.returncode == 1 and receipt.get("result") == "refused"
+                  and receipt.get("reason") == "host-entry-unsupported"
+                  and receipt.get("mutation_performed") is False
+                  and platform in detail and "host_skill_entry" in detail,
+                  f"{label}: host-entry-unsupported naming {platform} and the gap ({receipt})")
+            check(not sandbox.record_dir(receipt.get("platform") or "claude-code", session).exists(),
+                  f"{label}: no record directory, holder, or socket")
+
+        # T1: a codex dispatcher refuses the worker start before spawn.
+        worker = "claude-code-KPR-i122-t1"
+        result, receipt = sandbox.invoke(
+            "claude-code", "start", session=worker,
+            **{DISPATCHER_ENV: json.dumps(dict(fake_dispatcher, platform="codex",
+                                               session="codex-KPR-orchestrator-t122"))})
+        refused_unsupported(result, receipt, worker, "T1")
+        check((receipt or {}).get("heartbeat_host_source") == "dispatcher-no-carrier",
+              "T1: the source still names the entry-less dispatcher row")
+
+        # T1 Host side: a Host-named codex start is refused outright ...
+        host = "codex-KPR-orchestrator-t122"
+        result, receipt = sandbox.invoke("codex", "start", session=host)
+        refused_unsupported(result, receipt, host, "T1 Host start")
+        # ... while codex as an ordinary worker is unchanged.
+        plain = "codex-KPR-i122-worker"
+        check(sandbox.cli("codex", "start", session=plain).get("state") == "ready",
+              "T1: a worker-named codex start is not a Host and still starts")
+        sandbox.invoke("codex", "stop", "--force", session=plain)
+
+        # T2: every platform with a measured entry passes the gate and meets
+        # the unchanged #104 liveness check instead.
+        capable = [p for p in PLATFORMS if manifest(p)["host_skill_entry"]]
+        check(len(capable) == 9 and "codex" not in capable, f"nine entry platforms ({capable})")
+        for platform in capable:
+            worker = f"claude-code-KPR-i122-t2-{platform}"
+            result, receipt = sandbox.invoke(
+                "claude-code", "start", session=worker,
+                **{DISPATCHER_ENV: json.dumps(dict(
+                    fake_dispatcher, platform=platform,
+                    session=f"{platform}-KPR-orchestrator-t122"))})
+            check(result.returncode == 1
+                  and (receipt or {}).get("reason") == "heartbeat-host-unresolved",
+                  f"T2: {platform} dispatcher is not host-entry-unsupported ({receipt})")
+
+        # T3: an explicit heartbeat target naming codex refuses the same way.
+        worker = "claude-code-KPR-i122-t3"
+        result, receipt = sandbox.invoke(
+            "claude-code", "start", session=worker,
+            **{HEARTBEAT_HOST_ENV: json.dumps({"platform": "codex", "session": host,
+                                               "repo": str(sandbox.repo)})})
+        refused_unsupported(result, receipt, worker, "T3")
+
+        # T4: fill the entry in an installed codex tree's manifest (and its
+        # code-table twin, held equal by T5) and the same Host start admits,
+        # then a worker it dispatches binds to it.
+        tree = sandbox.dir / "installed" / "codex-kaola-project-runner"
+        shutil.copytree(ROOT / "skills" / "codex-kaola-project-runner", tree)
+        scripts = tree / "scripts"
+        for name, old, new in (("platform.yaml", 'host_skill_entry: ""',
+                                'host_skill_entry: "$kaola-project-runner"'),
+                               ("kaola-acp.py", '"codex": "",', '"codex": "$kaola-project-runner",')):
+            text = (scripts / name).read_text(encoding="utf-8")
+            check(text.count(old) == 1, f"T4: {name} carries the empty codex entry once")
+            (scripts / name).write_text(text.replace(old, new), encoding="utf-8")
+        cli = scripts / "kaola-acp.py"
+        started = sandbox.cli("codex", "start", session=host, cli=cli)
+        check(started.get("state") == "ready",
+              f"T4: the admitted codex Host starts ({started.get('error') or started.get('reason')})")
+        worker = "codex-KPR-i122-t4"
+        bound = sandbox.cli("codex", "start", session=worker, cli=cli,
+                            **{DISPATCHER_ENV: json.dumps(sandbox.dispatcher("codex", host))})
+        fact = bound.get("heartbeat_host") or {}
+        check(bound.get("state") == "ready" and bound.get("heartbeat_host_source") == "dispatcher"
+              and fact.get("platform") == "codex" and fact.get("session") == host,
+              f"T4: the admitted Host binds its worker ({bound.get('heartbeat_host_source')}, {fact})")
+        sandbox.invoke("codex", "stop", "--force", session=worker, cli=cli)
+        stop = sandbox.cli("codex", "stop", "--force", session=host, cli=cli)
+        check(stop.get("residual_pids") == [], "T4: the admitted Host stops without residue")
+
+        # T5: the table still equals the manifests (test_manifest_entries_are_
+        # the_code_table) and the matrix records the codex refusal.
+        matrix = (ROOT / "templates" / "orchestrator" / "references" /
+                  "host-entry-matrix.md").read_text(encoding="utf-8")
+        row = next((line for line in matrix.splitlines() if line.startswith("| codex |")), "")
+        check("host-entry-unsupported" in row, f"T5: the codex matrix row names the refusal ({row})")
+        check("until it is made" not in matrix, "T5: the matrix no longer defers the ruling")
+    finally:
+        sandbox.cleanup()
+
+
 TESTS = [
     test_manifest_entries_are_the_code_table,
     test_zcode_carrier_is_byte_identical,
@@ -482,6 +573,7 @@ TESTS = [
     test_non_zcode_host_build_skew_refuses,
     test_host_resolves_like_worker_h1,
     test_opencode_explicit_selection_h2,
+    test_issue_122_entryless_host_fails_closed,
 ]
 
 

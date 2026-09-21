@@ -16,12 +16,14 @@ line. It is an entry fact, never a model or tier field: a Host `start` resolves
 does, and `default` stays that platform's own default (opencode: the CLI's
 native opening model, not overridden).
 
-An empty value means no measured entry. That platform is not a carrier Host:
-a worker it dispatches starts unbound (`heartbeat_host_source:
-dispatcher-no-carrier`), an explicit `KAOLA_ACP_HEARTBEAT_HOST` naming it is a
-usage error, and its holder refuses `worker_event`. Whether an entry-less
-platform should instead refuse `start` as a Host or run with a plain-text first
-line is an open owner decision; until it is made, this pre-#119 behavior stays.
+An empty value means no measured entry, and that platform cannot be a Host
+(#122, owner ruling: fail closed, no plain-text first line). A Host-named `start`
+on it, a worker `start` it dispatches (`heartbeat_host_source:
+dispatcher-no-carrier`), and a start whose `KAOLA_ACP_HEARTBEAT_HOST` names it
+all refuse `reason: host-entry-unsupported` before any record, socket or holder
+exists (`mutation_performed: false`, exit 1); its holder still refuses
+`worker_event`. As an ordinary worker it is unaffected. Admission is the
+measurement: fill the entry from a row below, then it may host.
 
 A row is filled only from a live run with trigger evidence:
 
@@ -49,7 +51,7 @@ the quoted sentence exists only in this build.
 | dsh | `/kaola-project-runner` | E2; E2 / E2 | `~/.agents/skills` | harness 0.0.1 |
 | opencode | `/kaola-project-runner` | E1 (`skill` tool); E1+E2 / E2 | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | 2.0.11 |
 | kimi-cli | `/skill:kaola-project-runner ` | E2; E2 / E2 | `~/.agents/skills` | 2.0.2 |
-| codex | (empty) | none | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.11.0 |
+| codex | (empty) | none; Host refused `host-entry-unsupported` | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.11.0 |
 
 Notes:
 

@@ -657,12 +657,15 @@ def test_carrier_needs_host_skill_entry() -> None:
 
         # The CLI fails closed on an entry-less target, a self target, and junk.
         bad_target = sandbox.session()
-        result, _ = sandbox.invoke(
+        result, refused = sandbox.invoke(
             "start", "--mode", "yolo", session=bad_target, scenario="basic",
             **{HEARTBEAT_HOST_ENV: json.dumps(
                 {"platform": "codex", "session": host, "repo": str(sandbox.repo)})})
-        check(result.returncode != 0 and "Host Skill entry" in (result.stderr or ""),
-              f"entry-less heartbeat target is refused at start ({result.returncode})")
+        refused = refused or {}
+        check(result.returncode == 1 and refused.get("reason") == "host-entry-unsupported"
+              and refused.get("mutation_performed") is False
+              and "codex" in (refused.get("detail") or ""),
+              f"Issue #122: entry-less heartbeat target is a typed refusal ({refused})")
         check(not sandbox.record_dir(bad_target).exists(),
               "a refused target starts no holder")
 
@@ -1508,7 +1511,7 @@ def test_issue_104_dispatcher_refusals_open_nothing() -> None:
 def test_issue_104_explicit_and_no_carrier_rows() -> None:
     """Design §e P4, P5, P7: the explicit variable equal to the dispatcher
     binds as before; an entry-less dispatcher (Issue #119: codex, not merely
-    non-ZCode) starts unbound without refusal; a
+    non-ZCode) refuses host-entry-unsupported (Issue #122 fail-closed); a
     reused live holder keeps its binding and exact stop/start binds."""
     sandbox = Sandbox("i104-rows")
     try:
@@ -1529,19 +1532,19 @@ def test_issue_104_explicit_and_no_carrier_rows() -> None:
               f"P4: explicit target equal to the dispatcher binds as explicit ({receipt.get('error')})")
         sandbox.cli("stop", session=worker)
 
-        # P5
+        # P5 (Issue #122: fail-closed, no longer an unbound start)
         worker = sandbox.session()
-        receipt = sandbox.cli(
+        result, receipt = sandbox.invoke(
             "start", "--mode", "yolo", session=worker, scenario="basic",
             **{DISPATCHER_ENV: json.dumps(dict(dispatcher, platform="codex",
                                                session="codex-host"))})
-        check(receipt.get("state") == "ready"
+        receipt = receipt or {}
+        check(result.returncode == 1 and receipt.get("reason") == "host-entry-unsupported"
               and receipt.get("heartbeat_host_source") == "dispatcher-no-carrier"
-              and receipt.get("heartbeat_host") is None
-              and receipt.get("heartbeat_host_known") is True
-              and (receipt.get("dispatcher") or {}).get("platform") == "codex",
-              f"P5: an entry-less dispatcher starts unbound, not refused ({receipt.get('error')})")
-        sandbox.cli("stop", session=worker)
+              and receipt.get("mutation_performed") is False
+              and (receipt.get("dispatcher") or {}).get("platform") == "codex"
+              and not sandbox.record_dir(worker).exists(),
+              f"P5: an entry-less dispatcher refuses before spawn ({receipt})")
 
         # P7: a worker started before the change (no dispatcher, unbound).
         worker = sandbox.session()

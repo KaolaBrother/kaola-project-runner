@@ -118,7 +118,10 @@ DISPATCHER_ENV = "KAOLA_ACP_DISPATCHER"
 # installed worker Skill carries only its own manifest while the binding it
 # makes names another platform's Host. The contract test holds this table
 # equal to the manifests. Empty = no measured entry: that platform is not a
-# carrier Host (the pre-#119 behavior, unchanged pending the owner's call).
+# Host. Issue #122 (owner ruling): it fails closed - a Host-named start, a
+# start it dispatches, and a start naming it as the heartbeat target all
+# refuse `host-entry-unsupported`; filling the manifest entry with measured
+# evidence is the only admission.
 HOST_SKILL_ENTRIES = {
     "claude-code": "/kaola-project-runner",
     "codex": "",
@@ -154,6 +157,15 @@ HOST_SKILL_DISCOVERY_DIRS = {
 
 def host_capable(platform: Any) -> bool:
     return bool(HOST_SKILL_ENTRIES.get(platform) if isinstance(platform, str) else "")
+
+
+def host_entry_unsupported(platform: str, role: str) -> dict[str, str]:
+    """Issue #122: the typed refusal for an entry-less platform in a Host role."""
+    return {"reason": "host-entry-unsupported",
+            "detail": (f"{role} platform {platform} has no measured host_skill_entry "
+                       f"(platforms/{platform}.yaml is empty), so it cannot run as a Project "
+                       "Runner Host: no carrier can open its turn. Use a Host platform with a "
+                       "measured entry; admission is measuring the entry and filling the manifest")}
 
 
 def record_holder_child_spawn(proc: subprocess.Popen) -> dict[str, Any] | None:
@@ -1504,8 +1516,9 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
     Returns ``target`` (validated, socket-resolved, or None), ``source`` (``none``,
     ``explicit``, ``dispatcher``, ``dispatcher-no-carrier``), ``dispatcher`` (the parsed identity fact when
     present), and ``refusal`` ({"reason", "detail"}) when this start must
-    refuse before anything exists. Explicit-variable failures keep today's
-    ``die`` (stderr, exit 2)."""
+    refuse before anything exists - Issue #122: ``host-entry-unsupported``
+    when the dispatcher or the explicit target has no measured Host entry.
+    Other explicit-variable failures keep today's ``die`` (stderr, exit 2)."""
     raw = os.environ.get(HEARTBEAT_HOST_ENV) or ""
     explicit: dict[str, Any] | None = None
     if raw:
@@ -1513,6 +1526,14 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
             explicit_value = json.loads(raw)
         except ValueError:
             die(f"{HEARTBEAT_HOST_ENV} is not valid JSON")
+        # Issue #122: a known platform with no measured entry is a typed
+        # refusal, not a usage error; unknown platforms still fail as usage.
+        named = explicit_value.get("platform") if isinstance(explicit_value, dict) else None
+        if named in HOST_SKILL_ENTRIES and not host_capable(named):
+            dispatcher, _ = dispatcher_identity()
+            return {"target": None, "source": "explicit", "dispatcher": dispatcher,
+                    "requested": explicit_value,
+                    "refusal": host_entry_unsupported(named, HEARTBEAT_HOST_ENV + " target")}
         explicit = validate_heartbeat_target(explicit_value, args, repo, HEARTBEAT_HOST_ENV)
     dispatcher, dispatcher_error = dispatcher_identity()
     if dispatcher_error:
@@ -1523,10 +1544,13 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
         return {"target": explicit, "source": "explicit" if explicit else "none",
                 "dispatcher": None, "refusal": None}
     if not host_capable(dispatcher.get("platform")):
-        # Row 4: dispatched by a platform with no measured Host Skill entry,
-        # so no carrier can open its turn. An explicit target still binds.
-        return {"target": explicit, "source": "explicit" if explicit else "dispatcher-no-carrier",
-                "dispatcher": dispatcher, "refusal": None}
+        # Row 4, Issue #122: dispatched by a platform with no measured Host
+        # Skill entry. Fail closed - never an unbound start, and an explicit
+        # target no longer excuses it.
+        return {"target": None, "source": "explicit" if explicit else "dispatcher-no-carrier",
+                "dispatcher": dispatcher, "requested": explicit,
+                "refusal": host_entry_unsupported(str(dispatcher.get("platform")),
+                                                  f"{DISPATCHER_ENV} dispatcher")}
     problem = repo_problem(dispatcher["repo"])
     if problem:
         return {"target": None, "source": "explicit" if explicit else "dispatcher",
@@ -1957,6 +1981,13 @@ def attach_binding_fact(receipt: dict[str, Any], facts: Any) -> dict[str, Any]:
 
 
 def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
+    # Issue #122: a Host-named start on a platform with no measured Host
+    # Skill entry fails closed before anything exists,
+    # the bridge included.
+    if not host_capable(args.platform) and host_session(args.platform, args.session):
+        return heartbeat_host_refusal(args, repo, {
+            "source": "none", "dispatcher": None,
+            "refusal": host_entry_unsupported(args.platform, "Host")})
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args))
     if any(not fact["present"] for fact in getattr(args, "agent_command_facts", [])):

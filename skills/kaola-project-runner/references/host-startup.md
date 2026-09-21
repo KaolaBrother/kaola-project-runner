@@ -46,7 +46,8 @@ handling does not. Do not take that over session by session.
    attach update, a worker-event notification, and the round after any
    compaction — opens with `/kaola-project-runner` as its first line (a
    non-ZCode Host: its platform's `host_skill_entry`, per
-   [host-entry-matrix.md](host-entry-matrix.md)). A busy
+   [host-entry-matrix.md](host-entry-matrix.md); an empty entry cannot host
+   and refuses `host-entry-unsupported`). A busy
    `steer` guide is not a new prompt: it enters the running turn verbatim,
    keeps the already-loaded context, and is no new Skill invocation. The
    composite `steer --steer-mode interrupt` ends the turn and resends on a
