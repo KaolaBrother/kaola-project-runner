@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Grok sessions record the CLI build they actually ran (Issue #124).** Grok's `initialize`
+  returns no `agentInfo`, so a grok ACP `start` now stores the launched binary's `--version`
+  line as `cli_version` (`path`, `version`, `verified_versions`) in `record.json`, holder state,
+  and the start receipt's `transport`. It is recorded, never enforced: a mismatch still starts.
+  A live ACP smoke on grok 1.0.40 (start/send/read/cancel/stop: `end_turn`, `cancelled`, exit 0,
+  no residual pids; steering entries still `-32601`) moves `acp_verified_versions` and the
+  steering summary from cli 1.0.25 to 1.0.40.
 - **Non-ZCode ACP runtimes can host Project Runner (Issue #119).** Every platform manifest gains
   `host_skill_entry`: the measured first line that opens each Host turn. It is filled only from
   live trigger evidence in a fresh ACP session, plus a negative control.

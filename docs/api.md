@@ -67,7 +67,11 @@ PTY does (`CLAUDE_BIN`, else the first PATH match) and passes it to the bridge a
 `CLAUDE_ACP_CLAUDE_BIN`, reporting it as `runtime_binary` (`env`, `path`, `absolute`, `present`,
 `passed_as`, and on `preflight` the `--version` line); a non-absolute or missing value makes the
 bridge fail closed (`session/new`, `session/resume`, and `session/prompt` return JSON-RPC
-`-32603`) rather than search PATH. For ZCode the Runner never searches PATH: `preflight` and
+`-32603`) rather than search PATH. Grok's `initialize` returns no `agentInfo`, so a grok `start`
+resolves the ACP command's first word on the agent's PATH, runs its `--version`, and records
+`cli_version` (`path`, `version`, `verified_versions` from `acp_verified_versions`) in
+`record.json`, holder state, and the start receipt's `transport` (Issue #124). It is a fact only:
+a version that differs from the verified one, or an unreadable one, still starts. For ZCode the Runner never searches PATH: `preflight` and
 `start` fail closed unless `KAOLA_ZCODE_ENTRY` and `KAOLA_ZCODE_NODE` are both explicit
 absolute files (the adapter then launches `app-server --stdio` with `ELECTRON_RUN_AS_NODE=1`
 and an allowlisted child environment, and hands the desktop App's enabled GLM Coding Plan

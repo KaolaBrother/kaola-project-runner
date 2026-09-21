@@ -1,7 +1,7 @@
 # Grok CLI steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unsupported** (entry ``). No steering entry on the ACP surface: cli 1.0.25 answers JSON-RPC -32601 with the explicit data `unknown ACP extension method`, and `initialize` advertises `x.ai/hooks` and `x.ai/capabilities` but no steering `_meta`.
+**unsupported** (entry ``). No steering entry on the ACP surface: cli 1.0.40 answers JSON-RPC -32601 with the explicit data `unknown ACP extension method`, and `initialize` advertises `x.ai/hooks` and `x.ai/capabilities` but no steering `_meta`.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
