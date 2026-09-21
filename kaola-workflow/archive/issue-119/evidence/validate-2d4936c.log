@@ -1,0 +1,592 @@
+validate: scrubbed inherited env: KAOLA_ACP_DISPATCHER KAOLA_ACP_HEARTBEAT_HOST KAOLA_ACP_HEARTBEAT_HOST_SOCKET KAOLA_CLAUDE_PROFILE_REQUIRED KAOLA_PROJECT_RUNNER_CANONICAL_REPO KAOLA_ZCODE_ENTRY KAOLA_ZCODE_NODE
+render-skills: PASS (10 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2536 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+installer migration acceptance: PASS
+installer runtimes acceptance: PASS
+test_every_generated_copy_is_covered (__main__.TestEntrypointCannotSelfDeadlock.test_every_generated_copy_is_covered)
+The rule is worthless if it only guards the un-run source file. ... ok
+test_no_here_document_anywhere_in_the_shared_entrypoint (__main__.TestEntrypointCannotSelfDeadlock.test_no_here_document_anywhere_in_the_shared_entrypoint)
+One rule, checked structurally: this file uses no heredoc, ever. ... ok
+test_no_here_document_in_the_installer_or_validate_chain (__main__.TestEntrypointCannotSelfDeadlock.test_no_here_document_in_the_installer_or_validate_chain)
+Issue #101: place_staged deadlocked on its here-document under load. ... ok
+test_the_entrypoint_exists (__main__.TestEntrypointCannotSelfDeadlock.test_the_entrypoint_exists) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.003s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.063s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+...............................
+----------------------------------------------------------------------
+Ran 31 tests in 0.483s
+
+OK
+...............................................
+----------------------------------------------------------------------
+Ran 47 tests in 60.694s
+
+OK
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 10.141s
+
+OK
+............
+----------------------------------------------------------------------
+Ran 12 tests in 11.571s
+
+OK
+.............................
+----------------------------------------------------------------------
+Ran 29 tests in 6.655s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 2.600s
+
+OK
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 66.081s
+
+OK
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.002s
+
+OK
+generated Skill acceptance: PASS
+......................
+----------------------------------------------------------------------
+Ran 22 tests in 0.205s
+
+OK
+.......................
+----------------------------------------------------------------------
+Ran 23 tests in 1.815s
+
+OK
+test_a_confirmed_change_takes_effect_in_the_same_beat (__main__.HeartbeatGuidanceObligation.test_a_confirmed_change_takes_effect_in_the_same_beat) ... ok
+test_budgets_are_not_raised (__main__.HeartbeatGuidanceObligation.test_budgets_are_not_raised) ... ok
+test_carriers_stay_host_native_and_no_new_mechanism_is_introduced (__main__.HeartbeatGuidanceObligation.test_carriers_stay_host_native_and_no_new_mechanism_is_introduced) ... ok
+test_each_beat_subtracts_while_keeping_live_work (__main__.HeartbeatGuidanceObligation.test_each_beat_subtracts_while_keeping_live_work) ... ok
+test_exhaustion_neither_switches_platform_nor_cancels_in_flight (__main__.HeartbeatGuidanceObligation.test_exhaustion_neither_switches_platform_nor_cancels_in_flight) ... ok
+test_heartbeat_is_defined_per_host_without_a_shared_implementation (__main__.HeartbeatGuidanceObligation.test_heartbeat_is_defined_per_host_without_a_shared_implementation) ... ok
+test_quota_units_are_not_fused_into_one_number (__main__.HeartbeatGuidanceObligation.test_quota_units_are_not_fused_into_one_number) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.001s
+
+OK
+test_a_different_issue_or_project_never_cross_binds (__main__.AnchoredGrammarSeparatesIssues.test_a_different_issue_or_project_never_cross_binds) ... ok
+test_an_issue_shaped_substring_elsewhere_is_not_an_issue (__main__.AnchoredGrammarSeparatesIssues.test_an_issue_shaped_substring_elsewhere_is_not_an_issue) ... ok
+test_contract_examples_parse_and_stay_inside_the_existing_session_syntax (__main__.AnchoredGrammarSeparatesIssues.test_contract_examples_parse_and_stay_inside_the_existing_session_syntax) ... ok
+test_malformed_and_old_names_fall_back_to_unknown (__main__.AnchoredGrammarSeparatesIssues.test_malformed_and_old_names_fall_back_to_unknown) ... ok
+test_two_simultaneous_workers_on_one_issue_stay_distinct_but_share_the_issue (__main__.AnchoredGrammarSeparatesIssues.test_two_simultaneous_workers_on_one_issue_stay_distinct_but_share_the_issue) ... ok
+test_every_worker_example_uses_an_issue_scoped_name (__main__.ExamplesDoNotTeachTheOldName.test_every_worker_example_uses_an_issue_scoped_name) ... ok
+test_the_startup_reference_keeps_one_exact_name_across_the_five_operations (__main__.ExamplesDoNotTeachTheOldName.test_the_startup_reference_keeps_one_exact_name_across_the_five_operations) ... ok
+test_no_budget_was_raised_and_the_main_skill_clears_the_probe_ceiling (__main__.NoNewMechanism.test_no_budget_was_raised_and_the_main_skill_clears_the_probe_ceiling) ... ok
+test_no_new_workflow_state_field_registry_or_daemon (__main__.NoNewMechanism.test_no_new_workflow_state_field_registry_or_daemon) ... ok
+test_no_worker_skill_learned_an_issue_rule (__main__.NoNewMechanism.test_no_worker_skill_learned_an_issue_rule) ... ok
+test_the_session_validator_is_still_the_single_1_80_syntax (__main__.NoNewMechanism.test_the_session_validator_is_still_the_single_1_80_syntax) ... ok
+test_heartbeat_skeleton_carries_the_project_code_slot_and_both_rules (__main__.RenderedSurfacesStateTheRule.test_heartbeat_skeleton_carries_the_project_code_slot_and_both_rules) ... ok
+test_main_skill_states_the_name_the_code_slot_and_one_issue_per_run (__main__.RenderedSurfacesStateTheRule.test_main_skill_states_the_name_the_code_slot_and_one_issue_per_run) ... ok
+test_reference_states_the_grammar_negatives_and_non_goals (__main__.RenderedSurfacesStateTheRule.test_reference_states_the_grammar_negatives_and_non_goals) ... ok
+test_templates_and_rendered_surfaces_agree (__main__.RenderedSurfacesStateTheRule.test_templates_and_rendered_surfaces_agree) ... ok
+test_the_worktree_reference_no_longer_calls_a_run_a_bundle (__main__.RenderedSurfacesStateTheRule.test_the_worktree_reference_no_longer_calls_a_run_a_bundle) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.017s
+
+OK
+test_binding_spelled_through_a_symlink_accepts_the_real_root (__main__.TestBindingCompletesAndAccepts.test_binding_spelled_through_a_symlink_accepts_the_real_root) ... ok
+test_dotted_path_spelling_resolving_to_the_binding_is_accepted (__main__.TestBindingCompletesAndAccepts.test_dotted_path_spelling_resolving_to_the_binding_is_accepted) ... ok
+test_explicit_repo_equal_to_the_binding_is_accepted (__main__.TestBindingCompletesAndAccepts.test_explicit_repo_equal_to_the_binding_is_accepted) ... ok
+test_omitted_repo_is_completed_from_the_binding (__main__.TestBindingCompletesAndAccepts.test_omitted_repo_is_completed_from_the_binding)
+No --repo at all: the bound root is used, not the current directory. ... ok
+test_symlink_spelling_resolving_to_the_binding_is_accepted (__main__.TestBindingCompletesAndAccepts.test_symlink_spelling_resolving_to_the_binding_is_accepted) ... ok
+test_acp_transport_is_refused_by_the_same_shared_guard (__main__.TestBindingRefusesDrift.test_acp_transport_is_refused_by_the_same_shared_guard) ... ok
+test_child_worktree_of_the_same_repository_is_refused (__main__.TestBindingRefusesDrift.test_child_worktree_of_the_same_repository_is_refused) ... ok
+test_refusal_happens_before_the_acp_agent_is_launched (__main__.TestBindingRefusesDrift.test_refusal_happens_before_the_acp_agent_is_launched) ... ok
+test_second_child_worktree_is_refused_too (__main__.TestBindingRefusesDrift.test_second_child_worktree_is_refused_too) ... ok
+test_unrelated_repository_is_refused (__main__.TestBindingRefusesDrift.test_unrelated_repository_is_refused) ... ok
+test_dispatch_into_a_child_worktree_creates_no_worker_record (__main__.TestBoundRootReachesTheWorkerRecord.test_dispatch_into_a_child_worktree_creates_no_worker_record) ... ok
+test_started_worker_record_carries_the_bound_root (__main__.TestBoundRootReachesTheWorkerRecord.test_started_worker_record_carries_the_bound_root) ... ok
+test_binding_outside_any_repository_is_refused (__main__.TestInvalidBinding.test_binding_outside_any_repository_is_refused) ... ok
+test_binding_that_is_not_a_git_root_is_refused (__main__.TestInvalidBinding.test_binding_that_is_not_a_git_root_is_refused) ... ok
+test_invalid_binding_is_refused_even_when_repo_is_omitted (__main__.TestInvalidBinding.test_invalid_binding_is_refused_even_when_repo_is_omitted) ... ok
+test_missing_binding_path_is_refused (__main__.TestInvalidBinding.test_missing_binding_path_is_refused) ... ok
+test_relative_binding_is_refused (__main__.TestInvalidBinding.test_relative_binding_is_refused) ... ok
+test_empty_binding_is_not_orchestrator_context (__main__.TestPreservedBehavior.test_empty_binding_is_not_orchestrator_context) ... ok
+test_legacy_acp_session_can_still_be_captured (__main__.TestPreservedBehavior.test_legacy_acp_session_can_still_be_captured) ... ok
+test_legacy_worktree_rooted_session_can_still_be_observed (__main__.TestPreservedBehavior.test_legacy_worktree_rooted_session_can_still_be_observed) ... ok
+test_legacy_worktree_rooted_session_can_still_be_stopped (__main__.TestPreservedBehavior.test_legacy_worktree_rooted_session_can_still_be_stopped)
+Close-out by the verified original locator survives the binding. ... ok
+test_standalone_acp_start_in_a_child_worktree_is_not_refused (__main__.TestPreservedBehavior.test_standalone_acp_start_in_a_child_worktree_is_not_refused) ... ok
+test_standalone_omitted_repo_still_fails_as_before (__main__.TestPreservedBehavior.test_standalone_omitted_repo_still_fails_as_before)
+Without a binding there is nothing to complete from: unchanged error. ... ok
+test_standalone_start_in_a_child_worktree_is_not_refused (__main__.TestPreservedBehavior.test_standalone_start_in_a_child_worktree_is_not_refused) ... ok
+test_a_drifted_root_keeps_its_own_refusal_ahead_of_the_pty_gate (__main__.TestRunnerDispatchIsAcpOnly.test_a_drifted_root_keeps_its_own_refusal_ahead_of_the_pty_gate) ... ok
+test_acp_start_under_a_dispatcher_passes_the_shell_to_the_acp_resolver (__main__.TestRunnerDispatchIsAcpOnly.test_acp_start_under_a_dispatcher_passes_the_shell_to_the_acp_resolver)
+The shell gate is PTY-only: an ACP start reaches kaola-acp.py, whose ... ok
+test_n6_pty_start_under_a_zcode_dispatcher_is_refused (__main__.TestRunnerDispatchIsAcpOnly.test_n6_pty_start_under_a_zcode_dispatcher_is_refused) ... ok
+test_n6b_pty_start_under_a_non_zcode_dispatcher_is_refused_too (__main__.TestRunnerDispatchIsAcpOnly.test_n6b_pty_start_under_a_non_zcode_dispatcher_is_refused_too) ... ok
+test_n6c_pty_start_with_only_the_canonical_root_export_is_refused (__main__.TestRunnerDispatchIsAcpOnly.test_n6c_pty_start_with_only_the_canonical_root_export_is_refused) ... ok
+test_n6d_standalone_pty_start_proceeds_exactly_as_today (__main__.TestRunnerDispatchIsAcpOnly.test_n6d_standalone_pty_start_proceeds_exactly_as_today) ... ok
+test_other_pty_commands_under_a_dispatcher_are_not_gated (__main__.TestRunnerDispatchIsAcpOnly.test_other_pty_commands_under_a_dispatcher_are_not_gated) ... ok
+test_force_stop_also_honors_the_instance_check (__main__.TestStopInstanceProtection.test_force_stop_also_honors_the_instance_check) ... ok
+test_shared_entrypoint_forwards_the_expected_instance_to_stop (__main__.TestStopInstanceProtection.test_shared_entrypoint_forwards_the_expected_instance_to_stop) ... ok
+test_stop_with_a_foreign_instance_id_is_refused_with_no_side_effect (__main__.TestStopInstanceProtection.test_stop_with_a_foreign_instance_id_is_refused_with_no_side_effect) ... ok
+test_stop_with_the_verified_instance_id_stops (__main__.TestStopInstanceProtection.test_stop_with_the_verified_instance_id_stops) ... ok
+test_stop_without_an_expected_instance_keeps_todays_behavior (__main__.TestStopInstanceProtection.test_stop_without_an_expected_instance_keeps_todays_behavior) ... ok
+
+----------------------------------------------------------------------
+Ran 36 tests in 7.648s
+
+OK
+............................................
+----------------------------------------------------------------------
+Ran 44 tests in 26.007s
+
+OK
+.....................
+----------------------------------------------------------------------
+Ran 21 tests in 13.214s
+
+OK
+PASS test_provenance (122 checks)
+PASS test_dist_self_contained (6 checks)
+PASS test_turns_flags_env_cwd_logs (49 checks)
+PASS test_cwd_validation (3 checks)
+PASS test_permission_roundtrip (4 checks)
+PASS test_cancel_kills_process_group (10 checks)
+PASS test_stale_cancel_does_not_taint_next_turn (6 checks)
+PASS test_stop_during_turn_cleans_everything (5 checks)
+PASS test_missing_binary_fails_closed (10 checks)
+PASS test_concurrent_session_isolation (4 checks)
+PASS test_named_continuity_list_and_resume (7 checks)
+test-issue-50: 226 checks, 11/11 tests passed
+PASS test_continue_and_resume_land_in_the_same_native_session (9 checks)
+PASS test_fail_closed_without_exact_binary_or_bridge (10 checks)
+PASS test_force_stop_sweeps_detached_claude_groups (70 checks)
+PASS test_manifest_and_generated_skill (43 checks)
+PASS test_preflight_facts_in_both_layouts (18 checks)
+PASS test_pty_fallback_stays_explicit (3 checks)
+PASS test_start_send_cancel_stop_through_generated_skill (33 checks)
+test-issue-50-runner-integration: 7/7 tests, 186 checks
+.............................................................................
+----------------------------------------------------------------------
+Ran 77 tests in 191.836s
+
+OK
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 7.430s
+
+OK
+PASS test_fail_closed_without_explicit_runtime (14 checks)
+PASS test_installer_knows_zcode_and_rejects_zcode_bot (8 checks)
+PASS test_manifest_renderer_and_inventory (53 checks)
+PASS test_skip_all_mode_is_yolo_on_acp_and_pty (8 checks)
+PASS test_start_send_cancel_stop_schema_v3 (32 checks)
+PASS test_transport_dispatch_acp_default_pty_diagnostic (8 checks)
+test-issue-51-runner-integration: 6/6 tests, 123 checks
+PASS test_command_start_appends_child_record_when_env_present (11 checks)
+PASS test_holder_lost_stop_force_sweeps_recorded_inner (11 checks)
+PASS test_nested_two_layer_isolation_and_exact_stop (25 checks)
+test-zcode-host-contract: 3/3 tests, 47 checks
+PASS test_bounded_queue_dedup_and_single_batch_flush (48 checks)
+PASS test_busy_host_stages_then_flushes_after_turn_completed (15 checks)
+PASS test_canonical_heartbeat_spec_stays_one_set (13 checks)
+PASS test_carrier_needs_host_skill_entry (9 checks)
+PASS test_idle_episode_reads_prompt_body_at_delivery_time (25 checks)
+PASS test_issue_104_dispatcher_refusals_open_nothing (56 checks)
+PASS test_issue_104_explicit_and_no_carrier_rows (10 checks)
+PASS test_issue_104_start_inside_host_agent_binds_mechanically (26 checks)
+PASS test_issue_105_worker_skill_build_skew_refuses_before_spawn (14 checks)
+PASS test_issue_106_unreadable_discovery_root_is_a_typed_refusal (7 checks)
+PASS test_issue_108_host_requires_glm53_max (23 checks)
+PASS test_issue_108_worker_names_are_never_pinned (11 checks)
+PASS test_issue_66_defective_prompt_file_reports_its_defect (21 checks)
+PASS test_issue_66_unarmed_worker_stays_ungated (6 checks)
+PASS test_issue_87_idle_full_queue_overflow_delivers_now (6 checks)
+PASS test_issue_87_overflow_full_check_on_busy_host (57 checks)
+PASS test_issue_87_overflow_survives_stop_and_resume (52 checks)
+PASS test_issue_87_oversized_heartbeat_prompt_is_not_injected (10 checks)
+PASS test_issue_87_restore_seeds_generation_from_confirmed_after_rotation (7 checks)
+PASS test_issue_87_restore_takes_max_generation_when_log_is_reordered (4 checks)
+PASS test_issue_94_interrupt_steer_resends_verbatim_on_every_session (14 checks)
+PASS test_resume_redelivers_unconfirmed_events (13 checks)
+PASS test_terminated_event_delivers_full_body_and_confirms (25 checks)
+test-zcode-heartbeat-contract: 23/23 tests, 472 checks
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.269s
+
+OK
+......
+----------------------------------------------------------------------
+Ran 6 tests in 4.003s
+
+OK
+test_a_native_platform_can_still_be_asked_to_interrupt (__main__.SteeringContract.test_a_native_platform_can_still_be_asked_to_interrupt) ... ok
+test_agent_refusal_is_rejected_not_unknown (__main__.SteeringContract.test_agent_refusal_is_rejected_not_unknown) ... ok
+test_cancel_bound_to_a_finished_turn_reports_turn_changed (__main__.SteeringContract.test_cancel_bound_to_a_finished_turn_reports_turn_changed)
+The same binding, reachable directly: a stale id cancels nothing. ... ok
+test_cancel_then_steer_is_not_consumed (__main__.SteeringContract.test_cancel_then_steer_is_not_consumed) ... ok
+test_composite_steer_without_an_acp_session_is_not_consumed (__main__.SteeringContract.test_composite_steer_without_an_acp_session_is_not_consumed) ... ok
+test_consecutive_steers_each_get_their_own_receipt (__main__.SteeringContract.test_consecutive_steers_each_get_their_own_receipt) ... ok
+test_every_platform_has_a_documented_usable_path (__main__.SteeringContract.test_every_platform_has_a_documented_usable_path)
+The deliverable: ten platforms, ten usable steering paths. ... ok
+test_generated_skills_advertise_only_real_tools (__main__.SteeringContract.test_generated_skills_advertise_only_real_tools)
+Every platform documents a usable path; only a real native entry is ... ok
+test_idle_session_is_never_steered (__main__.SteeringContract.test_idle_session_is_never_steered) ... ok
+test_injected_preserves_the_running_turn (__main__.SteeringContract.test_injected_preserves_the_running_turn) ... ok
+test_interrupt_cancels_the_turn_then_resends_once (__main__.SteeringContract.test_interrupt_cancels_the_turn_then_resends_once) ... ok
+test_interrupt_on_an_idle_session_does_not_pretend_to_interrupt (__main__.SteeringContract.test_interrupt_on_an_idle_session_does_not_pretend_to_interrupt) ... ok
+test_manifest_pairs_capability_with_entry (__main__.SteeringContract.test_manifest_pairs_capability_with_entry) ... ok
+test_native_mode_on_an_unsupported_platform_writes_nothing (__main__.SteeringContract.test_native_mode_on_an_unsupported_platform_writes_nothing) ... ok
+test_native_steer_without_an_acp_session_is_not_consumed (__main__.SteeringContract.test_native_steer_without_an_acp_session_is_not_consumed) ... ok
+test_no_native_entry_refuses_until_the_agent_picks_a_mode (__main__.SteeringContract.test_no_native_entry_refuses_until_the_agent_picks_a_mode)
+The Runner never chooses to interrupt on the Agent's behalf. ... ok
+test_no_reply_keeps_consumption_unknown (__main__.SteeringContract.test_no_reply_keeps_consumption_unknown) ... ok
+test_prompt_required_is_not_consumed (__main__.SteeringContract.test_prompt_required_is_not_consumed) ... ok
+test_pty_transport_is_honest_unsupported (__main__.SteeringContract.test_pty_transport_is_honest_unsupported) ... ok
+test_repeated_interrupt_steers_the_steer (__main__.SteeringContract.test_repeated_interrupt_steers_the_steer) ... ok
+test_send_wait_cancel_stop_have_no_regression (__main__.SteeringContract.test_send_wait_cancel_stop_have_no_regression) ... ok
+test_send_without_an_acp_session_writes_nothing (__main__.SteeringContract.test_send_without_an_acp_session_writes_nothing) ... ok
+test_started_new_turn_is_not_called_injection (__main__.SteeringContract.test_started_new_turn_is_not_called_injection) ... ok
+test_steer_targets_only_its_own_session (__main__.SteeringContract.test_steer_targets_only_its_own_session) ... ok
+test_unconfirmed_cancel_sends_nothing (__main__.SteeringContract.test_unconfirmed_cancel_sends_nothing)
+A turn that will not stop must never receive a second dispatch. ... ok
+test_unrecognized_outcome_stays_unknown (__main__.SteeringContract.test_unrecognized_outcome_stays_unknown) ... ok
+test_unsupported_platform_never_consumes (__main__.SteeringContract.test_unsupported_platform_never_consumes)
+An explicit native request on a platform without the entry. ... ok
+
+----------------------------------------------------------------------
+Ran 27 tests in 31.546s
+
+OK
+test_a_late_answer_cannot_settle_the_turn_running_now (__main__.SteerRaceContract.test_a_late_answer_cannot_settle_the_turn_running_now) ... ok
+test_a_send_reports_the_request_id_from_its_own_admission (__main__.SteerRaceContract.test_a_send_reports_the_request_id_from_its_own_admission)
+Nothing downstream should have to ask `self.turn` who it just was. ... ok
+test_cancel_bound_to_a_replaced_turn_sends_nothing (__main__.SteerRaceContract.test_cancel_bound_to_a_replaced_turn_sends_nothing) ... ok
+test_cancel_receipt_describes_its_own_turn_when_another_takes_over (__main__.SteerRaceContract.test_cancel_receipt_describes_its_own_turn_when_another_takes_over)
+A ends and B takes over while the cancel is in flight. ... ok
+test_composite_does_not_claim_an_interruption_it_never_made (__main__.SteerRaceContract.test_composite_does_not_claim_an_interruption_it_never_made)
+A finishes on its own after the snapshot, while still being our turn. ... ok
+test_composite_new_turn_id_is_its_own_send (__main__.SteerRaceContract.test_composite_new_turn_id_is_its_own_send)
+B takes over immediately after our steering prompt is admitted. ... ok
+test_composite_reports_the_turn_it_targeted_when_b_takes_over (__main__.SteerRaceContract.test_composite_reports_the_turn_it_targeted_when_b_takes_over)
+A stops because of us, but B owns the session before we can send. ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.007s
+
+OK
+test_reference_never_uses_the_event_cursor_as_a_since_anchor (__main__.CursorAnchorBehaviour.test_reference_never_uses_the_event_cursor_as_a_since_anchor) ... ok
+test_turn_end_cursor_loses_the_reply_and_dispatch_cursor_keeps_it (__main__.CursorAnchorBehaviour.test_turn_end_cursor_loses_the_reply_and_dispatch_cursor_keeps_it) ... ok
+test_documented_mechanics_match_the_scripts (__main__.HostDispatchContract.test_documented_mechanics_match_the_scripts) ... ok
+test_main_skill_protects_a_waiting_host_from_idle_stop (__main__.HostDispatchContract.test_main_skill_protects_a_waiting_host_from_idle_stop) ... ok
+test_main_skill_states_the_end_turn_rule (__main__.HostDispatchContract.test_main_skill_states_the_end_turn_rule) ... ok
+test_reference_distinguishes_the_three_identities (__main__.HostDispatchContract.test_reference_distinguishes_the_three_identities) ... ok
+test_reference_explains_the_carrier_semantics (__main__.HostDispatchContract.test_reference_explains_the_carrier_semantics) ... ok
+test_reference_is_generated_and_within_budget (__main__.HostDispatchContract.test_reference_is_generated_and_within_budget) ... ok
+test_reference_keeps_turn_end_and_exit_as_equal_triggers (__main__.HostDispatchContract.test_reference_keeps_turn_end_and_exit_as_equal_triggers) ... ok
+test_reference_reads_results_by_worker_identity_and_cursor (__main__.HostDispatchContract.test_reference_reads_results_by_worker_identity_and_cursor) ... ok
+test_reference_reads_the_dispatch_receipt_honestly (__main__.HostDispatchContract.test_reference_reads_the_dispatch_receipt_honestly) ... ok
+test_reference_says_ending_the_turn_is_the_wait (__main__.HostDispatchContract.test_reference_says_ending_the_turn_is_the_wait) ... ok
+test_reference_starts_the_worker_from_the_host_with_a_runnable_example (__main__.HostDispatchContract.test_reference_starts_the_worker_from_the_host_with_a_runnable_example) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 1.313s
+
+OK
+PASS test_binding_fact_is_the_holder_not_the_caller_environment (14 checks)
+PASS test_rebinding_runs_through_the_existing_exact_stop_and_start (7 checks)
+PASS test_recovery_is_internal_bounded_and_only_exceptions_go_outward (9 checks)
+PASS test_unbound_is_explicit_and_a_pre_issue_70_record_is_unknown (6 checks)
+PASS test_worker_examples_use_issue_scoped_names (6 checks)
+PASS test_zcode_native_resume_id_comes_from_the_identity_event (13 checks)
+test-issue-70-binding-fact: 6/6 tests, 55 checks
+PASS test_permission_required_wakes_idle_host_while_turn_active (25 checks)
+PASS test_permission_event_stages_on_busy_host_then_flushes (12 checks)
+PASS test_droid_worker_wake_is_metadata_only_and_idempotent (22 checks)
+PASS test_unbound_worker_permission_is_unchanged (7 checks)
+PASS test_worker_event_validation_accepts_permission_required (11 checks)
+PASS: issue-76 permission wake contract (5 tests)
+...................
+----------------------------------------------------------------------
+Ran 19 tests in 0.932s
+
+OK
+test_failing_suite_does_not_hide_downstream_suites (__main__.TestLaneFailureVisibility.test_failing_suite_does_not_hide_downstream_suites)
+Both lanes finish every suite; nothing unmeasured, nothing hidden. ... ok
+test_green_path_is_unchanged (__main__.TestLaneFailureVisibility.test_green_path_is_unchanged)
+All suites pass: zero exit, every log replayed in order. ... ok
+test_missing_log_is_reported_skipped_not_a_cat_error (__main__.TestLaneFailureVisibility.test_missing_log_is_reported_skipped_not_a_cat_error)
+A suite that left no log is reported SKIPPED; replay continues. ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.277s
+
+OK
+PASS test_generated_entry_matrix_and_no_engine_leak
+PASS test_fake_acp_host_worker_event_and_live_status
+PASS test_adopt_nonstandard_live_host_without_second_start
+PASS test_existing_locator_accepts_zcode_host_full_attestation
+PASS test_missing_authorization_non_start_is_documentation_only
+PASS test_new_standard_host_after_confirmed_stop
+issue-74 checks: 158 assertions, 0 failed tests
+.....................................
+----------------------------------------------------------------------
+Ran 37 tests in 4.482s
+
+OK
+test_doc_bounds_the_evidence (__main__.Doc.test_doc_bounds_the_evidence) ... ok
+test_doc_discovery_roots_cover_agents_skills (__main__.Doc.test_doc_discovery_roots_cover_agents_skills) ... ok
+test_doc_interrupt_steer_is_not_a_host_entry (__main__.Doc.test_doc_interrupt_steer_is_not_a_host_entry) ... ok
+test_doc_marks_busy_steer_as_no_reentry (__main__.Doc.test_doc_marks_busy_steer_as_no_reentry) ... ok
+test_doc_names_every_entry_point (__main__.Doc.test_doc_names_every_entry_point) ... ok
+test_doc_states_the_entry (__main__.Doc.test_doc_states_the_entry) ... ok
+test_generated_files_exist_and_link (__main__.GeneratedSurface.test_generated_files_exist_and_link) ... ok
+test_generated_handoff_block (__main__.GeneratedSurface.test_generated_handoff_block) ... ok
+test_generated_skeleton_body_has_no_entry_line (__main__.GeneratedSurface.test_generated_skeleton_body_has_no_entry_line) ... ok
+test_generated_surface_carries_steer_and_root_facts (__main__.GeneratedSurface.test_generated_surface_carries_steer_and_root_facts) ... ok
+test_entry_is_the_first_payload_line (__main__.HolderEnvelope.test_entry_is_the_first_payload_line) ... ok
+test_holder_documents_interrupt_is_no_recovery_entry (__main__.HolderEnvelope.test_holder_documents_interrupt_is_no_recovery_entry) ... ok
+test_host_skill_entry_constant (__main__.HolderEnvelope.test_host_skill_entry_constant) ... ok
+test_interrupt_resend_is_verbatim_with_no_host_marker (__main__.HolderEnvelope.test_interrupt_resend_is_verbatim_with_no_host_marker)
+The composite interrupt resend carries the Agent's text verbatim ... ok
+test_no_second_mechanism (__main__.HolderEnvelope.test_no_second_mechanism) ... ok
+test_delegator_handoff_marks_busy_steer_as_no_reentry (__main__.Templates.test_delegator_handoff_marks_busy_steer_as_no_reentry) ... ok
+test_delegator_handoff_uses_the_same_entry (__main__.Templates.test_delegator_handoff_uses_the_same_entry) ... ok
+test_dispatch_names_the_entry_line (__main__.Templates.test_dispatch_names_the_entry_line) ... ok
+test_main_skill_points_at_the_entry_reference (__main__.Templates.test_main_skill_points_at_the_entry_reference) ... ok
+test_old_carrier_reference_is_deleted (__main__.Templates.test_old_carrier_reference_is_deleted) ... ok
+test_reference_busy_steer_is_no_skill_reentry (__main__.Templates.test_reference_busy_steer_is_no_skill_reentry) ... ok
+test_reference_covers_every_entry_point (__main__.Templates.test_reference_covers_every_entry_point) ... ok
+test_reference_denies_the_old_dependencies (__main__.Templates.test_reference_denies_the_old_dependencies) ... ok
+test_reference_discovery_roots_cover_agents_skills (__main__.Templates.test_reference_discovery_roots_cover_agents_skills) ... ok
+test_reference_interrupt_steer_is_not_a_host_entry (__main__.Templates.test_reference_interrupt_steer_is_not_a_host_entry) ... ok
+test_reference_keeps_honest_runtime_facts_and_bounds (__main__.Templates.test_reference_keeps_honest_runtime_facts_and_bounds) ... ok
+test_reference_names_configured_roots (__main__.Templates.test_reference_names_configured_roots) ... ok
+test_reference_scopes_the_entry_to_turn_opening_prompts (__main__.Templates.test_reference_scopes_the_entry_to_turn_opening_prompts) ... ok
+test_skeleton_body_excludes_the_entry_and_skill_text (__main__.Templates.test_skeleton_body_excludes_the_entry_and_skill_text) ... ok
+test_startup_teaches_the_same_entry (__main__.Templates.test_startup_teaches_the_same_entry) ... ok
+
+----------------------------------------------------------------------
+Ran 30 tests in 0.009s
+
+OK
+..................
+----------------------------------------------------------------------
+Ran 18 tests in 1.493s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.582s
+
+OK
+PASS test-issue-86-delegator-quota.py (46 checks)
+..........................................
+----------------------------------------------------------------------
+Ran 42 tests in 0.519s
+
+OK
+test_a_cached_confirmation_that_rotated_away_is_deliverable_again (__main__.EventConfirmationRace.test_a_cached_confirmation_that_rotated_away_is_deliverable_again)
+The promise is the RETAINED log - including for an id sitting in the ... ok
+test_a_confirmation_is_durable_before_it_is_answerable (__main__.EventConfirmationRace.test_a_confirmation_is_durable_before_it_is_answerable)
+The event log is the only persistence, so nothing may observe an ... ok
+test_a_confirmation_the_log_no_longer_holds_is_deliverable_again (__main__.EventConfirmationRace.test_a_confirmation_the_log_no_longer_holds_is_deliverable_again)
+The exact edge of the promise: it is as wide as the RETAINED log. ... ok
+test_a_confirmed_retry_is_ignored_past_the_hot_cache_bound (__main__.EventConfirmationRace.test_a_confirmed_retry_is_ignored_past_the_hot_cache_bound)
+The Issue says a confirmed event_id retry is ignored - with no "unless ... ok
+test_a_distinct_later_event_is_still_delivered_after_a_confirmed_retry (__main__.EventConfirmationRace.test_a_distinct_later_event_is_still_delivered_after_a_confirmed_retry) ... ok
+test_a_failed_notification_turn_leaves_the_event_redeliverable (__main__.EventConfirmationRace.test_a_failed_notification_turn_leaves_the_event_redeliverable) ... ok
+test_a_new_event_is_still_delivered_past_the_hot_cache_bound (__main__.EventConfirmationRace.test_a_new_event_is_still_delivered_past_the_hot_cache_bound)
+The wider lookup must not start swallowing genuinely new events. ... ok
+test_a_second_delivery_cannot_disturb_the_one_in_flight (__main__.EventConfirmationRace.test_a_second_delivery_cannot_disturb_the_one_in_flight)
+The interleaving a per-delivery rollback gets wrong. ... ok
+test_admission_failure_marks_nothing_and_keeps_the_event_deliverable (__main__.EventConfirmationRace.test_admission_failure_marks_nothing_and_keeps_the_event_deliverable)
+A prompt frame that is never written must not wedge the queue. ... ok
+test_an_unconfirmed_event_past_the_bound_still_resumes (__main__.EventConfirmationRace.test_an_unconfirmed_event_past_the_bound_still_resumes)
+At-least-once is unchanged: only CONFIRMED ids are suppressed. ... ok
+test_instant_response_confirms_a_full_queue_and_its_overflow_together (__main__.EventConfirmationRace.test_instant_response_confirms_a_full_queue_and_its_overflow_together)
+Realistic path: a busy Host fills the cap, overflows, then goes idle. ... ok
+test_instant_response_does_not_double_prompt_a_staged_event (__main__.EventConfirmationRace.test_instant_response_does_not_double_prompt_a_staged_event) ... ok
+test_instant_response_does_not_double_prompt_the_overflow_full_check (__main__.EventConfirmationRace.test_instant_response_does_not_double_prompt_the_overflow_full_check)
+Overflow full-check carries a generation, and races the same window. ... ok
+test_resume_rebuilds_the_confirmed_memory_from_the_event_log (__main__.EventConfirmationRace.test_resume_rebuilds_the_confirmed_memory_from_the_event_log)
+Dedup must survive a resume: the memory is derived from the log, so a ... ok
+test_resume_redelivers_unconfirmed_and_never_a_confirmed_event (__main__.EventConfirmationRace.test_resume_redelivers_unconfirmed_and_never_a_confirmed_event) ... ok
+test_retry_of_a_confirmed_event_id_does_not_prompt_again (__main__.EventConfirmationRace.test_retry_of_a_confirmed_event_id_does_not_prompt_again) ... ok
+test_the_carrier_op_stays_a_zcode_host_capability (__main__.EventConfirmationRace.test_the_carrier_op_stays_a_zcode_host_capability) ... ok
+test_the_confirmed_memory_is_bounded_and_keeps_the_newest (__main__.EventConfirmationRace.test_the_confirmed_memory_is_bounded_and_keeps_the_newest) ... ok
+test_two_deliveries_cannot_be_inside_the_admission_window_together (__main__.EventConfirmationRace.test_two_deliveries_cannot_be_inside_the_admission_window_together)
+Real threads, and deterministic in BOTH directions. ... ok
+
+----------------------------------------------------------------------
+Ran 19 tests in 8.896s
+
+OK
+PASS test_absent_host_recovers_the_wake_on_restart (32 checks)
+PASS test_recovered_wake_is_not_prompted_twice (16 checks)
+PASS test_settled_request_is_stale_and_never_wakes_the_host (16 checks)
+PASS test_exited_worker_wake_is_stale (14 checks)
+PASS test_busy_host_stages_the_recovered_wake (16 checks)
+PASS test_idle_and_unbound_paths_are_unchanged (11 checks)
+PASS test_a_reply_that_is_not_a_receipt_never_wedges_the_worker (10 checks)
+PASS test_a_host_answer_settles_the_debt_even_when_it_refuses (8 checks)
+PASS test_a_lost_receipt_retries_into_the_hosts_own_dedup (12 checks)
+PASS test_the_retention_has_no_retry_deadline (9 checks)
+PASS test_only_a_receipt_that_names_the_event_counts_as_delivered (13 checks)
+PASS test_an_older_host_build_keeps_the_wake_owed (11 checks)
+PASS test_an_accepting_receipt_must_name_the_event_that_was_sent (20 checks)
+PASS test_a_wake_that_dies_before_the_write_is_not_sent (15 checks)
+PASS test_a_late_settlement_is_a_stale_delivery_not_a_recovery (8 checks)
+PASS test_a_real_permit_during_an_offer_is_a_stale_delivery (18 checks)
+PASS test_the_host_contract_requires_fresh_verification (11 checks)
+PASS: issue-92 permission wake recovery contract (17/17 tests)
+test_exact_stop_settles_without_force (__main__.ReaderExceptionBoundary.test_exact_stop_settles_without_force) ... ok
+test_reader_survives_one_failed_message (__main__.ReaderExceptionBoundary.test_reader_survives_one_failed_message) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 2.172s
+
+OK
+test_codex_home_refusals (__main__.UserLayer.test_codex_home_refusals) ... ok
+test_emit_copy_is_self_contained (__main__.UserLayer.test_emit_copy_is_self_contained) ... ok
+test_emit_defers_only_to_a_bound_legacy_project_entry (__main__.UserLayer.test_emit_defers_only_to_a_bound_legacy_project_entry)
+Coexistence with the Issue #75 project layer: no double injection. ... ok
+test_emit_fires_for_compact_from_any_cwd (__main__.UserLayer.test_emit_fires_for_compact_from_any_cwd) ... ok
+test_emit_ignores_a_project_entry_that_lost_its_binding_or_entry (__main__.UserLayer.test_emit_ignores_a_project_entry_that_lost_its_binding_or_entry) ... ok
+test_emit_malformed_stdin_is_silent_and_exit_zero (__main__.UserLayer.test_emit_malformed_stdin_is_silent_and_exit_zero) ... ok
+test_emit_modes_stay_silent_on_stray_options (__main__.UserLayer.test_emit_modes_stay_silent_on_stray_options) ... ok
+test_emit_only_for_session_start_compact (__main__.UserLayer.test_emit_only_for_session_start_compact) ... ok
+test_empty_codex_home_is_refused (__main__.UserLayer.test_empty_codex_home_is_refused) ... ok
+test_fresh_codex_home_gets_only_ours (__main__.UserLayer.test_fresh_codex_home_gets_only_ours) ... ok
+test_hooks_json_symlink_cannot_escape_codex_home (__main__.UserLayer.test_hooks_json_symlink_cannot_escape_codex_home) ... ok
+test_install_appends_ours_and_preserves_foreign (__main__.UserLayer.test_install_appends_ours_and_preserves_foreign) ... ok
+test_install_blockers_are_receipts_not_tracebacks (__main__.UserLayer.test_install_blockers_are_receipts_not_tracebacks) ... ok
+test_malformed_and_null_shapes_refused_before_any_write (__main__.UserLayer.test_malformed_and_null_shapes_refused_before_any_write) ... ok
+test_payload_is_short_conditional_and_never_guesses_from_cwd (__main__.UserLayer.test_payload_is_short_conditional_and_never_guesses_from_cwd) ... ok
+test_reinstall_is_idempotent_and_makes_no_backup (__main__.UserLayer.test_reinstall_is_idempotent_and_makes_no_backup) ... ok
+test_status_reports_without_echoing_commands (__main__.UserLayer.test_status_reports_without_echoing_commands) ... ok
+test_uninstall_keeps_foreign_asset_siblings (__main__.UserLayer.test_uninstall_keeps_foreign_asset_siblings) ... ok
+test_uninstall_leaves_no_residue_when_only_ours (__main__.UserLayer.test_uninstall_leaves_no_residue_when_only_ours) ... ok
+test_uninstall_removes_only_ours (__main__.UserLayer.test_uninstall_removes_only_ours) ... ok
+test_user_layer_refuses_project_options_and_vice_versa (__main__.UserLayer.test_user_layer_refuses_project_options_and_vice_versa) ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 3.203s
+
+OK
+........................
+----------------------------------------------------------------------
+Ran 24 tests in 0.021s
+
+OK
+test_a_finished_suite_passes_its_status_through (__main__.TestValidateWatchdog.test_a_finished_suite_passes_its_status_through) ... ok
+test_a_hung_suite_is_killed_diagnosed_and_reported (__main__.TestValidateWatchdog.test_a_hung_suite_is_killed_diagnosed_and_reported) ... ok
+test_validate_runs_every_suite_under_the_watchdog (__main__.TestValidateWatchdog.test_validate_runs_every_suite_under_the_watchdog) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 9.251s
+
+OK
+test_acp_maps_each_tier_word_onto_its_manifest_keys (__main__.BothTransportsResolveTheSamePreset.test_acp_maps_each_tier_word_onto_its_manifest_keys) ... ok
+test_acp_resolves_the_measured_id_for_every_pinned_tier (__main__.BothTransportsResolveTheSamePreset.test_acp_resolves_the_measured_id_for_every_pinned_tier) ... ok
+test_pty_branch_reads_the_adapter_third_tier_variables (__main__.BothTransportsResolveTheSamePreset.test_pty_branch_reads_the_adapter_third_tier_variables)
+kaola-tmux.sh owns its own preset branch; it must read the new vars. ... ok
+test_droid_core_is_the_upgrade_preset_and_differs_from_default (__main__.LiveVerifiedPresets.test_droid_core_is_the_upgrade_preset_and_differs_from_default)
+Issue #117: core lands in `upgrade_*`, and core must not equal default. ... ok
+test_droid_launch_summary_names_auto_default_and_no_alternative (__main__.LiveVerifiedPresets.test_droid_launch_summary_names_auto_default_and_no_alternative)
+Issue #117: the summary states Auto default and K3 Max upgrade only. ... ok
+test_droid_needs_no_model_map_for_its_first_class_id (__main__.LiveVerifiedPresets.test_droid_needs_no_model_map_for_its_first_class_id)
+`auto` and `kimi-k3` are real Droid catalog ids, so nothing is hardcoded. ... ok
+test_dsh_default_is_already_carried_by_the_model_map (__main__.LiveVerifiedPresets.test_dsh_default_is_already_carried_by_the_model_map)
+The ACP wire value is the JSON pair, and the map was already right. ... ok
+test_dsh_records_the_runner_side_display_name (__main__.LiveVerifiedPresets.test_dsh_records_the_runner_side_display_name)
+"DeepSeek V4.1 Flash (OpenCode Go)" is ours; the catalog's is bare. ... ok
+test_manifest_pins_the_measured_default (__main__.LiveVerifiedPresets.test_manifest_pins_the_measured_default) ... ok
+test_manifest_pins_the_measured_third_tier (__main__.LiveVerifiedPresets.test_manifest_pins_the_measured_third_tier) ... ok
+test_every_platform_declares_the_same_presets_on_both_paths (__main__.ManifestAndAdapterAgree.test_every_platform_declares_the_same_presets_on_both_paths) ... ok
+test_computed_blocks_are_empty_without_a_third_tier (__main__.ThirdTierIsOptional.test_computed_blocks_are_empty_without_a_third_tier) ... ok
+test_generated_skills_mention_the_tier_only_where_it_exists (__main__.ThirdTierIsOptional.test_generated_skills_mention_the_tier_only_where_it_exists) ... ok
+test_render_rejects_a_label_without_a_model (__main__.ThirdTierIsOptional.test_render_rejects_a_label_without_a_model) ... ok
+test_render_rejects_a_model_without_a_label (__main__.ThirdTierIsOptional.test_render_rejects_a_model_without_a_label) ... ok
+test_a_platform_refuses_another_platforms_tier_word (__main__.UndeclaredTierIsRefused.test_a_platform_refuses_another_platforms_tier_word)
+Devin declares `fable`, so `alternative` must not slip through. ... ok
+test_acp_path_refuses_by_name_and_mutates_nothing (__main__.UndeclaredTierIsRefused.test_acp_path_refuses_by_name_and_mutates_nothing) ... ok
+test_droid_refuses_its_deleted_alternative_tier (__main__.UndeclaredTierIsRefused.test_droid_refuses_its_deleted_alternative_tier)
+Issue #117: droid no longer declares `alternative`; no silent fallback. ... ok
+test_pty_path_refuses_the_same_tier (__main__.UndeclaredTierIsRefused.test_pty_path_refuses_the_same_tier) ... ok
+test_manifest_default_equals_the_host_constants (__main__.ZcodeHasOneSourceOfTruth.test_manifest_default_equals_the_host_constants) ... ok
+test_the_default_satisfies_the_host_matcher (__main__.ZcodeHasOneSourceOfTruth.test_the_default_satisfies_the_host_matcher)
+Including the provider-qualified live spelling, and not the Flash. ... ok
+test_adapter_write_path_accepts_every_spelling (__main__.ZcodeThoughtConfigIdTolerance.test_adapter_write_path_accepts_every_spelling)
+Read structurally, not by substring: a narrowed tuple must fail. ... ok
+test_manifest_still_declares_the_tolerated_spelling (__main__.ZcodeThoughtConfigIdTolerance.test_manifest_still_declares_the_tolerated_spelling) ... ok
+test_read_path_accepts_every_spelling (__main__.ZcodeThoughtConfigIdTolerance.test_read_path_accepts_every_spelling) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 0.420s
+
+OK
+test_rule_present_in_chinese (__main__.HeartbeatSkeleton.test_rule_present_in_chinese) ... ok
+test_superseded_sentences_are_gone (__main__.HeartbeatSkeleton.test_superseded_sentences_are_gone) ... ok
+test_reassignment_is_stop_and_new_named_start (__main__.IssueDispatch.test_reassignment_is_stop_and_new_named_start) ... ok
+test_resume_is_same_issue_recovery (__main__.IssueDispatch.test_resume_is_same_issue_recovery) ... ok
+test_count_is_a_hard_cap_on_live_processes_including_acp (__main__.MainSkill.test_count_is_a_hard_cap_on_live_processes_including_acp) ... ok
+test_description_names_the_cap (__main__.MainSkill.test_description_names_the_cap) ... ok
+test_new_task_is_new_session_resume_is_same_assignment_only (__main__.MainSkill.test_new_task_is_new_session_resume_is_same_assignment_only) ... ok
+test_only_legal_idle_is_awaiting_acceptance_then_stop_same_beat (__main__.MainSkill.test_only_legal_idle_is_awaiting_acceptance_then_stop_same_beat) ... ok
+test_quota_reconciliation_keeps_no_quota_system (__main__.MainSkill.test_quota_reconciliation_keeps_no_quota_system) ... ok
+test_report_carries_live_over_authorized (__main__.MainSkill.test_report_carries_live_over_authorized) ... ok
+test_stop_before_start_at_the_cap (__main__.MainSkill.test_stop_before_start_at_the_cap) ... ok
+test_superseded_sentences_are_gone (__main__.MainSkill.test_superseded_sentences_are_gone) ... ok
+test_each_doc_names_the_cap_and_stop_before_start (__main__.MaintainerDocs.test_each_doc_names_the_cap_and_stop_before_start) ... ok
+test_old_summaries_are_gone (__main__.MaintainerDocs.test_old_summaries_are_gone) ... ok
+test_no_scheduling_rule_outside_the_host_read_surfaces (__main__.OuterSurfacesStayClean.test_no_scheduling_rule_outside_the_host_read_surfaces) ... ok
+test_count_before_start (__main__.ZCodeHostDispatch.test_count_before_start) ... ok
+test_finish_the_beat_reports_live_over_authorized (__main__.ZCodeHostDispatch.test_finish_the_beat_reports_live_over_authorized) ... ok
+test_stop_in_same_beat_after_acceptance (__main__.ZCodeHostDispatch.test_stop_in_same_beat_after_acceptance) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.010s
+
+OK
+PASS test_manifest_entries_are_the_code_table (34 checks)
+PASS test_zcode_carrier_is_byte_identical (2 checks)
+PASS test_carrier_first_lines_per_platform (26 checks)
+PASS test_non_zcode_host_binds_and_receives_carrier (11 checks)
+PASS test_entryless_dispatcher_and_non_zcode_refusals (6 checks)
+PASS test_non_zcode_host_build_skew_refuses (2 checks)
+PASS test_host_resolves_like_worker_h1 (29 checks)
+PASS test_opencode_explicit_selection_h2 (4 checks)
+test-issue-119-host-entry: 8/8 tests, 114 checks
+kaola-grok-bot-verify: PASS /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-119/hosts/grok-bot (1 bridge skill, 2536 B, stage content, manifest, guide; no canonical content; generated state)
+{"killed_group_members": [], "matched_pids": [], "residual_pids": [], "results": [], "root": "/tmp/kaola-val.eWzO0o", "swept_groups": []}
