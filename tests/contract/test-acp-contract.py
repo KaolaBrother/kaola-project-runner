@@ -368,6 +368,28 @@ class AcpContractTests(AcpSessionFixture, unittest.TestCase):
         stop = self.cli("stop")
         self.assertEqual(stop.get("residual_pids"), [])
 
+    def test_runner_preflight_receipt_carries_adapter_base_fields(self) -> None:
+        # Issue #114: the shared Runner's default (acp) preflight must still carry
+        # the adapter's base fields, not only the ACP/model-policy receipt.
+        native = self.root / "grok-114"
+        native.write_text("#!/bin/sh\necho 'grok fixture 1.14'\n", encoding="utf-8")
+        native.chmod(0o755)
+        env = self.env()
+        env.pop(CANONICAL_KEY, None)
+        env.update(KAOLA_ACP_COMMAND=self.mock_command(), GROK_BIN=str(native))
+        result = subprocess.run(
+            ["bash", str(PROJECT / "scripts" / "kaola-tmux.sh"), "grok", "preflight",
+             "--repo", str(self.repo), "--session", self.session],
+            capture_output=True, text=True, env=env, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt.get("transport", {}).get("selected"), "acp")
+        self.assertNotIn("error", receipt)
+        self.assertEqual(receipt.get("result"), "ready")
+        self.assertEqual(receipt.get("runtime_version"), "grok fixture 1.14")
+        self.assertIn("Grok CLI communication is available", receipt.get("detail") or "")
+
     # -- §7.4: agent dies while a permission request is pending ---------------
 
     def test_agent_dies_with_pending_permission(self) -> None:

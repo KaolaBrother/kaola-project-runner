@@ -246,6 +246,33 @@ if [[ "$transport" == acp ]]; then
   [[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")
   [[ "$command_name" == key ]] && acp_args+=(--key "$key_name")
   [[ -n "$decision_id" ]] && acp_args+=(--request-id "$decision_id")
+  if [[ "$command_name" == preflight ]]; then
+    # Issue #114: every platform defaults to acp, so the `preflight)` case below
+    # never ran and the adapter's base fields (runtime_version, detail, ...) were
+    # lost. Add them here as evidence under the ACP receipt, which wins on shared
+    # keys. A missing native binary is reported, never a gate on the ACP answer.
+    base_json="$(
+      repo="$(canonical_dir "$repo")"
+      runtime_override="$(printenv "$ADAPTER_BIN_ENV" 2>/dev/null || true)"
+      if RUNTIME_BIN="$(resolve_tool "${runtime_override:-$ADAPTER_DEFAULT_BIN}")"; then
+        adapter_preflight >/dev/null 2>&1 || true
+      else
+        RUNTIME_BIN=""; PREFLIGHT_VERSION=unknown
+        PREFLIGHT_DETAIL="$ADAPTER_DISPLAY_NAME executable not found (override with $ADAPTER_BIN_ENV)"
+      fi
+      emit_json "s:runtime:$ADAPTER_DISPLAY_NAME" "s:runtime_version:${PREFLIGHT_VERSION:-unknown}" "s:runtime_binary:$RUNTIME_BIN" "b:workflow_next:${PREFLIGHT_WORKFLOW_NEXT:-false}" "b:kaola_workflow_finalize:${PREFLIGHT_FINALIZE:-false}" "s:recurring_execution:$ADAPTER_RECURRING_EXECUTION" "s:project_materialization:${PREFLIGHT_PROJECT_MATERIALIZATION:-unknown}" "s:detail:${PREFLIGHT_DETAIL:-}"
+    )" || base_json='{}'
+    acp_rc=0; acp_receipt="$("${acp_args[@]}")" || acp_rc=$?
+    BASE_JSON="$base_json" ACP_RECEIPT="$acp_receipt" "$PYTHON_BIN" -c 'import json,os
+try: d=json.loads(os.environ["ACP_RECEIPT"])
+except ValueError: os.environ["ACP_RECEIPT"] and print(os.environ["ACP_RECEIPT"]); raise SystemExit
+if isinstance(d,dict) and "result" not in d:
+    base=json.loads(os.environ["BASE_JSON"] or "{}")
+    base["result"]="error" if "error" in d else "ready"
+    d={**base,**d}
+print(json.dumps(d,ensure_ascii=False,sort_keys=True))'
+    exit "$acp_rc"
+  fi
   exec "${acp_args[@]}"
 fi
 

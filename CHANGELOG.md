@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **The preflight receipt carries the adapter's base fields again (Issue #114).** Every platform
+  defaults to the `acp` transport, so `kaola-tmux.sh PLATFORM preflight` handed off to
+  `kaola-acp.py` before the adapter's preflight ever ran, and the receipt held only the ACP and
+  model-policy fields — `result`, `runtime`, `runtime_version`, `runtime_binary` and `detail` never
+  appeared (including #112's OpenCode `loopback=direct|excluded|ensured`). The `--transport pty`
+  path was never affected. The acp preflight now also runs the adapter's preflight and adds those
+  fields to the ACP receipt, which keeps precedence on any shared key; `result` is `ready`, or
+  `error` when the ACP receipt carries an `error`. A missing native binary is reported as
+  `runtime_version: unknown` with a `detail` naming the override variable — evidence, not a gate.
+
 - **Droid presets corrected: default is Auto again, Kimi K3 Max is the upgrade, and the alternative
   tier is gone (Issue #117).** #111 pinned Droid's default to Kimi K3 Max, mirrored the same pair
   into `upgrade`, and added a `kimi-k2.7-code` alternative tier. The default is back to the
