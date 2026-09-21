@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **A Runner started from inside a macOS Seatbelt sandbox reports why start failed and can still
+  stop (Issue #120).** A dsh Host runs its shell tool under Seatbelt (`DSH_PERMISSION_MODE` default
+  `workspace-write`), and every holder and agent started from that shell inherits it. A nested
+  `dsh --profile acp` then dies at boot with `EPERM` rewriting `$DSH_HOME/profiles/acp/cordis.yml`,
+  and the #119 receipt said only `acp-initialize-failed` / `agent-exited`. A failed ACP start now
+  adds the agent's `stderr_tail` and `seatbelt_confined` (`true` / `false`, `null` off macOS) to
+  `error`. The setuid `/bin/ps` cannot run under Seatbelt at all, so the holder's `stop` crashed
+  (`holder-closed`) and left the worker running. When `ps` cannot run, the holder and CLI now read
+  the same process columns from libproc; stop then reports `stopped: true` and the real
+  `residual_pids`. Nothing changes when `ps` runs.
+
 - **A stale main Skill in a Host's discovery roots is refused at Host start (Issue #121).** The
   #105 build-skew check compared only worker Skills, so an older `kaola-project-runner` main Skill
   in a user root (seen on cursor-cli) was loaded instead of the Host's build without any report.

@@ -22,8 +22,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
+import subprocess
+import sys
+import tempfile
+import time
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any
 
@@ -270,6 +276,149 @@ class TheAdapterNeverWritesUnderDshHome(unittest.TestCase):
                 continue
             self.assertNotIn("--from-default-profile", line,
                              "creating a profile writes under $DSH_HOME and is an operator act")
+
+
+# Issue #120: a dsh Host runs its model shell tool under macOS Seatbelt
+# (``DSH_PERMISSION_MODE`` default ``workspace-write``) and every Runner process
+# started from that shell inherits it. The profile below is the shape dsh
+# applies: everything allowed except writes outside the named roots.
+SANDBOX_EXEC = "/usr/bin/sandbox-exec"
+MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
+CLI = SCRIPTS / "kaola-acp.py"
+
+
+def seatbelt_profile(denied: Path) -> str:
+    """Any Seatbelt profile denies the setuid ``/bin/ps`` exec; this one also
+    denies writes under the agent's home, as dsh's denies ``~/.dsh``."""
+    return f'(version 1) (allow default) (deny file-write* (subpath "{os.path.realpath(denied)}"))'
+
+
+@unittest.skipUnless(sys.platform == "darwin" and os.access(SANDBOX_EXEC, os.X_OK),
+                     "Seatbelt is macOS-only")
+class Issue120RunnerUnderAHostSeatbelt(unittest.TestCase):
+    """The #119 failure: a worker started from a dsh Host's confined shell died
+    at boot with EPERM and the receipt said only ``agent-exited``; its exact
+    stop then crashed because the setuid ``/bin/ps`` cannot exec there."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="kaola-i120-")
+        self.root = Path(os.path.realpath(self._tmp.name))
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        # The agent's home is not writable under the profile, like ~/.dsh.
+        self.home = self.root / "home"
+        self.home.mkdir()
+        self.session = f"dsh-i120-{self._testMethodName[-24:].lower()}-{os.getpid()}"
+
+    def cli(self, command: str, *args: str, agent: str = "", confined: bool = True) -> dict:
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.root / "records")
+        argv = [sys.executable, str(CLI), "dsh", command, "--repo", str(self.repo),
+                "--session", self.session, *args]
+        if agent:
+            argv += ["--command", agent]
+        if confined:
+            argv = [SANDBOX_EXEC, "-p", seatbelt_profile(self.home), *argv]
+        result = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60)
+        return json.loads(result.stdout.strip().splitlines()[-1])
+
+    def own_pids(self) -> list[int]:
+        out = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True)
+        return [int(line.split(None, 1)[0]) for line in out.stdout.splitlines()
+                if self.session in line or str(self.root) in line]
+
+    def cleanup_session(self) -> None:
+        """Stop from outside the sandbox; kill whatever a broken stop left."""
+        self.cli("stop", "--force", confined=False)
+        for pid in self.own_pids():
+            try:
+                os.kill(pid, 9)
+            except OSError:
+                pass
+
+    def boot_writer(self) -> str:
+        """An agent that, like ``dsh --profile acp``, rewrites a file under its
+        own home before speaking ACP."""
+        script = self.root / "boot-writer.py"
+        target = self.home / "profiles" / "acp" / "cordis.yml"
+        target.parent.mkdir(parents=True)
+        script.write_text(
+            "import sys\n"
+            f"open({str(target)!r}, 'w').write('{{}}\\n')\n"
+            f"import runpy; sys.argv = [{str(MOCK)!r}]; runpy.run_path({str(MOCK)!r}, run_name='__main__')\n",
+            encoding="utf-8",
+        )
+        return f"{sys.executable} {script}"
+
+    def test_a_confined_boot_write_failure_names_its_cause(self) -> None:
+        self.addCleanup(self.cleanup_session)
+        receipt = self.cli("start", agent=self.boot_writer())
+        self.assertEqual(receipt.get("state"), "error", receipt)
+        error = receipt["error"]
+        self.assertEqual(error.get("code"), "acp-initialize-failed")
+        self.assertIs(error.get("seatbelt_confined"), True)
+        tail = "\n".join(error.get("stderr_tail") or [])
+        self.assertIn("Operation not permitted", tail)
+        self.assertIn("cordis.yml", tail)
+
+    def test_the_same_agent_starts_unconfined(self) -> None:
+        """The control: nothing about the agent itself fails."""
+        self.addCleanup(self.cleanup_session)
+        receipt = self.cli("start", agent=self.boot_writer(), confined=False)
+        self.assertEqual(receipt.get("state"), "ready", receipt)
+
+    def test_an_unconfined_start_failure_reports_false(self) -> None:
+        self.addCleanup(self.cleanup_session)
+        receipt = self.cli("start", agent=f"{sys.executable} -c 'import sys; sys.exit(1)'",
+                           confined=False)
+        self.assertIs(receipt["error"].get("seatbelt_confined"), False)
+
+    def test_exact_stop_works_inside_the_sandbox(self) -> None:
+        self.addCleanup(self.cleanup_session)
+        started = self.cli("start", agent=f"{sys.executable} {MOCK}")
+        self.assertEqual(started.get("state"), "ready", started)
+        stopped = self.cli("stop", "--force")
+        self.assertIs(stopped.get("stopped"), True, stopped)
+        self.assertEqual(stopped.get("residual_pids"), [])
+        for pid in (started["holder_pid"], started["agent_pid"]):
+            with self.subTest(pid=pid):
+                self.assertFalse(self._alive(pid))
+
+    @staticmethod
+    def _alive(pid: int) -> bool:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return False
+            except PermissionError:
+                return True
+            time.sleep(0.1)
+        return True
+
+
+@unittest.skipUnless(sys.platform == "darwin", "libproc is macOS-only")
+class Issue120ProcessTableWithoutPs(unittest.TestCase):
+    """When ``ps`` cannot exec, both scripts read the same columns from libproc."""
+
+    def test_libproc_rows_match_ps(self) -> None:
+        pid = os.getpid()
+        real = subprocess.run(["ps", "-o", "pid=,ppid=,pgid=,lstart=", "-p", str(pid)],
+                              capture_output=True, text=True,
+                              env={**os.environ, "LC_ALL": "C"}).stdout.split()
+        for name in ("kaola-acp", "kaola-acp-holder"):
+            module = load(name)
+            with self.subTest(script=name), mock.patch.object(
+                    module.subprocess, "run", side_effect=PermissionError(1, "denied")):
+                result = module.run_ps(["pid", "ppid", "pgid", "state", "lstart"])
+                self.assertEqual(result.returncode, 0)
+                rows = {line.split(None, 1)[0]: line.split() for line in result.stdout.splitlines()}
+                row = rows[str(pid)]
+                self.assertEqual(row[:3], real[:3])
+                self.assertEqual(row[4:], real[3:])
 
 
 if __name__ == "__main__":

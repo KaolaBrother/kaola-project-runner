@@ -81,15 +81,67 @@ def process_alive(pid: int) -> bool:
 PS_ENV = {**os.environ, "LC_ALL": "C"}
 
 
+class _BsdInfo(ctypes.Structure):
+    """``struct proc_bsdinfo`` (``PROC_PIDTBSDINFO``), 136 bytes on macOS."""
+    _fields_ = [("flags", ctypes.c_uint32), ("status", ctypes.c_uint32),
+                ("xstatus", ctypes.c_uint32), ("pid", ctypes.c_uint32),
+                ("ppid", ctypes.c_uint32), ("ids", ctypes.c_uint32 * 7),
+                ("comm", ctypes.c_char * 16), ("name", ctypes.c_char * 32),
+                ("nfiles", ctypes.c_uint32), ("pgid", ctypes.c_uint32),
+                ("pjobc", ctypes.c_uint32), ("e_tdev", ctypes.c_uint32),
+                ("e_tpgid", ctypes.c_uint32), ("nice", ctypes.c_int32),
+                ("start_tvsec", ctypes.c_uint64), ("start_tvusec", ctypes.c_uint64)]
+
+
+def libproc_ps(columns: list[str]) -> str | None:
+    """``ps -axo <columns>`` text built from libproc, for the columns pid,
+    ppid, pgid, state and lstart; ``None`` off macOS or when libproc is
+    unreadable. Only processes this user may inspect are listed."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        lib = ctypes.CDLL("/usr/lib/libproc.dylib")
+        count = lib.proc_listallpids(None, 0)
+        pids = (ctypes.c_int * (max(count, 0) + 256))()
+        count = lib.proc_listallpids(pids, ctypes.sizeof(pids))
+    except (OSError, AttributeError):
+        return None
+    if count <= 0:
+        return None
+    lines = []
+    for pid in pids[:count]:
+        info = _BsdInfo()
+        size = ctypes.sizeof(info)
+        if lib.proc_pidinfo(pid, 3, ctypes.c_uint64(0), ctypes.byref(info), size) != size:
+            continue
+        values = {"pid": str(pid), "ppid": str(info.ppid), "pgid": str(info.pgid),
+                  "state": "Z" if info.status == 5 else "S",
+                  "lstart": time.strftime("%a %b %e %H:%M:%S %Y",
+                                          time.localtime(info.start_tvsec))}
+        lines.append(" ".join(values[column] for column in columns))
+    return "\n".join(lines) + "\n"
+
+
+def run_ps(columns: list[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """``ps -axo <columns=...>``. Issue #120: under a Seatbelt profile (a dsh
+    Host's shell tool) the setuid ``/bin/ps`` cannot exec at all, and the
+    uncaught error killed ``stop`` mid-reply; the same columns then come from
+    libproc. A table neither source can read has returncode 1."""
+    argv = ["ps", "-axo", ",".join(f"{column}=" for column in columns)]
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, env=env)
+    except OSError as exc:
+        text = libproc_ps(columns)
+        return subprocess.CompletedProcess(argv, 1 if text is None else 0,
+                                           stdout=text or "", stderr=str(exc))
+
+
 def process_table() -> list[tuple[int, int, int, str]]:
     """Live (non-zombie) processes as (pid, ppid, pgid, start time). ``ps``
     renders ``lstart`` in the caller's locale on macOS; pin C so the text is
     the ctime layout ``start_epoch`` parses and stays comparable between the
     holder that recorded it and a later CLI process under another locale."""
-    result = subprocess.run(
-        ["ps", "-axo", "pid=,ppid=,pgid=,state=,lstart="], capture_output=True, text=True,
-        env=PS_ENV,
-    )
+    result = run_ps(["pid", "ppid", "pgid", "state", "lstart"], env=PS_ENV)
     rows: list[tuple[int, int, int, str]] = []
     for line in result.stdout.splitlines():
         fields = line.split(None, 4)
@@ -363,9 +415,7 @@ def live_child_groups(groups: dict[int, dict[int, str]]) -> dict[int, list[int]]
 
 
 def group_members(pgid: int) -> list[int]:
-    result = subprocess.run(
-        ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
-    )
+    result = run_ps(["pid", "pgid", "state"])
     members = []
     for line in result.stdout.splitlines():
         fields = line.split()
@@ -613,6 +663,24 @@ class StderrPump:
         with self.lock:
             text = bytes(self.ring).decode("utf-8", "replace")
         return text.splitlines()[-count:]
+
+
+def seatbelt_confined() -> bool | None:
+    """Issue #120: whether this holder (and so every agent it spawns) runs under
+    a macOS Seatbelt profile. Seatbelt is inherited by every descendant and no
+    new session escapes it, so a worker started from a Host whose shell tool is
+    confined (dsh's ``workspace-write``) cannot write outside that Host's
+    writable roots. ``None`` off macOS or when ``sandbox_check`` is unreadable.
+    A fact, never a gate."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        check = ctypes.CDLL("/usr/lib/libSystem.B.dylib").sandbox_check
+    except (OSError, AttributeError):
+        return None
+    check.restype = ctypes.c_int
+    check.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+    return bool(check(os.getpid(), None, 0))
 
 
 class AgentConnection:
@@ -3725,6 +3793,22 @@ class Holder:
                     self.write_record()
                     os._exit(0)
 
+    def start_failure_facts(self, error: dict[str, Any]) -> dict[str, Any]:
+        """Issue #120: a failed start carries the agent's own stderr tail and the
+        holder's Seatbelt confinement. A nested dsh dies at boot with EPERM
+        rewriting ``$DSH_HOME/profiles/acp/cordis.yml`` under a dsh Host's
+        sandbox, and without these the receipt said only ``agent-exited``."""
+        error = dict(error)
+        pump = self.agent.stderr_pump
+        if pump:
+            if self.agent.exited.is_set():
+                pump.thread.join(1.0)  # drain an exited agent's last lines
+            tail = pump.tail()
+            if tail:
+                error["stderr_tail"] = tail
+        error["seatbelt_confined"] = seatbelt_confined()
+        return error
+
     def run(self) -> int:
         self.created_at = round(time.time(), 3)
         self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -3748,7 +3832,7 @@ class Holder:
             resume=self.args.resume, use_continue=self.args.use_continue
         )
         if "error" in result:
-            self.fatal_error = result["error"]
+            self.fatal_error = self.start_failure_facts(result["error"])
             self.state = "error"
             self.write_record()
             if result["error"].get("code") == "acp-protocol-version-unsupported":

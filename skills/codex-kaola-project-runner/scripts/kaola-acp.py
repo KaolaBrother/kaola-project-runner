@@ -10,6 +10,7 @@ receipt as ``error: {code, message}`` while usage errors exit non-zero.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -932,9 +933,7 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
     if (args.command in ("status", "observe") and record.get("state") == "stopped"
             and all(isinstance(pid, int) and pid > 0 for pid in ids)
             and not any(pid_alive(pid) for pid in ids)):
-        members = subprocess.run(
-            ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
-        )
+        members = run_ps(["pid", "pgid", "state"])
         groups = recorded_groups(record, spawn_record_dir(args, repo))
         residual = []
         for line in members.stdout.splitlines():
@@ -997,6 +996,61 @@ SPAWN_RECORD_SLACK = 1.0
 PS_ENV = {**os.environ, "LC_ALL": "C"}
 
 
+class _BsdInfo(ctypes.Structure):
+    """``struct proc_bsdinfo`` (``PROC_PIDTBSDINFO``), 136 bytes on macOS."""
+    _fields_ = [("flags", ctypes.c_uint32), ("status", ctypes.c_uint32),
+                ("xstatus", ctypes.c_uint32), ("pid", ctypes.c_uint32),
+                ("ppid", ctypes.c_uint32), ("ids", ctypes.c_uint32 * 7),
+                ("comm", ctypes.c_char * 16), ("name", ctypes.c_char * 32),
+                ("nfiles", ctypes.c_uint32), ("pgid", ctypes.c_uint32),
+                ("pjobc", ctypes.c_uint32), ("e_tdev", ctypes.c_uint32),
+                ("e_tpgid", ctypes.c_uint32), ("nice", ctypes.c_int32),
+                ("start_tvsec", ctypes.c_uint64), ("start_tvusec", ctypes.c_uint64)]
+
+
+def libproc_ps(columns: list[str]) -> str | None:
+    """``ps -axo <columns>`` text built from libproc, for the columns pid,
+    ppid, pgid, state and lstart; ``None`` off macOS or when libproc is
+    unreadable. Only processes this user may inspect are listed."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        lib = ctypes.CDLL("/usr/lib/libproc.dylib")
+        count = lib.proc_listallpids(None, 0)
+        pids = (ctypes.c_int * (max(count, 0) + 256))()
+        count = lib.proc_listallpids(pids, ctypes.sizeof(pids))
+    except (OSError, AttributeError):
+        return None
+    if count <= 0:
+        return None
+    lines = []
+    for pid in pids[:count]:
+        info = _BsdInfo()
+        size = ctypes.sizeof(info)
+        if lib.proc_pidinfo(pid, 3, ctypes.c_uint64(0), ctypes.byref(info), size) != size:
+            continue
+        values = {"pid": str(pid), "ppid": str(info.ppid), "pgid": str(info.pgid),
+                  "state": "Z" if info.status == 5 else "S",
+                  "lstart": time.strftime("%a %b %e %H:%M:%S %Y",
+                                          time.localtime(info.start_tvsec))}
+        lines.append(" ".join(values[column] for column in columns))
+    return "\n".join(lines) + "\n"
+
+
+def run_ps(columns: list[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """``ps -axo <columns=...>``. Issue #120: under a Seatbelt profile (a dsh
+    Host's shell tool) the setuid ``/bin/ps`` cannot exec at all; the same
+    columns then come from libproc. A table neither source can read has
+    returncode 1, so a caller that requires a readable table still refuses."""
+    argv = ["ps", "-axo", ",".join(f"{column}=" for column in columns)]
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, env=env)
+    except OSError as exc:
+        text = libproc_ps(columns)
+        return subprocess.CompletedProcess(argv, 1 if text is None else 0,
+                                           stdout=text or "", stderr=str(exc))
+
+
 def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> list[int]:
     """The agent's own process group plus the out-of-group child groups the
     holder noted while the agent was alive (detached CLI children), plus the
@@ -1027,10 +1081,7 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
         return groups
     # ``lstart`` is rendered in the caller's locale on macOS: pin C so it
     # parses and matches what the holder recorded under the same pin.
-    table = subprocess.run(
-        ["ps", "-axo", "pid=,pgid=,state=,lstart="], capture_output=True, text=True,
-        env=PS_ENV,
-    )
+    table = run_ps(["pid", "pgid", "state", "lstart"], env=PS_ENV)
     by_pid: dict[int, tuple[int, str]] = {}
     for line in table.stdout.splitlines():
         fields = line.split(None, 3)
@@ -1061,9 +1112,7 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
 
 
 def live_group_members(groups: list[int]) -> list[int]:
-    members = subprocess.run(
-        ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True
-    )
+    members = run_ps(["pid", "pgid", "state"])
     found: list[int] = []
     for line in members.stdout.splitlines():
         fields = line.split()
