@@ -43,6 +43,16 @@ Scenarios (argv ``--scenario``):
                `model_context_window_exceeded`
   max_tokens_cancel  streams, waits for session/stop, then reports the
                output-token-max turn.failed (an explicit cancel still wins)
+  completed_stop_camel  turn.completed carrying stopReason `max_tokens`
+               (Issue #116: synthetic -- the strict wire schema has no
+               finish-reason field today; this pins the key the internal
+               ModelComplete event already carries, should a build project it)
+  completed_stop_snake  turn.completed carrying stop_reason `max_tokens`
+  completed_stop_prose  turn.completed whose prose merely quotes
+               `stopReason: max_tokens` and whose real stopReason is
+               `end_turn` (key-scoped negative control)
+  completed_stop_cancel  streams, waits for session/stop, then reports a
+               turn.completed carrying stopReason `max_tokens` (cancel wins)
   slow         waits for session/stop, then reports a terminal turn (cancel)
   batch        a tool.updated batch payload
   strict_model kept for compatibility; every scenario now rejects a model
@@ -861,6 +871,36 @@ class FakeAppServer:
                 "error": terminal_errors[scenario],
                 "turnPhase": "model_execution",
             })
+            return
+
+        # -- Issue #116: a stopReason carried on turn.completed --------------
+        #
+        # Synthetic, not an observed wire shape: the strict
+        # `turn.completed` schema has no finish-reason field today, but the
+        # internal ModelComplete event already carries `stopReason`, so a
+        # build that projects it would reach the adapter like this.
+        completed_stops = {
+            "completed_stop_camel": {"response": "DONE-FAKE-TURN",
+                                     "stopReason": "max_tokens"},
+            "completed_stop_snake": {"response": "DONE-FAKE-TURN",
+                                     "stop_reason": "max_tokens"},
+            # Negative control: the prose quotes the token, the key does not.
+            "completed_stop_prose": {
+                "response": "The last turn said stopReason: max_tokens.",
+                "message": "max_tokens",
+                "stopReason": "end_turn",
+            },
+            "completed_stop_cancel": {"response": "DONE-FAKE-TURN",
+                                      "stopReason": "max_tokens"},
+        }
+        if scenario in completed_stops:
+            if scenario == "completed_stop_cancel":
+                flag = threading.Event()
+                self.stop_flags[session_id] = flag
+                self.event(session_id, "model.streaming",
+                           {"kind": "text_delta", "delta": "working"})
+                flag.wait(10)
+            self.event(session_id, "turn.completed", completed_stops[scenario])
             return
 
         if scenario == "slow":

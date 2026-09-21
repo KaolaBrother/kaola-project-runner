@@ -21,6 +21,14 @@
   `KAOLA_VALIDATE_*` knobs — and prints the removed names on one
   `validate: scrubbed inherited env: ...` line (`none` when clean). Suites keep setting the
   `KAOLA_*` fixtures they need themselves; seats no longer strip names by hand.
+- **ZCode adapter also reads `stopReason` / `stop_reason` as an output-limit finish reason (Issue
+  #116).** The key-scoped scan behind the #113 `max_tokens` terminal knew only `finishReason`,
+  `finish_reason`, `rawFinishReason` and `raw_finish_reason`. ZCode's internal ModelComplete event
+  already names its field `stopReason`, so a build that projects it onto `turn.completed` would have
+  reported an output-token stop as `end_turn` and made it uncountable again. The gap is latent — the
+  strict `turn.completed` wire schema carries no finish reason today and `turn.failed` remains the
+  observed carrier — and matching stays key-scoped: prose that merely quotes `max_tokens` is still
+  `end_turn`, and an explicit cancel still reports `cancelled`.
 
 ## 0.5.5 — 2026-09-21
 

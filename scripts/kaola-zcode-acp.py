@@ -894,8 +894,12 @@ OUTPUT_LIMIT_PROVIDER_CODE = "model_output_limit_exceeded"
 # Matching is key-scoped on purpose. A `response` or `message` that merely
 # quotes one of these tokens is prose, not a terminal fact; only a field that
 # carries a finish reason or the error's own identity decides the stop.
+# `stopReason` (Issue #116) is the name ZCode's internal ModelComplete event
+# already uses; the strict `turn.completed` schema does not carry it today, so
+# this is latent, but a build that projects it must not read as `end_turn`.
 OUTPUT_LIMIT_REASON_KEYS = frozenset((
     "finishReason", "finish_reason", "rawFinishReason", "raw_finish_reason",
+    "stopReason", "stop_reason",
 ))
 OUTPUT_LIMIT_CODE_KEYS = frozenset((
     "providerErrorCode", "providerCode", "provider_code",

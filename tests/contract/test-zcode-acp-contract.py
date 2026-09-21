@@ -884,6 +884,61 @@ class ZcodeAcpContractTests(unittest.TestCase):
         assert done is not None
         self.assertEqual((done.get("result") or {}).get("stopReason"), "cancelled")
 
+    # -- Issue #116: a stopReason carried on turn.completed ------------------
+
+    def test_completed_stop_reason_key_reports_max_tokens(self) -> None:
+        """A ``turn.completed`` whose ``stopReason`` is an output limit ends ``max_tokens``.
+
+        Synthetic, not an observed wire shape: the strict ``turn.completed``
+        schema has no finish-reason field today, but ZCode's internal
+        ModelComplete event already carries ``stopReason``. A build that
+        projects it onto ``turn.completed`` must not be reported as
+        ``end_turn``, or the output-token stop #113 made countable would go
+        invisible again. Both spellings the adapter accepts for its other
+        finish-reason keys are pinned.
+        """
+        for scenario in ("completed_stop_camel", "completed_stop_snake"):
+            with self.subTest(scenario):
+                self.assertEqual(
+                    self.prompt_stop_reason(scenario, "write a very long file"),
+                    "max_tokens",
+                    scenario,
+                )
+
+    def test_completed_prose_quoting_the_token_stays_end_turn(self) -> None:
+        """Negative control: matching stays key-scoped.
+
+        The ``response`` and ``message`` prose quote ``max_tokens`` while the
+        real ``stopReason`` is ``end_turn``; a value scan that ignored the key
+        would misreport this ordinary turn.
+        """
+        self.assertEqual(
+            self.prompt_stop_reason("completed_stop_prose", "ordinary turn"),
+            "end_turn",
+        )
+
+    def test_cancel_still_wins_over_a_completed_stop_reason(self) -> None:
+        """An explicit cancel keeps ``cancelled`` over a ``stopReason`` limit."""
+        driver = self.start("completed_stop_cancel")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id,
+            "prompt": [{"type": "text", "text": "write a very long file"}],
+        })
+        chunk = driver.wait_for(
+            lambda msg: msg.get("method") == "session/update"
+            and ((msg.get("params") or {}).get("update") or {}).get("sessionUpdate")
+            == "agent_message_chunk",
+            timeout=8,
+        )
+        self.assertIsNotNone(chunk, "the turn never started streaming")
+        driver.send({"jsonrpc": "2.0", "method": "session/cancel",
+                     "params": {"sessionId": session_id}})
+        done = driver.wait_result(3, timeout=12)
+        self.assertIsNotNone(done)
+        assert done is not None
+        self.assertEqual((done.get("result") or {}).get("stopReason"), "cancelled")
+
     def test_mode_model_thought_without_silent_fallback(self) -> None:
         driver = self.start("strict_model")
         session_id = self.handshake(driver)
