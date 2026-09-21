@@ -200,7 +200,11 @@ dimensions: `--platform` filters worker Skills only. The main Skill is installed
 destination unless `--no-orchestrator` is passed; its directory name is not a platform id.
 Owned `$HOME/.local/bin/kaola-acp*` helper links and the `kaola-project-runner-locate`
 locator link are created only for the Codex runtime destination or on explicit `--bin-links`; uninstall never removes them unless `--bin-links` is
-passed, and then only exact-owned links.
+passed. Installed Skills and those links are shared blocks counted by reference (Issue #123):
+Skill receipts list their referrer runtimes, the links keep `{runtime, checkout}` referrers in
+`$HOME/.local/bin/.kaola-project-runner-bin-links.json`, and a block is removed only when no
+referrer (or, for the locator, no Grok Bot registration receipt) remains. So installing or
+uninstalling one runtime never deletes what another runtime installed or depends on.
 
 ## Session ownership
 

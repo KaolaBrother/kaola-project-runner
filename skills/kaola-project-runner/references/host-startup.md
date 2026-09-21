@@ -7,7 +7,8 @@ the single source for outer recover/start/send/stop. Every command here is the
 installed form; no platform argument, no new tool.
 
 ```bash
-WORKER="$HOME/.zcode/skills/codex-kaola-project-runner/scripts/runtime-tmux.sh"
+SKILLS="<skills root>"   # the root your own runtime installed to, e.g. $HOME/.zcode/skills
+WORKER="$SKILLS/codex-kaola-project-runner/scripts/runtime-tmux.sh"
 HOSTRUN="$HOME/.zcode/skills/zcode-kaola-project-runner/scripts/runtime-tmux.sh"
 PROJECT="/abs/path/to/project"     # the consuming project's canonical Git root
 ```

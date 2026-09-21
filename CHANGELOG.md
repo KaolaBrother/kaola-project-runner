@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Runtimes install and uninstall independently: shared blocks are counted by reference
+  (Issue #123).** `kimi-cli` and `dsh` still share `~/.agents/skills`. Each Skill receipt now
+  lists its `referrers`, and `--method link` writes a receipt too. Installing a build that is
+  already in place only records a reference (`refer:`). A different build updates the one shared
+  copy and keeps every referrer, so the #105 build check stays aligned across roots; its scan
+  scope is unchanged. `--uninstall` withdraws only this runtime's reference and keeps the Skill
+  (`kept:`) while another runtime still uses it. Receipts written before this change count as
+  used by every runtime mapped to that root. The three `~/.local/bin` links (`kaola-acp`,
+  `kaola-acp-holder`, `kaola-project-runner-locate`) share one sidecar ledger,
+  `.kaola-project-runner-bin-links.json`. A default `--runtime codex` install now references an
+  existing link that points to a usable executable (for example, one from an accepted checkout)
+  instead of aborting the whole install with `refusing to replace existing symlink`; a dangling
+  link is still refused. `--uninstall --bin-links` keeps a link while another runtime or checkout
+  refers to it. It keeps the locator link while the Grok Bot registration receipt exists, and the
+  installer never writes that receipt. Uninstall no longer exits nonzero on a link another checkout
+  made. The main Skill's ordinary-worker example now uses a `<skills root>` placeholder instead
+  of `~/.zcode/skills`.
 - **An entry-less platform cannot be a Host (Issue #122, owner ruling: fail closed).** A platform
   whose `host_skill_entry` is empty (today codex) is refused in every Host role with the typed
   receipt `reason: host-entry-unsupported` (`detail` names the platform and the empty entry,

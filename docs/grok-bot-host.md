@@ -247,9 +247,9 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
    Computer executed nothing and accessed no Mac file. After UAT, remove
    `$BIN/kaola-project-runner-locate` and its receipt or keep them registered;
    the normal installer-managed link is restored with
-   `./scripts/install-local.sh --bin-links` from the normal checkout (it refuses
-   to overwrite a link it does not own, so remove a UAT link placed in its
-   directory first) and then registered from that checkout.
+   `./scripts/install-local.sh --bin-links` from the normal checkout (it never
+   overwrites a link it does not own: a usable UAT link placed in its directory
+   is only referenced, so remove it first) and then registered from that checkout.
 
 A saved bridge is not live adoption; this read-only UAT is the boundary. Three
 kinds of evidence stay distinct and none substitutes for another: Grok Bot's
@@ -290,7 +290,7 @@ same way; the accepted pair itself is never rewritten. Cloud registration passes
 the account Skill through the same native write used to save it and remove the
 locator link and its receipt (`rm "$BIN/kaola-project-runner-locate" "$BIN/.kaola-project-runner-locate.json"`,
 or `./scripts/install-local.sh --uninstall --bin-links` for the installer-managed
-link). Do not Reset Agent Computer; do not stop unrelated workers.
+link, which keeps the locator link while that registration receipt exists). Do not Reset Agent Computer; do not stop unrelated workers.
 
 ## Token cost (chars ÷ 4 … ÷ 3.5)
 

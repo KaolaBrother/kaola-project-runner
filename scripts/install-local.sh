@@ -40,8 +40,8 @@ usage() {
     '  grok-cli     $HOME/.grok/skills (Grok CLI Host)' \
     '  droid        $HOME/.factory/skills' \
     '  opencode     $HOME/.config/opencode/skills' \
-    '  kimi-cli     $HOME/.agents/skills (the only root Kimi CLI reads)' \
-    '  dsh          $HOME/.agents/skills (the only root dsh reads)' \
+    '  kimi-cli     $HOME/.agents/skills (shared with dsh; see referrers below)' \
+    '  dsh          $HOME/.agents/skills (shared with kimi-cli)' \
     'Each root above was measured as a Skill root of that CLI (Issue #119,' \
     'host-entry-matrix.md in the Project Runner Skill).' \
     'Grok Bot is a bridge host, not an installer destination: the account holds one' \
@@ -76,10 +76,20 @@ usage() {
     'With no --platform, installs all nine worker Skills plus the control-plane' \
     'Skills for that destination (unless skipped). With no destination flags the' \
     'legacy Codex destination is used. Existing foreign paths are never replaced.' \
+    'Installed Skills are shared blocks counted by reference: each receipt lists' \
+    'the runtimes that use that Skill. Installing the same build another runtime' \
+    'already installed only records a reference (refer); another build updates the' \
+    'one shared copy and keeps every referrer. --uninstall withdraws only this' \
+    'runtime'"'"'s reference and removes a Skill only when no referrer is left (kept).' \
     '--bin-links also manages the $HOME/.local/bin/kaola-acp* helper links and the' \
     'kaola-project-runner-locate locator link; it is on by default only for the' \
     'Codex runtime destination. Uninstall never removes bin' \
-    'links unless --bin-links is passed explicitly.' \
+    'links unless --bin-links is passed explicitly. The links are counted the same' \
+    'way in $HOME/.local/bin/.kaola-project-runner-bin-links.json (runtime and' \
+    'checkout): an existing link to a usable executable is referenced, not' \
+    'replaced; a dangling one is refused. Uninstall keeps a link while another' \
+    'referrer remains, and keeps the locator link while its registration receipt' \
+    'exists (the installer never writes that receipt).' \
     'The Codex runtime destination (--runtime codex, or no destination flag) also' \
     'installs one Runner-owned user-level SessionStart(compact) recovery entry in' \
     '${CODEX_HOME:-$HOME/.codex}/hooks.json (id kaola-project-runner:user-compact-context,' \

@@ -158,10 +158,32 @@ valid receipt is not replacement or delete authority. `--uninstall` still
 refuses to delete a modified copy and affects only the selected destination
 and selected owned Skills.
 
-`--bin-links` additionally manages owned `$HOME/.local/bin/kaola-acp` / `kaola-acp-holder` symlinks
-to this repository's scripts. It defaults on only for the Codex runtime destination; uninstall
-leaves shared links alone unless `--bin-links` is passed explicitly, and removes only exact-owned
-links.
+Installed Skills are reference-counted shared blocks (Issue #123). Each receipt
+(`kaola-project-runner-install/1`; `--method link` now writes one too, with `method: link` and no
+`content_sha256`) carries `referrers`, the runtime ids using that Skill (`generic` for
+`--skills-dir`). If the installed copy already matches this build, the install prints `refer:`
+and only adds the reference. A copy from another build is updated in place (`update:`) and keeps
+every referrer. `--uninstall`, including a Skill that is already absent, only removes this
+runtime's id: while ids remain, the Skill and receipt stay (`kept: … (still referenced by …)`),
+and when none remain the Skill is removed as before. A receipt without `referrers` predates the
+ledger and counts as referenced by every runtime mapped to that root (`kimi-cli,dsh` for
+`$HOME/.agents/skills`), so a guess never removes it.
+
+`--bin-links` additionally manages the `$HOME/.local/bin/kaola-acp`, `kaola-acp-holder`, and
+`kaola-project-runner-locate` symlinks to this repository's scripts. It defaults on only for the
+Codex runtime destination; uninstall leaves the links alone unless `--bin-links` is passed
+explicitly. They are counted by reference in the sidecar
+`$HOME/.local/bin/.kaola-project-runner-bin-links.json` (`kaola-project-runner-bin-links/1`:
+`links.<name>.target` and `referrers` of `{runtime, checkout}`). An existing link that resolves to
+an executable file is referenced (`refer:`) and left pointing where it points. A link from before
+the ledger records its creator as `{runtime: legacy, checkout: <checkout it resolves into>}`. A
+dangling or non-executable link, or any non-symlink path, is still refused before anything is
+written. `--uninstall --bin-links` removes this runtime-and-checkout reference, plus that
+checkout's `legacy` entry. It unlinks a link only when no referrer remains and the link is this
+checkout's own or the one recorded. The locator link is also kept while the Grok Bot
+registration receipt `.kaola-project-runner-locate.json` exists beside it; the installer never
+writes that receipt. A kept link is reported as `kept: … (…)`, and uninstall no longer exits
+nonzero for a link another checkout made.
 
 The Codex runtime destination (`--runtime codex`, or no destination flag) also installs one
 Runner-owned user-level `SessionStart(compact)` recovery entry — id

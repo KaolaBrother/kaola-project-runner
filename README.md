@@ -390,7 +390,7 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime grok-cli   # ~/.grok/skills
 ./scripts/install-local.sh --runtime droid      # ~/.factory/skills
 ./scripts/install-local.sh --runtime opencode   # ~/.config/opencode/skills
-./scripts/install-local.sh --runtime kimi-cli   # ~/.agents/skills (dsh reads the same root)
+./scripts/install-local.sh --runtime kimi-cli   # ~/.agents/skills (shared with --runtime dsh)
 
 # Grok Bot: no installer destination. Save hosts/grok-bot/kaola-delegator.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:
@@ -435,13 +435,27 @@ byproduct. Edit repo templates/manifests, not installed Skill copies; drift is a
 diagnostic and does not gate Runner communication. Uninstall still refuses to
 delete a modified copy.
 
+Installed Skills are shared blocks counted by reference, so runtimes install and uninstall
+independently (Issue #123). `kimi-cli` and `dsh` both use `~/.agents/skills`. Each Skill
+receipt lists the runtimes that use it. When the same build is already installed, a second
+runtime only records its reference (`refer`). A different build updates the one shared copy
+and keeps every referrer, so every root stays on one build for the #105 check. `--uninstall`
+withdraws only this runtime's reference; the Skill stays (`kept`) while another runtime still
+uses it. A receipt written before this ledger counts as used by every runtime mapped to that
+root, so it is never removed on a guess.
+
 Use the host's Skill discovery mechanism, or have the agent read the installed `SKILL.md` directly.
 In Codex, a Skill can be invoked as `$claude-code-kaola-project-runner`, for example.
 
 To uninstall, repeat the same destination and worker selection with `--uninstall`. Add
 `--no-orchestrator` to leave the main Skill in place. Optional `kaola-acp` helper links in
 `~/.local/bin` are installed by default only for the Codex destination. Use `--bin-links`
-elsewhere; removing those links requires `--uninstall --bin-links`.
+elsewhere; removing those links requires `--uninstall --bin-links`. The links are counted the
+same way, in `~/.local/bin/.kaola-project-runner-bin-links.json` (runtime and checkout). An
+existing link to a usable executable, for example one from another checkout, is referenced
+rather than replaced; a dangling link is still refused. Uninstall keeps a link while another
+runtime or checkout still refers to it. It keeps `kaola-project-runner-locate` while the Grok
+Bot locator's registration receipt sits beside it, and the installer never writes that receipt.
 See the [installer reference](docs/api.md#installer) for all options.
 
 ## Direct command example
