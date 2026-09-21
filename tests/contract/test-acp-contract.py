@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import secrets
+import shlex
 import signal
 import socket
 import subprocess
@@ -389,6 +390,42 @@ class AcpContractTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(receipt.get("result"), "ready")
         self.assertEqual(receipt.get("runtime_version"), "grok fixture 1.14")
         self.assertIn("Grok CLI communication is available", receipt.get("detail") or "")
+
+    def test_start_records_launched_cli_version_without_gating(self) -> None:
+        # Issue #124: grok's initialize returns no agentInfo, so start records
+        # the launched binary's own --version beside acp_verified_versions in
+        # record.json and the start receipt. A version that differs from the
+        # verified one is a fact only: the session still starts.
+        fake = self.root / "bin-124" / "grok"
+        fake.parent.mkdir(exist_ok=True)
+        fake.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = --version ]; then echo 'grok 9.9.124 (fixture)'; exit 0; fi\n"
+            f"exec {shlex.quote(sys.executable)} {shlex.quote(str(MOCK))} --scenario normal\n",
+            encoding="utf-8")
+        fake.chmod(0o755)
+        env = self.env()
+        env["PATH"] = f"{fake.parent}{os.pathsep}{env.get('PATH', '')}"
+        result = subprocess.run(
+            [sys.executable, str(CLI), "grok", "start", "--repo", str(self.repo),
+             "--session", self.session, "--command", "grok agent --always-approve stdio"],
+            capture_output=True, text=True, env=env, timeout=60)
+        self._started = True
+        receipt = json.loads(result.stdout)
+        self.assertNotIn("error", receipt, receipt)
+        verified = next(line for line in (PROJECT / "platforms" / "grok.yaml")
+                        .read_text(encoding="utf-8").splitlines()
+                        if line.startswith("acp_verified_versions:"))
+        expected = {"path": str(fake), "version": "grok 9.9.124 (fixture)",
+                    "verified_versions": json.loads(verified.partition(":")[2])}
+        self.assertEqual(receipt["transport"].get("cli_version"), expected)
+        repo = os.path.realpath(str(self.repo))
+        digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
+        record = json.loads((self.record_root / "grok" / self.session / digest
+                             / "record.json").read_text(encoding="utf-8"))
+        self.assertEqual(record.get("cli_version"), expected)
+        stop = self.cli("stop")
+        self.assertEqual(stop.get("residual_pids"), [])
 
     # -- §7.4: agent dies while a permission request is pending ---------------
 

@@ -1312,6 +1312,14 @@ class Holder:
         self.host_entry: str = entry
         self.host_name: str = (getattr(args, "host_name", None)
                                or ("ZCode" if args.platform == "zcode" else args.platform))
+        # Issue #124: the launched CLI's own `--version` fact from `start`, for
+        # a platform whose `initialize` returns no agentInfo; None elsewhere.
+        try:
+            cli_version = json.loads(getattr(args, "cli_version", "") or "null")
+        except ValueError:
+            cli_version = None
+        self.cli_version: dict[str, Any] | None = (
+            cli_version if isinstance(cli_version, dict) else None)
 
     # -- record ---------------------------------------------------------------
 
@@ -1362,6 +1370,7 @@ class Holder:
             "initial_config_options": self.initial_config_options,
             "protocol_version": self.protocol_version,
             "agent_info": self.agent_info,
+            "cli_version": self.cli_version,
             "capabilities": self.capabilities,
             "state": self.state,
             # The target this holder really adopted at startup, or null for a
@@ -1798,6 +1807,7 @@ class Holder:
             "initial_config_options": self.initial_config_options,
             "protocol_version": self.protocol_version,
             "agent_info": self.agent_info,
+            "cli_version": self.cli_version,
             "capabilities": self.capabilities,
             "heartbeat_host": self.heartbeat_host,
             "pending_permissions": list(self.pending_permissions.values()),
@@ -3941,6 +3951,7 @@ def main() -> int:
     parser.add_argument("--init-meta", default="")
     parser.add_argument("--host-entry", default=None)
     parser.add_argument("--host-name", default=None)
+    parser.add_argument("--cli-version", default="")
     parser.add_argument("--probe", action="store_true")
     args = parser.parse_args()
     if args.probe:

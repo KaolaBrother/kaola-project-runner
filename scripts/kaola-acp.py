@@ -73,6 +73,9 @@ SKILL_SCRIPTS_TOKEN = "$SKILL_DIR/scripts/"
 BRIDGE_BINARY_ENV = {
     "claude-code": "CLAUDE_ACP_CLAUDE_BIN",
 }
+# Issue #124: platforms whose `initialize` returns no `agentInfo`, so a start
+# records the launched CLI's own `--version` instead (a fact, never a gate).
+CLI_VERSION_PLATFORMS = frozenset({"grok"})
 # Issue #112: OpenCode V2 reaches its own server over loopback HTTP, so a
 # forward proxy that does not exclude loopback swallows that hop and every ACP
 # session method answers ClientError while `initialize` still succeeds.
@@ -317,15 +320,37 @@ def bridge_facts(args: argparse.Namespace, with_version: bool = False) -> dict[s
             "passed_as": bridge_env,
         }
         if with_version and binary["present"]:
-            try:
-                out = subprocess.run([path, "--version"], capture_output=True, text=True,
-                                     timeout=15)
-                binary["version"] = (out.stdout or out.stderr).strip().splitlines()[0] \
-                    if (out.stdout or out.stderr).strip() else None
-            except (OSError, subprocess.TimeoutExpired):
-                binary["version"] = None
+            binary["version"] = binary_version(path)
         facts["runtime_binary"] = binary
     return facts
+
+
+def binary_version(path: str, env: dict[str, str] | None = None) -> str | None:
+    """First line of ``<path> --version``, or ``None`` when it cannot be read."""
+    try:
+        out = subprocess.run([path, "--version"], capture_output=True, text=True,
+                             timeout=15, env=env)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    text = (out.stdout or out.stderr).strip()
+    return text.splitlines()[0] if text else None
+
+
+def cli_version_fact(args: argparse.Namespace, env: dict[str, str]) -> dict[str, Any] | None:
+    """Issue #124: the CLI build this start actually launches, for a platform
+    whose ``initialize`` returns no ``agentInfo``. The first word of the agent
+    command is resolved on the agent's own PATH and asked for ``--version``,
+    reported beside ``acp_verified_versions``. A record, never a gate: a
+    mismatch or an unreadable version still starts the session."""
+    if args.platform not in CLI_VERSION_PLATFORMS:
+        return None
+    words = shlex.split(args.agent_command)
+    path = shutil.which(words[0], path=env.get("PATH")) if words else None
+    return {
+        "path": path,
+        "version": binary_version(path, env) if path else None,
+        "verified_versions": args.manifest.get("acp_verified_versions") or None,
+    }
 
 
 def die(message: str, code: int = 2) -> None:
@@ -2032,8 +2057,11 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     init_meta = parse_manifest_meta(args.manifest.get("acp_init_meta") or "")
     if init_meta:
         holder_argv += ["--init-meta", json.dumps(init_meta)]
+    holder_env = agent_environment(args)
+    cli_version = cli_version_fact(args, holder_env)
+    if cli_version is not None:
+        holder_argv += ["--cli-version", json.dumps(cli_version, sort_keys=True)]
     with open(log_path, "ab") as log:
-        holder_env = agent_environment(args)
         if heartbeat_host is not None:
             # Hand the holder the target this command validated and resolved,
             # so the binding it reports back is the one that was checked here
@@ -2077,6 +2105,8 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     attach_binding_fact(receipt, state)
     receipt["transport"]["protocol_version"] = state.get("protocol_version")
     receipt["transport"]["agent_info"] = state.get("agent_info")
+    if "cli_version" in state:
+        receipt["transport"]["cli_version"] = state["cli_version"]
     receipt["transport"]["capabilities"] = state.get("capabilities")
     if state.get("fatal_error"):
         receipt["error"] = state["fatal_error"]
