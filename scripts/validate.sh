@@ -53,6 +53,21 @@ trap 'exit 143' TERM
 export HOME="$sandbox_home"
 export TMPDIR="$validate_tmp"
 unset CODEX_HOME CLAUDE_CONFIG_DIR DEVIN_CONFIG_DIR
+# Issue #115: a seat a live Host dispatched inherits that Host's binding
+# (KAOLA_ACP_HEARTBEAT_HOST[_SOCKET], KAOLA_ACP_DISPATCHER, KAOLA_ZCODE_ENTRY/
+# NODE, KAOLA_CLAUDE_PROFILE_REQUIRED, ...), and fixture starts that copy
+# os.environ then bind to the real Host. Every suite sets the KAOLA_* fixtures
+# it needs itself, so the whole inherited KAOLA_* namespace is dropped here
+# (not a fixed list that each new binding name would outgrow); only validate's
+# own KAOLA_VALIDATE_* knobs survive.
+scrubbed_names=()
+for name in $(compgen -e); do
+  if [[ "$name" == KAOLA_* && "$name" != KAOLA_VALIDATE_* ]]; then
+    unset "$name"
+    scrubbed_names+=("$name")
+  fi
+done
+printf 'validate: scrubbed inherited env: %s\n' "${scrubbed_names[*]:-none}"
 
 watched render-check python3 "$repo_root/scripts/render-skills.py" --check
 for skill_dir in "$repo_root"/skills/*kaola-project-runner "$repo_root"/skills/kaola-delegator; do

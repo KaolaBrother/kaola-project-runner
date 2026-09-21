@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **`./scripts/validate.sh` is hermetic against a dispatching Host's environment (Issue #115).** A
+  worker seat a live ZCode Host dispatched inherits the Host's binding variables
+  (`KAOLA_ACP_HEARTBEAT_HOST`, `KAOLA_ACP_HEARTBEAT_HOST_SOCKET`, `KAOLA_ACP_DISPATCHER`,
+  `KAOLA_ZCODE_ENTRY`, `KAOLA_ZCODE_NODE`, `KAOLA_CLAUDE_PROFILE_REQUIRED`), and fixture starts that
+  copy the environment then bound to the real Host, failing `test-issue-73-canonical-root.py`
+  (`heartbeat-host-conflict`) and `test-zcode-acp-contract.py` as if the product had regressed.
+  validate.sh now drops every inherited `KAOLA_*` name before any suite runs — except its own
+  `KAOLA_VALIDATE_*` knobs — and prints the removed names on one
+  `validate: scrubbed inherited env: ...` line (`none` when clean). Suites keep setting the
+  `KAOLA_*` fixtures they need themselves; seats no longer strip names by hand.
+
 ## 0.5.5 — 2026-09-21
 
 - **OpenCode adapter upgraded to OpenCode V2 `2.0.11` (Issue #112).** The local CLI moved to the V2
