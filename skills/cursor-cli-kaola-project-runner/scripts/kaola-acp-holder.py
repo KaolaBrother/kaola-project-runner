@@ -1697,6 +1697,14 @@ class Holder:
         turn["active"] = False
         self.projection.close_message()
         outcome = turn["outcome"]
+        # Issue #113: the turn's own stop reason, durable in the event log.
+        # `record.json` only ever holds the LAST prompt, so a stop the next
+        # prompt supersedes - an output-token maximum among them - would
+        # otherwise leave nothing behind to count afterwards. Written verbatim:
+        # whatever stopReason the agent reported is what the log says.
+        self.events.append({"kind": "turn_ended", "outcome": outcome,
+                            "stop_reason": turn.get("stop_reason"),
+                            "prompt_fingerprint": turn.get("fingerprint")})
         if outcome in ("turn_completed", "turn_failed") and not self.agent.exited.is_set():
             # One business idle episode per ended turn with the agent alive;
             # the 600s idle_watcher stays a non-business exit timer.

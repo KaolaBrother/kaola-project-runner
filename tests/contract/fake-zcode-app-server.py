@@ -23,6 +23,26 @@ Scenarios (argv ``--scenario``):
   plan         backend asks interaction/requestUserInput (plan_approval)
   question     backend asks interaction/requestUserInput (AskUserQuestion)
   failure      turn.failed with an error payload
+  failure_finish_stop  turn.failed whose data.finishReason is `stop` -- a
+               model failure that is NOT an output-token limit (Issue #113
+               negative control)
+  max_tokens_exhausted  turn.failed carrying the app's own output-token-max
+               ModelError after `classifyOutputTokenContinuation` reported
+               `exhausted`: attribution.reason / attribution.providerErrorCode
+               `model_output_limit_exceeded` (the error context's
+               `providerCode` is renamed `providerErrorCode` on the wire)
+  max_tokens_finish_length  turn.failed whose data.finishReason is `length`
+               (this and the three raw legs below are defensive: the installed
+               build never populates error.data, so they cover the finish-
+               reason signal Issue #113 names, not an observed wire shape)
+  max_tokens_raw_plain      turn.failed whose data.rawFinishReason is
+               `max_tokens`
+  max_tokens_raw_output     turn.failed whose data.rawFinishReason is
+               `max_output_tokens`
+  max_tokens_raw_window     turn.failed whose data.rawFinishReason is
+               `model_context_window_exceeded`
+  max_tokens_cancel  streams, waits for session/stop, then reports the
+               output-token-max turn.failed (an explicit cancel still wins)
   slow         waits for session/stop, then reports a terminal turn (cancel)
   batch        a tool.updated batch payload
   strict_model kept for compatibility; every scenario now rejects a model
@@ -769,6 +789,78 @@ class FakeAppServer:
         if scenario == "failure":
             self.event(session_id, "turn.failed",
                        {"error": {"code": 1308, "message": "prompt is running"}})
+            return
+
+        # -- Issue #113: the output-token-max terminal -----------------------
+        #
+        # The app-server `session/event` union has no `turn.terminal` type, and
+        # `turn.completed.resultType` has no output-token member, so the
+        # terminal the app's own predicate produces reaches the adapter as
+        # `turn.failed`. Field names are transcribed from the app bundle:
+        #   classifyOutputTokenContinuation -> "exhausted" after 3 continues,
+        #   isOutputTokenLimitFinishReason(finishReason, rawFinishReason)
+        #     = finishReason === "length"
+        #       || rawFinishReason in {max_tokens, max_output_tokens,
+        #                              model_context_window_exceeded}
+        # The strict `turn.failed` payload is {error, turnPhase, ...}. The app
+        # builds `error` (`Woe`) as {type, ...NG(error), stack} and lifts the
+        # ModelError context's `providerCode` twice: onto top-level `code`
+        # (`PJs` -> `RJs`) and into `attribution` under the renamed key
+        # `providerErrorCode`. It never sets `data`. So OUTPUT_TOKEN_MAX_ERROR
+        # below is the shape this build really emits.
+        OUTPUT_TOKEN_MAX_ERROR = {
+            "type": "model_error",
+            "code": "model_output_limit_exceeded",
+            "message": "The model's response exceeded the output token maximum.",
+            "retryable": True,
+            "attribution": {
+                "source": "provider",
+                "reason": "model_output_limit_exceeded",
+                "providerErrorCode": "model_output_limit_exceeded",
+                "retryable": True,
+            },
+        }
+
+        def finish_reason_error(**data: Any) -> dict[str, Any]:
+            # NOT a shape the installed build emits (it never populates
+            # `data`): defensive coverage for the finish-reason signal Issue
+            # #113 names, placed in the one slot the strict schema leaves
+            # free-form. The message is deliberately generic so the
+            # classification cannot ride on it.
+            return {
+                "type": "model_error",
+                "message": "Model stopped before finishing its reply.",
+                "retryable": True,
+                "attribution": {"source": "provider"},
+                "data": data,
+            }
+
+        terminal_errors = {
+            "max_tokens_exhausted": OUTPUT_TOKEN_MAX_ERROR,
+            "max_tokens_cancel": OUTPUT_TOKEN_MAX_ERROR,
+            "max_tokens_finish_length": finish_reason_error(finishReason="length"),
+            "max_tokens_raw_plain": finish_reason_error(
+                finishReason="stop", rawFinishReason="max_tokens"),
+            "max_tokens_raw_output": finish_reason_error(
+                finishReason="stop", rawFinishReason="max_output_tokens"),
+            "max_tokens_raw_window": finish_reason_error(
+                finishReason="stop", rawFinishReason="model_context_window_exceeded"),
+            # Negative control: a model failure whose finish reason is not an
+            # output-token limit at all.
+            "failure_finish_stop": finish_reason_error(
+                finishReason="stop", rawFinishReason="stop"),
+        }
+        if scenario in terminal_errors:
+            if scenario == "max_tokens_cancel":
+                flag = threading.Event()
+                self.stop_flags[session_id] = flag
+                self.event(session_id, "model.streaming",
+                           {"kind": "text_delta", "delta": "working"})
+                flag.wait(10)
+            self.event(session_id, "turn.failed", {
+                "error": terminal_errors[scenario],
+                "turnPhase": "model_execution",
+            })
             return
 
         if scenario == "slow":

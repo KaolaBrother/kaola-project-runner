@@ -864,6 +864,73 @@ def tool_kind(name: str) -> str:
     return TOOL_KINDS.get(name, "other")
 
 
+# -- Issue #113: the output-token-max terminal -------------------------------
+#
+# ZCode can end a turn on its output ceiling, but the ZCode Protocol never says
+# so in one field, so this adapter used to collapse that terminal into
+# `end_turn` or `refusal` and the stop became uncountable. The app's own
+# predicate (`isOutputTokenLimitFinishReason` in the desktop bundle) is
+#
+#     finishReason === "length"
+#     || rawFinishReason in {max_tokens, max_output_tokens,
+#                            model_context_window_exceeded}
+#
+# and once `classifyOutputTokenContinuation` has spent its three auto-continues
+# it reports `exhausted`, so the app throws a ModelError whose error context
+# `providerCode` reaches the wire as `turn.failed` `error.code` and, renamed,
+# as `error.attribution.providerErrorCode`. That provider code is what the
+# installed build actually sends; the finish-reason keys are defensive, since
+# the build never populates the free-form `error.data` that could carry them.
+# `refusal` would tell the client the model declined; ACP `max_tokens` says the
+# reply was truncated by the output budget, which is the whole difference
+# between a stop that can be attributed and one that is invisible.
+OUTPUT_LIMIT_FINISH_REASONS = frozenset((
+    "length",
+    "max_tokens",
+    "max_output_tokens",
+    "model_context_window_exceeded",
+))
+OUTPUT_LIMIT_PROVIDER_CODE = "model_output_limit_exceeded"
+# Matching is key-scoped on purpose. A `response` or `message` that merely
+# quotes one of these tokens is prose, not a terminal fact; only a field that
+# carries a finish reason or the error's own identity decides the stop.
+OUTPUT_LIMIT_REASON_KEYS = frozenset((
+    "finishReason", "finish_reason", "rawFinishReason", "raw_finish_reason",
+))
+OUTPUT_LIMIT_CODE_KEYS = frozenset((
+    "providerErrorCode", "providerCode", "provider_code",
+    "reason", "code", "type", "name",
+))
+# `turn.failed.error.data` is the one free-form slot in an otherwise strict
+# schema, so the scan descends into nested objects - bounded, because depth is
+# the only thing a malformed payload gets to choose.
+OUTPUT_LIMIT_SCAN_DEPTH = 6
+
+
+def is_output_limit_terminal(payload: Any, depth: int = 0) -> bool:
+    """True when this turn terminal is ZCode's output-token maximum.
+
+    Either signal is sufficient: a finish reason the app itself would classify
+    as an output-token limit, or the exhaustion ModelError's provider code.
+    Deliberately NOT keyed on the broader `model_context_exceeded` error type,
+    which also covers `prompt_too_long` - that is INPUT context overflow and a
+    different stop.
+    """
+    if depth > OUTPUT_LIMIT_SCAN_DEPTH or not isinstance(payload, dict):
+        return False
+    for key, value in payload.items():
+        if isinstance(value, str):
+            token = value.strip().lower()
+            if key in OUTPUT_LIMIT_REASON_KEYS:
+                if token in OUTPUT_LIMIT_FINISH_REASONS:
+                    return True
+            elif key in OUTPUT_LIMIT_CODE_KEYS and token == OUTPUT_LIMIT_PROVIDER_CODE:
+                return True
+        elif isinstance(value, dict) and is_output_limit_terminal(value, depth + 1):
+            return True
+    return False
+
+
 TOOL_STATUS = {
     "scheduled": "pending",
     "started": "in_progress",
@@ -1515,8 +1582,8 @@ class ZCodeAcpAgent:
             usage = payload.get("usage")
             if usage:
                 self.update(session, {"sessionUpdate": "usage_update", "usage": usage})
-            stop = "cancelled" if session.cancelled else "end_turn"
-            self.finish_turn(session, stop, usage)
+            self.finish_turn(session, self.terminal_stop(session, payload, "end_turn"),
+                             usage)
             return
 
         if etype == "turn.failed":
@@ -1528,12 +1595,26 @@ class ZCodeAcpAgent:
                     "text": f"[zcode turn failed] {error.get('message', 'unknown error')}",
                 },
             })
-            self.finish_turn(session, "cancelled" if session.cancelled else "refusal", None)
+            self.finish_turn(session, self.terminal_stop(session, payload, "refusal"), None)
             return
 
         if etype == "turn.terminal":
-            self.finish_turn(session, "cancelled" if session.cancelled else "end_turn", None)
+            self.finish_turn(session, self.terminal_stop(session, payload, "end_turn"), None)
             return
+
+    def terminal_stop(self, session: Session, payload: dict[str, Any],
+                      default: str) -> str:
+        """The ACP stopReason for one turn terminal.
+
+        An explicit cancel keeps precedence (Issue #113): the client asked for
+        the turn to stop, and that verdict outranks whatever reason the backend
+        happened to report on the way out.
+        """
+        if session.cancelled:
+            return "cancelled"
+        if is_output_limit_terminal(payload):
+            return "max_tokens"
+        return default
 
     def translate_tool(self, session: Session, payload: dict[str, Any]) -> None:
         kind = payload.get("kind")

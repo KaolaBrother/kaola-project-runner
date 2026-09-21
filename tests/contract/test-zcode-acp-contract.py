@@ -786,6 +786,104 @@ class ZcodeAcpContractTests(unittest.TestCase):
         assert done is not None
         self.assertEqual((done.get("result") or {}).get("stopReason"), "cancelled")
 
+    # -- Issue #113: the output-token-max terminal -------------------------
+
+    OUTPUT_TOKEN_MAX_SCENARIOS = (
+        "max_tokens_exhausted",
+        "max_tokens_finish_length",
+        "max_tokens_raw_plain",
+        "max_tokens_raw_output",
+        "max_tokens_raw_window",
+    )
+
+    def prompt_stop_reason(self, scenario: str, text: str) -> str:
+        """Run one whole turn of `scenario` and return its ACP stopReason."""
+        driver = self.start(scenario)
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id,
+            "prompt": [{"type": "text", "text": text}],
+        })
+        done = driver.wait_result(3, timeout=8)
+        self.assertIsNotNone(done, f"{scenario}: the prompt never settled")
+        assert done is not None
+        self.assertNotIn("error", done, scenario)
+        stop = (done.get("result") or {}).get("stopReason")
+        self.stop_driver()
+        return stop
+
+    def test_output_token_max_terminal_reports_max_tokens(self) -> None:
+        """An output-token-max turn ends with ACP ``max_tokens``.
+
+        The app-server event union has no ``turn.terminal`` member and
+        ``turn.completed.resultType`` has no output-token member, so the
+        terminal the app's own ``classifyOutputTokenContinuation`` produces
+        (``exhausted`` after three auto-continues) reaches the adapter as
+        ``turn.failed``. The shape the installed build really emits is the
+        ModelError carrying ``model_output_limit_exceeded`` as ``error.code``
+        and as ``error.attribution.providerErrorCode`` (the error context's
+        ``providerCode``, renamed on the wire). The finish-reason legs are
+        defensive: the build never populates ``error.data``, so they pin the
+        signal ``isOutputTokenLimitFinishReason`` reads --- ``finishReason ===
+        "length"`` or a raw reason in {max_tokens, max_output_tokens,
+        model_context_window_exceeded} --- rather than an observed payload.
+
+        Collapsing that to ``refusal`` tells the client the model declined;
+        ``max_tokens`` is the ACP stop reason that says the reply was truncated
+        by the output budget and can be continued.
+        """
+        for scenario in self.OUTPUT_TOKEN_MAX_SCENARIOS:
+            with self.subTest(scenario):
+                self.assertEqual(
+                    self.prompt_stop_reason(scenario, "write a very long file"),
+                    "max_tokens",
+                    scenario,
+                )
+
+    def test_ordinary_terminals_keep_refusal_and_end_turn(self) -> None:
+        """Negative control: only the output-token limit becomes max_tokens.
+
+        An ordinary ``turn.failed`` stays ``refusal`` and an ordinary
+        ``turn.completed`` stays ``end_turn``, including a model failure whose
+        finish reason is present but is not an output-token limit. A change
+        that reported ``max_tokens`` for every failed turn fails here.
+        """
+        for scenario, expected in (("failure", "refusal"),
+                                   ("failure_finish_stop", "refusal"),
+                                   ("basic", "end_turn")):
+            with self.subTest(scenario):
+                self.assertEqual(
+                    self.prompt_stop_reason(scenario, "ordinary turn"),
+                    expected,
+                    scenario,
+                )
+
+    def test_cancel_still_wins_over_the_output_token_max_terminal(self) -> None:
+        """An explicit cancel keeps ``cancelled`` even on an output-limit end.
+
+        The client asked for the turn to stop; that verdict outranks the
+        reason the backend happened to report while stopping.
+        """
+        driver = self.start("max_tokens_cancel")
+        session_id = self.handshake(driver)
+        driver.request(3, "session/prompt", {
+            "sessionId": session_id,
+            "prompt": [{"type": "text", "text": "write a very long file"}],
+        })
+        chunk = driver.wait_for(
+            lambda msg: msg.get("method") == "session/update"
+            and ((msg.get("params") or {}).get("update") or {}).get("sessionUpdate")
+            == "agent_message_chunk",
+            timeout=8,
+        )
+        self.assertIsNotNone(chunk, "the turn never started streaming")
+        driver.send({"jsonrpc": "2.0", "method": "session/cancel",
+                     "params": {"sessionId": session_id}})
+        done = driver.wait_result(3, timeout=12)
+        self.assertIsNotNone(done)
+        assert done is not None
+        self.assertEqual((done.get("result") or {}).get("stopReason"), "cancelled")
+
     def test_mode_model_thought_without_silent_fallback(self) -> None:
         driver = self.start("strict_model")
         session_id = self.handshake(driver)

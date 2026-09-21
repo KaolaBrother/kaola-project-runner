@@ -81,6 +81,22 @@
   rejected a `runner-<tier>` selection source with an argparse usage error because the vocabulary
   was a closed four-value list, and the shell's refusal message doubled the tier label.
 
+- **ZCode output-token-limit stops are now visible as ACP `max_tokens` (Issue #113).** When a
+  ZCode turn ends on its output ceiling, the app auto-continues three times and then fails the
+  turn with `model_output_limit_exceeded`. The adapter used to collapse that terminal into
+  `refusal` (or `end_turn`), so the stop appeared in no Runner receipt and could only be found in
+  ZCode's own database. The adapter now reports **ACP `stopReason: "max_tokens"`** for a
+  `turn.failed` carrying `model_output_limit_exceeded` (as `error.code` or
+  `error.attribution.providerErrorCode`), and for a finish reason of `length` or the raw
+  `max_tokens` / `max_output_tokens` / `model_context_window_exceeded`. An explicit cancel still
+  reports `cancelled`, and ordinary failures and completions keep `refusal` and `end_turn`. The
+  holder records the reason verbatim: in the turn receipt, in `record.json`
+  `last_prompt.stop_reason`, and in a new `events.jsonl` `turn_ended` line
+  (`outcome`, `stop_reason`, `prompt_fingerprint`) written at every turn end, so a stop that a
+  later prompt supersedes still leaves a trace. A contract-test gate against the fake ZCode
+  app-server pins the translation, with negative controls, and fails on the previous adapter.
+  This is observability only: no model, effort or output-ceiling setting changed.
+
 ## 0.5.4 — 2026-09-20
 
 - **An unreadable ZCode discovery root is a typed refusal, not a traceback (Issue #106).** The
