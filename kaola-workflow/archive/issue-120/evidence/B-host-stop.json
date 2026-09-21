@@ -1,0 +1,1 @@
+{"error": {"code": "holder-closed", "message": "holder closed the connection"}, "git": {"branch": "master", "dirty": false}, "platform": "dsh", "repo": "/private/tmp/kpr120/repo", "schema_version": 3, "session": "dsh-KPR-i120-host", "transport": {"alternatives": ["pty"], "default": "acp", "reason": "manifest-default", "selected": "acp"}}
