@@ -126,8 +126,8 @@ Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `--skip-permissions-unsafe`, `--auto <level>`, or no flag, and ACP maps them to
 `auto-high|auto-low|auto-medium|auto-high|normal` through `acp_mode_config_id: autonomy_level`.
 ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reasoning_effort`, and
-`autonomy_level`. Droid's default stays Auto (`auto`); its upgrade preset is Kimi K3 Max (`kimi-k3`,
-`reasoning_effort=max`), and it has no separate Fast toggle.
+`autonomy_level`. Droid's default and upgrade presets are Auto (`auto`); its third tier `--tier core` is Kimi K3 Max
+(`kimi-k3`, `reasoning_effort=max`), and it has no separate Fast toggle.
 
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
@@ -482,10 +482,11 @@ Model evidence under `model` includes `requested_model_source`, `requested_model
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
 
-Droid's default is Auto Model (`auto`) with no effort pin; `--tier upgrade` is Kimi K3 Max
-(`kimi-k3` at `reasoning_effort=max`). Both are first-class catalog values, so `acp_model_map`
-stays empty. Droid declares no third tier, so `--tier alternative` is the typed
-`tier-not-declared` refusal. Its native ACP mode option is
+Droid's default is Auto Model (`auto`) with no effort pin, and `--tier upgrade` is the same Auto
+preset because no stronger Droid tier is established. Its third tier, `--tier core`
+(`alt_tier_label: core`), is Kimi K3 Max (`kimi-k3` at `reasoning_effort=max`) — a separate tier
+below the default, not an upgrade. Both ids are first-class catalog values, so `acp_model_map`
+stays empty. `--tier alternative` stays the typed `tier-not-declared` refusal. Its native ACP mode option is
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
 

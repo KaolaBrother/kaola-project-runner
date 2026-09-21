@@ -49,10 +49,10 @@ LIVE_PRESETS = {
         "alt": ("alternative", "Kimi K2.8", "kimi-code/kimi-for-coding", "max"),
     },
     "droid": {
-        # Issue #117: default is Auto again; core (Kimi K3 Max) is the upgrade
-        # preset, and the alternative tier is deleted.
+        # Issue #125 (correcting #117): default is Auto; core (Kimi K3 Max) is
+        # the third tier, not the upgrade, and the alternative tier stays deleted.
         "default": ("Auto Model", "auto", ""),
-        "alt": None,
+        "alt": ("core", "Kimi K3 Max", "kimi-k3", "max"),
     },
     "dsh": {
         "default": ("DeepSeek V4.1 Flash (OpenCode Go)", "opencode-go/deepseek-v4.1-flash", ""),
@@ -150,14 +150,20 @@ class LiveVerifiedPresets(unittest.TestCase):
         """`auto` and `kimi-k3` are real Droid catalog ids, so nothing is hardcoded."""
         self.assertEqual(manifest("droid")["acp_model_map"], "")
 
-    def test_droid_core_is_the_upgrade_preset_and_differs_from_default(self) -> None:
-        """Issue #117: core lands in `upgrade_*`, and core must not equal default."""
+    def test_droid_core_is_the_third_tier_and_upgrade_stays_auto(self) -> None:
+        """Issue #125: core is `alt_*` (below default), never `upgrade_*`; with
+        no stronger Droid tier established, upgrade equals the Auto default."""
         values = manifest("droid")
+        self.assertEqual(
+            (values["alt_tier_label"], values["alt_model_name"],
+             values["alt_model_id"], values["alt_model_effort"]),
+            ("core", "Kimi K3 Max", "kimi-k3", "max"))
         self.assertEqual(
             (values["upgrade_model_name"], values["upgrade_model_id"],
              values["upgrade_model_effort"]),
-            ("Kimi K3 Max", "kimi-k3", "max"))
-        self.assertNotEqual(values["upgrade_model_id"], values["default_model_id"])
+            (values["default_model_name"], values["default_model_id"],
+             values["default_model_effort"]))
+        self.assertEqual(values["upgrade_model_id"], "auto")
 
     def test_dsh_default_is_already_carried_by_the_model_map(self) -> None:
         """The ACP wire value is the JSON pair, and the map was already right."""
@@ -169,10 +175,11 @@ class LiveVerifiedPresets(unittest.TestCase):
         )
 
     def test_droid_launch_summary_names_auto_default_and_no_alternative(self) -> None:
-        """Issue #117: the summary states Auto default and K3 Max upgrade only."""
+        """Issue #125: the summary states Auto default/upgrade and K3 Max core."""
         summary = manifest("droid")["launch_summary"]
         self.assertIn("default Auto Model", summary)
-        self.assertIn("kimi-k3", summary)
+        self.assertIn("--tier core is the first-class catalog id kimi-k3", summary)
+        self.assertNotIn("--tier upgrade preset is the first-class catalog id kimi-k3", summary)
         for leftover in ("kimi-k2.7", "K2.7", "K2.8", "alternative"):
             self.assertNotIn(leftover, summary)
 
@@ -291,7 +298,7 @@ class UndeclaredTierIsRefused(unittest.TestCase):
         code, receipt = run_acp("droid", "--tier", "alternative")
         self.assertEqual(code, 1)
         self.assertEqual(receipt["reason"], "tier-not-declared")
-        self.assertEqual(receipt["available_tiers"], ["default", "upgrade"])
+        self.assertEqual(receipt["available_tiers"], ["default", "upgrade", "core"])
         self.assertFalse(receipt["mutation_performed"])
         proc = run_tmux("droid", "--tier", "alternative")
         self.assertEqual(proc.returncode, 1)

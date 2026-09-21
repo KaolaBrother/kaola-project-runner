@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Droid Core is the third tier, not the upgrade (Issue #125, correcting #117).** #117 put Kimi
+  K3 Max into Droid's `upgrade_*` slot, but Droid Core is a separate tier below the default, not a
+  stronger one. Kimi K3 Max (`kimi-k3` at `reasoning_effort=max`) moves to `alt_*` as
+  `--tier core` (`alt_tier_label: core`) on both transports. `--tier upgrade` now resolves to the
+  same Auto preset as `default` (no stronger Droid tier is established; the Kimi CLI precedent
+  allows upgrade to equal the default). The default stays `auto`, and the deleted alternative /
+  `kimi-k2.7-code` tier is not restored.
 - **Grok sessions record the CLI build they actually ran (Issue #124).** Grok's `initialize`
   returns no `agentInfo`, so a grok ACP `start` now stores the launched binary's `--version`
   line as `cli_version` (`path`, `version`, `verified_versions`) in `record.json`, holder state,

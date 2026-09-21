@@ -191,10 +191,10 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.assertEqual({option.get("id") for option in options},
                          {"autonomy_level", "model", "reasoning_effort"})
 
-    def test_upgrade_preset_effort_is_applied_exactly_once(self) -> None:
-        """The upgrade preset carries effort max: exactly that value, once.
-        The default preset carries none (test_default_start_applies_auto_model_and_autonomy_level)."""
-        self.start("--tier", "upgrade")
+    def test_core_preset_effort_is_applied_exactly_once(self) -> None:
+        """The core preset carries effort max: exactly that value, once.
+        The default and upgrade presets carry none (Issue #125)."""
+        self.start("--tier", "core")
         self.assertEqual(
             [value for config_id, value in self.config_events()
              if config_id == "reasoning_effort"],
@@ -253,20 +253,33 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
                     [("autonomy_level", expected)],
                 )
 
-    def test_upgrade_tier_applies_kimi_k3_max(self) -> None:
-        """Issue #117: core (Kimi K3 Max) lands in the upgrade preset, distinct
-        from the Auto default: kimi-k3 at reasoning_effort=max."""
-        receipt = self.start("--tier", "upgrade")
+    def test_core_tier_applies_kimi_k3_max(self) -> None:
+        """Issue #125: core (Kimi K3 Max) is the third tier, not the upgrade:
+        kimi-k3 at reasoning_effort=max."""
+        receipt = self.start("--tier", "core")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("source"), "runner-upgrade")
-        self.assertEqual(selection.get("tier"), "upgrade")
+        self.assertEqual(selection.get("source"), "runner-core")
+        self.assertEqual(selection.get("tier"), "core")
         self.assertEqual(selection.get("resolved_model"), "kimi-k3")
         self.assertEqual(selection.get("resolved_effort"), "max")
         self.assertEqual(
             self.config_events(),
             [("model", "kimi-k3"), ("reasoning_effort", "max"),
              ("autonomy_level", "auto-high")],
+        )
+
+    def test_upgrade_tier_is_auto_like_default(self) -> None:
+        """Issue #125: no stronger Droid tier is established, so upgrade
+        resolves to the Auto default and never to kimi-k3."""
+        receipt = self.start("--tier", "upgrade")
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        selection = receipt.get("model_selection") or {}
+        self.assertEqual(selection.get("source"), "runner-upgrade")
+        self.assertEqual(selection.get("resolved_model"), "auto")
+        self.assertEqual(
+            self.config_events(),
+            [("model", "auto"), ("autonomy_level", "auto-high")],
         )
 
     def test_deleted_alternative_tier_is_refused(self) -> None:
@@ -276,7 +289,7 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         receipt = self.start("--tier", "alternative", check=False)
         self.assertEqual(receipt.get("result"), "refused")
         self.assertEqual(receipt.get("reason"), "tier-not-declared")
-        self.assertEqual(receipt.get("available_tiers"), ["default", "upgrade"])
+        self.assertEqual(receipt.get("available_tiers"), ["default", "upgrade", "core"])
         self.assertFalse(receipt.get("mutation_performed"))
         self.assertEqual(self.config_events(), [])
 
@@ -285,7 +298,7 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         receipt = self.start("--tier", "fable", check=False)
         self.assertEqual(receipt.get("result"), "refused")
         self.assertEqual(receipt.get("reason"), "tier-not-declared")
-        self.assertEqual(receipt.get("available_tiers"), ["default", "upgrade"])
+        self.assertEqual(receipt.get("available_tiers"), ["default", "upgrade", "core"])
         self.assertFalse(receipt.get("mutation_performed"))
         self.assertEqual(self.config_events(), [])
 

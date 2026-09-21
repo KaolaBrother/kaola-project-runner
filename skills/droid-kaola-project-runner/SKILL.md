@@ -53,11 +53,13 @@ SESSION="droid-kaola-<purpose>"
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Auto Model**: `auto`,
-no Runner effort override) and `--tier upgrade` (**Kimi K3 Max**:
-`kimi-k3`, reasoning_effort=max) — and `default` applies whenever the user did
+no Runner effort override) and `--tier upgrade` (**Auto Model**:
+`auto`, no Runner effort override) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.
+
+A third preset, `--tier core` (**Kimi K3 Max**: `kimi-k3`), needs the same explicit user request as `upgrade`.
 
 An explicit user model choice always wins: pass it with `--model ID`, adding `--effort LEVEL` only
 when the user also named an effort. A bare explicit `--model` leaves the runtime's native effort
