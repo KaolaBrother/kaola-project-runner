@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.6 — 2026-09-21
 
 - **The authorized worker count is a hard cap on live processes; a finished seat is stopped, not
   kept (Issue #118).** Finished seats stayed alive after acceptance and the Host read them as
