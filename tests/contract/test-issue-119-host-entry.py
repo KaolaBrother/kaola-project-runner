@@ -14,6 +14,9 @@ against a small fake ACP agent (no real CLI, login, or network). Covers:
   what a worker-named start on the same platform resolves.
 * AC9 - #73 canonical root, #104's three refusals, and #105 build skew apply
   to a non-ZCode Host too.
+* Issue #121 - an installed main Skill (any directory whose SKILL.md is
+  named kaola-project-runner) that differs from the Host's build refuses
+  main-skill-build-skew; an aligned copy starts as before.
 * H2 - an explicit OpenCode --model/--effort the agent does not report is a
   typed refusal with the session stopped; nothing is substituted.
 """
@@ -401,6 +404,69 @@ def test_non_zcode_host_build_skew_refuses() -> None:
         sandbox.cleanup()
 
 
+def test_issue_121_main_skill_build_skew_refuses() -> None:
+    """Issue #121: #105's comparison extended to the main Skill, which ships
+    no scripts. Temp repo and shadow HOME only; no real user root is read."""
+    sandbox = Sandbox("main121")
+    try:
+        tree = sandbox.dir / "installed" / "droid-kaola-project-runner"
+        shutil.copytree(ROOT / "skills" / "droid-kaola-project-runner", tree)
+        cli = tree / "scripts" / "kaola-acp.py"
+        record = json.loads((tree / "scripts" / "main-skill-build.json").read_text(encoding="utf-8"))
+        build = record["build"]
+        main = sandbox.home / ".factory" / "skills" / "kaola-project-runner"
+        shutil.copytree(ROOT / "skills" / "kaola-project-runner", main)
+        host = "droid-KPR-orchestrator-t121"
+
+        # Same build: the Host starts and reports the main Skill build it compared.
+        receipt = sandbox.cli("droid", "start", session=host, cli=cli)
+        check(receipt.get("state") == "ready" and receipt.get("main_skill_build") == build,
+              f"#121: an aligned main Skill does not block the Host ({receipt.get('reason')}, "
+              f"{receipt.get('main_skill_build')} vs {build})")
+        sandbox.invoke("droid", "stop", "--force", session=host, cli=cli)
+
+        # An older main Skill in the user root, plus a renamed backup in the
+        # project root that the runtime still loads by its frontmatter name.
+        skill_md = main / "SKILL.md"
+        skill_md.write_bytes(skill_md.read_bytes() + b"\nOlder heartbeat wording.\n")
+        backup = sandbox.repo / ".agents" / "skills" / "kaola-project-runner.bak"
+        shutil.copytree(ROOT / "skills" / "kaola-project-runner", backup)
+        (backup / "references" / "host-startup.md").unlink()
+        host = "droid-KPR-orchestrator-t121b"
+        result, refused = sandbox.invoke("droid", "start", session=host, cli=cli)
+        refused = refused or {}
+        main, backup = Path(os.path.realpath(main)), Path(os.path.realpath(backup))
+        skew = {os.path.realpath(entry.get("path", "")): entry
+                for entry in refused.get("main_skill_skew") or []}
+        detail = str(refused.get("detail", ""))
+        check(result.returncode == 1 and refused.get("reason") == "main-skill-build-skew"
+              and refused.get("mutation_performed") is False
+              and not sandbox.record_dir("droid", host).exists(),
+              f"#121: a stale main Skill refuses the Host before anything exists ({refused})")
+        check(refused.get("main_skill_skew_count") == 2 and set(skew) == {str(main), str(backup)},
+              f"#121: both stale copies are named ({sorted(skew)})")
+        stale = skew.get(str(main)) or {}
+        check(stale.get("files") == ["SKILL.md"] and stale.get("expected") == build
+              and stale.get("installed") not in (None, build)
+              and (stale.get("path") or "?") in detail and build in detail
+              and stale["installed"] in detail,
+              f"#121: detail names the path and both builds ({detail})")
+        check((skew.get(str(backup)) or {}).get("files") == ["references/host-startup.md"],
+              "#121: a missing recorded file is skew")
+        check("install-local.sh" in detail, "#121: the refusal says how to repair it")
+        check(skill_md.read_bytes().endswith(b"Older heartbeat wording.\n") and backup.is_dir(),
+              "#121: detection only; the user roots are untouched")
+
+        # A worker-named start is not a Host and is not compared.
+        worker = "droid-KPR-i121-worker"
+        started = sandbox.cli("droid", "start", session=worker, cli=cli)
+        check(started.get("state") == "ready" and "main_skill_build" not in started,
+              "#121: a worker-named start is not compared")
+        sandbox.invoke("droid", "stop", "--force", session=worker, cli=cli)
+    finally:
+        sandbox.cleanup()
+
+
 def test_host_resolves_like_worker_h1() -> None:
     """AC3: no Host-only model table or manifest field; same selection path."""
     scripts = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "scripts").glob("*.py"))
@@ -571,6 +637,7 @@ TESTS = [
     test_non_zcode_host_binds_and_receives_carrier,
     test_entryless_dispatcher_and_non_zcode_refusals,
     test_non_zcode_host_build_skew_refuses,
+    test_issue_121_main_skill_build_skew_refuses,
     test_host_resolves_like_worker_h1,
     test_opencode_explicit_selection_h2,
     test_issue_122_entryless_host_fails_closed,

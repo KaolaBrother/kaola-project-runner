@@ -1620,6 +1620,11 @@ SKILL_DISCOVERY_DIRS = (".zcode/skills", ".agents/skills")
 WORKER_SKILL_SCRIPTS = ("kaola-acp.py", "kaola-acp-holder.py", "kaola-tmux.sh")
 WORKER_SKILL_OPTIONAL_SCRIPTS = ("kaola-zcode-acp.py",)
 SKEW_DETAIL_CAP = 12
+# Issue #121: the main orchestrator Skill ships no scripts, so #105 never saw
+# it. Every worker Skill carries the main Skill's build record instead, and a
+# Host start compares each same-named main Skill in its discovery roots.
+MAIN_SKILL_NAME = "kaola-project-runner"
+MAIN_SKILL_BUILD_FILE = "main-skill-build.json"
 
 # Issue #108: a ZCode Host is the Project Runner control plane, so its model
 # is a dispatch requirement, not a preference — GLM 5.3 at effort max. The
@@ -1829,16 +1834,42 @@ def invoking_skill_tree() -> Path | None:
     return tree if (tree / "SKILL.md").is_file() else None
 
 
-def installed_worker_skills(repo: str, platform: str = "zcode"
+def is_worker_skill(path: Path) -> bool:
+    return (path / "scripts" / "kaola-acp.py").is_file()
+
+
+def skill_frontmatter_name(path: Path) -> str | None:
+    """The ``name:`` of a Skill directory's SKILL.md frontmatter, or None. A
+    runtime loads a Skill by this name, so a renamed backup copy still counts."""
+    try:
+        lines = (path / "SKILL.md").read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return None
+        if line.startswith("name:"):
+            return line[len("name:"):].strip().strip("\"'") or None
+    return None
+
+
+def is_main_skill(path: Path) -> bool:
+    return skill_frontmatter_name(path) == MAIN_SKILL_NAME
+
+
+def installed_worker_skills(repo: str, platform: str = "zcode",
+                            match: Any = is_worker_skill
                             ) -> tuple[list[tuple[Path, list[Path]]], list[str]]:
     """``(found, unreadable)`` for the default discovery roots that exist.
 
-    ``found`` is ``(root, worker Skill directories)`` in the documented order
-    and without duplicates. A worker Skill is a Skill directory that ships
-    ``scripts/kaola-acp.py``; the main orchestrator Skill ships no scripts and
-    is not compared here. ``unreadable`` names every existing root that could
-    not be listed, so ``start`` refuses it by name instead of dying with a
-    traceback (Issue #106)."""
+    ``found`` is ``(root, matching Skill directories)`` in the documented order
+    and without duplicates. By default a match is a worker Skill, a Skill
+    directory that ships ``scripts/kaola-acp.py``; Issue #121 passes
+    ``is_main_skill`` for the main orchestrator Skill, which ships no scripts.
+    ``unreadable`` names every existing root that could not be listed, so
+    ``start`` refuses it by name instead of dying with a traceback (Issue #106)."""
     found: list[tuple[Path, list[Path]]] = []
     unreadable: list[str] = []
     seen: set[str] = set()
@@ -1856,10 +1887,7 @@ def installed_worker_skills(repo: str, platform: str = "zcode"
                 continue
             seen.add(key)
             try:
-                skills = sorted(
-                    path for path in root.iterdir()
-                    if (path / "scripts" / "kaola-acp.py").is_file()
-                )
+                skills = sorted(path for path in root.iterdir() if match(path))
             except OSError:
                 unreadable.append(str(root))
                 continue
@@ -1908,6 +1936,77 @@ def worker_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]
                 })
     return {"applies": True, "build": (baseline.get("kaola-acp.py") or "")[:12] or None,
             "roots": roots, "skew": skew, "unreadable_roots": unreadable}
+
+
+def main_skill_build(files: dict[str, Any]) -> str:
+    """One build id over a main Skill's per-file digests (render-skills.py
+    main_skill_build_record uses the same formula)."""
+    return hashlib.sha256(
+        json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()[:12]
+
+
+def main_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]:
+    """Issue #121: compare every installed main Skill with this build's record.
+
+    Same scope and roots as ``worker_skill_alignment``; ``applies`` is False
+    for a checkout invocation or a worker Skill built before the record
+    existed. A copy is aligned when every recorded file has the recorded
+    digest; extra files are ignored. Read-only."""
+    tree = invoking_skill_tree()
+    record_path = tree / "scripts" / MAIN_SKILL_BUILD_FILE if tree else None
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8")) if record_path else None
+    except (OSError, ValueError):
+        record = None
+    files = record.get("files") if isinstance(record, dict) else None
+    if not isinstance(files, dict) or not files:
+        return {"applies": False, "build": None, "skills": None, "skew": []}
+    build = main_skill_build(files)
+    found: list[str] = []
+    skew: list[dict[str, Any]] = []
+    for _root, skills in installed_worker_skills(repo, platform, is_main_skill)[0]:
+        for skill in skills:
+            found.append(str(skill))
+            installed = {name: file_sha256(skill / name) for name in files}
+            if installed == files:
+                continue
+            skew.append({
+                "path": str(skill),
+                "installed": main_skill_build(installed),
+                "expected": build,
+                "files": sorted(name for name in files if installed[name] != files[name]),
+            })
+    return {"applies": True, "build": build, "skills": found, "skew": skew}
+
+
+def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
+                            alignment: dict[str, Any]) -> dict[str, Any]:
+    """Issue #121: an installed main Skill differs from this Host's build, and
+    the runtime may load that copy instead. The Issue #105 refusal shape;
+    nothing is created and no user root is changed."""
+    skew = alignment["skew"]
+    shown = skew[:SKEW_DETAIL_CAP]
+    listed = ", ".join(f"{entry['path']} ({entry['installed']} != {entry['expected']})"
+                       for entry in shown)
+    more = "" if len(skew) == len(shown) else f" (+{len(skew) - len(shown)} more)"
+    receipt = base_receipt(args, repo)
+    receipt.pop("git", None)
+    receipt.update({
+        "result": "refused",
+        "reason": "main-skill-build-skew",
+        "action": "start",
+        "detail": (f"{len(skew)} installed {MAIN_SKILL_NAME} main Skill(s) do not match "
+                   f"this Host build {alignment['build']}: {listed}{more}. Re-run "
+                   "install-local.sh from the accepted checkout for that root, or remove "
+                   "the stale copy, then start again."),
+        "main_skill_build": alignment["build"],
+        "main_skill_skew": shown,
+        "main_skill_skew_count": len(skew),
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    return receipt
 
 
 def worker_skill_root_refusal(args: argparse.Namespace, repo: str,
@@ -2024,6 +2123,12 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         # to compare - unknown, never reported as aligned.
         receipt["worker_skill_build"] = alignment["build"]
         receipt["worker_skill_roots"] = alignment["roots"]
+        # Issue #121: the same comparison for the main Skill this Host's
+        # runtime loads, which ships no scripts and so is not in #105's set.
+        main_alignment = main_skill_alignment(repo, args.platform)
+        if main_alignment["skew"]:
+            return main_skill_skew_refusal(args, repo, main_alignment)
+        receipt["main_skill_build"] = main_alignment["build"]
         # Issue #108: a Host-shaped session must run GLM 5.3 at effort max.
         # An explicit --model/--effort that contradicts that is refused
         # before anything exists; an absent one is pinned after the session

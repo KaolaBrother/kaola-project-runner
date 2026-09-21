@@ -32,6 +32,9 @@ ZCODE_PLATFORM = "zcode"
 ZCODE_ADAPTER = "kaola-zcode-acp.py"
 ORCHESTRATOR_NAME = "kaola-project-runner"
 ORCHESTRATOR_DISPLAY = "Project Runner"
+# Issue #121: every worker Skill carries the main Skill's build record, so a
+# Host start can refuse an older main Skill that its runtime would load first.
+MAIN_SKILL_BUILD = "scripts/main-skill-build.json"
 EXTERNAL_NAME = "kaola-delegator"
 EXTERNAL_DISPLAY = "Kaola-Delegator"
 GROK_BOT_HOST = "grok-bot"  # a host packaging adapter (see below), never a platform
@@ -392,7 +395,18 @@ def expected_external_files() -> dict[str, bytes]:
     return result
 
 
-def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
+def main_skill_build_record(orch_files: dict[str, bytes]) -> bytes:
+    """Issue #121: the per-file sha256 of the generated main Skill and one
+    build id over them (the same formula as kaola-acp.py main_skill_build)."""
+    files = {name: hashlib.sha256(data).hexdigest() for name, data in sorted(orch_files.items())}
+    build = hashlib.sha256(
+        json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()[:12]
+    record = {"skill": ORCHESTRATOR_NAME, "build": build, "files": files}
+    return (json.dumps(record, indent=2, sort_keys=True) + "\n").encode()
+
+
+def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     result[MARKER] = (manifest["skill_name"] + "\n").encode()
     skill_template = TEMPLATES / "SKILL.md.tmpl"
@@ -450,6 +464,7 @@ def expected_files(manifest: dict[str, str]) -> dict[str, bytes]:
         + f"exec \"$script_dir/kaola-tmux.sh\" {manifest['id']} \"$@\"\n"
     )
     result["scripts/runtime-tmux.sh"] = wrapper.encode()
+    result[MAIN_SKILL_BUILD] = main_build
     if manifest["id"] == "grok":
         result["scripts/grok-tmux.sh"] = wrapper.encode()
     if manifest["id"] == VENDORED_BRIDGE_PLATFORM:
@@ -1049,8 +1064,9 @@ def main() -> int:
 
     limits = budgets()
     revision = accepted_revision()
-    worker_expected = {m["skill_name"]: expected_files(m) for m in manifests}
     orch_expected = expected_orchestrator_files(manifests)
+    main_build = main_skill_build_record(orch_expected)
+    worker_expected = {m["skill_name"]: expected_files(m, main_build) for m in manifests}
     external_expected = expected_external_files()
     if args.verify_install:
         # Issue #107: compare an installed root against this render. Budget and

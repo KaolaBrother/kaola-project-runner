@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **A stale main Skill in a Host's discovery roots is refused at Host start (Issue #121).** The
+  #105 build-skew check compared only worker Skills, so an older `kaola-project-runner` main Skill
+  in a user root (seen on cursor-cli) was loaded instead of the Host's build without any report.
+  Every worker Skill now carries the main Skill's build record, `scripts/main-skill-build.json`,
+  and a Host `start` that passes the worker check compares every Skill directory named
+  `kaola-project-runner` in its `SKILL.md` frontmatter (renamed backups included) in the same
+  roots. A difference is the typed refusal `reason: main-skill-build-skew` (exit 1, nothing
+  created): `main_skill_skew` and `detail` name each stale path with its installed and expected
+  build. The Runner never rewrites a user root; reinstall that root or remove the copy. A passing
+  Host `start` reports `main_skill_build`.
 - **Runtimes install and uninstall independently: shared blocks are counted by reference
   (Issue #123).** `kimi-cli` and `dsh` still share `~/.agents/skills`. Each Skill receipt now
   lists its `referrers`, and `--method link` writes a receipt too. Installing a build that is

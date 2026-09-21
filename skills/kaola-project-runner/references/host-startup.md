@@ -85,7 +85,9 @@ A Host `start` refuses `worker-skill-build-skew` (exit 1, nothing created) when
 the installed worker Skills are a different build from the Skill this Host runs:
 their `start` would be the copy without automatic binding. Nothing is recoverable
 from inside the Host — report it with the `worker_skill_skew` paths and ask for
-the install to be refreshed from the accepted checkout.
+the install to be refreshed from the accepted checkout. `main-skill-build-skew`
+is the same for an older copy of this Skill in a root the Host reads
+(`main_skill_skew` paths): that copy may be the one loaded instead of this build.
 
 The same `start` pinned this Host's model (Issue #108): a
 `zcode-<PROJECT_CODE>-orchestrator-<purpose>` session must run GLM 5.3 at effort

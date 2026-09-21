@@ -69,10 +69,11 @@ Notes:
   `.agents/skills`, and each platform's own dot-directory), except grok, which
   showed only user roots.
 - A Host start compares the worker Skills in its own platform's discovered roots
-  with its build before it starts (#105), the same check a ZCode Host runs. The
-  main Skill ships no scripts and is not compared, and a same-named older copy
-  in a user root wins over a project copy (seen on cursor-cli). Reinstall every
-  root the Host reads.
+  with its build before it starts (#105), the same check a ZCode Host runs. A
+  same-named older main Skill in a user root wins over a project copy (seen on
+  cursor-cli), so the start also compares every main Skill in those roots
+  (#121) and refuses `main-skill-build-skew` naming the stale path. Reinstall
+  every root the Host reads.
 - D3, all eight rows (2026-09-21): run under a shadow `HOME` whose Skill roots
   held only this build and an isolated `KAOLA_ACP_RECORD_ROOT`. Each Host
   started on its default tier (opencode on the explicit

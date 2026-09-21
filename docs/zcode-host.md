@@ -489,6 +489,14 @@ roots ZCode reaches only through ancestor directories, `skills.roots` or
 Skill build to compare and reports both fields `null`; and an already running
 holder, which keeps the code it started with either way.
 
+The main Skill ships no scripts, so the same `start` compares it against the
+build record every worker Skill carries (`scripts/main-skill-build.json`,
+Issue #121): any `kaola-project-runner` Skill in those roots with a different
+recorded file is refused as
+`{"result": "refused", "reason": "main-skill-build-skew"}` with exit 1 and
+nothing created (`main_skill_skew` names the path and both builds). The start
+only detects it; reinstall that root or remove the stale copy.
+
 The runtime scan stays scripts-only, but prose is no longer manual: a worker
 Skill copy carries only its own rendered prose, so it cannot know another
 platform's `SKILL.md`, and the accepted checkout is the one place every Skill's

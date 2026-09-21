@@ -362,6 +362,19 @@ an installed Skill tree: no Skill build to be the baseline, so the answer is unk
 Roots that ZCode reaches only through ancestor directories, `skills.roots`, or `plugins.dirs` are not
 compared.
 
+The main `kaola-project-runner` Skill ships no scripts, so the same Host `start` compares it separately
+(Issue #121): every worker Skill carries the main Skill's build record, `scripts/main-skill-build.json`
+(the per-file sha256 of the rendered main Skill and a 12-hex `build` over them). After the worker check
+passes, every Skill directory in the same roots whose `SKILL.md` frontmatter is
+`name: kaola-project-runner` (a renamed backup copy included) must have every recorded file with the
+recorded digest; extra files are ignored. Any difference is
+`{"result":"refused","reason":"main-skill-build-skew"}`, exit 1, nothing created and no root changed;
+`main_skill_skew` lists each stale copy's `path`, `installed` and `expected` build and differing
+`files`, `main_skill_skew_count` the total, and `detail` names the paths, both builds, and the repair
+(re-run `install-local.sh` for that root or remove the copy). A passing Host `start` reports
+`main_skill_build`, which is `null` when there is no record to compare (a checkout invocation or a
+worker Skill built before the record).
+
 ### `steer` — Agent-chosen steering of a running turn (Issue #65)
 
 `steer --repo ABS_PATH --session NAME [--text TEXT | --stdin] [--steer-mode native|interrupt]
