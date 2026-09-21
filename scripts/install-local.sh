@@ -198,6 +198,19 @@ else
 fi
 receipts_dir="$target_parent/.kaola-install-receipts"
 
+# Issue #123: this install's reference id, and who a pre-ledger receipt in this
+# root counts as referenced by (every runtime mapped to the same root, e.g.
+# kimi-cli and dsh for $HOME/.agents/skills).
+self_ref="$resolved_runtime"
+canonical_dir() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"; }
+target_key="$(canonical_dir "$target_parent")"
+legacy_referrers=""
+for known_runtime in codex claude-code cursor devin zcode grok-cli droid opencode kimi-cli dsh; do
+  [[ "$(canonical_dir "$(runtime_skills_dir "$known_runtime")")" == "$target_key" ]] \
+    && legacy_referrers="${legacy_referrers:+$legacy_referrers,}$known_runtime"
+done
+[[ -n "$legacy_referrers" ]] || legacy_referrers="$self_ref"
+
 if [[ "$mode" == install ]]; then
   if [[ "$bin_links_request" == on || ( -z "$bin_links_request" && "$resolved_runtime" == codex ) ]]; then
     want_bin_links=true
@@ -279,29 +292,203 @@ if (
     sys.stdout.write(data["content_sha256"])' "$1" "$2"
 }
 
+# Issue #123: an installed Skill and the $HOME/.local/bin helper links are
+# shared blocks, counted by reference. A Skill receipt lists the runtimes that
+# reference that Skill ("referrers"; copy and link installs both write one). A
+# receipt without the field predates the ledger and counts as referenced by
+# every runtime mapped to that root, so an unknown owner is never assumed gone.
+# The helper links keep their referrers in a separate sidecar beside them; the
+# locator registration receipt written by kaola-locate.py is never written
+# here, and its presence counts as one more reference to the locator link.
+refs_program='import json, os, sys, time
+op, args = sys.argv[1], sys.argv[2:]
+RECEIPT = "kaola-project-runner-install/1"
+LEDGER = ".kaola-project-runner-bin-links.json"
+LEDGER_SCHEMA = "kaola-project-runner-bin-links/1"
+REGISTRATION = ".kaola-project-runner-locate.json"
+LOCATOR = "kaola-project-runner-locate"
+
+def load(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+def write_json(path, data):
+    temp = "%s.part.%d" % (path, os.getpid())
+    with open(temp, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    os.replace(temp, path)
+
+def names(raw):
+    return sorted(set(item for item in raw.split(",") if item))
+
+def receipt_for(path, skill):
+    data = load(path)
+    if (isinstance(data, dict) and data.get("receipt") == RECEIPT
+            and data.get("skill") == skill and data.get("method") in ("copy", "link")):
+        return data
+    return None
+
+if op == "skill-refs":
+    # Print the referrers of skill $2 as a comma list: the recorded list, the
+    # legacy list $3 for a receipt (or an owned link, $4 = 1) without one, or
+    # nothing when this skill has no receipt.
+    path, skill, legacy, linked = args
+    data = receipt_for(path, skill)
+    if data is not None and isinstance(data.get("referrers"), list):
+        print(",".join(names(",".join(str(item) for item in data["referrers"]))))
+    elif data is not None or linked == "1":
+        print(legacy)
+    else:
+        print("")
+elif op == "write-receipt":
+    path, skill, method, source, digest, refs = args
+    data = {"receipt": RECEIPT, "skill": skill, "method": method, "source": source,
+            "referrers": names(refs),
+            "installed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if method == "copy":
+        data["content_sha256"] = digest
+    write_json(path, data)
+elif op == "set-referrers":
+    path, skill, refs = args
+    data = receipt_for(path, skill)
+    if data is None:
+        sys.exit("set-referrers: no owned receipt at %s" % path)
+    data["referrers"] = names(refs)
+    write_json(path, data)
+elif op == "owned":
+    sys.exit(0 if receipt_for(args[0], args[1]) is not None else 1)
+elif op == "bin-plan":
+    # Plan every helper link and print one "action|source|target|note" row per
+    # link, then "ledger|<json>" with the sidecar as it must read afterwards.
+    # A refusal exits 1 before anything is written.
+    mode, bin_dir, runtime, checkout = args[:4]
+    ledger = load(os.path.join(bin_dir, LEDGER))
+    links = {}
+    if isinstance(ledger, dict) and ledger.get("schema") == LEDGER_SCHEMA and isinstance(ledger.get("links"), dict):
+        links = {k: v for k, v in ledger["links"].items() if isinstance(v, dict)}
+    registered = os.path.isfile(os.path.join(bin_dir, REGISTRATION))
+    me = {"runtime": runtime, "checkout": checkout}
+    rows = []
+    def creator(path):
+        # A link made before the ledger belongs to the checkout it resolves into.
+        parent = os.path.dirname(path)
+        return os.path.dirname(parent) if os.path.basename(parent) == "scripts" else parent
+    def label(ref):
+        return "%s@%s" % (ref.get("runtime"), ref.get("checkout"))
+    for spec in args[4:]:
+        name, source = spec.split("=", 1)
+        target = os.path.join(bin_dir, name)
+        entry = links.get(name)
+        refs = [r for r in (entry or {}).get("referrers") or [] if isinstance(r, dict)]
+        is_link = os.path.islink(target)
+        raw = os.readlink(target) if is_link else ""
+        ours = is_link and os.path.exists(target) and os.path.exists(source) and os.path.samefile(target, source)
+        if is_link and entry is None and not ours:
+            refs = [{"runtime": "legacy", "checkout": creator(os.path.realpath(target))}]
+        if mode == "install":
+            if is_link:
+                usable = os.path.isfile(target) and os.access(target, os.X_OK)
+                if not (ours or usable):
+                    sys.stderr.write("refusing to replace existing symlink: %s -> %s (target missing or not executable)\n" % (target, raw))
+                    sys.exit(1)
+                known = me in refs
+                if not known:
+                    refs.append(me)
+                links[name] = {"target": raw, "referrers": refs}
+                if ours:
+                    rows.append(("already", source, target, ""))
+                else:
+                    rows.append(("already" if known else "refer", source, target,
+                                 ", ".join(label(r) for r in refs)))
+            elif os.path.lexists(target):
+                sys.stderr.write("refusing to replace existing path: %s\n" % target)
+                sys.exit(1)
+            else:
+                if me not in refs:
+                    refs.append(me)
+                links[name] = {"target": source, "referrers": refs}
+                rows.append(("install", source, target, ""))
+        else:
+            remaining = [r for r in refs if not (r.get("checkout") == checkout
+                                                 and r.get("runtime") in (runtime, "legacy"))]
+            holders = [label(r) for r in remaining]
+            if name == LOCATOR and registered:
+                holders.append("Grok Bot locator registration " + os.path.join(bin_dir, REGISTRATION))
+            if remaining:
+                links[name] = {"target": (entry or {}).get("target") or raw, "referrers": remaining}
+            else:
+                links.pop(name, None)
+            if is_link:
+                if holders:
+                    rows.append(("keep", source, target, "still referenced by " + ", ".join(holders)))
+                elif ours or (entry is not None and raw == entry.get("target")):
+                    rows.append(("uninstall", source, target, ""))
+                else:
+                    rows.append(("keep", source, target, "not linked by this checkout"))
+            elif os.path.lexists(target):
+                sys.stderr.write("refusing to remove non-symlink path: %s\n" % target)
+                sys.exit(1)
+            else:
+                rows.append(("absent", source, target, ""))
+    for row in rows:
+        print("|".join(row))
+    print("ledger|" + json.dumps({"schema": LEDGER_SCHEMA, "links": links}, sort_keys=True))
+elif op == "bin-write":
+    bin_dir, text = args
+    path = os.path.join(bin_dir, LEDGER)
+    data = json.loads(text)
+    if data["links"]:
+        write_json(path, data)
+    elif os.path.lexists(path):
+        os.unlink(path)
+'
+refs_tool() { "$installer_python" -c "$refs_program" "$@"; }
+
 write_receipt() {
-  # $1 skill name, $2 source dir, $3 content digest
+  # $1 skill name, $2 source dir, $3 method, $4 content digest (copy), $5 referrers
   mkdir -p "$receipts_dir"
-  "$installer_python" -c 'import json, sys, time
-path, skill, source, digest = sys.argv[1:5]
-data = {
-    "receipt": "kaola-project-runner-install/1",
-    "skill": skill,
-    "method": "copy",
-    "content_sha256": digest,
-    "source": source,
-    "installed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-}
-with open(path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, indent=2, sort_keys=True)
-    handle.write("\n")' "$receipts_dir/$1.json" "$1" "$2" "$3"
+  refs_tool write-receipt "$receipts_dir/$1.json" "$1" "$3" "$2" "$4" "$5"
 }
 
 drop_owned_receipt() {
-  # Remove $1's receipt only when it parses as an exact-owned receipt for $2.
+  # Remove $1's receipt only when it parses as an exact-owned receipt for $1.
   local path="$receipts_dir/$1.json"
   [[ -f "$path" ]] || return 0
-  [[ -n "$(receipt_digest "$path" "$1")" ]] && rm -f "$path" || true
+  refs_tool owned "$path" "$1" && rm -f "$path" || true
+}
+
+set_skill_referrers() {
+  # $1 skill name, $2 source dir, $3 referrers. A legacy owned link has no
+  # receipt yet; it gets a link receipt carrying the referrers.
+  if refs_tool owned "$receipts_dir/$1.json" "$1"; then
+    refs_tool set-referrers "$receipts_dir/$1.json" "$1" "$3"
+  else
+    write_receipt "$1" "$2" link "" "$3"
+  fi
+}
+
+has_ref() { [[ ",$1," == *",$2,"* ]]; }
+add_ref() {
+  if [[ -z "$1" ]]; then printf '%s\n' "$2"
+  elif has_ref "$1" "$2"; then printf '%s\n' "$1"
+  else printf '%s\n' "$1,$2"; fi
+}
+drop_ref() {
+  local out="" item
+  local -a items=()
+  [[ -z "$1" ]] || IFS=',' read -r -a items < <(printf '%s\n' "$1")
+  for item in ${items[@]+"${items[@]}"}; do
+    [[ "$item" == "$2" ]] || out="${out:+$out,}$item"
+  done
+  printf '%s\n' "$out"
+}
+skill_refs() {
+  # $1 skill name; $2 is 1 when the target is this checkout's own symlink.
+  refs_tool skill-refs "$receipts_dir/$1.json" "$1" "$legacy_referrers" "${2:-0}"
 }
 
 stage_copy() {
@@ -350,12 +537,14 @@ if os.path.lexists(backup) and keep_previous != "1":
 
 # Plan every action before any write; a refusal anywhere aborts the whole run.
 # $1 is the generated Skill directory name. $2 is the worker platform id, or
-# empty for the main orchestrator Skill (not a platform id).
+# empty for the main orchestrator Skill (not a platform id). Every row ends
+# with the Skill's referrers as they must read after the action (Issue #123).
 plan_skill() {
   local name="$1"
   local platform="${2-}"
   local source="$repo_root/skills/$name"
   local target="$target_parent/$name"
+  local refs remaining
 
   if [[ "$mode" == install ]]; then
     [[ -f "$source/SKILL.md" && -f "$source/.generated-by-kaola-project-runner" ]] || {
@@ -366,9 +555,14 @@ plan_skill() {
       if [[ -L "$target" ]]; then
         current="$(canonical_existing_target "$target" || true)"
         if [[ -n "$current" && "$current" -ef "$source" ]]; then
-          actions+=("already|$name|$source|$target")
+          refs="$(skill_refs "$name" 1)"
+          if has_ref "$refs" "$self_ref"; then
+            actions+=("already|$name|$source|$target|$refs")
+          else
+            actions+=("refer|$name|$source|$target|$(add_ref "$refs" "$self_ref")")
+          fi
         elif [[ "$platform" == grok && -n "$current" && "$current" -ef "$repo_root" ]]; then
-          actions+=("migrate|$name|$source|$target")
+          actions+=("migrate|$name|$source|$target|$(add_ref "$(skill_refs "$name" 1)" "$self_ref")")
         else
           printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
           exit 1
@@ -376,10 +570,11 @@ plan_skill() {
       elif [[ -d "$target" ]]; then
         recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
         actual="$(tree_digest "$target")"
+        refs="$(add_ref "$(skill_refs "$name")" "$self_ref")"
         if [[ -n "$recorded" && "$actual" == "$recorded" ]]; then
-          actions+=("relink|$name|$source|$target")
+          actions+=("relink|$name|$source|$target|$refs")
         elif [[ -n "$recorded" ]]; then
-          actions+=("relink-drift|$name|$source|$target")
+          actions+=("relink-drift|$name|$source|$target|$refs")
         else
           printf 'refusing to replace foreign directory without ownership receipt: %s\n' "$target" >&2
           exit 1
@@ -388,13 +583,13 @@ plan_skill() {
         printf 'refusing to replace existing path: %s\n' "$target" >&2
         exit 1
       else
-        actions+=("install|$name|$source|$target")
+        actions+=("install|$name|$source|$target|$(add_ref "$(skill_refs "$name")" "$self_ref")")
       fi
     else
       if [[ -L "$target" ]]; then
         current="$(canonical_existing_target "$target" || true)"
         if [[ -n "$current" && ( "$current" -ef "$source" || ( "$platform" == grok && "$current" -ef "$repo_root" ) ) ]]; then
-          actions+=("copy-over-link|$name|$source|$target")
+          actions+=("copy-over-link|$name|$source|$target|$(add_ref "$(skill_refs "$name" 1)" "$self_ref")")
         else
           printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
           exit 1
@@ -405,26 +600,40 @@ plan_skill() {
           printf 'refusing to replace foreign directory without ownership receipt: %s\n' "$target" >&2
           exit 1
         fi
+        refs="$(skill_refs "$name")"
         actual="$(tree_digest "$target")"
         if [[ "$actual" != "$recorded" ]]; then
-          actions+=("repair|$name|$source|$target")
+          actions+=("repair|$name|$source|$target|$(add_ref "$refs" "$self_ref")")
         elif [[ "$actual" == "$(tree_digest "$source")" ]]; then
-          actions+=("already|$name|$source|$target")
+          # Same build already in place: reference it instead of reinstalling.
+          if has_ref "$refs" "$self_ref"; then
+            actions+=("already|$name|$source|$target|$refs")
+          else
+            actions+=("refer|$name|$source|$target|$(add_ref "$refs" "$self_ref")")
+          fi
         else
-          actions+=("update|$name|$source|$target")
+          # Another build: update the one shared copy, keeping every referrer.
+          actions+=("update|$name|$source|$target|$(add_ref "$refs" "$self_ref")")
         fi
       elif [[ -e "$target" ]]; then
         printf 'refusing to replace existing path: %s\n' "$target" >&2
         exit 1
       else
-        actions+=("install|$name|$source|$target")
+        actions+=("install|$name|$source|$target|$(add_ref "$(skill_refs "$name")" "$self_ref")")
       fi
     fi
   else
+    # Uninstall only withdraws this runtime's reference; the Skill and its
+    # receipt are removed only when no other referrer remains.
     if [[ -L "$target" ]]; then
       current="$(canonical_existing_target "$target" || true)"
       if [[ -n "$current" && ( "$current" -ef "$source" || ( "$platform" == grok && "$current" -ef "$repo_root" ) ) ]]; then
-        actions+=("uninstall|$name|$source|$target")
+        remaining="$(drop_ref "$(skill_refs "$name" 1)" "$self_ref")"
+        if [[ -n "$remaining" ]]; then
+          actions+=("release|$name|$source|$target|$remaining")
+        else
+          actions+=("uninstall|$name|$source|$target|")
+        fi
       else
         printf 'refusing to remove foreign symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
         exit 1
@@ -435,16 +644,26 @@ plan_skill() {
         printf 'refusing to remove foreign directory without ownership receipt: %s\n' "$target" >&2
         exit 1
       fi
-      if [[ "$(tree_digest "$target")" != "$recorded" ]]; then
-        printf 'refusing to remove modified installed copy (user edits preserved): %s\n' "$target" >&2
-        exit 1
+      remaining="$(drop_ref "$(skill_refs "$name")" "$self_ref")"
+      if [[ -n "$remaining" ]]; then
+        actions+=("release|$name|$source|$target|$remaining")
+      else
+        if [[ "$(tree_digest "$target")" != "$recorded" ]]; then
+          printf 'refusing to remove modified installed copy (user edits preserved): %s\n' "$target" >&2
+          exit 1
+        fi
+        actions+=("uninstall-copy|$name|$source|$target|")
       fi
-      actions+=("uninstall-copy|$name|$source|$target")
     elif [[ -e "$target" ]]; then
       printf 'refusing to remove non-symlink path: %s\n' "$target" >&2
       exit 1
     else
-      actions+=("absent|$name|$source|$target")
+      remaining="$(drop_ref "$(skill_refs "$name")" "$self_ref")"
+      if [[ -n "$remaining" ]]; then
+        actions+=("release|$name|$source|$target|$remaining")
+      else
+        actions+=("absent|$name|$source|$target|")
+      fi
     fi
   fi
 }
@@ -479,40 +698,20 @@ bin_specs=(
   "kaola-project-runner-locate|$script_dir/kaola-locate.py"
 )
 bin_actions=()
+bin_ledger=""
 if [[ "$want_bin_links" == true ]]; then
-  for spec in "${bin_specs[@]}"; do
-    IFS='|' read -r name source < <(printf '%s\n' "$spec")
-    target="$bin_dir/$name"
-    if [[ "$mode" == install ]]; then
-      if [[ -L "$target" ]]; then
-        if [[ "$target" -ef "$source" ]]; then
-          bin_actions+=("already|$source|$target")
-        else
-          printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
-          exit 1
-        fi
-      elif [[ -e "$target" ]]; then
-        printf 'refusing to replace existing path: %s\n' "$target" >&2
-        exit 1
-      else
-        bin_actions+=("install|$source|$target")
-      fi
+  # Issue #123: the helper links are shared blocks counted in the sidecar
+  # ledger beside them; an existing link to a usable target is referenced,
+  # not refused, and uninstall keeps a link while anything still refers to it.
+  bin_plan="$(refs_tool bin-plan "$mode" "$bin_dir" "$self_ref" "$repo_root" \
+    "${bin_specs[@]/|/=}")" || exit 1
+  while IFS= read -r row; do
+    if [[ "$row" == ledger\|* ]]; then
+      bin_ledger="${row#ledger|}"
     else
-      if [[ -L "$target" ]]; then
-        if [[ "$target" -ef "$source" ]]; then
-          bin_actions+=("uninstall|$source|$target")
-        else
-          printf 'refusing to remove foreign symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
-          exit 1
-        fi
-      elif [[ -e "$target" ]]; then
-        printf 'refusing to remove non-symlink path: %s\n' "$target" >&2
-        exit 1
-      else
-        bin_actions+=("absent|$source|$target")
-      fi
+      bin_actions+=("$row")
     fi
-  done
+  done < <(printf '%s\n' "$bin_plan")
 fi
 
 # Issue #97: the Codex runtime destination owns one user-level
@@ -546,10 +745,18 @@ fi
 [[ "$want_bin_links" == true && "$mode" == install ]] && mkdir -p "$bin_dir"
 
 for row in "${actions[@]}"; do
-  IFS='|' read -r action name source target < <(printf '%s\n' "$row")
+  IFS='|' read -r action name source target refs < <(printf '%s\n' "$row")
   case "$action" in
     already)
       printf 'already installed: %s\n' "$target"
+      ;;
+    refer)
+      set_skill_referrers "$name" "$source" "$refs"
+      printf 'refer: %s (same build already installed; referrers: %s)\n' "$target" "$refs"
+      ;;
+    release)
+      set_skill_referrers "$name" "$source" "$refs"
+      printf 'kept: %s (still referenced by %s)\n' "$target" "$refs"
       ;;
     install|update|copy-over-link|repair)
       temp="$target_parent/.${name}.tmp.$$"
@@ -578,9 +785,9 @@ for row in "${actions[@]}"; do
         exit 1
       fi
       if [[ "$method" == copy ]]; then
-        write_receipt "$name" "$source" "$new_digest"
+        write_receipt "$name" "$source" copy "$new_digest" "$refs"
       else
-        drop_owned_receipt "$name"
+        write_receipt "$name" "$source" link "" "$refs"
       fi
       if [[ "$action" == repair ]]; then
         printf 'repair: %s (managed drift; previous copy: %s; edit repo templates/manifests, not installed Skills)\n' "$target" "$backup"
@@ -605,7 +812,7 @@ for row in "${actions[@]}"; do
         printf 'atomic replacement failed: %s\n' "$target" >&2
         exit 1
       fi
-      [[ "$action" == relink || "$action" == relink-drift ]] && drop_owned_receipt "$name"
+      write_receipt "$name" "$source" link "" "$refs"
       if [[ "$action" == relink-drift ]]; then
         printf 'repair: %s -> %s (managed drift; previous copy: %s; edit repo templates/manifests, not installed Skills)\n' "$target" "$source" "$backup"
       else
@@ -648,10 +855,16 @@ if [[ "$want_user_hook" == true ]]; then
 fi
 
 for row in ${bin_actions[@]+"${bin_actions[@]}"}; do
-  IFS='|' read -r action source target < <(printf '%s\n' "$row")
+  IFS='|' read -r action source target note < <(printf '%s\n' "$row")
   case "$action" in
     already)
-      printf 'already installed: %s -> %s\n' "$target" "$source"
+      printf 'already installed: %s -> %s\n' "$target" "$(readlink "$target")"
+      ;;
+    refer)
+      printf 'refer: %s -> %s (existing usable link kept; referrers: %s)\n' "$target" "$(readlink "$target")" "$note"
+      ;;
+    keep)
+      printf 'kept: %s (%s)\n' "$target" "$note"
       ;;
     install)
       temp="$bin_dir/.${target##*/}.tmp.$$"
@@ -675,3 +888,4 @@ os.replace(sys.argv[1], sys.argv[2])' "$temp" "$target"
       ;;
   esac
 done
+[[ -z "$bin_ledger" ]] || refs_tool bin-write "$bin_dir" "$bin_ledger"

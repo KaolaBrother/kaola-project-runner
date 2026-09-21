@@ -303,7 +303,10 @@ output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method link --pla
   || fail "test_copy_to_link" "relink failed: $output"
 assert_link "test_copy_to_link" "$dest/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
-assert_absent "test_copy_to_link_receipt" "$dest/.kaola-install-receipts/grok-kaola-project-runner.json"
+# Issue #123: a link install keeps a receipt too, so its referrers are counted.
+python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get("method") == "link" and d.get("referrers") == ["generic"] and "content_sha256" not in d else 1)' \
+  "$dest/.kaola-install-receipts/grok-kaola-project-runner.json" \
+  || fail "test_copy_to_link_receipt" "expected a link receipt with referrers [generic]"
 output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --platform grok 2>&1)" \
   || fail "test_link_to_copy" "copy-over-link failed: $output"
 assert_dir "test_link_to_copy" "$dest/grok-kaola-project-runner"
@@ -366,11 +369,18 @@ assert_absent "test_coexist_uninstall_b_dir" "$dest_b/grok-kaola-project-runner"
 assert_link "test_coexist_bin_link_preserved" "$home/.local/bin/kaola-acp" "$repo/scripts/kaola-acp.py"
 assert_link "test_coexist_install_a_survives" "$codex_home/skills/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
-# explicit --bin-links removal only touches exact-owned links
+# explicit --bin-links removal only touches exact-owned links, and only once no
+# other referrer remains (Issue #123: the codex install above still refers)
 ln -s /foreign/path "$home/.local/bin/kaola-acp-foreign"
 output="$(run_installer "$repo" "$home" --skills-dir "$dest_b" --platform grok --uninstall --bin-links 2>&1)" \
   || fail "test_bin_links_explicit_removal" "uninstall failed: $output"
+assert_link "test_bin_links_kept_for_codex" "$home/.local/bin/kaola-acp" "$repo/scripts/kaola-acp.py"
+[[ "$output" == *"kept: $home/.local/bin/kaola-acp (still referenced by codex@$repo)"* ]] \
+  || fail "test_bin_links_kept_for_codex_message" "expected kept report, got: $output"
+output="$(CODEX_HOME="$codex_home" run_installer "$repo" "$home" --runtime codex --platform grok --uninstall --bin-links 2>&1)" \
+  || fail "test_bin_links_explicit_removal" "uninstall failed: $output"
 assert_absent "test_bin_links_explicit_removal" "$home/.local/bin/kaola-acp"
+assert_absent "test_bin_links_ledger_removed" "$home/.local/bin/.kaola-project-runner-bin-links.json"
 assert_absent "test_bin_links_explicit_removal_holder" "$home/.local/bin/kaola-acp-holder"
 assert_link "test_foreign_bin_link_preserved" "$home/.local/bin/kaola-acp-foreign" "/foreign/path"
 
@@ -386,7 +396,7 @@ output="$(CODEX_HOME="$tmp_root/legacy-codex" run_installer "$repo" "$home" --pl
 assert_absent "test_legacy_uninstall_skill" "$tmp_root/legacy-codex/skills/grok-kaola-project-runner"
 assert_link "test_legacy_uninstall_keeps_bin_links" "$home/.local/bin/kaola-acp" "$repo/scripts/kaola-acp.py"
 
-# --- foreign helper links are refused on both install and uninstall ----------
+# --- a dangling foreign helper link refuses install; uninstall keeps it -------
 repo="$tmp_root/repo-foreign-bin"
 make_fixture "$repo"
 home="$tmp_root/home-foreign-bin"
@@ -399,12 +409,14 @@ set -e
 [[ "$rc" -ne 0 ]] || fail "test_foreign_bin_link_install_refused" "unexpected success"
 assert_link "test_foreign_bin_link_install_refused" "$home/.local/bin/kaola-acp" "/foreign/path"
 assert_absent "test_foreign_bin_link_no_partial_install" "$home/.claude/skills/grok-kaola-project-runner"
-set +e
-output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --uninstall --bin-links 2>&1)"
-rc=$?
-set -e
-[[ "$rc" -ne 0 ]] || fail "test_foreign_bin_link_uninstall_refused" "unexpected success"
-assert_link "test_foreign_bin_link_uninstall_refused" "$home/.local/bin/kaola-acp" "/foreign/path"
+[[ "$output" == *"target missing or not executable"* ]] \
+  || fail "test_foreign_bin_link_install_refused_reason" "expected dangling reason, got: $output"
+# Issue #123: uninstall never aborts on a link another checkout made; it keeps it.
+output="$(run_installer "$repo" "$home" --runtime claude-code --platform grok --uninstall --bin-links 2>&1)" \
+  || fail "test_foreign_bin_link_uninstall_kept" "uninstall failed: $output"
+assert_link "test_foreign_bin_link_uninstall_kept" "$home/.local/bin/kaola-acp" "/foreign/path"
+[[ "$output" == *"kept: $home/.local/bin/kaola-acp (still referenced by legacy@/foreign)"* ]] \
+  || fail "test_foreign_bin_link_uninstall_kept_message" "expected kept report, got: $output"
 
 # --- place_staged fault injection: second rename failure + failed rollback ---
 # PYTHON_BIN stub prepends an os.replace patch to every `python3 -c` program
