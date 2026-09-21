@@ -10,9 +10,9 @@ Two release-review defects on the frozen ``f39d940`` line, both prompt-level:
    ``mode``), but cursor-cli and grok only carry a launch flag with
    ``acp_mode_config_id`` empty, and OpenCode's ACP surface has no skip-all of
    any kind. Issue #98 added a fourth member with the opposite safety posture:
-   dsh advertises no skip-all because its ACP composition sends no permission
-   request at all, so for dsh there is no gate to skip and no request to
-   settle -- see ``DshHasNoApprovalGateAtAll`` below. A host reading that row as an all-platform guarantee stops
+   dsh advertises no skip-all option and its ACP composition sends no permission
+   request at all; its skip-all is the launch variable ``DSH_PERMISSION_MODE``
+   (Issue #120) -- see ``DshSkipAllIsTheLaunchVariable`` below. A host reading that row as an all-platform guarantee stops
    expecting the permission request that ``test-issue-76-permission-wake.py``
    already models, and stops settling it with ``permit``. The correction states
    a possibility, not a certainty: a launch flag can still suppress the request,
@@ -164,8 +164,8 @@ class MainSkillHandlesTheNoSkipAllCase(unittest.TestCase):
 
     def test_the_claim_is_possibility_not_certainty(self) -> None:
         """Cursor's and Grok's launch flags do suppress approvals. OpenCode is certain
-        to have no skip-all and even there a request is not guaranteed; dsh is certain
-        to have no gate at all, which the README carries per-platform."""
+        to have no skip-all and even there a request is not guaranteed; dsh never
+        sends a request at all, which the README carries per-platform."""
         text = flowed(MAIN_SKILL.read_text(encoding="utf-8"))
         self.assertIn(
             "permission may still arise",
@@ -568,18 +568,21 @@ class ApiDocDefersToTheManifests(unittest.TestCase):
         self.assertIn("instead of a proven absence", text)
 
 
-class DshHasNoApprovalGateAtAll(unittest.TestCase):
-    """Issue #98. dsh is in ``NO_ADVERTISED_ACP_SKIP_ALL`` for the opposite reason to
-    the other three, and that difference is safety-relevant: OpenCode, Cursor and Grok
-    still ask, dsh never does. Measured twice over raw ACP and once through the Runner:
-    two tool-using turns, including a bash write to an absolute path *outside* the
-    session workspace, produced zero ``session/request_permission`` calls and both
-    writes landed.
+class DshSkipAllIsTheLaunchVariable(unittest.TestCase):
+    """Issues #98 and #120. dsh is in ``NO_ADVERTISED_ACP_SKIP_ALL``: its ACP
+    composition never sends ``session/request_permission`` (measured twice over raw
+    ACP and once through the Runner), and it advertises no mode option. Its
+    permission mode is the launch variable ``DSH_PERMISSION_MODE``; dsh's own default
+    ``workspace-write`` runs the shell tool under a Seatbelt sandbox that denies writes
+    outside the workspace, ``/tmp`` and ``$TMPDIR``. The #98 claim that an
+    outside-workspace write "runs unattended with no approval gate to skip" was
+    measured by writing to ``/tmp``, inside that writable set, and was false for any
+    other path. Issue #120 (Host ruling) makes ``danger-full-access`` the Runner
+    default, like every other platform's measured bypass; a caller's own variable or
+    ``--mode`` wins.
 
-    Without this class the wording is unguarded: the roster check above is satisfied by
-    the word "dsh" appearing anywhere in README, so softening the paragraph into
-    OpenCode's weaker "no skip-all" shape keeps the suite green. These assertions pin
-    the claim itself on every surface that carries it.
+    The roster check above is satisfied by the word "dsh" appearing anywhere in
+    README, so these assertions pin the claim itself on every surface that carries it.
     """
 
     #: The distinguishing claim, in the three places a reader meets it.
@@ -600,21 +603,25 @@ class DshHasNoApprovalGateAtAll(unittest.TestCase):
                     f"{label} must state that dsh never sends a permission request",
                 )
 
-    def test_every_surface_states_there_is_no_gate_to_skip(self) -> None:
+    def test_every_surface_names_the_launch_variable_and_the_default(self) -> None:
         for label, path in self.SURFACES:
             with self.subTest(surface=label):
                 text = flowed(path.read_text(encoding="utf-8"))
-                self.assertIn(
-                    "no approval gate to skip",
-                    text,
-                    f"{label} must say there is no approval gate to skip, not merely "
-                    "that no skip-all option is advertised",
+                self.assertIn("DSH_PERMISSION_MODE", text)
+                self.assertIn("danger-full-access", text)
+                self.assertNotIn(
+                    "no approval gate to skip", text,
+                    f"{label} repeats the #98 claim #120 refuted: the skip-all is the "
+                    "launch variable",
                 )
 
-    def test_readme_keeps_the_measured_outside_workspace_write(self) -> None:
-        """The fact that makes the default consequential, not a technicality."""
+    def test_the_outside_workspace_claim_is_corrected(self) -> None:
+        """The #98 probe wrote to /tmp; the corrected text says so and says what the
+        sandbox denies, so a caller knows when to set the variable."""
         text = flowed(README.read_text(encoding="utf-8"))
-        self.assertIn("outside the session workspace", text)
+        self.assertNotIn("including a measured", text)
+        self.assertIn("inside that writable set", text)
+        self.assertIn("A caller that wants the sandbox", text)
 
     def test_the_operator_brief_carries_it_before_first_dispatch(self) -> None:
         """It is useless 370 lines away from the dsh subsection an operator reads."""
@@ -622,10 +629,10 @@ class DshHasNoApprovalGateAtAll(unittest.TestCase):
         start = text.index("dsh is driven through its shipped automation-only ACP profile")
         brief = flowed(text[start:start + 1600])
         self.assertIn(
-            "no approval gate to skip",
+            "`DSH_PERMISSION_MODE`",
             brief,
-            "the dsh operator brief must carry the no-gate fact itself; a reader who "
-            "stops after the pre-dispatch facts must not miss it",
+            "the dsh operator brief must carry the permission default itself; a reader "
+            "who stops after the pre-dispatch facts must not miss it",
         )
 
     def test_dsh_is_never_described_with_opencodes_weaker_shape(self) -> None:

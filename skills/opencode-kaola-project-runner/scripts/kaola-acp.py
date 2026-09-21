@@ -59,7 +59,27 @@ ACP_MODE_VALUE_MAP = {
         "low": "auto-low",
         "manual": "normal",
     },
+    "dsh": {"bypassPermissions": "danger-full-access"},
 }
+
+# Issue #120: dsh advertises no ACP mode option; its permission mode is the
+# launch variable ``DSH_PERMISSION_MODE`` (Seatbelt sandbox + approval policy,
+# dsh's own default ``workspace-write``). ``danger-full-access`` is dsh's
+# skip-all - no sandbox, approval never - and the Runner default, like every
+# other platform's measured bypass. A caller's ``--mode`` or own variable wins.
+DSH_PERMISSION_ENV = "DSH_PERMISSION_MODE"
+DSH_PERMISSION_MODES = ("read-only", "workspace-write", "danger-full-access")
+DSH_SKIP_MODE = "danger-full-access"
+
+
+def dsh_permission_mode(args: argparse.Namespace) -> tuple[str, str]:
+    """The ``DSH_PERMISSION_MODE`` a dsh start launches with, and its source."""
+    mode = getattr(args, "mode", None)
+    if mode:
+        return ACP_MODE_VALUE_MAP["dsh"].get(mode, mode), "caller-mode"
+    if os.environ.get(DSH_PERMISSION_ENV):
+        return os.environ[DSH_PERMISSION_ENV], "caller-env"
+    return DSH_SKIP_MODE, "runner-default"
 
 # A manifest ``acp_command`` may name files shipped inside the Skill with this
 # prefix (Issue #50: the vendored Claude Code bridge). It resolves to an
@@ -307,6 +327,8 @@ def agent_environment(args: argparse.Namespace) -> dict[str, str]:
         env[bridge_env] = runtime_binary(args.manifest)
     if args.platform in LOOPBACK_NO_PROXY_PLATFORMS:
         env.update(loopback_no_proxy(env))
+    if args.platform == "dsh":
+        env[DSH_PERMISSION_ENV] = dsh_permission_mode(args)[0]
     return env
 
 
@@ -2456,6 +2478,12 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 else:
                     application["fast"] = {"applied": False, "reason": "no-advertised-config-option"}
                     receipt["fast"] = fast_report(args, policy, "none", False)
+        if args.platform == "dsh":
+            value, source = dsh_permission_mode(args)
+            application["mode"] = {"applied": True, "applied_via": "env",
+                                   "env": DSH_PERMISSION_ENV, "value": value,
+                                   "source": source}
+            mode_value = None
         if mode_value and "error" not in receipt:
             # The mode/permission option id is a per-platform manifest fact
             # (``acp_mode_config_id``): droid's autonomy option is
@@ -2591,6 +2619,10 @@ def main() -> int:
     if args.command != "preflight":
         if not args.session or not SESSION_PATTERN.match(args.session):
             die("invalid or missing --session name")
+    if (args.platform == "dsh" and args.command == "start" and args.mode
+            and dsh_permission_mode(args)[0] not in DSH_PERMISSION_MODES):
+        die(f"--mode for dsh must be one of {', '.join(DSH_PERMISSION_MODES)} "
+            "or bypassPermissions")
     args.agent_command = (
         args.agent_command
         or os.environ.get("KAOLA_ACP_COMMAND")

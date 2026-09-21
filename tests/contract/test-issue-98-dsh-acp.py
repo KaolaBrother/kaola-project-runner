@@ -20,6 +20,7 @@ the manifest is edited to follow without re-measuring.
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import os
@@ -175,7 +176,10 @@ class DshManifestMatchesTheMeasuredSurface(unittest.TestCase):
         self.assertEqual(self.values["acp_mode_config_id"], "")
         acp = load("kaola-acp")
         self.assertNotIn("dsh", acp.ACP_SKIP_MODE)
-        self.assertNotIn("dsh", acp.ACP_MODE_VALUE_MAP)
+        # Issue #120: the skip-all is a launch variable, not an ACP option; only
+        # the Runner permission name is translated into it.
+        self.assertEqual(acp.ACP_MODE_VALUE_MAP["dsh"],
+                         {"bypassPermissions": "danger-full-access"})
 
     def test_continue_is_refused_not_advertised(self) -> None:
         """resume.txt: session/list entries carry sessionId and cwd, no updatedAt,
@@ -398,6 +402,102 @@ class Issue120RunnerUnderAHostSeatbelt(unittest.TestCase):
                 return True
             time.sleep(0.1)
         return True
+
+
+class Issue120DshPermissionModeDefault(unittest.TestCase):
+    """Host ruling on #120: a dsh start launches with ``DSH_PERMISSION_MODE``
+    ``danger-full-access`` (dsh's skip-all, no Seatbelt) unless the caller set the
+    variable or passed ``--mode``. A default-mode dsh Host's sandbox is what kept a
+    nested dsh worker from booting."""
+
+    def setUp(self) -> None:
+        self.acp = load("kaola-acp")
+        self.manifest = self.acp.load_manifest("dsh")
+
+    def launched(self, mode: str | None = None, **env: str) -> str:
+        args = argparse.Namespace(platform="dsh", manifest=self.manifest, mode=mode)
+        clean = {k: v for k, v in os.environ.items() if k != "DSH_PERMISSION_MODE"}
+        with mock.patch.dict(os.environ, {**clean, **env}, clear=True):
+            return self.acp.agent_environment(args)["DSH_PERMISSION_MODE"]
+
+    def test_the_default_is_full_access(self) -> None:
+        self.assertEqual(self.launched(), "danger-full-access")
+
+    def test_the_callers_variable_wins(self) -> None:
+        self.assertEqual(self.launched(DSH_PERMISSION_MODE="workspace-write"), "workspace-write")
+
+    def test_the_callers_mode_wins_over_everything(self) -> None:
+        self.assertEqual(self.launched("read-only", DSH_PERMISSION_MODE="danger-full-access"),
+                         "read-only")
+        self.assertEqual(self.launched("bypassPermissions"), "danger-full-access")
+
+    def test_other_platforms_get_no_dsh_variable(self) -> None:
+        args = argparse.Namespace(platform="grok", manifest=self.acp.load_manifest("grok"),
+                                  mode=None)
+        clean = {k: v for k, v in os.environ.items() if k != "DSH_PERMISSION_MODE"}
+        with mock.patch.dict(os.environ, clean, clear=True):
+            self.assertNotIn("DSH_PERMISSION_MODE", self.acp.agent_environment(args))
+
+
+class Issue120DshPermissionModeThroughTheRunner(unittest.TestCase):
+    """The launched agent really sees the value, the start receipt says where it
+    came from, and a mode dsh does not know is refused before anything spawns."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="kaola-i120m-")
+        self.root = Path(os.path.realpath(self._tmp.name))
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        self.seen = self.root / "seen.txt"
+        agent = self.root / "agent.py"
+        agent.write_text(
+            "import os, runpy, sys\n"
+            f"open({str(self.seen)!r}, 'w').write(os.environ.get('DSH_PERMISSION_MODE', '<unset>'))\n"
+            f"sys.argv = [{str(MOCK)!r}]; runpy.run_path({str(MOCK)!r}, run_name='__main__')\n",
+            encoding="utf-8")
+        self.agent = f"{sys.executable} {agent}"
+        self.session = f"dsh-i120m-{self._testMethodName[-20:].lower()}-{os.getpid()}"
+
+    def cli(self, command: str, *args: str, **env: str) -> subprocess.CompletedProcess:
+        base = {k: v for k, v in os.environ.items()
+                if not k.startswith("KAOLA_") and k != "DSH_PERMISSION_MODE"}
+        base.update(KAOLA_ACP_RECORD_ROOT=str(self.root / "records"), **env)
+        return subprocess.run([sys.executable, str(CLI), "dsh", command, "--repo", str(self.repo),
+                               "--session", self.session, "--command", self.agent, *args],
+                              capture_output=True, text=True, env=base, timeout=60)
+
+    def start(self, *args: str, **env: str) -> dict:
+        self.addCleanup(self.cli, "stop", "--force")
+        return json.loads(self.cli("start", *args, **env).stdout)
+
+    def test_default_start(self) -> None:
+        receipt = self.start()
+        self.assertEqual(receipt.get("state"), "ready", receipt)
+        self.assertEqual(self.seen.read_text(), "danger-full-access")
+        self.assertEqual(receipt["config_application"]["mode"],
+                         {"applied": True, "applied_via": "env", "env": "DSH_PERMISSION_MODE",
+                          "value": "danger-full-access", "source": "runner-default"})
+
+    def test_caller_variable(self) -> None:
+        receipt = self.start(DSH_PERMISSION_MODE="workspace-write")
+        self.assertEqual(self.seen.read_text(), "workspace-write")
+        self.assertEqual(receipt["config_application"]["mode"]["source"], "caller-env")
+
+    def test_caller_mode_is_no_longer_an_unavailable_option(self) -> None:
+        receipt = self.start("--mode", "workspace-write")
+        self.assertNotIn("error", receipt)
+        self.assertEqual(self.seen.read_text(), "workspace-write")
+        self.assertEqual(receipt["config_application"]["mode"]["source"], "caller-mode")
+
+    def test_an_unknown_mode_is_refused_before_spawn(self) -> None:
+        """A caller asking for less access must never silently get full access."""
+        result = self.cli("start", "--mode", "manual")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--mode for dsh must be one of", result.stderr)
+        self.assertFalse(self.seen.exists())
+        self.assertFalse((self.root / "records").exists())
 
 
 @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS-only")

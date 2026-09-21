@@ -118,10 +118,15 @@ UI — its profile templates are `acp`, `headless`, `sdk`, `sdk-minimal` and `we
 a pane conversation — so `--transport pty` is a diagnostic entry rather than a conversation
 channel.
 
-Three facts an operator should know before the first dispatch. **dsh runs unattended.** Its ACP
-composition never sends a permission request, so a tool call — including a measured `bash` write to
-an absolute path outside the session workspace — executes without the client being consulted; there
-is no approval gate to skip, and `--permission-mode` has nothing to act on. **A ready session can
+Three facts an operator should know before the first dispatch. **dsh runs with full access by
+default.** Its ACP composition never sends a permission request; its permission mode is the launch
+variable `DSH_PERMISSION_MODE`, and the Runner starts dsh with `danger-full-access` (no Seatbelt
+sandbox, approval `never`), the same full-access default as every other platform's measured bypass.
+A caller that wants the sandbox sets `DSH_PERMISSION_MODE` or passes `--mode` (`read-only`,
+`workspace-write`, `danger-full-access`); either wins. Under dsh's own default `workspace-write`,
+shell writes outside the workspace, `/tmp` and `$TMPDIR` are denied, and a Runner start run from
+that shell inherits the sandbox, so a nested dsh worker cannot boot (Issue #120). The Issue #98
+outside-workspace probe wrote to `/tmp`, which is inside that writable set. **A ready session can
 still be unable to answer.** The shipped profile pins the `deepseek-official` route and ignores the
 user's own default-model setting, so `start` reports `ready` and the first prompt fails with
 `no API key for provider route "deepseek-official"` — supply `DEEPSEEK_API_KEY` or pass `--model`
@@ -522,9 +527,9 @@ Droid's default and upgrade are both Auto Model (`auto`, no effort pin); Kimi K3
 Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-all option at start
 (`mode`, or `autonomy_level` for Droid). Cursor and Grok carry only a launch flag (`--yolo`,
 `--always-approve`) and advertise no ACP option; OpenCode's default ACP path has none at all. dsh
-advertises none either, but for the opposite reason: its ACP composition never sends a permission
-request at all, so tool calls - including a measured write to an absolute path outside the session
-workspace - run unattended with no approval gate to skip. On any of the remaining platforms with no
+advertises none either and never sends a permission request at all; its skip-all is the launch
+variable `DSH_PERMISSION_MODE=danger-full-access`, which the Runner sets unless the caller set the
+variable or passed `--mode`. On any of the remaining platforms with no
 verified ACP skip-all - Cursor, Grok and OpenCode today - a permission request
 may still arise: it surfaces through the existing `permission_required` carrier event and is
 settled with `permit`. That wake is not lost when the bound ZCode Host is temporarily away: the

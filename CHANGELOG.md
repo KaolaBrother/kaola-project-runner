@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **dsh starts with full access by default, so a dsh worker can run inside a dsh Host (Issue
+  #120, Host ruling).** dsh advertises no ACP mode option. Its permission mode is the launch
+  variable `DSH_PERMISSION_MODE`, and dsh's own default `workspace-write` runs the shell tool
+  under Seatbelt. A dsh `start` now launches with `DSH_PERMISSION_MODE=danger-full-access` (no
+  sandbox, approval `never`), the same full-access default as every other platform's measured
+  bypass. A caller's own `DSH_PERMISSION_MODE` or `--mode` wins: `read-only`, `workspace-write`
+  and `danger-full-access` are accepted, `bypassPermissions` maps to `danger-full-access`, and
+  any other value is refused before anything spawns. `--mode` on dsh therefore no longer errors
+  `config-option-unavailable`. The start receipt's `config_application.mode` records `applied_via:
+  env`, the value and its `source` (`runner-default`, `caller-env` or `caller-mode`). The
+  manifest and README no longer claim that outside-workspace writes "run unattended with no
+  approval gate to skip". The #98 probe behind that claim wrote to `/tmp`, which is inside the
+  sandbox's writable set.
+
 - **A Runner started from inside a macOS Seatbelt sandbox reports why start failed and can still
   stop (Issue #120).** A dsh Host runs its shell tool under Seatbelt (`DSH_PERMISSION_MODE` default
   `workspace-write`), and every holder and agent started from that shell inherits it. A nested
