@@ -446,24 +446,26 @@ class Issue41ScenarioMeaning(unittest.TestCase):
         self.assertIsNotNone(
             clause_present(
                 text,
-                (
-                    r"at every heartbeat.{0,80}authorized idle workers.{0,80}safe parallel work",
-                    r"dispatch every suitable match.{0,80}leave capacity idle.{0,80}invent work or expand authorization",
-                ),
+                (r"at every heartbeat.{0,80}authorized idle workers.{0,80}safe parallel work",),
             ),
-            "every heartbeat must match authorized idle workers to safe executable parallel work without inventing work or authorization",
+            "every heartbeat must match authorized idle workers to safe executable parallel work",
         )
+        self.assertIsNotNone(
+            clause_present(text, (r"never invent work or expand authorization",)),
+            "matching idle workers must not invent work or expand authorization",
+        )
+        # Issue #118 inverts the old stop-first negative: the authorized count is a
+        # hard cap, so at the cap a seat is stopped before any new one starts, and
+        # unused capacity is no longer parked as idle.
+        self.assertIsNotNone(
+            clause_present(text, (r"at the hard cap, stop one seat before starting any new one",)),
+            "at the hard cap the Host must stop one seat before starting a new one",
+        )
+        self.assertNotIn("leave capacity idle", normalize(text).lower())
         heartbeat = (orchestrator_package(PROJECT) / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
         self.assertIn("每拍核对已授权的空闲线程和可安全并行的工作，派出所有合适匹配", heartbeat)
-        wrong = authorizes_wrong_move(
-            text,
-            (
-                r"stop idle workers immediately",
-                r"an idle worker should be stopped before looking for (?:suitable )?work",
-                r"prefer stop(?:ping)? idle workers instead of (?:re-?)?dispatch",
-            ),
-        )
-        self.assertIsNone(wrong, f"idle-worker policy authorizes stop-first: {wrong!r}")
+        self.assertIn("达上限先精确 stop 一个再 start", heartbeat)
+        self.assertNotIn("无合适工作则保持空闲", heartbeat)
 
     def test_completion_prose_without_evidence_causes_verification_not_finalize(self) -> None:
         text = self.orchestrator_text()

@@ -140,6 +140,7 @@ python_suites_all=(
   "test-issue-98-dsh-acp.py"
   "test-issue-101-validate-watchdog.py"
   "test-issue-111-model-tiers.py"
+  "test-issue-118-seat-cap.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -164,6 +165,7 @@ python_suites_a=(
   "test-issue-97-codex-user-compact-hook.py"
   "test-issue-98-dsh-acp.py"
   "test-issue-101-validate-watchdog.py"
+  "test-issue-118-seat-cap.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"

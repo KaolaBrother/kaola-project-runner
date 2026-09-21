@@ -27,10 +27,11 @@ the field order, and never infer an issue from an arbitrary substring or from th
 token.
 
 Record the constructed name and verify it in the start receipt. The same rule applies on
-later heartbeat dispatches and when restarting a stopped worker for the same issue; a worker
-reassigned to a different issue gets a new Runner session name. **Existing active session
-names are left alone** - never stop or restart a live session solely to rename it, and the
-native ACP session id is unchanged by this rule.
+later heartbeat dispatches and when restarting a stopped worker for the same issue. A worker
+reassigned to a different issue is exact-stopped and a new-named session is started - never
+a live rename and never a chained prompt. **Otherwise existing active session names are left
+alone** - never stop or restart a live session solely to rename it, and the native ACP
+session id is unchanged by this rule.
 
 The outer orchestrator Host itself is not an issue-backed worker. Transport-only diagnostics
 and genuinely issue-less tasks have no Mission List association and must never be given one
@@ -71,5 +72,5 @@ end to end against a consumer.
 
 Do not add a blocking classifier, a registry, a daemon, or a new Workflow state field. Do not
 change exact ownership, default ACP, native session ids, authorization, the Workflow claim,
-or stop/resume semantics. Do not rename or restart a running session to adopt this rule, and
+or stop/resume semantics; `--resume` stays same-issue recovery only. Do not rename or restart a running session to adopt this rule, and
 do not let a name override the repository and `issue_number` facts it is checked against.

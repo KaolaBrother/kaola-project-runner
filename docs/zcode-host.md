@@ -332,7 +332,11 @@ worker agent terminated / worker turn ended (one idle episode)
   `.kaola/heartbeat-prompt.json`, then end the reply naturally — there is no
   "wait mode" command, because ending the turn *is* the wait. A Host awaiting
   in-flight workers or open close-out is not a stoppable idle worker, and the
-  outer Agent must not send it "continue". The generated main Skill carries
+  outer Agent must not send it "continue". On the worker side the authorized
+  count is a hard cap on live worker processes, ACP holders included: the Host
+  counts before every `start` and stops one seat first at the cap
+  (stop-before-start), and exact-stops a seat in the beat its delivery is
+  accepted. The generated main Skill carries
   these rules, and
   `skills/kaola-project-runner/references/zcode-host-dispatch.md` carries the
   runnable role-by-role procedure (outer Agent, Host, worker/carrier).

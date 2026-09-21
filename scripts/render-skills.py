@@ -283,7 +283,8 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
             "Use when the controlling Agent should supervise explicitly authorized "
             "CLI workers through the nine platform Runner Skills: recover live "
             "authorization, dispatch and review work, accept deliveries before "
-            "finalize, and stop idle sessions without dropping close-out duties."
+            "finalize, cap live workers at the authorized count, and stop each "
+            "accepted seat without dropping close-out duties."
         ),
         "SHORT_DESCRIPTION": (
             "Supervise authorized CLI workers through the nine platform Runner Skills"
@@ -295,8 +296,9 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         "SUPPORTED_WORKERS": supported_worker_summary(manifests),
         "IDLE_BEFORE_STOP": (
             "At every heartbeat, match authorized idle workers to safe parallel work and "
-            "dispatch every suitable match. Leave capacity idle rather than invent work or "
-            "expand authorization"
+            "dispatch every suitable match as a new session; never invent work or expand "
+            "authorization. At the hard cap, stop one seat before starting any new one "
+            "(stop-before-start)"
         ),
         "ACCEPTANCE_BEFORE_FINALIZE": (
             "Mission-frontier done triggers review, not automatic finalize"

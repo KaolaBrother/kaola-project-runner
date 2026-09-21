@@ -1,6 +1,6 @@
 ---
 name: kaola-project-runner
-description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the nine platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, and stop idle sessions without dropping close-out duties."
+description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the nine platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, cap live workers at the authorized count, and stop each accepted seat without dropping close-out duties."
 ---
 
 # Project Runner
@@ -53,8 +53,10 @@ conflicting information.
 
 Record the human's CLI, model/effort, count, and capability restrictions in the
 consuming project's run records, not in this Skill. A named CLI without a count
-defaults to one. Respect explicitly authorized multiple model assignments or
-open-ended concurrency; do not invent a quota system.
+defaults to one. The count is a hard cap on live worker processes, ACP holders
+included; a finished seat counts until its `stop` receipt. Granted open-ended
+concurrency is its own cap. Do not invent a quota system: the cap is that
+count, enforced from `status`/`stop` receipts.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. A serial build, GPU, port, or cache constraint must not block
@@ -119,7 +121,7 @@ dropped; `capture --full` is the only unbounded request.
 | Item | Default / rule |
 |---|---|
 | Allowed CLIs | None until named; all nine platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
-| Count | Named CLI without a count: one. |
+| Count | Named CLI without a count: one; it bounds live processes. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
 | Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
@@ -182,7 +184,7 @@ sink, and write ownership.
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
    first. Examine authorized remaining work and real parallel opportunities.
-   At every heartbeat, match authorized idle workers to safe parallel work and dispatch every suitable match. Leave capacity idle rather than invent work or expand authorization. State the task, working location, write ownership,
+   At every heartbeat, match authorized idle workers to safe parallel work and dispatch every suitable match as a new session; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start). State the task, working location, write ownership,
    delivery requirements, and the doc-impact call in its prompt; merely seeing a
    worktree or Mission List is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
@@ -205,10 +207,12 @@ sink, and write ownership.
    When existing records are inconsistent, investigate and direct a scoped
    repair using existing tools; do not fabricate claim identities or introduce
    a parallel lifecycle system.
-5. **Release and report.** Stop an idle exact session only when no suitable
-   authorized work is executable; then stop the rest. ACP and PTY/tmux are the
-   same stop action: exact owned session `stop` via the matching platform Skill,
-   including ACP holders. Idle is neither keep-alive nor completion. A Host that
+5. **Release and report.** The only legal idle seat is one whose delivery is
+   awaiting acceptance. Once acceptance finishes or the seat is abandoned,
+   exact-stop it in that same beat; a rejected delivery's repair is the same
+   assignment. ACP and PTY/tmux are the same stop action: exact owned session
+   `stop` via the matching platform Skill, including ACP holders. Idle is not
+   keep-alive or completion. A Host that
    ended its turn while workers are in flight, or with delivery, acceptance or
    close-out open, is not an idle worker: keep it and send it no "continue"; its
    next beat is a worker event. Cancel the heartbeat once no unfinished
@@ -242,9 +246,10 @@ and forces no merge or cleanup beyond its stated scope.
 Honor a user stop request within its stated scope; otherwise the heartbeat ends
 on step 5's conditions.
 
-Only new authorized work restarts a session once the idle ones were stopped:
-resume with `--resume` when a native session id is known, otherwise `--continue`
-or a fresh `start`. Reuse existing Runner `stop` / `start` / `--resume` /
+New authorized work, or a different task, gets a new session: a fresh `start`
+under a new standard name, never a prompt chained into a finished seat.
+`--resume` (native id known) or `--continue` recover the same assignment only.
+Reuse existing Runner `stop` / `start` / `--resume` /
 `--continue`, and do not invent a session state machine, quota engine, or extra
 dashboards.
 
@@ -275,7 +280,9 @@ negatives: [references/issue-dispatch.md](references/issue-dispatch.md).
 
 Use the user's report format. Otherwise one compact current-work table plus
 outstanding close-out items is sufficient. Include task/progress, meaningful
-model mismatches, blockers, and next action. Mention newly stopped sessions
-once; do not keep stale stopped rows in every report. Keep duties traceable in
+model mismatches, blockers, and next action. Per platform, report `live N /
+authorized M` and the seats stopped this beat; N > M with no stop that beat
+violates the cap. Do not keep stale stopped
+rows in every report. Keep duties traceable in
 existing records; no separate acceptance, finalize, rebase or close-out
 dashboard, state machine or ledger.

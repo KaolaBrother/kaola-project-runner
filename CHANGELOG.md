@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **The authorized worker count is a hard cap on live processes; a finished seat is stopped, not
+  kept (Issue #118).** Finished seats stayed alive after acceptance and the Host read them as
+  idle capacity, exceeding the authorized count and chaining later tasks into stale contexts.
+  The Project Runner main Skill, heartbeat skeleton, ZCode Host dispatch and issue dispatch
+  references now say: the count bounds live worker processes, ACP holders included, until each
+  `stop` receipt; at the cap, stop one seat before starting any new one (stop-before-start); the
+  only legal idle seat is a delivery awaiting acceptance, and the Host exact-stops it in the beat
+  acceptance finishes or the seat is abandoned (a rejected delivery's repair stays the same
+  assignment); a new or different task gets a new session, with `--resume`/`--continue` only for
+  recovering the same assignment; each beat reports `live N / authorized M` per platform and the
+  seats stopped. No quota system, ledger, or scheduler is added — the cap is the authorized count,
+  read from existing receipts. Kaola-Delegator and `host-startup.md` are unchanged. New suite
+  `tests/contract/test-issue-118-seat-cap.py`; `test-issue-41-orchestrator.py` no longer requires
+  "leave capacity idle" and now requires stop-before-start.
+
 - **The preflight receipt carries the adapter's base fields again (Issue #114).** Every platform
   defaults to the `acp` transport, so `kaola-tmux.sh PLATFORM preflight` handed off to
   `kaola-acp.py` before the adapter's preflight ever ran, and the receipt held only the ACP and

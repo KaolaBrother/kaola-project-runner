@@ -29,6 +29,11 @@ unbound. `--transport pty` is refused the same way
 (`heartbeat-host-pty-unsupported`): Runner dispatch is ACP-only. Worker names
 are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
+Count before every `start`: live owned sessions from `status`/`observe`
+receipts, ACP holders included. At the authorized count (a hard cap), exact-`stop`
+one seat first. A different task is a new session, never a prompt chained
+into a finished seat.
+
 ### Read the binding in force, new worker or reused
 
 ```json
@@ -78,7 +83,8 @@ establish it with `observe` before re-sending.
 
 Do the rest of this beat, update the heartbeat prompt at
 `<project>/.kaola/heartbeat-prompt.json` (`body`: project facts, pace, plans),
-report, then **end your reply normally**.
+report per platform `live N / authorized M` and the seats stopped this beat,
+then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
 `sleep`, poll in a loop, or hold this turn open with a blocking `wait` — an
@@ -116,8 +122,9 @@ updates. Read from an earlier anchor:
 Confirm you read the turn you dispatched: `observe`'s
 `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
 and `turn_outcome`/`stop_reason` must show it finished. No assistant text
-means the window was wrong — widen it. Then accept, fix, or dispatch more,
-update the heartbeat prompt, and end the turn.
+means the window was wrong — widen it. Then accept or send the repair (the
+same assignment); once accepted, exact-`stop` that seat in this same beat,
+before ending the turn. Update the heartbeat prompt, and end the turn.
 
 `kind` is `idle` when the worker's turn ended and `terminated` when its
 process exited; a finished turn is a full trigger, and you never kill a
