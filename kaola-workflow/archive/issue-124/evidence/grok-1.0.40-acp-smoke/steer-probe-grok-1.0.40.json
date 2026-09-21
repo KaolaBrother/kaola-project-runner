@@ -1,0 +1,259 @@
+{
+  "id": "grok-124",
+  "cmd": "grok agent --always-approve stdio",
+  "probed_at": "2026-09-21T22:54:22+0800",
+  "live": false,
+  "agent_info": null,
+  "protocol_version": 1,
+  "init_meta": {
+    "grokShell": true,
+    "defaultAuthMethodId": "cached_token",
+    "x.ai/mcp/sdk": true,
+    "x.ai/pluginDirs": true,
+    "currentWorkingDirectory": "/private/tmp/kw-issue65-probe/scratch-grok-124",
+    "agentVersion": "1.0.40",
+    "agentId": "5d2d0143-16cf-5410-89ea-f61b9a29edd3",
+    "agentInstanceId": "fe5b0698-036d-42f8-b53a-050607250f86",
+    "hostname": "bogon",
+    "modelState": {
+      "currentModelId": "grok-4.6",
+      "availableModels": [
+        {
+          "modelId": "grok-4.6",
+          "name": "Grok 4.6",
+          "description": "SpaceXAI's latest frontier model",
+          "_meta": {
+            "totalContextTokens": 500000,
+            "agentType": "grok-build-plan",
+            "supportsReasoningEffort": true,
+            "reasoningEffort": "xhigh",
+            "reasoningEfforts": [
+              {
+                "id": "xhigh",
+                "value": "xhigh",
+                "label": "Extra High Effort",
+                "description": "Highest effort and reasoning level",
+                "default": false
+              },
+              {
+                "id": "high",
+                "value": "high",
+                "label": "High Effort",
+                "description": "Higher implementation quality with extensive reasoning",
+                "default": true
+              },
+              {
+                "id": "medium",
+                "value": "medium",
+                "label": "Medium Effort",
+                "description": "Balanced effort with standard implementation and testing",
+                "default": false
+              },
+              {
+                "id": "low",
+                "value": "low",
+                "label": "Low Effort",
+                "description": "Quick, fast implementations",
+                "default": false
+              }
+            ]
+          }
+        },
+        {
+          "modelId": "grok-4.5",
+          "name": "Grok 4.5",
+          "_meta": {
+            "totalContextTokens": 500000,
+            "agentType": "grok-build-plan",
+            "supportsReasoningEffort": true,
+            "reasoningEffort": "high",
+            "reasoningEfforts": [
+              {
+                "id": "high",
+                "value": "high",
+                "label": "High Effort",
+                "description": "Highest implementation quality with extensive reasoning",
+                "default": true
+              },
+              {
+                "id": "medium",
+                "value": "medium",
+                "label": "Medium Effort",
+                "description": "Balanced effort with standard implementation and testing",
+                "default": false
+              },
+              {
+                "id": "low",
+                "value": "low",
+                "label": "Low Effort",
+                "description": "Quick, fast implementations",
+                "default": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mcpServers": [],
+    "mcpApps": false,
+    "metadata": null,
+    "availableCommands": [
+      {
+        "name": "compact",
+        "description": "Compress conversation history to save context window",
+        "input": {
+          "hint": "optional context about what to preserve"
+        }
+      },
+      {
+        "name": "always-approve",
+        "description": "Toggle always-approve mode (skip all permission prompts)",
+        "input": {
+          "hint": "on|off"
+        }
+      },
+      {
+        "name": "context",
+        "description": "Show context window usage and session stats",
+        "input": null
+      },
+      {
+        "name": "session-info",
+        "description": "Show session details (model, turns, context usage)",
+        "input": null
+      },
+      {
+        "name": "deep-research",
+        "description": "Research with bounded parallel agents, cross-check evidence, and write a cited report",
+        "input": {
+          "hint": "<query>"
+        }
+      },
+      {
+        "name": "workflow",
+        "description": "Launch a saved workflow, list runs, or manage a run (pause, resume, stop, save)",
+        "input": {
+          "hint": "<name> [--agent-budget N] [--effort LEVEL] [args] | runs | pause|resume|stop|save [name]"
+        }
+      },
+      {
+        "name": "goal",
+        "description": "Set, manage, or check an autonomous goal",
+        "input": {
+          "hint": "<objective> [--budget <tokens>] | status | pause | resume | clear"
+        }
+      }
+    ],
+    "cancelRewind": true,
+    "sessionRecap": true,
+    "feedbackTraceOffer": false,
+    "voiceMode": true
+  },
+  "agent_capabilities": {
+    "loadSession": true,
+    "promptCapabilities": {
+      "image": false,
+      "audio": false,
+      "embeddedContext": true
+    },
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    },
+    "sessionCapabilities": {
+      "list": {},
+      "resume": {},
+      "close": {}
+    },
+    "auth": {},
+    "_meta": {
+      "x.ai/fs_notify": true,
+      "x.ai/hooks": {
+        "blockingEvents": [
+          "pre_tool_use",
+          "stop",
+          "subagent_stop"
+        ],
+        "decisions": [
+          "deny",
+          "block"
+        ],
+        "stopSignals": [
+          "continue",
+          "stopReason",
+          "additionalContext"
+        ]
+      },
+      "x.ai/capabilities": {
+        "toolOverrides": {
+          "x_keyword_search": true,
+          "x_semantic_search": true,
+          "x_user_search": false,
+          "x_thread_fetch": false
+        }
+      }
+    }
+  },
+  "steering_advertised": {
+    "top_level_meta_steering": null,
+    "capabilities_meta_steering": null,
+    "session_capabilities": {
+      "list": {},
+      "resume": {},
+      "close": {}
+    }
+  },
+  "steering_word_in_initialize": false,
+  "session_id": "01a0c475-ff78-7cf0-b337-73bd09ddf93c",
+  "idle_entry_probe": {
+    "_session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 101,
+        "error": {
+          "code": -32601,
+          "message": "Method not found",
+          "data": "unknown ACP extension method: session/steering"
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steering": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 102,
+        "error": {
+          "code": -32601,
+          "message": "Method not found"
+        }
+      },
+      "verdict": "absent"
+    },
+    "session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 103,
+        "error": {
+          "code": -32601,
+          "message": "Method not found"
+        }
+      },
+      "verdict": "absent"
+    },
+    "_session/steer": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 104,
+        "error": {
+          "code": -32601,
+          "message": "Method not found",
+          "data": "unknown ACP extension method: session/steer"
+        }
+      },
+      "verdict": "absent"
+    }
+  },
+  "native_entry": null,
+  "idle_probe_elapsed_s": 0.95,
+  "stderr_tail": ""
+}
