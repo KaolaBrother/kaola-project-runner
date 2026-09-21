@@ -64,7 +64,16 @@ Notes:
   `.agents/skills`, and each platform's own dot-directory), except grok, which
   showed only user roots.
 - A Host start compares the worker Skills in its own platform's discovered roots
-  with its build before it starts (#105), the same check a ZCode Host runs.
+  with its build before it starts (#105), the same check a ZCode Host runs. The
+  main Skill ships no scripts and is not compared: in the cursor-cli deep test an
+  older same-named `kaola-project-runner` in a user root (`~/.cursor/skills` or
+  `~/.claude/skills`) won over the project copy on the woken turn. Reinstall
+  every root the Host reads.
+- Deep test (cursor-cli Host, dsh worker, 2026-09-21): the worker bound to the
+  Host (`heartbeat_host_source: dispatcher`), its idle event was delivered and
+  confirmed, the delivered carrier's fingerprint equals a rebuild opening
+  `/kaola-project-runner` / `(Cursor CLI Host)`, and the woken turn read,
+  exact-stopped the worker (`stopped: true`, `residual_pids: []`) and ended.
 
 ## OpenCode model and effort (H2)
 
