@@ -27,9 +27,44 @@ opencode_surface() {
   [[ -f "$root/kaola-workflow/scripts/kaola-workflow-claim.js" ]] || return 1
 }
 
+# Issue #112: OpenCode V2 reaches its own server over loopback HTTP for every command. A forward
+# proxy that does not exclude loopback swallows that hop: `opencode acp` answers every session
+# method with ClientError and the TUI hangs at "Starting background server...". Upstream treats
+# loopback bypass as intended (anomalyco/opencode#31096). This fills OPENCODE_LOOPBACK_ENV with the
+# NAME=VALUE pairs the opencode CHILD needs and exports nothing. With no forward proxy it does
+# nothing. Each non-empty NO_PROXY/no_proxy is extended in place (operator bytes kept, never
+# removed or reordered) with only the loopback hosts it lacks; `*` already excludes everything.
+# When neither name is set, both are set. scripts/kaola-acp.py loopback_no_proxy() applies the
+# same rule to the ACP child, and one contract test runs both over the same cases.
+opencode_loopback_env() {
+  OPENCODE_LOOPBACK_ENV=()
+  [[ -n "${HTTP_PROXY:-}${http_proxy:-}${HTTPS_PROXY:-}${https_proxy:-}" ]] || return 0
+  local name current rest entry host missing base
+  local -a names=() entries=()
+  [[ -n "${NO_PROXY:-}" ]] && names+=(NO_PROXY)
+  [[ -n "${no_proxy:-}" ]] && names+=(no_proxy)
+  (( ${#names[@]} > 0 )) || names=(NO_PROXY no_proxy)
+  for name in "${names[@]}"; do
+    current="${!name:-}" rest="${!name:-}," missing="" entries=()
+    while [[ -n "$rest" ]]; do
+      entry="${rest%%,*}"; rest="${rest#*,}"
+      entry="${entry#"${entry%%[![:space:]]*}"}"; entry="${entry%"${entry##*[![:space:]]}"}"
+      entries+=("|$entry|")
+    done
+    [[ " ${entries[*]} " == *" |*| "* ]] && continue
+    for host in 127.0.0.1 localhost; do
+      [[ " ${entries[*]} " == *" |$host| "* ]] || missing="${missing:+$missing,}$host"
+    done
+    [[ -n "$missing" ]] || continue
+    base="${current%"${current##*[![:space:]]}"}"
+    [[ -n "$base" && "$base" != *, ]] && base+=","
+    OPENCODE_LOOPBACK_ENV+=("$name=$base$missing")
+  done
+}
+
 adapter_preflight() {
   local config_root="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}" carrier="" config_state=missing
-  local forward_proxy="${HTTP_PROXY:-${http_proxy:-${HTTPS_PROXY:-${https_proxy:-}}}}" loopback=direct
+  local loopback=direct
   if opencode_surface "$repo/.opencode"; then carrier="$repo/.opencode"
   elif opencode_surface "$config_root"; then carrier="$config_root"
   fi
@@ -38,16 +73,12 @@ adapter_preflight() {
   PREFLIGHT_WORKFLOW_NEXT=false; PREFLIGHT_FINALIZE=false
   [[ -n "$carrier" ]] && PREFLIGHT_WORKFLOW_NEXT=true PREFLIGHT_FINALIZE=true
   PREFLIGHT_PROJECT_MATERIALIZATION=not-required
-  # Issue #112: OpenCode V2 reaches its own server over loopback HTTP for every
-  # command. A forward proxy that does not exclude loopback swallows that hop —
-  # `opencode acp` then answers every session method with ClientError and the
-  # background service reads as stopped (upstream anomalyco/opencode#31096
-  # fixed the same class on the V1 line). Report it; never gate on it.
-  if [[ -n "$forward_proxy" ]]; then
-    case ",${NO_PROXY:-${no_proxy:-}}," in
-      *,127.0.0.1,*|*,localhost,*) loopback=excluded ;;
-      *) loopback=proxied ;;
-    esac
+  # Issue #112: report what the opencode child will actually see: direct (no forward proxy),
+  # excluded (the operator already excludes loopback), or ensured (the Runner appends the missing
+  # loopback entries to the child's env). Evidence only; never a gate.
+  if [[ -n "${HTTP_PROXY:-}${http_proxy:-}${HTTPS_PROXY:-}${https_proxy:-}" ]]; then
+    opencode_loopback_env
+    if (( ${#OPENCODE_LOOPBACK_ENV[@]} > 0 )); then loopback=ensured; else loopback=excluded; fi
   fi
   PREFLIGHT_DETAIL="OpenCode communication is available; Kaola carrier=${carrier:-not-discovered}; configuration=$config_state; loopback=$loopback"
 }
@@ -71,8 +102,13 @@ adapter_build_launch() {
 }
 
 adapter_prepare_model_environment() {
+  # Issue #112: the PTY child gets the loopback proxy bypass through the same -e channel as the
+  # model payload. It is evaluated against this caller's environment, which is also what seeds a
+  # tmux server the Runner starts, and that is exactly the case where the PTY child was measured
+  # inheriting the forward proxy.
+  opencode_loopback_env
+  ADAPTER_MODEL_ENV=(${OPENCODE_LOOPBACK_ENV[@]+"${OPENCODE_LOOPBACK_ENV[@]}"})
   if [[ -z "$RESOLVED_MODEL_ID" && -z "$RESOLVED_MODEL_EFFORT" ]]; then
-    ADAPTER_MODEL_ENV=()
     return 0
   fi
   local existing="${OPENCODE_CONFIG_CONTENT:-}" merged
@@ -96,7 +132,7 @@ if model_id:
 print(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
 PY
 )"
-  ADAPTER_MODEL_ENV=("OPENCODE_CONFIG_CONTENT=$merged")
+  ADAPTER_MODEL_ENV+=("OPENCODE_CONFIG_CONTENT=$merged")
 }
 
 adapter_detect_tui() {

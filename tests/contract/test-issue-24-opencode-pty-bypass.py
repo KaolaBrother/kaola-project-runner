@@ -21,11 +21,15 @@ this contract.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import importlib.util
+import os
 import re
+import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 PROJECT = Path(__file__).resolve().parents[2]
@@ -340,6 +344,123 @@ class Issue24NoInventedSkipSubstitute(unittest.TestCase):
         self.assertIsNotNone(snippet, "adapter_prepare_model_environment not found")
         model_env = snippet.group(1) if snippet else ""
         self.assertNotIn("permission", model_env.lower())
+
+
+PROXY = "http://proxy.invalid:3128"
+
+# (case env, expected child additions). One table drives both implementations.
+LOOPBACK_CASES = (
+    ({}, {}),
+    ({"NO_PROXY": "corp.example"}, {}),
+    ({"HTTP_PROXY": PROXY},
+     {"NO_PROXY": "127.0.0.1,localhost", "no_proxy": "127.0.0.1,localhost"}),
+    ({"https_proxy": PROXY, "NO_PROXY": "corp.example"},
+     {"NO_PROXY": "corp.example,127.0.0.1,localhost"}),
+    ({"HTTP_PROXY": PROXY, "NO_PROXY": "corp.example, localhost"},
+     {"NO_PROXY": "corp.example, localhost,127.0.0.1"}),
+    ({"HTTP_PROXY": PROXY, "NO_PROXY": "a,", "no_proxy": "b"},
+     {"NO_PROXY": "a,127.0.0.1,localhost", "no_proxy": "b,127.0.0.1,localhost"}),
+    ({"HTTPS_PROXY": PROXY, "no_proxy": "127.0.0.1,localhost"}, {}),
+    ({"HTTP_PROXY": PROXY, "NO_PROXY": "*"}, {}),
+)
+
+BASH_LOOPBACK = (
+    'source "$1"; opencode_loopback_env; '
+    'for kv in ${OPENCODE_LOOPBACK_ENV[@]+"${OPENCODE_LOOPBACK_ENV[@]}"}; do printf "%s\\n" "$kv"; done'
+)
+
+
+def load_acp():
+    spec = importlib.util.spec_from_file_location("kaola_acp_issue_112", ACP)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def bash_loopback(case: dict[str, str]) -> dict[str, str]:
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **case}
+    out = subprocess.run(
+        ["bash", "-c", BASH_LOOPBACK, "bash", str(OPENCODE_ADAPTER)],
+        env=env, capture_output=True, text=True, check=True,
+    ).stdout
+    return dict(line.split("=", 1) for line in out.splitlines() if line)
+
+
+class Issue112LoopbackProxyBypass(unittest.TestCase):
+    """Issue #112: OpenCode V2 reaches its own server over loopback HTTP, so a
+    forward proxy without a loopback NO_PROXY entry breaks every ACP session
+    method (live-measured ClientError) and hangs the PTY TUI. The opencode
+    child, and only the child, gets the missing loopback entries appended."""
+
+    def test_acp_rule_matches_the_case_table(self) -> None:
+        module = load_acp()
+        for case, expected in LOOPBACK_CASES:
+            with self.subTest(case=case):
+                self.assertEqual(module.loopback_no_proxy(dict(case)), expected)
+
+    def test_pty_rule_is_the_same_rule(self) -> None:
+        for case, expected in LOOPBACK_CASES:
+            with self.subTest(case=case):
+                self.assertEqual(bash_loopback(case), expected)
+
+    def test_acp_child_env_gets_it_and_the_runner_env_does_not(self) -> None:
+        module = load_acp()
+        args = argparse.Namespace(platform="opencode", manifest={})
+        with mock.patch.dict(os.environ, {"HTTP_PROXY": PROXY}, clear=True):
+            env = module.agent_environment(args)
+            self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost")
+            self.assertEqual(env["no_proxy"], "127.0.0.1,localhost")
+            self.assertEqual(env["HTTP_PROXY"], PROXY, "the proxy itself is left alone")
+            self.assertEqual(dict(os.environ), {"HTTP_PROXY": PROXY},
+                             "the Runner's own environment must not be modified")
+
+    def test_acp_injection_is_scoped_to_opencode(self) -> None:
+        module = load_acp()
+        with mock.patch.dict(os.environ, {"HTTP_PROXY": PROXY}, clear=True):
+            env = module.agent_environment(argparse.Namespace(platform="codex", manifest={}))
+        self.assertNotIn("NO_PROXY", env)
+        self.assertNotIn("no_proxy", env)
+
+    def test_no_forward_proxy_leaves_the_acp_child_untouched(self) -> None:
+        module = load_acp()
+        with mock.patch.dict(os.environ, {"NO_PROXY": "corp.example"}, clear=True):
+            env = module.agent_environment(argparse.Namespace(platform="opencode", manifest={}))
+        self.assertEqual(env, {"NO_PROXY": "corp.example"})
+
+    def test_pty_child_env_carries_it_with_and_without_a_model(self) -> None:
+        script = (
+            'source "$1"; RESOLVED_MODEL_ID="$2"; RESOLVED_MODEL_EFFORT=""; PYTHON_BIN=python3; '
+            'adapter_prepare_model_environment; '
+            'for kv in ${ADAPTER_MODEL_ENV[@]+"${ADAPTER_MODEL_ENV[@]}"}; do printf "%s\\n" "${kv%%=*}"; done'
+        )
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HTTP_PROXY": PROXY}
+        for model, names in (("", ["NO_PROXY", "no_proxy"]),
+                             ("zhipuai-coding-plan/glm-5.3",
+                              ["NO_PROXY", "no_proxy", "OPENCODE_CONFIG_CONTENT"])):
+            with self.subTest(model=model):
+                out = subprocess.run(
+                    ["bash", "-c", script, "bash", str(OPENCODE_ADAPTER), model],
+                    env=env, capture_output=True, text=True, check=True,
+                ).stdout.split()
+                self.assertEqual(out, names)
+
+    def test_preflight_reports_what_the_child_sees(self) -> None:
+        script = (
+            'source "$1"; repo=/nonexistent; RUNTIME_BIN=/usr/bin/true; adapter_preflight; '
+            'printf "%s\\n" "${PREFLIGHT_DETAIL##*loopback=}"'
+        )
+        for case, state in (({}, "direct"),
+                            ({"HTTP_PROXY": PROXY}, "ensured"),
+                            ({"HTTP_PROXY": PROXY, "NO_PROXY": "127.0.0.1,localhost"}, "excluded")):
+            with self.subTest(case=case):
+                env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                       "HOME": "/nonexistent", **case}
+                out = subprocess.run(
+                    ["bash", "-c", script, "bash", str(OPENCODE_ADAPTER)],
+                    env=env, capture_output=True, text=True, check=True,
+                ).stdout.strip()
+                self.assertEqual(out, state)
 
 
 if __name__ == "__main__":

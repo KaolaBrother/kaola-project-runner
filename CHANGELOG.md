@@ -18,10 +18,16 @@
   `opencode service status`, `models` and `auth list`, which means the separately reported "wedged
   managed service" was never wedged. Upstream fixed this class on the V1 line
   (`anomalyco/opencode#31096`) but the V2 ACP adapter was copied rather than ported (#35457, open),
-  so it regressed. `acp_quirks` now states the requirement, `acp_env_allowlist` gains `NO_PROXY`, and
-  `adapter_preflight` reports `loopback=direct|excluded|proxied` as evidence. The Runner reports the
-  condition; it does not rewrite the operator's proxy environment, and no classifier, retry or
-  waiting layer was added.
+  so it regressed. When a forward proxy (`HTTP_PROXY`/`HTTPS_PROXY`, either case) is set, the
+  Runner now appends any missing `127.0.0.1`/`localhost` to `NO_PROXY`/`no_proxy` **in the opencode
+  child's environment only**: the ACP child through `kaola-acp.py` `agent_environment()`, and the
+  PTY child through the adapter's `-e` channel. The PTY path needs it too, because a tmux server the
+  Runner starts from a proxied shell inherits the proxy, and the V2 TUI was measured hanging at
+  "Starting background server...". Operator entries are extended in place and never removed or
+  reordered, `*` counts as already excluded, nothing changes without a forward proxy, and the
+  Runner's own environment is never modified. `adapter_preflight` reports
+  `loopback=direct|excluded|ensured` for what the child actually sees, and `acp_env_allowlist` gains
+  `NO_PROXY`. No classifier, retry or waiting layer was added.
 
   With the transport unblocked, the facts that were previously unverifiable are now measured on
   2.0.11 rather than inherited from 1.18.x. A full `initialize → session/new → session/prompt →

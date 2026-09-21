@@ -1,6 +1,6 @@
 # OpenCode ACP transport
 
-Command: `opencode acp`. Login requires a PTY: `false`. Platform quirks: no ACP skip-all measured on 2.0.11 - session/request_permission offers only allow_once/allow_always/reject_once and configOptions carries model/effort/mode only; PTY --auto via --transport pty is the bypass. V2 reaches its own server over loopback HTTP, so a forward proxy with no loopback NO_PROXY entry leaves initialize working while every session method answers ClientError.
+Command: `opencode acp`. Login requires a PTY: `false`. Platform quirks: no ACP skip-all measured on 2.0.11 - session/request_permission offers only allow_once/allow_always/reject_once and configOptions carries model/effort/mode only; PTY --auto via --transport pty is the bypass. V2 reaches its own server over loopback HTTP, and a forward proxy on that hop leaves initialize working while every session method answers ClientError; so when HTTP(S)_PROXY is set, the Runner appends any missing 127.0.0.1/localhost to NO_PROXY/no_proxy in the opencode child env only (ACP and PTY), keeping operator entries and never touching the Runner env.
 
 ## Command surface
 

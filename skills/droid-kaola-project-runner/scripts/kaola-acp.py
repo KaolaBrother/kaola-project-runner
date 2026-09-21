@@ -73,6 +73,16 @@ SKILL_SCRIPTS_TOKEN = "$SKILL_DIR/scripts/"
 BRIDGE_BINARY_ENV = {
     "claude-code": "CLAUDE_ACP_CLAUDE_BIN",
 }
+# Issue #112: OpenCode V2 reaches its own server over loopback HTTP, so a
+# forward proxy that does not exclude loopback swallows that hop and every ACP
+# session method answers ClientError while `initialize` still succeeds.
+# Upstream treats loopback bypass as intended (anomalyco/opencode#31096). For
+# these platforms only, the child environment gains the missing loopback
+# entries; the Runner's own process environment is never modified.
+LOOPBACK_NO_PROXY_PLATFORMS = frozenset({"opencode"})
+FORWARD_PROXY_ENV = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy")
+NO_PROXY_ENV = ("NO_PROXY", "no_proxy")
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
 ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
 ZCODE_NODE_ENV = "KAOLA_ZCODE_NODE"
 # Issue #62 phase 2: a worker start may declare the ZCode Host session whose
@@ -199,14 +209,46 @@ def runtime_binary(manifest: dict[str, str]) -> str:
     )
 
 
+def loopback_no_proxy(env: dict[str, str]) -> dict[str, str]:
+    """The NO_PROXY/no_proxy values a loopback-reaching child needs, or {}.
+
+    No-op without a forward proxy. Each non-empty name the operator set is
+    extended in place (existing bytes kept, never removed or reordered) with
+    only the loopback hosts it lacks; ``*`` already excludes everything. When
+    neither name is set, both are set, because clients differ on which one
+    they read. ``scripts/adapters/opencode.sh`` applies the same rule to the
+    PTY child, and one contract test runs both over the same cases."""
+    if not any(env.get(name) for name in FORWARD_PROXY_ENV):
+        return {}
+    names = [name for name in NO_PROXY_ENV if env.get(name)] or list(NO_PROXY_ENV)
+    changes: dict[str, str] = {}
+    for name in names:
+        current = env.get(name) or ""
+        entries = {entry.strip() for entry in current.split(",")}
+        if "*" in entries:
+            continue
+        missing = [host for host in LOOPBACK_HOSTS if host not in entries]
+        if not missing:
+            continue
+        base = current.rstrip()
+        if base and not base.endswith(","):
+            base += ","
+        changes[name] = base + ",".join(missing)
+    return changes
+
+
 def agent_environment(args: argparse.Namespace) -> dict[str, str]:
     """Environment for the holder and its agent process: inherited whole, plus
     the exact binary path for a vendored bridge. A non-absolute value is passed
-    as-is so the bridge refuses it (fail closed) instead of searching PATH."""
+    as-is so the bridge refuses it (fail closed) instead of searching PATH.
+    Loopback-reaching platforms also get the loopback proxy bypass; that lands
+    in this copy only, never in ``os.environ``."""
     env = dict(os.environ)
     bridge_env = BRIDGE_BINARY_ENV.get(args.platform)
     if bridge_env:
         env[bridge_env] = runtime_binary(args.manifest)
+    if args.platform in LOOPBACK_NO_PROXY_PLATFORMS:
+        env.update(loopback_no_proxy(env))
     return env
 
 
