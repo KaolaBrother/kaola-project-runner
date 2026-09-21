@@ -122,8 +122,8 @@ Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `--skip-permissions-unsafe`, `--auto <level>`, or no flag, and ACP maps them to
 `auto-high|auto-low|auto-medium|auto-high|normal` through `acp_mode_config_id: autonomy_level`.
 ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reasoning_effort`, and
-`autonomy_level`. Droid has no model/effort upgrade tier and no separate Fast toggle; effort is
-passed only when explicitly requested.
+`autonomy_level`. Droid's default stays Auto (`auto`); its upgrade preset is Kimi K3 Max (`kimi-k3`,
+`reasoning_effort=max`), and it has no separate Fast toggle.
 
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
