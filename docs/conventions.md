@@ -142,7 +142,7 @@ sockets/processes.
 Real runtime tests record version, relay/child/pane identity, snapshot, prompt
 delivery, Workflow start evidence, stop result, and zero unintended residual sessions.
 Authentication-blocked command receipt is not reported as successful Workflow execution.
-For Cursor CLI, live experiments must pass the exact non-FAST slug `cursor-grok-4.6-xhigh`, capture
-the resulting `Cursor Grok 4.6 Extra High` footer without `Fast`, then run the prompt/reply proof.
+For Cursor CLI, live experiments must pass the exact non-FAST slug `grok-4.7-xhigh`, capture
+the resulting `Grok 4.7 256K Extra High` footer without `Fast`, then run the prompt/reply proof.
 Do not use native `/model` as a read-only probe: Cursor 2026.08.25 rewrites global picker config even
 when the visible selection is unchanged.

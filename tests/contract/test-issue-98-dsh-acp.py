@@ -66,7 +66,7 @@ class AcpValueParamsRejectsAWholeValueBracket(unittest.TestCase):
     def test_cursor_descriptor_still_parses(self) -> None:
         """The only real user of the feature must not regress."""
         self.assertEqual(
-            self.acp.acp_value_params("grok-4.6[effort=high,fast=true]"),
+            self.acp.acp_value_params("grok-4.7[effort=high,fast=true]"),
             {"effort": "high", "fast": "true"},
         )
 
@@ -81,7 +81,7 @@ class AcpValueParamsRejectsAWholeValueBracket(unittest.TestCase):
         self.assertEqual(self.acp.acp_value_params('["vendor","model-fast=true"]'), {})
 
     def test_plain_and_empty_values_are_unchanged(self) -> None:
-        for value in ("auto", "deepseek-v4-pro", "", "grok-4.6"):
+        for value in ("auto", "deepseek-v4-pro", "", "grok-4.7"):
             with self.subTest(value=value):
                 self.assertEqual(self.acp.acp_value_params(value), {})
 

@@ -350,7 +350,7 @@ def real_surface_evidence(platform: str, frame: str) -> tuple[str | None, dict[s
         if anchor not in frame:
             # Some TUIs keep a distinctive model footer after their header has
             # scrolled away.  These footer forms cannot occur in launch argv.
-            if platform == "cursor-cli" and "Cursor Grok 4.6" in frame:
+            if platform == "cursor-cli" and re.search(r"\bGrok 4\.7(?:\s+\d+K)?\s+(?:Extra High|High|Medium|Low)\b", frame, re.I):
                 runtime_frame = frame
             elif platform == "kimi-cli" and re.search(r"\byolo\s+K3\s+thinking:\s*(?:low|high|max)\b", frame, re.I):
                 runtime_frame = frame
@@ -376,12 +376,12 @@ def real_surface_evidence(platform: str, frame: str) -> tuple[str | None, dict[s
         if families and efforts:
             return families[-1].lower(), {"effort": efforts[-1].lower()}, "claude-main-tui"
     elif platform == "cursor-cli":
-        matches = re.findall(r"Cursor Grok 4\.6(?:\s*[—|-]?\s*)?(Extra High|High|Medium|Low)(?:\s+(Fast))?", runtime_frame, re.I)
+        matches = re.findall(r"\bGrok 4\.7(?:\s+\d+K)?(?:\s*[—|-]?\s*)?(Extra High|High|Medium|Low)(?:\s+(Fast))?", runtime_frame, re.I)
         if matches:
             effort_label, fast_label = matches[-1]
             effort = {"extra high": "xhigh", "high": "high", "medium": "medium", "low": "low"}[effort_label.lower()]
             suffix = "-fast" if fast_label else ""
-            return f"cursor-grok-4.6-{effort}{suffix}", {"effort": effort, "fast": bool(fast_label)}, "cursor-main-tui"
+            return f"grok-4.7-{effort}{suffix}", {"effort": effort, "fast": bool(fast_label)}, "cursor-main-tui"
     elif platform == "grok":
         model_effort = re.findall(
             r"\bGrok\s+(4\.[0-9]+)\s*\((low|medium|high|xhigh|max|extra high)\)",

@@ -30,7 +30,7 @@ LOG_LOCK = threading.Lock()
 STDOUT_LOCK = threading.Lock()
 
 AUTONOMY_VALUES = ("normal", "spec", "auto-low", "auto-medium", "auto-high")
-MODEL_VALUES = ("auto", "gpt-5.6-sol", "gpt-5.6-sol-fast", "grok-4.6", "claude-opus-5",
+MODEL_VALUES = ("auto", "gpt-5.6-sol", "gpt-5.6-sol-fast", "grok-4.7", "claude-opus-5",
                 "deepseek-v4-pro",
                 # Issue #111 read these three from the live 51-value catalog;
                 # the Runner core preset names kimi-k3. kimi-k2.7-code stays

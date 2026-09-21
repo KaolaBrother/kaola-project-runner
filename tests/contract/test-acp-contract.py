@@ -1274,7 +1274,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(set(fast.get("values") or []), {"false", "true"})
 
     def test_cursor_default_exact_order_and_semantics(self) -> None:
-        # Grok 4.6 Extra High Fast Off: the picker ID decomposes onto the
+        # Grok 4.7 Extra High Fast Off: the picker ID decomposes onto the
         # parameterized surface — native model id, then effort, then the
         # fast STRING "false" — with no semantic substitution.
         receipt = self.start("cursor-cli", caps="cursor-params,strict-config")
@@ -1282,7 +1282,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(
             self.config_events(),
             [
-                ("model", "grok-4.6"),
+                ("model", "grok-4.7"),
                 ("effort", "xhigh"),
                 ("fast", "false"),
             ],
@@ -1290,13 +1290,13 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         application = receipt.get("config_application") or {}
         model = application.get("model") or {}
         self.assertTrue(model.get("applied"))
-        self.assertEqual(model.get("requested_id"), "cursor-grok-4.6-xhigh")
+        self.assertEqual(model.get("requested_id"), "grok-4.7-xhigh")
         self.assertTrue(model.get("mapped"))
         self.assertNotIn("[", str(model.get("value")))
         self.assertTrue((application.get("effort") or {}).get("applied"))
         self.assertTrue((application.get("fast") or {}).get("applied"))
         selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("resolved_model"), "cursor-grok-4.6-xhigh")
+        self.assertEqual(selection.get("resolved_model"), "grok-4.7-xhigh")
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("requested"), "off")
         self.assertEqual(fast.get("effective"), "off")
@@ -1324,10 +1324,10 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         # A bare explicit fast-variant picker ID carries its semantics in the
         # ID: base model value, suffix-derived effort, fast on.
         receipt = self.start(
-            "cursor-cli", "--model", "cursor-grok-4.6-xhigh-fast",
+            "cursor-cli", "--model", "grok-4.7-xhigh-fast",
             caps="cursor-params,strict-config",
         )
-        self.assertIn(("model", "grok-4.6"), self.config_events())
+        self.assertIn(("model", "grok-4.7"), self.config_events())
         self.assertIn(("effort", "xhigh"), self.config_events())
         self.assertIn(("fast", "true"), self.config_events())
         fast = receipt.get("fast") or {}
@@ -1361,7 +1361,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertTrue(mapped_values)
         for value in mapped_values:
             self.assertNotIn("[", value, f"descriptor substitution in map: {value}")
-            self.assertIn(value, {"grok-4.6", "claude-fable-5-1"})
+            self.assertIn(value, {"grok-4.7", "claude-fable-5-1"})
 
 
 class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):

@@ -1327,7 +1327,7 @@ def parse_acp_model_map(raw: str) -> dict[str, str]:
 
     Maps resolved runtime model IDs (PTY picker IDs) onto the ACP option
     values the agent actually advertises for the same model — e.g. Cursor's
-    ``cursor-grok-4.6-xhigh`` onto ``grok-4.6[effort=high,fast=true]``.
+    ``grok-4.7-xhigh`` onto ``grok-4.7[effort=high,fast=true]``.
     """
     mapping: dict[str, str] = {}
     for pair in (raw or "").split(";"):
@@ -1369,7 +1369,7 @@ def parse_manifest_value_map(raw: str) -> dict[str, str]:
 def picker_effort_suffix(model_id: str) -> str:
     """Extract an effort encoded in a picker-style model ID.
 
-    Picker IDs like ``cursor-grok-4.6-xhigh`` or ``...-xhigh-fast`` encode
+    Picker IDs like ``grok-4.7-xhigh`` or ``...-xhigh-fast`` encode
     effort in the trailing token; parameterized ACP transports carry that
     effort through their own effort config option instead.
     """
@@ -1386,7 +1386,7 @@ def acp_value_params(value: str) -> dict[str, str]:
     """Parse a trailing ``[k=v,...]`` descriptor from an ACP option value.
 
     Cursor-style values carry their declared settings in the value itself
-    (``grok-4.6[effort=high,fast=true]``); the bracket is the agent's own
+    (``grok-4.7[effort=high,fast=true]``); the bracket is the agent's own
     statement of what selecting that value does.
 
     A *descriptor* qualifies a base value, so it can never be the whole value.

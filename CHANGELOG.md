@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Grok 4.7 is the default for the `grok` and `cursor-cli` workers (Issue #127).** Both CLIs now
+  offer Grok 4.7. `grok` default and upgrade are `grok-4.7` (Grok 4.7 Extra High) on Grok CLI 1.0.40.
+  The Cursor 4.7 picker IDs lost the old `cursor-` prefix, so the `cursor-cli` default is
+  `grok-4.7-xhigh` (Fast off), not `cursor-grok-4.7-xhigh`. `acp_model_map` maps
+  `grok-4.7-xhigh` and `grok-4.7-xhigh-fast` to the ACP model value `grok-4.7`. The Cursor TUI
+  footer is now `Grok 4.7 256K Extra High` (no `Cursor` prefix, a context token). The model-policy
+  parser reads that form and reports `grok-4.7-{effort}[-fast]`. It also recognizes the footer
+  when the `Cursor Agent` header has scrolled away. Cursor `acp_verified_versions` is now
+  `cli=2026.09.15-d2fe57e`. Dated live-smoke records, decisions, released entries and the raw
+  2026.08.25 Cursor frame fixture keep their 4.6 facts.
+
 - **dsh starts with full access by default, so a dsh worker can run inside a dsh Host (Issue
   #120, Host ruling).** dsh advertises no ACP mode option. Its permission mode is the launch
   variable `DSH_PERMISSION_MODE`, and dsh's own default `workspace-write` runs the shell tool

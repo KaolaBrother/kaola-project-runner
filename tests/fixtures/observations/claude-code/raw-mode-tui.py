@@ -75,7 +75,7 @@ def cursor_ready_frame() -> list[str]:
         "",
         "The main conversation is open",
         "",
-        "Cursor Grok 4.6 Extra High  Run Everything",
+        "Grok 4.7 256K Extra High  Run Everything",
         "→ Plan, search, build anything",
     ]
 

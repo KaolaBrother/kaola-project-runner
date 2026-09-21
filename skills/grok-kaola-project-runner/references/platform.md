@@ -6,8 +6,8 @@
 - Default tmux session prefix: `grok-kaola`
 - Continue: `--continue`
 - Exact resume: `--resume <session-id-or-title>`
-- Runner default preset (`--tier default`): **Grok 4.6 Extra High** — `grok-4.6` with `effort=xhigh, fast=false`
-- Runner upgrade preset (`--tier upgrade`): **Grok 4.6 Extra High** — `grok-4.6` with `effort=xhigh, fast=false`
+- Runner default preset (`--tier default`): **Grok 4.7 Extra High** — `grok-4.7` with `effort=xhigh, fast=false`
+- Runner upgrade preset (`--tier upgrade`): **Grok 4.7 Extra High** — `grok-4.7` with `effort=xhigh, fast=false`
 - Fast support: no native Fast mechanism on either transport; explicit --fast on is reported unsupported
 
 ## Preflight

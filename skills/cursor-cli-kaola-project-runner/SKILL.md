@@ -52,7 +52,7 @@ SESSION="cursor-cli-kaola-<purpose>"
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**Grok 4.6 Extra High**: `cursor-grok-4.6-xhigh`,
+presets — `--tier default` (**Grok 4.7 Extra High**: `grok-4.7-xhigh`,
 effort=xhigh (encoded in model ID), fast=false) and `--tier upgrade` (**Claude Fable 5.1 High**:
 `claude-fable-5-1-high`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
@@ -66,7 +66,7 @@ already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the R
 invent extra effort or Fast configuration for it.
 
 Fast is OFF by default. Pass `--fast on` only on an explicit user request for Fast; this platform's
-Fast support: Fast via native `-fast` PTY picker variants (e.g. cursor-grok-4.6-xhigh-fast); over ACP the parameterized `fast` option (true/false strings) applies to any model; unsupported PTY variants reported rather than invented. Fast and tier are independent selections. When a native fast model
+Fast support: Fast via native `-fast` PTY picker variants (e.g. grok-4.7-xhigh-fast); over ACP the parameterized `fast` option (true/false strings) applies to any model; unsupported PTY variants reported rather than invented. Fast and tier are independent selections. When a native fast model
 ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
 conflict honestly if it is also passed with `--fast off`.
 

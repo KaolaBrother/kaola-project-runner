@@ -95,7 +95,7 @@ def main() -> int:
     if not all(
         marker in agents_text
         for marker in (
-            "Live Cursor experiments use `cursor-grok-4.6-xhigh` with Fast disabled",
+            "Live Cursor experiments use `grok-4.7-xhigh` with Fast disabled",
             "never use `/model` as a read-only probe",
         )
     ):

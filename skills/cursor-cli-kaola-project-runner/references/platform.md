@@ -6,9 +6,9 @@
 - Default tmux session prefix: `cursor-cli-kaola`
 - Continue: `--continue`
 - Exact resume: `--resume <chat-id>`
-- Runner default preset (`--tier default`): **Grok 4.6 Extra High** — `cursor-grok-4.6-xhigh` with `effort=xhigh (encoded in model ID), fast=false`
+- Runner default preset (`--tier default`): **Grok 4.7 Extra High** — `grok-4.7-xhigh` with `effort=xhigh (encoded in model ID), fast=false`
 - Runner upgrade preset (`--tier upgrade`): **Claude Fable 5.1 High** — `claude-fable-5-1-high` with `effort=high (encoded in model ID)`
-- Fast support: Fast via native `-fast` PTY picker variants (e.g. cursor-grok-4.6-xhigh-fast); over ACP the parameterized `fast` option (true/false strings) applies to any model; unsupported PTY variants reported rather than invented
+- Fast support: Fast via native `-fast` PTY picker variants (e.g. grok-4.7-xhigh-fast); over ACP the parameterized `fast` option (true/false strings) applies to any model; unsupported PTY variants reported rather than invented
 
 ## Preflight
 

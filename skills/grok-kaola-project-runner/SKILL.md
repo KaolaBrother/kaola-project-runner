@@ -52,9 +52,9 @@ SESSION="grok-kaola-<purpose>"
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**Grok 4.6 Extra High**: `grok-4.6`,
-effort=xhigh, fast=false) and `--tier upgrade` (**Grok 4.6 Extra High**:
-`grok-4.6`, effort=xhigh, fast=false) — and `default` applies whenever the user did
+presets — `--tier default` (**Grok 4.7 Extra High**: `grok-4.7`,
+effort=xhigh, fast=false) and `--tier upgrade` (**Grok 4.7 Extra High**:
+`grok-4.7`, effort=xhigh, fast=false) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.

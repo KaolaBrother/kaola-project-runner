@@ -108,7 +108,7 @@ assert isinstance(resolved_parameters, dict), resolved_parameters
 expected_effort = os.environ["EXPECTED_EFFORT"]
 if expected_effort:
     assert resolved_parameters.get("effort") == expected_effort, resolved_parameters
-if os.environ["EXPECTED_RESOLVED"] == "cursor-grok-4.6-xhigh":
+if os.environ["EXPECTED_RESOLVED"] == "grok-4.7-xhigh":
     assert resolved_parameters.get("fast") is False, resolved_parameters
 
 actual_parameters = field("actual_parameters")
@@ -438,13 +438,13 @@ for platform in "${platforms[@]}"; do
       override_id=sonnet; override_effort=medium
       ;;
     cursor-cli)
-      default_name='Grok 4.6 Extra High'; default_id=cursor-grok-4.6-xhigh; default_effort=xhigh; binary_env=CURSOR_AGENT_BIN
+      default_name='Grok 4.7 Extra High'; default_id=grok-4.7-xhigh; default_effort=xhigh; binary_env=CURSOR_AGENT_BIN
       upgrade_name='Claude Fable 5.1 High'; upgrade_id=claude-fable-5-1-high; upgrade_effort=high
       override_id=cursor-gpt-5.2; override_effort=high
       ;;
     grok)
-      default_name='Grok 4.6 Extra High'; default_id=grok-4.6; default_effort=xhigh; binary_env=GROK_BIN
-      upgrade_name='Grok 4.6 Extra High'; upgrade_id=grok-4.6; upgrade_effort=xhigh
+      default_name='Grok 4.7 Extra High'; default_id=grok-4.7; default_effort=xhigh; binary_env=GROK_BIN
+      upgrade_name='Grok 4.7 Extra High'; upgrade_id=grok-4.7; upgrade_effort=xhigh
       override_id=grok-code-fast-1; override_effort=high
       ;;
     opencode)
@@ -899,9 +899,9 @@ OpenAI Codex' \
 
 verified_frame="$(mktemp "${TMPDIR:-/tmp}/kpr-model-frame.XXXXXX")"
 scrolled_frame="$(mktemp "${TMPDIR:-/tmp}/kpr-model-frame.XXXXXX")"
-printf '%s\n' 'Grok Build v1.0.13' 'Grok 4.6 (xhigh)' >"$verified_frame"
+printf '%s\n' 'Grok Build v1.0.13' 'Grok 4.7 (xhigh)' >"$verified_frame"
 printf '%s\n' 'The model footer has scrolled away.' >"$scrolled_frame"
-initial_policy='{"resolved_runtime_model_id":"grok-4.6","resolved_parameters":{"effort":"xhigh","fast":false},"actual_runtime_model_id":null,"actual_parameters":null,"model_verified":"unknown","model_mismatch_reason":"actual-model-evidence-not-yet-read","model_evidence_provenance":{}}'
+initial_policy='{"resolved_runtime_model_id":"grok-4.7","resolved_parameters":{"effort":"xhigh","fast":false},"actual_runtime_model_id":null,"actual_parameters":null,"model_verified":"unknown","model_mismatch_reason":"actual-model-evidence-not-yet-read","model_evidence_provenance":{}}'
 verified_policy="$(python3 "$project_root/scripts/kaola-model-policy.py" verify --platform grok --policy-json "$initial_policy" --frame-file "$verified_frame")"
 scrolled_policy="$(python3 "$project_root/scripts/kaola-model-policy.py" verify --platform grok --policy-json "$verified_policy" --frame-file "$scrolled_frame")"
 rm -f "$verified_frame" "$scrolled_frame"
@@ -910,7 +910,7 @@ import json
 import os
 
 payload = json.loads(os.environ["JSON_INPUT"])
-assert payload["actual_runtime_model_id"] == "grok-4.6", payload
+assert payload["actual_runtime_model_id"] == "grok-4.7", payload
 assert payload["actual_parameters"] == {"effort": "xhigh", "fast": False}, payload
 assert payload["model_verified"] is True, payload
 assert payload["model_evidence_provenance"]["actual"]["source"] == "grok-main-tui", payload
@@ -918,6 +918,26 @@ assert payload["model_evidence_provenance"]["latest_observation"]["source"] == "
 PY
 then
   fail "test_last_confirmed_model_survives_scrolled_frame" "$scrolled_policy"
+fi
+
+# Issue #127: the live Cursor 2026.09.15 footer is `Grok 4.7 256K Extra High`
+# (no `Cursor` prefix, a context token); the banner tip still names 4.6.
+cursor_frame="$(mktemp "${TMPDIR:-/tmp}/kpr-model-frame.XXXXXX")"
+printf '%s\n' 'Cursor Agent' 'v2026.09.15-d2fe57e' 'Tip: Try Cursor Grok 4.6 via /model, frontier intelligence at a fraction of the cost.' '  Grok 4.7 256K Extra High Fast' >"$cursor_frame"
+cursor_policy="$(python3 "$project_root/scripts/kaola-model-policy.py" verify --platform cursor-cli --policy-json '{"resolved_runtime_model_id":"grok-4.7-xhigh-fast","resolved_parameters":{"effort":"xhigh","fast":true},"actual_runtime_model_id":null,"actual_parameters":null,"model_verified":"unknown","model_mismatch_reason":"actual-model-evidence-not-yet-read","model_evidence_provenance":{}}' --frame-file "$cursor_frame")"
+rm -f "$cursor_frame"
+if ! JSON_INPUT="$cursor_policy" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["JSON_INPUT"])
+assert payload["actual_runtime_model_id"] == "grok-4.7-xhigh-fast", payload
+assert payload["actual_parameters"] == {"effort": "xhigh", "fast": True}, payload
+assert payload["model_verified"] is True, payload
+assert payload["model_evidence_provenance"]["actual"]["source"] == "cursor-main-tui", payload
+PY
+then
+  fail "test_cursor_grok_47_footer_is_parsed" "$cursor_policy"
 fi
 
 if [[ "$failures" -gt 0 ]]; then

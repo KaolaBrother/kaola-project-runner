@@ -411,7 +411,7 @@ class MockAgent:
          "description": "Controls which model variant is used for responses",
          "category": "model", "type": "select", "options": [
              {"value": "default", "name": "Auto"},
-             {"value": "grok-4.6", "name": "Cursor Grok 4.6"},
+             {"value": "grok-4.7", "name": "Grok 4.7"},
              {"value": "claude-fable-5-1", "name": "Claude Fable 5.1"},
          ]},
         {"id": "effort", "name": "Effort",
