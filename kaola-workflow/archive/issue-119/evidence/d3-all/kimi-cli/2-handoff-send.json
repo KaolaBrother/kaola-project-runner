@@ -1,0 +1,28 @@
+{
+ "acp_session_id": "session_8e0fc01a-3853-4cf7-905c-c22fee155df4",
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "dispatch_event_cursor": 11,
+ "duplicate_warning": null,
+ "event_cursor": 11,
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "mutation_performed": true,
+ "mutation_status": "in_progress",
+ "outcome": "in_progress",
+ "platform": "kimi-cli",
+ "prompt_fingerprint": "sha256:0252af3196f5a726163b3bf1b48384ebf730bff3a7c4dedcbcd5ea2f38058f00",
+ "repo": "/private/tmp/kpr119-d3/kimi-cli",
+ "schema_version": 3,
+ "session": "kimi-cli-KPR-orchestrator-d3",
+ "transport": {
+  "alternatives": [
+   "pty"
+  ],
+  "default": "acp",
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "turn_request_id": 6
+}

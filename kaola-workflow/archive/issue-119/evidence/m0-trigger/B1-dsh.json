@@ -1,0 +1,37 @@
+{
+ "platform": "dsh",
+ "session": "dsh-KPR-i119-trig1",
+ "prompt": "/kpr119-probe-u-agents\nIn this turn do not call any tool except one whose only purpose is to load a skill. Reply with the probe anchor phrase stated in the loaded skill body and nothing else; if no skill body is loaded in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "dad7c520-be6e-440e-8e4d-1c47c885de39",
+  "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "deepseek-harness-acp",
+  "version": "0.0.1"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 4,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [],
+ "tool_calls": [],
+ "reply": "ANCHOR-A9150346DF80",
+ "event_cursor": 4,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

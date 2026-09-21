@@ -1,0 +1,15 @@
+/kaola-project-runner
+kaola-host-notify/1: event-driven heartbeat carrier (dsh Host)
+worker events (structured, one JSON object per line):
+{"event_cursor": 0, "event_id": "dsh/dsh-KPR-i119-wdsh/terminated/0", "kind": "terminated", "platform": "dsh", "reason": "exit_code=1", "repo": "/private/tmp/kpr119-d3/dsh", "session": "dsh-KPR-i119-wdsh"}
+heartbeat prompt source: /private/tmp/kpr119-d3/dsh/.kaola/heartbeat-prompt.json (fingerprint sha256:8664e9a07223284c1d0a27a43e237f733e84d7ebc9214b2557eba060922aaacf, 1166 bytes)
+heartbeat prompt body follows, verbatim:
+<<<heartbeat-prompt
+Issue #119 deep test beat (dsh Host). Do exactly this, then end the turn:
+1. Begin your reply by quoting verbatim the first sentence under the heading "Heartbeat" of the loaded Project Runner Skill body. Do not open, read, cat or grep any kaola-project-runner SKILL.md or reference file in this turn; quote only from the Skill body this prompt's first line loaded.
+2. Read the worker: `/tmp/kpr119-home/.agents/skills/dsh-kaola-project-runner/scripts/runtime-tmux.sh status --repo /private/tmp/kpr119-d3/dsh --session dsh-KPR-i119-wdsh` and `/tmp/kpr119-home/.agents/skills/dsh-kaola-project-runner/scripts/runtime-tmux.sh capture --repo /private/tmp/kpr119-d3/dsh --session dsh-KPR-i119-wdsh --lines 40`; report its reply text.
+3. Exact-stop that worker: `/tmp/kpr119-home/.agents/skills/dsh-kaola-project-runner/scripts/runtime-tmux.sh stop --repo /private/tmp/kpr119-d3/dsh --session dsh-KPR-i119-wdsh`; report the receipt fields stopped and residual_pids.
+4. Overwrite /private/tmp/kpr119-d3/dsh/.kaola/heartbeat-prompt.json with a JSON object whose "body" is "deep test complete; nothing to do.".
+5. End the turn. Start nothing else, do not wait, sleep or poll.
+heartbeat-prompt>>>
+Perform exactly one full Project Runner heartbeat pass - recover authorization and field state, handle worker questions, dispatch suitable authorized work, verify deliveries, and close out - per PROJECT_RUNNER_HEARTBEAT_V2. This worker event is the only heartbeat trigger; this dsh Host registers no periodic carrier.

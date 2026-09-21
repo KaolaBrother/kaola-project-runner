@@ -1,0 +1,682 @@
+{
+ "acp_session_id": "62a270677c036538b1ba04dcb2481acd",
+ "activity_hint": "exited",
+ "agent_alive": false,
+ "agent_exit_code": 0,
+ "agent_info": {
+  "name": "claude-code-acp",
+  "title": "Claude Code ACP Bridge",
+  "version": "0.1.0"
+ },
+ "agent_message_errors": 1,
+ "agent_pgid": 23204,
+ "agent_pid": 23204,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "capabilities": {
+  "loadSession": false,
+  "mcpCapabilities": {
+   "http": false,
+   "sse": false
+  },
+  "promptCapabilities": {
+   "audio": false,
+   "embeddedContext": false,
+   "image": false
+  },
+  "sessionCapabilities": {
+   "list": {},
+   "resume": {}
+  }
+ },
+ "context_usage": null,
+ "event_cursor": 19,
+ "fatal_error": null,
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": {
+  "platform": "dsh",
+  "repo": "/private/tmp/kpr119-d3/dsh",
+  "session": "dsh-KPR-orchestrator-d3",
+  "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/ace75e5f7e102fb2757098ee.sock"
+ },
+ "heartbeat_host_known": true,
+ "holder_instance_id": "aa0c6dcced29659293494ca5f9c9f883",
+ "holder_pid": 23203,
+ "initial_config_options": [
+  {
+   "category": "mode",
+   "currentValue": "bypassPermissions",
+   "description": "Claude Code --permission-mode for every turn",
+   "id": "mode",
+   "name": "Permission mode",
+   "options": [
+    {
+     "name": "Bypass permissions",
+     "value": "bypassPermissions"
+    },
+    {
+     "name": "Accept edits",
+     "value": "acceptEdits"
+    },
+    {
+     "name": "Auto",
+     "value": "auto"
+    },
+    {
+     "name": "Manual",
+     "value": "manual"
+    },
+    {
+     "name": "Don't ask",
+     "value": "dontAsk"
+    },
+    {
+     "name": "Plan",
+     "value": "plan"
+    }
+   ],
+   "type": "select"
+  },
+  {
+   "category": "model",
+   "currentValue": "default",
+   "description": "Claude Code --model for every turn (alias or full model name)",
+   "id": "model",
+   "name": "Model",
+   "options": [
+    {
+     "name": "Native default",
+     "value": "default"
+    },
+    {
+     "name": "Fable",
+     "value": "fable"
+    },
+    {
+     "name": "Opus",
+     "value": "opus"
+    },
+    {
+     "name": "Sonnet",
+     "value": "sonnet"
+    },
+    {
+     "name": "Haiku",
+     "value": "haiku"
+    }
+   ],
+   "type": "select"
+  },
+  {
+   "category": "thought_level",
+   "currentValue": "default",
+   "description": "Claude Code --effort for every turn",
+   "id": "effort",
+   "name": "Effort",
+   "options": [
+    {
+     "name": "Native default",
+     "value": "default"
+    },
+    {
+     "name": "Low",
+     "value": "low"
+    },
+    {
+     "name": "Medium",
+     "value": "medium"
+    },
+    {
+     "name": "High",
+     "value": "high"
+    },
+    {
+     "name": "Extra high",
+     "value": "xhigh"
+    },
+    {
+     "name": "Max",
+     "value": "max"
+    }
+   ],
+   "type": "select"
+  },
+  {
+   "category": "fast",
+   "currentValue": "off",
+   "description": "Process-scoped fastMode settings pin (on => true, otherwise false)",
+   "id": "fast",
+   "name": "Fast",
+   "options": [
+    {
+     "name": "Off",
+     "value": "off"
+    },
+    {
+     "name": "On",
+     "value": "on"
+    }
+   ],
+   "type": "select"
+  }
+ ],
+ "last_prompt": {
+  "fingerprint": "sha256:c9fe765c4d427d0800c8baeaf27fac7a9b641fe00b7b4b9a2e59e75b5e41948f",
+  "mutation_status": "completed",
+  "stop_reason": "end_turn",
+  "transport": "acp",
+  "written_at": 1789991036.384
+ },
+ "malformed_stdout_lines": 0,
+ "mutation_status": "completed",
+ "pending_permissions": [],
+ "platform": "claude-code",
+ "protocol_version": 1,
+ "record": {
+  "acp_session_id": "62a270677c036538b1ba04dcb2481acd",
+  "agent_alive": false,
+  "agent_child_groups": {},
+  "agent_child_pgids": [],
+  "agent_info": {
+   "name": "claude-code-acp",
+   "title": "Claude Code ACP Bridge",
+   "version": "0.1.0"
+  },
+  "agent_message_errors": 1,
+  "agent_pgid": 23204,
+  "agent_pid": 23204,
+  "capabilities": {
+   "loadSession": false,
+   "mcpCapabilities": {
+    "http": false,
+    "sse": false
+   },
+   "promptCapabilities": {
+    "audio": false,
+    "embeddedContext": false,
+    "image": false
+   },
+   "sessionCapabilities": {
+    "list": {},
+    "resume": {}
+   }
+  },
+  "created_at": 1789991033.697,
+  "event_cursor": 19,
+  "fatal_error": null,
+  "heartbeat_host": {
+   "platform": "dsh",
+   "repo": "/private/tmp/kpr119-d3/dsh",
+   "session": "dsh-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/ace75e5f7e102fb2757098ee.sock"
+  },
+  "holder_instance_id": "aa0c6dcced29659293494ca5f9c9f883",
+  "holder_pid": 23203,
+  "host_skill_entry": "/kaola-project-runner",
+  "initial_config_options": [
+   {
+    "category": "mode",
+    "currentValue": "bypassPermissions",
+    "description": "Claude Code --permission-mode for every turn",
+    "id": "mode",
+    "name": "Permission mode",
+    "options": [
+     {
+      "name": "Bypass permissions",
+      "value": "bypassPermissions"
+     },
+     {
+      "name": "Accept edits",
+      "value": "acceptEdits"
+     },
+     {
+      "name": "Auto",
+      "value": "auto"
+     },
+     {
+      "name": "Manual",
+      "value": "manual"
+     },
+     {
+      "name": "Don't ask",
+      "value": "dontAsk"
+     },
+     {
+      "name": "Plan",
+      "value": "plan"
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "model",
+    "currentValue": "default",
+    "description": "Claude Code --model for every turn (alias or full model name)",
+    "id": "model",
+    "name": "Model",
+    "options": [
+     {
+      "name": "Native default",
+      "value": "default"
+     },
+     {
+      "name": "Fable",
+      "value": "fable"
+     },
+     {
+      "name": "Opus",
+      "value": "opus"
+     },
+     {
+      "name": "Sonnet",
+      "value": "sonnet"
+     },
+     {
+      "name": "Haiku",
+      "value": "haiku"
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "thought_level",
+    "currentValue": "default",
+    "description": "Claude Code --effort for every turn",
+    "id": "effort",
+    "name": "Effort",
+    "options": [
+     {
+      "name": "Native default",
+      "value": "default"
+     },
+     {
+      "name": "Low",
+      "value": "low"
+     },
+     {
+      "name": "Medium",
+      "value": "medium"
+     },
+     {
+      "name": "High",
+      "value": "high"
+     },
+     {
+      "name": "Extra high",
+      "value": "xhigh"
+     },
+     {
+      "name": "Max",
+      "value": "max"
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "fast",
+    "currentValue": "off",
+    "description": "Process-scoped fastMode settings pin (on => true, otherwise false)",
+    "id": "fast",
+    "name": "Fast",
+    "options": [
+     {
+      "name": "Off",
+      "value": "off"
+     },
+     {
+      "name": "On",
+      "value": "on"
+     }
+    ],
+    "type": "select"
+   }
+  ],
+  "last_prompt": {
+   "fingerprint": "sha256:c9fe765c4d427d0800c8baeaf27fac7a9b641fe00b7b4b9a2e59e75b5e41948f",
+   "mutation_status": "completed",
+   "stop_reason": "end_turn",
+   "transport": "acp",
+   "written_at": 1789991036.384
+  },
+  "malformed_stdout_lines": 0,
+  "pending_permissions": [],
+  "platform": "claude-code",
+  "protocol_version": 1,
+  "repo": "/private/tmp/kpr119-d3/dsh",
+  "session": "claude-code-KPR-i119-wdsh",
+  "session_meta": {
+   "configOptions": [
+    {
+     "category": "mode",
+     "currentValue": "bypassPermissions",
+     "description": "Claude Code --permission-mode for every turn",
+     "id": "mode",
+     "name": "Permission mode",
+     "options": [
+      {
+       "name": "Bypass permissions",
+       "value": "bypassPermissions"
+      },
+      {
+       "name": "Accept edits",
+       "value": "acceptEdits"
+      },
+      {
+       "name": "Auto",
+       "value": "auto"
+      },
+      {
+       "name": "Manual",
+       "value": "manual"
+      },
+      {
+       "name": "Don't ask",
+       "value": "dontAsk"
+      },
+      {
+       "name": "Plan",
+       "value": "plan"
+      }
+     ],
+     "type": "select"
+    },
+    {
+     "category": "model",
+     "currentValue": "opus",
+     "description": "Claude Code --model for every turn (alias or full model name)",
+     "id": "model",
+     "name": "Model",
+     "options": [
+      {
+       "name": "Native default",
+       "value": "default"
+      },
+      {
+       "name": "Fable",
+       "value": "fable"
+      },
+      {
+       "name": "Opus",
+       "value": "opus"
+      },
+      {
+       "name": "Sonnet",
+       "value": "sonnet"
+      },
+      {
+       "name": "Haiku",
+       "value": "haiku"
+      }
+     ],
+     "type": "select"
+    },
+    {
+     "category": "thought_level",
+     "currentValue": "high",
+     "description": "Claude Code --effort for every turn",
+     "id": "effort",
+     "name": "Effort",
+     "options": [
+      {
+       "name": "Native default",
+       "value": "default"
+      },
+      {
+       "name": "Low",
+       "value": "low"
+      },
+      {
+       "name": "Medium",
+       "value": "medium"
+      },
+      {
+       "name": "High",
+       "value": "high"
+      },
+      {
+       "name": "Extra high",
+       "value": "xhigh"
+      },
+      {
+       "name": "Max",
+       "value": "max"
+      }
+     ],
+     "type": "select"
+    },
+    {
+     "category": "fast",
+     "currentValue": "off",
+     "description": "Process-scoped fastMode settings pin (on => true, otherwise false)",
+     "id": "fast",
+     "name": "Fast",
+     "options": [
+      {
+       "name": "Off",
+       "value": "off"
+      },
+      {
+       "name": "On",
+       "value": "on"
+      }
+     ],
+     "type": "select"
+    }
+   ],
+   "modes": {
+    "availableModes": [
+     {
+      "description": "Skip every permission prompt (default; matches the PTY launch)",
+      "id": "bypassPermissions",
+      "name": "Bypass permissions"
+     },
+     {
+      "description": "Auto-accept file edits",
+      "id": "acceptEdits",
+      "name": "Accept edits"
+     },
+     {
+      "description": "Claude Code auto permission mode",
+      "id": "auto",
+      "name": "Auto"
+     },
+     {
+      "description": "Ask before every permissioned action",
+      "id": "manual",
+      "name": "Manual"
+     },
+     {
+      "description": "Deny anything that would prompt",
+      "id": "dontAsk",
+      "name": "Don't ask"
+     },
+     {
+      "description": "Plan without making changes",
+      "id": "plan",
+      "name": "Plan"
+     }
+    ],
+    "currentModeId": "bypassPermissions"
+   },
+   "sessionId": "62a270677c036538b1ba04dcb2481acd"
+  },
+  "state": "stopping",
+  "transport": "acp",
+  "updated_at": 1789991046.982
+ },
+ "repo": "/private/tmp/kpr119-d3/dsh",
+ "schema_version": 3,
+ "session": "claude-code-KPR-i119-wdsh",
+ "session_meta": {
+  "configOptions": [
+   {
+    "category": "mode",
+    "currentValue": "bypassPermissions",
+    "description": "Claude Code --permission-mode for every turn",
+    "id": "mode",
+    "name": "Permission mode",
+    "options": [
+     {
+      "name": "Bypass permissions",
+      "value": "bypassPermissions"
+     },
+     {
+      "name": "Accept edits",
+      "value": "acceptEdits"
+     },
+     {
+      "name": "Auto",
+      "value": "auto"
+     },
+     {
+      "name": "Manual",
+      "value": "manual"
+     },
+     {
+      "name": "Don't ask",
+      "value": "dontAsk"
+     },
+     {
+      "name": "Plan",
+      "value": "plan"
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "model",
+    "currentValue": "opus",
+    "description": "Claude Code --model for every turn (alias or full model name)",
+    "id": "model",
+    "name": "Model",
+    "options": [
+     {
+      "name": "Native default",
+      "value": "default"
+     },
+     {
+      "name": "Fable",
+      "value": "fable"
+     },
+     {
+      "name": "Opus",
+      "value": "opus"
+     },
+     {
+      "name": "Sonnet",
+      "value": "sonnet"
+     },
+     {
+      "name": "Haiku",
+      "value": "haiku"
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "thought_level",
+    "currentValue": "high",
+    "description": "Claude Code --effort for every turn",
+    "id": "effort",
+    "name": "Effort",
+    "options": [
+     {
+      "name": "Native default",
+      "value": "default"
+     },
+     {
+      "name": "Low",
+      "value": "low"
+     },
+     {
+      "name": "Medium",
+      "value": "medium"
+     },
+     {
+      "name": "High",
+      "value": "high"
+     },
+     {
+      "name": "Extra high",
+      "value": "xhigh"
+     },
+     {
+      "name": "Max",
+      "value": "max"
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "fast",
+    "currentValue": "off",
+    "description": "Process-scoped fastMode settings pin (on => true, otherwise false)",
+    "id": "fast",
+    "name": "Fast",
+    "options": [
+     {
+      "name": "Off",
+      "value": "off"
+     },
+     {
+      "name": "On",
+      "value": "on"
+     }
+    ],
+    "type": "select"
+   }
+  ],
+  "modes": {
+   "availableModes": [
+    {
+     "description": "Skip every permission prompt (default; matches the PTY launch)",
+     "id": "bypassPermissions",
+     "name": "Bypass permissions"
+    },
+    {
+     "description": "Auto-accept file edits",
+     "id": "acceptEdits",
+     "name": "Accept edits"
+    },
+    {
+     "description": "Claude Code auto permission mode",
+     "id": "auto",
+     "name": "Auto"
+    },
+    {
+     "description": "Ask before every permissioned action",
+     "id": "manual",
+     "name": "Manual"
+    },
+    {
+     "description": "Deny anything that would prompt",
+     "id": "dontAsk",
+     "name": "Don't ask"
+    },
+    {
+     "description": "Plan without making changes",
+     "id": "plan",
+     "name": "Plan"
+    }
+   ],
+   "currentModeId": "bypassPermissions"
+  },
+  "sessionId": "62a270677c036538b1ba04dcb2481acd"
+ },
+ "state": "stopping",
+ "stop_reason": "end_turn",
+ "transport": {
+  "alternatives": [
+   "pty"
+  ],
+  "default": "acp",
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "turn_active": false,
+ "turn_outcome": "turn_completed",
+ "undelivered_worker_events": [],
+ "unknown_update_variants": 1
+}

@@ -1,0 +1,58 @@
+{
+ "platform": "kimi-cli",
+ "session": "kimi-cli-KPR-i119-neg",
+ "prompt": "In this turn do not call any tool at all. Quote verbatim the first sentence under the heading \"Dispatch notes\" of the Project Runner Skill body if that body is already in your context, and nothing else; if it is not in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "session_64cddf71-9a84-424b-bb69-9ce4fdff8590",
+  "resolved_runtime_model_id": "kimi-code/k3",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "Kimi Code CLI",
+  "version": "2.0.2"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 80,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [
+  "compact",
+  "status",
+  "usage",
+  "mcp",
+  "tasks",
+  "help",
+  "check-kimi-code-docs",
+  "import-from-cc-codex",
+  "mcp-config",
+  "sub-skill",
+  "sub-skill.consolidate",
+  "sub-skill.review",
+  "update-config",
+  "write-goal",
+  "skill:kaola-project-runner",
+  "skill:kaola-workflow-finalize",
+  "skill:kpr119-probe-p-agents",
+  "skill:kpr119-probe-u-agents",
+  "skill:workflow-init",
+  "skill:workflow-next"
+ ],
+ "tool_calls": [],
+ "reply": "SKILL-NOT-LOADED",
+ "event_cursor": 81,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

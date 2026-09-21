@@ -1,0 +1,37 @@
+{
+ "platform": "dsh",
+ "session": "dsh-KPR-i119-neg",
+ "prompt": "In this turn do not call any tool at all. Quote verbatim the first sentence under the heading \"Dispatch notes\" of the Project Runner Skill body if that body is already in your context, and nothing else; if it is not in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "681a2bde-1bb5-492c-991b-904d120f35c2",
+  "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "deepseek-harness-acp",
+  "version": "0.0.1"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 4,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [],
+ "tool_calls": [],
+ "reply": "SKILL-NOT-LOADED",
+ "event_cursor": 4,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

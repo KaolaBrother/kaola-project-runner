@@ -1,0 +1,173 @@
+{
+ "acp_session_id": "ses_f3c3e1ba3ffeX03uZ4IXPmim45",
+ "actual_parameters": null,
+ "actual_runtime_model_id": null,
+ "agent_pid": 5492,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "config_application": {
+  "effort": {
+   "applied": true,
+   "config_id": "effort",
+   "value": "max"
+  },
+  "fast": {
+   "applied": false,
+   "reason": "no-advertised-config-option"
+  },
+  "model": {
+   "applied": true,
+   "config_id": "model",
+   "value": "opencode-go/deepseek-v4.1-flash"
+  }
+ },
+ "configured_options": [
+  {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "opencode-go/deepseek-v4.1-flash",
+   "option_name": "Model",
+   "value": "opencode-go/deepseek-v4.1-flash",
+   "value_name": "opencode-go/DeepSeek V4.1 Flash"
+  },
+  {
+   "config_id": "effort",
+   "configured": true,
+   "current_value": "max",
+   "option_description": "Available effort levels for this model",
+   "option_name": "Effort",
+   "value": "max",
+   "value_name": "Max"
+  }
+ ],
+ "dispatcher": null,
+ "effective_selection": {
+  "effective_effort": "max",
+  "effective_model": "opencode-go/deepseek-v4.1-flash"
+ },
+ "fast": {
+  "applied": false,
+  "applied_via": "none",
+  "detail": "no native Fast mechanism; nothing to enable",
+  "effective": "off",
+  "requested": "off",
+  "support": "none"
+ },
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": null,
+ "heartbeat_host_known": true,
+ "heartbeat_host_requested": null,
+ "heartbeat_host_source": "none",
+ "holder_instance_id": "2362455cf51314a4076e310b07bb7c3b",
+ "holder_pid": 5487,
+ "model_evidence_provenance": {
+  "catalog_probe": {
+   "available_model_count": 2,
+   "candidate_present": false,
+   "probes": [
+    {
+     "command": [
+      "opencode",
+      "models"
+     ],
+     "error": "TimeoutExpired",
+     "output_digest": null,
+     "returncode": null
+    },
+    {
+     "command": [
+      "opencode",
+      "--help"
+     ],
+     "output_digest": "sha256:6a44afc495acc590a74c3581b9e0fade1eb02e5a9d3f5318bbdfd3c47d2999ab",
+     "returncode": 0
+    }
+   ],
+   "state": "readable"
+  },
+  "fast": {
+   "detail": "no native Fast mechanism; nothing to enable",
+   "mechanism": "none",
+   "requested": "off",
+   "support": "none"
+  },
+  "requested": {
+   "name": "opencode-go/deepseek-v4.1-flash",
+   "source": "user"
+  },
+  "resolution": {
+   "candidate_id": "opencode-go/deepseek-v4.1-flash",
+   "display_name": "opencode-go/deepseek-v4.1-flash",
+   "resolved_id": "opencode-go/deepseek-v4.1-flash",
+   "state": "catalog-missing-declared-candidate",
+   "supported_options": []
+  },
+  "selection": {
+   "source": "user",
+   "tier": "default"
+  }
+ },
+ "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+ "model_selection": {
+  "preserved": false,
+  "requested_name": "opencode-go/deepseek-v4.1-flash",
+  "resolved_effort": "max",
+  "resolved_model": "opencode-go/deepseek-v4.1-flash",
+  "source": "user",
+  "tier": "default"
+ },
+ "model_verified": "unknown",
+ "platform": "opencode",
+ "repo": "/private/tmp/kpr119-d3/opencode",
+ "requested_fast": "off",
+ "requested_model_name": "opencode-go/deepseek-v4.1-flash",
+ "requested_model_source": "user",
+ "requested_tier": "default",
+ "resolved_fast": "off",
+ "resolved_parameters": {
+  "effort": "max"
+ },
+ "resolved_runtime_model_display": "opencode-go/deepseek-v4.1-flash",
+ "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+ "schema_version": 3,
+ "session": "opencode-KPR-orchestrator-d3",
+ "state": "ready",
+ "transport": {
+  "agent_info": {
+   "name": "OpenCode",
+   "version": "2.0.11"
+  },
+  "alternatives": [
+   "pty"
+  ],
+  "capabilities": {
+   "_meta": {
+    "opencode/child-session-updates": true
+   },
+   "loadSession": true,
+   "mcpCapabilities": {
+    "http": true,
+    "sse": false
+   },
+   "promptCapabilities": {
+    "embeddedContext": true,
+    "image": true
+   },
+   "sessionCapabilities": {
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+   }
+  },
+  "default": "acp",
+  "protocol_version": 1,
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "worker_skill_build": null,
+ "worker_skill_roots": null
+}

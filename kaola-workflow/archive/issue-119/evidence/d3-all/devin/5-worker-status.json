@@ -1,0 +1,234 @@
+{
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": {
+  "platform": "devin",
+  "repo": "/private/tmp/kpr119-d3/devin",
+  "session": "devin-KPR-orchestrator-d3",
+  "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/4b516451b50d261a9af9b116.sock"
+ },
+ "heartbeat_host_known": true,
+ "mutation_performed": true,
+ "mutation_status": "completed",
+ "outcome": "stopped",
+ "platform": "dsh",
+ "record": {
+  "acp_session_id": "342ce5d3-9d4c-443a-9fb6-5056c9d945f9",
+  "agent_alive": false,
+  "agent_child_groups": {},
+  "agent_child_pgids": [],
+  "agent_info": {
+   "name": "deepseek-harness-acp",
+   "version": "0.0.1"
+  },
+  "agent_message_errors": 0,
+  "agent_pgid": 9821,
+  "agent_pid": 9821,
+  "capabilities": {
+   "mcpCapabilities": {
+    "http": true
+   },
+   "promptCapabilities": {
+    "audio": false,
+    "embeddedContext": false,
+    "image": false
+   },
+   "sessionCapabilities": {
+    "close": {},
+    "list": {},
+    "resume": {}
+   }
+  },
+  "created_at": 1789990703.052,
+  "event_cursor": 7,
+  "fatal_error": null,
+  "heartbeat_host": {
+   "platform": "devin",
+   "repo": "/private/tmp/kpr119-d3/devin",
+   "session": "devin-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/4b516451b50d261a9af9b116.sock"
+  },
+  "holder_instance_id": "b37a97247ee8abbdb749b064d0bfd900",
+  "holder_pid": 9820,
+  "host_skill_entry": "/kaola-project-runner",
+  "initial_config_options": [
+   {
+    "category": "model",
+    "currentValue": "[\"deepseek-official\",\"deepseek-v4-flash\"]",
+    "id": "model",
+    "name": "Model",
+    "options": [
+     {
+      "group": "deepseek-official",
+      "name": "DeepSeek",
+      "options": [
+       {
+        "name": "DeepSeek-V41-Flash",
+        "value": "[\"deepseek-official\",\"deepseek-flash\"]"
+       },
+       {
+        "description": "Fast, efficient, and economical; suited to focused, routine, or parallel tasks.",
+        "name": "DeepSeek-V4-Flash",
+        "value": "[\"deepseek-official\",\"deepseek-v4-flash\"]"
+       },
+       {
+        "description": "Stronger agentic coding, knowledge, and difficult reasoning; suited to complex or quality-critical tasks at higher cost.",
+        "name": "DeepSeek-V4-Pro",
+        "value": "[\"deepseek-official\",\"deepseek-v4-pro\"]"
+       },
+       {
+        "name": "DeepSeek-V4-Flash-Vision-Exp",
+        "value": "[\"deepseek-official\",\"deepseek-v4-flash-vision-exp\"]"
+       }
+      ]
+     },
+     {
+      "group": "opencode-go",
+      "name": "OpenCode Go",
+      "options": [
+       {
+        "name": "deepseek-v4.1-flash",
+        "value": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+       },
+       {
+        "name": "DeepSeek V4 Pro (New)",
+        "value": "[\"opencode-go\",\"deepseek-v4-pro\"]"
+       },
+       {
+        "name": "DeepSeek V4 Flash",
+        "value": "[\"opencode-go\",\"deepseek-v4-flash\"]"
+       },
+       {
+        "name": "DeepSeek V4 Flash Vision Exp",
+        "value": "[\"opencode-go\",\"deepseek-v4-flash-vision-exp\"]"
+       }
+      ]
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "thought_level",
+    "currentValue": "high",
+    "id": "reasoning_effort",
+    "name": "Reasoning effort",
+    "options": [
+     {
+      "description": "Use for simple tasks that do not need reasoning.",
+      "name": "Off",
+      "value": "off"
+     },
+     {
+      "description": "Prefer for routine or latency-sensitive tasks.",
+      "name": "Low",
+      "value": "low"
+     },
+     {
+      "description": "The default balance for most tasks.",
+      "name": "High",
+      "value": "high"
+     },
+     {
+      "description": "Reserve for the hardest quality-first tasks.",
+      "name": "Max",
+      "value": "max"
+     }
+    ],
+    "type": "select"
+   }
+  ],
+  "last_prompt": {
+   "fingerprint": "sha256:c9fe765c4d427d0800c8baeaf27fac7a9b641fe00b7b4b9a2e59e75b5e41948f",
+   "mutation_status": "completed",
+   "stop_reason": "end_turn",
+   "transport": "acp",
+   "written_at": 1789990710.206
+  },
+  "malformed_stdout_lines": 0,
+  "pending_permissions": [],
+  "platform": "dsh",
+  "protocol_version": 1,
+  "repo": "/private/tmp/kpr119-d3/devin",
+  "session": "dsh-KPR-i119-wdevin",
+  "session_meta": {
+   "configOptions": [
+    {
+     "category": "model",
+     "currentValue": "[\"opencode-go\",\"deepseek-v4.1-flash\"]",
+     "id": "model",
+     "name": "Model",
+     "options": [
+      {
+       "group": "deepseek-official",
+       "name": "DeepSeek",
+       "options": [
+        {
+         "name": "DeepSeek-V41-Flash",
+         "value": "[\"deepseek-official\",\"deepseek-flash\"]"
+        },
+        {
+         "description": "Fast, efficient, and economical; suited to focused, routine, or parallel tasks.",
+         "name": "DeepSeek-V4-Flash",
+         "value": "[\"deepseek-official\",\"deepseek-v4-flash\"]"
+        },
+        {
+         "description": "Stronger agentic coding, knowledge, and difficult reasoning; suited to complex or quality-critical tasks at higher cost.",
+         "name": "DeepSeek-V4-Pro",
+         "value": "[\"deepseek-official\",\"deepseek-v4-pro\"]"
+        },
+        {
+         "name": "DeepSeek-V4-Flash-Vision-Exp",
+         "value": "[\"deepseek-official\",\"deepseek-v4-flash-vision-exp\"]"
+        }
+       ]
+      },
+      {
+       "group": "opencode-go",
+       "name": "OpenCode Go",
+       "options": [
+        {
+         "name": "deepseek-v4.1-flash",
+         "value": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+        },
+        {
+         "name": "DeepSeek V4 Pro (New)",
+         "value": "[\"opencode-go\",\"deepseek-v4-pro\"]"
+        },
+        {
+         "name": "DeepSeek V4 Flash",
+         "value": "[\"opencode-go\",\"deepseek-v4-flash\"]"
+        },
+        {
+         "name": "DeepSeek V4 Flash Vision Exp",
+         "value": "[\"opencode-go\",\"deepseek-v4-flash-vision-exp\"]"
+        }
+       ]
+      }
+     ],
+     "type": "select"
+    }
+   ],
+   "sessionId": "342ce5d3-9d4c-443a-9fb6-5056c9d945f9"
+  },
+  "state": "stopped",
+  "transport": "acp",
+  "updated_at": 1789990743.55
+ },
+ "repo": "/private/tmp/kpr119-d3/devin",
+ "residual_pids": [],
+ "schema_version": 3,
+ "session": "dsh-KPR-i119-wdevin",
+ "state": "stopped",
+ "stopped": true,
+ "transport": {
+  "alternatives": [
+   "pty"
+  ],
+  "default": "acp",
+  "reason": "manifest-default",
+  "selected": "acp"
+ }
+}

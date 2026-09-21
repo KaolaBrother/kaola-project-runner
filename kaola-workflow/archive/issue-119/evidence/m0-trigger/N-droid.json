@@ -1,0 +1,64 @@
+{
+ "platform": "droid",
+ "session": "droid-KPR-i119-neg",
+ "prompt": "In this turn do not call any tool at all. Quote verbatim the first sentence under the heading \"Dispatch notes\" of the Project Runner Skill body if that body is already in your context, and nothing else; if it is not in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "270aabe4-a579-46d5-ace1-3e2362fca908",
+  "resolved_runtime_model_id": "auto",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "@factory/cli",
+  "title": "Factory Droid",
+  "version": "0.220.0"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 19,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [
+  "detect-overlapping-workstreams",
+  "excel",
+  "incident",
+  "init",
+  "install-code-review",
+  "install-qa",
+  "install-triage",
+  "install-wiki",
+  "kaola-project-runner",
+  "kaola-workflow-finalize",
+  "kpr119-probe-p-agents",
+  "kpr119-probe-p-factory",
+  "kpr119-probe-u-agents",
+  "kpr119-probe-u-factory",
+  "pdf-document",
+  "powerpoint",
+  "review",
+  "security-review",
+  "session-navigation",
+  "simplify",
+  "wiki",
+  "wiki-video-gen",
+  "word-document",
+  "workflow-init",
+  "workflow-next"
+ ],
+ "tool_calls": [],
+ "reply": "SKILL-NOT-LOADED",
+ "event_cursor": 19,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

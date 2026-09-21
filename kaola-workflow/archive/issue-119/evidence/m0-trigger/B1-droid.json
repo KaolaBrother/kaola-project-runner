@@ -1,0 +1,63 @@
+{
+ "platform": "droid",
+ "session": "droid-KPR-i119-trig1",
+ "prompt": "/kpr119-probe-u-factory\nIn this turn do not call any tool except one whose only purpose is to load a skill. Reply with the probe anchor phrase stated in the loaded skill body and nothing else; if no skill body is loaded in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "5179b2a4-9f72-44c4-b2c1-42520fd02934",
+  "resolved_runtime_model_id": "auto",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "@factory/cli",
+  "title": "Factory Droid",
+  "version": "0.220.0"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 19,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [
+  "detect-overlapping-workstreams",
+  "excel",
+  "incident",
+  "init",
+  "install-code-review",
+  "install-qa",
+  "install-triage",
+  "install-wiki",
+  "kaola-workflow-finalize",
+  "kpr119-probe-p-agents",
+  "kpr119-probe-p-factory",
+  "kpr119-probe-u-agents",
+  "kpr119-probe-u-factory",
+  "pdf-document",
+  "powerpoint",
+  "review",
+  "security-review",
+  "session-navigation",
+  "simplify",
+  "wiki",
+  "wiki-video-gen",
+  "word-document",
+  "workflow-init",
+  "workflow-next"
+ ],
+ "tool_calls": [],
+ "reply": "ANCHOR-A9D70A20E8EF",
+ "event_cursor": 19,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

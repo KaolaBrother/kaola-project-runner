@@ -1,0 +1,38 @@
+{
+ "platform": "claude-code",
+ "session": "claude-code-KPR-i119-kpr",
+ "prompt": "/kaola-project-runner\nIn this turn do not call any tool except one whose only purpose is to load a skill. Quote verbatim the first sentence under the heading \"Dispatch notes\" of the loaded Project Runner Skill body and nothing else; if that Skill body is not in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "71bbae88a812cf4f53f623b589cd4149",
+  "resolved_runtime_model_id": "opus",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "claude-code-acp",
+  "title": "Claude Code ACP Bridge",
+  "version": "0.1.0"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 16,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [],
+ "tool_calls": [],
+ "reply": "Call the matching platform Runner Skill by its installed directory.",
+ "event_cursor": 16,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

@@ -1,0 +1,205 @@
+{
+ "acp_session_id": "01a0c3c1-ec56-7870-9995-8aac87d6e54c",
+ "actual_parameters": null,
+ "actual_runtime_model_id": null,
+ "agent_pid": 5495,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "config_application": {
+  "effort": {
+   "applied": true,
+   "config_id": "reasoning_effort",
+   "value": "xhigh"
+  },
+  "fast": {
+   "applied": false,
+   "reason": "no-advertised-config-option"
+  },
+  "model": {
+   "applied": true,
+   "config_id": "model",
+   "value": "grok-4.6"
+  }
+ },
+ "configured_options": [
+  {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "grok-4.6",
+   "option_name": "Model",
+   "value": "grok-4.6",
+   "value_name": "Grok 4.6"
+  },
+  {
+   "config_id": "reasoning_effort",
+   "configured": true,
+   "current_value": "xhigh",
+   "option_name": "Reasoning Effort",
+   "value": "xhigh",
+   "value_description": "Highest effort and reasoning level",
+   "value_name": "Extra High Effort"
+  }
+ ],
+ "dispatcher": null,
+ "effective_selection": {
+  "effective_effort": "xhigh",
+  "effective_model": "grok-4.6"
+ },
+ "fast": {
+  "applied": false,
+  "applied_via": "none",
+  "detail": "no native Fast mechanism; nothing to enable",
+  "effective": "off",
+  "requested": "off",
+  "support": "none"
+ },
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": null,
+ "heartbeat_host_known": true,
+ "heartbeat_host_requested": null,
+ "heartbeat_host_source": "none",
+ "holder_instance_id": "69a002168e42a9f88bc6b499ee1bf1e5",
+ "holder_pid": 5484,
+ "model_evidence_provenance": {
+  "catalog_probe": {
+   "available_model_count": 2,
+   "candidate_present": true,
+   "probes": [
+    {
+     "command": [
+      "grok",
+      "models"
+     ],
+     "output_digest": "sha256:a034e099499082d83b336f4f24170c3bf839bc43a3d3c1be8bdd9efc7e27107f",
+     "returncode": 0
+    },
+    {
+     "command": [
+      "grok",
+      "inspect",
+      "--json"
+     ],
+     "output_digest": "sha256:2cefec8e3b58c185b3ae00da0b7574bc8f8d9db0b25da7af4137460a7e772d7c",
+     "returncode": 0
+    },
+    {
+     "command": [
+      "grok",
+      "--help"
+     ],
+     "output_digest": "sha256:085bb92de8e1570ae7e72e288a857df29a0e2aefd0a7abd421489156c052cc26",
+     "returncode": 0
+    }
+   ],
+   "state": "readable"
+  },
+  "fast": {
+   "detail": "no native Fast mechanism; nothing to enable",
+   "mechanism": "none",
+   "requested": "off",
+   "support": "none"
+  },
+  "requested": {
+   "name": "Grok 4.6 Extra High",
+   "source": "runner-default"
+  },
+  "resolution": {
+   "candidate_id": "grok-4.6",
+   "display_name": "grok-4.6",
+   "resolved_id": "grok-4.6",
+   "state": "resolved",
+   "supported_options": [
+    "--effort",
+    "--reasoning-effort"
+   ]
+  },
+  "selection": {
+   "source": "runner-default",
+   "tier": "default"
+  }
+ },
+ "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+ "model_selection": {
+  "preserved": false,
+  "requested_name": "Grok 4.6 Extra High",
+  "resolved_effort": "xhigh",
+  "resolved_model": "grok-4.6",
+  "source": "runner-default",
+  "tier": "default"
+ },
+ "model_verified": "unknown",
+ "platform": "grok",
+ "repo": "/private/tmp/kpr119-d3/grok",
+ "requested_fast": "off",
+ "requested_model_name": "Grok 4.6 Extra High",
+ "requested_model_source": "runner-default",
+ "requested_tier": "default",
+ "resolved_fast": "off",
+ "resolved_parameters": {
+  "effort": "xhigh"
+ },
+ "resolved_runtime_model_display": "grok-4.6",
+ "resolved_runtime_model_id": "grok-4.6",
+ "schema_version": 3,
+ "session": "grok-KPR-orchestrator-d3",
+ "state": "ready",
+ "transport": {
+  "agent_info": {},
+  "alternatives": [
+   "pty"
+  ],
+  "capabilities": {
+   "_meta": {
+    "x.ai/capabilities": {
+     "toolOverrides": {
+      "x_keyword_search": true,
+      "x_semantic_search": true,
+      "x_thread_fetch": false,
+      "x_user_search": false
+     }
+    },
+    "x.ai/fs_notify": true,
+    "x.ai/hooks": {
+     "blockingEvents": [
+      "pre_tool_use",
+      "stop",
+      "subagent_stop"
+     ],
+     "decisions": [
+      "deny",
+      "block"
+     ],
+     "stopSignals": [
+      "continue",
+      "stopReason",
+      "additionalContext"
+     ]
+    }
+   },
+   "auth": {},
+   "loadSession": true,
+   "mcpCapabilities": {
+    "http": true,
+    "sse": true
+   },
+   "promptCapabilities": {
+    "audio": false,
+    "embeddedContext": true,
+    "image": false
+   },
+   "sessionCapabilities": {
+    "close": {},
+    "list": {},
+    "resume": {}
+   }
+  },
+  "default": "acp",
+  "protocol_version": 1,
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "worker_skill_build": null,
+ "worker_skill_roots": null
+}

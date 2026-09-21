@@ -1,0 +1,37 @@
+{
+ "platform": "dsh",
+ "session": "dsh-KPR-i119-discover",
+ "prompt": "Do not use any tool and do not read any file in this turn. Using only the skill and command lists already present in your context, list every skill or command name that starts with kpr119-probe. Reply with those names separated by single spaces, or reply NONE.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "9545fa06-df73-49e9-9be3-248546103231",
+  "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "deepseek-harness-acp",
+  "version": "0.0.1"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 4,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [],
+ "tool_calls": [],
+ "reply": "kpr119-probe-p-agents kpr119-probe-u-agents",
+ "event_cursor": 4,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

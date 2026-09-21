@@ -1,0 +1,28 @@
+{
+ "platform": "dsh",
+ "host": "dsh-KPR-orchestrator-d3",
+ "worker": "dsh-KPR-i119-wdsh",
+ "repo": "/private/tmp/kpr119-d3/dsh",
+ "entry": "/kaola-project-runner",
+ "host_start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "requested_tier": "default",
+  "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+  "effective_selection": {
+   "effective_effort": null,
+   "effective_model": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+  }
+ },
+ "handoff_dispatch_cursor": 1,
+ "timed_out": false,
+ "pending_permissions_seen": [],
+ "worker_state_before_cleanup": "stopping",
+ "host_stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

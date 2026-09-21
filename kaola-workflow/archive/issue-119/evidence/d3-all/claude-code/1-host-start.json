@@ -1,0 +1,203 @@
+{
+ "acp_session_id": "39cddf43fb57fec7ae966b8e7887cad5",
+ "actual_parameters": null,
+ "actual_runtime_model_id": null,
+ "agent_pid": 5498,
+ "bridge": {
+  "layout": "checkout",
+  "path": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-119/vendor/claude-code-acp/dist/index.js",
+  "present": true,
+  "relative": "vendor/claude-code-acp/dist/index.js",
+  "sha256": "027fab3d8d3587bea3e8754f738cdd9f9f6b60c85ff60fb4614ba2d53c615306",
+  "upstream_pin": "6c20f2802e390c80b0542247c6b9738e11efdc11",
+  "verified_versions": "cli=2.1.272;bridge=6c20f28;protocol=1"
+ },
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "config_application": {
+  "effort": {
+   "applied": true,
+   "config_id": "effort",
+   "value": "high"
+  },
+  "fast": {
+   "applied": true,
+   "config_id": "fast",
+   "value": "off"
+  },
+  "mode": {
+   "applied": true,
+   "config_id": "mode",
+   "value": "bypassPermissions"
+  },
+  "model": {
+   "applied": true,
+   "config_id": "model",
+   "value": "opus"
+  }
+ },
+ "configured_options": [
+  {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "opus",
+   "option_description": "Claude Code --model for every turn (alias or full model name)",
+   "option_name": "Model",
+   "value": "opus",
+   "value_name": "Opus"
+  },
+  {
+   "config_id": "effort",
+   "configured": true,
+   "current_value": "high",
+   "option_description": "Claude Code --effort for every turn",
+   "option_name": "Effort",
+   "value": "high",
+   "value_name": "High"
+  },
+  {
+   "config_id": "fast",
+   "configured": true,
+   "current_value": "off",
+   "option_description": "Process-scoped fastMode settings pin (on => true, otherwise false)",
+   "option_name": "Fast",
+   "value": "off",
+   "value_name": "Off"
+  },
+  {
+   "config_id": "mode",
+   "configured": true,
+   "current_value": "bypassPermissions",
+   "option_description": "Claude Code --permission-mode for every turn",
+   "option_name": "Permission mode",
+   "value": "bypassPermissions",
+   "value_name": "Bypass permissions"
+  }
+ ],
+ "dispatcher": null,
+ "effective_selection": {
+  "effective_effort": "high",
+  "effective_model": "opus"
+ },
+ "fast": {
+  "applied": true,
+  "applied_via": "acp-config",
+  "detail": "no native Fast mechanism; nothing to enable",
+  "effective": "off",
+  "requested": "off",
+  "support": "settings"
+ },
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": null,
+ "heartbeat_host_known": true,
+ "heartbeat_host_requested": null,
+ "heartbeat_host_source": "none",
+ "holder_instance_id": "3723e620779156293a21b6cd9594ba42",
+ "holder_pid": 5490,
+ "model_evidence_provenance": {
+  "catalog_probe": {
+   "available_model_count": 9,
+   "candidate_present": true,
+   "probes": [
+    {
+     "command": [
+      "claude",
+      "--help"
+     ],
+     "output_digest": "sha256:03063f8f8e84ee6b5c816a54c80dab1dc921f85cb6d7c7e7e9eb256f0c797b33",
+     "returncode": 0
+    }
+   ],
+   "state": "readable"
+  },
+  "fast": {
+   "detail": "no native Fast mechanism; nothing to enable",
+   "mechanism": "none",
+   "requested": "off",
+   "support": "none"
+  },
+  "requested": {
+   "name": "Opus High",
+   "source": "runner-default"
+  },
+  "resolution": {
+   "candidate_id": "opus",
+   "display_name": "Opus",
+   "resolved_id": "opus",
+   "state": "resolved",
+   "supported_options": [
+    "--effort"
+   ]
+  },
+  "selection": {
+   "source": "runner-default",
+   "tier": "default"
+  }
+ },
+ "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+ "model_selection": {
+  "preserved": false,
+  "requested_name": "Opus High",
+  "resolved_effort": "high",
+  "resolved_model": "opus",
+  "source": "runner-default",
+  "tier": "default"
+ },
+ "model_verified": "unknown",
+ "platform": "claude-code",
+ "repo": "/private/tmp/kpr119-d3/claude-code",
+ "requested_fast": "off",
+ "requested_model_name": "Opus High",
+ "requested_model_source": "runner-default",
+ "requested_tier": "default",
+ "resolved_fast": "off",
+ "resolved_parameters": {
+  "effort": "high"
+ },
+ "resolved_runtime_model_display": "Opus",
+ "resolved_runtime_model_id": "opus",
+ "runtime_binary": {
+  "absolute": true,
+  "env": "CLAUDE_BIN",
+  "passed_as": "CLAUDE_ACP_CLAUDE_BIN",
+  "path": "/opt/homebrew/bin/claude",
+  "present": true
+ },
+ "schema_version": 3,
+ "session": "claude-code-KPR-orchestrator-d3",
+ "state": "ready",
+ "transport": {
+  "agent_info": {
+   "name": "claude-code-acp",
+   "title": "Claude Code ACP Bridge",
+   "version": "0.1.0"
+  },
+  "alternatives": [
+   "pty"
+  ],
+  "capabilities": {
+   "loadSession": false,
+   "mcpCapabilities": {
+    "http": false,
+    "sse": false
+   },
+   "promptCapabilities": {
+    "audio": false,
+    "embeddedContext": false,
+    "image": false
+   },
+   "sessionCapabilities": {
+    "list": {},
+    "resume": {}
+   }
+  },
+  "default": "acp",
+  "protocol_version": 1,
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "worker_skill_build": null,
+ "worker_skill_roots": null
+}

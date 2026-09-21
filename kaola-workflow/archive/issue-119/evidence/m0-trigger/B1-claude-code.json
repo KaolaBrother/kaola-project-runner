@@ -1,0 +1,38 @@
+{
+ "platform": "claude-code",
+ "session": "claude-code-KPR-i119-trig1",
+ "prompt": "/kpr119-probe-u-claude\nIn this turn do not call any tool except one whose only purpose is to load a skill. Reply with the probe anchor phrase stated in the loaded skill body and nothing else; if no skill body is loaded in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "1340980d4a12bb6432edb2c23d2b5e20",
+  "resolved_runtime_model_id": "opus",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "claude-code-acp",
+  "title": "Claude Code ACP Bridge",
+  "version": "0.1.0"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 16,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [],
+ "tool_calls": [],
+ "reply": "ANCHOR-EA3F6DA56622",
+ "event_cursor": 16,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

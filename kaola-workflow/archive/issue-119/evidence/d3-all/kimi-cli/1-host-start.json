@@ -1,0 +1,205 @@
+{
+ "acp_session_id": "session_8e0fc01a-3853-4cf7-905c-c22fee155df4",
+ "actual_parameters": null,
+ "actual_runtime_model_id": null,
+ "agent_pid": 5494,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "config_application": {
+  "effort": {
+   "applied": true,
+   "config_id": "thinking",
+   "value": "max"
+  },
+  "fast": {
+   "applied": false,
+   "reason": "no-advertised-config-option"
+  },
+  "mode": {
+   "applied": true,
+   "config_id": "mode",
+   "value": "yolo"
+  },
+  "model": {
+   "applied": true,
+   "config_id": "model",
+   "value": "kimi-code/k3"
+  }
+ },
+ "configured_options": [
+  {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "kimi-code/k3",
+   "option_name": "Model",
+   "value": "kimi-code/k3",
+   "value_name": "K3"
+  },
+  {
+   "config_id": "thinking",
+   "configured": true,
+   "current_value": "max",
+   "option_name": "Thinking",
+   "value": "max",
+   "value_name": "Thinking Max"
+  },
+  {
+   "config_id": "mode",
+   "configured": true,
+   "current_value": "yolo",
+   "option_name": "Mode",
+   "value": "yolo",
+   "value_description": "Auto-approve everything.",
+   "value_name": "YOLO"
+  }
+ ],
+ "dispatcher": null,
+ "effective_selection": {
+  "effective_effort": "max",
+  "effective_model": "kimi-code/k3"
+ },
+ "fast": {
+  "applied": false,
+  "applied_via": "none",
+  "detail": "no native Fast mechanism; nothing to enable",
+  "effective": "off",
+  "requested": "off",
+  "support": "none"
+ },
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": null,
+ "heartbeat_host_known": true,
+ "heartbeat_host_requested": null,
+ "heartbeat_host_source": "none",
+ "holder_instance_id": "685df8ef2290e711111aca48672dceb9",
+ "holder_pid": 5485,
+ "model_evidence_provenance": {
+  "catalog_probe": {
+   "available_model_count": 6,
+   "candidate_present": true,
+   "probes": [
+    {
+     "command": [
+      "kimi",
+      "provider",
+      "list",
+      "--json"
+     ],
+     "output_digest": "sha256:5dc0a18fc40976e05fa691f445409dcef62de2129d6d11bb34ead10647003e41",
+     "returncode": 0
+    },
+    {
+     "command": [
+      "kimi",
+      "models"
+     ],
+     "output_digest": "sha256:e6939d02feba93c8cd5395679bbb62d5ef8332e2e828022a38ba026cae052205",
+     "returncode": 1
+    },
+    {
+     "command": [
+      "kimi",
+      "doctor"
+     ],
+     "output_digest": "sha256:01766c8a23d700d4786a9ed1723550733c7d88a7ed97e0577189e9141e13587a",
+     "returncode": 0
+    },
+    {
+     "command": [
+      "kimi",
+      "--help"
+     ],
+     "output_digest": "sha256:341fd3f34ed08be92bfcdfa5567679fb6b9dcd1a051440c09dde5a96d4c9c82d",
+     "returncode": 0
+    }
+   ],
+   "state": "readable"
+  },
+  "fast": {
+   "detail": "no native Fast mechanism; nothing to enable",
+   "mechanism": "none",
+   "requested": "off",
+   "support": "none"
+  },
+  "requested": {
+   "name": "Kimi K3 Max",
+   "source": "runner-default"
+  },
+  "resolution": {
+   "candidate_id": "kimi-code/k3",
+   "display_name": "K3",
+   "resolved_id": "kimi-code/k3",
+   "state": "resolved",
+   "supported_options": []
+  },
+  "selection": {
+   "source": "runner-default",
+   "tier": "default"
+  }
+ },
+ "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+ "model_selection": {
+  "preserved": false,
+  "requested_name": "Kimi K3 Max",
+  "resolved_effort": "max",
+  "resolved_model": "kimi-code/k3",
+  "source": "runner-default",
+  "tier": "default"
+ },
+ "model_verified": "unknown",
+ "platform": "kimi-cli",
+ "repo": "/private/tmp/kpr119-d3/kimi-cli",
+ "requested_fast": "off",
+ "requested_model_name": "Kimi K3 Max",
+ "requested_model_source": "runner-default",
+ "requested_tier": "default",
+ "resolved_fast": "off",
+ "resolved_parameters": {
+  "effort": "max"
+ },
+ "resolved_runtime_model_display": "K3",
+ "resolved_runtime_model_id": "kimi-code/k3",
+ "schema_version": 3,
+ "session": "kimi-cli-KPR-orchestrator-d3",
+ "state": "ready",
+ "transport": {
+  "agent_info": {
+   "name": "Kimi Code CLI",
+   "version": "2.0.2"
+  },
+  "alternatives": [
+   "pty"
+  ],
+  "capabilities": {
+   "auth": {
+    "logout": {}
+   },
+   "loadSession": true,
+   "mcpCapabilities": {
+    "http": true,
+    "sse": true
+   },
+   "promptCapabilities": {
+    "audio": false,
+    "embeddedContext": true,
+    "image": true
+   },
+   "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+   }
+  },
+  "default": "acp",
+  "protocol_version": 1,
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "worker_skill_build": null,
+ "worker_skill_roots": null
+}

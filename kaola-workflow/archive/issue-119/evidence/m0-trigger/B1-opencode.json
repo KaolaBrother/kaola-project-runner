@@ -1,0 +1,67 @@
+{
+ "platform": "opencode",
+ "session": "opencode-KPR-i119-trig1",
+ "prompt": "/kpr119-probe-u-opencode\nIn this turn do not call any tool except one whose only purpose is to load a skill. Reply with the probe anchor phrase stated in the loaded skill body and nothing else; if no skill body is loaded in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "ses_f3c7544e1ffeADOQjV8dXAffyJ",
+  "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "OpenCode",
+  "version": "2.0.11"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 14,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [
+  "init",
+  "review"
+ ],
+ "tool_calls": [
+  {
+   "cursor": 7,
+   "kind": "tool_call",
+   "title": "skill",
+   "toolKind": "other",
+   "rawInput": {},
+   "status": "pending"
+  },
+  {
+   "cursor": 9,
+   "kind": "tool_call_update",
+   "title": "skill",
+   "toolKind": "other",
+   "rawInput": {
+    "id": "kpr119-probe-u-opencode"
+   },
+   "status": "in_progress"
+  },
+  {
+   "cursor": 10,
+   "kind": "tool_call_update",
+   "title": null,
+   "toolKind": null,
+   "rawInput": null,
+   "status": "completed"
+  }
+ ],
+ "reply": "ANCHOR-CD2C4F7C0D82",
+ "event_cursor": 14,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

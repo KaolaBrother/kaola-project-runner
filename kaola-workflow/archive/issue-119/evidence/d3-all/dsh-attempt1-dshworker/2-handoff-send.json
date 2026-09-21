@@ -1,0 +1,28 @@
+{
+ "acp_session_id": "6802359e-4149-4501-91c5-df76cdbad370",
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "dispatch_event_cursor": 1,
+ "duplicate_warning": null,
+ "event_cursor": 1,
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "mutation_performed": true,
+ "mutation_status": "in_progress",
+ "outcome": "in_progress",
+ "platform": "dsh",
+ "prompt_fingerprint": "sha256:c93f3055f731fa3b7a2f006c5e8b0eb6acb58edddb998ff9d335c07eb558a46f",
+ "repo": "/private/tmp/kpr119-d3/dsh",
+ "schema_version": 3,
+ "session": "dsh-KPR-orchestrator-d3",
+ "transport": {
+  "alternatives": [
+   "pty"
+  ],
+  "default": "acp",
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "turn_request_id": 4
+}

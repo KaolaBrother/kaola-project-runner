@@ -1,0 +1,28 @@
+{
+ "acp_session_id": "ses_f3c3e1ba3ffeX03uZ4IXPmim45",
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "dispatch_event_cursor": 3,
+ "duplicate_warning": null,
+ "event_cursor": 3,
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "mutation_performed": true,
+ "mutation_status": "in_progress",
+ "outcome": "in_progress",
+ "platform": "opencode",
+ "prompt_fingerprint": "sha256:995a3b0f1c127f80a247faca087d14ba0583e8c46b3b5db62d315d9fcf7c50f5",
+ "repo": "/private/tmp/kpr119-d3/opencode",
+ "schema_version": 3,
+ "session": "opencode-KPR-orchestrator-d3",
+ "transport": {
+  "alternatives": [
+   "pty"
+  ],
+  "default": "acp",
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "turn_request_id": 5
+}

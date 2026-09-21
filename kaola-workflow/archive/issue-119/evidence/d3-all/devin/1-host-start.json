@@ -1,0 +1,187 @@
+{
+ "acp_session_id": "lavender-hisser",
+ "actual_parameters": null,
+ "actual_runtime_model_id": null,
+ "agent_pid": 5497,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "config_application": {
+  "effort": {
+   "applied": false,
+   "reason": "no-resolved-value"
+  },
+  "fast": {
+   "applied": false,
+   "reason": "no-advertised-config-option"
+  },
+  "mode": {
+   "applied": true,
+   "config_id": "mode",
+   "value": "bypass"
+  },
+  "model": {
+   "applied": true,
+   "config_id": "model",
+   "value": "swe-2-max"
+  }
+ },
+ "configured_options": [
+  {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "swe-2-max",
+   "option_description": "AI model to use",
+   "option_name": "Model",
+   "value": "swe-2-max",
+   "value_name": "SWE-2 Max"
+  },
+  {
+   "config_id": "mode",
+   "configured": true,
+   "current_value": "bypass",
+   "option_name": "Session Mode",
+   "value": "bypass",
+   "value_description": "Auto-approve all tool calls",
+   "value_name": "Bypass Permissions"
+  }
+ ],
+ "dispatcher": null,
+ "effective_selection": {
+  "effective_effort": null,
+  "effective_model": "swe-2-max"
+ },
+ "fast": {
+  "applied": false,
+  "applied_via": "none",
+  "effective": "off",
+  "requested": "off",
+  "support": "model-variant"
+ },
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": null,
+ "heartbeat_host_known": true,
+ "heartbeat_host_requested": null,
+ "heartbeat_host_source": "none",
+ "holder_instance_id": "a0cec472561551355e528c59f2118f1e",
+ "holder_pid": 5489,
+ "model_evidence_provenance": {
+  "catalog_probe": {
+   "available_model_count": 386,
+   "candidate_present": true,
+   "probes": [
+    {
+     "command": [
+      "devin",
+      "models",
+      "list"
+     ],
+     "output_digest": "sha256:d94c50ecf0f1bebd83aca869337b01794cf74023cb631627de19b5e9bd663dd9",
+     "returncode": 0
+    },
+    {
+     "command": [
+      "devin",
+      "--help"
+     ],
+     "output_digest": "sha256:ea0ccc6a74811695d031fc8af47999762f1d983a80ab73b0e2d2e03de5c10138",
+     "returncode": 0
+    }
+   ],
+   "state": "readable"
+  },
+  "fast": {
+   "mechanism": "model-suffix",
+   "requested": "off",
+   "support": "model-variant"
+  },
+  "requested": {
+   "name": "SWE-2 Max",
+   "source": "runner-default"
+  },
+  "resolution": {
+   "candidate_id": "swe-2-max",
+   "display_name": "SWE-2 Max",
+   "resolved_id": "swe-2-max",
+   "state": "resolved",
+   "supported_options": []
+  },
+  "selection": {
+   "source": "runner-default",
+   "tier": "default"
+  }
+ },
+ "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+ "model_selection": {
+  "preserved": false,
+  "requested_name": "SWE-2 Max",
+  "resolved_effort": null,
+  "resolved_model": "swe-2-max",
+  "source": "runner-default",
+  "tier": "default"
+ },
+ "model_verified": "unknown",
+ "platform": "devin",
+ "repo": "/private/tmp/kpr119-d3/devin",
+ "requested_fast": "off",
+ "requested_model_name": "SWE-2 Max",
+ "requested_model_source": "runner-default",
+ "requested_tier": "default",
+ "resolved_fast": "off",
+ "resolved_parameters": {},
+ "resolved_runtime_model_display": "SWE-2 Max",
+ "resolved_runtime_model_id": "swe-2-max",
+ "schema_version": 3,
+ "session": "devin-KPR-orchestrator-d3",
+ "state": "ready",
+ "transport": {
+  "agent_info": {
+   "name": "affogato",
+   "title": "Devin Agent",
+   "version": "0.0.0-dev"
+  },
+  "alternatives": [
+   "pty"
+  ],
+  "capabilities": {
+   "_meta": {
+    "cognition.ai/chains": true,
+    "cognition.ai/commandRevision": true,
+    "cognition.ai/documentLifecycle": true,
+    "cognition.ai/editableCommands": true,
+    "cognition.ai/megaplan": true,
+    "cognition.ai/multiRootWorkspace": true,
+    "cognition.ai/ruleMentions": true,
+    "cognition.ai/sessionRename": true,
+    "cognition.ai/sessionShare": true,
+    "cognition.ai/terminalLifecycle": true,
+    "cognition.ai/userConfig": true,
+    "cognition.ai/userEdits": true,
+    "cognition.ai/userShellCommand": true
+   },
+   "auth": {},
+   "loadSession": true,
+   "mcpCapabilities": {
+    "http": false,
+    "sse": false
+   },
+   "promptCapabilities": {
+    "audio": false,
+    "embeddedContext": true,
+    "image": true
+   },
+   "sessionCapabilities": {
+    "additionalDirectories": {},
+    "delete": {},
+    "list": {}
+   }
+  },
+  "default": "acp",
+  "protocol_version": 1,
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "worker_skill_build": null,
+ "worker_skill_roots": null
+}

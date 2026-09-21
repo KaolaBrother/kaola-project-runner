@@ -1,0 +1,100 @@
+{
+ "acp_session_id": null,
+ "activity_hint": "exited",
+ "agent_alive": false,
+ "agent_exit_code": 1,
+ "agent_info": {},
+ "agent_message_errors": 0,
+ "agent_pgid": 7412,
+ "agent_pid": 7412,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "capabilities": {},
+ "context_usage": null,
+ "event_cursor": 2,
+ "fatal_error": {
+  "code": "acp-initialize-failed",
+  "message": {
+   "code": "agent-exited",
+   "message": "agent process exited"
+  }
+ },
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": {
+  "platform": "dsh",
+  "repo": "/private/tmp/kpr119-d3/dsh",
+  "session": "dsh-KPR-orchestrator-d3",
+  "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/ace75e5f7e102fb2757098ee.sock"
+ },
+ "heartbeat_host_known": true,
+ "holder_instance_id": "0208e717ac669889a20033f2acb310eb",
+ "holder_pid": 7410,
+ "initial_config_options": null,
+ "last_prompt": {},
+ "malformed_stdout_lines": 0,
+ "mutation_status": "not_started",
+ "pending_permissions": [],
+ "platform": "dsh",
+ "protocol_version": null,
+ "record": {
+  "acp_session_id": null,
+  "agent_alive": false,
+  "agent_child_groups": {},
+  "agent_child_pgids": [],
+  "agent_info": {},
+  "agent_message_errors": 0,
+  "agent_pgid": 7412,
+  "agent_pid": 7412,
+  "capabilities": {},
+  "created_at": 1789990668.569,
+  "event_cursor": 2,
+  "fatal_error": {
+   "code": "acp-initialize-failed",
+   "message": {
+    "code": "agent-exited",
+    "message": "agent process exited"
+   }
+  },
+  "heartbeat_host": {
+   "platform": "dsh",
+   "repo": "/private/tmp/kpr119-d3/dsh",
+   "session": "dsh-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/ace75e5f7e102fb2757098ee.sock"
+  },
+  "holder_instance_id": "0208e717ac669889a20033f2acb310eb",
+  "holder_pid": 7410,
+  "host_skill_entry": "/kaola-project-runner",
+  "initial_config_options": null,
+  "last_prompt": {},
+  "malformed_stdout_lines": 0,
+  "pending_permissions": [],
+  "platform": "dsh",
+  "protocol_version": null,
+  "repo": "/private/tmp/kpr119-d3/dsh",
+  "session": "dsh-KPR-i119-wdsh",
+  "session_meta": {},
+  "state": "stopping",
+  "transport": "acp",
+  "updated_at": 1789990695.303
+ },
+ "repo": "/private/tmp/kpr119-d3/dsh",
+ "schema_version": 3,
+ "session": "dsh-KPR-i119-wdsh",
+ "session_meta": {},
+ "state": "stopping",
+ "stop_reason": null,
+ "transport": {
+  "alternatives": [
+   "pty"
+  ],
+  "default": "acp",
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "turn_active": false,
+ "turn_outcome": null,
+ "undelivered_worker_events": [],
+ "unknown_update_variants": 0
+}

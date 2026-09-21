@@ -1,0 +1,38 @@
+{
+ "platform": "devin",
+ "session": "devin-KPR-i119-discover",
+ "prompt": "Do not use any tool and do not read any file in this turn. Using only the skill and command lists already present in your context, list every skill or command name that starts with kpr119-probe. Reply with those names separated by single spaces, or reply NONE.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "aquamarine-babcat",
+  "resolved_runtime_model_id": "swe-2-max",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "affogato",
+  "title": "Devin Agent",
+  "version": "0.0.0-dev"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 98,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [],
+ "tool_calls": [],
+ "reply": "kpr119-probe-p-devin kpr119-probe-p-claude kpr119-probe-u-devin kpr119-probe-u-agents kpr119-probe-u-claude kpr119-probe-p-cursor kpr119-probe-u-cursor kpr119-probe-p-agents",
+ "event_cursor": 98,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

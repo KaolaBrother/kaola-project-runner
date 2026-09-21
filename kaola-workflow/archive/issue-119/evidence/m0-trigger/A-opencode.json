@@ -1,0 +1,40 @@
+{
+ "platform": "opencode",
+ "session": "opencode-KPR-i119-discover",
+ "prompt": "Do not use any tool and do not read any file in this turn. Using only the skill and command lists already present in your context, list every skill or command name that starts with kpr119-probe. Reply with those names separated by single spaces, or reply NONE.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "ses_f3c766884ffe1cTUxKfaqe0Nmy",
+  "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "OpenCode",
+  "version": "2.0.11"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 17,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [
+  "init",
+  "review"
+ ],
+ "tool_calls": [],
+ "reply": "kpr119-probe-p-agents kpr119-probe-p-claude kpr119-probe-p-opencode kpr119-probe-u-agents kpr119-probe-u-claude kpr119-probe-u-opencode kpr119-probe-u-opencode1",
+ "event_cursor": 17,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

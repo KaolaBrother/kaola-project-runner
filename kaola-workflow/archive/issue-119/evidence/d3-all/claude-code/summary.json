@@ -1,0 +1,28 @@
+{
+ "platform": "claude-code",
+ "host": "claude-code-KPR-orchestrator-d3",
+ "worker": "dsh-KPR-i119-wclaudecode",
+ "repo": "/private/tmp/kpr119-d3/claude-code",
+ "entry": "/kaola-project-runner",
+ "host_start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "requested_tier": "default",
+  "resolved_runtime_model_id": "opus",
+  "effective_selection": {
+   "effective_effort": "high",
+   "effective_model": "opus"
+  }
+ },
+ "handoff_dispatch_cursor": 13,
+ "timed_out": false,
+ "pending_permissions_seen": [],
+ "worker_state_before_cleanup": "stopped",
+ "host_stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

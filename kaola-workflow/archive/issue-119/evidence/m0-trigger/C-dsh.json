@@ -1,0 +1,37 @@
+{
+ "platform": "dsh",
+ "session": "dsh-KPR-i119-kpr",
+ "prompt": "/kaola-project-runner\nIn this turn do not call any tool except one whose only purpose is to load a skill. Quote verbatim the first sentence under the heading \"Dispatch notes\" of the loaded Project Runner Skill body and nothing else; if that Skill body is not in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "343a2457-1ff5-4f43-9abe-ed75a625fb9d",
+  "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "deepseek-harness-acp",
+  "version": "0.0.1"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 4,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [],
+ "tool_calls": [],
+ "reply": "The first sentence under \"Dispatch notes\" is:\n\nCall the matching platform Runner Skill by its installed directory.",
+ "event_cursor": 4,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

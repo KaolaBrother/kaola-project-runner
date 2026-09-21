@@ -1,0 +1,147 @@
+{
+ "created_dirs": [
+  "/Users/ylminiserver/.config/agents/skills",
+  "/Users/ylminiserver/.grok/skills",
+  "/Users/ylminiserver/.kimi/skills",
+  "/Users/ylminiserver/.config/kimi/skills",
+  "/Users/ylminiserver/.config/opencode/skills",
+  "/Users/ylminiserver/.config/opencode/skill",
+  "/private/tmp/kpr119-scratch/.agents/skills",
+  "/private/tmp/kpr119-scratch/.claude/skills",
+  "/private/tmp/kpr119-scratch/.codex/skills",
+  "/private/tmp/kpr119-scratch/.cursor/skills",
+  "/private/tmp/kpr119-scratch/.grok/skills",
+  "/private/tmp/kpr119-scratch/.kimi/skills",
+  "/private/tmp/kpr119-scratch/.devin/skills",
+  "/private/tmp/kpr119-scratch/.factory/skills",
+  "/private/tmp/kpr119-scratch/.opencode/skills"
+ ],
+ "probes": {
+  "u-claude": {
+   "root": "/Users/ylminiserver/.claude/skills",
+   "name": "kpr119-probe-u-claude",
+   "nonce": "ANCHOR-EA3F6DA56622",
+   "dir": "/Users/ylminiserver/.claude/skills/kpr119-probe-u-claude"
+  },
+  "u-codex": {
+   "root": "/Users/ylminiserver/.codex/skills",
+   "name": "kpr119-probe-u-codex",
+   "nonce": "ANCHOR-EE8B4C79CF5F",
+   "dir": "/Users/ylminiserver/.codex/skills/kpr119-probe-u-codex"
+  },
+  "u-agents": {
+   "root": "/Users/ylminiserver/.agents/skills",
+   "name": "kpr119-probe-u-agents",
+   "nonce": "ANCHOR-A9150346DF80",
+   "dir": "/Users/ylminiserver/.agents/skills/kpr119-probe-u-agents"
+  },
+  "u-cfgagents": {
+   "root": "/Users/ylminiserver/.config/agents/skills",
+   "name": "kpr119-probe-u-cfgagents",
+   "nonce": "ANCHOR-04175A2106D1",
+   "dir": "/Users/ylminiserver/.config/agents/skills/kpr119-probe-u-cfgagents"
+  },
+  "u-cursor": {
+   "root": "/Users/ylminiserver/.cursor/skills",
+   "name": "kpr119-probe-u-cursor",
+   "nonce": "ANCHOR-4E456EB241B6",
+   "dir": "/Users/ylminiserver/.cursor/skills/kpr119-probe-u-cursor"
+  },
+  "u-grok": {
+   "root": "/Users/ylminiserver/.grok/skills",
+   "name": "kpr119-probe-u-grok",
+   "nonce": "ANCHOR-B1A966122302",
+   "dir": "/Users/ylminiserver/.grok/skills/kpr119-probe-u-grok"
+  },
+  "u-kimi": {
+   "root": "/Users/ylminiserver/.kimi/skills",
+   "name": "kpr119-probe-u-kimi",
+   "nonce": "ANCHOR-E9A8C0973FFC",
+   "dir": "/Users/ylminiserver/.kimi/skills/kpr119-probe-u-kimi"
+  },
+  "u-cfgkimi": {
+   "root": "/Users/ylminiserver/.config/kimi/skills",
+   "name": "kpr119-probe-u-cfgkimi",
+   "nonce": "ANCHOR-F78102B7E8C7",
+   "dir": "/Users/ylminiserver/.config/kimi/skills/kpr119-probe-u-cfgkimi"
+  },
+  "u-devin": {
+   "root": "/Users/ylminiserver/.config/devin/skills",
+   "name": "kpr119-probe-u-devin",
+   "nonce": "ANCHOR-8CF98A413817",
+   "dir": "/Users/ylminiserver/.config/devin/skills/kpr119-probe-u-devin"
+  },
+  "u-factory": {
+   "root": "/Users/ylminiserver/.factory/skills",
+   "name": "kpr119-probe-u-factory",
+   "nonce": "ANCHOR-A9D70A20E8EF",
+   "dir": "/Users/ylminiserver/.factory/skills/kpr119-probe-u-factory"
+  },
+  "u-opencode": {
+   "root": "/Users/ylminiserver/.config/opencode/skills",
+   "name": "kpr119-probe-u-opencode",
+   "nonce": "ANCHOR-CD2C4F7C0D82",
+   "dir": "/Users/ylminiserver/.config/opencode/skills/kpr119-probe-u-opencode"
+  },
+  "u-opencode1": {
+   "root": "/Users/ylminiserver/.config/opencode/skill",
+   "name": "kpr119-probe-u-opencode1",
+   "nonce": "ANCHOR-CA1D12B69E86",
+   "dir": "/Users/ylminiserver/.config/opencode/skill/kpr119-probe-u-opencode1"
+  },
+  "p-agents": {
+   "root": "/private/tmp/kpr119-scratch/.agents/skills",
+   "name": "kpr119-probe-p-agents",
+   "nonce": "ANCHOR-95A79E71278B",
+   "dir": "/private/tmp/kpr119-scratch/.agents/skills/kpr119-probe-p-agents"
+  },
+  "p-claude": {
+   "root": "/private/tmp/kpr119-scratch/.claude/skills",
+   "name": "kpr119-probe-p-claude",
+   "nonce": "ANCHOR-E02F5D42D9AF",
+   "dir": "/private/tmp/kpr119-scratch/.claude/skills/kpr119-probe-p-claude"
+  },
+  "p-codex": {
+   "root": "/private/tmp/kpr119-scratch/.codex/skills",
+   "name": "kpr119-probe-p-codex",
+   "nonce": "ANCHOR-C58CC36DA379",
+   "dir": "/private/tmp/kpr119-scratch/.codex/skills/kpr119-probe-p-codex"
+  },
+  "p-cursor": {
+   "root": "/private/tmp/kpr119-scratch/.cursor/skills",
+   "name": "kpr119-probe-p-cursor",
+   "nonce": "ANCHOR-F53B3C77E1BF",
+   "dir": "/private/tmp/kpr119-scratch/.cursor/skills/kpr119-probe-p-cursor"
+  },
+  "p-grok": {
+   "root": "/private/tmp/kpr119-scratch/.grok/skills",
+   "name": "kpr119-probe-p-grok",
+   "nonce": "ANCHOR-02A04D2C918E",
+   "dir": "/private/tmp/kpr119-scratch/.grok/skills/kpr119-probe-p-grok"
+  },
+  "p-kimi": {
+   "root": "/private/tmp/kpr119-scratch/.kimi/skills",
+   "name": "kpr119-probe-p-kimi",
+   "nonce": "ANCHOR-9B93FF7D6A23",
+   "dir": "/private/tmp/kpr119-scratch/.kimi/skills/kpr119-probe-p-kimi"
+  },
+  "p-devin": {
+   "root": "/private/tmp/kpr119-scratch/.devin/skills",
+   "name": "kpr119-probe-p-devin",
+   "nonce": "ANCHOR-69A99D5F657E",
+   "dir": "/private/tmp/kpr119-scratch/.devin/skills/kpr119-probe-p-devin"
+  },
+  "p-factory": {
+   "root": "/private/tmp/kpr119-scratch/.factory/skills",
+   "name": "kpr119-probe-p-factory",
+   "nonce": "ANCHOR-E20C299C4496",
+   "dir": "/private/tmp/kpr119-scratch/.factory/skills/kpr119-probe-p-factory"
+  },
+  "p-opencode": {
+   "root": "/private/tmp/kpr119-scratch/.opencode/skills",
+   "name": "kpr119-probe-p-opencode",
+   "nonce": "ANCHOR-FB0A82C64D14",
+   "dir": "/private/tmp/kpr119-scratch/.opencode/skills/kpr119-probe-p-opencode"
+  }
+ }
+}

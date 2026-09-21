@@ -1,0 +1,28 @@
+{
+ "acp_session_id": "39cddf43fb57fec7ae966b8e7887cad5",
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "dispatch_event_cursor": 13,
+ "duplicate_warning": null,
+ "event_cursor": 13,
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "mutation_performed": true,
+ "mutation_status": "in_progress",
+ "outcome": "in_progress",
+ "platform": "claude-code",
+ "prompt_fingerprint": "sha256:886e907baaf3d02e336a692acbb2ca21e137aabbd96ac40da56ca10545b46f67",
+ "repo": "/private/tmp/kpr119-d3/claude-code",
+ "schema_version": 3,
+ "session": "claude-code-KPR-orchestrator-d3",
+ "transport": {
+  "alternatives": [
+   "pty"
+  ],
+  "default": "acp",
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "turn_request_id": 7
+}

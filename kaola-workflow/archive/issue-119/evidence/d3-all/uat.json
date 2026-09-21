@@ -1,0 +1,530 @@
+{
+ "claude-code": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "opus",
+   "effective_selection": {
+    "effective_effort": "high",
+    "effective_model": "opus"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "claude-code",
+   "repo": "/private/tmp/kpr119-d3/claude-code",
+   "session": "claude-code-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/2731f7da83a7cdb29a3ebd8d.sock"
+  },
+  "carrier_delivered": [
+   [
+    21,
+    [
+     "dsh/dsh-KPR-i119-wclaudecode/idle/4"
+    ]
+   ],
+   [
+    33,
+    [
+     "dsh/dsh-KPR-i119-wclaudecode/terminated/5"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    32,
+    [
+     "dsh/dsh-KPR-i119-wclaudecode/idle/4"
+    ]
+   ],
+   [
+    38,
+    [
+     "dsh/dsh-KPR-i119-wclaudecode/terminated/5"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   20,
+   31,
+   37
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "/kaola-project-runner",
+   "kaola-host-notify/1: event-driven heartbeat carrier (Claude Code Host)"
+  ],
+  "worker_state_after": "stopped",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ },
+ "cursor-cli": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "cursor-grok-4.6-xhigh",
+   "effective_selection": {
+    "effective_effort": "xhigh",
+    "effective_model": "grok-4.6"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "cursor-cli",
+   "repo": "/private/tmp/kpr119-d3/cursor-cli",
+   "session": "cursor-cli-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/85d0d46d8027ffc852c1219e.sock"
+  },
+  "carrier_delivered": [
+   [
+    656,
+    [
+     "dsh/dsh-KPR-i119-wcursorcli/idle/4"
+    ]
+   ],
+   [
+    989,
+    [
+     "dsh/dsh-KPR-i119-wcursorcli/terminated/5"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    988,
+    [
+     "dsh/dsh-KPR-i119-wcursorcli/idle/4"
+    ]
+   ],
+   [
+    1223,
+    [
+     "dsh/dsh-KPR-i119-wcursorcli/terminated/5"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   655,
+   987,
+   1222
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "/kaola-project-runner",
+   "kaola-host-notify/1: event-driven heartbeat carrier (Cursor CLI Host)"
+  ],
+  "worker_state_after": "stopped",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ },
+ "grok": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "grok-4.6",
+   "effective_selection": {
+    "effective_effort": "xhigh",
+    "effective_model": "grok-4.6"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "grok",
+   "repo": "/private/tmp/kpr119-d3/grok",
+   "session": "grok-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/099cf4de085ad716d50b2d96.sock"
+  },
+  "carrier_delivered": [
+   [
+    531,
+    [
+     "dsh/dsh-KPR-i119-wgrok/idle/4"
+    ]
+   ],
+   [
+    927,
+    [
+     "dsh/dsh-KPR-i119-wgrok/terminated/5"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    925,
+    [
+     "dsh/dsh-KPR-i119-wgrok/idle/4"
+    ]
+   ],
+   [
+    1172,
+    [
+     "dsh/dsh-KPR-i119-wgrok/terminated/5"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   530,
+   924,
+   1171
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "/kaola-project-runner",
+   "kaola-host-notify/1: event-driven heartbeat carrier (Grok CLI Host)"
+  ],
+  "worker_state_after": "stopped",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ },
+ "droid": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "auto",
+   "effective_selection": {
+    "effective_effort": "none",
+    "effective_model": "auto"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "droid",
+   "repo": "/private/tmp/kpr119-d3/droid",
+   "session": "droid-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/8b9dbf44f048eb225e14f688.sock"
+  },
+  "carrier_delivered": [
+   [
+    84,
+    [
+     "dsh/dsh-KPR-i119-wdroid/idle/4"
+    ]
+   ],
+   [
+    107,
+    [
+     "dsh/dsh-KPR-i119-wdroid/terminated/5"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    106,
+    [
+     "dsh/dsh-KPR-i119-wdroid/idle/4"
+    ]
+   ],
+   [
+    114,
+    [
+     "dsh/dsh-KPR-i119-wdroid/terminated/5"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   83,
+   105,
+   113
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "/kaola-project-runner",
+   "kaola-host-notify/1: event-driven heartbeat carrier (Droid Host)"
+  ],
+  "worker_state_after": "stopped",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ },
+ "dsh": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+   "effective_selection": {
+    "effective_effort": null,
+    "effective_model": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "dsh",
+   "repo": "/private/tmp/kpr119-d3/dsh",
+   "session": "dsh-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/ace75e5f7e102fb2757098ee.sock"
+  },
+  "carrier_delivered": [
+   [
+    72,
+    [
+     "claude-code/claude-code-KPR-i119-wdsh/idle/16"
+    ]
+   ],
+   [
+    100,
+    [
+     "claude-code/claude-code-KPR-i119-wdsh/terminated/17"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    99,
+    [
+     "claude-code/claude-code-KPR-i119-wdsh/idle/16"
+    ]
+   ],
+   [
+    108,
+    [
+     "claude-code/claude-code-KPR-i119-wdsh/terminated/17"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   71,
+   98,
+   107
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "/kaola-project-runner",
+   "kaola-host-notify/1: event-driven heartbeat carrier (dsh Host)"
+  ],
+  "worker_state_after": "stopping",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ },
+ "devin": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "swe-2-max",
+   "effective_selection": {
+    "effective_effort": null,
+    "effective_model": "swe-2-max"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "devin",
+   "repo": "/private/tmp/kpr119-d3/devin",
+   "session": "devin-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/4b516451b50d261a9af9b116.sock"
+  },
+  "carrier_delivered": [
+   [
+    556,
+    [
+     "dsh/dsh-KPR-i119-wdevin/idle/4"
+    ]
+   ],
+   [
+    925,
+    [
+     "dsh/dsh-KPR-i119-wdevin/terminated/5"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    924,
+    [
+     "dsh/dsh-KPR-i119-wdevin/idle/4"
+    ]
+   ],
+   [
+    1134,
+    [
+     "dsh/dsh-KPR-i119-wdevin/terminated/5"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   555,
+   923,
+   1133
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "/kaola-project-runner",
+   "kaola-host-notify/1: event-driven heartbeat carrier (Devin CLI Host)"
+  ],
+  "worker_state_after": "stopped",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ },
+ "opencode": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+   "effective_selection": {
+    "effective_effort": "max",
+    "effective_model": "opencode-go/deepseek-v4.1-flash"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "opencode",
+   "repo": "/private/tmp/kpr119-d3/opencode",
+   "session": "opencode-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/b24d858643e4e66701144878.sock"
+  },
+  "carrier_delivered": [
+   [
+    122,
+    [
+     "dsh/dsh-KPR-i119-wopencode/idle/4"
+    ]
+   ],
+   [
+    246,
+    [
+     "dsh/dsh-KPR-i119-wopencode/terminated/5"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    245,
+    [
+     "dsh/dsh-KPR-i119-wopencode/idle/4"
+    ]
+   ],
+   [
+    301,
+    [
+     "dsh/dsh-KPR-i119-wopencode/terminated/5"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   121,
+   244,
+   300
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "/kaola-project-runner",
+   "kaola-host-notify/1: event-driven heartbeat carrier (OpenCode Host)"
+  ],
+  "worker_state_after": "stopped",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ },
+ "kimi-cli": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "kimi-code/k3",
+   "effective_selection": {
+    "effective_effort": "max",
+    "effective_model": "kimi-code/k3"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "kimi-cli",
+   "repo": "/private/tmp/kpr119-d3/kimi-cli",
+   "session": "kimi-cli-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/64a4b4e20e734b6f18735380.sock"
+  },
+  "carrier_delivered": [
+   [
+    840,
+    [
+     "dsh/dsh-KPR-i119-wkimicli/idle/4"
+    ]
+   ],
+   [
+    1647,
+    [
+     "dsh/dsh-KPR-i119-wkimicli/terminated/5"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    1645,
+    [
+     "dsh/dsh-KPR-i119-wkimicli/idle/4"
+    ]
+   ],
+   [
+    2152,
+    [
+     "dsh/dsh-KPR-i119-wkimicli/terminated/5"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   838,
+   1644,
+   2151
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "/skill:kaola-project-runner ",
+   "kaola-host-notify/1: event-driven heartbeat carrier (Kimi CLI Host)"
+  ],
+  "worker_state_after": "stopped",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ }
+}

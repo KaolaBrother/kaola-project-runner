@@ -1,0 +1,154 @@
+{
+ "acp_session_id": "2c4726bc-a59c-494b-97d1-ddbe8bb4bc61",
+ "actual_parameters": null,
+ "actual_runtime_model_id": null,
+ "agent_pid": 36666,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "config_application": {
+  "effort": {
+   "applied": false,
+   "reason": "no-resolved-value"
+  },
+  "fast": {
+   "applied": false,
+   "reason": "no-advertised-config-option"
+  },
+  "mode": {
+   "applied": true,
+   "config_id": "autonomy_level",
+   "value": "auto-high"
+  },
+  "model": {
+   "applied": true,
+   "config_id": "model",
+   "value": "auto"
+  }
+ },
+ "configured_options": [
+  {
+   "config_id": "model",
+   "configured": true,
+   "value": "auto"
+  },
+  {
+   "config_id": "autonomy_level",
+   "configured": true,
+   "value": "auto-high"
+  }
+ ],
+ "dispatcher": null,
+ "effective_selection": {
+  "effective_effort": "none",
+  "effective_model": "auto"
+ },
+ "fast": {
+  "applied": false,
+  "applied_via": "none",
+  "detail": "no native Fast mechanism; nothing to enable",
+  "effective": "off",
+  "requested": "off",
+  "support": "none"
+ },
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": null,
+ "heartbeat_host_known": true,
+ "heartbeat_host_requested": null,
+ "heartbeat_host_source": "none",
+ "holder_instance_id": "48ff5831bdad076103a7875092a9fa5e",
+ "holder_pid": 36665,
+ "model_evidence_provenance": {
+  "catalog_probe": {
+   "available_model_count": 0,
+   "candidate_present": false,
+   "probes": [
+    {
+     "command": [
+      "droid",
+      "--version"
+     ],
+     "output_digest": "sha256:d74e878f22877f72177f0831d44321e82ead81638b4e1d8561c1e85bd39f5e19",
+     "returncode": 0
+    }
+   ],
+   "state": "unknown"
+  },
+  "fast": {
+   "detail": "no native Fast mechanism; nothing to enable",
+   "mechanism": "none",
+   "requested": "off",
+   "support": "none"
+  },
+  "requested": {
+   "name": "Auto Model",
+   "source": "runner-default"
+  },
+  "resolution": {
+   "candidate_id": "auto",
+   "display_name": "Auto Model",
+   "resolved_id": "auto",
+   "state": "catalog-unknown-declared-candidate",
+   "supported_options": []
+  },
+  "selection": {
+   "source": "runner-default",
+   "tier": "default"
+  }
+ },
+ "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+ "model_selection": {
+  "preserved": false,
+  "requested_name": "Auto Model",
+  "resolved_effort": null,
+  "resolved_model": "auto",
+  "source": "runner-default",
+  "tier": "default"
+ },
+ "model_verified": "unknown",
+ "platform": "droid",
+ "repo": "/private/tmp/kpr119-d3/droid",
+ "requested_fast": "off",
+ "requested_model_name": "Auto Model",
+ "requested_model_source": "runner-default",
+ "requested_tier": "default",
+ "resolved_fast": "off",
+ "resolved_parameters": {},
+ "resolved_runtime_model_display": "Auto Model",
+ "resolved_runtime_model_id": "auto",
+ "schema_version": 3,
+ "session": "droid-KPR-orchestrator-d3",
+ "state": "ready",
+ "transport": {
+  "agent_info": {
+   "name": "@factory/cli",
+   "title": "Factory Droid",
+   "version": "0.220.0"
+  },
+  "alternatives": [
+   "pty"
+  ],
+  "capabilities": {
+   "_meta": {
+    "terminal-auth": true,
+    "terminal_output": true
+   },
+   "loadSession": true,
+   "promptCapabilities": {
+    "embeddedContext": true,
+    "image": true
+   },
+   "sessionCapabilities": {
+    "list": {},
+    "resume": {}
+   }
+  },
+  "default": "acp",
+  "protocol_version": 1,
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "worker_skill_build": null,
+ "worker_skill_roots": null
+}

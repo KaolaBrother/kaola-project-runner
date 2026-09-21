@@ -1,0 +1,15 @@
+/kaola-project-runner
+kaola-host-notify/1: event-driven heartbeat carrier (Cursor CLI Host)
+worker events (structured, one JSON object per line):
+{"event_cursor": 4, "event_id": "dsh/dsh-KPR-i119-deepworker/idle/4", "kind": "idle", "platform": "dsh", "reason": "outcome=turn_completed stop_reason=end_turn", "repo": "/private/tmp/kpr119-scratch", "session": "dsh-KPR-i119-deepworker"}
+heartbeat prompt source: /private/tmp/kpr119-scratch/.kaola/heartbeat-prompt.json (fingerprint sha256:235d2efcd913285f59dc01695901436459d18fd5630d75b53dc29173a68e5f63, 1073 bytes)
+heartbeat prompt body follows, verbatim:
+<<<heartbeat-prompt
+Issue #119 deep test beat (cursor-cli Host). Do exactly this, then end the turn:
+1. Begin your reply by quoting verbatim the first sentence under the heading "Heartbeat" of the loaded Project Runner Skill body.
+2. Read the worker: run `/private/tmp/kpr119-scratch/.cursor/skills/dsh-kaola-project-runner/scripts/runtime-tmux.sh status --repo /private/tmp/kpr119-scratch --session dsh-KPR-i119-deepworker` and `/private/tmp/kpr119-scratch/.cursor/skills/dsh-kaola-project-runner/scripts/runtime-tmux.sh capture --repo /private/tmp/kpr119-scratch --session dsh-KPR-i119-deepworker --lines 40`; report the worker's reply text.
+3. Exact-stop that worker: `/private/tmp/kpr119-scratch/.cursor/skills/dsh-kaola-project-runner/scripts/runtime-tmux.sh stop --repo /private/tmp/kpr119-scratch --session dsh-KPR-i119-deepworker`; report the receipt fields stopped and residual_pids.
+4. Overwrite /private/tmp/kpr119-scratch/.kaola/heartbeat-prompt.json with a JSON object whose "body" is "deep test complete; nothing to do.".
+5. End the turn. Start nothing else, do not wait or poll.
+heartbeat-prompt>>>
+Perform exactly one full Project Runner heartbeat pass - recover authorization and field state, handle worker questions, dispatch suitable authorized work, verify deliveries, and close out - per PROJECT_RUNNER_HEARTBEAT_V2. This worker event is the only heartbeat trigger; this Cursor CLI Host registers no periodic carrier.

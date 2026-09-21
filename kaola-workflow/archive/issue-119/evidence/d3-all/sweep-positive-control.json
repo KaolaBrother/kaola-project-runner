@@ -1,0 +1,1 @@
+{"killed_group_members": [], "matched_pids": [37874], "residual_pids": [], "results": [{"force_killed": false, "holder_alive": false, "pid": 37874, "stop_error": null, "stop_residual_pids": [], "via": "socket"}], "root": "/tmp/kpr119-records", "swept_groups": [37875]}

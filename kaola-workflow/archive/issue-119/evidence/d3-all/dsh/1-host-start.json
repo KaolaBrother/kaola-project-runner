@@ -1,0 +1,148 @@
+{
+ "acp_session_id": "87be5652-bb29-4163-86cc-d8651028295d",
+ "actual_parameters": null,
+ "actual_runtime_model_id": null,
+ "agent_pid": 22529,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "config_application": {
+  "effort": {
+   "applied": false,
+   "reason": "no-resolved-value"
+  },
+  "fast": {
+   "applied": false,
+   "reason": "no-advertised-config-option"
+  },
+  "model": {
+   "applied": true,
+   "config_id": "model",
+   "mapped": true,
+   "requested_id": "opencode-go/deepseek-v4.1-flash",
+   "value": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+  }
+ },
+ "configured_options": [
+  {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "[\"opencode-go\",\"deepseek-v4.1-flash\"]",
+   "option_name": "Model",
+   "value": "[\"opencode-go\",\"deepseek-v4.1-flash\"]",
+   "value_name": "deepseek-v4.1-flash"
+  }
+ ],
+ "dispatcher": null,
+ "effective_selection": {
+  "effective_effort": null,
+  "effective_model": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+ },
+ "fast": {
+  "applied": false,
+  "applied_via": "none",
+  "detail": "no native Fast mechanism; nothing to enable",
+  "effective": "off",
+  "requested": "off",
+  "support": "none"
+ },
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "heartbeat_host": null,
+ "heartbeat_host_known": true,
+ "heartbeat_host_requested": null,
+ "heartbeat_host_source": "none",
+ "holder_instance_id": "d20169e5eee86335efd1a9356ca17d6e",
+ "holder_pid": 22527,
+ "model_evidence_provenance": {
+  "catalog_probe": {
+   "available_model_count": 1,
+   "candidate_present": false,
+   "probes": [
+    {
+     "command": [
+      "dsh",
+      "--version"
+     ],
+     "output_digest": "sha256:3d473e98bfce03bba6a15b681b43dedd4c675f4c8051a585634f5249d2228610",
+     "returncode": 0
+    }
+   ],
+   "state": "readable"
+  },
+  "fast": {
+   "detail": "no native Fast mechanism; nothing to enable",
+   "mechanism": "none",
+   "requested": "off",
+   "support": "none"
+  },
+  "requested": {
+   "name": "DeepSeek V4.1 Flash (OpenCode Go)",
+   "source": "runner-default"
+  },
+  "resolution": {
+   "candidate_id": "opencode-go/deepseek-v4.1-flash",
+   "display_name": "DeepSeek V4.1 Flash (OpenCode Go)",
+   "resolved_id": "opencode-go/deepseek-v4.1-flash",
+   "state": "catalog-missing-declared-candidate",
+   "supported_options": []
+  },
+  "selection": {
+   "source": "runner-default",
+   "tier": "default"
+  }
+ },
+ "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+ "model_selection": {
+  "preserved": false,
+  "requested_name": "DeepSeek V4.1 Flash (OpenCode Go)",
+  "resolved_effort": null,
+  "resolved_model": "opencode-go/deepseek-v4.1-flash",
+  "source": "runner-default",
+  "tier": "default"
+ },
+ "model_verified": "unknown",
+ "platform": "dsh",
+ "repo": "/private/tmp/kpr119-d3/dsh",
+ "requested_fast": "off",
+ "requested_model_name": "DeepSeek V4.1 Flash (OpenCode Go)",
+ "requested_model_source": "runner-default",
+ "requested_tier": "default",
+ "resolved_fast": "off",
+ "resolved_parameters": {},
+ "resolved_runtime_model_display": "DeepSeek V4.1 Flash (OpenCode Go)",
+ "resolved_runtime_model_id": "opencode-go/deepseek-v4.1-flash",
+ "schema_version": 3,
+ "session": "dsh-KPR-orchestrator-d3",
+ "state": "ready",
+ "transport": {
+  "agent_info": {
+   "name": "deepseek-harness-acp",
+   "version": "0.0.1"
+  },
+  "alternatives": [
+   "pty"
+  ],
+  "capabilities": {
+   "mcpCapabilities": {
+    "http": true
+   },
+   "promptCapabilities": {
+    "audio": false,
+    "embeddedContext": false,
+    "image": false
+   },
+   "sessionCapabilities": {
+    "close": {},
+    "list": {},
+    "resume": {}
+   }
+  },
+  "default": "acp",
+  "protocol_version": 1,
+  "reason": "manifest-default",
+  "selected": "acp"
+ },
+ "worker_skill_build": null,
+ "worker_skill_roots": null
+}

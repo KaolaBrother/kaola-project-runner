@@ -1,0 +1,25 @@
+{
+ "agent_exit_code": 0,
+ "agent_exit_signal": null,
+ "canonical_repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner",
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "mutation_status": "completed",
+ "platform": "claude-code",
+ "repo": "/private/tmp/kpr119-d3/claude-code",
+ "residual_pids": [],
+ "schema_version": 3,
+ "session": "claude-code-KPR-orchestrator-d3",
+ "stopped": true,
+ "swept_child_pgids": [],
+ "transport": {
+  "alternatives": [
+   "pty"
+  ],
+  "default": "acp",
+  "reason": "manifest-default",
+  "selected": "acp"
+ }
+}
