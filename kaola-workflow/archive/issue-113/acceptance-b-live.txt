@@ -1,0 +1,28 @@
+Issue #113 — Acceptance (b) live recipe: OUTCOME = BLOCKED (recipe not deterministic on the installed build)
+Date 2026-09-21. Candidate: issue-113 worktree adapter + holder. App: /Applications/ZCode.app zcode.cjs (3.12.x),
+node /opt/homebrew/bin/node. Scratch HOME + scratch record root under /tmp (0700), deleted after this run.
+Session kpr113-otmax-live, standalone (every Host-inherited KAOLA_* var unset: no binding to or notification of
+the live Host). Model: manifest default GLM-5.3 thought=max, no --model/--effort override. Prompt: text-only,
+'Do not use any tools ... essay of at least 3000 words on the history of computing ...'.
+
+== RUN 1: the prescribed lever — scratch ~/.zcode/v2/config.json GLM-5.3 limit.output=256 (all 4 providers) ==
+Runner receipt: {"outcome": "turn_completed", "stop_reason": "end_turn", "mutation_status": "completed", "duration_ms": 185490, "tool_calls": {"count": 0, "failed": 0, "kinds": {}}}
+scratch DB model_usage (finish_reason|output_tokens):
+stop|9186
+stop|11
+
+== RUN 2: + scratch provider_config.json manualProviderModelRules
+   {providerId: account:bigmodel-individual-coding-plan, modelId: GLM-5.3, config.optionSpecs.maxOutputTokens.max: 256} ==
+Runner receipt: {"outcome": "turn_completed", "stop_reason": "end_turn", "mutation_status": "completed", "duration_ms": 179761, "tool_calls": {"count": 0, "failed": 0, "kinds": {}}}
+record.json last_prompt:
+{"mutation_status": "completed", "stop_reason": "end_turn", "transport": "acp", "written_at": 1789958029.802}
+events.jsonl turn_ended lines:
+  {"cursor": 582, "kind": "turn_ended", "outcome": "turn_completed", "stop_reason": "end_turn", "ts": 1789957940.218}
+  {"cursor": 1177, "kind": "turn_ended", "outcome": "turn_completed", "stop_reason": "end_turn", "ts": 1789958209.562}
+scratch DB model_usage (rowid|finish_reason|output_tokens), all runs:
+1|stop|9186
+2|stop|11
+3|stop|9137
+4|stop|11
+scratch DB finish_reason distribution:
+stop|4

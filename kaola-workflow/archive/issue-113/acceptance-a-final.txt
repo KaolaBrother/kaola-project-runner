@@ -1,0 +1,148 @@
+Issue #113 — Acceptance A on the FINAL test bytes (re-proof after the review's fixture-fidelity fix)
+=======================================================================================
+Test files: final candidate bytes. BEFORE = HEAD 7fc6fe3 adapter (throwaway detached worktree /tmp/kpr113-baseline,
+scripts/ diff vs HEAD empty). AFTER = the issue-113 candidate adapter.
+Command: env -u KAOLA_ZCODE_ENTRY -u KAOLA_ZCODE_NODE -u KAOLA_ACP_DISPATCHER -u KAOLA_ACP_HEARTBEAT_HOST -u KAOLA_ACP_HEARTBEAT_HOST_SOCKET -u KAOLA_CLAUDE_PROFILE_REQUIRED python3 tests/contract/test-zcode-acp-contract.py ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens ZcodeAcpContractTests.test_ordinary_terminals_keep_refusal_and_end_turn ZcodeAcpContractTests.test_cancel_still_wins_over_the_output_token_max_terminal -v
+
+---------------- BEFORE (pre-change adapter) ----------------
+test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens)
+An output-token-max turn ends with ACP ``max_tokens``. ... 
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_exhausted]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_finish_length]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_plain]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_output]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_window]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+test_ordinary_terminals_keep_refusal_and_end_turn (__main__.ZcodeAcpContractTests.test_ordinary_terminals_keep_refusal_and_end_turn)
+Negative control: only the output-token limit becomes max_tokens. ... ok
+test_cancel_still_wins_over_the_output_token_max_terminal (__main__.ZcodeAcpContractTests.test_cancel_still_wins_over_the_output_token_max_terminal)
+An explicit cancel keeps ``cancelled`` even on an output-limit end. ... ok
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_exhausted]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/kpr113-baseline/tests/contract/test-zcode-acp-contract.py", line 837, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_exhausted
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_finish_length]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/kpr113-baseline/tests/contract/test-zcode-acp-contract.py", line 837, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_finish_length
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_plain]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/kpr113-baseline/tests/contract/test-zcode-acp-contract.py", line 837, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_raw_plain
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_output]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/kpr113-baseline/tests/contract/test-zcode-acp-contract.py", line 837, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_raw_output
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_window]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/kpr113-baseline/tests/contract/test-zcode-acp-contract.py", line 837, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_raw_window
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.853s
+
+FAILED (failures=5)
+EXIT=1
+
+---------------- AFTER (candidate adapter) ----------------
+test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens)
+An output-token-max turn ends with ACP ``max_tokens``. ... ok
+test_ordinary_terminals_keep_refusal_and_end_turn (__main__.ZcodeAcpContractTests.test_ordinary_terminals_keep_refusal_and_end_turn)
+Negative control: only the output-token limit becomes max_tokens. ... ok
+test_cancel_still_wins_over_the_output_token_max_terminal (__main__.ZcodeAcpContractTests.test_cancel_still_wins_over_the_output_token_max_terminal)
+An explicit cancel keeps ``cancelled`` even on an output-limit end. ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.851s
+
+OK
+EXIT=0

@@ -1,0 +1,38 @@
+Issue #113 — Acceptance (b) recipe v3 (Host rescue round, 2026-09-21): OUTCOME = PASS
+Supersedes nothing: acceptance-b-live.txt (runs 1-2, BLOCKED) stays as recorded.
+
+== The knob (static, read-only from /Applications/ZCode.app/Contents/Resources/glm/zcode.cjs) ==
+  KJ = rwa(modelMaxOutputTokens) ?? twa  -> zcode.cjs:14607 (byte 12922793)
+  twa = 32e3 / rwa positive-int guard   -> zcode.cjs:14607 (byte 12923578)
+  lka: _ = o.optionSpecs.maxOutputTokens.max (the per-request baseline) -> zcode.cjs:14644 (byte 13019480)
+  ModelConfigRules.composeEffective(builtin, personal exact rules appended LAST) -> zcode.cjs:71 (byte 544420)
+  provider registry: g = aA.composeEffective(zcodeBuiltinModelRules, personalModels) -> zcode.cjs:71 (byte 573558)
+  ZCODE_PERSONAL_PROVIDER_CONFIG_FILE / provider_config.json -> zcode.cjs:96 (byte 1066299)
+  personal schema hKe {providerModelRules, manualProviderModelRules} -> zcode.cjs:71 (byte 536822)
+  Bundled source of the 128000: config/provider/zcode-builtin.json modelConfigRules.modelRules[6]
+    {modelMatch: '.*glm-5\.3(?:-flash)?...', config.optionSpecs.maxOutputTokens.max: 128000}.
+  Scratch-writable override: $HOME/.zcode/v2/provider_config.json (the adapter injects this path as
+    ZCODE_PERSONAL_PROVIDER_CONFIG_FILE from the child's HOME) -> config.modelConfigRules.providerModelRules:
+    [{"providerId":"account:bigmodel-individual-coding-plan","modelId":"GLM-5.3","config":{"optionSpecs":{"maxOutputTokens":{"max":256}}}}]
+  Effect: the exact provider/model rule overlays the regex rule, so model.optionSpecs.maxOutputTokens.max = 256
+  and KJ() -> 256. Zero Runner-side change; the adapter's 3.12 registration path is untouched.
+  Attribution: run 1 (config.json limit.output=256 ALONE) produced 9186 tokens, so the effective knob is the
+  providerModelRules entry. Run 2's manualProviderModelRules variant did not cap (9137 tokens); not diagnosed
+  further — the manual path clears then overlays a narrower Oj schema, and the non-manual rule is the one that works.
+
+== Recipe v3 run (session kpr113-otmax-v3, standalone, every Host-inherited KAOLA_* var unset; default GLM-5.3 thought=max) ==
+Runner receipt (wait):
+  {"outcome": "turn_completed", "stop_reason": "max_tokens", "mutation_status": "completed", "duration_ms": 111644, "tool_calls": {"count": 0, "failed": 0, "kinds": {}}}
+  final_text tail: "irst systematic answer to a permanent problem[zcode turn failed] The model's response exceeded the output token maximum."
+record.json last_prompt: {"mutation_status": "completed", "stop_reason": "max_tokens", "transport": "acp", "written_at": 1789959110.171}
+events.jsonl turn_ended:
+  {"cursor": 87, "kind": "turn_ended", "outcome": "turn_completed", "stop_reason": "max_tokens", "ts": 1789959137.825}
+scratch DB model_usage (rowid|status|finish_reason|output_tokens|error_type|error_code):
+1|completed|length|256|-|-
+2|completed|length|256|-|-
+3|completed|length|256|-|-
+4|completed|length|256|-|-
+Reading: 1 request + 3 auto-continues, each capped at 256 with finish length, then the app threw the exhaustion
+ModelError, which reached the adapter as turn.failed and surfaced as ACP max_tokens. The exhaustion error writes NO
+model_usage error row (all 4 rows are status=completed), so the DB counter for this stop is finish_reason='length'.
+Cost: one live run, 111.6 s, 1,024 output tokens.

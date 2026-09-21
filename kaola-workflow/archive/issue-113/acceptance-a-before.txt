@@ -1,0 +1,180 @@
+Issue #113 — Acceptance A baseline (fail-first)
+================================================
+
+Claim: the ZCode adapter must translate an output-token-max turn terminal to
+ACP `stopReason: "max_tokens"`. On the unmodified tree it reports `refusal`
+(scripts/kaola-zcode-acp.py:1522-1532 collapses every `turn.failed` to
+`refusal`; :1514-1520 / :1534-1536 collapse to `end_turn`).
+
+Tree under test
+---------------
+worktree : /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-113
+HEAD     : 7fc6fe36d54551600f2851cbfb8cdad832a6374f  (chore: archive issue-111 [sink])
+dirty    : tests/contract/fake-zcode-app-server.py, tests/contract/test-zcode-acp-contract.py
+           (TEST-ONLY edits — no production file was modified)
+date     : 2026-09-21
+
+Command (run from the worktree root)
+------------------------------------
+env -u KAOLA_ZCODE_ENTRY -u KAOLA_ZCODE_NODE -u KAOLA_ACP_DISPATCHER \
+  python3 tests/contract/test-zcode-acp-contract.py \
+    ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens \
+    ZcodeAcpContractTests.test_ordinary_terminals_keep_refusal_and_end_turn \
+    ZcodeAcpContractTests.test_cancel_still_wins_over_the_output_token_max_terminal \
+    -v
+
+Observed vs expected (baseline)
+-------------------------------
+  max_tokens_exhausted      observed refusal   expected max_tokens   FAIL
+  max_tokens_finish_length  observed refusal   expected max_tokens   FAIL
+  max_tokens_raw_plain      observed refusal   expected max_tokens   FAIL
+  max_tokens_raw_output     observed refusal   expected max_tokens   FAIL
+  max_tokens_raw_window     observed refusal   expected max_tokens   FAIL
+  failure                   observed refusal   expected refusal      ok (negative control)
+  failure_finish_stop       observed refusal   expected refusal      ok (negative control)
+  basic                     observed end_turn  expected end_turn     ok (negative control)
+  max_tokens_cancel         observed cancelled expected cancelled    ok (cancel precedence)
+
+Verbatim output
+---------------
+test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens)
+An output-token-max turn ends with ACP ``max_tokens``. ... 
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_exhausted]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_finish_length]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_plain]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_output]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+  test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_window]
+An output-token-max turn ends with ACP ``max_tokens``. ... FAIL
+test_ordinary_terminals_keep_refusal_and_end_turn (__main__.ZcodeAcpContractTests.test_ordinary_terminals_keep_refusal_and_end_turn)
+Negative control: only the output-token limit becomes max_tokens. ... ok
+test_cancel_still_wins_over_the_output_token_max_terminal (__main__.ZcodeAcpContractTests.test_cancel_still_wins_over_the_output_token_max_terminal)
+An explicit cancel keeps ``cancelled`` even on an output-limit end. ... ok
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_exhausted]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-113/tests/contract/test-zcode-acp-contract.py", line 836, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_exhausted
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_finish_length]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-113/tests/contract/test-zcode-acp-contract.py", line 836, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_finish_length
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_plain]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-113/tests/contract/test-zcode-acp-contract.py", line 836, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_raw_plain
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_output]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-113/tests/contract/test-zcode-acp-contract.py", line 836, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_raw_output
+
+======================================================================
+FAIL: test_output_token_max_terminal_reports_max_tokens (__main__.ZcodeAcpContractTests.test_output_token_max_terminal_reports_max_tokens) [max_tokens_raw_window]
+An output-token-max turn ends with ACP ``max_tokens``.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner/.kw/worktrees/issue-113/tests/contract/test-zcode-acp-contract.py", line 836, in test_output_token_max_terminal_reports_max_tokens
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.prompt_stop_reason(scenario, "write a very long file"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "max_tokens",
+        ^^^^^^^^^^^^^
+        scenario,
+        ^^^^^^^^^
+    )
+    ^
+AssertionError: 'refusal' != 'max_tokens'
+- refusal
++ max_tokens
+ : max_tokens_raw_window
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.224s
+
+FAILED (failures=5)
+
+Exit status: 1
+
+Whole-suite collateral check
+----------------------------
+Command (same env, same worktree):
+  env -u KAOLA_ZCODE_ENTRY -u KAOLA_ZCODE_NODE -u KAOLA_ACP_DISPATCHER \
+    python3 tests/contract/test-zcode-acp-contract.py -v
+
+Result: Ran 74 tests in 199.138s / FAILED (failures=5) / exit 1.
+All 5 failures are the five subTests of
+test_output_token_max_terminal_reports_max_tokens; the other 73 cases pass,
+including every pre-existing case. No collateral damage, and nothing else on
+this tree was already failing. No holder or fake app-server process survived
+the run.

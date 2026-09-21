@@ -1,0 +1,15 @@
+--- scenario=max_tokens_exhausted expect=max_tokens
+  receipt.stop_reason      : max_tokens
+  record.last_prompt       : {"fingerprint": "sha256:7f3cb05bcdadaae60d191963166286d83931e79c0b2a89cf92d3e9bddca462e2", "mutation_status": "completed", "stop_reason": "max_tokens", "transport": "acp", "written_at": 1789957113.406}
+  record.stop_reason       : None
+  events.jsonl turn_ended  : [{"cursor": 18, "kind": "turn_ended", "outcome": "turn_completed", "prompt_fingerprint": "sha256:7f3cb05bcdadaae60d191963166286d83931e79c0b2a89cf92d3e9bddca462e2", "stop_reason": "max_tokens", "ts": 1789957113.421}]
+--- scenario=failure expect=refusal
+  receipt.stop_reason      : refusal
+  record.last_prompt       : {"fingerprint": "sha256:7f3cb05bcdadaae60d191963166286d83931e79c0b2a89cf92d3e9bddca462e2", "mutation_status": "completed", "stop_reason": "refusal", "transport": "acp", "written_at": 1789957114.061}
+  record.stop_reason       : None
+  events.jsonl turn_ended  : [{"cursor": 18, "kind": "turn_ended", "outcome": "turn_completed", "prompt_fingerprint": "sha256:7f3cb05bcdadaae60d191963166286d83931e79c0b2a89cf92d3e9bddca462e2", "stop_reason": "refusal", "ts": 1789957114.078}]
+--- scenario=basic expect=end_turn
+  receipt.stop_reason      : end_turn
+  record.last_prompt       : {"fingerprint": "sha256:7f3cb05bcdadaae60d191963166286d83931e79c0b2a89cf92d3e9bddca462e2", "mutation_status": "completed", "stop_reason": "end_turn", "transport": "acp", "written_at": 1789957114.726}
+  record.stop_reason       : None
+  events.jsonl turn_ended  : [{"cursor": 24, "kind": "turn_ended", "outcome": "turn_completed", "prompt_fingerprint": "sha256:7f3cb05bcdadaae60d191963166286d83931e79c0b2a89cf92d3e9bddca462e2", "stop_reason": "end_turn", "ts": 1789957114.745}]
