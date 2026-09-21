@@ -2,6 +2,41 @@
 
 ## 0.5.5 — unreleased
 
+- **OpenCode adapter upgraded to OpenCode V2 `2.0.11` (Issue #112).** The local CLI moved to the V2
+  line, which rejects the V1 launch outright: `opencode <repo> --mini --auto` now answers
+  `Unrecognized flag: --mini in command opencode`, and top-level `--model` and `--variant` are gone
+  the same way. The PTY launch becomes **`opencode <repo> --auto`** — `--auto` survives as a
+  top-level V2 flag, so the documented PTY bypass is intact — while an explicit caller model no
+  longer rides argv. `mini` is a subcommand on V2 and cannot carry this launch: it accepts neither a
+  directory nor `--auto`.
+
+  The reported hard blocker — every ACP session method answering
+  `-32603 ... {"errorName":"ClientError"}` while `initialize` succeeded — turned out **not** to be an
+  authentication fault. Its cause is a forward proxy with no loopback exclusion: V2 reaches its own
+  server over loopback HTTP, and with `HTTP_PROXY` set and `NO_PROXY` unset that hop was handed to
+  the proxy. Excluding loopback alone turns `ClientError` into a live session, and also restores
+  `opencode service status`, `models` and `auth list`, which means the separately reported "wedged
+  managed service" was never wedged. Upstream fixed this class on the V1 line
+  (`anomalyco/opencode#31096`) but the V2 ACP adapter was copied rather than ported (#35457, open),
+  so it regressed. `acp_quirks` now states the requirement, `acp_env_allowlist` gains `NO_PROXY`, and
+  `adapter_preflight` reports `loopback=direct|excluded|proxied` as evidence. The Runner reports the
+  condition; it does not rewrite the operator's proxy environment, and no classifier, retry or
+  waiting layer was added.
+
+  With the transport unblocked, the facts that were previously unverifiable are now measured on
+  2.0.11 rather than inherited from 1.18.x. A full `initialize → session/new → session/prompt →
+  session/close` round trip passes, so `acp_verified_versions` becomes `cli=2.0.11;protocol=1`.
+  **There is still no ACP skip-all**, and that is now a measurement: `session/request_permission`
+  offers exactly `allow_once`, `allow_always` and `reject_once`, and `session/new` advertises only
+  the `model`/`effort`/`mode` config options. `acp_model_config_id` and `acp_effort_config_id` keep
+  their values — `effort` is live on V2 with `low/high/max/default` — so the per-model `variants`
+  array is a catalog shape, not a replacement for the flat config id. `OPENCODE_CONFIG_CONTENT` is
+  written in the V2 shape the official migration guide documents (`agents.build.model` with the
+  variant folded in after `#`) and is recorded as ignored by 2.0.11 itself (upstream #50236, which
+  names this exact version). Finally, the V2 TUI footer reads `ctrl+p commands` where 1.18.x read
+  `ctrl+p cmd`; since `cmd` is not a substring of `commands`, TUI detection and the activity hint had
+  both silently stopped matching, and both are fixed and re-verified against a live pane.
+
 - **Five platforms' model presets re-pointed at live-verified ids (Issue #111).** Every id below
   was read from the live ACP catalog on 2026-09-21 (`initialize` → `session/new` → `configOptions`,
   read-only, session closed immediately); no user configuration was written. Kimi CLI's default

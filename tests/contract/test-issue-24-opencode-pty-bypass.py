@@ -2,9 +2,17 @@
 """Issue #24 RED contract: keep OpenCode ACP without skip; document PTY --auto bypass.
 
 Measurement found no OpenCode ACP skip-all. Default transport stays ACP
-(``opencode acp`` with no skip argv). PTY ``--mini --auto`` remains the bypass
-via ``--transport pty``. Do not invent process-time auto-permit or inject
+(``opencode acp`` with no skip argv). PTY ``--auto`` remains the bypass via
+``--transport pty``. Do not invent process-time auto-permit or inject
 ``OPENCODE_PERMISSION`` / permission config as a fake skip.
+
+Issue #112 re-measured the no-skip fact on OpenCode V2 ``2.0.11`` instead of
+inheriting it: ``session/request_permission`` offers exactly ``allow_once``,
+``allow_always`` and ``reject_once``, and ``session/new`` advertises only the
+``model``/``effort``/``mode`` config options -- no skip-all in either place.
+The same upgrade removed the ``--mini`` flag ("Unrecognized flag: --mini in
+command opencode"), so the PTY bypass is now ``<repo> --auto``; ``--auto`` is
+still a top-level V2 flag and is still the knob this contract protects.
 
 The Agent-facing gap on this baseline is empty ``acp_quirks`` (generated Skill
 says known quirks are blank). README/CHANGELOG/launch_summary notes are not
@@ -38,7 +46,6 @@ SKIP_ARGV = (
     "--dangerously-skip-permissions",
     "--always-approve",
     "--skip-permissions",
-    "--mini",
     "--yes",
 )
 
@@ -154,16 +161,33 @@ class Issue24KeepAcpWithoutSkip(unittest.TestCase):
 
 
 class Issue24PtyAutoBypass(unittest.TestCase):
-    """PTY launch still supplies --mini --auto as the documented bypass knob."""
+    """PTY launch still supplies --auto as the documented bypass knob."""
 
-    def test_opencode_pty_launch_still_passes_mini_auto(self) -> None:
+    def test_opencode_pty_launch_still_passes_auto(self) -> None:
         body = OPENCODE_ADAPTER.read_text(encoding="utf-8")
-        self.assertIn("--mini --auto", body)
         self.assertRegex(
             body,
-            r"ADAPTER_LAUNCH_ARGS=\([^)]*--mini --auto",
-            "PTY adapter must still launch --mini --auto",
+            r"ADAPTER_LAUNCH_ARGS=\(\"\$launch_repo\" --auto\)",
+            "PTY adapter must still launch the repo with --auto",
         )
+
+    def test_opencode_pty_launch_drops_the_v1_only_flags(self) -> None:
+        """Issue #112: V2 rejects each of these outright, so a surviving
+        occurrence is a launch that aborts on 2.0.11, not a stale comment."""
+        body = OPENCODE_ADAPTER.read_text(encoding="utf-8")
+        launch = re.search(
+            r"adapter_build_launch\(\) \{(.*?)^\}", body, flags=re.DOTALL | re.MULTILINE
+        )
+        self.assertIsNotNone(launch, "adapter_build_launch not found")
+        args = re.findall(r"ADAPTER_LAUNCH_ARGS[+]?=\((.*?)\)", launch.group(1))
+        self.assertTrue(args, "no ADAPTER_LAUNCH_ARGS assignment found")
+        for argv in args:
+            for flag in ("--mini", "--model", "--variant"):
+                self.assertNotIn(
+                    flag,
+                    argv,
+                    f"V2 rejects top-level {flag}; it must not reach the launch argv: {argv!r}",
+                )
 
     def test_launch_summary_does_not_steer_default_start_onto_pty(self) -> None:
         summary = parse_manifest(MANIFEST)["launch_summary"]

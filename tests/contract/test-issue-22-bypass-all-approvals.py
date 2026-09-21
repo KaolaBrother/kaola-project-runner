@@ -75,7 +75,10 @@ class Issue22StaticSkipKnobs(unittest.TestCase):
         self.assertIn("ADAPTER_LAUNCH_ARGS+=(--yolo)", CURSOR_ADAPTER.read_text(encoding="utf-8"))
 
     def test_opencode_pty_launch_passes_auto(self) -> None:
-        self.assertIn("--mini --auto", OPENCODE_ADAPTER.read_text(encoding="utf-8"))
+        # Issue #112: OpenCode V2 (2.0.11) removed the --mini flag; --auto is
+        # still the top-level bypass knob this contract is about.
+        body = OPENCODE_ADAPTER.read_text(encoding="utf-8")
+        self.assertIn('ADAPTER_LAUNCH_ARGS=("$launch_repo" --auto)', body)
 
     def test_grok_pty_launch_passes_always_approve(self) -> None:
         self.assertIn("--always-approve", GROK_ADAPTER.read_text(encoding="utf-8"))

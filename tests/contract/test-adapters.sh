@@ -291,7 +291,8 @@ else
           fail "test_${platform}_no_flag_skip_all" "No-flag Kimi PTY start must launch with --yolo: $log_text"
       fi
     elif [[ "$platform" == opencode ]]; then
-      grep -Fq "args=$canonical_repo --mini --auto" <<<"$log_text" || fail "test_${platform}_new_launch" "OpenCode launch lacks repo --mini --auto shape: $log_text"
+      grep -Fq "args=$canonical_repo --auto" <<<"$log_text" || fail "test_${platform}_new_launch" "OpenCode launch lacks repo --auto shape: $log_text"
+      grep -Fq -- '--mini' <<<"$log_text" && fail "test_${platform}_new_launch" "OpenCode V2 rejects the top-level --mini flag (issue #112): $log_text"
     elif [[ "$platform" == cursor-cli ]]; then
       grep -Fq "args=--workspace $canonical_repo" <<<"$log_text" || fail "test_${platform}_new_launch" "Cursor launch lacks --workspace shape: $log_text"
       grep -Fq -- '--yolo' <<<"$log_text" || fail "test_${platform}_no_flag_skip_all" "No-flag Cursor PTY start must launch with --yolo: $log_text"

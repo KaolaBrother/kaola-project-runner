@@ -30,7 +30,7 @@ blocks ordinary observe, capture, send, key, or stop transport chosen by the Age
 
 ## Launch
 
-Launch opencode <repo> --mini --auto. Default ACP has no skip-all; PTY --auto via --transport pty is the bypass; configOptions.mode is agent identity (build/plan), not skip-all.
+Launch opencode <repo> --auto. V2 removed the --mini flag, its mini subcommand takes neither a directory nor --auto, and top-level --model/--variant are rejected outright. Default ACP has no skip-all; PTY --auto via --transport pty is the bypass; configOptions.mode is agent identity (build/plan), not skip-all.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, key, answer, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill

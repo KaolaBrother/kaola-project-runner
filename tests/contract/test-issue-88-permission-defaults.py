@@ -20,6 +20,9 @@ Two release-review defects on the frozen ``f39d940`` line, both prompt-level:
 
 2. ``platforms/opencode.yaml`` carried ``acp_verified_versions cli=1.18.29``
    while its ``steering_summary`` reported a ``-32601`` probe run on 1.18.17.
+   Issue #112 moved the verified build to OpenCode V2 ``2.0.11``; the
+   calibration is unchanged in shape -- 1.18.17 stays the historical probe and
+   must not be read as speaking for the newer verified build.
    Read together those assert a current-version result that was never measured.
 
 The fix is wording and evidence marking only. This contract therefore pins the
@@ -282,6 +285,20 @@ class PlatformFactsStayTheSingleSource(unittest.TestCase):
         self.assertEqual(values["acp_command"], "opencode acp")
         self.assertIn("no ACP skip-all", values["acp_quirks"])
 
+    def test_opencode_no_skip_all_is_measured_on_the_verified_build(self) -> None:
+        """Issue #112: the claim must name the build it was measured on and the
+        choice set it measured, not carry a V1 finding forward unlabelled."""
+        values = manifest_values(OPENCODE_MANIFEST)
+        quirks = values["acp_quirks"]
+        self.assertIn("2.0.11", quirks)
+        self.assertIn("cli=2.0.11", values["acp_verified_versions"])
+        for choice in ("allow_once", "allow_always", "reject_once"):
+            self.assertIn(
+                choice,
+                quirks,
+                f"the measured V2 permission choice set must name {choice!r}: {quirks!r}",
+            )
+
     def test_cursor_acp_still_carries_the_yolo_launch_flag(self) -> None:
         values = manifest_values(CURSOR_MANIFEST)
         self.assertEqual(values["acp_command"], "cursor-agent --yolo acp")
@@ -293,7 +310,8 @@ class PlatformFactsStayTheSingleSource(unittest.TestCase):
 
 
 class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
-    """1.18.17 is history; 1.18.29 was never probed and must read as unknown."""
+    """1.18.17 is history; the verified 2.0.11 build was never probed for
+    steering and must read as unknown."""
 
     def test_summary_marks_the_probe_as_historical(self) -> None:
         summary = manifest_values(OPENCODE_MANIFEST)["steering_summary"]
@@ -308,15 +326,15 @@ class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
         values = manifest_values(OPENCODE_MANIFEST)
         summary = values["steering_summary"]
         self.assertIn(
-            "1.18.29",
+            "2.0.11",
             summary,
             "the summary must name the currently verified version it does NOT cover",
         )
-        self.assertIn("cli=1.18.29", values["acp_verified_versions"])
+        self.assertIn("cli=2.0.11", values["acp_verified_versions"])
         self.assertRegex(
             summary,
             r"not a measurement of",
-            f"the summary must deny that 1.18.17 measured 1.18.29: {summary!r}",
+            f"the summary must deny that 1.18.17 measured 2.0.11: {summary!r}",
         )
         self.assertRegex(
             summary,
@@ -326,7 +344,7 @@ class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
 
     def test_generated_steering_reference_carries_the_calibration(self) -> None:
         text = OPENCODE_STEERING.read_text(encoding="utf-8")
-        for needle in ("1.18.17", "1.18.29", "unknown"):
+        for needle in ("1.18.17", "2.0.11", "unknown"):
             self.assertIn(
                 needle,
                 text,
@@ -375,7 +393,7 @@ class OpenCodeCurrentCapabilityIsUnknownEverywhere(unittest.TestCase):
         self.assertEqual(
             manifest_values(OPENCODE_MANIFEST)["native_steering"],
             "unknown",
-            "the 1.18.17 probe does not measure the verified 1.18.29 build, so the "
+            "the 1.18.17 probe does not measure the verified 2.0.11 build, so the "
             "current capability is unknown, not unsupported",
         )
 
@@ -545,7 +563,7 @@ class ApiDocDefersToTheManifests(unittest.TestCase):
         """The one case #88 established is still concrete, not generalised away."""
         text = flowed(API_DOC.read_text(encoding="utf-8"))
         self.assertIn("1.18.17", text)
-        self.assertIn("1.18.29", text)
+        self.assertIn("2.0.11", text)
         self.assertIn("steer-capability-unknown", text)
         self.assertIn("instead of a proven absence", text)
 
