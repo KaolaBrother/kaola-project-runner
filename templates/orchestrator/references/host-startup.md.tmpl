@@ -44,7 +44,9 @@ handling does not. Do not take that over session by session.
 
    Every turn-opening prompt to the Host — the first handoff, a resume or
    attach update, a worker-event notification, and the round after any
-   compaction — opens with `/kaola-project-runner` as its first line. A busy
+   compaction — opens with `/kaola-project-runner` as its first line (a
+   non-ZCode Host: its platform's `host_skill_entry`, per
+   [host-entry-matrix.md](host-entry-matrix.md)). A busy
    `steer` guide is not a new prompt: it enters the running turn verbatim,
    keeps the already-loaded context, and is no new Skill invocation. The
    composite `steer --steer-mode interrupt` ends the turn and resends on a
@@ -57,7 +59,7 @@ handling does not. Do not take that over session by session.
 ## C. The Host's own startup and beat
 
 The prompt that woke you already loaded the main Skill through its first-line
-`/kaola-project-runner` invocation — startup, resume and post-compaction rounds
+entry (`/kaola-project-runner` on ZCode) — startup, resume and post-compaction rounds
 alike; never `read` a `SKILL.md` path by hand. Read the plan and the project's
 recovery records, and answer
 with a short startup receipt: role, authorization (platforms, count, implement or

@@ -223,8 +223,10 @@ class HolderEnvelope(unittest.TestCase):
         self.assertIn('HOST_SKILL_ENTRY = "/kaola-project-runner"', self.src)
 
     def test_entry_is_the_first_payload_line(self) -> None:
-        m = re.search(r"lines = \[\s*\n\s*HOST_SKILL_ENTRY,", self.src)
-        self.assertIsNotNone(m, "the payload list must start with HOST_SKILL_ENTRY")
+        # Issue #119: the payload opens with the holder's own entry line,
+        # which is HOST_SKILL_ENTRY for ZCode.
+        m = re.search(r"lines = \[\s*\n\s*self\.host_entry,", self.src)
+        self.assertIsNotNone(m, "the payload list must start with the host entry")
         self.assertLess(m.start(), self.src.index("kaola-host-notify/1"))
 
     def test_no_second_mechanism(self) -> None:
@@ -247,13 +249,23 @@ class HolderEnvelope(unittest.TestCase):
                       self.src)
         self.assertIsNotNone(m, "interrupt resend must send text verbatim")
         # HOST_SKILL_ENTRY is used exactly twice: its definition and the
-        # notification payload's first line — never as prompt-content
-        # inspection or a resend prepend.
+        # ZCode fallback of the holder's own entry (Issue #119). That entry is
+        # read only by the constructor, the notification payload's first line,
+        # the carrier-op capability guard, and the record - never as
+        # prompt-content inspection or a resend prepend.
         uses = [ln for ln in self.src.splitlines()
                 if "HOST_SKILL_ENTRY" in ln]
         self.assertEqual(len(uses), 2, uses)
         self.assertIn('HOST_SKILL_ENTRY = "/kaola-project-runner"', uses[0])
-        self.assertRegex(uses[1], r"^\s+HOST_SKILL_ENTRY,$")
+        self.assertIn('entry = HOST_SKILL_ENTRY if args.platform == "zcode"', uses[1])
+        entry_uses = [ln.strip() for ln in self.src.splitlines()
+                      if "self.host_entry" in ln]
+        self.assertEqual(entry_uses, [
+            "self.host_entry: str = entry",
+            '"host_skill_entry": self.host_entry,',
+            "self.host_entry,",
+            "if not self.host_entry:",
+        ], entry_uses)
 
     def test_holder_documents_interrupt_is_no_recovery_entry(self) -> None:
         text = flat(self.src)

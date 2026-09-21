@@ -647,20 +647,22 @@ def test_bounded_queue_dedup_and_single_batch_flush() -> None:
         sandbox.cleanup()
 
 
-def test_carrier_is_zcode_host_only() -> None:
+def test_carrier_needs_host_skill_entry() -> None:
+    """Issue #119: the carrier is open to every platform with a measured Host
+    Skill entry; a platform without one (codex today) still fails closed."""
     sandbox = Sandbox("zcodeonly")
     try:
         host = sandbox.session()
         sandbox.start(host, "basic")
 
-        # The CLI fails closed on a non-ZCode target, a self target, and junk.
+        # The CLI fails closed on an entry-less target, a self target, and junk.
         bad_target = sandbox.session()
         result, _ = sandbox.invoke(
             "start", "--mode", "yolo", session=bad_target, scenario="basic",
             **{HEARTBEAT_HOST_ENV: json.dumps(
-                {"platform": "claude-code", "session": host, "repo": str(sandbox.repo)})})
-        check(result.returncode != 0 and "ZCode" in (result.stderr or ""),
-              f"non-ZCode heartbeat target is refused at start ({result.returncode})")
+                {"platform": "codex", "session": host, "repo": str(sandbox.repo)})})
+        check(result.returncode != 0 and "Host Skill entry" in (result.stderr or ""),
+              f"entry-less heartbeat target is refused at start ({result.returncode})")
         check(not sandbox.record_dir(bad_target).exists(),
               "a refused target starts no holder")
 
@@ -676,23 +678,23 @@ def test_carrier_is_zcode_host_only() -> None:
             **{HEARTBEAT_HOST_ENV: "not-json"})
         check(result.returncode != 0, "malformed heartbeat target env is refused")
 
-        # A holder for another platform rejects the op outright.
+        # A holder for an entry-less platform rejects the op outright.
         fake_agent = sandbox.dir / "fake-acp-agent.py"
         fake_agent.write_text(FAKE_ACP_AGENT, encoding="utf-8")
         fake_agent.chmod(fake_agent.stat().st_mode | 0o755)
         other = f"hb-other-{uuid.uuid4().hex[:8]}"
         receipt = sandbox.cli("start", "--command", f"{PYTHON} {fake_agent}",
-                              session=other, scenario=None, platform="claude-code")
-        check(receipt.get("state") == "ready", f"non-ZCode holder starts ({receipt.get('error')})")
-        other_dir = sandbox.record_dir(other, platform="claude-code")
+                              session=other, scenario=None, platform="codex")
+        check(receipt.get("state") == "ready", f"entry-less holder starts ({receipt.get('error')})")
+        other_dir = sandbox.record_dir(other, platform="codex")
         rejection = holder_op(holder_socket(other_dir), "worker_event",
                               {"schema": "kaola-worker-event/1", "kind": "idle",
                                "platform": "zcode", "session": "w", "repo": "/x",
                                "reason": "r", "event_cursor": 1})
         check((rejection.get("error") or {}).get("code") == "worker-event-unsupported",
-              f"a non-ZCode host holder rejects the carrier op ({rejection})")
-        stop = sandbox.cli("stop", "--force", session=other, platform="claude-code")
-        check(stop.get("residual_pids") == [], "non-ZCode holder stop leaves no residue")
+              f"an entry-less host holder rejects the carrier op ({rejection})")
+        stop = sandbox.cli("stop", "--force", session=other, platform="codex")
+        check(stop.get("residual_pids") == [], "entry-less holder stop leaves no residue")
         host_stop = sandbox.cli("stop", "--force", session=host)
         check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
     finally:
@@ -1146,6 +1148,8 @@ def bare_holder(module, entries: list[dict] | None = None, *,
     holder.agent = Agent()
     holder.args = type("Args", (), {"platform": "zcode", "repo": "/nonexistent",
                                     "session": "host"})()
+    holder.host_entry = module.HOST_SKILL_ENTRY
+    holder.host_name = "ZCode"
     return holder
 
 
@@ -1503,7 +1507,8 @@ def test_issue_104_dispatcher_refusals_open_nothing() -> None:
 
 def test_issue_104_explicit_and_no_carrier_rows() -> None:
     """Design §e P4, P5, P7: the explicit variable equal to the dispatcher
-    binds as before; a non-ZCode dispatcher starts unbound without refusal; a
+    binds as before; an entry-less dispatcher (Issue #119: codex, not merely
+    non-ZCode) starts unbound without refusal; a
     reused live holder keeps its binding and exact stop/start binds."""
     sandbox = Sandbox("i104-rows")
     try:
@@ -1528,14 +1533,14 @@ def test_issue_104_explicit_and_no_carrier_rows() -> None:
         worker = sandbox.session()
         receipt = sandbox.cli(
             "start", "--mode", "yolo", session=worker, scenario="basic",
-            **{DISPATCHER_ENV: json.dumps(dict(dispatcher, platform="claude-code",
-                                               session="cc-host"))})
+            **{DISPATCHER_ENV: json.dumps(dict(dispatcher, platform="codex",
+                                               session="codex-host"))})
         check(receipt.get("state") == "ready"
               and receipt.get("heartbeat_host_source") == "dispatcher-no-carrier"
               and receipt.get("heartbeat_host") is None
               and receipt.get("heartbeat_host_known") is True
-              and (receipt.get("dispatcher") or {}).get("platform") == "claude-code",
-              f"P5: a non-ZCode dispatcher starts unbound, not refused ({receipt.get('error')})")
+              and (receipt.get("dispatcher") or {}).get("platform") == "codex",
+              f"P5: an entry-less dispatcher starts unbound, not refused ({receipt.get('error')})")
         sandbox.cli("stop", session=worker)
 
         # P7: a worker started before the change (no dispatcher, unbound).

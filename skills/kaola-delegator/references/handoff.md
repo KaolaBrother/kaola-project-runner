@@ -119,11 +119,11 @@ yourself to open a Host round.
 
 Every turn-opening Host prompt — handoff and later updates alike — opens
 with `/kaola-project-runner` as its own first line: the native Skill entry,
-idempotent across re-invocation and after compaction. Install the generated
+idempotent across re-invocation and after compaction (non-ZCode: its
+`host_skill_entry`). Install the generated
 Skill under a discovered root — default `<repo>/.zcode/skills/`,
 `<repo>/.agents/skills/`, `~/.zcode/skills/`, or `~/.agents/skills/`
-(configured `skills.roots`/`plugins.dirs` roots also scan); elsewhere the
-line arrives as plain text. No `AGENTS.md` block or manual `SKILL.md` read is the carrier.
+(configured `skills.roots`/`plugins.dirs` roots also scan); else plain text. No `AGENTS.md` block or manual `SKILL.md` read is the carrier.
 
 Handoff text (quota units never merge; `unspecified` is not unlimited):
 

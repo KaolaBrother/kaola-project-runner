@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- **Non-ZCode ACP runtimes can host Project Runner (Issue #119).** Every platform manifest gains
+  `host_skill_entry`: the measured first line that opens each Host turn. It is filled only from
+  live trigger evidence in a fresh ACP session, plus a negative control.
+  `/kaola-project-runner` is measured for zcode, claude-code, cursor-cli, grok, devin, droid, dsh
+  and opencode; kimi-cli uses `/skill:kaola-project-runner ` (the trailing space ends Kimi's
+  command name). Codex stays empty because its turns were blocked by an account usage limit. The
+  heartbeat carrier opens with the Host's own entry and names `(<runtime_name> Host)`; the ZCode
+  carrier is byte-identical to before. A worker dispatched by any Host with an entry binds to it
+  (#104), and an entry-less dispatcher still starts unbound. Carrier-target validation, the
+  holder's `worker_event` op, and #105's build-skew check follow the entry. For a Host-named
+  start on those platforms, #105 compares that platform's measured Skill roots. A Host start
+  resolves model/tier exactly like a worker start; the only Host model constants are still the
+  ZCode ones. Every ACP `start` receipt reports the agent's own `effective_selection`. On
+  opencode, an explicit `--model`/`--effort` the agent does not report is refused
+  (`explicit-selection-unverified`) and the session is stopped. Measured on OpenCode 2.0.11, the
+  ACP default resolves the configured `opencode-go/deepseek-v4.1-flash` under provider `opencode`
+  (`provider.no-route`) and does not inherit the TUI's `max` effort. The explicit
+  `--model opencode-go/deepseek-v4.1-flash --effort max` works. The installer gains
+  `--runtime grok-cli|droid|opencode|kimi-cli|dsh`, each installing to a measured root.
+  `--runtime grok` is still refused and now points to `grok-cli`. New reference
+  `host-entry-matrix.md` and new suite `tests/contract/test-issue-119-host-entry.py`. The
+  #33/#74/#90/#94 heartbeat tests now pin the per-platform entry instead of ZCode-only.
+
 ## 0.5.6 — 2026-09-21
 
 - **The authorized worker count is a hard cap on live processes; a finished seat is stopped, not

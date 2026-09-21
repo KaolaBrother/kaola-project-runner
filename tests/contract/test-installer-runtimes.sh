@@ -129,6 +129,23 @@ assert_link "test_runtime_zcode_install" "$home/.zcode/skills/grok-kaola-project
 assert_absent "test_runtime_zcode_no_external" "$home/.zcode/skills/kaola-delegator"
 assert_absent "test_runtime_zcode_no_bin_links" "$home/.local/bin/kaola-acp"
 
+# Issue #119: measured Skill roots of the non-ZCode Host platforms; each
+# install is reversible by --uninstall on the same runtime.
+for pair in "grok-cli:.grok/skills" "droid:.factory/skills" \
+            "opencode:.config/opencode/skills" "kimi-cli:.agents/skills" "dsh:.agents/skills"; do
+  rt="${pair%%:*}"; rel="${pair#*:}"
+  output="$(run_installer "$repo" "$home" --runtime "$rt" --platform grok --method link 2>&1)" \
+    || fail "test_runtime_${rt}_install" "install failed: $output"
+  assert_link "test_runtime_${rt}_install" "$home/$rel/grok-kaola-project-runner" \
+    "$(source_for "$repo" grok-kaola-project-runner)"
+  assert_link "test_runtime_${rt}_main_skill" "$home/$rel/kaola-project-runner" \
+    "$(source_for "$repo" kaola-project-runner)"
+  output="$(run_installer "$repo" "$home" --runtime "$rt" --platform grok --uninstall 2>&1)" \
+    || fail "test_runtime_${rt}_uninstall" "uninstall failed: $output"
+  assert_absent "test_runtime_${rt}_uninstall" "$home/$rel/grok-kaola-project-runner"
+  assert_absent "test_runtime_${rt}_uninstall_main" "$home/$rel/kaola-project-runner"
+done
+
 # --- argument validation -----------------------------------------------------
 set +e
 output="$(run_installer "$repo" "$home" --runtime bogus --platform grok 2>&1)"
@@ -143,6 +160,7 @@ set -e
 [[ "$output" == *"unknown runtime: grok"* ]] || fail "test_runtime_grok_is_not_host" "expected grok host/worker distinction, got: $output"
 [[ "$output" == *"bridge host"* ]] || fail "test_runtime_grok_is_not_host" "expected bridge-host hint, got: $output"
 [[ "$output" == *"--platform grok"* ]] || fail "test_runtime_grok_is_not_host" "expected platform grok hint, got: $output"
+[[ "$output" == *"--runtime grok-cli"* ]] || fail "test_runtime_grok_is_not_host" "expected Grok CLI Host install hint, got: $output"
 set +e
 output="$(run_installer "$repo" "$home" --platform grok-bot 2>&1)"
 rc=$?

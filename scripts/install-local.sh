@@ -37,6 +37,13 @@ usage() {
     '               .agents/skills — --skills-dir covers either — and the' \
     '               user-level ~/.zcode/skills and ~/.agents/skills; configured' \
     '               skills.roots/plugins.dirs roots also scan — docs/zcode-host.md)' \
+    '  grok-cli     $HOME/.grok/skills (Grok CLI Host)' \
+    '  droid        $HOME/.factory/skills' \
+    '  opencode     $HOME/.config/opencode/skills' \
+    '  kimi-cli     $HOME/.agents/skills (the only root Kimi CLI reads)' \
+    '  dsh          $HOME/.agents/skills (the only root dsh reads)' \
+    'Each root above was measured as a Skill root of that CLI (Issue #119,' \
+    'host-entry-matrix.md in the Project Runner Skill).' \
     'Grok Bot is a bridge host, not an installer destination: the account holds one' \
     'thin generated Skill (hosts/grok-bot/kaola-delegator.md) that loads the' \
     'Kaola-Delegator Skill from this checkout on the bound execution target' \
@@ -44,7 +51,8 @@ usage() {
     '(scripts/kaola-locate.py register --target local|cloud, which validates the' \
     'checkout, links the command, and writes its registration receipt beside the' \
     'link; a bare --bin-links link carries no receipt). See docs/grok-bot-host.md.' \
-    'Grok CLI worker uses --platform grok, not --runtime grok.' \
+    'Grok CLI worker uses --platform grok, not --runtime grok; a Grok CLI Host' \
+    'installs with --runtime grok-cli.' \
     'ZCode is both a worker platform (--platform zcode) and a native' \
     'skill-directory Host (--runtime zcode installs to $HOME/.zcode/skills; a' \
     'workspace .zcode/skills or .agents/skills destination goes through' \
@@ -106,6 +114,12 @@ runtime_skills_dir() {
     cursor) printf '%s\n' "$HOME/.cursor/skills" ;;
     devin) printf '%s\n' "${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills" ;;
     zcode) printf '%s\n' "$HOME/.zcode/skills" ;;
+    # Issue #119: user roots measured live for each non-ZCode Host platform
+    # (templates/orchestrator/references/host-entry-matrix.md).
+    grok-cli) printf '%s\n' "$HOME/.grok/skills" ;;
+    droid) printf '%s\n' "$HOME/.factory/skills" ;;
+    opencode) printf '%s\n' "$HOME/.config/opencode/skills" ;;
+    kimi-cli|dsh) printf '%s\n' "$HOME/.agents/skills" ;;
     *) return 1 ;;
   esac
 }
@@ -133,7 +147,7 @@ while [[ $# -gt 0 ]]; do
     --runtime)
       [[ $# -ge 2 ]] || { printf '%s\n' '--runtime needs a value' >&2; exit 2; }
       if [[ "$2" == grok ]]; then
-        printf 'unknown runtime: grok\nGrok CLI is worker platform id grok (--platform grok). Grok Bot is a bridge host with no installer destination (see docs/grok-bot-host.md).\n' >&2
+        printf 'unknown runtime: grok\nGrok CLI is worker platform id grok (--platform grok); a Grok CLI Host installs with --runtime grok-cli ($HOME/.grok/skills). Grok Bot is a bridge host with no installer destination (see docs/grok-bot-host.md).\n' >&2
         exit 2
       fi
       if [[ "$2" == grok-bot || "$2" == grokbot ]]; then

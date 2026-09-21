@@ -139,8 +139,9 @@ CHILD_RECORD_NAME = "children.jsonl"
 # writer, never a periodic scheduler. Issue #87: a 33rd detailed event is
 # refused as queue-full and recorded as one monotonic full-check generation
 # in that same log so the next heartbeat still wakes a real-status /
-# pending-approval pass (remind only). Other hosts are untouched: the
-# carrier op exists only for platform zcode.
+# pending-approval pass (remind only). Issue #119: any platform whose
+# manifest declares a measured ``host_skill_entry`` can host; the carrier op is
+# refused on a holder that was started without one.
 HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
 HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
 # Issue #104 (design #99 §a.1): set by this holder for the agent it hosts.
@@ -175,7 +176,9 @@ OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
 # Runner body for this turn - startup, resume, heartbeat, and post-compaction
 # alike. A busy `steer` guide is forwarded into the running turn instead and
 # is no new Skill invocation. The envelope owns this line; the Host's
-# heartbeat `body` does not carry it.
+# heartbeat `body` does not carry it. Issue #119: this is the ZCode value and
+# the fallback for a holder spawned without --host-entry; every other platform
+# hands its own measured manifest line through --host-entry.
 HOST_SKILL_ENTRY = "/kaola-project-runner"
 # Issue #90: how many recently confirmed worker event ids stay remembered, so a
 # worker retrying the same deterministic event_id after a confirmed Host turn is
@@ -198,14 +201,15 @@ def parse_heartbeat_host() -> dict[str, str] | None:
         target = json.loads(raw)
     except ValueError:
         target = None
-    if (not isinstance(target, dict) or target.get("platform") != "zcode"
+    if (not isinstance(target, dict) or not isinstance(target.get("platform"), str)
+            or not target["platform"]
             or not isinstance(target.get("session"), str) or not target["session"]
             or not isinstance(target.get("repo"), str) or not target["repo"]
             or not socket_path or not os.path.isabs(socket_path)):
         sys.stderr.write(f"[kaola-acp-holder] invalid {HEARTBEAT_HOST_ENV}: "
                          "heartbeat carrier disabled\n")
         return None
-    return {"platform": "zcode", "session": target["session"],
+    return {"platform": target["platform"], "session": target["session"],
             "repo": target["repo"], "socket": socket_path}
 
 
@@ -1300,6 +1304,14 @@ class Holder:
         self.undelivered_wakes: dict[str, dict[str, Any]] = {}
         self.undelivered_wakes_lock = threading.Lock()
         self.heartbeat_host = parse_heartbeat_host()
+        # Issue #119: the turn-opening Skill entry line and display name this
+        # holder carries as a Host. Empty entry = not a carrier Host.
+        entry = getattr(args, "host_entry", None)
+        if entry is None:
+            entry = HOST_SKILL_ENTRY if args.platform == "zcode" else ""
+        self.host_entry: str = entry
+        self.host_name: str = (getattr(args, "host_name", None)
+                               or ("ZCode" if args.platform == "zcode" else args.platform))
 
     # -- record ---------------------------------------------------------------
 
@@ -1356,6 +1368,7 @@ class Holder:
             # plain unbound worker. A surface without the key predates Issue #70
             # and is unknown, never evidence of being unbound.
             "heartbeat_host": self.heartbeat_host,
+            "host_skill_entry": self.host_entry,
             "pending_permissions": list(self.pending_permissions.values()),
             "last_prompt": self.last_prompt,
             "event_cursor": self.events.cursor,
@@ -2285,7 +2298,7 @@ class Holder:
         if not maintained:
             if defect is not None:
                 body = (f"The heartbeat prompt file at {source} exists but carries no "
-                        f"usable prompt: {defect}. This ZCode Host session maintains "
+                        f"usable prompt: {defect}. This {self.host_name} Host session maintains "
                         'that file; write a JSON object whose "body" field is a '
                         "non-empty string holding the full working prompt, and treat "
                         "this pass as running without it. Recover authorization and "
@@ -2296,8 +2309,8 @@ class Holder:
                         "authorization and field state from the consuming project records, "
                         "then run one full pass.")
         lines = [
-            HOST_SKILL_ENTRY,
-            "kaola-host-notify/1: event-driven heartbeat carrier (ZCode Host)",
+            self.host_entry,
+            f"kaola-host-notify/1: event-driven heartbeat carrier ({self.host_name} Host)",
             "worker events (structured, one JSON object per line):",
         ]
         for event in events:
@@ -2334,7 +2347,7 @@ class Holder:
                      "authorization and field state, handle worker questions, dispatch "
                      "suitable authorized work, verify deliveries, and close out - per "
                      "PROJECT_RUNNER_HEARTBEAT_V2. This worker event is the only heartbeat "
-                     "trigger; this ZCode Host registers no periodic carrier.")
+                     f"trigger; this {self.host_name} Host registers no periodic carrier.")
         meta: dict[str, Any] = {"heartbeat_fingerprint": f"sha256:{digest}",
                                 "heartbeat_source": str(source),
                                 "heartbeat_maintained": maintained}
@@ -2501,13 +2514,13 @@ class Holder:
                 self._deliver_worker_events()
 
     def op_worker_event(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Carrier op on a ZCode Host holder: stage one worker event, then
+        """Carrier op on a Host holder: stage one worker event, then
         deliver when the host turn is already idle."""
-        if self.args.platform != "zcode":
+        if not self.host_entry:
             return {"error": {"code": "worker-event-unsupported",
-                              "message": "the event-driven heartbeat carrier is a ZCode "
-                                         f"Host capability; this session's platform is "
-                                         f"{self.args.platform}"}}
+                              "message": "the event-driven heartbeat carrier needs a "
+                                         "measured host Skill entry; this session's "
+                                         f"platform {self.args.platform} declares none"}}
         kind = params.get("kind")
         platform = params.get("platform")
         session = params.get("session")
@@ -3926,6 +3939,8 @@ def main() -> int:
     parser.add_argument("--resume")
     parser.add_argument("--continue", dest="use_continue", action="store_true")
     parser.add_argument("--init-meta", default="")
+    parser.add_argument("--host-entry", default=None)
+    parser.add_argument("--host-name", default=None)
     parser.add_argument("--probe", action="store_true")
     args = parser.parse_args()
     if args.probe:

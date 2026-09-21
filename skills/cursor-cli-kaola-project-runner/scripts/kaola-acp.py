@@ -90,8 +90,9 @@ ZCODE_NODE_ENV = "KAOLA_ZCODE_NODE"
 # heartbeat carrier). JSON: {"platform": "zcode", "session": ..., "repo": ...}.
 # The CLI validates it, resolves the host holder's deterministic socket, and
 # hands both to the spawned worker holder; that holder does the notifying from
-# its existing agent-exit and turn-end paths. Other hosts keep their periodic
-# carriers: the target platform is ZCode only, and it fails closed.
+# its existing agent-exit and turn-end paths. Issue #119: the target platform
+# is any platform with a measured Host Skill entry (below); every other
+# platform keeps its periodic carrier, and it fails closed.
 HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
 HEARTBEAT_HOST_SOCKET_ENV = "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"
 # Set by a holder for its agent: the JSONL file where an agent that spawns
@@ -109,6 +110,47 @@ CHILD_RECORD_ENV = "KAOLA_ACP_CHILD_RECORD"
 # with a typed receipt when it is not, so a Runner-dispatched worker can
 # never open unbound by omission. Absent => standalone start, unchanged.
 DISPATCHER_ENV = "KAOLA_ACP_DISPATCHER"
+# Issue #119: each platform's measured turn-opening Skill entry line - the
+# `host_skill_entry` fact of platforms/<id>.yaml, restated here because an
+# installed worker Skill carries only its own manifest while the binding it
+# makes names another platform's Host. The contract test holds this table
+# equal to the manifests. Empty = no measured entry: that platform is not a
+# carrier Host (the pre-#119 behavior, unchanged pending the owner's call).
+HOST_SKILL_ENTRIES = {
+    "claude-code": "/kaola-project-runner",
+    "codex": "",
+    "cursor-cli": "/kaola-project-runner",
+    "devin": "/kaola-project-runner",
+    "droid": "/kaola-project-runner",
+    "dsh": "/kaola-project-runner",
+    "grok": "/kaola-project-runner",
+    "kimi-cli": "/skill:kaola-project-runner ",
+    "opencode": "/kaola-project-runner",
+    "zcode": "/kaola-project-runner",
+}
+# Issue #119: the Skill roots each platform was measured to discover, relative
+# to both the consuming repo and the home directory (a pair that does not
+# exist on one side is simply skipped). Issue #105 compares worker Skills found
+# here against a Host's own build before that Host starts.
+HOST_SKILL_DISCOVERY_DIRS = {
+    "claude-code": (".claude/skills",),
+    "codex": (".codex/skills", ".agents/skills"),
+    "cursor-cli": (".cursor/skills", ".claude/skills", ".codex/skills",
+                   ".grok/skills", ".agents/skills"),
+    "devin": (".config/devin/skills", ".devin/skills", ".claude/skills",
+              ".cursor/skills", ".agents/skills"),
+    "droid": (".factory/skills", ".agents/skills"),
+    "dsh": (".agents/skills",),
+    "grok": (".grok/skills", ".agents/skills", ".claude/skills", ".cursor/skills"),
+    "kimi-cli": (".agents/skills",),
+    "opencode": (".config/opencode/skills", ".config/opencode/skill",
+                 ".opencode/skills", ".claude/skills", ".agents/skills"),
+    "zcode": (".zcode/skills", ".agents/skills"),
+}
+
+
+def host_capable(platform: Any) -> bool:
+    return bool(HOST_SKILL_ENTRIES.get(platform) if isinstance(platform, str) else "")
 
 
 def record_holder_child_spawn(proc: subprocess.Popen) -> dict[str, Any] | None:
@@ -1349,17 +1391,19 @@ def holder_predates_steer(method: str, error: dict[str, Any]) -> dict[str, Any]:
 
 def validate_heartbeat_target(target: Any, args: argparse.Namespace, repo: str,
                               origin: str) -> dict[str, Any]:
-    """Validate one heartbeat host target (ZCode Host only) and resolve its
-    holder socket. Fails closed: a malformed, non-ZCode, or self-referential
-    target is a usage error, never a silently dropped event carrier."""
+    """Validate one heartbeat host target (a platform with a measured Host
+    Skill entry) and resolve its holder socket. Fails closed: a malformed,
+    entry-less, or self-referential target is a usage error, never a silently
+    dropped event carrier."""
     if not isinstance(target, dict):
         die(f"{origin} must be a JSON object")
     platform = target.get("platform")
     session = target.get("session")
     host_repo = target.get("repo")
-    if platform != "zcode":
-        die(f'{origin} target platform must be "zcode" (the event-driven '
-            f"heartbeat carrier is a ZCode Host capability), got {platform!r}")
+    if not host_capable(platform):
+        die(f"{origin} target platform must declare a measured Host Skill entry "
+            "(the event-driven heartbeat carrier needs one to open the Host turn), "
+            f"got {platform!r}")
     if not isinstance(session, str) or not SESSION_PATTERN.match(session):
         die(f"{origin} target session is missing or invalid")
     if not isinstance(host_repo, str) or not host_repo:
@@ -1453,9 +1497,9 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
     if dispatcher is None:
         return {"target": explicit, "source": "explicit" if explicit else "none",
                 "dispatcher": None, "refusal": None}
-    if dispatcher.get("platform") != "zcode":
-        # Row 4: dispatched, but the carrier is a ZCode Host capability. An
-        # explicit target still binds as today.
+    if not host_capable(dispatcher.get("platform")):
+        # Row 4: dispatched by a platform with no measured Host Skill entry,
+        # so no carrier can open its turn. An explicit target still binds.
         return {"target": explicit, "source": "explicit" if explicit else "dispatcher-no-carrier",
                 "dispatcher": dispatcher, "refusal": None}
     problem = repo_problem(dispatcher["repo"])
@@ -1465,10 +1509,13 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
                 "refusal": {"reason": "heartbeat-host-unresolved",
                             "detail": f"dispatcher repo {dispatcher['repo']} {problem}"}}
     derived = validate_heartbeat_target(
-        {"platform": "zcode", "session": dispatcher["session"], "repo": dispatcher["repo"]},
+        {"platform": dispatcher["platform"], "session": dispatcher["session"],
+         "repo": dispatcher["repo"]},
         args, repo, DISPATCHER_ENV)
     if explicit is not None:
-        if explicit["session"] == derived["session"] and explicit["repo"] == derived["repo"]:
+        if (explicit["platform"] == derived["platform"]
+                and explicit["session"] == derived["session"]
+                and explicit["repo"] == derived["repo"]):
             return {"target": explicit, "source": "explicit", "dispatcher": dispatcher,
                     "refusal": None}
         return {"target": None, "source": "explicit", "dispatcher": dispatcher,
@@ -1548,6 +1595,16 @@ def zcode_host_session(name: Any) -> bool:
     return bool(ZCODE_HOST_SESSION.match(name)) and not ZCODE_HOST_WORKER_MARKER.search(name)
 
 
+def host_session(platform: str, name: Any) -> bool:
+    """Issue #119: the standard Host name <platform>-<PROJECT_CODE>-orchestrator-<purpose>
+    for any platform, with the same -i<N>- worker exclusion as ZCode."""
+    if not isinstance(name, str):
+        return False
+    pattern = (rf"^{re.escape(platform)}-[A-Za-z0-9_.]+-orchestrator-"
+               r"[A-Za-z0-9][A-Za-z0-9_.-]*$")
+    return bool(re.match(pattern, name)) and not ZCODE_HOST_WORKER_MARKER.search(name)
+
+
 def zcode_host_model_match(value: Any) -> bool:
     """An ACP model value names GLM 5.3 exactly — provider-qualified values
     (``account:*\\GLM-5.3``, ``builtin:*\\GLM-5.3``) included; the distinct
@@ -1618,6 +1675,67 @@ def zcode_host_config_state(state: dict[str, Any]) -> tuple[Any, Any]:
     return model, effort
 
 
+# Issue #119 (H2): platforms whose explicit --model/--effort must be proven by
+# the agent's own advertised currentValue. OpenCode's ACP default silently
+# resolves a configured provider to another one (measured 2.0.11), so an
+# explicit request that did not take effect must never run on.
+EXPLICIT_SELECTION_VERIFIED = frozenset({"opencode"})
+
+
+def effective_selection(manifest: dict[str, str], state: Any) -> dict[str, Any]:
+    """The agent-advertised currentValue of this platform's model and effort
+    config options - the agent's answer, not the value this client sent."""
+    options = ((state.get("session_meta") or {}).get("configOptions")
+               if isinstance(state, dict) else None)
+    wanted = {"model": manifest.get("acp_model_config_id") or "",
+              "effort": manifest.get("acp_effort_config_id") or ""}
+    found: dict[str, Any] = {"effective_model": None, "effective_effort": None}
+    if isinstance(options, list):
+        for option in options:
+            if not isinstance(option, dict):
+                continue
+            for label, config_id in wanted.items():
+                if config_id and option.get("id") == config_id:
+                    found[f"effective_{label}"] = option.get("currentValue")
+    return found
+
+
+def explicit_selection_problem(requested_model: str, requested_effort: str,
+                               effective: dict[str, Any]) -> str | None:
+    problems = []
+    if requested_model and effective.get("effective_model") != requested_model:
+        problems.append(f"model {effective.get('effective_model')!r} is not the "
+                        f"requested {requested_model!r}")
+    if requested_effort and str(effective.get("effective_effort") or "").lower() \
+            != requested_effort.lower():
+        problems.append(f"effort {effective.get('effective_effort')!r} is not the "
+                        f"requested {requested_effort!r}")
+    return "; ".join(problems) or None
+
+
+def stop_started_holder(sock: Path, proc: subprocess.Popen) -> dict[str, Any]:
+    """Force-stop the holder this start just spawned and reap it."""
+    stop_reply = socket_request(sock, "stop", {"force": True}, 30.0)
+    # Reap through proc.wait: an exited holder stays a zombie under
+    # pid_alive until its own Popen object collects it.
+    try:
+        proc.wait(timeout=10.0)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            pass
+    return {
+        "host_session_stopped": bool(isinstance(stop_reply, dict) and stop_reply.get("stopped")),
+        "residual_pids": stop_reply.get("residual_pids") if isinstance(stop_reply, dict) else None,
+        "holder_alive": proc.poll() is None,
+    }
+
+
 def zcode_host_refusal(args: argparse.Namespace, repo: str,
                        problem: str) -> dict[str, Any]:
     """Issue #108 typed refusal — the Issue #105 shape: nothing was probed,
@@ -1662,7 +1780,8 @@ def invoking_skill_tree() -> Path | None:
     return tree if (tree / "SKILL.md").is_file() else None
 
 
-def installed_worker_skills(repo: str) -> tuple[list[tuple[Path, list[Path]]], list[str]]:
+def installed_worker_skills(repo: str, platform: str = "zcode"
+                            ) -> tuple[list[tuple[Path, list[Path]]], list[str]]:
     """``(found, unreadable)`` for the default discovery roots that exist.
 
     ``found`` is ``(root, worker Skill directories)`` in the documented order
@@ -1675,7 +1794,7 @@ def installed_worker_skills(repo: str) -> tuple[list[tuple[Path, list[Path]]], l
     unreadable: list[str] = []
     seen: set[str] = set()
     for base in (Path(repo), Path.home()):
-        for relative in SKILL_DISCOVERY_DIRS:
+        for relative in HOST_SKILL_DISCOVERY_DIRS.get(platform, SKILL_DISCOVERY_DIRS):
             root = base / relative
             if not root.is_dir():
                 continue
@@ -1700,7 +1819,7 @@ def installed_worker_skills(repo: str) -> tuple[list[tuple[Path, list[Path]]], l
     return found, unreadable
 
 
-def worker_skill_alignment(repo: str) -> dict[str, Any]:
+def worker_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]:
     """Compare every installed worker Skill's shared scripts with this build.
 
     Returns ``applies`` (False for a checkout invocation, which has no Skill
@@ -1718,7 +1837,7 @@ def worker_skill_alignment(repo: str) -> dict[str, Any]:
                 for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS}
     roots: list[dict[str, Any]] = []
     skew: list[dict[str, Any]] = []
-    installed, unreadable = installed_worker_skills(repo)
+    installed, unreadable = installed_worker_skills(repo, platform)
     for root, skills in installed:
         roots.append({"root": str(root), "skills": [skill.name for skill in skills]})
         for skill in skills:
@@ -1755,7 +1874,7 @@ def worker_skill_root_refusal(args: argparse.Namespace, repo: str,
         "result": "refused",
         "reason": "worker-skill-root-unreadable",
         "action": "start",
-        "detail": ("cannot verify installed worker Skills: ZCode discovery "
+        "detail": (f"cannot verify installed worker Skills: {args.platform} discovery "
                    f"root(s) not readable: {', '.join(roots)}. Make the root "
                    "readable or remove it, then start again."),
         "worker_skill_build": alignment["build"],
@@ -1828,12 +1947,16 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             receipt["mutation_status"] = "not_started"
             receipt["mutation_performed"] = False
             return receipt
+    # Issue #119: every ZCode start as before, plus a Host-named start on any
+    # other platform with a measured Host Skill entry.
+    if args.platform == "zcode" or (host_capable(args.platform)
+                                    and host_session(args.platform, args.session)):
         # Issue #105: this agent dispatches workers by running an installed
         # worker Skill's own `start`, and that copy carries the Issue #104
         # binding. Refuse a Host whose installed worker Skills are a different
         # build before anything exists, rather than letting the binding fail
         # silently one dispatch later.
-        alignment = worker_skill_alignment(repo)
+        alignment = worker_skill_alignment(repo, args.platform)
         # Issue #106: an existing default root that cannot be listed means no
         # comparison was possible at all; refuse it by name, never a traceback.
         if alignment["unreadable_roots"]:
@@ -1849,7 +1972,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         # An explicit --model/--effort that contradicts that is refused
         # before anything exists; an absent one is pinned after the session
         # is ready and verified against the holder's advertised state.
-        if zcode_host_session(args.session):
+        if args.platform == "zcode" and zcode_host_session(args.session):
             problem = zcode_host_request_problem(args)
             if problem is not None:
                 return zcode_host_refusal(args, repo, problem)
@@ -1902,6 +2025,10 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         holder_argv += ["--resume", args.resume]
     if args.use_continue:
         holder_argv += ["--continue"]
+    # Issue #119: the Host turn-opening entry and name come from this platform's
+    # own manifest, never from the platform id.
+    holder_argv += ["--host-entry", args.manifest.get("host_skill_entry") or "",
+                    "--host-name", args.manifest.get("runtime_name") or args.platform]
     init_meta = parse_manifest_meta(args.manifest.get("acp_init_meta") or "")
     if init_meta:
         holder_argv += ["--init-meta", json.dumps(init_meta)]
@@ -2139,6 +2266,27 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             receipt["configured_options"] = configured
         receipt["config_application"] = application
         receipt.setdefault("fast", fast_report(args, policy, "none", False))
+        # Issue #119 (H2): what the agent itself now reports, for every start.
+        effective = effective_selection(args.manifest, socket_request(sock, "state", {}, 10.0))
+        receipt["effective_selection"] = effective
+        explicit_model = acp_model_value if args.model else ""
+        explicit_effort = effort_value if args.effort else ""
+        problem = (explicit_selection_problem(explicit_model, explicit_effort, effective)
+                   if args.platform in EXPLICIT_SELECTION_VERIFIED else None)
+        if problem is not None:
+            receipt.pop("error", None)
+            receipt.update({
+                "result": "refused",
+                "reason": "explicit-selection-unverified",
+                "action": "start",
+                "detail": (f"the {args.platform} agent did not report the explicit "
+                           f"selection: {problem}; the session was stopped before this "
+                           "start returned, and no other model was substituted."),
+                **stop_started_holder(sock, proc),
+                "mutation_performed": False,
+                "mutation_status": "not_started",
+            })
+            return receipt
         if host_required:
             # Issue #108: the pin is only real once the agent's own advertised
             # state agrees — a rejected or silently ignored set must never
@@ -2152,20 +2300,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 effective_model, effective_effort)
             receipt["host_selection"] = host_fact
             if not host_fact["verified"]:
-                stop_reply = socket_request(sock, "stop", {"force": True}, 30.0)
-                # Reap through proc.wait: an exited holder stays a zombie under
-                # pid_alive until its own Popen object collects it.
-                try:
-                    proc.wait(timeout=10.0)
-                except subprocess.TimeoutExpired:
-                    try:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except OSError:
-                        pass
-                    try:
-                        proc.wait(timeout=5.0)
-                    except subprocess.TimeoutExpired:
-                        pass
+                stopped = stop_started_holder(sock, proc)
                 receipt.pop("error", None)
                 receipt.update({
                     "result": "refused",
@@ -2177,11 +2312,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                         "the applied session did not report it, so it was "
                         "stopped before this start returned."
                     ),
-                    "host_session_stopped": bool(
-                        isinstance(stop_reply, dict) and stop_reply.get("stopped")),
-                    "residual_pids": (stop_reply.get("residual_pids")
-                                      if isinstance(stop_reply, dict) else None),
-                    "holder_alive": proc.poll() is None,
+                    **stopped,
                     "mutation_performed": False,
                     "mutation_status": "not_started",
                 })

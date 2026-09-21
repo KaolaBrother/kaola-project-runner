@@ -58,6 +58,10 @@ REQUIRED = {
     "acp_fast_config_id", "acp_model_map", "acp_wrapper_pin",
     "acp_init_meta", "acp_fast_values",
     "native_steering", "acp_steer_method", "steering_summary",
+    # Issue #119: the measured turn-opening Skill entry line when this platform
+    # runs as a Host (templates/orchestrator/references/host-entry-matrix.md);
+    # empty = no measured entry. An entry fact, never a model or tier field.
+    "host_skill_entry",
 }
 
 

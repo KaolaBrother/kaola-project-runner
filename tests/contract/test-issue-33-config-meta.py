@@ -238,8 +238,12 @@ class Issue33ConfigMetaTests(unittest.TestCase):
     def test_start_model_flows_to_observe(self) -> None:
         baseline = options(model="init-default", mode="read-only")
         native_b = options(model="native-b", mode="agent")
+        # Issue #119 (H2): an explicit opencode --model the agent does not then
+        # report is refused and stopped (test-issue-119-host-entry.py), so this
+        # flow requests the value the agent reports; the init-default baseline
+        # still proves the post-set state is what reaches observe.
         receipt = self.start(
-            "--model", "requested-b",
+            "--model", "native-b",
             config={"new": baseline,
                     "set_result": {"configOptions": native_b}})
         configured = {

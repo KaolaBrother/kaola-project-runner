@@ -141,6 +141,7 @@ python_suites_all=(
   "test-issue-101-validate-watchdog.py"
   "test-issue-111-model-tiers.py"
   "test-issue-118-seat-cap.py"
+  "test-issue-119-host-entry.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -195,6 +196,7 @@ python_suites_b=(
   "test-issue-90-event-confirmation-race.py"
   "test-issue-95-reader-exception.py"
   "test-issue-111-model-tiers.py"
+  "test-issue-119-host-entry.py"
 )
 run_suite_lane() {
   local status=0 rc

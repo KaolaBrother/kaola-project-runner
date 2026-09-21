@@ -677,6 +677,9 @@ class EventConfirmationRace(unittest.TestCase):
 
     def test_the_carrier_op_stays_a_zcode_host_capability(self) -> None:
         self.holder.args.platform = "codex"
+        # Issue #119: the capability is the measured Host Skill entry, and
+        # codex has none.
+        self.holder.host_entry = ""
         refusal = self.stage(51)
         self.assertEqual(refusal.get("error", {}).get("code"), "worker-event-unsupported")
         self.assertEqual(self.notification_prompts(), [])
