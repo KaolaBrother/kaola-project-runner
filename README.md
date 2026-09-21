@@ -488,13 +488,13 @@ argument. Invoke it by absolute path; `--repo` identifies the project being work
 
 Model selection uses `--tier default|upgrade` or an explicit `--model ID` with optional
 `--effort LEVEL`. Presets live in the [platform manifests](platforms/); Fast is off unless requested.
-Some platforms declare one further preset under their own word — `--tier alternative` on Kimi CLI
-and Droid, `--tier fable` on Devin — and asking a platform for a tier it does not declare is a
+Some platforms declare one further preset under their own word — `--tier alternative` on Kimi CLI,
+`--tier fable` on Devin — and asking a platform for a tier it does not declare is a
 typed refusal, not a quiet fallback to `default`.
 Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the runtime supports it.
-Droid is the exception to the upgrade policy: both tiers are Kimi K3 Max, with the cheaper
-`kimi-k2.7-code` on the alternative tier. Its `-fast` catalog IDs are explicit `--model` choices,
-not a separate Fast toggle.
+Droid's default is Auto Model (`auto`, no effort pin) and its upgrade is Kimi K3 Max (`kimi-k3`
+at `reasoning_effort=max`); it declares no third tier. Its `-fast` catalog IDs are explicit
+`--model` choices, not a separate Fast toggle.
 
 **Permission defaults matter:** the default is per platform, not one guarantee across all ten.
 Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-all option at start

@@ -258,15 +258,12 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         text = text.replace("claude-fable-5-1-high", "devin-fable-model-id")
         text = text.replace("claude fable 5.1 high", "devin-fable-catalog-name")
     if package_id == "droid-kaola-project-runner":
-        # Issue #111: Droid's catalog carries first-class Kimi-family models,
-        # and its Runner presets select two of them. That is a Factory catalog
-        # fact, not Kimi CLI adapter leakage -- remove only those exact
-        # declared preset strings, so a real kimi-cli fact would still fail.
-        text = text.replace("kimi k3 max", "droid-default-model")
-        text = text.replace("kimi k2.7 code", "droid-alternative-model")
-        text = text.replace("kimi-k2.7-code", "droid-alternative-model-id")
-        text = text.replace("kimi-k3", "droid-default-model-id")
-        text = text.replace("kimi-family", "same-vendor-family")
+        # Issue #111/#117: Droid's catalog carries first-class Kimi-family
+        # models, and its Runner upgrade preset selects kimi-k3. That is a
+        # Factory catalog fact, not Kimi CLI adapter leakage -- remove only the
+        # exact declared preset strings, so a real kimi-cli fact would still fail.
+        text = text.replace("kimi k3 max", "droid-upgrade-model")
+        text = text.replace("kimi-k3", "droid-upgrade-model-id")
     if package_id == "dsh-kaola-project-runner":
         # Issue #111: dsh's model catalog is grouped by provider route, and one
         # of its routes is literally named `opencode-go`. The default preset

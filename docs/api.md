@@ -473,10 +473,10 @@ Model evidence under `model` includes `requested_model_source`, `requested_model
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
 
-Droid's default is Kimi K3 Max (`kimi-k3` at `reasoning_effort=max`, both first-class catalog
-values, so `acp_model_map` stays empty); `--tier upgrade` mirrors the default and is a no-op, and
-`--tier alternative` selects `kimi-k2.7-code` with no Runner effort, because the agent states the
-available `reasoning_effort` values depend on the selected model. Its native ACP mode option is
+Droid's default is Auto Model (`auto`) with no effort pin; `--tier upgrade` is Kimi K3 Max
+(`kimi-k3` at `reasoning_effort=max`). Both are first-class catalog values, so `acp_model_map`
+stays empty. Droid declares no third tier, so `--tier alternative` is the typed
+`tier-not-declared` refusal. Its native ACP mode option is
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
 

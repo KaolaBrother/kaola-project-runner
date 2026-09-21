@@ -49,8 +49,10 @@ LIVE_PRESETS = {
         "alt": ("alternative", "Kimi K2.8", "kimi-code/kimi-for-coding", "max"),
     },
     "droid": {
-        "default": ("Kimi K3 Max", "kimi-k3", "max"),
-        "alt": ("alternative", "Kimi K2.7 Code", "kimi-k2.7-code", ""),
+        # Issue #117: default is Auto again; core (Kimi K3 Max) is the upgrade
+        # preset, and the alternative tier is deleted.
+        "default": ("Auto Model", "auto", ""),
+        "alt": None,
     },
     "dsh": {
         "default": ("DeepSeek V4.1 Flash (OpenCode Go)", "opencode-go/deepseek-v4.1-flash", ""),
@@ -145,8 +147,17 @@ class LiveVerifiedPresets(unittest.TestCase):
                 self.assertEqual(values["alt_model_effort"], effort)
 
     def test_droid_needs_no_model_map_for_its_first_class_id(self) -> None:
-        """`kimi-k3` is a real Droid catalog id, so nothing is hardcoded."""
+        """`auto` and `kimi-k3` are real Droid catalog ids, so nothing is hardcoded."""
         self.assertEqual(manifest("droid")["acp_model_map"], "")
+
+    def test_droid_core_is_the_upgrade_preset_and_differs_from_default(self) -> None:
+        """Issue #117: core lands in `upgrade_*`, and core must not equal default."""
+        values = manifest("droid")
+        self.assertEqual(
+            (values["upgrade_model_name"], values["upgrade_model_id"],
+             values["upgrade_model_effort"]),
+            ("Kimi K3 Max", "kimi-k3", "max"))
+        self.assertNotEqual(values["upgrade_model_id"], values["default_model_id"])
 
     def test_dsh_default_is_already_carried_by_the_model_map(self) -> None:
         """The ACP wire value is the JSON pair, and the map was already right."""
@@ -157,11 +168,13 @@ class LiveVerifiedPresets(unittest.TestCase):
             '["opencode-go","deepseek-v4.1-flash"]',
         )
 
-    def test_droid_launch_summary_no_longer_claims_model_auto(self) -> None:
-        """The rewritten sentence is part of the change, not a leftover."""
+    def test_droid_launch_summary_names_auto_default_and_no_alternative(self) -> None:
+        """Issue #117: the summary states Auto default and K3 Max upgrade only."""
         summary = manifest("droid")["launch_summary"]
-        self.assertNotIn("sets model=auto", summary)
+        self.assertIn("default Auto Model", summary)
         self.assertIn("kimi-k3", summary)
+        for leftover in ("kimi-k2.7", "K2.7", "K2.8", "alternative"):
+            self.assertNotIn(leftover, summary)
 
     def test_dsh_records_the_runner_side_display_name(self) -> None:
         """"DeepSeek V4.1 Flash (OpenCode Go)" is ours; the catalog's is bare."""
@@ -272,6 +285,17 @@ class UndeclaredTierIsRefused(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(receipt["reason"], "tier-not-declared")
         self.assertEqual(receipt["available_tiers"], ["default", "upgrade", "fable"])
+
+    def test_droid_refuses_its_deleted_alternative_tier(self) -> None:
+        """Issue #117: droid no longer declares `alternative`; no silent fallback."""
+        code, receipt = run_acp("droid", "--tier", "alternative")
+        self.assertEqual(code, 1)
+        self.assertEqual(receipt["reason"], "tier-not-declared")
+        self.assertEqual(receipt["available_tiers"], ["default", "upgrade"])
+        self.assertFalse(receipt["mutation_performed"])
+        proc = run_tmux("droid", "--tier", "alternative")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("declares no --tier alternative", proc.stderr)
 
     def test_pty_path_refuses_the_same_tier(self) -> None:
         proc = run_tmux("codex", "--tier", "fable")

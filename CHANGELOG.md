@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Droid presets corrected: default is Auto again, Kimi K3 Max is the upgrade, and the alternative
+  tier is gone (Issue #117).** #111 pinned Droid's default to Kimi K3 Max, mirrored the same pair
+  into `upgrade`, and added a `kimi-k2.7-code` alternative tier. The default is back to the
+  first-class catalog id `auto` (Auto Model) with no effort pin — PTY writes it into the
+  process-scoped `--settings` overlay and ACP applies `model=auto` explicitly, because the native
+  currentValue is not `auto`. `--tier upgrade` is now the distinct Kimi K3 Max slot (`kimi-k3` at
+  `reasoning_effort=max`). Droid declares no third tier, so `--tier alternative` is the typed
+  `tier-not-declared` refusal on both transports instead of selecting `kimi-k2.7-code`.
+
 - **`./scripts/validate.sh` is hermetic against a dispatching Host's environment (Issue #115).** A
   worker seat a live ZCode Host dispatched inherits the Host's binding variables
   (`KAOLA_ACP_HEARTBEAT_HOST`, `KAOLA_ACP_HEARTBEAT_HOST_SOCKET`, `KAOLA_ACP_DISPATCHER`,

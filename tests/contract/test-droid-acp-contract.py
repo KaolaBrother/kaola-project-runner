@@ -131,30 +131,25 @@ class DroidAcpSessionFixture(unittest.TestCase):
 
 
 class DroidAcpStartContractTests(DroidAcpSessionFixture):
-    def test_default_start_applies_kimi_k3_max_and_autonomy_level(self) -> None:
-        """Issue #111: the default preset is the live catalog id kimi-k3 at
-        reasoning_effort=max, applied through the advertised config ids -- not
-        a mapped or invented value, which is why acp_model_map stays empty."""
+    def test_default_start_applies_auto_model_and_autonomy_level(self) -> None:
+        """Issue #117: the default preset is the first-class catalog id auto
+        with no effort pin. The native currentValue is not auto, so model=auto
+        is applied explicitly, never inherited."""
         receipt = self.start()
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
-        # model and effort through their own configIds, bypass through
-        # autonomy_level, never configId "mode".
+        # model=auto through configId "model", bypass through autonomy_level,
+        # never configId "mode" and no effort unless explicitly called.
         self.assertEqual(
             self.config_events(),
-            [("model", "kimi-k3"), ("reasoning_effort", "max"),
-             ("autonomy_level", "auto-high")],
+            [("model", "auto"), ("autonomy_level", "auto-high")],
         )
         application = receipt.get("config_application") or {}
         model = application.get("model") or {}
         self.assertTrue(model.get("applied"))
         self.assertEqual(model.get("config_id"), "model")
-        self.assertEqual(model.get("value"), "kimi-k3")
+        self.assertEqual(model.get("value"), "auto")
         # The preset id is sent verbatim: nothing was mapped on the way out.
         self.assertIsNone(model.get("requested_id"))
-        effort = application.get("effort") or {}
-        self.assertTrue(effort.get("applied"))
-        self.assertEqual(effort.get("config_id"), "reasoning_effort")
-        self.assertEqual(effort.get("value"), "max")
         mode = application.get("mode") or {}
         self.assertTrue(mode.get("applied"))
         self.assertEqual(mode.get("config_id"), "autonomy_level")
@@ -162,8 +157,8 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("source"), "runner-default")
         self.assertEqual(selection.get("tier"), "default")
-        self.assertEqual(selection.get("resolved_model"), "kimi-k3")
-        self.assertEqual(selection.get("resolved_effort"), "max")
+        self.assertEqual(selection.get("resolved_model"), "auto")
+        self.assertFalse(selection.get("resolved_effort"))
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("support"), "none")
         self.assertFalse(fast.get("applied"))
@@ -196,13 +191,10 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.assertEqual({option.get("id") for option in options},
                          {"autonomy_level", "model", "reasoning_effort"})
 
-    def test_preset_effort_is_applied_exactly_once_and_only_its_own(self) -> None:
-        """Issue #111 gave the default preset an effort, so "no invented
-        effort" now means: exactly the preset's declared value, exactly once.
-        The unchanged half of that rule -- an explicit model without an
-        explicit effort gets none -- is test_explicit_model_gets_no_invented_effort.
-        """
-        self.start()
+    def test_upgrade_preset_effort_is_applied_exactly_once(self) -> None:
+        """The upgrade preset carries effort max: exactly that value, once.
+        The default preset carries none (test_default_start_applies_auto_model_and_autonomy_level)."""
+        self.start("--tier", "upgrade")
         self.assertEqual(
             [value for config_id, value in self.config_events()
              if config_id == "reasoning_effort"],
@@ -233,7 +225,7 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.start("--effort", "medium")
         self.assertEqual(
             [event for event in self.config_events() if event[0] != "autonomy_level"],
-            [("model", "kimi-k3"), ("reasoning_effort", "medium")],
+            [("model", "auto"), ("reasoning_effort", "medium")],
         )
 
     def test_permission_mode_bypass_maps_to_auto_high_not_mode(self) -> None:
@@ -261,40 +253,39 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
                     [("autonomy_level", expected)],
                 )
 
-    def test_upgrade_tier_is_a_documented_noop(self) -> None:
-        """Droid declares no distinct upgrade: it resolves to the default pair."""
+    def test_upgrade_tier_applies_kimi_k3_max(self) -> None:
+        """Issue #117: core (Kimi K3 Max) lands in the upgrade preset, distinct
+        from the Auto default: kimi-k3 at reasoning_effort=max."""
         receipt = self.start("--tier", "upgrade")
-        selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("source"), "runner-upgrade")
-        self.assertEqual(selection.get("resolved_model"), "kimi-k3")
-        self.assertIn(("model", "kimi-k3"), self.config_events())
-
-    def test_alternative_tier_selects_the_cheaper_kimi_without_effort(self) -> None:
-        """Issue #111's third preset, over a real ACP handshake.
-
-        kimi-k2.7-code is the Kimi-family analogue (Droid's catalog has no
-        K2.8), and it carries no Runner effort because the agent states the
-        available reasoning_effort values depend on the selected model -- so
-        the preset must not drag the default's `max` onto a different model.
-        """
-        receipt = self.start("--tier", "alternative")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("source"), "runner-alternative")
-        self.assertEqual(selection.get("tier"), "alternative")
-        self.assertEqual(selection.get("resolved_model"), "kimi-k2.7-code")
+        self.assertEqual(selection.get("source"), "runner-upgrade")
+        self.assertEqual(selection.get("tier"), "upgrade")
+        self.assertEqual(selection.get("resolved_model"), "kimi-k3")
+        self.assertEqual(selection.get("resolved_effort"), "max")
         self.assertEqual(
             self.config_events(),
-            [("model", "kimi-k2.7-code"), ("autonomy_level", "auto-high")],
+            [("model", "kimi-k3"), ("reasoning_effort", "max"),
+             ("autonomy_level", "auto-high")],
         )
+
+    def test_deleted_alternative_tier_is_refused(self) -> None:
+        """Issue #117 deleted the alternative tier. The fake catalog still
+        carries kimi-k2.7-code, so this refusal is tier-based, not a
+        catalog-absence accident."""
+        receipt = self.start("--tier", "alternative", check=False)
+        self.assertEqual(receipt.get("result"), "refused")
+        self.assertEqual(receipt.get("reason"), "tier-not-declared")
+        self.assertEqual(receipt.get("available_tiers"), ["default", "upgrade"])
+        self.assertFalse(receipt.get("mutation_performed"))
+        self.assertEqual(self.config_events(), [])
 
     def test_a_tier_droid_does_not_declare_is_refused(self) -> None:
         """Devin's word must not silently become Droid's `default`."""
         receipt = self.start("--tier", "fable", check=False)
         self.assertEqual(receipt.get("result"), "refused")
         self.assertEqual(receipt.get("reason"), "tier-not-declared")
-        self.assertEqual(receipt.get("available_tiers"),
-                         ["default", "upgrade", "alternative"])
+        self.assertEqual(receipt.get("available_tiers"), ["default", "upgrade"])
         self.assertFalse(receipt.get("mutation_performed"))
         self.assertEqual(self.config_events(), [])
 
