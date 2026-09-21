@@ -385,6 +385,13 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime zcode
 ./scripts/install-local.sh --skills-dir "$PWD/.zcode/skills"
 
+# Issue #119: measured Skill roots of the other Host-capable CLIs (entry lines and
+# evidence: skills/kaola-project-runner/references/host-entry-matrix.md).
+./scripts/install-local.sh --runtime grok-cli   # ~/.grok/skills
+./scripts/install-local.sh --runtime droid      # ~/.factory/skills
+./scripts/install-local.sh --runtime opencode   # ~/.config/opencode/skills
+./scripts/install-local.sh --runtime kimi-cli   # ~/.agents/skills (dsh reads the same root)
+
 # Grok Bot: no installer destination. Save hosts/grok-bot/kaola-delegator.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:
 python3 scripts/kaola-locate.py register --target local --bin-dir <dir on PATH> --expect-revision <accepted commit>   # validates origin/revision/clean, links kaola-project-runner-locate, writes the registration receipt beside it

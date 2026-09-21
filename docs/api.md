@@ -131,6 +131,11 @@ ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reaso
 `zcode` → `$HOME/.zcode/skills` (ZCode Host install; verified default discovery roots are the
 workspace `.zcode/skills` and `.agents/skills`, which `--skills-dir` covers — see
 [ZCode host](zcode-host.md)),
+and (Issue #119, each measured as that CLI's Skill root) `grok-cli` → `$HOME/.grok/skills`,
+`droid` → `$HOME/.factory/skills`, `opencode` → `$HOME/.config/opencode/skills`, and
+`kimi-cli` / `dsh` → `$HOME/.agents/skills`; which platforms can run Project Runner as a Host,
+and with which first line, is the `host_skill_entry` table in the main Skill's
+`references/host-entry-matrix.md`.
 `--runtime grok-bot` (and `grokbot`) is refused: Grok Bot is a bridge host with no installer
 destination (see [Grok Bot host](grok-bot-host.md)). `--runtime grok` is not a host alias;
 `--platform grok` is the Grok CLI worker.
