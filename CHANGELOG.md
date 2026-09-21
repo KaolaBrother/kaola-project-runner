@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Recorded CLI versions follow the 2026-09-22 harness-compat check (Issue #129).** ZCode
+  `acp_verified_versions` is now `cli=0.16.9`. The installed ZCode.app 3.14.1 bundles that CLI.
+  ZCode `acp_quirks` also names upstream `william0wang/zcode-acp` v0.46.6 (turnId and
+  permissions) as the newer protocol reference. The adapter still follows the `80aa4e2` pin. The
+  record now says to check the actual CLI version before the next live run. Claude Code moves to
+  `cli=2.1.278` and Droid to `cli=0.223.0`. These values are records only. None of them comes
+  from a live ACP run, and no local CLI was upgraded. At start the Runner still reports the
+  launched `--version` next to the record without gating on it. Dated measurements and the
+  fixtures that model them keep the versions they were measured on (ZCode 0.16.5, Claude 2.1.272,
+  Droid 0.220.0).
+
 - **Grok 4.7 is the default for the `grok` and `cursor-cli` workers (Issue #127).** Both CLIs now
   offer Grok 4.7. `grok` default and upgrade are `grok-4.7` (Grok 4.7 Extra High) on Grok CLI 1.0.40.
   The Cursor 4.7 picker IDs lost the old `cursor-` prefix, so the `cursor-cli` default is
