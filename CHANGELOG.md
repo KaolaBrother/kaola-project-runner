@@ -55,7 +55,6 @@
   observed carrier — and matching stays key-scoped: prose that merely quotes `max_tokens` is still
   `end_turn`, and an explicit cancel still reports `cancelled`.
 
-## 0.5.5 — 2026-09-21
 
 - **OpenCode adapter upgraded to OpenCode V2 `2.0.11` (Issue #112).** The local CLI moved to the V2
   line, which rejects the V1 launch outright: `opencode <repo> --mini --auto` now answers
