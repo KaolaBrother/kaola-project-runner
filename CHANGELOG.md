@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+- **Breaking: the PTY transport is retired; the Runner is ACP-only (Issue #130, owner ruling
+  2026-09-22).** Any command given `--transport pty` is now refused from its arguments alone,
+  before the manifest, Git, the canonical-root binding (#73) or the dispatcher checks (#104) are
+  read, and nothing is created (no process, holder, record or session). The refusal is one JSON
+  line, exit 1: `reason: transport-pty-retired`, `mutation_performed: false`, `mutation_status:
+  not_started`, `transport: {"requested":"pty","supported":["acp"]}`, and a `detail` that says to
+  re-run without `--transport` (or with `--transport acp`). `--transport acp` is still accepted and
+  does nothing; any other value exits 1 with `--transport must be acp`.
+  - Receipts: the `transport` block is now exactly `{"selected":"acp"}`, plus the ACP probe fields
+    a command already added. The `default`, `alternatives` and `reason` keys are gone.
+    `schema_version` stays 3, so a consumer that reads `transport.selected` is unaffected.
+  - Manifests: the `default_transport` key is removed. The renderer now rejects it as an
+    unexpected key, so `render-skills.py --check` fails closed if it comes back.
+    `acp_login_requires_pty` keeps its name; the Skill text now says login is a human act in a
+    native terminal, outside the Runner.
+  - Retired reasons: `heartbeat-host-pty-unsupported` (#104) and `steer-unsupported-transport`
+    (#65) are replaced by `transport-pty-retired`. The ACP start's tmux name-collision probe and its
+    `transport-mismatch` error are removed.
+  - Removed files: `scripts/kaola-observation.py`, `kaola-pane-relay.py`, `kaola-relay-client.py`,
+    `kaola-relay-protocol.py`, `templates/references/transport.md.tmpl`, and the tmux/relay branch
+    of `kaola-tmux.sh`. Worker Skills no longer ship `references/transport.md` or those four
+    scripts. `kaola-tmux.sh` and `runtime-tmux.sh` keep their names, and `scripts/adapters/*.sh`
+    still supply the `preflight` base facts. The 25 PTY-only test suites and their fixtures are
+    deleted, and the third `validate.sh` lane (`test-model-policy.sh`) is removed.
+  - Lost capabilities, with no Runner replacement: Codex OS-level read-only, which existed only on
+    PTY (ACP `read-only` is upstream on-request approval, not an OS sandbox); OpenCode skip-all
+    (PTY `--auto`), so on ACP `permit` settles each request; native keys, menus and editor
+    replacement (`answer --replace-editor`), with only `key escape` left as ACP cancel; and the
+    ZCode PTY "diagnostic entry", which never opened a session anyway. To watch a session, use
+    `kaola-acp list`, `view` or `follow`.
+  - Model evidence: `status`/`observe` no longer carry request provenance
+    (`requested_model_source`, `model_selection`, `resolved_*`), which is now only on the
+    `start`/`preflight` receipt; `status` keeps the agent's own
+    `session_meta.configOptions[].currentValue`. `actual_runtime_model_id` and `actual_parameters`
+    are always `null` and `model_verified` is always `unknown`
+    (`actual-model-evidence-not-yet-read`), so the actual selection is `effective_selection` on
+    `start`. The PTY launch carriers (Codex `-c service_tier`, Cursor `-fast` picker variants,
+    OpenCode `OPENCODE_CONFIG_CONTENT`) are gone and ACP
+    config options carry the selection. The Issue #8 guarantees (hostile id verbatim and never
+    executed, unavailable model verbatim and not a gate, user override, mismatch as evidence,
+    `unknown` when unreadable) are now asserted over ACP in `test-issue-130-pty-retired.py`
+    (`ModelPolicyOnAcp`), replacing the deleted `test-model-policy.sh`.
+  - Migration: stop every existing PTY session **with the old build before upgrading**, or end it
+    with `tmux kill-session`. After the upgrade, `stop --transport pty` is refused like every other
+    PTY request and touches nothing. After merging, re-run `./scripts/render-skills.py --write &&
+    ./scripts/install-local.sh` on every install root, because Host start refuses worker and
+    main-Skill build skew (#105/#121).
+  - Scope: this does not reopen or revise #128. It removes the lane and fakes #128 added by
+    deleting what they tested, which follows from the policy. The #128 entry below describes the
+    gate as it was when #128 merged.
+
 - **`validate.sh` now runs the model-policy and lifecycle contract suites (Issue #128).** Both
   suites were outside the gate and had gone red on main without anyone noticing. Every failure was
   a stale fixture; no product behavior changed. The lifecycle inventory now lists the
@@ -100,7 +151,7 @@
 - **Droid Core is the third tier, not the upgrade (Issue #125, correcting #117).** #117 put Kimi
   K3 Max into Droid's `upgrade_*` slot, but Droid Core is a separate tier below the default, not a
   stronger one. Kimi K3 Max (`kimi-k3` at `reasoning_effort=max`) moves to `alt_*` as
-  `--tier core` (`alt_tier_label: core`) on both transports. `--tier upgrade` now resolves to the
+  `--tier core` (`alt_tier_label: core`). `--tier upgrade` now resolves to the
   same Auto preset as `default` (no stronger Droid tier is established; the Kimi CLI precedent
   allows upgrade to equal the default). The default stays `auto`, and the deleted alternative /
   `kimi-k2.7-code` tier is not restored.

@@ -11,8 +11,8 @@ Git top-level the human named as the project, not a Workflow-owned child. A
 recovered for one claim (often under `.kw/worktrees/`, but path shape is not an
 authorization rule). Each linked worktree is itself a Git top-level, so two of
 them can share one remote and still carry different Runner `repo` identities.
-`KAOLA_PROJECT_RUNNER_REPO` is the realpath of the Agent-selected Git top-level,
-not proof that the path is the canonical project root.
+A Runner `repo` is the realpath of the Agent-selected Git top-level, not proof
+that the path is the canonical project root.
 
 ## Orchestrator binding
 
@@ -56,9 +56,8 @@ and Mission Lists, and existing-run recovery are **Agent decisions rather than
 transport gates**. The controlling Agent may choose a different startup or
 recovery path when current evidence, explicit authorization, review-only work, an
 existing handoff, a damaged run, or another concrete circumstance makes that
-safer. Report the chosen Git root honestly. PTY and ACP retain identical decision
-authority: neither transport classifies Workflow mode, and standalone Runner use
-is unchanged.
+safer. Report the chosen Git root honestly. The transport never classifies Workflow
+mode, and standalone Runner use is unchanged.
 
 ## Concurrent sessions
 

@@ -2,20 +2,8 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-OWNER_KEY=KAOLA_PROJECT_RUNNER
-PLATFORM_KEY=KAOLA_PROJECT_RUNNER_PLATFORM
-REPO_KEY=KAOLA_PROJECT_RUNNER_REPO
-RELAY_SOCKET_KEY=KAOLA_PROJECT_RUNNER_RELAY_SOCKET
-RELAY_EPOCH_KEY=KAOLA_PROJECT_RUNNER_RELAY_EPOCH
-OWNER_VALUE=1
-LEGACY_OWNER_KEY=GROK_KAOLA_PROJECT_RUNNER
-LEGACY_REPO_KEY=GROK_KAOLA_REPO
-OBSERVATION_HELPER="$script_dir/kaola-observation.py"
-RELAY="$script_dir/kaola-pane-relay.py"
-RELAY_CLIENT="$script_dir/kaola-relay-client.py"
 MODEL_POLICY_HELPER="$script_dir/kaola-model-policy.py"
-MODEL_POLICY_KEY=KAOLA_PROJECT_RUNNER_MODEL_POLICY
-export OBSERVATION_HELPER
+ACP_CLI="$script_dir/kaola-acp.py"
 
 # Issue #78: this file must contain no here-document and no here-string. Bash writes
 # any heredoc body up to HEREDOC_PIPESIZE (4096) into a pipe from the forked child
@@ -35,10 +23,11 @@ usage() {
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N] [--full]
   kaola-tmux.sh PLATFORM send      --repo ABS_PATH --session NAME [--if-snapshot ID] [--text TEXT]
-  kaola-tmux.sh PLATFORM steer     --repo ABS_PATH --session NAME --text TEXT [--steer-mode native|interrupt] [--cancel-timeout SECONDS]   # acp transport only
+  kaola-tmux.sh PLATFORM steer     --repo ABS_PATH --session NAME --text TEXT [--steer-mode native|interrupt] [--cancel-timeout SECONDS]
   kaola-tmux.sh PLATFORM key       --repo ABS_PATH --session NAME [--if-snapshot ID] --key NAME
   kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME [--decision-id ID] [--if-snapshot ID] --replace-editor [--text TEXT]
-  kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force]'
+  kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force]
+Transport is ACP only (Issue #130); a request for the pty transport is refused (transport-pty-retired).'
 }
 
 die() { printf 'kaola-tmux[%s]: %s\n' "${platform:-unknown}" "$*" >&2; exit 1; }
@@ -54,16 +43,19 @@ for raw in sys.argv[1:]:
 if d.get("schema_version") == 3 and os.environ.get("KPR_CANONICAL_REPO") and "canonical_repo" not in d:
     d["canonical_repo"]=os.environ["KPR_CANONICAL_REPO"]
 if d.get("schema_version") == 3 and d.get("platform") and "transport" not in d:
-    d["transport"]={"selected":"pty","default":os.environ.get("KPR_DEFAULT_TRANSPORT","pty"),"alternatives":["acp"],"reason":os.environ.get("KPR_TRANSPORT_REASON","caller-override")}
+    d["transport"]={"selected":"acp"}
 if "mutation_performed" in d and "mutation_status" not in d:
     d["mutation_status"]="completed" if d["mutation_performed"] is True else "not_started" if d["mutation_performed"] is False else "unknown"
 print(json.dumps(d,ensure_ascii=False,sort_keys=True))' "$@"
 }
 
+# KPR_CANONICAL_REPO is this invocation's own channel to emit_json and kaola-acp.py;
+# a value inherited from a parent Runner (a Host-dispatched seat) is not a binding.
+unset KPR_CANONICAL_REPO
 platform="${1:-}"; [[ -n "$platform" ]] || { usage; exit 2; }; shift
 case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode|droid|dsh) ;; *) die "unknown platform: $platform" ;; esac
 adapter_file="$script_dir/adapters/$platform.sh"; [[ -f "$adapter_file" ]] || die "adapter not installed"
-[[ -f "$OBSERVATION_HELPER" && -f "$RELAY" && -f "$RELAY_CLIENT" && -f "$MODEL_POLICY_HELPER" ]] || die "relay control plane is incomplete"
+[[ -f "$MODEL_POLICY_HELPER" && -f "$ACP_CLI" ]] || die "ACP transport is not installed"
 # shellcheck source=/dev/null
 source "$adapter_file"
 [[ "${ADAPTER_ID:-}" == "$platform" ]] || die "adapter identity mismatch"
@@ -71,11 +63,11 @@ source "$adapter_file"
 
 command_name="${1:-}"; [[ -n "$command_name" ]] || { usage; exit 2; }; shift
 if [[ "$command_name" == view ]]; then
-  printf '%s\n' '{"error":{"code":"view-unsupported","message":"view is not a pty/tmux command; use kaola-acp"},"schema":"kaola-acp-view/1"}'
+  printf '%s\n' '{"error":{"code":"view-unsupported","message":"view is not a Runner command; use kaola-acp"},"schema":"kaola-acp-view/1"}'
   exit 1
 fi
 if [[ "$command_name" == follow ]]; then
-  printf '%s\n' '{"error":{"code":"follow-unsupported","message":"follow is not a pty/tmux command; use kaola-acp"},"kind":"error"}'
+  printf '%s\n' '{"error":{"code":"follow-unsupported","message":"follow is not a Runner command; use kaola-acp"},"kind":"error"}'
   exit 1
 fi
 case "$command_name" in preflight|start|observe|status|capture|send|steer|wait|permit|cancel|key|answer|stop) ;; *) die "unknown command: $command_name" ;; esac
@@ -104,36 +96,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Issue #22: no-flag start uses each platform's measured skip-all permission
-# mode. Caller --permission-mode still wins. ACP skip values can differ from PTY
-# argv (Devin PTY dangerous vs ACP bypass) and are forwarded below / in kaola-acp.py.
-if [[ "$permission_mode_given" != true ]]; then
-  case "$platform" in
-    claude-code) permission_mode=bypassPermissions ;;
-    devin) permission_mode=dangerous ;;
-    codex) permission_mode=agent-full-access ;;
-    zcode) permission_mode=yolo ;;
-    droid) permission_mode=bypassPermissions ;;
-  esac
-fi
-
 if [[ ( -n "$steer_mode" || -n "$cancel_timeout" ) && "$command_name" != steer ]]; then
   die "--steer-mode and --cancel-timeout are steer-only"
 fi
 PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
-manifest_file="$script_dir/platform.yaml"
-[[ -f "$manifest_file" ]] || manifest_file="$(dirname "$script_dir")/platforms/$platform.yaml"
-[[ -f "$manifest_file" ]] || die "platform manifest not found"
-default_transport="$("$PYTHON_BIN" -c 'import json,sys
-for line in open(sys.argv[1], encoding="utf-8"):
-    key, separator, value = line.partition(":")
-    if separator and key.strip() == "default_transport":
-        print(json.loads(value)); break' "$manifest_file"
-)"
-[[ "$default_transport" == acp || "$default_transport" == pty ]] || die "invalid manifest default_transport"
-if [[ -z "$transport" ]]; then transport="$default_transport"; transport_reason=manifest-default; else transport_reason=caller-override; fi
-[[ "$transport" == acp || "$transport" == pty ]] || die "--transport must be acp or pty"
-export KPR_DEFAULT_TRANSPORT="$default_transport" KPR_TRANSPORT_REASON="$transport_reason"
+
+# Issue #130 (owner ruling 2026-09-22): PTY is retired and the Runner is ACP-only.
+# A request for the pty transport on any command is refused here, from the arguments
+# alone, before a manifest, Git, the canonical-root binding (#73), or the
+# dispatcher (#104) is consulted, and before any process, session, or record
+# exists. --transport acp stays accepted as a no-op.
+if [[ "$transport_given" == true && "$transport" == pty ]]; then
+  emit_json "n:schema_version:3" "s:result:refused" "s:reason:transport-pty-retired" \
+    "s:action:$command_name" "s:platform:$platform" "s:session:$session" "s:repo:$repo" \
+    "s:detail:PTY transport is retired (Issue #130); this Runner is ACP-only. Re-run without --transport (or with --transport acp)." \
+    "b:mutation_performed:false" "j:transport:{\"requested\":\"pty\",\"supported\":[\"acp\"]}"
+  exit 1
+fi
+[[ "$transport_given" != true || "$transport" == acp ]] || die "--transport must be acp"
 
 # Issue #73: a Project Runner Orchestrator binds one human-selected canonical
 # project root once, and every worker it dispatches afterwards uses that root.
@@ -141,18 +121,16 @@ export KPR_DEFAULT_TRANSPORT="$default_transport" KPR_TRANSPORT_REASON="$transpo
 # ordinary standalone invocation and nothing here applies. With it, an omitted
 # --repo is completed from the bound root, and a new `start` must name exactly
 # that root - a linked worktree of the same repository is a different Git
-# top-level and is refused here, before any process, tmux session, or record
+# top-level and is refused here, before any process, holder, or record
 # exists. An already-located session keeps its own --repo for close-out, so
 # legacy worktree-rooted work can still be observed and exactly stopped. This
 # guards against accidental dispatch drift; it is not protection against a
 # hostile controlling host, and it is not a second Workflow classifier.
 refuse_canonical_root() {
-  local reason="$1" requested="$2" bound="$3" alternative=acp
-  [[ "$transport" == acp ]] && alternative=pty
+  local reason="$1" requested="$2" bound="$3"
   emit_json "n:schema_version:3" "s:result:refused" "s:reason:$reason" \
     "s:action:$command_name" "s:platform:$platform" "s:session:$session" \
-    "s:repo:$requested" "s:canonical_repo:$bound" "b:mutation_performed:false" \
-    "j:transport:{\"selected\":\"$transport\",\"default\":\"$default_transport\",\"alternatives\":[\"$alternative\"],\"reason\":\"$transport_reason\"}"
+    "s:repo:$requested" "s:canonical_repo:$bound" "b:mutation_performed:false"
   exit 1
 }
 canonical_binding="${KAOLA_PROJECT_RUNNER_CANONICAL_REPO:-}"
@@ -176,573 +154,82 @@ if [[ -n "$canonical_binding" && ( -z "$repo" || "$command_name" == start ) ]]; 
       || refuse_canonical_root canonical-root-mismatch "$requested_repo" "$canonical_repo"
     repo="$canonical_repo"
   fi
-  # Both transports report the bound root they passed through as one bounded fact.
+  # The receipt reports the bound root it passed through as one bounded fact.
   export KPR_CANONICAL_REPO="$canonical_repo"
 fi
 
-# Issue #104 (design #99 §c.4, ruled 2026-09-19): worker dispatch on the Project
-# Runner path is ACP-only. The path is mechanically evident when a holder named
-# itself to this agent (KAOLA_ACP_DISPATCHER, any platform) or the Orchestrator
-# declared its context (KAOLA_PROJECT_RUNNER_CANONICAL_REPO, Issue #73). A PTY
-# worker under an event-driven Host has no wake source, so a `--transport pty`
-# start there is refused before any preflight, tmux session, or record exists.
-# It runs after the canonical-root guard so a drifted or unusable root keeps its
-# own refusal and an accepted one reports `canonical_repo` here.
-# Standalone PTY use - neither export - is unchanged, as is every other command
-# on an existing PTY session.
-if [[ "$command_name" == start && "$transport" == pty \
-      && ( -n "${KAOLA_ACP_DISPATCHER:-}" || -n "${KAOLA_PROJECT_RUNNER_CANONICAL_REPO:-}" ) ]]; then
-  emit_json "n:schema_version:3" "s:result:refused" "s:reason:heartbeat-host-pty-unsupported" \
-    "s:action:start" "s:platform:$platform" "s:session:$session" "s:repo:$repo" \
-    "s:detail:Project Runner dispatch is ACP-only; a pty worker under a Host has no wake source" \
-    "b:mutation_performed:false" \
-    "j:transport:{\"selected\":\"pty\",\"default\":\"$default_transport\",\"alternatives\":[\"acp\"],\"reason\":\"$transport_reason\"}"
-  exit 1
+# Issue #104: the dispatcher's PTY refusal (heartbeat-host-pty-unsupported) is
+# absorbed by the unconditional transport-pty-retired refusal above.
+if [[ "$command_name" != preflight && ! "$session" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$ ]]; then
+  die "invalid or missing --session name"
 fi
-
-if [[ "$transport" == acp ]]; then
-  [[ -f "$script_dir/kaola-acp.py" ]] || die "ACP transport is not installed"
-  acp_args=("$PYTHON_BIN" "$script_dir/kaola-acp.py" "$platform" "$command_name" --repo "$repo" --transport-reason "$transport_reason")
-  [[ -n "$session" ]] && acp_args+=(--session "$session")
-  [[ -n "$resume_id" ]] && acp_args+=(--resume "$resume_id")
-  [[ "$continue_mode" == true ]] && acp_args+=(--continue)
-  [[ "$force" == true ]] && acp_args+=(--force)
-  [[ "$text_given" == true ]] && acp_args+=(--text "$text_value")
-  [[ ( "$command_name" == send || "$command_name" == steer ) && "$text_given" == false ]] && acp_args+=(--stdin)
-  [[ "$acp_wait" == false ]] && acp_args+=(--no-wait)
-  [[ -n "$timeout" ]] && acp_args+=(--timeout "$timeout")
-  [[ -n "$steer_mode" ]] && acp_args+=(--steer-mode "$steer_mode")
-  [[ -n "$cancel_timeout" ]] && acp_args+=(--cancel-timeout "$cancel_timeout")
-  [[ -n "$request_id" ]] && acp_args+=(--request-id "$request_id")
-  [[ -n "$option" ]] && acp_args+=(--option "$option")
-  [[ "$expected_holder_instance_id_given" == true ]] && acp_args+=(--expected-holder-instance-id "$expected_holder_instance_id")
-  [[ "$capture_tools" == true ]] && acp_args+=(--tools)
-  [[ -n "$capture_since" ]] && acp_args+=(--since "$capture_since")
-  [[ "$capture_full" == true ]] && acp_args+=(--full)
-  [[ "$capture_inline" == true ]] && acp_args+=(--inline)
-  if [[ "$command_name" == start || "$command_name" == preflight ]]; then
-    # Selection inputs pass through raw; kaola-acp.py resolves presets,
-    # explicit overrides, resume preservation, and Fast itself through the
-    # shared model-policy helper so both transports resolve identically.
-    [[ "$model_given" == true ]] && acp_args+=(--model "$model")
-    [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
-    [[ "$tier_given" == true ]] && acp_args+=(--tier "$tier")
-    [[ "$fast_given" == true ]] && acp_args+=(--fast "$fast")
-  fi
-  if [[ "$permission_mode_given" == true ]]; then
-    acp_args+=(--mode "$permission_mode")
-  elif [[ "$command_name" == start ]]; then
-    # Measured ACP skip knobs only. Cursor/OpenCode have no configOptions.mode skip
-    # value; Grok ACP is agent always-approve with no approval option.
-    case "$platform" in
-      kimi-cli) acp_args+=(--mode yolo) ;;
-      devin) acp_args+=(--mode bypass) ;;
-      claude-code) acp_args+=(--mode bypassPermissions) ;;
-      codex) acp_args+=(--mode agent-full-access) ;;
-      zcode) acp_args+=(--mode yolo) ;;
-      droid) acp_args+=(--mode auto-high) ;;
-    esac
-  fi
-  [[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")
-  [[ "$command_name" == key ]] && acp_args+=(--key "$key_name")
-  [[ -n "$decision_id" ]] && acp_args+=(--request-id "$decision_id")
-  if [[ "$command_name" == preflight ]]; then
-    # Issue #114: every platform defaults to acp, so the `preflight)` case below
-    # never ran and the adapter's base fields (runtime_version, detail, ...) were
-    # lost. Add them here as evidence under the ACP receipt, which wins on shared
-    # keys. A missing native binary is reported, never a gate on the ACP answer.
-    base_json="$(
-      repo="$(canonical_dir "$repo")"
-      runtime_override="$(printenv "$ADAPTER_BIN_ENV" 2>/dev/null || true)"
-      if RUNTIME_BIN="$(resolve_tool "${runtime_override:-$ADAPTER_DEFAULT_BIN}")"; then
-        adapter_preflight >/dev/null 2>&1 || true
-      else
-        RUNTIME_BIN=""; PREFLIGHT_VERSION=unknown
-        PREFLIGHT_DETAIL="$ADAPTER_DISPLAY_NAME executable not found (override with $ADAPTER_BIN_ENV)"
-      fi
-      emit_json "s:runtime:$ADAPTER_DISPLAY_NAME" "s:runtime_version:${PREFLIGHT_VERSION:-unknown}" "s:runtime_binary:$RUNTIME_BIN" "b:workflow_next:${PREFLIGHT_WORKFLOW_NEXT:-false}" "b:kaola_workflow_finalize:${PREFLIGHT_FINALIZE:-false}" "s:recurring_execution:$ADAPTER_RECURRING_EXECUTION" "s:project_materialization:${PREFLIGHT_PROJECT_MATERIALIZATION:-unknown}" "s:detail:${PREFLIGHT_DETAIL:-}"
-    )" || base_json='{}'
-    acp_rc=0; acp_receipt="$("${acp_args[@]}")" || acp_rc=$?
-    BASE_JSON="$base_json" ACP_RECEIPT="$acp_receipt" "$PYTHON_BIN" -c 'import json,os
+acp_args=("$PYTHON_BIN" "$ACP_CLI" "$platform" "$command_name" --repo "$repo")
+[[ -n "$session" ]] && acp_args+=(--session "$session")
+[[ -n "$resume_id" ]] && acp_args+=(--resume "$resume_id")
+[[ "$continue_mode" == true ]] && acp_args+=(--continue)
+[[ "$force" == true ]] && acp_args+=(--force)
+[[ "$text_given" == true ]] && acp_args+=(--text "$text_value")
+[[ ( "$command_name" == send || "$command_name" == steer ) && "$text_given" == false ]] && acp_args+=(--stdin)
+[[ "$acp_wait" == false ]] && acp_args+=(--no-wait)
+[[ -n "$timeout" ]] && acp_args+=(--timeout "$timeout")
+[[ -n "$steer_mode" ]] && acp_args+=(--steer-mode "$steer_mode")
+[[ -n "$cancel_timeout" ]] && acp_args+=(--cancel-timeout "$cancel_timeout")
+[[ -n "$request_id" ]] && acp_args+=(--request-id "$request_id")
+[[ -n "$option" ]] && acp_args+=(--option "$option")
+[[ "$expected_holder_instance_id_given" == true ]] && acp_args+=(--expected-holder-instance-id "$expected_holder_instance_id")
+[[ "$capture_tools" == true ]] && acp_args+=(--tools)
+[[ -n "$capture_since" ]] && acp_args+=(--since "$capture_since")
+[[ "$capture_full" == true ]] && acp_args+=(--full)
+[[ "$capture_inline" == true ]] && acp_args+=(--inline)
+if [[ "$command_name" == start || "$command_name" == preflight ]]; then
+  # Selection inputs pass through raw; kaola-acp.py resolves presets,
+  # explicit overrides, resume preservation, and Fast itself through the
+  # shared model-policy helper.
+  [[ "$model_given" == true ]] && acp_args+=(--model "$model")
+  [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
+  [[ "$tier_given" == true ]] && acp_args+=(--tier "$tier")
+  [[ "$fast_given" == true ]] && acp_args+=(--fast "$fast")
+fi
+if [[ "$permission_mode_given" == true ]]; then
+  acp_args+=(--mode "$permission_mode")
+elif [[ "$command_name" == start ]]; then
+  # Measured ACP skip knobs only. Cursor/OpenCode have no configOptions.mode skip
+  # value; Grok ACP is agent always-approve with no approval option.
+  case "$platform" in
+    kimi-cli) acp_args+=(--mode yolo) ;;
+    devin) acp_args+=(--mode bypass) ;;
+    claude-code) acp_args+=(--mode bypassPermissions) ;;
+    codex) acp_args+=(--mode agent-full-access) ;;
+    zcode) acp_args+=(--mode yolo) ;;
+    droid) acp_args+=(--mode auto-high) ;;
+  esac
+fi
+[[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")
+[[ "$command_name" == key ]] && acp_args+=(--key "$key_name")
+[[ -n "$decision_id" ]] && acp_args+=(--request-id "$decision_id")
+if [[ "$command_name" == preflight ]]; then
+  # Issue #114: the adapter's base fields (runtime_version, detail, ...) are
+  # added here as evidence under the ACP receipt, which wins on shared keys. A missing native binary is reported, never a gate on the ACP answer.
+  base_json="$(
+    repo="$(canonical_dir "$repo")"
+    runtime_override="$(printenv "$ADAPTER_BIN_ENV" 2>/dev/null || true)"
+    if RUNTIME_BIN="$(resolve_tool "${runtime_override:-$ADAPTER_DEFAULT_BIN}")"; then
+      adapter_preflight >/dev/null 2>&1 || true
+    else
+      RUNTIME_BIN=""; PREFLIGHT_VERSION=unknown
+      PREFLIGHT_DETAIL="$ADAPTER_DISPLAY_NAME executable not found (override with $ADAPTER_BIN_ENV)"
+    fi
+    emit_json "s:runtime:$ADAPTER_DISPLAY_NAME" "s:runtime_version:${PREFLIGHT_VERSION:-unknown}" "s:runtime_binary:$RUNTIME_BIN" "b:workflow_next:${PREFLIGHT_WORKFLOW_NEXT:-false}" "b:kaola_workflow_finalize:${PREFLIGHT_FINALIZE:-false}" "s:recurring_execution:$ADAPTER_RECURRING_EXECUTION" "s:project_materialization:${PREFLIGHT_PROJECT_MATERIALIZATION:-unknown}" "s:detail:${PREFLIGHT_DETAIL:-}"
+  )" || base_json='{}'
+  acp_rc=0; acp_receipt="$("${acp_args[@]}")" || acp_rc=$?
+  BASE_JSON="$base_json" ACP_RECEIPT="$acp_receipt" "$PYTHON_BIN" -c 'import json,os
 try: d=json.loads(os.environ["ACP_RECEIPT"])
 except ValueError: os.environ["ACP_RECEIPT"] and print(os.environ["ACP_RECEIPT"]); raise SystemExit
 if isinstance(d,dict) and "result" not in d:
-    base=json.loads(os.environ["BASE_JSON"] or "{}")
-    base["result"]="error" if "error" in d else "ready"
-    d={**base,**d}
+  base=json.loads(os.environ["BASE_JSON"] or "{}")
+  base["result"]="error" if "error" in d else "ready"
+  d={**base,**d}
 print(json.dumps(d,ensure_ascii=False,sort_keys=True))'
-    exit "$acp_rc"
-  fi
-  exec "${acp_args[@]}"
+  exit "$acp_rc"
 fi
-
-if [[ "$command_name" == steer ]]; then
-  # Issue #65: over PTY a mid-turn write is an ordinary keystroke stream. The
-  # native UI alone decides whether it steers, queues, or interrupts, and the
-  # terminal returns no receipt that separates those. The Runner refuses to call
-  # that steering rather than reporting an unproven injection.
-  printf '%s\n' '{"error":{"code":"steer-unsupported-transport","message":"steer is an acp-transport operation; over pty use send and read the native result"},"mutation_performed":false,"mutation_status":"not_started","schema_version":3,"steer_consumed":false,"steer_outcome":"unsupported"}'
-  exit 1
-fi
-TMUX_BIN="$(resolve_tool "${TMUX_BIN:-tmux}")" || die "tmux executable not found"
-PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
-PS_BIN="$(resolve_tool "${PS_BIN:-ps}")" || die "ps executable not found"
-runtime_override="$(printenv "$ADAPTER_BIN_ENV" 2>/dev/null || true)"
-RUNTIME_BIN="$(resolve_tool "${runtime_override:-$ADAPTER_DEFAULT_BIN}")" || die "$ADAPTER_DISPLAY_NAME executable not found (override with $ADAPTER_BIN_ENV)"
-RUNTIME_BIN_REAL="$("$PYTHON_BIN" -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$RUNTIME_BIN")"
-[[ "$repo" == /* && -d "$repo" ]] || die "--repo must be an existing absolute path"
-PUBLIC_REPO="$repo"
-repo="$(canonical_dir "$repo")"; git_root="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || die "not a Git repository: $repo"
-git_root="$(canonical_dir "$git_root")"; [[ "$git_root" == "$repo" ]] || die "--repo must name the Git root: $git_root"
-[[ "$session" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$ ]] || die "invalid session name"
-TMUX_SESSION_TARGET="=$session"
-if [[ "$platform" != claude-code && "$platform" != devin && "$platform" != codex && "$platform" != zcode && "$platform" != droid && "$permission_mode_given" == true ]]; then die "permission mode is platform-specific"; fi
-if [[ "$command_name" != start && "$command_name" != preflight && ( "$model_given" == true || "$effort_given" == true || "$tier_given" == true || "$fast_given" == true ) ]]; then die "model, effort, tier, and fast are start/preflight-only"; fi
-if [[ "$command_name" != start && "$permission_mode_given" == true ]]; then die "permission mode is start-only"; fi
-# Issue #111: the optional third preset carries the platform's own word
-# (`alternative`, `fable`), declared by the adapter. A tier this platform does
-# not declare is refused by name -- never resolved silently to `default`.
-alt_tier="${ADAPTER_ALT_TIER_LABEL:-}"
-if [[ "$tier_given" == true ]]; then
-  if [[ "$tier" != default && "$tier" != upgrade ]] && [[ -z "$alt_tier" || "$tier" != "$alt_tier" ]]; then
-    if [[ -n "$alt_tier" ]]; then die "$platform declares no --tier $tier; its presets are default, upgrade, or $alt_tier"; fi
-    die "$platform declares no --tier $tier; its presets are default or upgrade"
-  fi
-else
-  tier=default
-fi
-if [[ "$fast_given" == true ]]; then
-  case "$fast" in on|off) ;; *) die "--fast must be on or off" ;; esac
-fi
-MODEL_VALUE="$model" "$PYTHON_BIN" -c 'import os
-value = os.environ.get("MODEL_VALUE", "")
-raise SystemExit(1 if any(ord(ch) < 32 or ord(ch) == 127 for ch in value) else 0)' || die "model contains unsupported terminal controls"
-if [[ -n "$effort" ]]; then
-  case "$effort" in
-    low|medium|high|xhigh|max) ;;
-    ultra) [[ "$platform" == codex ]] || die "unsupported effort" ;;
-    *) die "unsupported effort" ;;
-  esac
-fi
-if [[ "$platform" == codex ]]; then
-  case "$permission_mode" in read-only|agent|agent-full-access) ;; *) die "unsupported Codex permission mode" ;; esac
-elif [[ "$platform" == devin ]]; then
-  case "$permission_mode" in auto|accept-edits|smart|dangerous) ;; *) die "unsupported Devin permission mode" ;; esac
-elif [[ "$platform" == zcode ]]; then
-  # CLI 0.16.5 --help: --mode/--permission-mode are build|edit|plan|yolo (legacy
-  # alias also lists default). Packaged engine: yolo bypasses permission prompts.
-  case "$permission_mode" in build|edit|plan|yolo|default) ;; *) die "unsupported ZCode permission mode" ;; esac
-elif [[ "$platform" == droid ]]; then
-  # Droid PTY: bypassPermissions maps to --skip-permissions-unsafe, the
-  # autonomy levels to --auto low|medium|high, manual to no flag.
-  case "$permission_mode" in bypassPermissions|low|medium|high|manual) ;; *) die "unsupported Droid permission mode" ;; esac
-else
-  case "$permission_mode" in acceptEdits|auto|bypassPermissions|manual|dontAsk|plan) ;; *) die "unsupported Claude permission mode" ;; esac
-fi
-if [[ -n "$key_name" && "$command_name" != key ]]; then die "--key is only valid with key"; fi
-if [[ "$command_name" == key ]]; then
-  case "$key_name" in up|down|left|right|enter|escape|tab|backtab|space) ;; *) die "--key must be one of up,down,left,right,enter,escape,tab,backtab,space" ;; esac
-fi
-
-session_exists() { "$TMUX_BIN" has-session -t "$TMUX_SESSION_TARGET" 2>/dev/null; }
-tmux_env_value() { local line; line="$("$TMUX_BIN" show-environment -t "$TMUX_SESSION_TARGET" "$1" 2>/dev/null || true)"; [[ "$line" == "$1="* ]] || return 1; printf '%s\n' "${line#*=}"; }
-path_leads_command() {
-  local command="$1" expected="$2" after_argv0
-  [[ -n "$command" && -n "$expected" ]] || return 1
-  [[ "$command" == "$expected" || "$command" == "$expected "* ]] && return 0
-  [[ "$command" == *" "* ]] || return 1
-  after_argv0="${command#* }"
-  while [[ "$after_argv0" == " "* ]]; do after_argv0="${after_argv0# }"; done
-  [[ "$after_argv0" == "$expected" || "$after_argv0" == "$expected "* ]]
-}
-runtime_process_matches() { path_leads_command "$1" "$RUNTIME_BIN" && return 0; [[ "$RUNTIME_BIN_REAL" != "$RUNTIME_BIN" ]] && path_leads_command "$1" "$RUNTIME_BIN_REAL" && return 0; type adapter_process_matches >/dev/null 2>&1 && adapter_process_matches "$1" "$2"; }
-
-MODEL_POLICY_JSON="" RESOLVED_MODEL_ID="" RESOLVED_MODEL_EFFORT="" RESOLVED_FAST="" MODEL_HAS_EFFORT=false MODEL_HAS_VARIANT=false
-resolve_model_policy() {
-  local source requested candidate chosen_effort fast_arg
-  if [[ "$tier" == upgrade ]]; then
-    source=runner-upgrade requested="$ADAPTER_UPGRADE_MODEL_NAME" candidate="$ADAPTER_UPGRADE_MODEL_ID" chosen_effort="$ADAPTER_UPGRADE_MODEL_EFFORT"
-  elif [[ -n "$alt_tier" && "$tier" == "$alt_tier" ]]; then
-    source="runner-$alt_tier" requested="${ADAPTER_ALT_MODEL_NAME:-}" candidate="${ADAPTER_ALT_MODEL_ID:-}" chosen_effort="${ADAPTER_ALT_MODEL_EFFORT:-}"
-  else
-    source=runner-default requested="$ADAPTER_DEFAULT_MODEL_NAME" candidate="$ADAPTER_DEFAULT_MODEL_ID" chosen_effort="$ADAPTER_DEFAULT_MODEL_EFFORT"
-  fi
-  if [[ "$model_given" == true ]]; then
-    source=user requested="$model" candidate="$model"
-    # An explicit model without explicit effort leaves native effort alone;
-    # a preset effort only attaches to its own preset model.
-    [[ "$effort_given" == true ]] || chosen_effort=""
-  fi
-  if [[ "$effort_given" == true ]]; then chosen_effort="$effort"; fi
-  if [[ ( -n "$resume_id" || "$continue_mode" == true ) && "$model_given" == false && "$effort_given" == false && "$tier_given" == false ]]; then
-    source=resume-preserved requested="native saved session selection" candidate="" chosen_effort=""
-  fi
-  fast_arg=false; [[ "$fast" == on ]] && fast_arg=true
-  MODEL_POLICY_JSON="$("$PYTHON_BIN" "$MODEL_POLICY_HELPER" resolve --platform "$platform" --runtime-bin "$RUNTIME_BIN" --repo "$repo" --source "$source" --requested-name "$requested" --candidate-id "$candidate" --effort "$chosen_effort" --fast "$fast_arg" --tier "$tier" --fast-mechanism "${ADAPTER_FAST_MECHANISM:-none}" "--fast-suffixes=${ADAPTER_FAST_SUFFIXES:--fast,-priority}")"
-  RESOLVED_MODEL_ID="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_runtime_model_id")')"
-  RESOLVED_MODEL_EFFORT="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_parameters",{}).get("effort")')"
-  RESOLVED_FAST="$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("resolved_fast")')"
-  [[ "$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("model_evidence_provenance",{}).get("resolution",{}).get("supported_options",[])')" == *'--effort'* ]] && MODEL_HAS_EFFORT=true
-  [[ "$(printf '%s' "$MODEL_POLICY_JSON" | json_value 'd.get("model_evidence_provenance",{}).get("resolution",{}).get("supported_options",[])')" == *'--variant'* ]] && MODEL_HAS_VARIANT=true
-  [[ -n "$MODEL_POLICY_JSON" ]]
-}
-
-load_session_identity() {
-  STATE_PRESENT=false STATE_OWNED=false STATE_PLATFORM_MATCH=false STATE_REPO_MATCH=false STATE_TUI=false
-  STATE_LEGACY_OWNERSHIP=false
-  STATE_PANE_COUNT=0 STATE_PANE_ID="" STATE_PANE_PATH="" STATE_PANE_COMMAND="" STATE_PANE_TITLE="" STATE_PANE_DEAD="" STATE_PANE_PID="" STATE_PANE_PROCESS=""
-  STATE_RELAY_PROCESS_MATCH=false STATE_PROCESS_MATCH=false STATE_PANE_INPUT_OFF=false STATE_PANE_WIDTH="" STATE_PANE_HEIGHT="" STATE_CURSOR_X="" STATE_CURSOR_Y=""
-  STATE_CURSOR_FLAG=false STATE_ALTERNATE_ON=false STATE_HISTORY_SIZE="" STATE_HISTORY_BYTES="" STATE_CAPTURE_HISTORY="" STATE_ACTIVITY=unknown STATE_RUNTIME_SESSION_ID=""
-  STATE_RELAY_SOCKET="" STATE_RELAY_EPOCH="" STATE_MODEL_POLICY_JSON=""; session_exists || return 0; STATE_PRESENT=true
-  local panes owner platform_marker repo_marker value pane_real legacy_owner legacy_repo
-  panes="$("$TMUX_BIN" list-panes -t "$TMUX_SESSION_TARGET" -F '#{pane_id}')"; STATE_PANE_COUNT="$(printf '%s\n' "$panes" | awk 'NF{n++}END{print n+0}')"
-  if [[ "$STATE_PANE_COUNT" -eq 1 ]]; then
-    STATE_PANE_ID="$(printf '%s\n' "$panes" | awk 'NF{print;exit}')"
-    read -r STATE_PANE_PATH STATE_PANE_COMMAND STATE_PANE_DEAD STATE_PANE_PID STATE_PANE_WIDTH STATE_PANE_HEIGHT STATE_CURSOR_X STATE_CURSOR_Y STATE_HISTORY_SIZE STATE_HISTORY_BYTES < <("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{pane_current_path} #{pane_current_command} #{pane_dead} #{pane_pid} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y} #{history_size} #{history_bytes}') || true
-    STATE_PANE_TITLE="$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{pane_title}')"; value="$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{pane_input_off}')"; [[ "$value" == 1 ]] && STATE_PANE_INPUT_OFF=true
-    value="$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{cursor_flag}')"; [[ "$value" == 1 ]] && STATE_CURSOR_FLAG=true; value="$("$TMUX_BIN" display-message -p -t "$STATE_PANE_ID" '#{alternate_on}')"; [[ "$value" == 1 ]] && STATE_ALTERNATE_ON=true
-    STATE_CAPTURE_HISTORY="$("$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S -100 2>/dev/null || true)"; STATE_PANE_PROCESS="$("$PS_BIN" -ww -p "$STATE_PANE_PID" -o command= 2>/dev/null || true)"
-  fi
-  owner="$(tmux_env_value "$OWNER_KEY" || true)"; platform_marker="$(tmux_env_value "$PLATFORM_KEY" || true)"; repo_marker="$(tmux_env_value "$REPO_KEY" || true)"
-  if [[ "$owner" == 1 ]]; then STATE_OWNED=true; [[ "$platform_marker" == "$platform" ]] && STATE_PLATFORM_MATCH=true
-  elif [[ "$platform" == grok ]]; then legacy_owner="$(tmux_env_value "$LEGACY_OWNER_KEY" || true)"; legacy_repo="$(tmux_env_value "$LEGACY_REPO_KEY" || true)"; [[ "$legacy_owner" == 1 && "$legacy_repo" == "$repo" ]] && STATE_OWNED=true STATE_PLATFORM_MATCH=true STATE_LEGACY_OWNERSHIP=true repo_marker="$legacy_repo"; fi
-  if [[ -d "$STATE_PANE_PATH" ]]; then pane_real="$(canonical_dir "$STATE_PANE_PATH" || true)"; [[ "$pane_real" == "$repo" && "$repo_marker" == "$repo" ]] && STATE_REPO_MATCH=true; fi
-  STATE_RELAY_SOCKET="$(tmux_env_value "$RELAY_SOCKET_KEY" || true)"; STATE_RELAY_EPOCH="$(tmux_env_value "$RELAY_EPOCH_KEY" || true)"
-  STATE_MODEL_POLICY_JSON="$(tmux_env_value "$MODEL_POLICY_KEY" || true)"
-  if [[ -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]]; then path_leads_command "$STATE_PANE_PROCESS" "$RELAY" && STATE_RELAY_PROCESS_MATCH=true; if [[ -n "${CURRENT_RELAY_JSON:-}" ]]; then STATE_PROCESS_MATCH="$(printf '%s' "$CURRENT_RELAY_JSON" | json_value 'd.get("child_process_match",False)')"; fi
-  else runtime_process_matches "$STATE_PANE_PROCESS" "$STATE_PANE_COMMAND" && STATE_PROCESS_MATCH=true; fi
-  if [[ "$STATE_PROCESS_MATCH" == true ]] && adapter_detect_tui "$STATE_PANE_TITLE" "$STATE_PANE_COMMAND" "$STATE_CAPTURE_HISTORY"; then STATE_TUI=true; STATE_ACTIVITY="$(adapter_activity_hint "$STATE_CAPTURE_HISTORY")"; STATE_RUNTIME_SESSION_ID="$(adapter_extract_session_id "$STATE_CAPTURE_HISTORY" || true)"; fi
-}
-
-RELAY_DIR="" RELAY_CLIENT_PID="" RELAY_REPLY="" RELAY_CHANNEL_OPEN=false
-close_relay_channel() { if [[ "$RELAY_CHANNEL_OPEN" == true ]]; then { exec 8>&-; } 2>/dev/null || true; { exec 9<&-; } 2>/dev/null || true; RELAY_CHANNEL_OPEN=false; fi; if [[ -n "$RELAY_CLIENT_PID" ]]; then wait "$RELAY_CLIENT_PID" 2>/dev/null || true; RELAY_CLIENT_PID=""; fi; if [[ -n "$RELAY_DIR" && -d "$RELAY_DIR" ]]; then rm -rf "$RELAY_DIR"; RELAY_DIR=""; fi; }
-open_relay_channel() { RELAY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kpr-channel.XXXXXX")"; mkfifo "$RELAY_DIR/request" "$RELAY_DIR/reply"; "$PYTHON_BIN" "$RELAY_CLIENT" --serve --socket "$1" --epoch "$2" --child-fingerprint "$3" --relay-pid "$4" <"$RELAY_DIR/request" >"$RELAY_DIR/reply" 2>"$RELAY_DIR/error" & RELAY_CLIENT_PID=$!; exec 8>"$RELAY_DIR/request"; exec 9<"$RELAY_DIR/reply"; RELAY_CHANNEL_OPEN=true; }
-relay_line() { printf '%s\n' "$1" >&8; IFS= read -r RELAY_REPLY <&9 || { [[ -f "$RELAY_DIR/error" ]] && cat "$RELAY_DIR/error" >&2; return 1; }; }
-debug_relay_reply() {
-  [[ "${KAOLA_RUNNER_DEBUG:-0}" == 1 ]] || return 0
-  local result detail
-  result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"
-  detail="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("detail")' 2>/dev/null || true)"
-  printf 'kaola-tmux[%s]: relay result=%s detail=%s\n' "$platform" "${result:-unavailable}" "${detail:-none}" >&2
-}
-
-bootstrap_relay() {
-  "$PYTHON_BIN" -c 'import importlib.util,json,secrets,socket,sys
-spec=importlib.util.spec_from_file_location("kpr_protocol_boot",sys.argv[3]); p=importlib.util.module_from_spec(spec); spec.loader.exec_module(p)
-s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); s.settimeout(5.0); s.connect(sys.argv[1]); h={"protocol_version":1,"request_id":secrets.token_hex(16),"relay_epoch":sys.argv[2],"operation":"bootstrap-hello","expected_child_fingerprint":""}; p.send_frame(s,h); r,_=p.recv_frame(s); s.close(); print(json.dumps(r,sort_keys=True))' "$STATE_RELAY_SOCKET" "$STATE_RELAY_EPOCH" "$script_dir/kaola-relay-protocol.py"
-}
-
-build_sample() {
-  local relay_json="$1" barrier_json="$2" result="${3:-observed}" frame cursor_frame cursor_logical_y process_json adapter_json child_pid ps_text temporary pane_facts_json model_json
-  if [[ -n "$relay_json" && "$relay_json" != null ]]; then
-    CURRENT_RELAY_JSON="$relay_json"
-  else
-    CURRENT_RELAY_JSON=""
-  fi
-  load_session_identity; frame=""; cursor_frame=""; cursor_logical_y=0
-  if [[ "$STATE_PRESENT" == true && -n "$STATE_PANE_ID" ]]; then
-    frame="$("$TMUX_BIN" capture-pane -p -N -J -t "$STATE_PANE_ID" 2>/dev/null || true)"
-    cursor_frame="$("$TMUX_BIN" capture-pane -p -N -J -S 0 -E "${STATE_CURSOR_Y:-0}" -t "$STATE_PANE_ID" 2>/dev/null || true)"
-    cursor_logical_y="$(CURSOR_FRAME="$cursor_frame" "$PYTHON_BIN" -c 'import os; print(max(0,len(os.environ["CURSOR_FRAME"].splitlines())-1))')"
-  fi
-  pane_facts_json="$(emit_json "n:cursor_x:${STATE_CURSOR_X:-0}" "n:cursor_y:${STATE_CURSOR_Y:-0}" "n:cursor_logical_y:$cursor_logical_y")"
-  if [[ "$STATE_TUI" == true ]]; then adapter_json="$(adapter_observe_frame "$frame" "$pane_facts_json")"; else adapter_json='{"editor_state":"unknown","editor_fingerprint":null,"visible_shell_count":null,"visible_agent_count":null,"native_approval":{"state":"unknown","kind":null,"fingerprint":null},"structured_decision_marker":null,"activity_hint":"unknown"}'; fi
-  process_json=null; child_pid=""
-  if [[ -n "$CURRENT_RELAY_JSON" ]]; then
-    child_pid="$(printf '%s' "$CURRENT_RELAY_JSON" | json_value 'd.get("child_pid")' 2>/dev/null || true)"
-  fi
-  [[ "$child_pid" =~ ^[0-9]+$ ]] || child_pid="$STATE_PANE_PID"
-  if [[ -n "$child_pid" ]]; then ps_text="$("$PS_BIN" -axo pid=,ppid=,state=,comm=,command= 2>/dev/null || true)"; process_json="$(printf '%s\n' "$ps_text" | "$PYTHON_BIN" "$OBSERVATION_HELPER" process-tree "$child_pid" 2>/dev/null || printf null)"; fi
-  temporary="$(mktemp "${TMPDIR:-/tmp}/kpr-frame.XXXXXX")"; printf '%s' "$frame" >"$temporary"
-  if [[ -n "$STATE_MODEL_POLICY_JSON" ]]; then
-    model_json="$("$PYTHON_BIN" "$MODEL_POLICY_HELPER" verify --platform "$platform" --policy-json "$STATE_MODEL_POLICY_JSON" --frame-file "$temporary")"
-    [[ "$STATE_PRESENT" == true ]] && "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$MODEL_POLICY_KEY" "$model_json"
-  else
-    model_json='{}'
-  fi
-  KPR_FRAME_FILE="$temporary" KPR_PRESENT="$STATE_PRESENT" KPR_OWNED="$STATE_OWNED" KPR_PLATFORM_MATCH="$STATE_PLATFORM_MATCH" KPR_REPO_MATCH="$STATE_REPO_MATCH" KPR_PANE_COUNT="$STATE_PANE_COUNT" KPR_PANE_ID="$STATE_PANE_ID" KPR_PANE_DEAD="${STATE_PANE_DEAD:-0}" KPR_PANE_INPUT_OFF=false KPR_PANE_PATH="$STATE_PANE_PATH" KPR_PANE_PID="$STATE_PANE_PID" KPR_PANE_COMMAND="$STATE_PANE_COMMAND" KPR_PANE_TITLE="$STATE_PANE_TITLE" KPR_PANE_PROCESS="$STATE_PANE_PROCESS" KPR_RELAY_PROCESS_MATCH="$STATE_RELAY_PROCESS_MATCH" KPR_PROCESS_MATCH="$STATE_PROCESS_MATCH" KPR_TUI="$STATE_TUI" KPR_PANE_WIDTH="$STATE_PANE_WIDTH" KPR_PANE_HEIGHT="$STATE_PANE_HEIGHT" KPR_CURSOR_X="$STATE_CURSOR_X" KPR_CURSOR_Y="$STATE_CURSOR_Y" KPR_CURSOR_FLAG="$STATE_CURSOR_FLAG" KPR_ALTERNATE_ON="$STATE_ALTERNATE_ON" KPR_HISTORY_SIZE="$STATE_HISTORY_SIZE" KPR_HISTORY_BYTES="$STATE_HISTORY_BYTES" KPR_ADAPTER_JSON="$adapter_json" KPR_PROCESS_JSON="$process_json" KPR_RELAY_JSON="$relay_json" KPR_BARRIER_JSON="$barrier_json" KPR_RESULT="$result" KPR_PLATFORM="$platform" KPR_RUNTIME="$ADAPTER_DISPLAY_NAME" KPR_SESSION="$session" KPR_REPO="$repo" KPR_RUNTIME_SESSION_ID="$STATE_RUNTIME_SESSION_ID" KPR_MODEL_JSON="$model_json" "$PYTHON_BIN" "$OBSERVATION_HELPER" build
-  rm -f "$temporary"
-}
-
-observe_managed() {
-  local bootstrap child_fingerprint relay_pid state_reply relay_json barrier_json
-  load_session_identity; if [[ -z "$STATE_RELAY_SOCKET" || -z "$STATE_RELAY_EPOCH" ]]; then build_sample null null observed; return; fi
-  bootstrap="$(bootstrap_relay)" || { build_sample null null unstable; return; }; child_fingerprint="$(printf '%s' "$bootstrap" | json_value 'd["child_start_fingerprint"]')"; relay_pid="$(printf '%s' "$bootstrap" | json_value 'd["pid"]')"; [[ "$relay_pid" == "$STATE_PANE_PID" ]] || { build_sample null null unstable; return; }
-  open_relay_channel "$STATE_RELAY_SOCKET" "$STATE_RELAY_EPOCH" "$child_fingerprint" "$relay_pid"
-  relay_line '{"operation":"state"}' || { close_relay_channel; build_sample null null unstable; return; }
-  state_reply="$RELAY_REPLY"
-  close_relay_channel
-  [[ "$(printf '%s' "$state_reply" | json_value 'd.get("result")' 2>/dev/null || true)" == state ]] || { build_sample null null unstable; return; }
-  relay_json="$(printf '%s' "$state_reply" | json_value 'd["relay"]')"
-  barrier_json="$(printf '%s' "$state_reply" | json_value 'd.get("barrier")')"
-  [[ -n "$barrier_json" ]] || barrier_json=null
-  build_sample "$relay_json" "$barrier_json"
-}
-
-# The status/start line is bounded once more by status-view *after* the wrapper fields
-# (result, and legacy_ownership for grok) are added, so the emitted line stays within budget.
-emit_status() { local observation; observation="$(observe_managed)"; load_session_identity; printf '%s' "$observation" | KPR_STATUS_RESULT="$1" KPR_STATUS_LEGACY="$STATE_LEGACY_OWNERSHIP" "$PYTHON_BIN" "$OBSERVATION_HELPER" status-view; }
-emit_refusal() { emit_json "n:schema_version:3" "s:result:$1" "s:action:${2:-$command_name}" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:false"; }
-emit_transport_result() {
-  local mutation_field
-  case "$3" in
-    true|false) mutation_field="b:mutation_performed:$3" ;;
-    *) mutation_field="j:mutation_performed:null" ;;
-  esac
-  emit_json "n:schema_version:3" "s:result:$1" "s:action:$2" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "$mutation_field"
-}
-emit_transport_refusal() {
-  emit_json "n:schema_version:3" "s:result:refused" "s:reason:$1" "s:action:$2" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:false"
-}
-emit_existing_session_not_reusable() {
-  local relay_endpoint_present=false
-  [[ -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]] && relay_endpoint_present=true
-  emit_json "n:schema_version:3" "s:result:existing-session-not-reusable" "s:action:start" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "b:mutation_performed:false" "b:owned:$STATE_OWNED" "b:platform_match:$STATE_PLATFORM_MATCH" "b:repo_match:$STATE_REPO_MATCH" "n:pane_count:$STATE_PANE_COUNT" "b:relay_process_match:$STATE_RELAY_PROCESS_MATCH" "b:relay_endpoint_present:$relay_endpoint_present"
-}
-load_payload() { if [[ "$text_given" == true ]]; then PAYLOAD="$text_value"; else [[ ! -t 0 ]] || die "$command_name needs --text or stdin"; PAYLOAD="$(</dev/stdin)"; fi; [[ -n "$PAYLOAD" ]] || die "prompt must not be empty"; }
-validate_payload_controls() {
-  PAYLOAD_VALUE="$PAYLOAD" "$PYTHON_BIN" -c 'import os
-
-payload = os.environ["PAYLOAD_VALUE"]
-for character in payload:
-    codepoint = ord(character)
-    if codepoint in (0x09, 0x0A):
-        continue
-    if (
-        codepoint < 0x20
-        or codepoint == 0x7F
-        or 0x80 <= codepoint <= 0x9F
-        or 0xDC80 <= codepoint <= 0xDCFF
-    ):
-        raise SystemExit(1)'
-}
-payload_needs_bracketed_paste() { [[ "$PAYLOAD" == *$'\n'* || "$PAYLOAD" == *$'\t'* ]]; }
-payload_hex() { printf '%s' "$PAYLOAD" | "$PYTHON_BIN" -c 'import sys; print(sys.stdin.buffer.read().hex())'; }
-fingerprint_payload() { printf '%s' "$PAYLOAD" | "$PYTHON_BIN" -c 'import hashlib,sys; print("sha256:"+hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
-journal_pty_prompt() {
-  KAOLA_PLATFORM="$platform" KAOLA_SESSION="$session" KAOLA_REPO="$repo" KAOLA_FINGERPRINT="$1" "$PYTHON_BIN" -c 'import hashlib,json,os,pathlib,tempfile,time
-base=pathlib.Path(os.environ.get("KAOLA_ACP_RECORD_ROOT") or tempfile.gettempdir())
-if "KAOLA_ACP_RECORD_ROOT" not in os.environ:
-    base=base/f"kaola-{os.getuid()}"
-digest=hashlib.sha256(os.environ["KAOLA_REPO"].encode()).hexdigest()[:16]
-directory=base/os.environ["KAOLA_PLATFORM"]/os.environ["KAOLA_SESSION"]/digest
-directory.mkdir(parents=True,exist_ok=True); path=directory/"record.json"
-try: record=json.loads(path.read_text())
-except (OSError,ValueError): record={"platform":os.environ["KAOLA_PLATFORM"],"session":os.environ["KAOLA_SESSION"],"repo":os.environ["KAOLA_REPO"]}
-record["last_prompt"]={"fingerprint":os.environ["KAOLA_FINGERPRINT"],"written_at":time.time(),"transport":"pty","mutation_status":"accepted","stop_reason":None}
-temporary=path.with_suffix(".tmp"); temporary.write_text(json.dumps(record,sort_keys=True)); os.replace(temporary,path)'
-}
-cleanup_terminal_socket() {
-  "$PYTHON_BIN" -c 'import os, pathlib, socket, stat, sys, tempfile
-path = pathlib.Path(sys.argv[1])
-epoch = sys.argv[2]
-expected = pathlib.Path(tempfile.gettempdir()) / f"kpr-{os.getuid()}" / f"{epoch}.sock"
-if path != expected or not epoch:
-    raise SystemExit(1)
-try:
-    info = path.lstat()
-except FileNotFoundError:
-    raise SystemExit(0)
-if path.is_symlink() or not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
-    raise SystemExit(1)
-path.unlink()' "$1" "$2"
-}
-DIRECT_CHILD_FP="" DIRECT_RELAY=""
-open_transport_channel() {
-  local bootstrap relay_pid state_reply
-  load_session_identity
-  [[ "$STATE_PRESENT" == true ]] || { REFUSAL=absent; return 1; }
-  [[ "$STATE_OWNED" == true ]] || { REFUSAL=unowned; return 1; }
-  [[ "$STATE_PLATFORM_MATCH" == true ]] || { REFUSAL=platform-mismatch; return 1; }
-  [[ "$STATE_PANE_COUNT" -eq 1 ]] || { REFUSAL=unexpected-pane-count; return 1; }
-  [[ "$STATE_REPO_MATCH" == true ]] || { REFUSAL=repo-mismatch; return 1; }
-  [[ "$STATE_RELAY_PROCESS_MATCH" == true && -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]] || { REFUSAL=relay-required; return 1; }
-  bootstrap="$(bootstrap_relay)" || { REFUSAL=relay-attestation-failed; return 1; }
-  DIRECT_CHILD_FP="$(printf '%s' "$bootstrap" | json_value 'd.get("child_start_fingerprint")')"
-  relay_pid="$(printf '%s' "$bootstrap" | json_value 'd.get("pid")')"
-  [[ "$relay_pid" == "$STATE_PANE_PID" && "$DIRECT_CHILD_FP" =~ ^sha256:[0-9a-f]{64}$ ]] || { REFUSAL=relay-attestation-failed; return 1; }
-  open_relay_channel "$STATE_RELAY_SOCKET" "$STATE_RELAY_EPOCH" "$DIRECT_CHILD_FP" "$relay_pid"
-  relay_line '{"operation":"state"}' || { close_relay_channel; REFUSAL=relay-unavailable; return 1; }
-  state_reply="$RELAY_REPLY"
-  [[ "$(printf '%s' "$state_reply" | json_value 'd.get("result")' 2>/dev/null || true)" == state ]] || { close_relay_channel; REFUSAL=relay-unavailable; return 1; }
-  [[ "$(printf '%s' "$state_reply" | json_value 'd.get("direct_input",False)' 2>/dev/null || true)" == true ]] || { close_relay_channel; REFUSAL=relay-upgrade-required; return 1; }
-  DIRECT_RELAY="$(printf '%s' "$state_reply" | json_value 'd.get("relay")')"
-  [[ "$(printf '%s' "$DIRECT_RELAY" | json_value 'd.get("managed",False)' 2>/dev/null || true)" == true ]] || { close_relay_channel; REFUSAL=relay-attestation-failed; return 1; }
-  [[ "$(printf '%s' "$DIRECT_RELAY" | json_value 'd.get("child_process_match",False)' 2>/dev/null || true)" == true ]] || { close_relay_channel; REFUSAL=process-mismatch; return 1; }
-}
-trap 'close_relay_channel' EXIT HUP INT TERM
-
-# Force stop is intentionally small: prove the exact owned tmux identity,
-# end that one session, and report what remains. The relay owns its child
-# lifecycle; the runner does not classify or sweep unrelated processes.
-force_stop_exact() {
-  local relay_pid terminal_socket terminal_epoch session_present relay_running socket_present result
-  load_session_identity
-  if [[ "$STATE_PRESENT" != true ]]; then emit_status already-stopped; return 0; fi
-  if [[ "$STATE_OWNED" != true ]]; then emit_refusal unowned force-stop; return 1; fi
-  if [[ "$STATE_PLATFORM_MATCH" != true ]]; then emit_refusal platform-mismatch force-stop; return 1; fi
-  if [[ "$STATE_PANE_COUNT" -ne 1 ]]; then emit_refusal unexpected-pane-count force-stop; return 1; fi
-  if [[ "$STATE_REPO_MATCH" != true ]]; then emit_refusal repo-mismatch force-stop; return 1; fi
-  if [[ "$STATE_RELAY_PROCESS_MATCH" != true || ! "$STATE_PANE_PID" =~ ^[0-9]+$ ]]; then
-    emit_refusal relay-attestation-failed force-stop
-    return 1
-  fi
-
-  relay_pid="$STATE_PANE_PID"
-  terminal_socket="$STATE_RELAY_SOCKET"
-  terminal_epoch="$STATE_RELAY_EPOCH"
-  "$TMUX_BIN" kill-session -t "$TMUX_SESSION_TARGET" >/dev/null 2>&1 || true
-
-  for _ in {1..20}; do
-    if ! session_exists; then
-      if ! "$PS_BIN" -p "$relay_pid" -o pid= 2>/dev/null | awk 'NF{found=1} END{exit !found}'; then
-        break
-      fi
-    fi
-    sleep 0.05
-  done
-
-  session_present=false
-  session_exists && session_present=true
-  relay_running=false
-  "$PS_BIN" -p "$relay_pid" -o pid= 2>/dev/null | awk 'NF{found=1} END{exit !found}' && relay_running=true
-
-  if [[ "$session_present" == false && "$relay_running" == false && -n "$terminal_socket" && -n "$terminal_epoch" ]]; then
-    cleanup_terminal_socket "$terminal_socket" "$terminal_epoch" >/dev/null 2>&1 || true
-  fi
-  socket_present=false
-  [[ -n "$terminal_socket" && -e "$terminal_socket" ]] && socket_present=true
-
-  result=stopped
-  if [[ "$session_present" == true || "$relay_running" == true || "$socket_present" == true ]]; then
-    result=termination-uncertain
-  fi
-  emit_json \
-    "n:schema_version:3" \
-    "s:result:$result" \
-    "s:action:force-stop" \
-    "s:platform:$platform" \
-    "s:session:$session" \
-    "s:repo:$repo" \
-    "s:based_on_snapshot:$if_snapshot" \
-    "b:mutation_performed:true" \
-    "j:final_state:{\"session_present\":$session_present,\"relay_running\":$relay_running,\"child_running\":null,\"child_group_running\":null,\"socket_present\":$socket_present,\"pane_input_off\":null}" \
-    "s:escaped_descendants:unknown"
-  [[ "$result" == stopped ]]
-}
-
-case "$command_name" in
-  preflight)
-    adapter_preflight; resolve_model_policy || true
-    base_json="$(emit_json "s:result:ready" "s:platform:$platform" "s:runtime:$ADAPTER_DISPLAY_NAME" "s:runtime_version:$PREFLIGHT_VERSION" "s:runtime_binary:$RUNTIME_BIN" "s:repo:$repo" "s:session:$session" "b:workflow_next:$PREFLIGHT_WORKFLOW_NEXT" "b:kaola_workflow_finalize:$PREFLIGHT_FINALIZE" "s:recurring_execution:$ADAPTER_RECURRING_EXECUTION" "s:project_materialization:$PREFLIGHT_PROJECT_MATERIALIZATION" "s:detail:$PREFLIGHT_DETAIL")"
-    BASE_JSON="$base_json" POLICY_JSON="$MODEL_POLICY_JSON" GROK_VERSION="$PREFLIGHT_VERSION" GROK_ROOT="${PREFLIGHT_PROJECT_ROOT_JSON:-null}" "$PYTHON_BIN" -c 'import json,os,sys
-d=json.loads(os.environ["BASE_JSON"]); d.update(json.loads(os.environ["POLICY_JSON"]))
-if sys.argv[1] == "grok": d.update(grok_version=os.environ["GROK_VERSION"], project_root=json.loads(os.environ["GROK_ROOT"]))
-print(json.dumps(d,ensure_ascii=False,sort_keys=True))' "$platform"
-    ;;
-  observe) observe_managed ;;
-  status) load_session_identity; if [[ "$STATE_PRESENT" == true ]]; then emit_status present; else emit_status absent; fi ;;
-  capture) [[ "$lines" =~ ^[1-9][0-9]*$ && "$lines" -le 5000 ]] || die "--lines must be 1..5000"; load_session_identity; [[ "$STATE_PRESENT" == true && "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && "$STATE_PANE_COUNT" -eq 1 && -n "$STATE_PANE_ID" ]] || { emit_refusal identity-mismatch capture; exit 1; }
-    # Ordinary capture is a bounded receipt (newest bytes + truncation marker with the
-    # sha256 of the whole stream); --full is the explicit, unbounded request.
-    if [[ "$capture_full" == true ]]; then "$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S "-$lines"; else "$TMUX_BIN" capture-pane -p -t "$STATE_PANE_ID" -S "-$lines" | "$PYTHON_BIN" "$OBSERVATION_HELPER" bound-text; fi ;;
-  start)
-    [[ -z "$resume_id" || "$continue_mode" == false ]] || die "--resume and --continue are mutually exclusive"
-    adapter_preflight
-    # Catalog probes are evidence only. The adapter always receives the
-    # declared exact model literal from resolve_model_policy.
-    resolve_model_policy || true
-    load_session_identity
-    if [[ "$STATE_PRESENT" == true ]]; then
-      if [[ "$STATE_OWNED" == true && "$STATE_PLATFORM_MATCH" == true && "$STATE_REPO_MATCH" == true && "$STATE_PANE_COUNT" -eq 1 && "$STATE_RELAY_PROCESS_MATCH" == true && -n "$STATE_RELAY_SOCKET" && -n "$STATE_RELAY_EPOCH" ]]; then
-        existing_bootstrap="$(bootstrap_relay 2>/dev/null || true)"
-        existing_relay_pid="$(printf '%s' "$existing_bootstrap" | json_value 'd.get("pid")' 2>/dev/null || true)"
-        existing_child_fp="$(printf '%s' "$existing_bootstrap" | json_value 'd.get("child_start_fingerprint")' 2>/dev/null || true)"
-        if [[ "$existing_relay_pid" == "$STATE_PANE_PID" && "$existing_child_fp" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-          emit_status already-running
-          exit 0
-        fi
-      fi
-      # A present endpoint that cannot complete same-epoch bootstrap is not a
-      # reusable live session. Leave it intact; explicit --force owns recovery.
-      emit_existing_session_not_reusable
-      exit 1
-    fi
-    adapter_prepare_model_environment
-    session_env_args=(); while IFS='=' read -r name value; do case "$name" in CLAUDE_*|GROK_*|OPENCODE_*|KIMI_*|CURSOR_*|CODEX_*|OPENAI_API_KEY|FAKE_*) session_env_args+=(-e "$name=$value") ;; esac; done < <(env)
-    set +u
-    for value in "${ADAPTER_MODEL_ENV[@]}"; do session_env_args+=(-e "$value"); done
-    set -u
-    if (( ${#session_env_args[@]} > 0 )); then
-      "$TMUX_BIN" new-session -d -s "$session" -c "$repo" "${session_env_args[@]}" || { emit_status existing-session-not-reusable; exit 1; }
-    else
-      "$TMUX_BIN" new-session -d -s "$session" -c "$repo" || { emit_status existing-session-not-reusable; exit 1; }
-    fi
-    "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$OWNER_KEY" 1; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$PLATFORM_KEY" "$platform"; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$REPO_KEY" "$repo"; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$MODEL_POLICY_KEY" "$MODEL_POLICY_JSON"; if [[ "$platform" == grok ]]; then "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$LEGACY_OWNER_KEY" 1; "$TMUX_BIN" set-environment -t "$TMUX_SESSION_TARGET" "$LEGACY_REPO_KEY" "$repo"; fi
-    load_session_identity; adapter_build_launch "$repo" "$resume_id" "$continue_mode"; launch=exec; for argument in "$PYTHON_BIN" "$RELAY" --tmux-bin "$TMUX_BIN" --session "$session" --pane-id "$STATE_PANE_ID" --repo "$repo" --runtime-path "$RUNTIME_BIN" --exact-process-title "${ADAPTER_CHILD_PROCESS_TITLE_EXACT:-}" -- ${ADAPTER_LAUNCH_ARGS[@]+"${ADAPTER_LAUNCH_ARGS[@]}"}; do printf -v quoted '%q' "$argument"; launch+=" $quoted"; done; "$TMUX_BIN" send-keys -t "$STATE_PANE_ID" -l "$launch"; "$TMUX_BIN" send-keys -t "$STATE_PANE_ID" C-m
-    start_timeout="${KAOLA_START_TIMEOUT:-${GROK_START_TIMEOUT:-20}}"; [[ "$start_timeout" =~ ^[0-9]+$ ]] || die "KAOLA_START_TIMEOUT must be integer"; start_deadline=$((SECONDS + start_timeout)); while (( SECONDS < start_deadline )); do sleep 0.1; load_session_identity; [[ "$STATE_PRESENT" == true ]] || { emit_status start-exited; exit 1; }; if [[ -n "$STATE_RELAY_SOCKET" ]]; then observation="$(observe_managed)"; if [[ "$(printf '%s' "$observation" | json_value 'd.get("relay",{}).get("managed",False)')" == true ]]; then printf '%s' "$observation" | KPR_STATUS_RESULT=started "$PYTHON_BIN" "$OBSERVATION_HELPER" status-view; exit 0; fi; fi; done; emit_status start-pending; exit 2
-    ;;
-  answer)
-    [[ "$ADAPTER_ANSWER_MODE" == claude-clear-v1 ]] || { emit_transport_result answer-unsupported answer false; exit 1; }
-    [[ "$replace_editor" == true ]] || { emit_transport_result replace-editor-required answer false; exit 1; }
-    load_payload
-    validate_payload_controls || { emit_transport_refusal unsafe-terminal-control answer; exit 1; }
-    if ! open_transport_channel; then emit_transport_result "$REFUSAL" answer false; exit 1; fi
-    if payload_needs_bracketed_paste && [[ "$(printf '%s' "$DIRECT_RELAY" | json_value 'd.get("bracketed_paste",False)')" != true ]]; then close_relay_channel; emit_transport_refusal bracketed-paste-required answer; exit 1; fi
-    answer_fp="$(fingerprint_payload)"; hex="$(payload_hex)"
-    relay_line "{\"operation\":\"send-input\",\"clear_editor\":true,\"payload_hex\":\"$hex\"}" || { close_relay_channel; emit_transport_result transport-uncertain answer unknown; exit 1; }
-    relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"
-    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" answer unknown; exit 1; }
-    payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"; clear_editor="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("clear_editor",False)')"
-    [[ "$payload_fp" == "$answer_fp" && "$clear_editor" == true ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch answer true; exit 1; }
-    close_relay_channel
-    emit_json "n:schema_version:3" "s:result:answer-sent" "s:action:answer" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:decision_id:$decision_id" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp" "b:clear_editor:true"
-    ;;
-  send)
-    load_payload
-    validate_payload_controls || { emit_transport_refusal unsafe-terminal-control send; exit 1; }
-    if ! open_transport_channel; then emit_transport_result "$REFUSAL" send false; exit 1; fi
-    if payload_needs_bracketed_paste && [[ "$(printf '%s' "$DIRECT_RELAY" | json_value 'd.get("bracketed_paste",False)')" != true ]]; then close_relay_channel; emit_transport_refusal bracketed-paste-required send; exit 1; fi
-    send_fp="$(fingerprint_payload)"; hex="$(payload_hex)"
-    relay_line "{\"operation\":\"send-input\",\"payload_hex\":\"$hex\"}" || { close_relay_channel; emit_transport_result transport-uncertain send unknown; exit 1; }
-    relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"
-    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" send unknown; exit 1; }
-    payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
-    [[ "$payload_fp" == "$send_fp" ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch send true; exit 1; }
-    close_relay_channel
-    journal_pty_prompt "$payload_fp"
-    emit_json "n:schema_version:3" "s:result:sent" "s:action:send" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"
-    ;;
-  key)
-    if ! open_transport_channel; then emit_transport_result "$REFUSAL" key false; exit 1; fi
-    case "$key_name" in
-      up) key_hex=1b5b41 ;; down) key_hex=1b5b42 ;; right) key_hex=1b5b43 ;; left) key_hex=1b5b44 ;;
-      enter) key_hex=0d ;; escape) key_hex=1b ;; tab) key_hex=09 ;; backtab) key_hex=1b5b5a ;; space) key_hex=20 ;;
-    esac
-    expected_key_fp="$(printf '%s' "$key_hex" | "$PYTHON_BIN" -c 'import hashlib,sys; print("sha256:"+hashlib.sha256(bytes.fromhex(sys.stdin.read())).hexdigest())')"
-    relay_line "{\"operation\":\"send-control\",\"payload_hex\":\"$key_hex\"}" || { close_relay_channel; emit_transport_result transport-uncertain key unknown; exit 1; }
-    [[ "$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")')" == control-sent ]] || { relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"; debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" key unknown; exit 1; }
-    key_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
-    [[ "$key_fp" == "$expected_key_fp" ]] || { close_relay_channel; emit_transport_result key-attestation-mismatch key true; exit 1; }
-    close_relay_channel
-    emit_json "n:schema_version:3" "s:result:key-sent" "s:action:key" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:key:$key_name" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$key_fp"
-    ;;
-  stop)
-    load_session_identity
-    if [[ "$STATE_PRESENT" != true ]]; then emit_status already-stopped; exit 0; fi
-    if [[ "$force" == true ]]; then
-      force_stop_exact
-      exit $?
-    fi
-    if ! open_transport_channel; then emit_transport_result "$REFUSAL" stop false; exit 1; fi
-    PAYLOAD="$ADAPTER_QUIT_TEXT"; quit_fp="$(fingerprint_payload)"; hex="$(payload_hex)"
-    relay_line "{\"operation\":\"send-input\",\"payload_hex\":\"$hex\"}" || { close_relay_channel; emit_transport_result transport-uncertain stop unknown; exit 1; }
-    relay_result="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("result")' 2>/dev/null || true)"
-    [[ "$relay_result" == input-sent ]] || { debug_relay_reply; close_relay_channel; emit_transport_result "${relay_result:-transport-failed}" stop unknown; exit 1; }
-    payload_fp="$(printf '%s' "$RELAY_REPLY" | json_value 'd.get("payload_fingerprint")')"
-    [[ "$payload_fp" == "$quit_fp" ]] || { close_relay_channel; emit_transport_result payload-attestation-mismatch stop true; exit 1; }
-    close_relay_channel
-    for _ in {1..100}; do session_exists || { emit_json "n:schema_version:3" "s:result:stopped" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"; exit 0; }; sleep 0.1; done
-    emit_json "n:schema_version:3" "s:result:quit-pending" "s:action:stop" "s:platform:$platform" "s:session:$session" "s:repo:$repo" "s:based_on_snapshot:$if_snapshot" "b:mutation_performed:true" "s:payload_fingerprint:$payload_fp"; exit 2
-    ;;
-esac
+exec "${acp_args[@]}"

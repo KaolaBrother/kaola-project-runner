@@ -552,23 +552,21 @@ class Issue44IdleStopOnCompleteMeaning(unittest.TestCase):
         self.assertTrue(text.strip(), "generated orchestrator markdown is empty")
         return text
 
-    def test_acp_and_pty_share_the_same_owned_session_stop(self) -> None:
+    def test_idle_acp_session_takes_the_exact_owned_session_stop(self) -> None:
+        # Issue #130: ACP is the only transport, so the stop clause names the
+        # ACP holder alone instead of comparing it with PTY/tmux.
         text = self.orchestrator_text()
         self.assertIsNotNone(
             clause_present(
                 text,
                 (
-                    r"ACP.{0,80}(?:the )?same (?:way|stop action).{0,40}(?:as )?(?:PTY|tmux)",
-                    r"ACP and PTY.{0,40}(?:are )?(?:the )?same stop",
-                    r"leftover ACP holder.{0,100}(?:exact owned )?`?stop`?",
-                    r"idle owned ACP.{0,80}matching platform Runner Skill",
-                    r"including ACP holders?.{0,80}matching platform Runner Skill",
-                    r"ACP (?:idle|holder|session).{0,80}(?:exact owned session )?stop.{0,80}(?:PTY|tmux)",
+                    r"stop action is the exact owned session `?stop`? via the matching platform (?:Runner )?Skill, which ends its ACP holder",
                 ),
             ),
-            "orchestrator must require stopping an idle owned ACP session the same "
-            "way as PTY/tmux: exact owned stop via the matching platform Runner Skill",
+            "orchestrator must require stopping an idle owned ACP session with the "
+            "exact owned stop via the matching platform Runner Skill",
         )
+        self.assertIsNone(clause_present(text, (r"ACP and PTY.{0,40}same stop", r"same (?:way|stop action).{0,40}(?:as )?(?:PTY|tmux)")))
         wrong = authorizes_wrong_move(
             text,
             (

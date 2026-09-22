@@ -101,8 +101,8 @@ Project Runner entry is not renamed, restarted, or cancelled from here.
 This Skill loads on its own. Load one selected worker Skill only at dispatch, a
 reference only when the current step needs it, and never read script source or
 whole files into context: receipts, hashes, counts and bounded excerpts are the
-evidence. Ordinary `observe`, `status` and `capture --lines` receipts are bounded
-on both transports, keeping the newest part and naming what a `truncated` block
+evidence. Ordinary `observe`, `status` and `capture --lines` receipts are bounded,
+keeping the newest part and naming what a `truncated` block
 dropped; `capture --full` is the only unbounded request.
 
 ### Defaults
@@ -124,12 +124,12 @@ Bind the consuming project's canonical project root once at setup with
 Runner fills it and refuses a drifted root before anything starts, so no
 dispatch re-proves the path. Ask each worker to invoke its installed
 workflow-next. Without that binding, linked-worktree starts and existing-run
-recovery are Agent decisions on both PTY and ACP, not transport gates. See
+recovery are Agent decisions, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
 
 `self_hosting_risk` and model mismatches are reported evidence, not automatic
 start gates. Bypass is not broader authorization. With no verified ACP skip-all,
-permission may still arise: `permit` settles it, never force PTY or add a gate.
+permission may still arise: `permit` settles it; never add a gate.
 
 ## Heartbeat
 
@@ -163,12 +163,12 @@ sink, and write ownership.
 1. **Recover and observe.** Read worker/run records, relevant
    Git/Forge state, and fresh Runner evidence. Use exact owned sessions and
    current platform Skills. Observe busy workers without injecting "status?"
-   messages or polling raw PTY screens as a human UI. Do not replay a prompt whose
+   messages or polling raw frames as a human UI. Do not replay a prompt whose
    acceptance or effects are known or uncertain; investigate the existing action
    first. Steering a running turn is an Agent
    choice, never a Runner policy: pick the mode yourself, read the receipt, and
    never call a not-consumed or `unknown` steer delivered. No automatic
-   fallback/resend, raw tmux injection, or model-picker mutation.
+   fallback/resend, raw terminal injection, or model-picker mutation.
 2. **Decide and dispatch.** Resolve worker questions within existing
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
@@ -199,8 +199,8 @@ sink, and write ownership.
 5. **Release and report.** The only legal idle seat is one whose delivery is
    awaiting acceptance. Once acceptance finishes or the seat is abandoned,
    exact-stop it in that same beat; a rejected delivery's repair is the same
-   assignment. ACP and PTY/tmux are the same stop action: exact owned session
-   `stop` via the matching platform Skill, including ACP holders. Idle is not
+   assignment. The stop action is the exact owned session
+   `stop` via the matching platform Skill, which ends its ACP holder. Idle is not
    keep-alive or completion. A Host that
    ended its turn while workers are in flight, or with delivery, acceptance or
    close-out open, is not an idle worker: keep it and send it no "continue"; its

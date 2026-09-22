@@ -9,10 +9,10 @@ a worker on a different model.
 
 Three separate things are pinned:
 
-* the five re-pointed presets, on **both** sources of truth -- ``platforms/*.yaml``
+* the five re-pointed presets, on **both** declarations -- ``platforms/*.yaml``
   feeds the ACP path through ``kaola-acp.py`` and ``scripts/adapters/*.sh``
-  feeds the PTY path through ``kaola-tmux.sh``, and nothing but this test makes
-  the two agree;
+  still carries the same preset facts (the retired PTY path used to read them,
+  Issue #130), and nothing but this test makes the two agree;
 * the third preset slot, which is optional: it must resolve where declared and
   be **absent** from the generated output of the seven platforms that declare
   none, while an undeclared tier is a typed refusal rather than a quiet
@@ -109,18 +109,6 @@ def run_acp(platform: str, *extra: str) -> tuple[int, dict[str, Any]]:
     return proc.returncode, json.loads(proc.stdout)
 
 
-def run_tmux(platform: str, *extra: str) -> subprocess.CompletedProcess[str]:
-    """The PTY branch of the shared entrypoint, which owns its own tier check."""
-    env = {k: v for k, v in os.environ.items()
-           if k not in ("KAOLA_ZCODE_ENTRY", "KAOLA_ZCODE_NODE", "KAOLA_ACP_DISPATCHER")}
-    return subprocess.run(
-        ["bash", str(SCRIPTS / "kaola-tmux.sh"), platform, "preflight",
-         "--repo", str(PROJECT), "--session", f"{platform}-i111-tier",
-         "--transport", "pty", *extra],
-        capture_output=True, text=True, timeout=120, env=env,
-    )
-
-
 class LiveVerifiedPresets(unittest.TestCase):
     """Each re-pointed preset names the exact id read from the live catalog."""
 
@@ -177,7 +165,10 @@ class LiveVerifiedPresets(unittest.TestCase):
     def test_droid_launch_summary_names_auto_default_and_no_alternative(self) -> None:
         """Issue #125: the summary states Auto default/upgrade and K3 Max core."""
         summary = manifest("droid")["launch_summary"]
-        self.assertIn("default Auto Model", summary)
+        # Issue #130 dropped the PTY launch clause that spelled "default Auto
+        # Model"; the ACP clause states the same default.
+        self.assertIn("The default preset is the first-class catalog id auto", summary)
+        self.assertNotIn("--skip-permissions-unsafe", summary)
         self.assertIn("--tier core is the first-class catalog id kimi-k3", summary)
         self.assertNotIn("--tier upgrade preset is the first-class catalog id kimi-k3", summary)
         for leftover in ("kimi-k2.7", "K2.7", "K2.8", "alternative"):
@@ -193,9 +184,9 @@ class LiveVerifiedPresets(unittest.TestCase):
 class ManifestAndAdapterAgree(unittest.TestCase):
     """Two transports, two declarations of the same preset, one meaning.
 
-    `kaola-acp.py` reads `platforms/*.yaml`; `kaola-tmux.sh` reads
-    `scripts/adapters/*.sh`. Nothing else makes them agree, and a skew would
-    silently start the PTY and ACP transports on different models.
+    `kaola-acp.py` reads `platforms/*.yaml`; `scripts/adapters/*.sh` carries
+    the same preset facts (read by the PTY path until Issue #130 retired it).
+    Nothing else makes them agree, so a skew is still pinned here.
     """
 
     def test_every_platform_declares_the_same_presets_on_both_paths(self) -> None:
@@ -300,26 +291,17 @@ class UndeclaredTierIsRefused(unittest.TestCase):
         self.assertEqual(receipt["reason"], "tier-not-declared")
         self.assertEqual(receipt["available_tiers"], ["default", "upgrade", "core"])
         self.assertFalse(receipt["mutation_performed"])
-        proc = run_tmux("droid", "--tier", "alternative")
-        self.assertEqual(proc.returncode, 1)
-        self.assertIn("declares no --tier alternative", proc.stderr)
-
-    def test_pty_path_refuses_the_same_tier(self) -> None:
-        proc = run_tmux("codex", "--tier", "fable")
-        self.assertEqual(proc.returncode, 1)
-        self.assertIn("declares no --tier fable", proc.stderr)
 
 
 class BothTransportsResolveTheSamePreset(unittest.TestCase):
-    """The two transports resolve presets independently, so both are pinned.
+    """The ACP transport's preset mapping is pinned deterministically.
 
     Deliberately not end to end: `preflight` resolution probes the real CLI
     catalog, which takes minutes for the larger catalogs and answers
     differently on a machine where a binary is absent. What is actually at risk
-    is the *mapping* -- which manifest keys a `--tier` word selects, and whether
-    the adapter that feeds the PTY path carries the same values -- so that is
-    what is asserted here, deterministically. The end-to-end pair is covered by
-    `UndeclaredTierIsRefused`, which returns before any probe.
+    is the *mapping* -- which manifest keys a `--tier` word selects -- so that is
+    what is asserted here, deterministically. The end-to-end refusal is covered
+    by `UndeclaredTierIsRefused`, which returns before any probe.
     """
 
     def test_acp_maps_each_tier_word_onto_its_manifest_keys(self) -> None:
@@ -348,21 +330,6 @@ class BothTransportsResolveTheSamePreset(unittest.TestCase):
                 self.assertEqual(prefix, "alt")
                 self.assertEqual(values[f"{prefix}_model_id"], model_id)
                 self.assertEqual(values[f"{prefix}_model_effort"], effort)
-
-    def test_pty_branch_reads_the_adapter_third_tier_variables(self) -> None:
-        """kaola-tmux.sh owns its own preset branch; it must read the new vars.
-
-        Paired with `ManifestAndAdapterAgree`, this is what makes a PTY start
-        land on the same model as the ACP start for the same `--tier`.
-        """
-        marker = 'elif [[ -n "$alt_tier" && "$tier" == "$alt_tier" ]]; then'
-        text = (SCRIPTS / "kaola-tmux.sh").read_text(encoding="utf-8").splitlines()
-        body = next((text[index + 1] for index, line in enumerate(text)
-                     if line.strip() == marker), None)
-        self.assertIsNotNone(body, "kaola-tmux.sh lost its third-tier preset branch")
-        for variable in ("ADAPTER_ALT_MODEL_NAME", "ADAPTER_ALT_MODEL_ID",
-                         "ADAPTER_ALT_MODEL_EFFORT"):
-            self.assertIn(variable, body)
 
 
 class ZcodeHasOneSourceOfTruth(unittest.TestCase):

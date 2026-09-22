@@ -79,7 +79,7 @@ Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, Droid CLI
 (DeepSeek Harness)**. A
 controlling agent can start a session in a Git repository, send instructions, read replies and
 runtime evidence, and stop that exact owned session. Communication uses structured ACP (Agent
-Client Protocol) or a tmux terminal. Pair a chosen entry with
+Client Protocol) only. Pair a chosen entry with
 [Kaola Workflow](https://github.com/KaolaBrother/Kaola-Workflow) when that work needs a
 recoverable path from issue to verified delivery.
 
@@ -93,30 +93,27 @@ For example, Claude Code can load the Codex Runner Skill to work through Codex C
 Each target has its own generated **worker** Skill, platform manifest, and launch adapter.
 The main orchestrator Skill is generated separately and is not an eleventh platform.
 
-| Target runtime | Skill | CLI executable | Default transport |
-|---|---|---|---|
-| Claude Code | `claude-code-kaola-project-runner` | `claude` | ACP |
-| Codex CLI | `codex-kaola-project-runner` | `codex` | ACP |
-| Cursor CLI | `cursor-cli-kaola-project-runner` | `cursor-agent` | ACP |
-| Devin CLI | `devin-kaola-project-runner` | `devin` | ACP |
-| Grok CLI | `grok-kaola-project-runner` | `grok` | ACP |
-| Kimi CLI | `kimi-cli-kaola-project-runner` | `kimi` | ACP |
-| OpenCode | `opencode-kaola-project-runner` | `opencode` | ACP |
-| ZCode | `zcode-kaola-project-runner` | explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` | ACP (PTY unsupported) |
-| Droid CLI | `droid-kaola-project-runner` | `droid` | ACP |
-| dsh (DeepSeek Harness) | `dsh-kaola-project-runner` | `dsh` | ACP (PTY unsupported) |
+| Target runtime | Skill | CLI executable |
+|---|---|---|
+| Claude Code | `claude-code-kaola-project-runner` | `claude` |
+| Codex CLI | `codex-kaola-project-runner` | `codex` |
+| Cursor CLI | `cursor-cli-kaola-project-runner` | `cursor-agent` |
+| Devin CLI | `devin-kaola-project-runner` | `devin` |
+| Grok CLI | `grok-kaola-project-runner` | `grok` |
+| Kimi CLI | `kimi-cli-kaola-project-runner` | `kimi` |
+| OpenCode | `opencode-kaola-project-runner` | `opencode` |
+| ZCode | `zcode-kaola-project-runner` | explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` |
+| Droid CLI | `droid-kaola-project-runner` | `droid` |
+| dsh (DeepSeek Harness) | `dsh-kaola-project-runner` | `dsh` |
 
 Droid is driven through its native ACP agent command, `droid exec --output-format acp`, with
-Auto Model and full bypass defaults on both transports. Its explicit PTY fallback uses the
-native TUI with `/quit` and `--resume --last`; login remains native through TUI `/login` or
-`FACTORY_API_KEY`.
+Auto Model and full bypass defaults. Login is a human act in a native terminal, outside the
+Runner (TUI `/login` or `FACTORY_API_KEY`).
 
 dsh is driven through its shipped automation-only ACP profile, `dsh --profile acp`. It needs no
 login (`authMethods` is empty), resumes with `session/resume` rather than `session/load`, and has
 no `--continue`: `session/list` carries no timestamp to order candidates by. dsh ships no terminal
-UI — its profile templates are `acp`, `headless`, `sdk`, `sdk-minimal` and `web`, none of which is
-a pane conversation — so `--transport pty` is a diagnostic entry rather than a conversation
-channel.
+UI — its profile templates are `acp`, `headless`, `sdk`, `sdk-minimal` and `web`.
 
 Three facts an operator should know before the first dispatch. **dsh runs with full access by
 default.** Its ACP composition never sends a permission request; its permission mode is the launch
@@ -133,9 +130,10 @@ user's own default-model setting, so `start` reports `ready` and the first promp
 to select a credentialed route. **The profile must already exist** under `$DSH_HOME`; creating one
 writes there, which the Runner never does.
 
-ACP returns structured replies and events. PTY preserves the native terminal UI, including
-terminal-only login and selection flows. Choose explicitly with `--transport acp|pty`;
-capabilities vary by platform. Claude Code's ACP agent is a vendored, pinned fork of
+Every platform communicates over ACP only, with structured replies and events; capabilities vary
+by platform. The PTY transport is retired (Issue #130): any command given `--transport pty` is
+refused with `transport-pty-retired` and `mutation_performed: false` before anything exists, and
+login is a human act in a native terminal, outside the Runner. Claude Code's ACP agent is a vendored, pinned fork of
 [harukitosa/claude-code-acp](https://github.com/harukitosa/claude-code-acp) (MIT,
 `vendor/claude-code-acp/`, upstream commit `6c20f2802e390c80b0542247c6b9738e11efdc11`) shipped
 inside the Claude Code worker Skill and run from there with the local `node`: it drives the exact
@@ -146,8 +144,8 @@ runs `npx`, and never reads, copies, or logs Settings, proxy values, or credenti
 drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` from the child environment. ACP became Claude
 Code's default after the live subscription gate of Issue #50 passed on this Mac (2026-09-16:
 Fable High sentinel, native transcript model `claude-fable-5-1`, tool call, cancel, continue,
-resume, zero residue, Settings untouched); `--transport pty` remains the explicit fallback, and
-login itself always stays a PTY act. Under this bridge `permit` settles only the reported
+resume, zero residue, Settings untouched); login is a human act in a native terminal, outside
+the Runner. Under this bridge `permit` settles only the reported
 `tool_call` status: the `claude -p` child has no stdin and no `--permission-prompt-tool`, so a
 permission answer cannot gate or resume the child, and on 2.1.272 a Bash tool call emitted no
 `permission_request` in `bypassPermissions` or `manual` mode. Because each `claude -p` runs
@@ -181,11 +179,8 @@ desktop build named: **3.11.2** on 2026-09-16 (the `runtimeModel` path), and **3
 `account:bigmodel-individual-coding-plan`/`GLM-5.3`, a real model reply, then exact stop reporting
 no residual process). Neither receipt carries over to a build it was not run against, and both were
 taken on one macOS machine with the ZCode desktop App already logged in; a different desktop
-version, plan, or machine is unverified until it is run there. ZCode does not support a PTY
-transport: the bundled
-runtime ships no terminal UI (`Cannot find package '@zcode/tui'`) and headless `--prompt` needs
-`~/.zcode/cli/config.json`, so `--transport pty` remains selectable only as a known-unsupported
-diagnostic entry, and login happens in the ZCode desktop App.
+version, plan, or machine is unverified until it is run there. The bundled ZCode runtime ships no
+terminal UI (`Cannot find package '@zcode/tui'`), and login happens in the ZCode desktop App.
 
 ### Main orchestrator Skill
 
@@ -245,7 +240,8 @@ and Devin; see [validation and evidence](#validation-and-evidence) for the limit
 ## What Runner does
 
 - Start, inspect, and stop an exact session associated with a repository and target CLI.
-- Send agent-selected prompts; transfer native keys through PTY where supported.
+- Send agent-selected prompts; `key escape` maps to ACP cancel, and there is no native key,
+  menu, or editor transfer.
 - Return replies, tool events, terminal output, process facts, and transport receipts.
 - Apply per-run model and effort choices, with platform presets and explicit overrides.
 - Resume native conversations where supported, or let the agent choose a fresh session.
@@ -254,7 +250,7 @@ and Devin; see [validation and evidence](#validation-and-evidence) for the limit
 The controlling agent chooses the task, interprets the output, and decides what to do next.
 Runner reports runtime and model observations as evidence. A successful send or a finished reply
 alone does not establish that the task is complete. Worker Skills do not automatically retry
-prompts, switch transports, upgrade models, or schedule recurring work. Project-level heartbeat
+prompts, upgrade models, or schedule recurring work. Project-level heartbeat
 and acceptance belong to the main orchestrator Skill when that Skill is in use.
 
 ## Collaborative delivery with Kaola Workflow
@@ -267,8 +263,8 @@ work. Both can be used independently.
 ```text
 Host Agent
   └─ Main Skill kaola-project-runner (optional control plane)
-        └─ Worker Runner Skill → ACP or PTY → Target CLI
-                                              └─ Kaola Workflow
+        └─ Worker Runner Skill → ACP → Target CLI
+                                      └─ Kaola Workflow
                                                   Issue → Claim → Mission List → Work & validation
                                                         → Finalize → Archive & sink
 ```
@@ -294,7 +290,7 @@ A typical collaboration works like this:
 
 Several exact Runner sessions may share one canonical project root while their Workflows own
 distinct child worktrees. Linked-worktree starts, outer-created branches, and existing-run
-recovery are Agent decisions, not transport gates; PTY and ACP have the same authority.
+recovery are Agent decisions, not transport gates.
 
 Every new issue-backed ACP dispatch picks its real open issue first and names the session
 `<platform>-<PROJECT>-i<ISSUE>-<unique-purpose>` (`droid-KT-i274-parser`), where `PROJECT` is
@@ -321,7 +317,7 @@ export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=/path/to/project
 
 While it is exported, `--repo` may be omitted and is completed from that root, and a `start` that
 names a different root - a linked worktree of the same repository included - is refused with
-`canonical-root-mismatch` and `mutation_performed: false` before any process, tmux session or
+`canonical-root-mismatch` and `mutation_performed: false` before any process, holder or
 record exists; an accepted dispatch reports `canonical_repo` in its receipt. Commands on a session
 that already exists keep the `--repo` they were given, so earlier work stays observable and exactly
 stoppable by its own locator. Without that export nothing changes.
@@ -361,7 +357,9 @@ Example instruction to an agent with the Claude Code Runner Skill loaded:
 
 ## Install
 
-Requirements: Bash, Python 3, tmux, Git, and the selected target CLI with working authentication.
+Requirements: Bash, Python 3, Git, and the selected target CLI with working authentication. The
+ACP transport does not use tmux; only the locator's `session.present` probe reads a tmux server
+when one is installed.
 ACP wrappers may also require Node.js/npx; exact commands are in the [platform manifests](platforms/).
 Runner does not install the target CLIs or provide model access.
 
@@ -544,12 +542,10 @@ leaves the Host holding a locator for something already gone. That is why the ev
 locator — the Host re-reads the worker's live `pending_permissions` and approves nothing from the
 event itself. Neither forcing PTY nor adding a gate is the answer. Use
 `--permission-mode` where supported and check the native semantics: Codex ACP's `read-only` mode
-can write workspace files;
-strict Codex read-only execution requires `--transport pty --permission-mode read-only`.
-Droid defaults to full bypass on both transports: PTY uses `--skip-permissions-unsafe` and a
-process-scoped settings overlay, while ACP applies `model=auto` and `autonomy_level=auto-high`.
-Its `--permission-mode` values are `bypassPermissions|low|medium|high|manual`; PTY maps them to
-`--skip-permissions-unsafe`, `--auto <level>`, or no flag, and ACP maps them to
+is upstream on-request approval with a workspace-write sandbox and can write workspace files; it
+is not an OS sandbox, and the Runner has no path to OS-level read-only.
+Droid defaults to full bypass: ACP applies `model=auto` and `autonomy_level=auto-high`.
+Its `--permission-mode` values are `bypassPermissions|low|medium|high|manual`; ACP maps them to
 `auto-high|auto-low|auto-medium|auto-high|normal`.
 Authentication and workspace trust remain native CLI concerns.
 
@@ -569,10 +565,10 @@ The offline suite checks generated Skills, installer behavior, shell syntax, tra
 and regression cases in an isolated temporary home directory. Live validation separately exercises
 start, read, send, read-back, and exact-session stop with the actual CLI and account.
 
-Published evidence includes [PTY communication tests](docs/live-smoke-issue-9-2026-08-31.md),
+Published evidence includes [historical PTY-era communication tests](docs/live-smoke-issue-9-2026-08-31.md),
 [Grok and Kimi ACP experiments](docs/poc-acp-transport-2026-09-11.md), and
 [Cursor, Devin, and OpenCode ACP verification](docs/acp-live-verification-2026-09-11.md), and
-[Droid ACP and PTY verification](docs/droid-live-verification-2026-09-17.md).
+[Droid live verification (2026-09-17)](docs/droid-live-verification-2026-09-17.md).
 These are dated results, not a guarantee for every CLI version, model, or account. The recorded
 Claude tests establish prompt transport and login-error read-back, not authenticated model
 execution; its ACP wrapper failed initialization in the published September 11 run.

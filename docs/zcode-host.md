@@ -178,9 +178,9 @@ worker agent terminated / worker turn ended (one idle episode)
   `host-entry-unsupported` (Issue #122), as is a Host-named start on that
   platform; a start under no holder
   at all is `none` and unbound, exactly as before. Runner dispatch is
-  ACP-only: a `--transport pty` start under any dispatcher, or under the
-  Orchestrator's canonical-root export alone, is refused by
-  `kaola-tmux.sh` with `heartbeat-host-pty-unsupported`. Transitional: a
+  ACP-only for every caller (Issue #130): a `--transport pty` request is refused
+  `transport-pty-retired`, which absorbs the former #104 reason
+  `heartbeat-host-pty-unsupported`. Transitional: a
   Host whose holder started on an older build never set the fact, so its
   workers land on `none` (unbound, not refused) until that Host is
   restarted on the new build.
@@ -544,7 +544,7 @@ alike:
 - An explicit `--model`/`--effort` that contradicts the requirement is a
   typed pre-mutation refusal — `{"result": "refused", "reason":
   "host-model-mismatch"}`, exit 1, nothing created (no record directory, no
-  holder socket, no tmux session) — and `host_selection` names the required
+  holder socket) — and `host_selection` names the required
   and requested values. An absent selection is never refused: the pin
   supplies it.
 - Once the session reports ready, the pin is applied through the ordinary
@@ -565,8 +565,7 @@ attached in place and never re-`start`ed — it keeps the selection its own
 start proved, and upgrading it means exact-stop plus a fresh
 standard-named start. The issue-worker marker `-i<digits>-` wins over a
 purpose token that happens to contain "orchestrator", so an ordinary worker
-is never pinned; PTY sessions never reach the check because it lives in the
-ACP `start` path only.
+is never pinned. The check lives in the ACP `start` path, the only one.
 
 ## Verification
 

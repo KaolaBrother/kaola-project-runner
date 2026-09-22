@@ -69,8 +69,7 @@ def state_receipt(session_meta: dict[str, Any], initial_config_options: list[Any
     """The observe/status receipt shape: base facts plus holder state fields."""
     receipt: dict[str, Any] = {
         "schema_version": 3, "platform": "devin", "session": "issue-64", "repo": "/repo",
-        "transport": {"selected": "acp", "default": "acp", "alternatives": ["pty"],
-                      "reason": "manifest-default"},
+        "transport": {"selected": "acp"},
         "git": {"branch": "main", "dirty": False},
         "state": "ready", "activity_hint": "idle", "holder_pid": 4242,
         "holder_instance_id": "instance-hex", "agent_pid": 4243, "agent_pgid": 4243,

@@ -27,7 +27,7 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 | `resent_without_interrupt` | `true` | composite: the turn had already ended, so nothing was interrupted and this text ran as the next turn |
 | `started_new_turn` | `true` | the agent opened a separate turn instead — not injection, and this holder does not track it |
 | `not_consumed` | `false` | nothing was written (no active turn, or the turn had already settled); `send` a normal prompt if you still want it |
-| `unsupported` | `false` | no native entry on this platform or transport; nothing was written |
+| `unsupported` | `false` | no native entry on this platform; nothing was written |
 | `rejected` | `false` | the agent refused the request; `error.detail` carries its reason |
 | `unknown` | `null` | no reply or an unrecognized outcome — consumption is undecided; do not resend blindly |
 
@@ -74,5 +74,3 @@ the whole conversation.
   `--timeout` applies. How fast a cancel settles is a platform fact, so a timeout shorter than this
   platform's real cancel latency buys a truthful `unknown`, not a faster steer.
 
-`steer` is an `acp` operation; over `pty` it answers `steer-unsupported-transport`, because a
-mid-turn terminal write is an ordinary keystroke stream whose meaning only the native UI decides.

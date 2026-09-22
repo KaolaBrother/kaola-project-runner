@@ -55,7 +55,7 @@ REQUIRED = {
     "alt_tier_label", "alt_model_name", "alt_model_id", "alt_model_parameters",
     "alt_model_effort",
     "fast_support", "fast_summary",
-    "default_transport", "acp_command",
+    "acp_command",
     "acp_client_capabilities", "acp_quirks", "acp_verified_versions", "acp_env_allowlist",
     "acp_login_requires_pty", "acp_mode_config_id", "acp_model_config_id", "acp_effort_config_id",
     "acp_fast_config_id", "acp_model_map", "acp_wrapper_pin",
@@ -105,8 +105,6 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: invalid skill name {result['skill_name']!r}")
     if result["recurring_execution"] not in {"supported", "unsupported"}:
         raise ValueError(f"{path}: invalid recurring_execution")
-    if result["default_transport"] not in {"acp", "pty"}:
-        raise ValueError(f"{path}: invalid default_transport")
     # Issue #65: the native steering fact and its transport entry travel together.
     if result["native_steering"] not in {"supported", "unsupported", "unknown"}:
         raise ValueError(f"{path}: invalid native_steering")
@@ -422,10 +420,6 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         platform_facts.read_text(encoding="utf-8"), manifest, platform_facts
     ).encode()
 
-    transport = TEMPLATES / "references" / "transport.md.tmpl"
-    result["references/transport.md"] = render(
-        transport.read_text(encoding="utf-8"), manifest, transport
-    ).encode()
     acp = TEMPLATES / "references" / "acp.md.tmpl"
     result["references/acp.md"] = render(
         acp.read_text(encoding="utf-8"), manifest, acp
@@ -446,10 +440,6 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         (shared_root / "kaola-acp-holder.py", "scripts/kaola-acp-holder.py"),
         (PLATFORMS / f"{manifest['id']}.yaml", "scripts/platform.yaml"),
         (shared_root / "kaola-model-policy.py", "scripts/kaola-model-policy.py"),
-        (shared_root / "kaola-observation.py", "scripts/kaola-observation.py"),
-        (shared_root / "kaola-pane-relay.py", "scripts/kaola-pane-relay.py"),
-        (ROOT / "scripts" / "kaola-relay-client.py", "scripts/kaola-relay-client.py"),
-        (ROOT / "scripts" / "kaola-relay-protocol.py", "scripts/kaola-relay-protocol.py"),
         (adapter, f"scripts/adapters/{adapter.name}"),
     )
     for source, target in shared_sources:

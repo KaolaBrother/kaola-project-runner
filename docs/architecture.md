@@ -13,16 +13,12 @@ Kaola Workflow, implement Workflow, or own a runtime's configuration.
 Host Agent
     -> optional main Skill kaola-project-runner (heartbeat, dispatch, acceptance, close-out)
         -> communication-only worker Agent Skill
-            -> manifest-selected transport
+            -> ACP (the only transport; `--transport pty` is refused transport-pty-retired)
                 -> ACP holder + structured protocol agent
                    (Claude Code: the vendored claude-code-acp bridge shipped in the Skill,
                     one exact `claude -p` subprocess per turn under the user's subscription;
                     ZCode: Skill-relative kaola-zcode-acp.py over explicit app-server --stdio)
-                OR
-                -> fixed platform adapter
-                    -> exact owned tmux pane leader: managed relay
-                        -> attested nested-PTY runtime child
-            -> Agent-selected prompt, key, or optional Workflow command
+            -> Agent-selected prompt, escape→cancel, or optional Workflow command
 ```
 
 The controlling Agent owns every command, orchestration, heartbeat, recovery, decision, and completion
@@ -36,19 +32,18 @@ The Runner owns exact-session control, evidence collection, prompt/key transfer,
 readback, and truthful mechanical receipts. Kaola Workflow owns lifecycle state only when the Agent
 chooses to invoke it.
 
-ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 holder 上的投影，不得成为第二条 agent stdio 客户端，也不得把原始 `session/update` 塞进 Skill 热路径。permit lock（#25）、`list`/`view`（#26）与本机 `follow`（#27）已实现。PTY 仍是登录与原生 TUI 接管。
+ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 holder 上的投影，不得成为第二条 agent stdio 客户端，也不得把原始 `session/update` 塞进 Skill 热路径。permit lock（#25）、`list`/`view`（#26）与本机 `follow`（#27）已实现。登录是 Runner 之外的人类原生终端动作；PTY 已退役（#130），没有原生 TUI 接管路径。
 
 Main-model choice is a per-run transport fact. A current-request `--model` wins; otherwise
 `--tier default|upgrade` selects the manifest's declared preset (`default` when unset), resolved
 against the current catalog; a platform may declare one further preset under its own word
 (`alt_tier_label`, e.g. `--tier alternative`, `--tier fable`), and a tier the platform does not
 declare is refused by name rather than resolved to `default`. `--effort` applies only to the model selected in the same request, and
-`--fast on` is an explicit per-run opt-in applied through the native mechanism (config option,
-`-c service_tier`, `-fast` model variant, or process-scoped `--settings '{"fastMode": ...}'`) —
+`--fast on` is an explicit per-run opt-in applied through an ACP config option (the Claude
+bridge turns its `fast` option into a per-turn `--settings '{"fastMode": ...}'`) —
 reported `unsupported` where none exists; where a mechanism exists the native CLI determines
 model support and effective stays `unknown` without native evidence. The
-selection enters the child as literal argv plus narrowly scoped invocation parameters, never by
-rewriting global CLI configuration. `--resume`/`--continue` without selection flags preserves the
+selection reaches the agent as ACP config options, never by rewriting global CLI configuration. `--resume`/`--continue` without selection flags preserves the
 saved native session selection. There is no automatic escalation on complexity, failures, or elapsed
 time; runtime-owned post-launch evidence is returned to the Agent and does not become permission to
 use the communication channel.
@@ -62,8 +57,8 @@ generated worker Skills do not impose them, and they are not the contract for `k
 `templates/SKILL.md.tmpl` is the authoritative ten-platform communication-only contract.
 `templates/orchestrator/` is the authoritative main-Skill contract.
 
-Only platform facts may vary: executable, runtime carrier preflight, launch/continue/resume syntax,
-TUI/editor/approval/session observation, graceful quit, and capability declarations. Unsupported
+Only platform facts may vary: executable, runtime carrier preflight, ACP command and quirks,
+continue/resume support, permission/mode options, and capability declarations. Unsupported
 runtime-native recurring capability is reported as evidence; the invoking agent may still choose an
 outer Codex carrier.
 
@@ -74,8 +69,8 @@ existing eight platforms retain byte-identical behavior.
 
 ## Generated Skills
 
-`render-skills.py` combines the active communication template, frozen optional references, fixed manifests, metadata templates, shared tmux
-core, relay/client/protocol/observation helpers, and one matching adapter into ten self-contained
+`render-skills.py` combines the active communication template, frozen optional references, fixed manifests, metadata templates, the shared
+entrypoint `kaola-tmux.sh` (historical name, ACP only), the ACP CLI/holder, the model-policy helper, and one matching adapter into ten self-contained
 worker directories under `skills/`, and renders the fixed orchestrator directory
 `skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
 derived from the ten manifests (no orchestrator platform manifest or adapter). It also emits
@@ -88,10 +83,9 @@ outside its own directory. The renderer refuses unmanaged targets and `--check` 
 byte inventories, including the orchestrator package and `hosts/grok-bot/`.
 
 The ten-worker inventory includes Claude Code, Codex, Cursor CLI, Devin, Droid, dsh, Grok CLI,
-Kimi CLI, OpenCode, and ZCode. Droid uses the native ACP agent `droid exec --output-format acp`
-as its default transport and keeps PTY as an explicit fallback. dsh uses its shipped automation-only
-ACP profile `dsh --profile acp` and has no PTY transport at all: no terminal UI exists for it, so
-`--transport pty` is a diagnostic entry only.
+Kimi CLI, OpenCode, and ZCode, all ACP only. Droid uses the native ACP agent
+`droid exec --output-format acp`; dsh uses its shipped automation-only ACP profile
+`dsh --profile acp`.
 
 Grok Bot is a **bridge host** for Kaola-Delegator, not a Project Runner host.
 Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
@@ -149,11 +143,8 @@ Discovery exposes only a stable name and a short description. Activating Project
 loads its body only, never a worker body. Selecting one worker loads that worker only.
 References load only when the current operation needs them. Scripts execute mechanically;
 the model never reads their source. Observe, status, capture, and verifier outputs are
-bounded receipts (hashes, counts, relevant excerpts), never whole files or unbounded terminal
-history, on both transports: PTY `capture` through `kaola-observation.py bound-text` and PTY
-`observe`/`status` through `bound_observation` (newest frame lines and first process entries
-kept, `truncated.fields` with sizes and sha256, `snapshot_id` from the full frame); ACP
-`capture` through `bound_capture_receipt` and ACP `observe`/`status` through
+bounded receipts (hashes, counts, relevant excerpts), never whole files or unbounded
+history: ACP `capture` through `bound_capture_receipt` and ACP `observe`/`status` through
 `bound_state_receipt` in `kaola-acp.py` (oldest entries dropped or structures summarised by
 size and sha256 under a `truncated` block); `capture --full` is the only explicit exception. Host adapters may not flatten,
 concatenate, eagerly preload, or duplicate canonical Skill bodies for packaging convenience.
@@ -208,46 +199,28 @@ uninstalling one runtime never deletes what another runtime installed or depends
 
 ## Session ownership
 
-The core accepts `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, `droid`, or `dsh`. New sessions
-receive:
-
-```text
-KAOLA_PROJECT_RUNNER=1
-KAOLA_PROJECT_RUNNER_PLATFORM=<platform>
-KAOLA_PROJECT_RUNNER_REPO=<canonical Git root>
-KAOLA_PROJECT_RUNNER_MODEL_POLICY=<canonical JSON selection/provenance>
-```
-
-Observation reports exact session, owner, platform, repo, pane, cwd, relay, runtime child, and TUI
-facts. These facts go to the agent rather than forming semantic authorization. Direct relay
-transfers use the exact named single pane and current relay endpoint. The relay socket peer,
-epoch and start fingerprint must match that pane; the nested child path, argv, PID/PGID and start
-fingerprint must match the resolved runtime. Kimi's exact product-title exception remains limited to
-its attested Node child. Scrollback, process basenames, and later argv text are never identity proof.
-
-Snapshots and revisions correlate actions with evidence; they are not freshness gates. The Runner does
-not classify runtime semantics: editor/activity/approval/decision/worker fields, coordinates, Git,
-Workflow facts, and ordinary frame changes are advisory evidence and do not authorize or block generic
-`send`/`stop`. A relay reports objective transfer outcomes. `answer --replace-editor` is
-a separately measured transport capability, not a semantic decision engine. Grok retains its legacy
-markers and JSON aliases.
+The core accepts `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, `droid`, or `dsh`.
+A session is one ACP holder per exact session name and repository, identified by its record
+(`record.json`), its holder instance id, and the ACP and native session ids it reports. These facts
+go to the agent rather than forming semantic authorization. The Runner does not classify runtime
+semantics: activity, approval, decision, Git, and Workflow facts are advisory evidence and do not
+authorize or block generic `send`/`stop`. There is no native key, menu, or editor-replacement
+transfer; `key escape` maps to ACP cancel and `answer` is `answer-unsupported`.
 
 ## Canonical project root and Workflow child worktrees
 
 `--repo` must name a Git top-level. The ordinary Workflow default is the consuming project's
 **canonical project root** (the main checkout). A Workflow **child worktree** is also a Git
-top-level; starting there is an Agent decision, not a transport refusal, on both PTY and ACP.
-`KAOLA_PROJECT_RUNNER_REPO` is the realpath of the Agent-selected `--repo`, not a classifier that
-the path is the canonical project root.
+top-level; starting there is an Agent decision, not a transport refusal.
 
 A Project Runner Orchestrator states the root explicitly instead, by exporting
 `KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<abs root>` once at setup. `scripts/kaola-tmux.sh` — the one
-entrypoint both transports and all ten platforms pass through — then resolves that binding and the
+entrypoint all ten platforms pass through — then resolves that binding and the
 requested `--repo` with `realpath`, requires the binding to be a Git top-level, completes an omitted
 `--repo` from it, and on `start` compares the two exactly. A different root, including a linked
 worktree of the same repository, returns a typed `canonical-root-mismatch` refusal (an unusable
 binding returns `canonical-root-invalid`) with `mutation_performed: false` before any process,
-tmux session, or record exists; an accepted dispatch reports `canonical_repo` in its receipt.
+holder, or record exists; an accepted dispatch reports `canonical_repo` in its receipt.
 Without that export nothing changes: standalone starts, existing sessions, and close-out of a
 legacy worktree-rooted session by its own `--repo` behave exactly as before. The binding guards
 against accidental dispatch drift; it is not protection against a hostile controlling host, and it
@@ -261,42 +234,14 @@ project root with distinct Workflow-owned worktrees. Path shape such as `.kw/wor
 security boundary. See the generated orchestrator reference
 `skills/kaola-project-runner/references/workflow-worktree.md`.
 
-## Measured relay transfer
-
-The managed relay remains the pane leader and owns the CLI in a nested PTY, but ordinary communication
-does not stop that child or create a prepare/submit transaction:
-
-1. `observe` authenticates the relay and reads live relay/process/frame state without changing child,
-   pane-input, or lease state;
-2. the Runner proves exact session, repository, pane, relay, and child identity, then checks that the
-   relay advertises direct-input capability;
-3. `send`, `answer`, and graceful `stop` write one literal or bracketed-paste prompt followed by carriage
-   return; `key` writes only the Agent-selected native key bytes;
-4. the relay event loop serializes each request and returns the exact payload fingerprint. The Agent
-   reads following output and decides its meaning.
-
-Legacy quiesce/lease/fence operations remain an inactive protocol compatibility surface. They are not
-called by normal Runner actions. A running legacy relay is readable and returns
-`relay-upgrade-required` for mutation until the Agent chooses a safe exact-session restart.
-The transport `pane_revision` and `snapshot_id` summarize visible and deterministic facts for
-correlation. Output, input, editor, process, approval, decision, Git, and Workflow changes may advance
-them, but no such change independently denies an agent-directed action. Later-output barriers remain
-reported evidence rather than Runner-owned permission.
-
-The relay attests the exact requested payload fingerprint. Payload validation rejects terminal
-controls before PTY mutation; LF/TAB require attested bracketed paste. Placeholder and cursor
-observations remain diagnostics for the agent rather than mutation gates. Force stop proves the exact
-owned tmux identity, ends only that session, and reports any remaining relay/socket evidence without
-classifying or sweeping processes.
-
 ## Failure model
 
 Preflight, observation, and transfer report their exact facts and outcomes. A lost connection before a
 direct-transfer receipt reports mutation as unknown rather than claiming non-execution. The Runner never installs
 Kaola Workflow, guesses meaning from a process name, evaluates prompt text in a shell, rewrites user
-configuration, or treats a supervision heartbeat as an execution loop. An absent session, unavailable
-relay, legacy relay capability, disconnect, or unknown transfer outcome is reported as an objective
-transport fact; a stale snapshot is not. Runtime-semantic uncertainty is given to the controlling agent
+configuration, or treats a supervision heartbeat as an execution loop. An absent session, lost or
+unreachable holder, disconnect, or unknown transfer outcome is reported as an objective
+transport fact. Runtime-semantic uncertainty is given to the controlling agent
 rather than converted into a Runner status gate. Cursor launch does not materialize or rewrite project
 files; any installed authority or command surface is evidence for the Agent. Successful CLI prose,
 Git cleanliness, or PR mergeability alone never proves a terminal Kaola run.

@@ -1,25 +1,19 @@
 ---
 name: droid-kaola-project-runner
-description: Use when the controlling Agent should communicate with a Droid main conversation through an exact tmux session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.
+description: Use when the controlling Agent should communicate with a Droid main conversation through an exact owned ACP session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.
 ---
 
 # Droid Kaola Project Runner
 
 This Skill is a communication driver for Droid. It gives the controlling Agent a
-measured tmux channel; it does not choose commands, Workflow modes, cadence, state, approvals,
+measured ACP channel to one exact owned session; it does not choose commands, Workflow modes, cadence, state, approvals,
 retries, or completion policy. The separate Skill `kaola-project-runner` (display name Project
 Runner) is the main orchestrator when a host Agent is supervising workers; this Skill stays
 transport-only.
 
-## Transport facts
+## Transport
 
-Default transport: **acp**. The ACP command is `droid exec --output-format acp`; login requires a PTY: `true`. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. Select either channel explicitly with `--transport acp|pty` when the default is not appropriate.
-
-## Cost hints
-
-ACP usually carries structured text and events with less terminal-rendering overhead; where supported, PTY preserves the native interactive UI and terminal-only login or selection flows. These are cost and capability facts; the Agent chooses the transport.
-
-## Fallback
+ACP is the only transport (Issue #130). The ACP command is `droid exec --output-format acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `true`). This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
 
 | `mutation_status` | Safe interpretation |
 |---|---|
@@ -29,7 +23,7 @@ ACP usually carries structured text and events with less terminal-rendering over
 | `completed` | The turn reached a reported stop reason. |
 | `unknown` | Partial mutation cannot be ruled out. |
 
-Runner never auto-falls back or resends. Read the receipt and decide whether another transport or prompt is appropriate.
+Runner never auto-falls back or resends. Read the receipt and decide whether another prompt is appropriate.
 
 ## Communication loop
 
@@ -83,7 +77,7 @@ evidence for the Agent and does not disable the communication channel.
 configuration health, account state, trust state, editor state, activity hints, or a changed
 snapshot do not authorize or block starting the CLI communication channel.
 
-Use the evidence internally to choose the next communication action. Do not narrate raw relay,
+Use the evidence internally to choose the next communication action. Do not narrate raw holder,
 process, snapshot, model, editor, or activity fields in user progress updates; report only visible
 task progress, an actual transport failure, or a decision that genuinely needs the user.
 
@@ -112,18 +106,11 @@ interrupted-then-continued, never injection: work in progress stops and may have
 left partial side effects (`side_effects_possible`). An unconfirmed cancel sends
 nothing and reports `unknown`. See [references/steering.md](references/steering.md).
 
-## Native keys
+## Cancel and permissions
 
-For a native selection screen, the Agent may choose one exact key. The Runner transfers it without
-interpreting its meaning or adding Enter:
-
-```bash
-"$SKILL_DIR/scripts/runtime-tmux.sh" key --repo "$REPO" --session "$SESSION" --key down
-"$SKILL_DIR/scripts/runtime-tmux.sh" key --repo "$REPO" --session "$SESSION" --key enter
-```
-
-Supported key names are `up`, `down`, `left`, `right`, `enter`, `escape`, `tab`, `backtab`, and
-`space`. Read the resulting output before choosing another action.
+`key --key escape` (or `cancel`) cancels the running turn; there are no other native keys, menus,
+or editor replacement. A pending permission `request_id` is settled with `permit` (see
+[references/acp.md](references/acp.md)). Read the resulting output before choosing another action.
 
 When the Agent decides the exact session is finished, end only that owned session:
 
@@ -132,8 +119,8 @@ When the Agent decides the exact session is finished, end only that owned sessio
 "$SKILL_DIR/scripts/runtime-tmux.sh" status --repo "$REPO" --session "$SESSION"
 ```
 
-Use `--force` only when the Agent explicitly chooses terminal containment for this exact owned
-session. Never use raw `tmux send-keys` or broad session/process cleanup.
+Use `--force` only when the Agent explicitly chooses forced containment for this exact owned
+session. Never use broad session/process cleanup.
 
 ## Ending, releasing, and resuming
 
@@ -146,14 +133,14 @@ operation and reports the true result. These are suggestions, never gates:
 - When this delegation's work is delivered and no immediate interaction is expected, the
   default recommendation is to `stop` the exactly-owned running session. Keep it running
   when the Agent expects to resume interacting right away or the user asked for it to stay.
-- `stop` releases the owned runtime (PTY child/relay/tmux session, or ACP holder/agent). It
+- `stop` releases the owned runtime (the ACP holder and its agent). It
   does not delete CLI history, session records, work artifacts, or unrelated resources, and
   it is never coupled to a history wipe. Judge success by the `stop`/`status` result
   evidence, not by a completed call.
 - Before stopping, the Agent may keep whatever resume facts are already available —
   platform, canonical repo, any reported native session ID, outcome, remaining work —
   from existing receipts and Workflow records. The native session ID is the CLI's own
-  conversation identifier, never the Runner's tmux session name. Missing identifiers
+  conversation identifier, never the Runner's `--session` name. Missing identifiers
   never block a chosen `stop`; nothing here is a required checkpoint.
 - Later work resumes through the Agent's choice: `start --resume <native-session-id>`,
   `start --continue` for the platform's latest conversation, or a fresh `start` plus
@@ -168,8 +155,7 @@ start or resume with `workflow-next` using its installed native Workflow instruc
 Workflow-backed work: prefer `--repo` bound to the consuming project's canonical Git root, then ask
 this CLI to invoke its installed `workflow-next` so that runtime's Workflow creates or recovers the
 child worktree. This Skill only transports the exact session. Linked-worktree starts, outer-prepared
-bundles, and existing-run recovery are Agent decisions, not transport gates; PTY and ACP share that
-authority. Inspect Git and Workflow evidence first, report the chosen Git root, and allow several
+bundles, and existing-run recovery are Agent decisions, not transport gates. Inspect Git and Workflow evidence first, report the chosen Git root, and allow several
 exact sessions at one canonical root with separate Workflow worktrees. A session already in a child
 worktree is advisory: preserve work, then continue, stop/restart at root, or use another Workflow
 recovery path. Existing carrier evidence can help; installation for another runtime alone does not
@@ -183,16 +169,15 @@ work. These are suggestions for the Agent, not automatic Runner actions or commu
 
 ## Evidence boundary
 
-- `raw_current_frame`, `capture`, process facts, editor facts, approval facts, activity hints, and
-  snapshot changes are evidence for the Agent.
-- Exact session ownership, platform/repository identity, one-pane targeting, relay attestation,
-  literal payload/key fingerprinting, and terminal-control rejection are transport integrity checks.
+- `capture`, events, process facts, permission facts, activity hints, and snapshot changes are
+  evidence for the Agent.
+- Exact session ownership, platform/repository identity, holder identity, prompt fingerprinting,
+  and outbound redaction are transport integrity checks.
 - The Runner never classifies evidence into permission to act. The Agent handles every runtime or
   Workflow problem after reading the evidence.
 - No invocation implicitly starts `workflow-next`, installs commands, materializes repository files,
   creates a heartbeat, or selects recurring behavior. The Agent may send any of those commands when
   it decides they serve the user's task.
 
-See [references/platform.md](references/platform.md) for Droid launch/observation facts,
-[references/transport.md](references/transport.md) for PTY receipt and recovery details, and
-[references/acp.md](references/acp.md) for the structured ACP command surface.
+See [references/platform.md](references/platform.md) for Droid launch/observation facts
+and [references/acp.md](references/acp.md) for the structured ACP command surface.

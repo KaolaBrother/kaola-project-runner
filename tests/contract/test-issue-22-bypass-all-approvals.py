@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """Issue #22 RED contract: default start bypasses security-permission prompts.
 
-Public ``start`` (no caller ``--permission-mode``) must launch skip-all on both
-ACP and PTY/tmux. Known knobs:
+Public ``start`` (no caller ``--permission-mode``) must launch skip-all on ACP,
+the only transport since Issue #130 retired PTY/tmux. Known ACP knobs:
 
-- Claude PTY: ``permission_mode=bypassPermissions``
-- Devin PTY: ``permission_mode=dangerous`` (workspace-trust false is not enough)
-- Kimi PTY: ``--yolo``; Kimi ACP: ``mode=yolo``
+- Claude ACP: ``mode=bypassPermissions``
+- Kimi ACP: ``mode=yolo``
 - Devin ACP: ``mode=bypass``
-- Cursor PTY/ACP: ``--yolo``
-- OpenCode PTY: ``--auto``
-- Grok PTY: ``--always-approve``; Grok ACP: ``grok agent --always-approve stdio``
-- Codex PTY: ``--sandbox danger-full-access --ask-for-approval never``;
-  Codex ACP: ``mode=agent-full-access``
+- Cursor ACP: ``cursor-agent --yolo acp``
+- Grok ACP: ``grok agent --always-approve stdio``
+- Codex ACP: ``mode=agent-full-access``
 
 OpenCode ACP has no skip argv and is not asserted as skipped.
 """
@@ -34,11 +31,7 @@ RUNNER = PROJECT / "scripts" / "kaola-tmux.sh"
 ACP = PROJECT / "scripts" / "kaola-acp.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 CLAUDE_ADAPTER = PROJECT / "scripts" / "adapters" / "claude-code.sh"
-CURSOR_ADAPTER = PROJECT / "scripts" / "adapters" / "cursor-cli.sh"
 DEVIN_ADAPTER = PROJECT / "scripts" / "adapters" / "devin.sh"
-GROK_ADAPTER = PROJECT / "scripts" / "adapters" / "grok.sh"
-KIMI_ADAPTER = PROJECT / "scripts" / "adapters" / "kimi-cli.sh"
-OPENCODE_ADAPTER = PROJECT / "scripts" / "adapters" / "opencode.sh"
 # Issue #73 binds Orchestrator dispatch to one canonical root. This suite starts
 # against its own throwaway repository, which is an ordinary standalone
 # invocation, so it states that intent instead of inheriting the operator shell.
@@ -48,17 +41,6 @@ CANONICAL_KEY = "KAOLA_PROJECT_RUNNER_CANONICAL_REPO"
 class Issue22StaticSkipKnobs(unittest.TestCase):
     """Source contracts for measured skip knobs. Unknown ACP mode strings omitted."""
 
-    def test_devin_manifest_documents_dangerous_not_auto(self) -> None:
-        manifest = (PROJECT / "platforms" / "devin.yaml").read_text(encoding="utf-8")
-        match = re.search(r"launch_summary:.*?--permission-mode\s+(\S+)", manifest)
-        self.assertIsNotNone(match, "launch_summary permission-mode not found")
-        self.assertEqual(
-            match.group(1),
-            "dangerous",
-            "no-flag Devin start must document --permission-mode dangerous; "
-            "--respect-workspace-trust false does not satisfy Issue #22",
-        )
-
     def test_claude_adapter_still_forwards_permission_mode(self) -> None:
         body = CLAUDE_ADAPTER.read_text(encoding="utf-8")
         self.assertIn('--permission-mode "$permission_mode"', body)
@@ -67,21 +49,6 @@ class Issue22StaticSkipKnobs(unittest.TestCase):
         body = DEVIN_ADAPTER.read_text(encoding="utf-8")
         self.assertIn('--permission-mode "$permission_mode"', body)
         self.assertIn("--respect-workspace-trust false", body)
-
-    def test_kimi_pty_launch_passes_yolo(self) -> None:
-        self.assertIn("ADAPTER_LAUNCH_ARGS+=(--yolo)", KIMI_ADAPTER.read_text(encoding="utf-8"))
-
-    def test_cursor_pty_launch_passes_yolo(self) -> None:
-        self.assertIn("ADAPTER_LAUNCH_ARGS+=(--yolo)", CURSOR_ADAPTER.read_text(encoding="utf-8"))
-
-    def test_opencode_pty_launch_passes_auto(self) -> None:
-        # Issue #112: OpenCode V2 (2.0.11) removed the --mini flag; --auto is
-        # still the top-level bypass knob this contract is about.
-        body = OPENCODE_ADAPTER.read_text(encoding="utf-8")
-        self.assertIn('ADAPTER_LAUNCH_ARGS=("$launch_repo" --auto)', body)
-
-    def test_grok_pty_launch_passes_always_approve(self) -> None:
-        self.assertIn("--always-approve", GROK_ADAPTER.read_text(encoding="utf-8"))
 
     def test_cursor_acp_command_includes_yolo(self) -> None:
         manifest = (PROJECT / "platforms" / "cursor-cli.yaml").read_text(encoding="utf-8")
@@ -268,31 +235,16 @@ class Issue22KimiAcpDefaultYolo(unittest.TestCase):
         )
 
 
-class Issue22PtyDefaultStart(unittest.TestCase):
-    """Default PTY skip knobs must be assigned by core, not only listed as allowed values.
+class Issue22AcpDefaultStart(unittest.TestCase):
+    """Default ACP skip knobs must be forwarded by the shared entrypoint.
 
-    Live tmux start is covered by ``test-adapters.sh`` / ``test-claude-code-runtime.sh``.
-    This file keeps a tmux-independent oracle so Issue #22 is RED even when a
-    nested Cloud tmux server cannot hold a pane.
+    Issue #130 removed the PTY no-flag ``permission_mode`` mapping with the
+    tmux branch; the no-flag ACP ``--mode`` mapping is the one that remains.
     """
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.runner = RUNNER.read_text(encoding="utf-8")
-
-    def test_claude_no_flag_default_is_bypass_or_dont_ask(self) -> None:
-        self.assertIn(
-            "claude-code) permission_mode=bypassPermissions ;;",
-            self.runner,
-            "no-flag Claude PTY start must assign permission_mode=bypassPermissions",
-        )
-
-    def test_devin_no_flag_default_is_dangerous(self) -> None:
-        self.assertIn(
-            "devin) permission_mode=dangerous ;;",
-            self.runner,
-            "no-flag Devin PTY start must assign permission_mode=dangerous",
-        )
 
     def test_devin_acp_default_forwards_bypass(self) -> None:
         self.assertIn(
@@ -301,12 +253,13 @@ class Issue22PtyDefaultStart(unittest.TestCase):
             "no-flag Devin ACP start must forward --mode bypass",
         )
 
-    def test_codex_no_flag_default_is_agent_full_access(self) -> None:
+    def test_claude_acp_default_forwards_bypass_permissions(self) -> None:
         self.assertIn(
-            "codex) permission_mode=agent-full-access ;;",
+            "claude-code) acp_args+=(--mode bypassPermissions) ;;",
             self.runner,
-            "no-flag Codex PTY start must assign permission_mode=agent-full-access",
+            "no-flag Claude ACP start must forward --mode bypassPermissions",
         )
+        self.assertNotIn("claude-code) permission_mode=bypassPermissions ;;", self.runner)
 
     def test_codex_acp_default_forwards_agent_full_access(self) -> None:
         self.assertIn(
@@ -317,12 +270,11 @@ class Issue22PtyDefaultStart(unittest.TestCase):
 
 
 class Issue22CodexPermissionMappings(unittest.TestCase):
-    """Codex ACP mode names and PTY sandbox/approval pairs (issue #28)."""
+    """Codex ACP mode names (issue #28); the PTY sandbox/approval pairs retired with #130."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.acp = (PROJECT / "scripts" / "kaola-acp.py").read_text(encoding="utf-8")
-        cls.adapter = (PROJECT / "scripts" / "adapters" / "codex.sh").read_text(encoding="utf-8")
         cls.runner = RUNNER.read_text(encoding="utf-8")
         cls.manifest = (PROJECT / "platforms" / "codex.yaml").read_text(encoding="utf-8")
 
@@ -335,19 +287,7 @@ class Issue22CodexPermissionMappings(unittest.TestCase):
             '--package @agentclientprotocol/codex-acp@1.11.0 codex-acp"',
             self.manifest,
         )
-        self.assertIn('default_transport: "acp"', self.manifest)
-
-    def test_pty_read_only_maps_sandbox_and_approval(self) -> None:
-        self.assertIn("--sandbox read-only --ask-for-approval on-request", self.adapter)
-
-    def test_pty_agent_maps_workspace_write_and_approval(self) -> None:
-        self.assertIn("--sandbox workspace-write --ask-for-approval on-request", self.adapter)
-
-    def test_pty_agent_full_access_maps_danger_and_never(self) -> None:
-        self.assertIn("--sandbox danger-full-access --ask-for-approval never", self.adapter)
-
-    def test_runner_validates_codex_permission_values(self) -> None:
-        self.assertIn("read-only|agent|agent-full-access", self.runner)
+        self.assertNotIn("default_transport", self.manifest)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # ACP Watch Surface
 
 状态：设计冻结（2026-09-13）；**#25 / #26 / #27 已实现**（permit/cancel/stop at-most-once；`kaola-acp list` / `view`；本机 `follow` NDJSON）。
-范围：人类旁观 ACP 会话，不把编排器拉回 PTY 刮屏，也不做第二条 agent stdio 客户端。
+范围：人类旁观 ACP 会话，不做终端刮屏，也不做第二条 agent stdio 客户端。
 
 本目录是 GitHub **#25 / #26 / #27** 的设计权威。实现必须按对应文件的 Boundary 施工，不得把后继 issue 的内容提前塞进当前 issue。
 
@@ -34,4 +34,4 @@
 - 让 Skill 热路径吞 `capture --since` 当人类 UI  
 - Watch 面默认 `session/prompt` / `stop`
 
-既有双通道基线仍是 [`../runner-v2-dual-transport-design.md`](../runner-v2-dual-transport-design.md) v0.3。本目录只补「人类可视」这一缺口，不改通道选择权、不自动 fallback。
+历史传输基线见 [`../runner-v2-dual-transport-design-2026-09-11.md`](../runner-v2-dual-transport-design-2026-09-11.md) v0.3（superseded by #130, PTY retired：只剩 ACP）。本目录只补「人类可视」这一缺口，不自动 fallback。

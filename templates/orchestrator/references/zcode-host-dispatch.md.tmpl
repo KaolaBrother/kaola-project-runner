@@ -25,8 +25,8 @@ WORK_REPO="/abs/path/to/project"      # the worker's repo
 
 Run `start` from your own session: it binds the worker to you and refuses
 (`result: refused`, `reason: heartbeat-host-…`, exit 1) instead of starting
-unbound. `--transport pty` is refused the same way
-(`heartbeat-host-pty-unsupported`): Runner dispatch is ACP-only. Worker names
+unbound. A PTY request is refused on every command
+(`transport-pty-retired`): the Runner is ACP-only. Worker names
 are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
 Count before every `start`: live owned sessions from `status`/`observe`

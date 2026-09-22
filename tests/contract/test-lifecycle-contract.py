@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Acceptance checks for the communication-only generated Skill contract.
 
-Project Runner exposes an exact tmux transport to a controlling Agent. It does
+Project Runner exposes an exact owned ACP session to a controlling Agent. It does
 not own Workflow commands, scheduling, task modes, lifecycle state, or semantic
 classification. Generated packages must keep that boundary identical across
 all supported CLIs.
@@ -32,7 +32,6 @@ EXPECTED_MARKDOWN = {
     "references/acp.md",
     "references/platform.md",
     "references/steering.md",
-    "references/transport.md",
 }
 
 EXPECTED_ACTIVE_TEMPLATES = {
@@ -41,8 +40,10 @@ EXPECTED_ACTIVE_TEMPLATES = {
     "references/acp.md.tmpl",
     "references/platform.md.tmpl",
     "references/steering.md.tmpl",
-    "references/transport.md.tmpl",
 }
+
+# Issue #130 retired PTY; its tmux transport overlay must not come back.
+RETIRED_TEMPLATES = {"references/transport.md.tmpl"}
 
 SKILL_MARKERS = (
     "communication driver",
@@ -53,7 +54,7 @@ SKILL_MARKERS = (
     '"$SKILL_DIR/scripts/runtime-tmux.sh" observe',
     '"$SKILL_DIR/scripts/runtime-tmux.sh" capture',
     '"$SKILL_DIR/scripts/runtime-tmux.sh" send',
-    '"$SKILL_DIR/scripts/runtime-tmux.sh" key',
+    "`key --key escape` (or `cancel`) cancels the running turn",
     '"$SKILL_DIR/scripts/runtime-tmux.sh" stop',
 )
 
@@ -61,14 +62,6 @@ PLATFORM_MARKERS = (
     "The Agent decides",
     "does not block starting the CLI",
     "reported as evidence",
-)
-
-TRANSPORT_MARKERS = (
-    "managed nested-PTY relay",
-    "Transfer the agent's prompt",
-    "Transfer an Agent-selected native key",
-    "Read the response",
-    "Stop and capability-specific actions",
 )
 
 PROHIBITED_POLICY = (
@@ -130,6 +123,11 @@ def main() -> int:
             "test_active_template_inventory — missing worker templates "
             f"{sorted(missing_worker_templates)}"
         )
+    revived = RETIRED_TEMPLATES & active_templates
+    if revived:
+        failures.append(
+            f"test_active_template_inventory — retired PTY templates present {sorted(revived)}"
+        )
     for skill_id in SKILL_IDS:
         package = PROJECT / "skills" / skill_id
         markdown = {
@@ -143,7 +141,6 @@ def main() -> int:
         checks = (
             (package / "SKILL.md", SKILL_MARKERS),
             (package / "references/platform.md", PLATFORM_MARKERS),
-            (package / "references/transport.md", TRANSPORT_MARKERS),
         )
         for path, markers in checks:
             if not path.is_file():

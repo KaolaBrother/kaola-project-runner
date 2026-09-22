@@ -65,7 +65,7 @@ LOCATOR_COMMAND = "kaola-project-runner-locate"
 EXPECTED_ORIGIN = "github.com/KaolaBrother/kaola-project-runner"
 UNOFFICIAL_API = ("GrokBotService", "EnsureSandBox", "SAND_GATEWAY", "sand-host", "grokbot-sdk", "aiserver.v1", "/local-exec/")
 TRANSPORT_MARKERS = ("## Transport facts", "## Communication loop", 'runtime-tmux.sh" send', 'runtime-tmux.sh" observe',
-                     'runtime-tmux.sh" capture', 'runtime-tmux.sh" key', "mutation_status", "raw_current_frame", "--transport acp|pty", "SKILL_DIR=")
+                     'runtime-tmux.sh" capture', 'runtime-tmux.sh" key', "mutation_status", "raw_current_frame", "$SKILL_DIR/scripts/runtime-tmux.sh", "SKILL_DIR=")
 ORCHESTRATOR_MARKERS = ("PROJECT_RUNNER_HEARTBEAT", "## Heartbeat", "## Main execution loop", "Allowed CLIs", "Needs attention",
                         "Routine", "Mission-frontier", "Accept the delivery", "## Authorization", "## Ending a run", "## Bundled reference")
 PATH_PATTERNS = (r"\$HOME", r"~/", r"/Users/", r"/home/", r"/workspace", r"/Volumes/", r"KAOLA_GROK_BOT_HOME", r"current ->",
@@ -198,7 +198,7 @@ def host_products(root: Path) -> dict[str, bytes]:
 CANONICAL_INVARIANCE_EDITS = (
     ("templates/orchestrator/SKILL.md.tmpl", "It is not a platform Runner and has", "It is not a platform InvTst and has"),
     ("templates/SKILL.md.tmpl", "It gives the controlling Agent a", "It gives the controlling InvTs a"),
-    ("templates/references/transport.md.tmpl", "The Runner starts the runtime as", "The InvTst starts the runtime as"),
+    ("templates/references/acp.md.tmpl", "Every receipt identifies", "Every InvTsts identifies"),
     ("templates/kaola-delegator/SKILL.md.tmpl", "This Skill is the external delegation Skill", "This Skill is the external delegatIon Skill"),
 )
 
@@ -544,11 +544,11 @@ class Issue49BridgeInvariance(unittest.TestCase):
             self.assertNotEqual(after_main, before_main, "the canonical edit must actually land")
             self.assertIn("platform InvTst and has", after_main.decode("utf-8"))
             self.assertIn("controlling InvTs a", (root / "skills" / "claude-code-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8"))
-            self.assertIn("The InvTst starts the runtime as", (root / "skills" / "claude-code-kaola-project-runner" / "references" / "transport.md").read_text(encoding="utf-8"))
+            self.assertIn("Every InvTsts identifies", (root / "skills" / "claude-code-kaola-project-runner" / "references" / "acp.md").read_text(encoding="utf-8"))
             self.assertIn("external delegatIon Skill", (root / "skills" / EXTERNAL_ID / "SKILL.md").read_text(encoding="utf-8"))
             self.assertIn("Renamed Runtime", (root / "skills" / "claude-code-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8"))
             host_blob = b"".join(before_products.values())
-            for needle in (b"platform InvTst", b"controlling InvTs a", b"The InvTst starts", b"external delegatIon Skill"):
+            for needle in (b"platform InvTst", b"controlling InvTs a", b"Every InvTsts identifies", b"external delegatIon Skill"):
                 self.assertNotIn(needle, host_blob)
             # Positive control: a real host-template edit is visible in the host products.
             # Equal-length (Issue #71): the generated bridge is 2536 B / 2560, so appending
@@ -1248,7 +1248,7 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
     def test_human_decision_acceptance_and_stop_stay_on_project_runner(self) -> None:
         text = self.orchestrator_text()
         self.assertIsNotNone(clause_present(text, (r"not automatic finalize",)))
-        self.assertIsNotNone(clause_present(text, (r"exact owned session `stop` via the matching platform Runner Skill", r"ACP and PTY/tmux are the same stop action")))
+        self.assertIsNotNone(clause_present(text, (r"exact owned session `stop` via the matching platform (?:Runner )?Skill, which ends its ACP holder")))
         self.assertIsNotNone(clause_present(text, (r"recover existing explicit authorization and live work",)))
         wrong = authorizes_wrong_move(text, (r"use Agent Computer takeover for HUMAN_DECISION_REQUIRED", r"use Stop now to end worker sessions", r"Reset Agent Computer.{0,40}takeover"))
         self.assertIsNone(wrong, wrong)

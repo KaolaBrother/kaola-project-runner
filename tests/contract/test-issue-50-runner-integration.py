@@ -187,17 +187,17 @@ def test_manifest_and_generated_skill() -> None:
     allow = manifest["acp_env_allowlist"].split(",")
     check(allow == ["CLAUDE_BIN", "CLAUDE_CONFIG_DIR"], "acp_env_allowlist is CLAUDE_BIN,CLAUDE_CONFIG_DIR")
     check("ANTHROPIC_API_KEY" not in manifest["acp_env_allowlist"], "acp_env_allowlist excludes the API key")
-    check(manifest["acp_login_requires_pty"] == "true", "login stays a PTY act")
+    check(manifest["acp_login_requires_pty"] == "true", "login stays a native-terminal act outside the Runner")
     check((manifest["acp_model_config_id"], manifest["acp_effort_config_id"], manifest["acp_fast_config_id"])
           == ("model", "effort", "fast"), "model/effort/fast config ids match the bridge's options")
-    check(manifest["default_transport"] in ("pty", "acp"), "default_transport is a valid channel")
+    check("default_transport" not in manifest, "ACP is the only transport: no default_transport key (Issue #130)")
     for name in VENDORED_FILES:
         shipped = SKILL / "scripts" / "vendor" / "claude-code-acp" / name
         check(shipped.is_file() and shipped.read_bytes() == (VENDOR / name).read_bytes(),
               f"Claude worker ships vendored {name} byte-identical")
     skill_text = (SKILL / "SKILL.md").read_text()
-    check(ACP_COMMAND in skill_text and f"Default transport: **{manifest['default_transport']}**" in skill_text,
-          "Claude SKILL.md states the ACP command and the default transport")
+    check(ACP_COMMAND in skill_text and "ACP is the only transport (Issue #130)." in skill_text,
+          "Claude SKILL.md states the ACP command and that ACP is the only transport")
     check(ACP_COMMAND in (SKILL / "references" / "acp.md").read_text(), "Claude acp.md states the ACP command")
     others = [p for p in (ROOT / "skills").iterdir() if p.is_dir() and p != SKILL]
     check(len(others) == 11, "eleven other generated packages (nine other workers + orchestrator + kaola-delegator)")
@@ -526,20 +526,22 @@ def test_continue_and_resume_land_in_the_same_native_session() -> None:
         sandbox.cleanup()
 
 
-def test_pty_fallback_stays_explicit() -> None:
+def test_pty_request_is_refused_as_retired() -> None:
     sandbox = Sandbox("dispatch")
     try:
-        default = parse_manifest(MANIFEST)["default_transport"]
         session = sandbox.session()
         receipt = sandbox.runtime("status", "--repo", str(sandbox.repo), "--session", session, "--transport", "pty")
-        check(receipt["transport"]["selected"] == "pty" and receipt["transport"]["default"] == default,
-              "--transport pty selects the PTY channel and reports the manifest default")
+        check(receipt.get("result") == "refused" and receipt.get("reason") == "transport-pty-retired"
+              and receipt.get("mutation_performed") is False
+              and receipt.get("transport") == {"requested": "pty", "supported": ["acp"]},
+              "--transport pty is refused as transport-pty-retired and changes nothing")
         receipt = sandbox.runtime("status", "--repo", str(sandbox.repo), "--session", session, "--transport", "acp")
         check(receipt["transport"]["selected"] == "acp" and receipt["error"]["code"] == "no-session",
               "--transport acp reaches kaola-acp.py")
         receipt = sandbox.runtime("status", "--repo", str(sandbox.repo), "--session", session)
-        check(receipt["transport"]["selected"] == default and receipt["transport"]["reason"] == "manifest-default",
-              "no override follows the manifest default")
+        check(receipt["transport"]["selected"] == "acp" and "reason" not in receipt["transport"]
+              and "default" not in receipt["transport"],
+              "no override reaches ACP with no transport choice to report")
     finally:
         sandbox.cleanup()
 

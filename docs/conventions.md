@@ -37,8 +37,8 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
   Host-invariance probes in `tests/contract/test-issue-49-grok-bot-host.py` mutate
   canonical sources with equal-length substitutions and do not reduce those numbers.
 - Frozen historical Workflow lifecycle and prompts: `templates/grok-golden/`.
-- Shared evidence-first transport guidance: `templates/references/transport.md.tmpl` plus exact reversible
-  renderer overlays; never broad-replace golden prose.
+- Shared ACP transport guidance: `templates/references/acp.md.tmpl` and `templates/SKILL.md.tmpl`
+  (the PTY `transport.md.tmpl` reference was removed in Issue #130); never broad-replace golden prose.
 - Fixed runtime facts: one `platforms/*.yaml` manifest.
 - Every manifest includes the `acp_mode_config_id` key so ACP mode/permission option IDs remain
   platform-specific; empty values record platforms whose agents expose no ACP mode option.
@@ -60,7 +60,7 @@ Activating Project Runner loads its body only, never a worker body. Selecting on
 that worker only. References load only when the current operation needs them. Scripts execute
 mechanically; the model never reads their source. Observe, status, capture, and verifier
 outputs are bounded receipts: hashes, counts, and relevant excerpts, never whole files or
-unbounded terminal history, on PTY and ACP alike; an over-budget receipt keeps its newest part
+unbounded history; an over-budget receipt keeps its newest part
 and names the rest in a `truncated` block with counts and sha256 (`capture --full` is the
 explicit, requested exception). Host adapters may not flatten,
 concatenate, eagerly preload, or duplicate canonical Skill bodies for packaging convenience.
@@ -75,12 +75,11 @@ from the bridge.
 ## Shell safety
 
 Use macOS-compatible Bash with `set -euo pipefail`. Platform IDs use fixed dispatch. Canonicalize
-repositories and prove the Git top-level. Send prompt bytes through the attested relay protocol,
-never interpolation or `eval`. Do not use fuzzy tmux targets, basename-only ownership, process-name
-adoption, raw tmux input as a guarded-action substitute, or global tmux-server termination. Runtime
-identity requires the exact relay pane leader plus exact nested runtime child path/argv/PID/PGID and
-adapter TUI evidence. Reject terminal controls before child PTY writes; LF/TAB require attested
-bracketed paste. Raw frames, coordinates, captured output, editor/approval/activity labels, worker
+repositories and prove the Git top-level. Send prompt text as ACP stdio JSON-RPC through the exact
+session's holder, never interpolation or `eval`. Do not use basename-only ownership or process-name
+adoption; stop acts only on the exact recorded holder, agent group, and identity-checked child groups.
+The PTY transport is retired (Issue #130): a `--transport pty` request is refused
+`transport-pty-retired` before anything exists. Captured output, approval/activity labels, worker
 counts, and later argv text are evidence for the controlling agent, not Runner semantic authority.
 Generic send/stop may not branch on those advisory fields.
 
@@ -92,9 +91,9 @@ SIGKILL aimed at its parent (Issue #78). Pass Python programs with `-c` and feed
 process substitution.
 
 Each platform Skill must teach the same measured loop: start, observe/capture, let the Agent decide,
-transfer the chosen prompt or key, observe/capture the response, and stop the exact session when the
+send the chosen prompt, observe/capture the response, and stop the exact session when the
 Agent chooses. Workflow/Git/forge verification occurs only when the Agent chose a Workflow task.
-Snapshot changes and retained drafts are evidence, never Skill-owned policy gates. The same Skills
+Activity and retained drafts are evidence, never Skill-owned policy gates. The same Skills
 recommend — never require — stopping owned runtime once delegated work is delivered, keeping
 already-available resume facts (native session ID is not the Runner session name); `stop` never
 deletes history, and resume stays the Agent's choice among `--resume`, `--continue`, or a fresh
@@ -104,16 +103,12 @@ Model mismatch, unreadable actual-model evidence, login failures, and resume beh
 facts for the controlling Agent. Never turn them into a start/send/observe/stop gate or rewrite the
 Agent-selected model literal.
 
-Normal observe/send/answer/key/stop paths must not stop the child, disable pane input, acquire a lease,
-or run the tokenized DECRQM compatibility fence. Legacy relays are reporting-only for mutation until
-the Agent explicitly chooses an exact-session restart.
-
 ## Canonical project root and Workflow child worktrees
 
 Ordinary Workflow-backed work starts the worker at the consuming project's canonical project root
 and asks that runtime to invoke `workflow-next` in-session. The worker's Workflow owns the child
 worktree. Linked-worktree starts and existing-run recovery are Agent decisions, not transport
-gates; PTY and ACP share that authority. Do not add a `.kw/worktrees` refusal to adapters or
+gates. Do not add a `.kw/worktrees` refusal to adapters or
 runtime scripts. Change this guidance through `templates/orchestrator/` and `templates/SKILL.md.tmpl`,
 then `./scripts/render-skills.py --write`.
 
@@ -134,12 +129,9 @@ is outside this repository and is not verified here.
 ## Tests and live evidence
 
 Behavioral changes require baseline-failing acceptance. Offline tests use temporary repositories,
-fake binaries, isolated homes, unique tmux sessions, sanitized frame hashes, and public transport
-commands. Relay changes additionally prove live observation without suspension, direct long-prompt
-transfer, escaped-descendant non-blocking plus exact-stop cleanup, payload receipts, terminal-control
-outcomes, coordinate-invariant evidence, legacy protocol compatibility, and zero residual
-sockets/processes.
-Real runtime tests record version, relay/child/pane identity, snapshot, prompt
+fake ACP agents, isolated homes and ACP record roots (`KAOLA_ACP_RECORD_ROOT`), and public
+transport commands; a test that starts a real holder registers its force-stop cleanup first.
+Real runtime tests record version, holder/agent identity, ACP and native session ids, prompt
 delivery, Workflow start evidence, stop result, and zero unintended residual sessions.
 Authentication-blocked command receipt is not reported as successful Workflow execution.
 For Cursor CLI, live experiments must pass the exact non-FAST slug `grok-4.7-xhigh`, capture

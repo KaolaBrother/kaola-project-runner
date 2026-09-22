@@ -66,7 +66,7 @@ DEFAULT_BUDGETS = {"bridge_bytes": 2560, "description_chars": 320, "bridge_guide
 # The bridge must not carry the workers' transport contract ...
 TRANSPORT_MARKERS = (
     "## Transport facts", "## Communication loop", "mutation_status", "raw_current_frame",
-    "--transport acp|pty", "SKILL_DIR=", "--tier default", "bracketed paste",
+    "$SKILL_DIR/scripts/runtime-tmux.sh", "SKILL_DIR=", "--tier default", "bracketed paste",
 )
 # ... nor the orchestrator's policy ...
 ORCHESTRATOR_MARKERS = (

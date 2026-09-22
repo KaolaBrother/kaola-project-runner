@@ -25,44 +25,44 @@ RENDERER = PROJECT / "scripts" / "render-skills.py"
 PLATFORMS = {
     "grok-kaola-project-runner": {
         "display": "Grok Kaola Project Runner",
-        "short": "Communicate with Grok CLI through exact tmux",
-        "prompt": "Use $grok-kaola-project-runner to start an exact Grok CLI tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with Grok CLI through exact ACP",
+        "prompt": "Use $grok-kaola-project-runner to start an exact Grok CLI ACP session, read its output, and send only the input I choose.",
         "tokens": ("grok", "grok-kaola-project-runner"),
     },
     "claude-code-kaola-project-runner": {
         "display": "Claude Code Kaola Project Runner",
-        "short": "Communicate with Claude Code through exact tmux",
-        "prompt": "Use $claude-code-kaola-project-runner to start an exact Claude Code tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with Claude Code through exact ACP",
+        "prompt": "Use $claude-code-kaola-project-runner to start an exact Claude Code ACP session, read its output, and send only the input I choose.",
         "tokens": ("claude", "claude-code", "claude-code-kaola-project-runner"),
     },
     "opencode-kaola-project-runner": {
         "display": "OpenCode Kaola Project Runner",
-        "short": "Communicate with OpenCode through exact tmux",
-        "prompt": "Use $opencode-kaola-project-runner to start an exact OpenCode tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with OpenCode through exact ACP",
+        "prompt": "Use $opencode-kaola-project-runner to start an exact OpenCode ACP session, read its output, and send only the input I choose.",
         "tokens": ("opencode", "opencode-kaola-project-runner"),
     },
     "kimi-cli-kaola-project-runner": {
         "display": "Kimi CLI Kaola Project Runner",
-        "short": "Communicate with Kimi CLI through exact tmux",
-        "prompt": "Use $kimi-cli-kaola-project-runner to start an exact Kimi CLI tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with Kimi CLI through exact ACP",
+        "prompt": "Use $kimi-cli-kaola-project-runner to start an exact Kimi CLI ACP session, read its output, and send only the input I choose.",
         "tokens": ("kimi", "kimi-cli", "kimi-cli-kaola-project-runner"),
     },
     "cursor-cli-kaola-project-runner": {
         "display": "Cursor CLI Kaola Project Runner",
-        "short": "Communicate with Cursor CLI through exact tmux",
-        "prompt": "Use $cursor-cli-kaola-project-runner to start an exact Cursor CLI tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with Cursor CLI through exact ACP",
+        "prompt": "Use $cursor-cli-kaola-project-runner to start an exact Cursor CLI ACP session, read its output, and send only the input I choose.",
         "tokens": ("cursor", "cursor-agent", "cursor-cli", "cursor-cli-kaola-project-runner"),
     },
     "devin-kaola-project-runner": {
         "display": "Devin CLI Kaola Project Runner",
-        "short": "Communicate with Devin CLI through exact tmux",
-        "prompt": "Use $devin-kaola-project-runner to start an exact Devin CLI tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with Devin CLI through exact ACP",
+        "prompt": "Use $devin-kaola-project-runner to start an exact Devin CLI ACP session, read its output, and send only the input I choose.",
         "tokens": ("devin", "devin-kaola-project-runner"),
     },
     "codex-kaola-project-runner": {
         "display": "Codex CLI Kaola Project Runner",
-        "short": "Communicate with Codex CLI through exact tmux",
-        "prompt": "Use $codex-kaola-project-runner to start an exact Codex CLI tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with Codex CLI through exact ACP",
+        "prompt": "Use $codex-kaola-project-runner to start an exact Codex CLI ACP session, read its output, and send only the input I choose.",
         # "codex" alone is the controlling runtime name and legitimately
         # appears in every package's description, so only Codex-specific facts
         # are leakage tokens.
@@ -70,20 +70,20 @@ PLATFORMS = {
     },
     "zcode-kaola-project-runner": {
         "display": "ZCode Kaola Project Runner",
-        "short": "Communicate with ZCode through exact tmux",
-        "prompt": "Use $zcode-kaola-project-runner to start an exact ZCode tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with ZCode through exact ACP",
+        "prompt": "Use $zcode-kaola-project-runner to start an exact ZCode ACP session, read its output, and send only the input I choose.",
         "tokens": ("zcode", "zcode-kaola-project-runner"),
     },
     "droid-kaola-project-runner": {
         "display": "Droid Kaola Project Runner",
-        "short": "Communicate with Droid through exact tmux",
-        "prompt": "Use $droid-kaola-project-runner to start an exact Droid tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with Droid through exact ACP",
+        "prompt": "Use $droid-kaola-project-runner to start an exact Droid ACP session, read its output, and send only the input I choose.",
         "tokens": ("droid", "droid-kaola-project-runner"),
     },
     "dsh-kaola-project-runner": {
         "display": "dsh Kaola Project Runner",
-        "short": "Communicate with dsh through exact tmux",
-        "prompt": "Use $dsh-kaola-project-runner to start an exact dsh tmux session, read its output, and send only the input I choose.",
+        "short": "Communicate with dsh through exact ACP",
+        "prompt": "Use $dsh-kaola-project-runner to start an exact dsh ACP session, read its output, and send only the input I choose.",
         "tokens": ("dsh", "dsh-kaola-project-runner"),
     },
 }
@@ -338,7 +338,7 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
                 "communication driver",
                 "does not choose commands",
                 '"$SKILL_DIR/scripts/runtime-tmux.sh" send',
-                '"$SKILL_DIR/scripts/runtime-tmux.sh" key',
+                "`key --key escape` (or `cancel`) cancels the running turn",
                 '"$SKILL_DIR/scripts/runtime-tmux.sh" capture',
                 "No invocation implicitly starts `workflow-next`",
             )
@@ -350,7 +350,7 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
     }
     assertions.check(
         "test_grok_active_package_has_only_communication_references",
-        generated_references == {"acp.md", "platform.md", "steering.md", "transport.md"},
+        generated_references == {"acp.md", "platform.md", "steering.md"},
         f"active package carries orchestration references: {sorted(generated_references)!r}",
     )
 
@@ -358,79 +358,27 @@ def check_grok_compatibility(assertions: Assertions, root: Path) -> None:
 def check_evidence_first_transport_guidance(
     assertions: Assertions, package: Path, package_id: str
 ) -> None:
-    """Pin the five generated Skills to the agent-owned interaction loop."""
+    """Pin the generated Skills to the agent-owned interaction loop.
+
+    Issue #130 retired PTY: the tmux `references/transport.md` overlay (raw
+    frame, relay, snapshot and retained-editor evidence) is gone, and the
+    Skill's own `## Transport` section plus `references/acp.md` carry the ACP
+    facts. The Agent-directed send/stop/key examples stay pinned below.
+    """
     transport = package / "references" / "transport.md"
     assertions.check(
-        f"test_{package_id}_schema_v2_transport_overlay_exists",
-        transport.is_file(),
-        f"missing generated transport overlay: {transport}",
+        f"test_{package_id}_no_retired_pty_transport_overlay",
+        not transport.exists(),
+        f"retired PTY transport overlay is still generated: {transport}",
     )
-    if not transport.is_file():
-        return
-
-    transport_text = transport.read_text(encoding="utf-8")
-    examples = shell_examples(transport_text)
-    observe_examples = [command for command in examples if " observe " in f" {command} "]
-    send_examples = [command for command in examples if " send " in f" {command} "]
-    stop_examples = [command for command in examples if " stop " in f" {command} "]
-    lowered = transport_text.lower()
-    normalized = re.sub(r"\s+", " ", lowered)
+    skill_text = (package / "SKILL.md").read_text(encoding="utf-8") if (package / "SKILL.md").is_file() else ""
+    skill_normalized = re.sub(r"\s+", " ", skill_text).lower()
     assertions.check(
-        f"test_{package_id}_transport_exposes_raw_evidence_before_agent_decision",
-        "raw_current_frame" in transport_text
-        and "terminal" in lowered
-        and "process/relay" in normalized
-        and any('"$SKILL_DIR/scripts/runtime-tmux.sh" observe' in command for command in observe_examples)
-        and ("agent decides" in normalized or "controlling agent decides" in normalized),
-        "transport must expose raw frame/tmux/process/relay evidence and say that the controlling agent decides",
-    )
-    assertions.check(
-        f"test_{package_id}_transport_send_has_no_snapshot_or_semantic_hard_gate",
-        bool(send_examples)
-        and all(
-            is_shell_command_example(command)
-            and "--if-snapshot" not in command
-            and "--require-empty-editor" not in command
-            for command in send_examples
-        ),
-        f"send examples must not present snapshot/editor/status correlation as authority: {send_examples!r}",
-    )
-    assertions.check(
-        f"test_{package_id}_transport_stop_has_no_snapshot_hard_gate",
-        bool(stop_examples)
-        and all(is_shell_command_example(command) and "--if-snapshot" not in command for command in stop_examples),
-        f"stop examples present an evidence identifier as authority: {stop_examples!r}",
-    )
-    assertions.check(
-        f"test_{package_id}_snapshot_is_optional_audit_correlation",
-        "optional" in lowered
-        and "evidence identifiers, not freshness gates" in lowered
-        and "action-time identifier" in lowered
-        and "observation_changed:true" in lowered,
-        "snapshot guidance must describe optional audit correlation and changed action-time evidence",
-    )
-    assertions.check(
-        f"test_{package_id}_transport_teaches_observe_decide_send_read_durable_evidence",
-        all(
-            marker in normalized
-            for marker in (
-                "observe",
-                "agent decides",
-                "send",
-                "reads the real response",
-                "if the agent chose workflow work",
-            )
-        ),
-        "missing observe -> agent decides -> send -> observe/read -> durable Workflow evidence loop",
-    )
-    assertions.check(
-        f"test_{package_id}_retained_text_is_agent_policy_not_runner_classification",
-        "retained text" in normalized
-        and "agent may still choose" in normalized
-        and "whole-editor replacement" in normalized
-        and "clean conversation" in normalized
-        and "does not turn any of those observations into a policy gate" in normalized,
-        "retained-text guidance must expose evidence and leave the route to the controlling agent",
+        f"test_{package_id}_skill_teaches_agent_decides_then_sends_without_fallback",
+        "the controlling agent chooses what to send" in skill_normalized
+        and "runner never auto-falls back or resends" in skill_normalized
+        and "transport-pty-retired" in skill_normalized,
+        "Skill must leave the send decision to the Agent, never auto-fall back, and name the PTY refusal",
     )
 
     if package_id == "grok-kaola-project-runner":
@@ -445,9 +393,9 @@ def check_evidence_first_transport_guidance(
         )
     platform = package / "references" / "platform.md"
     assertions.check(
-        f"test_{package_id}_platform_routes_mutations_through_transport",
-        platform.is_file() and "[transport.md](transport.md)" in platform.read_text(encoding="utf-8"),
-        f"generated platform guidance does not route mutations through {transport.name}",
+        f"test_{package_id}_platform_routes_mutations_through_acp",
+        platform.is_file() and "[acp.md](acp.md)" in platform.read_text(encoding="utf-8"),
+        "generated platform guidance does not route mutations through acp.md",
     )
     if not platform.is_file():
         return
@@ -473,10 +421,13 @@ def check_evidence_first_transport_guidance(
         and all(is_shell_command_example(command) and "--if-snapshot" not in command for command in routed_stops),
         f"routed stop example(s) still present snapshot correlation as authority: {routed_stops!r}",
     )
+    # Issue #130: the PTY native-key examples are gone; the only key is the
+    # Agent-selected ACP cancel, and any key example must still name --key.
     assertions.check(
         f"test_{package_id}_routed_key_examples_are_agent_selected",
-        bool(routed_keys) and all("--key" in command for command in routed_keys),
-        f"active Skill does not expose explicit Agent-selected key transport: {routed_keys!r}",
+        all("--key" in command for command in routed_keys)
+        and "`key --key escape` (or `cancel`) cancels the running turn" in re.sub(r"\s+", " ", skill_text),
+        f"active Skill does not expose the explicit Agent-selected cancel key: {routed_keys!r}",
     )
 
 

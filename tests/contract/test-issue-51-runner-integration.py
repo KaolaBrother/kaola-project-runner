@@ -2,7 +2,7 @@
 """Issue #51 Mission 3: offline Runner integration of ZCode as the eighth worker.
 
 Drives real ``kaola-acp.py`` (checkout layout and the generated Skill once it
-exists) plus ``kaola-tmux.sh`` transport dispatch. The backend is
+exists) plus ``kaola-tmux.sh`` dispatch (ACP only, Issue #130). The backend is
 ``tests/contract/fake-zcode-app-server.py``, never an installed ZCode.app.
 No network, no account, no PATH search for ``zcode``.
 """
@@ -27,7 +27,7 @@ SKILL = ROOT / "skills" / "zcode-kaola-project-runner"
 CHECKOUT_CLI = ROOT / "scripts" / "kaola-acp.py"
 SKILL_CLI = SKILL / "scripts" / "kaola-acp.py"
 ADAPTER_SRC = ROOT / "scripts" / "kaola-zcode-acp.py"
-PTY_ADAPTER = ROOT / "scripts" / "adapters" / "zcode.sh"
+SHELL_ADAPTER = ROOT / "scripts" / "adapters" / "zcode.sh"
 TMUX = ROOT / "scripts" / "kaola-tmux.sh"
 RENDERER = ROOT / "scripts" / "render-skills.py"
 INSTALLER = ROOT / "scripts" / "install-local.sh"
@@ -305,7 +305,7 @@ def test_manifest_renderer_and_inventory() -> None:
     manifest = parse_manifest(MANIFEST)
     check(manifest["id"] == "zcode", "manifest id is zcode")
     check(manifest["skill_name"] == "zcode-kaola-project-runner", "skill_name is zcode-kaola-project-runner")
-    check(manifest["default_transport"] == "acp", "default_transport is acp (owner correction 2: ZCode is ACP-only)")
+    check("default_transport" not in manifest, "default_transport is gone: every worker is ACP-only (Issue #130)")
     command = manifest["acp_command"]
     check(ACP_TOKEN in command, "acp_command is Skill-relative to kaola-zcode-acp.py")
     lowered = command.lower()
@@ -319,7 +319,7 @@ def test_manifest_renderer_and_inventory() -> None:
     check(manifest["acp_model_config_id"] == "model", "acp_model_config_id is model")
     effort = manifest.get("acp_effort_config_id") or ""
     check(effort in ("", "thought"), "thought/effort id is thought if present")
-    check(PTY_ADAPTER.is_file(), "scripts/adapters/zcode.sh exists")
+    check(SHELL_ADAPTER.is_file(), "scripts/adapters/zcode.sh exists")
 
     acp = load_module(CHECKOUT_CLI, "kaola_acp_i51")
     check("zcode" in acp.PLATFORMS, "kaola-acp.py accepts platform zcode")
@@ -561,9 +561,9 @@ def test_start_send_cancel_stop_schema_v3() -> None:
         hanging.cleanup()
 
 
-def test_transport_dispatch_acp_default_pty_diagnostic() -> None:
-    """ACP is the manifest default; explicit --transport pty stays dispatchable only
-    as a known-unsupported diagnostic entry (the bundled runtime has no TUI)."""
+def test_transport_dispatch_is_acp_only() -> None:
+    """Issue #130: --transport pty is refused with the typed transport-pty-retired
+    receipt; --transport acp and no override both reach kaola-acp.py."""
     sandbox = Sandbox("dispatch")
     try:
         session = sandbox.session()
@@ -571,9 +571,10 @@ def test_transport_dispatch_acp_default_pty_diagnostic() -> None:
             "status", "--repo", str(sandbox.repo), "--session", session, "--transport", "pty"
         )
         check("unknown platform" not in stderr, "kaola-tmux.sh accepts platform zcode")
-        if isinstance(payload, dict) and payload.get("transport"):
-            check(payload["transport"].get("selected") == "pty", "--transport pty is still dispatchable as a diagnostic entry")
-            check(payload["transport"].get("default") == "acp", "manifest default_transport is acp")
+        check(code != 0 and isinstance(payload, dict), f"--transport pty is refused with a receipt ({stderr[-300:]})")
+        if isinstance(payload, dict):
+            check(payload.get("reason") == "transport-pty-retired", f"--transport pty is transport-pty-retired ({payload})")
+            check(payload.get("transport") == {"requested": "pty", "supported": ["acp"]}, "refusal names acp as the only transport")
         code, payload, stderr = sandbox.tmux(
             "status", "--repo", str(sandbox.repo), "--session", session, "--transport", "acp"
         )
@@ -584,32 +585,23 @@ def test_transport_dispatch_acp_default_pty_diagnostic() -> None:
             "status", "--repo", str(sandbox.repo), "--session", session
         )
         if isinstance(payload, dict) and payload.get("transport"):
-            check(
-                payload["transport"].get("selected") == "acp"
-                and payload["transport"].get("reason") == "manifest-default",
-                "no override follows the acp manifest default",
-            )
-        check(PTY_ADAPTER.is_file(), "PTY adapter scripts/adapters/zcode.sh exists")
-        identity = PTY_ADAPTER.read_text(encoding="utf-8")
+            check(payload["transport"] == {"selected": "acp"}, "no override reaches kaola-acp.py")
+        identity = SHELL_ADAPTER.read_text(encoding="utf-8")
         check(
             re.search(r'ADAPTER_ID="zcode"', identity) is not None,
-            "PTY adapter declares ADAPTER_ID=zcode",
+            "shell adapter declares ADAPTER_ID=zcode",
         )
     finally:
         sandbox.cleanup()
 
 
-def test_skip_all_mode_is_yolo_on_acp_and_pty() -> None:
+def test_skip_all_mode_is_yolo_on_acp() -> None:
     """CLI 0.16.5 --help: --mode is Permission mode, values build|edit|plan|yolo,
     default yolo for --prompt. Packaged PermissionService: 'Yolo mode bypasses
-    permission prompts'. The (diagnostic-only) PTY adapter must pass --mode yolo; ACP skip-all is yolo."""
+    permission prompts'. ACP skip-all is yolo."""
     acp = load_module(CHECKOUT_CLI, "kaola_acp_i51_mode")
     check(acp.ACP_SKIP_MODE.get("zcode") == "yolo", "ACP_SKIP_MODE zcode is yolo")
     tmux = TMUX.read_text(encoding="utf-8")
-    check(
-        re.search(r"\bzcode\) permission_mode=yolo\b", tmux) is not None,
-        "PTY no-flag start maps zcode skip-all to yolo",
-    )
     check(
         re.search(r"\bzcode\) acp_args\+=\(--mode yolo\)", tmux) is not None,
         "ACP start without caller --mode sends yolo",
@@ -621,30 +613,6 @@ def test_skip_all_mode_is_yolo_on_acp_and_pty() -> None:
     )
     sandbox = Sandbox("skip-all")
     try:
-        script = r"""
-set -euo pipefail
-permission_mode=yolo
-RESOLVED_MODEL_ID=""
-# shellcheck source=/dev/null
-source "$1"
-adapter_build_launch "$2" "" false
-printf '%s\n' "${ADAPTER_LAUNCH_ARGS[*]}"
-"""
-        result = subprocess.run(
-            ["bash", "-c", script, "skip-all", str(PTY_ADAPTER), str(sandbox.repo)],
-            capture_output=True,
-            text=True,
-            env=sandbox.env(),
-            timeout=10,
-        )
-        check(result.returncode == 0, f"PTY adapter_build_launch runs: {result.stderr[-300:]}")
-        argv = result.stdout.split()
-        check("--mode" in argv, "PTY launch argv includes --mode")
-        check(
-            argv[argv.index("--mode") + 1] == "yolo",
-            f"PTY launch --mode is yolo, not {argv!r}",
-        )
-
         session = sandbox.session()
         receipt = sandbox.cli(SKILL_CLI, "start", session=session)
         applied = (receipt.get("config_application") or {}).get("mode") or {}

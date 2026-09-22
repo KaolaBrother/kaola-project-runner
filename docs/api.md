@@ -32,13 +32,13 @@ line; a label that looks like a release tag or begins with "release" is refused)
 is reported as `budget: <surface> is N B > M B (<key>)` and nothing is written (an unverifiable
 pin is likewise never written). `--check` returns nonzero for any missing, stale,
 or unexpected file, Skill directory, or host bundle file. Manifest values are JSON strings in a
-flat YAML subset parsed without an external dependency. Transport fields are `default_transport`,
+flat YAML subset parsed without an external dependency. Transport fields are `acp_command`,
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
 `acp_effort_config_id`, `acp_mode_config_id`, `acp_fast_config_id`, `acp_fast_values`, `acp_model_map`, and
 `clientCapabilities._meta` during `initialize` — Cursor's `parameterizedModelPicker=true` makes
 its ACP surface advertise separate `model`/`effort`/`fast` options with base model IDs and string
 `"true"`/`"false"` fast values. `acp_model_map` is an optional `picker-id=acp-option-value;...`
-list mapping resolved PTY model IDs onto the ACP model value the agent advertises for the same
+list mapping resolved catalog model IDs onto the ACP model value the agent advertises for the same
 model; an effort encoded in the picker ID suffix travels through the effort option and Fast
 through `acp_fast_values`-converted values, so semantics are never substituted — an unmapped ID
 is sent literally and a rejection is reported as a limitation. Model-selection fields are
@@ -50,8 +50,10 @@ carries the platform's own word for the tier (`alternative`, `fable`) and an emp
 the platform declares no third tier, in which case the whole group must be empty and nothing
 about it is rendered. It reaches the generated Skill through the computed `TIER_BLOCK`
 (SKILL.md) and `ALT_TIER_LINE` (references/platform.md) blocks, never an unconditional
-template sentence. They render as `DEFAULT_TRANSPORT`,
-`ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY` template variables.
+template sentence. They render as `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY`
+template variables; `acp_login_requires_pty` only records whether login needs a native terminal —
+login is a human act outside the Runner. The manifest key `default_transport` is removed
+(Issue #130); the parser rejects it as an unexpected key, so `--check` fails closed if it returns.
 
 An `acp_command` word may start with `$SKILL_DIR/scripts/` to name a file shipped inside the
 Skill (Claude Code: `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`;
@@ -62,8 +64,8 @@ sits one level up — and reports the result as `bridge` (`relative`, `path`, `l
 `skill|checkout`, `present`, `sha256`, `upstream_pin` from `acp_wrapper_pin`,
 `verified_versions`) on `preflight` and `start`. A token that resolves to no file is
 `error.code` `acp-bridge-missing` and nothing is spawned; there is no PATH lookup and no
-download. For the Claude Code platform the Runner also resolves the exact runtime binary the way
-PTY does (`CLAUDE_BIN`, else the first PATH match) and passes it to the bridge as
+download. For the Claude Code platform the Runner also resolves the exact runtime binary
+(`CLAUDE_BIN`, else the first PATH match) and passes it to the bridge as
 `CLAUDE_ACP_CLAUDE_BIN`, reporting it as `runtime_binary` (`env`, `path`, `absolute`, `present`,
 `passed_as`, and on `preflight` the `--version` line); a non-absolute or missing value makes the
 bridge fail closed (`session/new`, `session/resume`, and `session/prompt` return JSON-RPC
@@ -89,10 +91,8 @@ neither, derived from that entry and never inherited), the plan registered throu
 refused, `~/.zcode/cli/config.json` is never written, and the credential never reaches
 receipts). The
 `start`/`preflight` receipt's `agent_info._meta.zcode` carries the secret-free provider facts
-(`providerId`, `baseURL`, `planCacheStatus`, `modelIds`, `rejectedProviders`). ZCode's default
-transport is `acp`; `--transport pty` is dispatchable only as a known-unsupported diagnostic
-entry, because the bundled runtime has no terminal UI and headless `--prompt` requires
-`~/.zcode/cli/config.json`. Login happens in the ZCode desktop App. The
+(`providerId`, `baseURL`, `planCacheStatus`, `modelIds`, `rejectedProviders`). The bundled ZCode
+runtime has no terminal UI; login happens in the ZCode desktop App. The
 renderer copies `dist/index.js`, `dist/DERIVATION.json`,
 `LICENSE`, and `UPSTREAM.md` from `vendor/claude-code-acp/` into the Claude Code worker only,
 and copies `scripts/kaola-zcode-acp.py` into the ZCode worker only;
@@ -120,10 +120,8 @@ preflighted before mutation; foreign paths are never replaced.
 
 Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `droid exec --output-format acp`; no bridge or translator is used. Droid defaults to Auto Model
-(`model=auto`) and full bypass (`autonomy_level=auto-high`) on ACP, while PTY uses
-`--skip-permissions-unsafe` plus a process-scoped `--settings` overlay. The supported
-`--permission-mode` values are `bypassPermissions|low|medium|high|manual`; PTY maps them to
-`--skip-permissions-unsafe`, `--auto <level>`, or no flag, and ACP maps them to
+(`model=auto`) and full bypass (`autonomy_level=auto-high`). The supported
+`--permission-mode` values are `bypassPermissions|low|medium|high|manual`; ACP maps them to
 `auto-high|auto-low|auto-medium|auto-high|normal` through `acp_mode_config_id: autonomy_level`.
 ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reasoning_effort`, and
 `autonomy_level`. Droid's default and upgrade presets are Auto (`auto`); its third tier `--tier core` is Kimi K3 Max
@@ -248,7 +246,9 @@ boundary; no content hashing). Git runs with `GIT_TERMINAL_PROMPT=0`; no credent
 printed, hashed, or forwarded; paths in the receipt are local evidence and never enter an
 account Skill.
 
-## tmux core
+## Runner entrypoint (`kaola-tmux.sh`)
+
+The file keeps its historical name; it drives ACP only and starts no tmux session.
 
 ```text
 scripts/kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
@@ -267,8 +267,8 @@ scripts/kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME \
   [--if-snapshot ID] [--force]
 ```
 
-`--repo` must resolve to the exact Git top-level. A linked worktree is a valid Git top-level on
-both PTY and ACP and is not a transport refusal; preferring the consuming project's canonical
+`--repo` must resolve to the exact Git top-level. A linked worktree is a valid Git top-level and
+is not a transport refusal; preferring the consuming project's canonical
 project root is Agent guidance, so a Workflow child worktree is not required as `--repo`.
 Asking the CLI to invoke `workflow-next` is an Agent-selected prompt, not a Runner
 operation. Session names match
@@ -287,42 +287,38 @@ instance. A mismatch returns `{"error":{"code":"holder-instance-mismatch"}}` wit
 is never stopped in place of the one the Agent verified.
 
 Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
-`CURSOR_AGENT_BIN`, `DEVIN_BIN`, and `DROID_BIN`. Test/embedding overrides are `TMUX_BIN`, `PYTHON_BIN`, `PS_BIN`, and
-`KAOLA_START_TIMEOUT`; `GROK_START_TIMEOUT` remains a Grok-only compatibility alias.
+`CURSOR_AGENT_BIN`, `DEVIN_BIN`, and `DROID_BIN` (read by `preflight` for the runtime version
+fact). The entrypoint's test/embedding override is `PYTHON_BIN`.
 
 ## Transport selection
 
-Every command accepts `--transport acp|pty`. Without an override, the platform manifest selects the default. ACP dispatches to `kaola-acp.py`; PTY retains the nested-relay path. Receipts report the selected/default transports, alternatives, and whether selection came from `manifest-default` or `caller-override`. ACP supports `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; an ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded to `capture_receipt_bytes` by dropping its oldest `events`/`tool_calls` and adding `truncated` (`list`, `kept`, `dropped`, `total`, `stream_bytes`, `stream_sha256` of the untruncated one-JSON-line-per-entry stream, `hint`), while `capture --full` is the explicit unbounded request; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. For Claude Code's vendored bridge a `permit` answer settles only the reported `tool_call` status (the `claude -p` child takes no `--permission-prompt-tool`, so it cannot gate or resume the child). `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin. Each holder process mints an opaque random `holder_instance_id` at construction — immutable for that process, never restored from `record.json` or the native session id, never derived from the PID — and exposes it on `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). `permit`, `cancel`, and the `key escape`→cancel alias accept optional `--expected-holder-instance-id VALUE`; when supplied — including an explicit empty value — the holder compares it against its own id under the settlement lock before any permission settlement, pending-permission cancellation, turn mutation, or outbound cancel, even when no permission/turn is active. A mismatch returns `error.code` `holder-instance-mismatch` with `expected_holder_instance_id` and the actual `holder_instance_id` inside the error object plus top-level `mutation_status` `not_started` and `mutation_performed` `false`; nothing is written to the agent. Omitting the flag keeps legacy unbound behavior. The binding is Runner envelope only and is never forwarded into native ACP method params.
+ACP is the only transport (Issue #130). `--transport acp` is accepted as a no-op; `--transport pty` on any command is refused from the arguments alone, before the manifest, Git, the canonical-root binding (#73), or the dispatcher checks (#104) are read, and before any process, holder, record, or session exists. The refusal is one JSON line on stdout, exit 1:
 
-Codex `--permission-mode` values are the same literal IDs on both transports but not the same semantics. ACP passes the ID through to the upstream adapter's `mode` option: `read-only` is upstream display name "Ask for approval" (workspace-write sandbox + on-request approval — workspace file writes are permitted without a permission request), `agent` is "Approve for me" (auto_review reviewer), `agent-full-access` is "Full access". PTY maps the same IDs to strict `--sandbox read-only|workspace-write|danger-full-access` plus `--ask-for-approval on-request|never`; OS-level read-only exists only via `--transport pty`. ACP does not claim equivalent enforcement. Start receipts surface the adapter's own display names/descriptions as factual evidence in `configured_options[*].option_name` / `option_description` / `value_name` / `value_description` when the adapter returns them.
+```json
+{"schema_version":3,"result":"refused","reason":"transport-pty-retired","action":"<command>","platform":"<id>","session":"<name>","repo":"<as given or empty>","detail":"PTY transport is retired (Issue #130); this Runner is ACP-only. Re-run without --transport (or with --transport acp).","mutation_performed":false,"mutation_status":"not_started","transport":{"requested":"pty","supported":["acp"]}}
+```
+
+Any other `--transport` value exits 1 with `--transport must be acp` on stderr. Every command dispatches to `kaola-acp.py`, and every schema-3 receipt's `transport` block is `{"selected":"acp"}` plus the ACP probe facts where a command adds them; the former `default`, `alternatives`, and `reason` keys are removed and `schema_version` stays 3. ACP supports `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; an ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded to `capture_receipt_bytes` by dropping its oldest `events`/`tool_calls` and adding `truncated` (`list`, `kept`, `dropped`, `total`, `stream_bytes`, `stream_sha256` of the untruncated one-JSON-line-per-entry stream, `hint`), while `capture --full` is the explicit unbounded request; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. For Claude Code's vendored bridge a `permit` answer settles only the reported `tool_call` status (the `claude -p` child takes no `--permission-prompt-tool`, so it cannot gate or resume the child). `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin. Each holder process mints an opaque random `holder_instance_id` at construction — immutable for that process, never restored from `record.json` or the native session id, never derived from the PID — and exposes it on `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). `permit`, `cancel`, and the `key escape`→cancel alias accept optional `--expected-holder-instance-id VALUE`; when supplied — including an explicit empty value — the holder compares it against its own id under the settlement lock before any permission settlement, pending-permission cancellation, turn mutation, or outbound cancel, even when no permission/turn is active. A mismatch returns `error.code` `holder-instance-mismatch` with `expected_holder_instance_id` and the actual `holder_instance_id` inside the error object plus top-level `mutation_status` `not_started` and `mutation_performed` `false`; nothing is written to the agent. Omitting the flag keeps legacy unbound behavior. The binding is Runner envelope only and is never forwarded into native ACP method params.
+
+Codex `--permission-mode` values are literal upstream IDs, and their semantics are the upstream adapter's. ACP passes the ID through to the upstream adapter's `mode` option: `read-only` is upstream display name "Ask for approval" (workspace-write sandbox + on-request approval — workspace file writes are permitted without a permission request), `agent` is "Approve for me" (auto_review reviewer), `agent-full-access` is "Full access". ACP `read-only` is on-request approval, not an OS sandbox, and the Runner has no path to OS-level read-only (that existed only on the retired PTY transport). Start receipts surface the adapter's own display names/descriptions as factual evidence in `configured_options[*].option_name` / `option_description` / `value_name` / `value_description` when the adapter returns them.
 
 ACP `observe`/`status` report `session_meta.configOptions` as the latest native-attested option list, not the launch snapshot. The `session/new`/`session/resume`/`session/load` result is the baseline (also surfaced as `initial_config_options`); a successful `session/set_config_option` result replaces the list wholesale, and `config_option_update` notifications for the same session refresh it. `configured_options[*].current_value` carries the adapter's native `currentValue` when returned — proof is the native response, never the requested value. Failed or timed-out updates and responses without usable config facts leave the last proven configuration untouched.
 
 The ZCode adapter (Issue #62) reports three separately trackable session identities: the Runner session name (on every receipt), the ACP session id, and the native `sess_*` id. Once a backend session is materialized or faithfully resumed the adapter emits one credential-free `session/update {sessionUpdate: native_session_identity, acpSessionId, nativeSessionId}` notification, and `session/load` returns the adopted `sessionId` plus its `configOptions` so the holder's record and every receipt track which native session was loaded. Nested Host→Worker isolation is a process/session contract (separate process groups, separate record roots; the outer exact stop sweeps recorded inner sessions); the explicit runtime facts `KAOLA_ZCODE_ENTRY`/`KAOLA_ZCODE_NODE` are forwarded to a nested ZCode child, while the holder's `KAOLA_ACP_CHILD_RECORD` write handle and the denied credential names are never forwarded. See [ZCode host](zcode-host.md).
 
-Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` is the only command without a required platform positional or `--repo`; stdout is one `kaola-acp-list/1` object of live holders. `kaola-acp <platform> view --repo ROOT --session NAME [--since CURSOR]` stdout is one `kaola-acp-view/1` object. `kaola-acp <platform> follow --repo ROOT --session NAME [--since CURSOR] [--format text]` keeps the Unix socket open and writes NDJSON `{kind:snapshot|delta|heartbeat|eof|error}` lines; snapshot/delta payloads reuse `kaola-acp-view/1`. After the first `follow` op that FD is read-only (`prompt`/`permit`/`cancel`/`stop` reply `kind=error` and must use another short connection). A slow follower whose queue exceeds 256 lines gets `follow-dropped` and disconnects; other followers, `view`, and agent stdio continue. Killing the follow CLI does not stop holder/agent. Agent exit emits `kind=eof`, after which the holder closes that connection and the CLI exits; a dead holder emits `kind=error` `holder-lost`. View caps are enforced, not only flagged: thinking keeps an 8 KiB tail, one tool's content is clipped to 32 KiB, the timeline keeps the newest 200 messages, and a view over 256 KiB drops its oldest tools then oldest messages (`truncated=true`). Chunks without `messageId` join the previous same-role message until a tool call, new prompt, or turn end. `--format text` joins message/tool titles into tty text (not a TUI). Runtime facts use `error.code` in `holder-lost` / `holder-unreachable` / `no-session`. `kaola-tmux.sh PLATFORM view` prints `{"schema":"kaola-acp-view/1","error":{"code":"view-unsupported","message":"view is not a pty/tmux command; use kaola-acp"}}` and does not fall back to PTY; `follow` is likewise `follow-unsupported`. `install-local.sh --bin-links` (default on for the Codex runtime destination) also installs owned `$HOME/.local/bin/kaola-acp`, `kaola-acp-holder`, and `kaola-project-runner-locate` symlinks.
+Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` is the only command without a required platform positional or `--repo`; stdout is one `kaola-acp-list/1` object of live holders. `kaola-acp <platform> view --repo ROOT --session NAME [--since CURSOR]` stdout is one `kaola-acp-view/1` object. `kaola-acp <platform> follow --repo ROOT --session NAME [--since CURSOR] [--format text]` keeps the Unix socket open and writes NDJSON `{kind:snapshot|delta|heartbeat|eof|error}` lines; snapshot/delta payloads reuse `kaola-acp-view/1`. After the first `follow` op that FD is read-only (`prompt`/`permit`/`cancel`/`stop` reply `kind=error` and must use another short connection). A slow follower whose queue exceeds 256 lines gets `follow-dropped` and disconnects; other followers, `view`, and agent stdio continue. Killing the follow CLI does not stop holder/agent. Agent exit emits `kind=eof`, after which the holder closes that connection and the CLI exits; a dead holder emits `kind=error` `holder-lost`. View caps are enforced, not only flagged: thinking keeps an 8 KiB tail, one tool's content is clipped to 32 KiB, the timeline keeps the newest 200 messages, and a view over 256 KiB drops its oldest tools then oldest messages (`truncated=true`). Chunks without `messageId` join the previous same-role message until a tool call, new prompt, or turn end. `--format text` joins message/tool titles into tty text (not a TUI). Runtime facts use `error.code` in `holder-lost` / `holder-unreachable` / `no-session`. `kaola-tmux.sh PLATFORM view` prints `{"error":{"code":"view-unsupported","message":"view is not a Runner command; use kaola-acp"},"schema":"kaola-acp-view/1"}`, exit 1; `follow` is likewise `follow-unsupported` (`"kind":"error"`). `install-local.sh --bin-links` (default on for the Codex runtime destination) also installs owned `$HOME/.local/bin/kaola-acp`, `kaola-acp-holder`, and `kaola-project-runner-locate` symlinks.
 
 ## Observation schema
 
-`observe` returns evidence for the controlling agent. Ordinary PTY `observe`/`status` receipts
-are bounded by `capture_receipt_bytes` (`kaola-observation.py bound_observation`): over budget,
-`raw_current_frame` keeps its newest whole lines, then `child_processes` its first entries, and
-`truncated.fields` records each bounded field's kept/total size or counts and the sha256 of
-the full value; `snapshot_id` and `pane_revision` are computed from the full frame before
-bounding. The budget is measured on the emitted line (newline included) and applied last:
-`status`/`start` add `result` (and `legacy_ownership` for grok) inside `status-view` before
-its bound, and a receipt bounded twice (build, then status-view) merges its `truncated`
-block, keeping every original total, count, and digest and lowering only the kept figures. ACP `observe`/`status` receipts are bounded the same way by `bound_state_receipt`
-in `kaola-acp.py`, on their own larger `state_receipt_bytes` budget (256 KiB, Issue #64:
+`observe` returns evidence for the controlling agent. ACP `observe`/`status` receipts are bounded by `bound_state_receipt`
+in `kaola-acp.py`, on their own `state_receipt_bytes` budget (256 KiB, Issue #64:
 a realistic platform `session_meta` — Devin's is ~70 KB — and the stored `record`
 (~142 KB) stay whole, so `session_meta.configOptions` `currentValue` remains readable;
 only larger structures are summarised) (`record`, `initial_config_options`, `session_meta`, `capabilities`,
 `agent_info` summarised by size and sha256; `pending_permissions` keeps its newest entries).
-Only `capture --full` is unbounded. Schema version 3 includes `snapshot_id`,
-`pane_revision`, `raw_current_frame`, exact ownership and pane facts, runtime child/process evidence,
-relay input/output facts, Git reporting facts, and compatibility editor/activity/approval/decision
-signals. Those compatibility fields are advisory evidence for the controlling agent; generic
-`send`/`stop` never consume them as semantic authority.
+Only `capture --full` is unbounded. Every schema-3 receipt carries `platform`, `session`, `repo`,
+`transport` and Git reporting facts (`git`); these are evidence for the controlling agent and never
+semantic authority for `send`/`stop`.
 
 ACP receipts also report the notification binding in force (Issue #70). `start`, `observe`
 and `status` carry `heartbeat_host`: the target the running holder really adopted, or `null`
@@ -341,10 +337,9 @@ variable naming such a platform, and a Host-named `start` on it are refused `hos
 (`detail` names the platform and the empty entry), exit 1, before anything exists. On the `dispatcher` path the script verifies the named Host holder is live
 before anything exists and otherwise refuses with `{"result":"refused","reason":
 "heartbeat-host-unresolved"}` (`detail` names the failed check), exit 1; an explicit variable naming a
-different Host than the dispatcher is `heartbeat-host-conflict`. Runner dispatch is ACP-only: a
-`--transport pty` `start` under any dispatcher, or with only `KAOLA_PROJECT_RUNNER_CANONICAL_REPO`
-exported, is refused by `kaola-tmux.sh` with `heartbeat-host-pty-unsupported` before any preflight or
-tmux session. Every refusal carries `mutation_performed: false`; standalone starts are unchanged.
+different Host than the dispatcher is `heartbeat-host-conflict`. The former #104 reason
+`heartbeat-host-pty-unsupported` is retired: a `--transport pty` request is now refused
+`transport-pty-retired` for every caller, ahead of these checks. Every refusal carries `mutation_performed: false`; standalone starts are unchanged.
 
 A ZCode `start` also checks, before anything is spawned, that the worker Skill copies its agent will
 load are the same build as the Skill tree this CLI was loaded from (Issue #105). The Issue #104
@@ -381,9 +376,8 @@ worker Skill built before the record).
 [--timeout SECONDS] [--cancel-timeout SECONDS]` delivers one Agent-chosen message to the turn that is
 **already running** on that exact session. It is a tool the controlling Agent decides to use, never a
 Runner policy, and it reuses the same session/repo routing as `send`: no scheduler, no second stdin
-writer, and no second lifecycle. Its scope is the **ACP channel only** — over `pty` it answers
-`steer-unsupported-transport`, since a mid-turn terminal write is an ordinary keystroke stream whose
-meaning only the native UI decides.
+writer, and no second lifecycle. It works over ACP, the only channel; the former
+`steer-unsupported-transport` reason is retired with the PTY transport (Issue #130).
 
 Every platform has a usable path inside ACP, and the Agent picks which one:
 
@@ -467,26 +461,7 @@ either mode. A holder started before this release has no `steer` op and cannot g
 restart, which answers `steer-holder-outdated` with nothing written.
 
 
-The `relay` object reports relay epoch/process/socket, runtime child PID/PGID/path/start fingerprint,
-child input/output offsets, streaming output digest, resize revision, bracketed-paste mode, and terminal
-fence facts. `snapshot_id` is opaque correlation evidence. Any changed fact may produce a different
-identifier, but that change is reported and never independently blocks an agent-directed action.
-
-An absent or legacy-direct session may have no snapshot. Legacy direct sessions remain observable,
-with `relay.managed: false` and `relay-required` in advisory `evidence_flags`; the agent decides how
-to proceed from the available transport capabilities.
-
 ## Status compatibility
-
-Commands return neutral JSON keys including `result`, `platform`, `runtime`, `session`, `repo`,
-`present`, `owned`, `platform_match`, `repo_match`, `tui_detected`, `activity`,
-`runtime_session_id`, pane identity, and Git branch/HEAD/cleanliness/ahead/behind. Grok additionally
-returns `grok_tui` as a compatibility alias. Status also reports `process_match` and the observed
-`pane_process`; a TUI is not accepted unless the live process matches the exact resolved runtime
-binary at argv[0] or interpreter argv[1], except Kimi's exact `kimi-code` plus `node` product identity.
-The Grok compatibility wrapper preserves `grok_version`, `project_root`, `grok_tui`, and legacy
-ownership aliases. `status.activity` equals `status.activity_hint` for compatibility, but both are
-advisory and excluded from action guards.
 
 Preflight reports runtime binary/version, optional Workflow capability discovery, recurring evidence,
 project materialization evidence, and an adapter-specific summary. Missing Workflow carriers,
@@ -501,9 +476,8 @@ never a silent fallback to `default`. A bare `--model` wins over the tier preset
 its effort; `--effort` only applies to the model selected in the same request. Model IDs that already
 encode effort or Fast variants get no invented extra effort/configuration calls. `--fast` defaults to
 `off`; `--fast on` is the per-run opt-in and is applied through the platform's native mechanism (Codex
-ACP `fast-mode` configId / PTY `-c service_tier`, Cursor parameterized `fast` option or
-`-fast`-style model variants, Claude process-scoped `--settings '{"fastMode": ...}'` passed
-verbatim — the native CLI determines model support and effective reports `unknown` without
+ACP `fast-mode` configId, Cursor parameterized `fast` option, the Claude bridge's `fast` config option, which the
+vendored bridge turns into a per-turn `--settings '{"fastMode": ...}'` — the native CLI determines model support and effective reports `unknown` without
 native evidence). Where no
 native mechanism or advertised fast variant exists, the request is reported `resolved_fast:
 "unsupported"`, never silently claimed. `--resume`/`--continue` without tier/model/effort preserves the
@@ -512,10 +486,14 @@ There is no automatic escalation based on complexity, failures, or elapsed time.
 reported as evidence and never rewrites or blocks the declared exact model literal. Actual mismatch,
 catalog absence, or unreadable evidence never disables generic communication.
 
-Model evidence under `model` includes `requested_model_source`, `requested_model_name`,
-`requested_tier`, `requested_fast`, `resolved_runtime_model_id`, `resolved_parameters`,
-`resolved_fast`, `actual_runtime_model_id`, `actual_parameters`, tri-state `model_verified`,
-`model_mismatch_reason`, and structured provenance. ACP `start` receipts additionally carry
+Model evidence under `model` on the `start`/`preflight` receipt includes `requested_model_source`,
+`requested_model_name`, `requested_tier`, `requested_fast`, `resolved_runtime_model_id`,
+`resolved_parameters`, `resolved_fast`, and structured provenance. `actual_runtime_model_id` and
+`actual_parameters` are always `null` and `model_verified` is always `unknown`
+(`model_mismatch_reason: actual-model-evidence-not-yet-read`): ACP computes no true/false verdict.
+The agent's actual selection is `effective_selection` on `start`, beside
+`resolved_runtime_model_id`. `status`/`observe` carry no request provenance; they report the
+agent's own `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
 
@@ -529,39 +507,25 @@ manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass valu
 
 ## Agent-directed transport results
 
-Every transport action verifies the exact session/repository/pane/relay/child identity and performs one
-direct relay transfer. It does not quiesce the CLI, acquire a lease, fence the terminal, or create a
-later-output barrier. `send` and `stop` do not require a snapshot. If legacy `--if-snapshot` is supplied,
-the compact receipt returns it only as `based_on_snapshot`; a changed frame does not return
-`stale-snapshot`. No generic action branches on editor, activity, approval, decision, worker count,
-coordinate, prose, Git, Workflow, or later-output-barrier interpretations.
+Every action goes through the exact session's ACP holder. It does not quiesce the CLI, acquire a
+lease, or create a later-output barrier. `send` and `stop` do not require a snapshot; the parser
+still accepts legacy `--if-snapshot` and `--replace-editor` but does not forward them. No generic
+action branches on editor, activity, approval, decision, worker count, prose, Git, Workflow, or
+later-output-barrier interpretations.
 
-`send` returns the transferred payload fingerprint plus `mutation_performed:true`. If the relay reply
-is lost or a partial write cannot be excluded, `mutation_performed` is `null`, never falsely `false`.
-`key` accepts `up`, `down`, `left`, `right`, `enter`, `escape`, `tab`, `backtab`, or `space`; it sends
-only that key's exact bytes, adds no Enter, and returns `result:key-sent` plus `payload_fingerprint`.
-The controlling Agent owns the choice and meaning of the key.
-`answer --replace-editor` is a capability-specific whole-editor transfer; Claude Code is the only v1
-replacement capability, while other adapters report `answer-unsupported`. Decision IDs, revisions,
-and any legacy later-output barriers are evidence for the agent and do not become generic follow-up
-gates.
+`send` writes the text as one `session/prompt` text block over the agent's stdio JSON-RPC, never
+through a shell or a terminal, and returns `prompt_fingerprint` (`sha256:` of the text) with
+`mutation_performed: true` once the frame is written; a frame that was not written is
+`acp-write-failed` with `mutation_performed: false`. `key` accepts only `escape`, which maps to
+ACP `cancel`; every other key is `key-unsupported`. `answer` is `answer-unsupported` ("use send;
+--decision-id maps to permit --request-id"). There is no native key, menu, or editor-replacement
+transfer on ACP, and no Runner path to one since the PTY transport was retired (Issue #130).
 
-Before a follow-up, the controlling agent reads the raw frame and chooses how to handle any retained
-draft, approval, output, login/trust, or decision surface. The Runner does not decide that choice.
-After send/key, the agent observes/captures the response and, when applicable, verifies durable
-Workflow/Git/forge state.
+After send, the agent observes/captures the response and, when applicable, verifies durable
+Workflow/Git/forge state. The Runner does not decide how to handle a draft, approval, output,
+login/trust, or decision surface.
 
-Input payloads reject CR, ESC, DEL, every other C0/C1 control except LF/TAB, invalid raw control
-bytes, and embedded paste delimiters before any child PTY write. LF/TAB are accepted only when the
-relay attests bracketed-paste mode. Send and Claude answer attest the exact transferred payload
-fingerprint. Answer also attests clear-editor.
-
-Ordinary and force stop do not require a snapshot. A successful force
-stop reports `result: stopped`, `action: force-stop`, and terminal `final_state`; it cannot target a
-session that the current transport cannot mechanically reach, and it is not emitted until the original
-child/group and every exact fingerprint-tracked escaped descendant are absent.
-
-Stop releases only the exactly-owned runtime: the PTY child/relay/tmux session, or — on ACP — a
+Stop releases only the exactly-owned runtime: a
 `session/close` when the adapter advertises that capability followed by holder/agent exit, with
 residual processes reported. The holder also notes process groups the agent spawned outside its
 own group (for example the Claude bridge's detached `claude -p` children) from two sources: the
@@ -585,7 +549,7 @@ groups at once, and reports those groups as `swept_pgids`; a recorded normal sto
 alive. Stopping never deletes CLI history, session records, or work artifacts,
 and no completion signal (`end_turn`, idle frame, successful receipt) triggers or gates it. Resume is
 a separate Agent choice: `--resume <native-session-id>` (ACP `session/resume`/`session/load` per
-advertised capability, or the platform's PTY flag) or `--continue` for the platform's latest
+advertised capability) or `--continue` for the platform's latest
 conversation; a missing identifier never blocks `stop`, and unsupported resume never blocks a fresh
 `start`. The Runner performs no automatic shutdown, fallback, re-prompt, or Workflow continuation.
 After a recorded normal ACP stop, `status`/`observe` report `outcome: stopped`,
@@ -600,12 +564,9 @@ Each adapter declares identity, display name, executable, environment override, 
 quit text, answer capability, and declared default-model facts. It implements `adapter_preflight`,
 `adapter_build_launch`, `adapter_prepare_model_environment`,
 `adapter_detect_tui`, `adapter_activity_hint`, `adapter_observe_frame`, and
-`adapter_extract_session_id`. Adapters contain platform facts only and must not evaluate runtime- or
-user-produced shell text. Starting a CLI does not invoke a Workflow materializer.
-
-Claude, Cursor, and OpenCode painted placeholders and cursor coordinates are preserved as visible
-evidence but never become input-origin authority.
-
-Structural adapter facts describe visible chrome and compatibility hints for Agent review; they do
-not decide input readiness or Workflow completion. Cursor CLI start does not call a Workflow
+`adapter_extract_session_id`. Since Issue #130 the entrypoint calls only `adapter_preflight`, for
+the base facts it adds to the ACP `preflight` receipt (Issue #114); the launch, TUI, and frame
+functions remain in the files until a follow-on removes them. Adapters contain platform facts only
+and must not evaluate runtime- or user-produced shell text. Starting a CLI does not invoke a
+Workflow materializer. Cursor CLI start does not call a Workflow
 materializer or mutate `.cursor`; installed/global/project command surfaces are reported only.

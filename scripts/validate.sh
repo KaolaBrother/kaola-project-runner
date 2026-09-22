@@ -92,8 +92,6 @@ watched installer-runtimes bash "$repo_root/tests/contract/test-installer-runtim
 # rather than letting a missing-log cat error abort the replay (Issue #83).
 python_suites_all=(
   "test-issue-78-heredoc-deadlock.py"
-  "test-issue-9-contract.py"
-  "test-direct-transport-contract.py"
   "test-devin-regressions.py"
   "test-acp-contract.py"
   "test-acp-watch-contract.py"
@@ -103,7 +101,7 @@ python_suites_all=(
   "test-issue-33-config-meta.py"
   "test-runner-v2.py"
   "test-generated-skills.py"
-  "test-issue-24-opencode-pty-bypass.py"
+  "test-issue-24-opencode-no-skip-all.py"
   "test-issue-41-orchestrator.py"
   "test-issue-68-heartbeat-snapshot.py"
   "test-issue-72-session-naming.py"
@@ -144,7 +142,8 @@ python_suites_all=(
   "test-issue-119-host-entry.py"
   "test-issue-123-shared-refs.py"
   "test-lifecycle-contract.py"
-  "test-model-policy.sh"
+  "test-issue-22-bypass-all-approvals.py"
+  "test-issue-130-pty-retired.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -161,8 +160,6 @@ python_suites_a=(
   "test-issue-68-heartbeat-snapshot.py"
   "test-issue-72-session-naming.py"
   "test-runner-v2.py"
-  "test-direct-transport-contract.py"
-  "test-issue-9-contract.py"
   "test-issue-83-lane-failure-visibility.py"
   "test-issue-88-permission-defaults.py"
   "test-issue-92-permission-wake-recovery.py"
@@ -187,7 +184,7 @@ python_suites_b=(
   "test-generated-skills.py"
   "test-devin-regressions.py"
   "test-issue-52-workflow-worktree.py"
-  "test-issue-24-opencode-pty-bypass.py"
+  "test-issue-24-opencode-no-skip-all.py"
   "test-issue-64-receipt-bound.py"
   "test-issue-65-steer-race.py"
   "test-issue-65-host-contract.py"
@@ -202,11 +199,8 @@ python_suites_b=(
   "test-issue-111-model-tiers.py"
   "test-issue-119-host-entry.py"
   "test-issue-123-shared-refs.py"
-)
-# Issue #128: the tmux-driven model-policy suite takes ~300 s on its own, so it
-# runs as a third concurrent lane rather than lengthening either Python lane.
-python_suites_c=(
-  "test-model-policy.sh"
+  "test-issue-22-bypass-all-approvals.py"
+  "test-issue-130-pty-retired.py"
 )
 run_suite_lane() {
   local status=0 rc
@@ -230,11 +224,9 @@ run_suite_lane() {
 }
 run_suite_lane "${python_suites_a[@]}" & lane_a=$!
 run_suite_lane "${python_suites_b[@]}" & lane_b=$!
-run_suite_lane "${python_suites_c[@]}" & lane_c=$!
 python_status=0
 wait "$lane_a" || python_status=1
 wait "$lane_b" || python_status=1
-wait "$lane_c" || python_status=1
 for suite in "${python_suites_all[@]}"; do
   if [[ -f "$validate_tmp/$suite.log" ]]; then
     cat "$validate_tmp/$suite.log"

@@ -1,3 +1,5 @@
+> Superseded by #130 (2026-09-22): PTY retired, ACP only. Historical record; body unchanged.
+
 # Kaola Project Runner v2 设计文档：ACP 优先、tmux 兜底的双通道架构
 
 状态：v0.3 实施基线（PoC #15 已验证；本版按实测事实修正并锁定生产实现范围）

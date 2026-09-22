@@ -1,12 +1,12 @@
 # OpenCode ACP transport
 
-Command: `opencode acp`. Login requires a PTY: `false`. Platform quirks: no ACP skip-all measured on 2.0.11 - session/request_permission offers only allow_once/allow_always/reject_once and configOptions carries model/effort/mode only; PTY --auto via --transport pty is the bypass. V2 reaches its own server over loopback HTTP, and a forward proxy on that hop leaves initialize working while every session method answers ClientError; so when HTTP(S)_PROXY is set, the Runner appends any missing 127.0.0.1/localhost to NO_PROXY/no_proxy in the opencode child env only (ACP and PTY), keeping operator entries and never touching the Runner env.
+Command: `opencode acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: no ACP skip-all measured on 2.0.11 - session/request_permission offers only allow_once/allow_always/reject_once and configOptions carries model/effort/mode only; there is no skip-all, and permit settles each request. V2 reaches its own server over loopback HTTP, and a forward proxy on that hop leaves initialize working while every session method answers ClientError; so when HTTP(S)_PROXY is set, the Runner appends any missing 127.0.0.1/localhost to NO_PROXY/no_proxy in the opencode child env only, keeping operator entries and never touching the Runner env.
 
 ## Command surface
 
-Use `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; other native keys and editor replacement are PTY-only capabilities. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
+Use `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; there are no other native keys and no editor replacement. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
 
-Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Orchestrator ordinary turns must not poll raw frames as a human UI. Where supported, PTY can handle terminal-only login and native TUI takeover; check platform quirks before using it.
+Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
 
 ## Level-zero receipt
 
@@ -20,13 +20,13 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 
 This platform's ACP steering facts, both modes, the receipt vocabulary and the races: [steering.md](steering.md).
 
-`start` resolves the same tier/model/effort/Fast selection as PTY and applies it through the
+`start` resolves the tier/model/effort/Fast selection through the shared model policy and applies it through the
 agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
 `model`/`effort`/`` when non-empty.
 A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
 during `initialize`): agents that negotiate a parameterized model picker advertise separate
 `model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead
-of fixed variant descriptors. When a manifest declares `acp_model_map`, a resolved PTY picker ID decomposes onto
+of fixed variant descriptors. When a manifest declares `acp_model_map`, a resolved catalog model ID decomposes onto
 the ACP model value the agent advertises for the same model — effort encoded in the picker ID
 suffix then travels through the effort option and Fast through the fast option (values converted
 per `acp_fast_values`), recorded as `requested_id`/`mapped`/`declared` in the model application.

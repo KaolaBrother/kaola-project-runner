@@ -196,11 +196,14 @@ class MainSkillHandlesTheNoSkipAllCase(unittest.TestCase):
     def test_main_skill_keeps_the_protective_clauses(self) -> None:
         text = flowed(MAIN_SKILL.read_text(encoding="utf-8"))
         self.assertIn("Bypass is not broader authorization.", text)
+        # Issue #130: PTY is retired, so the do-not-force-PTY half has nothing
+        # left to force; the do-not-add-a-gate rule stays.
         self.assertIn(
-            "never force PTY or add a gate",
+            "`permit` settles it; never add a gate.",
             text,
-            "the correction must keep the do-not-force-PTY / do-not-add-a-gate rule",
+            "the correction must keep the do-not-add-a-gate rule",
         )
+        self.assertNotIn("force PTY", text)
 
     def test_main_skill_claims_no_automatic_approval(self) -> None:
         text = flowed(MAIN_SKILL.read_text(encoding="utf-8"))

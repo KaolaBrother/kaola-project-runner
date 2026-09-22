@@ -187,11 +187,11 @@
 
 ## 错误
 
-用法错误仍 exit 2。运行时事实与既有回执同形：stdout **一个 JSON 对象**，带 `schema` 与 `error: {code, message}`，code ∈ `holder-lost` / `holder-unreachable` / `no-session`。pty 上若经 `kaola-tmux.sh` 分发 `view`，给显式 `view-unsupported`，不自动回退。
+用法错误仍 exit 2。运行时事实与既有回执同形：stdout **一个 JSON 对象**，带 `schema` 与 `error: {code, message}`，code ∈ `holder-lost` / `holder-unreachable` / `no-session`。经 `kaola-tmux.sh` 分发 `view` 给显式 `view-unsupported`（`follow` 同理为 `follow-unsupported`），不自动回退；请直接用 `kaola-acp`。
 
 ## Skill 文案
 
-改写「acp 无可视界面」：人类用 Terminal 或 `list`/`view`（本机后续 `follow`）订阅；编排器普通回合仍不得轮询原始帧；PTY 仍是登录与原生 TUI 接管。
+改写「acp 无可视界面」：人类用 Terminal 或 `list`/`view`（本机后续 `follow`）订阅；编排器普通回合仍不得轮询原始帧；登录是 Runner 之外的人类原生终端动作（PTY 已退役，#130）。
 
 ## 验收
 

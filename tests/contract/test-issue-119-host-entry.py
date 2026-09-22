@@ -349,15 +349,17 @@ def test_entryless_dispatcher_and_non_zcode_refusals() -> None:
             **{DISPATCHER_ENV: json.dumps(dispatcher), HEARTBEAT_HOST_ENV: json.dumps(other)})
         check(result.returncode == 1 and (refused or {}).get("reason") == "heartbeat-host-conflict",
               f"AC9 #104: explicit target conflicting with a non-ZCode dispatcher refuses ({refused})")
-        # #104 refusal 3: PTY under a non-ZCode Host.
+        # #104 refusal 3 (PTY under a non-ZCode Host) is absorbed by #130:
+        # every PTY request is refused as transport-pty-retired.
         pty = subprocess.run(
             ["bash", str(TMUX), "claude-code", "start", "--repo", str(sandbox.repo),
              "--session", "claude-code-KPR-i119-pty", "--transport", "pty"],
             capture_output=True, text=True, timeout=60,
             env=sandbox.env(**{DISPATCHER_ENV: json.dumps(dispatcher)}))
         pty_receipt = json.loads(pty.stdout.strip().splitlines()[-1]) if pty.stdout.strip() else {}
-        check(pty.returncode == 1 and pty_receipt.get("reason") == "heartbeat-host-pty-unsupported",
-              f"AC9 #104: PTY under a non-ZCode Host refuses ({pty_receipt})")
+        check(pty.returncode == 1 and pty_receipt.get("reason") == "transport-pty-retired"
+              and pty_receipt.get("mutation_performed") is False,
+              f"AC9 #104/#130: PTY under a non-ZCode Host refuses ({pty_receipt})")
         # #73: a non-ZCode Host start outside the canonical root refuses.
         elsewhere = sandbox.dir / "other"
         elsewhere.mkdir()

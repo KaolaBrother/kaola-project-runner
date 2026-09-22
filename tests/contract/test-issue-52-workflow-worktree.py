@@ -3,7 +3,8 @@
 
 Guidance is a decision default, not a transport gate. Tests pin template/doc
 consistency, keep adapters free of a hardcoded ``.kw/worktrees`` refusal, and
-prove both PTY and ACP accept a linked worktree as a Git top-level.
+prove the ACP transport (the only one since Issue #130) accepts a linked
+worktree as a Git top-level.
 """
 
 from __future__ import annotations
@@ -11,7 +12,6 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
-import os
 import re
 import subprocess
 import sys
@@ -50,19 +50,18 @@ WORKER_MARKERS = (
     "canonical Git root",
     "installed `workflow-next`",
     "Agent decisions, not transport gates",
-    "PTY and ACP share that authority",
 )
 ORCHESTRATOR_MARKERS = (
     "canonical project root",
     "workflow-next",
-    "Agent decisions on both PTY and ACP, not transport gates",
+    "recovery are Agent decisions, not transport gates",
     "](references/workflow-worktree.md)",
 )
 REFERENCE_MARKERS = (
     "canonical project root",
     "child worktree",
     "Agent decisions rather than transport gates",
-    "PTY and ACP retain identical decision authority",
+    "The transport never classifies Workflow mode, and standalone Runner use is unchanged",
     "## Normal path",
     "## Evidence-backed exception",
     "## Concurrent sessions",
@@ -133,22 +132,6 @@ def make_linked_worktree(temporary: str) -> tuple[Path, Path, Path]:
         check=True,
     )
     return root.resolve(), nested, child.resolve()
-
-
-def tmux_git_root_ok(repo: Path) -> tuple[bool, str]:
-    """Reproduce the PTY ``--repo`` identity check from ``kaola-tmux.sh``."""
-    real = os.path.realpath(repo)
-    result = subprocess.run(
-        ["git", "-C", repo, "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return False, result.stderr.strip() or "not a Git repository"
-    git_root = os.path.realpath(result.stdout.strip())
-    if git_root != real:
-        return False, f"--repo must name the Git root: {git_root}"
-    return True, git_root
 
 
 class Issue52GuidanceConsistency(unittest.TestCase):
@@ -248,7 +231,8 @@ class Issue52NoTransportGate(unittest.TestCase):
             PROJECT / "templates" / "SKILL.md.tmpl",
             PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl",
             PROJECT / "templates" / "orchestrator" / "references" / "workflow-worktree.md",
-            PROJECT / "templates" / "references" / "transport.md.tmpl",
+            PROJECT / "templates" / "references" / "acp.md.tmpl",
+            PROJECT / "templates" / "references" / "platform.md.tmpl",
             PROJECT / "README.md",
             PROJECT / "docs" / "architecture.md",
             PROJECT / "docs" / "conventions.md",
@@ -265,23 +249,23 @@ class Issue52NoTransportGate(unittest.TestCase):
 
 
 class Issue52LinkedWorktreeIsValidRepo(unittest.TestCase):
-    def test_pty_and_acp_accept_canonical_root_and_linked_worktree(self) -> None:
+    def test_acp_accepts_canonical_root_and_linked_worktree(self) -> None:
+        # Issue #130: the PTY `--repo` identity check went with the tmux
+        # branch; kaola-acp.py resolve_repo is the one Git-root check.
         acp = load_acp(PROJECT / "scripts" / "kaola-acp.py")
-        tmux = (PROJECT / "scripts" / "kaola-tmux.sh").read_text(encoding="utf-8")
-        self.assertIn('rev-parse --show-toplevel', tmux)
-        self.assertIn('--repo must name the Git root', tmux)
+        source = (PROJECT / "scripts" / "kaola-acp.py").read_text(encoding="utf-8")
+        self.assertIn('"rev-parse", "--show-toplevel"', source)
+        self.assertIn("--repo must name the Git root", source)
         with tempfile.TemporaryDirectory(prefix="kaola-issue-52-wt-") as temporary:
             root, nested, child = make_linked_worktree(temporary)
-            self.assertTrue(tmux_git_root_ok(root)[0], root)
-            self.assertTrue(tmux_git_root_ok(child)[0], child)
-            nested_ok, nested_detail = tmux_git_root_ok(nested)
-            self.assertFalse(nested_ok, "a non-root subdirectory must remain invalid")
-            self.assertIn("Git root", nested_detail)
             self.assertEqual(acp.resolve_repo(str(root)), str(root))
             self.assertEqual(acp.resolve_repo(str(child)), str(child))
-            with contextlib.redirect_stderr(io.StringIO()):
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
                 with self.assertRaises(SystemExit):
                     acp.resolve_repo(str(nested))
+            self.assertIn("--repo must name the Git root", stderr.getvalue(),
+                          "a non-root subdirectory must remain invalid")
 
 
 class Issue52BehavioralExamples(unittest.TestCase):

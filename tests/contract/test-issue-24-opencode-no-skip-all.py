@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Issue #24 RED contract: keep OpenCode ACP without skip; document PTY --auto bypass.
+"""Issue #24 contract: keep OpenCode ACP without skip; permit settles each request.
 
-Measurement found no OpenCode ACP skip-all. Default transport stays ACP
-(``opencode acp`` with no skip argv). PTY ``--auto`` remains the bypass via
-``--transport pty``. Do not invent process-time auto-permit or inject
-``OPENCODE_PERMISSION`` / permission config as a fake skip.
+Measurement found no OpenCode ACP skip-all. The ACP command stays
+``opencode acp`` with no skip argv. Issue #130 retired the PTY transport, so
+the former PTY ``--auto`` bypass is gone: there is no skip-all on any path and
+every ``session/request_permission`` is settled by an explicit ``permit``. Do
+not invent process-time auto-permit or inject ``OPENCODE_PERMISSION`` /
+permission config as a fake skip.
 
 Issue #112 re-measured the no-skip fact on OpenCode V2 ``2.0.11`` instead of
 inheriting it: ``session/request_permission`` offers exactly ``allow_once``,
 ``allow_always`` and ``reject_once``, and ``session/new`` advertises only the
 ``model``/``effort``/``mode`` config options -- no skip-all in either place.
 The same upgrade removed the ``--mini`` flag ("Unrecognized flag: --mini in
-command opencode"), so the PTY bypass is now ``<repo> --auto``; ``--auto`` is
-still a top-level V2 flag and is still the knob this contract protects.
+command opencode").
 
-The Agent-facing gap on this baseline is empty ``acp_quirks`` (generated Skill
-says known quirks are blank). README/CHANGELOG/launch_summary notes are not
-this contract.
+The Agent-facing surface is ``acp_quirks`` (manifest, rendered into the
+generated ``references/acp.md``): it must state the no-skip-all fact and that
+permit settles each request. README/CHANGELOG notes are not this contract.
 """
 
 from __future__ import annotations
@@ -96,7 +97,7 @@ def acp_start_skip_case(runner: str) -> str:
 def skill_quirks_pointer(text: str) -> str | None:
     """Issue #65: the quirks string is no longer duplicated verbatim in the
     budgeted SKILL.md. The Skill names the on-demand reference that carries it;
-    `test_generated_acp_reference_quirks_document_pty_bypass` checks the content
+    `test_generated_acp_reference_quirks_document_no_skip_all` checks the content
     there, so the quirk is still documented by the generated Skill."""
     match = re.search(
         r"ACP quirks are in \[references/acp\.md\]\(references/acp\.md\)", text)
@@ -142,8 +143,9 @@ class Issue24KeepAcpWithoutSkip(unittest.TestCase):
                 f"OpenCode ACP command must not carry skip argv {flag}: {command!r}",
             )
 
-    def test_default_transport_remains_acp(self) -> None:
-        self.assertEqual(parse_manifest(MANIFEST)["default_transport"], "acp")
+    def test_manifest_no_longer_declares_a_transport_choice(self) -> None:
+        # Issue #130: ACP is the only transport; the manifest key is gone.
+        self.assertNotIn("default_transport", parse_manifest(MANIFEST))
 
     def test_acp_skip_mode_does_not_map_opencode(self) -> None:
         mapping = acp_skip_mode(ACP.read_text(encoding="utf-8"))
@@ -164,90 +166,52 @@ class Issue24KeepAcpWithoutSkip(unittest.TestCase):
         )
 
 
-class Issue24PtyAutoBypass(unittest.TestCase):
-    """PTY launch still supplies --auto as the documented bypass knob."""
+class Issue24LaunchSummaryStatesPermit(unittest.TestCase):
+    """The platform reference launch summary states the ACP permission fact."""
 
-    def test_opencode_pty_launch_still_passes_auto(self) -> None:
-        body = OPENCODE_ADAPTER.read_text(encoding="utf-8")
-        self.assertRegex(
-            body,
-            r"ADAPTER_LAUNCH_ARGS=\(\"\$launch_repo\" --auto\)",
-            "PTY adapter must still launch the repo with --auto",
-        )
-
-    def test_opencode_pty_launch_drops_the_v1_only_flags(self) -> None:
-        """Issue #112: V2 rejects each of these outright, so a surviving
-        occurrence is a launch that aborts on 2.0.11, not a stale comment."""
-        body = OPENCODE_ADAPTER.read_text(encoding="utf-8")
-        launch = re.search(
-            r"adapter_build_launch\(\) \{(.*?)^\}", body, flags=re.DOTALL | re.MULTILINE
-        )
-        self.assertIsNotNone(launch, "adapter_build_launch not found")
-        args = re.findall(r"ADAPTER_LAUNCH_ARGS[+]?=\((.*?)\)", launch.group(1))
-        self.assertTrue(args, "no ADAPTER_LAUNCH_ARGS assignment found")
-        for argv in args:
-            for flag in ("--mini", "--model", "--variant"):
-                self.assertNotIn(
-                    flag,
-                    argv,
-                    f"V2 rejects top-level {flag}; it must not reach the launch argv: {argv!r}",
-                )
-
-    def test_launch_summary_does_not_steer_default_start_onto_pty(self) -> None:
+    def test_launch_summary_states_no_skip_all_and_permit(self) -> None:
         summary = parse_manifest(MANIFEST)["launch_summary"]
-        first = summary.split(".", 1)[0]
         self.assertNotRegex(
-            first,
+            summary,
             r"--transport\s+pty",
-            "Launch instruction must not lead with --transport pty; "
-            "default_transport is still acp: "
-            f"{first!r}",
+            f"launch_summary must not offer the retired PTY transport: {summary!r}",
         )
         self.assertRegex(
             summary,
-            r"--transport\s+pty",
-            f"launch_summary must still name --transport pty as the bypass: {summary!r}",
+            r"ACP has no skip-all",
+            f"launch_summary must state that ACP has no skip-all: {summary!r}",
         )
         self.assertRegex(
             summary,
-            r"--auto\b",
-            f"launch_summary must still name PTY --auto: {summary!r}",
-        )
-        self.assertRegex(
-            summary.lower(),
-            r"default acp",
-            "launch_summary must state that default ACP has no skip, "
-            f"not only the PTY argv: {summary!r}",
+            r"permit settles each request",
+            f"launch_summary must state that permit settles each request: {summary!r}",
         )
 
 
 class Issue24DocumentGeneratedAcpSurface(unittest.TestCase):
-    """Generated Skill ACP surface must name the no-skip fact and PTY bypass."""
+    """Generated Skill ACP surface must name the no-skip fact and permit."""
 
-    def assert_documents_pty_auto_bypass(self, quirks: str, label: str) -> None:
+    def assert_documents_no_skip_all(self, quirks: str, label: str) -> None:
         text = (quirks or "").strip()
         self.assertTrue(
             text,
             f"{label} is empty; Agent-facing ACP quirks must document that "
-            "OpenCode ACP has no skip-all and that PTY --auto via "
-            "--transport pty is the bypass",
+            "OpenCode ACP has no skip-all and that permit settles each request",
         )
         self.assertRegex(
             text,
-            r"--auto\b",
-            f"{label} must name PTY --auto as the bypass knob: {text!r}",
+            r"no ACP skip-all|there is no skip-all",
+            f"{label} must state the ACP no-skip-all fact: {text!r}",
         )
         self.assertRegex(
+            text,
+            r"permit settles each request",
+            f"{label} must state that permit settles each request: {text!r}",
+        )
+        self.assertNotRegex(
             text,
             r"--transport\s+pty",
-            f"{label} must name --transport pty as the bypass selector: {text!r}",
-        )
-        lowered = text.lower()
-        self.assertRegex(
-            lowered,
-            r"\b(skip(?:-all)?|auto-approve|permission)\b",
-            f"{label} must state the ACP skip/permission gap, not only PTY flags: "
-            f"{text!r}",
+            f"{label} must not offer the retired PTY transport: {text!r}",
         )
         self.assertNotRegex(
             text,
@@ -262,9 +226,9 @@ class Issue24DocumentGeneratedAcpSurface(unittest.TestCase):
         self.assertIn("references/acp.md", SKILL_TMPL.read_text(encoding="utf-8"))
         self.assertIn("{{ACP_QUIRKS}}", ACP_TMPL.read_text(encoding="utf-8"))
 
-    def test_manifest_acp_quirks_documents_pty_bypass(self) -> None:
+    def test_manifest_acp_quirks_documents_no_skip_all(self) -> None:
         quirks = parse_manifest(MANIFEST)["acp_quirks"]
-        self.assert_documents_pty_auto_bypass(quirks, "platforms/opencode.yaml acp_quirks")
+        self.assert_documents_no_skip_all(quirks, "platforms/opencode.yaml acp_quirks")
 
     def test_generated_skill_points_at_the_quirks_reference(self) -> None:
         body = SKILL.read_text(encoding="utf-8")
@@ -278,11 +242,11 @@ class Issue24DocumentGeneratedAcpSurface(unittest.TestCase):
             r"opencode\s+acp\s+--(?:auto|yolo|dangerously-skip-permissions)",
         )
 
-    def test_generated_acp_reference_quirks_document_pty_bypass(self) -> None:
+    def test_generated_acp_reference_quirks_document_no_skip_all(self) -> None:
         body = ACP_REF.read_text(encoding="utf-8")
         quirks = acp_reference_quirks(body)
         self.assertIsNotNone(quirks, "generated references/acp.md missing Platform quirks")
-        self.assert_documents_pty_auto_bypass(quirks or "", "generated references/acp.md quirks")
+        self.assert_documents_no_skip_all(quirks or "", "generated references/acp.md quirks")
 
     def test_renderer_copies_manifest_quirks_into_skill_templates(self) -> None:
         renderer = load_renderer()
@@ -294,7 +258,7 @@ class Issue24DocumentGeneratedAcpSurface(unittest.TestCase):
         self.assertIsNotNone(
             skill_quirks_pointer(skill), "rendered SKILL.md.tmpl points at the quirks reference"
         )
-        self.assert_documents_pty_auto_bypass(
+        self.assert_documents_no_skip_all(
             acp_reference_quirks(acp) or "",
             "rendered acp.md.tmpl quirks",
         )

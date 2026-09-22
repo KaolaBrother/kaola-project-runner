@@ -11,7 +11,8 @@ facts that make the receipt trustworthy:
 * an idle session is never steered into an untracked turn;
 * the running turn keeps its own request id, output, and terminal state;
 * consecutive steers, cancel, and session isolation behave;
-* `steer` over `pty` is an honest unsupported, never an unproven injection;
+* `steer` over `pty` is refused as `transport-pty-retired` (Issue #130), never
+  an unproven injection;
 * the generated Skills advertise a `steer` tool only where it really exists.
 """
 
@@ -156,16 +157,21 @@ class SteeringContract(unittest.TestCase):
         self.assertEqual(receipt["error"]["code"], "steer-unsupported")
         self.assertEqual(receipt["mutation_status"], "not_started")
 
-    def test_pty_transport_is_honest_unsupported(self) -> None:
+    def test_pty_transport_is_refused_as_retired(self) -> None:
+        # Issue #130: the tmux branch and `steer-unsupported-transport` are
+        # gone; a PTY steer is the one typed refusal and injects nothing.
         result = subprocess.run(
             ["bash", str(TMUX), SUPPORTED_PLATFORM, "steer", "--transport", "pty",
              "--repo", str(self.repo), "--session", self.session, "--text", STEER_TEXT],
             capture_output=True, text=True, env=self.env(), timeout=30)
         receipt = json.loads(result.stdout)
-        self.assertEqual(receipt["steer_outcome"], "unsupported")
-        self.assertIs(receipt["steer_consumed"], False)
-        self.assertEqual(receipt["error"]["code"], "steer-unsupported-transport")
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(receipt["result"], "refused")
+        self.assertEqual(receipt["reason"], "transport-pty-retired")
+        self.assertEqual(receipt["action"], "steer")
+        self.assertIs(receipt["mutation_performed"], False)
+        self.assertEqual(receipt["mutation_status"], "not_started")
+        self.assertNotIn("steer_consumed", receipt)
 
     # -- supported platform: outcome mapping ---------------------------------
 

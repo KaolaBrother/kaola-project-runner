@@ -49,9 +49,7 @@ adapter_build_launch() {
   # headless, sdk, sdk-minimal and web (@deepseek-ai/dsh-app-boot's
   # PROFILE_TEMPLATES): web is a browser app, headless answers one task and
   # exits, sdk/sdk-minimal are programmatic, and acp is a JSON-RPC stdio
-  # server. None is a pane conversation, so explicit --transport pty is a
-  # known-unsupported diagnostic entry that shows the server waiting on stdin,
-  # not a conversation channel or a fallback. ACP is the real transport.
+  # server. None is a pane conversation; ACP is the only transport (#130).
   ADAPTER_LAUNCH_ARGS=(--profile acp)
   # The acp profile accepts no application arguments: resume is the protocol
   # call session/resume, and --continue is unsupported because session/list

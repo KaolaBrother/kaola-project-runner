@@ -563,8 +563,8 @@ def view_error(code: str, message: str) -> dict[str, Any]:
 
 # Ordinary receipts are bounded (progressive disclosure): capture through
 # bound_capture_receipt, observe/status through bound_state_receipt. The capture limit
-# equals ``capture_receipt_bytes`` in templates/budgets.json and the PTY bound in
-# kaola-observation.py. ``capture --full`` is the explicit, unbounded request and
+# equals ``capture_receipt_bytes`` in templates/budgets.json. ``capture --full`` is
+# the explicit, unbounded request and
 # never passes through bound_capture_receipt.
 CAPTURE_RECEIPT_BYTES = 65536
 BOUNDED_LISTS = ("events", "tool_calls")
@@ -919,12 +919,7 @@ def base_receipt(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         "platform": args.platform,
         "session": args.session,
         "repo": repo,
-        "transport": {
-            "selected": "acp",
-            "default": args.manifest["default_transport"],
-            "alternatives": ["pty"],
-            "reason": args.transport_reason,
-        },
+        "transport": {"selected": "acp"},
         "git": git_facts(repo),
     }
     # Issue #73: set by the shared entrypoint once its canonical-root binding
@@ -2219,16 +2214,6 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt["heartbeat_host_source"] = resolution["source"]
     receipt["dispatcher"] = resolution["dispatcher"]
     directory = record_dir(args, repo)
-    tmux = subprocess.run(
-        ["tmux", "has-session", "-t", f"={args.session}"], capture_output=True
-    )
-    if tmux.returncode == 0:
-        receipt["error"] = {
-            "code": "transport-mismatch",
-            "other_transport": "pty",
-            "message": "a pty session with this name exists",
-        }
-        return receipt
     record = read_record(directory)
     if record:
         if pid_alive(record.get("holder_pid")):
@@ -2608,7 +2593,6 @@ def main() -> int:
     parser.add_argument("--mode")
     parser.add_argument("--steer-mode", choices=("native", "interrupt"))
     parser.add_argument("--cancel-timeout", type=float)
-    parser.add_argument("--transport-reason", choices=("manifest-default", "caller-override"), default="manifest-default")
     args = parser.parse_args()
 
     args.manifest = load_manifest(args.platform)

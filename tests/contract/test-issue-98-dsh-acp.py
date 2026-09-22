@@ -167,7 +167,7 @@ class DshManifestMatchesTheMeasuredSurface(unittest.TestCase):
     def test_the_acp_peer_is_dsh_itself_with_no_wrapper(self) -> None:
         self.assertEqual(self.values["acp_command"], "dsh --profile acp")
         self.assertEqual(self.values["acp_wrapper_pin"], "")
-        self.assertEqual(self.values["default_transport"], "acp")
+        self.assertNotIn("default_transport", self.values)  # Issue #130: ACP-only
         self.assertFalse(list(SKILL.glob("scripts/kaola-dsh-acp.py")))
         self.assertFalse((SKILL / "scripts" / "vendor").exists())
 

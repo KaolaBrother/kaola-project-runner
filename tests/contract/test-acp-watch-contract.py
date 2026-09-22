@@ -606,6 +606,10 @@ class AcpWatchContractTests(unittest.TestCase):
         payload = self.load_object(result, "kaola-tmux view")
         self.assertEqual(payload.get("schema"), "kaola-acp-view/1")
         self.assertEqual((payload.get("error") or {}).get("code"), "view-unsupported")
+        # Issue #130: there is no pty/tmux view to point at any more.
+        message = (payload.get("error") or {}).get("message", "")
+        self.assertEqual(message, "view is not a Runner command; use kaola-acp")
+        self.assertNotIn("pty", message.lower())
 
     def test_acp_reference_names_human_list_and_view(self) -> None:
         for path in (ACP_TMPL, GROK_ACP_REF):

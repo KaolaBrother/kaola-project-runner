@@ -93,7 +93,9 @@ class HostDispatchContract(unittest.TestCase):
         self.assertIn('"heartbeat_host_source": "dispatcher"', self.ref)
         self.assertIn('"session":"zcode-kaola-host"', self.ref)
         self.assertIn("start --repo", self.ref)
-        self.assertIn("heartbeat-host-pty-unsupported", self.ref)
+        # Issue #130: the Host-only PTY refusal is absorbed by the universal one.
+        self.assertIn("transport-pty-retired", self.ref)
+        self.assertNotIn("heartbeat-host-pty-unsupported", self.ref)
         # the installed wrapper is platform-pinned: a platform argument in these
         # examples is a real error a live Host will hit (and did, on 2026-09-18)
         self.assertNotIn('"$W" codex ', self.ref)
