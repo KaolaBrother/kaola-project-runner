@@ -45,7 +45,12 @@ receipt. `acp_model_map` is an optional `picker-id=acp-option-value;...`
 list mapping resolved catalog model IDs onto the ACP model value the agent advertises for the same
 model; an effort encoded in the picker ID suffix travels through the effort option and Fast
 through `acp_fast_values`-converted values, so semantics are never substituted — an unmapped ID
-is sent literally and a rejection is reported as a limitation. Model-selection fields are
+is sent literally and a rejection is reported as a limitation. `acp_command_default`,
+`acp_command_upgrade`, and `acp_command_alt` are optional per-tier spawn commands (Issue #140; only
+Devin declares them, as `devin acp --model <preset id>`): when the tier preset selects the model,
+`kaola-acp.py` spawns that command instead of `acp_command`, while `--command`,
+`KAOLA_ACP_COMMAND`, an explicit `--model`, or a preserved resume keep the base; an empty value, or
+`acp_command_alt` without `alt_tier_label`, is rejected. Model-selection fields are
 `default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`,
 `upgrade_model_name`/`upgrade_model_id`/`upgrade_model_parameters`/`upgrade_model_effort`,
 `alt_tier_label`/`alt_model_name`/`alt_model_id`/`alt_model_parameters`/`alt_model_effort`, and
@@ -537,7 +542,11 @@ Model evidence under `model` on the `start`/`preflight` receipt includes `reques
 (`model_mismatch_reason: actual-model-evidence-not-yet-read`): ACP computes no true/false verdict.
 The agent's actual selection is `effective_selection` on `start`, beside
 `resolved_runtime_model_id`; its `effort_config_id` names the effort option id it was read from
-(the resolved `acp_effort_config_id` candidate). `status`/`observe` carry no request provenance; they report the
+(the resolved `acp_effort_config_id` candidate). When the spawn argv already carries the resolved
+model as `--model`, the model option is not re-sent: `config_application.model` is
+`{"applied": true, "applied_via": "argv", "value": ...}` and `effective_selection.effective_model`
+is that id with `effective_model_source: "launch-argv"`, the agent's own (possibly stale) value kept
+as `advertised_model`. `status`/`observe` carry no request provenance; they report the
 agent's own `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
