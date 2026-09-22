@@ -81,6 +81,56 @@ class LedgerProjection(unittest.TestCase):
         self.assertIn("the Runner only reads", startup)
 
 
+class TerminalLedger(unittest.TestCase):
+    """Owner revision (issuecomment-5770305093): an all-terminal ledger that is still
+    present is read together with the forge issue state the Host already gates on."""
+
+    RULES = {
+        "OPEN": "Every line terminal (`done`/`failed`) with the forge issue OPEN: finalize/archive is in progress, keep waiting.",
+        "CLOSED": "Every line terminal with the issue CLOSED, or the run already under `archive/`: the archive was forgotten - report it stuck and name its owner, neither `unknown` nor done.",
+    }
+
+    @staticmethod
+    def verdict(projection: str, forge_state: str) -> str:
+        """Apply the rendered rule to the one-liner's output; 'live' when not all terminal."""
+        match = re.fullmatch(r"(\d+) / (\d+) (\[.*\])", projection)
+        assert match, projection
+        done, total = int(match.group(1)), int(match.group(2))
+        flagged = re.findall(r"\((\d+), '(failed|blocked)'\)", match.group(3))
+        failed = sum(1 for _, status in flagged if status == "failed")
+        if total == 0 or done + failed != total:
+            return "live"
+        return "in-progress" if forge_state == "OPEN" else "stuck"
+
+    def test_all_terminal_ledger_is_in_progress_when_open_and_stuck_when_closed(self) -> None:
+        text = re.sub(r"\s+", " ", DISPATCH.read_text(encoding="utf-8"))
+        for rule in self.RULES.values():
+            self.assertIn(rule, text)
+        self.assertIn("a vanished file means archive done", text)
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "kaola-workflow" / ".ledger"
+            ledger.mkdir(parents=True)
+            rows = [
+                {"n": 1, "name": "a", "details": "", "status": "done"},
+                {"n": 2, "name": "b", "details": "", "status": "failed"},
+                {"n": 3, "name": "c", "details": "", "status": "done"},
+            ]
+            (ledger / "issue-7.jsonl").write_text(
+                "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
+            )
+            terminal = run_projection(Path(tmp), 7)
+            rows[2]["status"] = "in-flight"
+            (ledger / "issue-7.jsonl").write_text(
+                "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
+            )
+            live = run_projection(Path(tmp), 7)
+        self.assertEqual(terminal.returncode, 0, terminal.stderr)
+        self.assertEqual(terminal.stdout.strip(), "2 / 3 [(2, 'failed')]")
+        self.assertEqual(self.verdict(terminal.stdout.strip(), "OPEN"), "in-progress")
+        self.assertEqual(self.verdict(terminal.stdout.strip(), "CLOSED"), "stuck")
+        self.assertEqual(self.verdict(live.stdout.strip(), "CLOSED"), "live")
+
+
 class AbsentLedger(unittest.TestCase):
     def test_absent_ledger_is_unknown_with_no_fallback(self) -> None:
         text = re.sub(r"\s+", " ", DISPATCH.read_text(encoding="utf-8"))

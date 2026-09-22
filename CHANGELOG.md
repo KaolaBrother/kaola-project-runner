@@ -7,7 +7,9 @@
   line per mission with keys `n`, `name`, `details`, `status` (`todo | in-flight | done | failed |
   blocked`). The run's Workflow Main Orchestrator is the only writer; the Host reads the
   `{n,status}` projection read-only and reports `done` lines over total. An absent file is
-  `unknown`. The Markdown Mission List is retired on the Runner side with no fallback reader, and
+  `unknown`. An all-terminal (`done`/`failed`) ledger that is still present means finalize is in
+  progress while the forge issue is OPEN, and a forgotten archive (stuck; reported with its owner)
+  once the issue is CLOSED or the run is already archived. The Markdown Mission List is retired on the Runner side with no fallback reader, and
   every template, rendered Skill, and test fixture that kept one now names the ledger. This
   repository ignores `kaola-workflow/.ledger/`. The contract matches Kaola-Workflow#1089, which
   owns the writer side. New suite `test-issue-133-mission-ledger.py`.

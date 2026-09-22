@@ -1,5 +1,5 @@
 {
-  "build": "5de1f535a22c",
+  "build": "c44a8a58f9a9",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "b5d0e8625dbb83844d7a35ae87f44559002b0b7598909f79b8af3d70553e9230",
@@ -8,7 +8,7 @@
     "references/heartbeat-skeleton.md": "66b4533ce5b2d7e260f1aa477babda82338477a980d90947cbf67c2b6d4ca384",
     "references/host-entry-matrix.md": "e439694a373607c33c0dace9ba2bffbff8d8efb239b6cb70cc947cff34baf41f",
     "references/host-startup.md": "53a93196bbdd900b8dfe4dc4497f083242dd48898149c061a0c028b7db7f34a3",
-    "references/issue-dispatch.md": "d8a4dce6756473967eb48fc02b86413bffb27a5d2225a054b80b33956b2c22c2",
+    "references/issue-dispatch.md": "1d4fd6b84ca322f47954dd8f0bf20313dbb1b18b67f1939f33391afa9a41abc1",
     "references/workflow-worktree.md": "fc6f3ae30ff485d474772c0529ad7fa66437ff4db7330d9607b6029eb0b7d848",
     "references/zcode-host-dispatch.md": "3c9f0e8d70f3a10a78e082d160a4d257b9e0976bb9ef7dd6014834b64ee77637",
     "references/zcode-native-skill-entry.md": "2c544a1ab49e2319be2fd9d815b8894476e3f2dbb25312744015fa0a1f1acedf"

@@ -75,8 +75,11 @@ toward progress. `failed`: one dispatch has one result; the run's orchestrator d
 mission, the Host may redispatch a worker and never edits the line. `blocked`: escalate
 authorization or `HUMAN_DECISION_REQUIRED`, or supply the missing authorization so the worker
 returns to `in-flight`. On Workflow archive the file moves to
-`kaola-workflow/archive/<project>/mission-ledger.jsonl`, so presence under `.ledger/` means a
-live run. Session facts stay in Runner receipts and run facts in `workflow-state.md`.
+`kaola-workflow/archive/<project>/mission-ledger.jsonl`; a vanished file means archive done.
+Every line terminal (`done`/`failed`) with the forge issue OPEN: finalize/archive is in
+progress, keep waiting. Every line terminal with the issue CLOSED, or the run already under
+`archive/`: the archive was forgotten - report it stuck and name its owner, neither `unknown`
+nor done. Session facts stay in Runner receipts and run facts in `workflow-state.md`.
 
 ## What the name does not decide
 
