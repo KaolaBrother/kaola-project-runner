@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.7 — 2026-09-22
 
 - **One live Host per repo, and a repo sweep on every Delegator reach-out (Issue #132).** A
   Host-named `start` now refuses `host-exists` (exit 1, nothing created) while another Host-named
@@ -214,6 +214,10 @@
   `--runtime grok` is still refused and now points to `grok-cli`. New reference
   `host-entry-matrix.md` and new suite `tests/contract/test-issue-119-host-entry.py`. The
   #33/#74/#90/#94 heartbeat tests now pin the per-platform entry instead of ZCode-only.
+
+- **Not in this release: Codex as a Host (Issue #126, open).** `platforms/codex.yaml` keeps
+  `host_skill_entry: ""`, so a Codex Host start still fails closed (#122). Codex remains a worker
+  and a consuming runtime; measuring its Host entry is left to #126.
 
 ## 0.5.6 — 2026-09-21
 
