@@ -1,10 +1,8 @@
 # Startup: ordinary worker flow, and the Host's own startup receipt
 
-Read this for ordinary worker supervision from Project Runner, or when this
-session **is** the ZCode Host doing its own startup. Outer Agents start or
-continue that Host through Kaola-Delegator (`kaola-delegator`); that Skill is
-the single source for outer recover/start/send/stop. Every command here is the
-installed form; no platform argument, no new tool.
+Read this for ordinary worker supervision, or when this session **is** the
+Host doing its own startup. Outer recover/start/send/stop lives only in
+Kaola-Delegator (`kaola-delegator`). Commands here are the installed form.
 
 ```bash
 SKILLS="<skills root>"   # the root your own runtime installed to, e.g. $HOME/.zcode/skills
@@ -26,10 +24,8 @@ Nothing below in this file applies: no event binding, no heartbeat file, no Host
 "$WORKER" stop    --repo "$PROJECT" --session codex-KT-i274-parser
 ```
 
-That one exact name is the issue-scoped dispatch name of
-[issue-dispatch.md](issue-dispatch.md): the platform id, the consuming project's declared
-heartbeat short code, `i` plus the real issue number, and a purpose token. All five
-operations use it unchanged.
+That exact name is the issue-scoped name of [issue-dispatch.md](issue-dispatch.md),
+unchanged across all five operations.
 
 Check each receipt: a `start` without a ready session started nothing, a `send`
 `error` dispatched nothing, and a `prompt_timeout` or missing receipt leaves
@@ -39,8 +35,7 @@ re-sent. Blocking `send` is a normal, supported way to wait here.
 ## B. Outer Agent: starting a Host
 
 Do not start the Host from this file. Follow Kaola-Delegator (`kaola-delegator`)
-and its `references/handoff.md`. This section exists only so a Host that loaded
-this Skill does not copy a second outer procedure. Exceptions reach you; worker
+and its `references/handoff.md`. Exceptions reach you; worker
 handling does not. Do not take that over session by session.
 
    Every turn-opening prompt to the Host — the first handoff, a resume or
@@ -88,6 +83,10 @@ from inside the Host — report it with the `worker_skill_skew` paths and ask fo
 the install to be refreshed from the accepted checkout. `main-skill-build-skew`
 is the same for an older copy of this Skill in a root the Host reads
 (`main_skill_skew` paths): that copy may be the one loaded instead of this build.
+`host-exists` (Issue #132, same shape) refuses a Host-named `start` while another
+Host-named holder of this canonical root passes the identity check below — any
+platform, a dispatched Host-named worker included. `existing_host` is that live
+Host: attach it; never rename and retry, never stop it.
 
 The same `start` pinned this Host's model (Issue #108): a
 `zcode-<PROJECT_CODE>-orchestrator-<purpose>` session must run GLM 5.3 at effort
@@ -96,12 +95,40 @@ in the receipt's `host_selection`. A `host-model-mismatch` /
 `host-model-unverified` refusal is the outer Agent's evidence — a Host reading
 this was verified before it ran.
 
-The beat itself - starting workers from this session, non-blocking dispatch,
-the `dispatch_event_cursor` reading anchor, ending
-the turn as the wait, and reading the worker's real reply when an event wakes you
-- is one procedure, written once in
-[zcode-host-dispatch.md](zcode-host-dispatch.md). Follow it from there rather
-than from a second copy.
+The beat itself - starting workers here, non-blocking dispatch, the
+`dispatch_event_cursor` reading anchor, ending the turn as the wait, reading the
+real reply when an event wakes you - is written once in
+[zcode-host-dispatch.md](zcode-host-dispatch.md).
+
+## Repo sweep: first step of every beat a Delegator opens
+
+A prompt carrying `sweep=` (handoff, update, or steer) runs this before anything
+else, as part of recover-and-observe, not a new beat. You own it; the Delegator
+only asks; `--repo` keeps other repos out.
+
+```bash
+python3 "${WORKER%/*}/kaola-acp.py" list --repo "$PROJECT" --include-dead
+```
+
+Live means `identity: verified`: record, live PID, answering socket, and the
+recorded `holder_instance_id`; a PID alone is never liveness. Your own id is in
+`KAOLA_ACP_DISPATCHER`.
+
+| Row | Action |
+|---|---|
+| you; a verified seat whose `dispatcher.holder_instance_id` is yours | keep |
+| `dead` / `unreachable` (Host or worker); your seat `agent_exited`/`error` whose delivery is accepted or abandoned | stop, prove gone |
+| another verified `host_class` row | stop, prove gone; both mid-prompt is `HUMAN_DECISION_REQUIRED` |
+| verified seat of another or dead Host instance | report; adopt only a seat of a claim you hold |
+| verified, `heartbeat_host` null/unknown; or `mismatch` | report, never stop |
+
+Stop = that platform Runner's `stop --force --expected-holder-instance-id <the
+row's id>`; gone = `status` reads `stopped` with `residual_pids: []`, or
+`no-session`. `pid_reused: true` signalled nothing and retired the record;
+`holder-instance-mismatch` means re-list, never a bare kill. Only orphans stop;
+in-flight work is never guessed dead. End the reply and the heartbeat `body` with
+`swept: stopped=[session:id] kept=[] adopt_candidates=[] unowned=[] residual_pids=[]`;
+non-empty `residual_pids` is reported, never silent.
 
 ## D. Which record holds what
 

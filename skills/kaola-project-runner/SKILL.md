@@ -31,7 +31,8 @@ start or continue a ZCode Host through Kaola-Delegator (`kaola-delegator`).
 Role, authorization and lifecycle boundary come from the
 project's existing Project Plan or already-authorized task plan - never a new
 schema, never this session's claim of having loaded this Skill. Startup
-receipt, beat, and the entry line opening every Host turn, also after
+receipt, one Host per root (`host-exists`), the repo sweep first in every beat
+a Delegator opens, and the entry line opening every Host turn, also after
 compaction: [host-startup.md](references/host-startup.md),
 [zcode-native-skill-entry.md](references/zcode-native-skill-entry.md),
 [host-entry-matrix.md](references/host-entry-matrix.md).
@@ -84,12 +85,11 @@ platform's default transport is ACP:
 ### Hosts
 
 This Skill is host-neutral. Consuming entries are Codex, generic
-`--skills-dir`, and ZCode. Native skill-directory installs also exist for
-Claude Code, Cursor and Devin, where the nine workers are sibling Skill
-directories. A ZCode Host session is one named Runner session like any other:
-an inner worker it dispatches, ZCode or not, is a separate session with its own
-record entry and process group - an inner stop never reaches the outer Host, and
-the outer stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop; it
+`--skills-dir`, and ZCode. Claude Code, Cursor and Devin also install natively,
+the workers as sibling Skill directories. A ZCode Host session is one named
+Runner session like any other: each inner worker, ZCode or not, is a separate
+session and process group - an inner stop never reaches the Host, and the
+Host's stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop; it
 cannot discover its own `platform`/`session`/`repo` - give them in its first
 prompt. Each beat: a worker `start` run from this Host binds to it by itself
 (`KAOLA_ACP_HEARTBEAT_HOST` is derived; the receipt's `heartbeat_host` names you,

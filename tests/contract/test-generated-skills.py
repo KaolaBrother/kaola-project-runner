@@ -611,6 +611,61 @@ def check_external_package(assertions: Assertions, root: Path) -> None:
     )
 
 
+def check_issue_132_one_host(assertions: Assertions, root: Path) -> None:
+    """Issue #132 T10/T11: one Host per repo and the reach-out repo sweep are
+    stated where each reader looks, and no surface introduces a registry,
+    lock file, or pointer file, or reads PPID as an orphan test."""
+    def text(*parts: str) -> str:
+        path = root.joinpath(*parts)
+        return re.sub(r"\s+", " ", path.read_text(encoding="utf-8")) if path.is_file() else ""
+
+    delegator = text("skills", EXTERNAL_ID, "SKILL.md")
+    handoff_raw = (root / "skills" / EXTERNAL_ID / "references" / "handoff.md")
+    handoff_raw = handoff_raw.read_text(encoding="utf-8") if handoff_raw.is_file() else ""
+    handoff = re.sub(r"\s+", " ", handoff_raw)
+    main = text("skills", ORCHESTRATOR_ID, "SKILL.md")
+    startup = text("skills", ORCHESTRATOR_ID, "references", "host-startup.md")
+    dispatch = text("skills", ORCHESTRATOR_ID, "references", "zcode-host-dispatch.md")
+    pins = {
+        "delegator": (delegator, ("One live Host per repo", "`host-exists` means attach its `existing_host`",
+                                  "never rename and retry", "is exact-stopped, proven gone (`residual_pids: []`)",
+                                  "`sweep=` line")),
+        "handoff": (handoff, ("list --repo \"$PROJECT\" --include-dead", "`identity: verified`",
+                              "never a second `start`", "(`stopped` with `residual_pids: []`, or `no-session`)",
+                              "first exact-stopped", "each with the `sweep=` line",
+                              "a PID alone is never liveness")),
+        "main": (main, ("one Host per root (`host-exists`)", "the repo sweep first in every beat")),
+        "host-startup": (startup, ("## Repo sweep: first step of every beat a Delegator opens",
+                                   "`host-exists`", "a PID alone is never liveness",
+                                   "`HUMAN_DECISION_REQUIRED`", "Only orphans stop",
+                                   "in-flight work is never guessed dead", "`swept: stopped=",
+                                   "--include-dead", "`pid_reused: true` signalled nothing")),
+        "zcode-host-dispatch": (dispatch, ("identity-verified", "a PID alone is not a seat",
+                                           "`holder_pid` is a fourth fact")),
+    }
+    for surface, (body, phrases) in pins.items():
+        for phrase in phrases:
+            assertions.check(f"test_issue_132_{surface}_states_one_host_and_sweep",
+                             phrase in body, f"{surface} lost {phrase!r}")
+    assertions.check("test_issue_132_handoff_text_carries_sweep_line",
+                     re.search(r"(?m)^sweep=.*list --repo.*stop orphans only.*keep in-flight", handoff_raw)
+                     is not None, "the handoff text block has no sweep= line")
+    # Control-plane surfaces; a worker's platform.md may name a platform's own
+    # registry (ZCode's desktop provider registry) as a measured fact.
+    surfaces = [*root.glob(f"skills/{ORCHESTRATOR_ID}/**/*.md"),
+                *root.glob(f"skills/{EXTERNAL_ID}/**/*.md"), *root.glob("hosts/grok-bot/*.md")]
+    negation = re.compile(r"\b(no|not|never|do not|absent|without)\b", re.IGNORECASE)
+    for path in surfaces:
+        body = re.sub(r"\s+", " ", path.read_text(encoding="utf-8"))
+        for sentence in re.split(r"(?<=[.;:])\s", body):
+            if re.search(r"registry|lock file|pointer file", sentence, re.IGNORECASE):
+                assertions.check("test_issue_132_no_registry_lock_or_pointer_mechanism",
+                                 negation.search(sentence) is not None,
+                                 f"{path.relative_to(root)} names a new mechanism: {sentence[:160]!r}")
+        assertions.check("test_issue_132_ppid_is_no_orphan_criterion", "PPID" not in body,
+                         f"{path.relative_to(root)} mentions PPID")
+
+
 def check_generated_tree(assertions: Assertions, root: Path, require_check: bool = True) -> None:
     generated = root / "skills"
     actual_ids = {
@@ -624,6 +679,7 @@ def check_generated_tree(assertions: Assertions, root: Path, require_check: bool
     )
     check_orchestrator_package(assertions, root)
     check_external_package(assertions, root)
+    check_issue_132_one_host(assertions, root)
     for package_id, details in PLATFORMS.items():
         package = generated / package_id
         check_self_contained(assertions, package, package_id)

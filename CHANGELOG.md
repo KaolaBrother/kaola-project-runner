@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **One live Host per repo, and a repo sweep on every Delegator reach-out (Issue #132).** A
+  Host-named `start` now refuses `host-exists` (exit 1, nothing created) while another Host-named
+  holder of the same canonical root passes the identity check: record present, holder PID alive,
+  admin socket answering, and the socket's `holder_instance_id` equal to the record's. A PID alone
+  is no longer treated as liveness. `session-exists` requires that check (or a PID whose argv still
+  names the record); a reused PID is replaced without a signal. `stop --force` signals a
+  live-but-unreachable holder only when its argv anchors it to the record; a reused PID's record is
+  retired instead. A dead holder's force stop marks the record `stopped` once nothing is left.
+  `kaola-acp-list/1` rows add `identity`, `host_class`, `dispatcher`, and the `heartbeat_host`
+  binding, and `--include-dead` opts into dead records; the default view is unchanged. The
+  Delegator's One Host rule and handoff now spell out attach-or-exact-stop-and-prove-gone before any
+  start and carry a `sweep=` line in every prompt; the Host's `host-startup.md` gains the repo
+  sweep table (keep / stop / report). New checks live in `test-acp-contract.py` and
+  `test-issue-74-kaola-delegator.py`.
+
 - **The Host reads the Workflow mission ledger instead of a Mission List (Issue #133).** Issue
   progress now comes from `<canonical-root>/kaola-workflow/.ledger/issue-<N>.jsonl`: one JSON
   line per mission with keys `n`, `name`, `details`, `status` (`todo | in-flight | done | failed |

@@ -2,8 +2,8 @@
 
 Outer Agents start, continue, or restore the project's one ZCode Host here;
 Project Runner inside it owns workers, heartbeat, and close-out. No new tool,
-queue, registry, scheduler, or Delegator pointer file — Git worktree, Workflow
-run / ledger, Issues, and Runner records already hold durable facts.
+queue, registry, scheduler, or Delegator pointer file — Git, Workflow, Issues,
+and Runner records hold the facts.
 
 ```bash
 ZCODE="<skills>/zcode-kaola-project-runner/scripts/runtime-tmux.sh"
@@ -11,15 +11,13 @@ PROJECT="/abs/path/to/consumer-project"          # bound canonical Git root
 HOST="zcode-<PROJECT_CODE>-orchestrator-main"    # e.g. zcode-KPR-orchestrator-main
 ```
 
-`<skills>` is the sibling Skill directory, or `ROOT/skills` after the bridge
-located ROOT. A missing `$ZCODE` is a hard stop — no ZCode Runner, no Host.
+`<skills>`: the sibling Skill directory, or the bridge's `ROOT/skills`. No
+`$ZCODE`, no Host. `<PROJECT_CODE>`: the project's short code (ask once if
+unrecorded); workers are `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>` (#72),
+the Host is not one (no `i0`).
 
-`<PROJECT_CODE>` is the project's established short code. Ask once if
-unrecorded. Inner workers keep `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>`
-(#72). The Host name is not an Issue worker and does not use `i0`.
-
-Three identities stay separate — read them from existing Runner `status`,
-start receipts, and Host events; never synthesize one from another:
+Three identities stay separate — read each from `status`, start receipts,
+or Host events; never synthesize one from another:
 
 | Field | Source | Use |
 |---|---|---|
@@ -27,24 +25,21 @@ start receipts, and Host events; never synthesize one from another:
 | `acp_session_id` | start / `status` receipt | ACP bridge id |
 | native `sess_*` | `native_session_identity.nativeSessionId` | `start --resume` after the holder stopped |
 
-`session_meta` does not automatically hold `sess_*`: `start` has no
-`native_session_identity` before the first prompt; a stopped app-server
-does not restore it.
+`session_meta` does not hold `sess_*`: there is no
+`native_session_identity` before the first prompt.
 
 ## Grok Bot co-location (account bridge only)
 
-Loaded from the Grok Bot account bridge (ROOT, bound target, and project
-given as inputs): before each Host `status`, `start` (including `--resume`),
-`send`, and `stop` on that bound target, run the existing locator with full
-attestation. Codex and generic Skill-directory hosts skip this.
-No second locator, ledger, or schema.
+Loaded from the Grok Bot account bridge: before each Host `status`, `start`
+(including `--resume`), `send`, and `stop` on that bound target, run the
+existing locator with full attestation. Codex and generic hosts skip this.
 
 ```bash
 kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
   --project "$PROJECT" --worker zcode --session "$HOST"
 ```
 
-`$HOST` is the exact session about to be used: the standard name, or a
+`$HOST` is the exact session used: the standard name, or a
 uniquely adopted live nonstandard name — never any other session. Refuse any
 `refused` receipt; do not operate the Host.
 
@@ -55,38 +50,41 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
 
    ```bash
    "$ZCODE" status --repo "$PROJECT" --session "$HOST"
+   python3 "${ZCODE%/*}/kaola-acp.py" list --repo "$PROJECT" --include-dead
    ```
 
    Read existing Runner records/receipts too: if they uniquely name a live
    Host whose session is not `$HOST`, adopt that locator — never rename or
-   start a second Host; a missing `$HOST` proves nothing.
+   start a second Host; a missing `$HOST` proves nothing. Live Hosts =
+   `list` rows with `host_class` and `identity: verified`.
    Ambiguous location: report and do not start.
 2. **Live Host** (exact platform/repo/session still serves, and
    `holder_instance_id` plus `acp_session_id` match the receipts): do not
    `start`. Continue on that holder. If `status` shows a different
-   `holder_instance_id`, it is not H1 — do not `send`/`stop` as H1; re-verify.
+   `holder_instance_id`, it is not H1 — do not `send`/`stop` as H1; re-verify
+   to attach it or step 3, never a second `start`.
    Do not replay the first handoff. An outer-Agent change neither stops the
    Host nor re-asks authorization; apply only the user's latest change.
-3. **Confirmed stopped** and no other live orchestrator on this `$PROJECT`:
-   if existing receipts attest a native `sess_*`, try only:
+3. **Confirmed stopped** (`stopped` with `residual_pids: []`, or
+   `no-session`) and no verified Host row. A Host row failing identity is
+   first exact-stopped (`stop --force` with its record id) and proven gone
+   the same way. If receipts attest `sess_*`, try:
 
    ```bash
    "$ZCODE" start --repo "$PROJECT" --session "$HOST" --resume "$NATIVE_SESS"
    ```
 
-   Never use `--continue` to guess a same-directory worker. After exact
+   Never use `--continue`. After exact
    `stop`, try attested `--resume` of that `sess_*` first. Native resume
    is backend-dependent; `session/close` may not spend it.
    On proven failure (`Session not found` or no attested id) a **new**
    `$HOST` is allowed after step 4. That is a new ACP session and a new
    holder — say so. Rebuild the frontier from Git, Workflow claim / ledger,
-   Issues, and run receipts — never re-claim, re-dispatch, or redo. Do not
-   `start` until step 4 completes.
+   Issues, and run receipts — never re-claim, re-dispatch, or redo.
 4. A new Host (first start, or after failed `--resume`) needs current
    authorization **before** `start`: goal and remaining work; allowed worker
    platforms/members; counts and concurrency; the quota given, in its own
-   units; priority; delivery and stop boundary. Restore them from the latest
-   project facts. Missing, conflicting, or expired key
+   units; priority; delivery and stop boundary. Missing, conflicting, or expired key
    values: ask the user; do not `start`. A unit the user never gave is none
    of those: send it `unspecified`. Do not guess and do not reuse a stale
    quota. Do not open a blank Host. A live Host A→B attach is not a new
@@ -99,10 +97,8 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
 
 ## Handoff and updates
 
-Do not start another platform.
-
-Idle Host: `send` is enough — `--no-wait` is admitted, not delivered, not
-project complete; a first `end_turn` is only that beat.
+Idle Host: `send`; `--no-wait` is admitted, not delivered or complete; a
+first `end_turn` is only that beat.
 
 Busy Host (`prompt-in-progress` / turn active): never claim a `--no-wait`
 send consumed — `steer` injects the running turn verbatim (no new `Skill`
@@ -117,7 +113,8 @@ yourself to open a Host round.
 "$ZCODE" capture --repo "$PROJECT" --session "$HOST" --lines 200
 ```
 
-Every turn-opening Host prompt — handoff and later updates alike — opens
+Every turn-opening Host prompt — handoff and later updates alike, each with
+the `sweep=` line — opens
 with `/kaola-project-runner` as its own first line: the native Skill entry,
 idempotent across re-invocation and after compaction (non-ZCode: its
 `host_skill_entry`). Install the generated
@@ -141,6 +138,7 @@ quota_token=<as given>
 priority=<as given>
 delivery_stop_boundary=<as given>
 project_context=<canonical root and other given facts>
+sweep=every beat: list --repo, verify identity, stop orphans only, keep in-flight, report
 Finish planning, worker dispatch, heartbeat, acceptance, and Workflow
 close-out internally. Missing authorization stays missing:
 do not expand it.
@@ -174,4 +172,4 @@ start/`status` receipt — not inner workers or name-only:
 
 `$HOLDER` is `holder_instance_id` on that receipt. `holder-instance-mismatch`
 means this name now serves a different instance: do not stop it; re-read
-`status`.
+`status`. Prove it gone as in Recover step 3; a PID alone is never liveness.

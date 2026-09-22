@@ -43,7 +43,7 @@
 
 ## `kaola-acp-list/1`
 
-一个 JSON 对象。`rows` 只含活着的 `holder_pid`（死 holder 从 live list 省略；`status`/`observe` 仍可报 holder-lost）。
+一个 JSON 对象。`rows` 只含活着的 `holder_pid`（死 holder 从 live list 省略；`status`/`observe` 仍可报 holder-lost）。Issue #132：显式 `--include-dead` 才额外列出 holder PID 已亡的记录（`identity: dead`）；默认视图不变。
 
 ```json
 {
@@ -80,6 +80,10 @@
 | `pending_count` | int |
 | `socket_ok` | bool（短路径套接字文件存在且可连接） |
 | `transport` | 恒为 `"acp"` |
+| `identity` | Issue #132：`verified` \| `dead` \| `unreachable` \| `mismatch`；record 在、PID 活、套接字应答、`state` 回报的 `holder_instance_id` 与 record 相等才是 `verified`（对该套接字发一次只读 `state`，上限 5 s）；PID 活不等于活 |
+| `host_class` | bool；会话名是标准 Host 名 `<platform>-<CODE>-orchestrator-<purpose>` |
+| `dispatcher` | object \| null；该 holder 继承的派工 holder 身份（`holder_instance_id` `platform` `repo` `session`） |
+| `heartbeat_host` / `heartbeat_host_known` | 记录中的绑定事实（#70 三态） |
 
 扫描根：`${KAOLA_ACP_RECORD_ROOT:-XDG_RUNTIME_DIR|TMPDIR}/kaola-<uid>/<platform>/<session>/<sha16>/record.json`。`--platform` / `--repo` 只做过滤。
 
