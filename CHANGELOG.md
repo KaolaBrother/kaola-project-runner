@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **The Host reads the Workflow mission ledger instead of a Mission List (Issue #133).** Issue
+  progress now comes from `<canonical-root>/kaola-workflow/.ledger/issue-<N>.jsonl`: one JSON
+  line per mission with keys `n`, `name`, `details`, `status` (`todo | in-flight | done | failed |
+  blocked`). The run's Workflow Main Orchestrator is the only writer; the Host reads the
+  `{n,status}` projection read-only and reports `done` lines over total. An absent file is
+  `unknown`. The Markdown Mission List is retired on the Runner side with no fallback reader, and
+  every template, rendered Skill, and test fixture that kept one now names the ledger. This
+  repository ignores `kaola-workflow/.ledger/`. The contract matches Kaola-Workflow#1089, which
+  owns the writer side. New suite `test-issue-133-mission-ledger.py`.
+
 - **`validate.sh` now runs the model-policy and lifecycle contract suites (Issue #128).** Both
   suites were outside the gate and had gone red on main without anyone noticing. Every failure was
   a stale fixture; no product behavior changed. The lifecycle inventory now lists the

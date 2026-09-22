@@ -41,7 +41,7 @@ every layer. Each layer finishes its own job and does not repeat the next.
 
 | If you want | Use | What it does | What it does not do |
 |---|---|---|---|
-| Hands-off: delegate the whole project | **Kaola-Delegator** (`kaola-delegator`) | Extract goal, progress, authorized platforms/quota/priority, and stop boundary; start or resume **one** delegated Host that must load Project Runner | Dispatch workers, copy a Mission List, maintain the inner heartbeat, or bind per-worker variables |
+| Hands-off: delegate the whole project | **Kaola-Delegator** (`kaola-delegator`) | Extract goal, progress, authorized platforms/quota/priority, and stop boundary; start or resume **one** delegated Host that must load Project Runner | Dispatch workers, copy a mission ledger, maintain the inner heartbeat, or bind per-worker variables |
 | Control the orchestration | **Project Runner** (`kaola-project-runner`) | Recover authorization, plan, dispatch, heartbeat, accept before finalize, and own close-out | Run as a second orchestrator on the same project |
 | Coordinate one or a few issues yourself | **Platform Runner** (`<platform>-kaola-project-runner`) | Exact-session start, send, read, and stop | Task planning or completion judgment |
 | Do one issue in this Agent | **Workflow Next** | Claim or resume that issue and advance it | Finalize, archive, and sink — those are Workflow finalize |
@@ -260,7 +260,7 @@ and acceptance belong to the main orchestrator Skill when that Skill is in use.
 ## Collaborative delivery with Kaola Workflow
 
 [**Kaola Workflow**](https://github.com/KaolaBrother/Kaola-Workflow) provides the engineering
-workflow: issue claims, a recoverable Mission List, validation, finalization, and delivery records.
+workflow: issue claims, a recoverable mission ledger, validation, finalization, and delivery records.
 Runner provides the communication channel through which an agent asks another runtime to do that
 work. Both can be used independently.
 
@@ -269,7 +269,7 @@ Host Agent
   └─ Main Skill kaola-project-runner (optional control plane)
         └─ Worker Runner Skill → ACP or PTY → Target CLI
                                               └─ Kaola Workflow
-                                                  Issue → Claim → Mission List → Work & validation
+                                                  Issue → Claim → Mission ledger → Work & validation
                                                         → Finalize → Archive & sink
 ```
 
@@ -283,7 +283,7 @@ A typical collaboration works like this:
    worktree).
 3. Send the task and ask that CLI's main conversation to start or resume with `workflow-next`,
    following that runtime's installed Workflow instructions. The worker's Workflow then creates,
-   resumes, or recovers its own run, branch, Mission List, and child worktree. One run
+   resumes, or recovers its own run, branch, mission ledger, and child worktree. One run
    claims one real issue; a second issue means a second run, session, and name.
 4. The CLI performs the work and validates the result. The controlling agent reads replies and
    work evidence, then sends follow-up instructions as needed. Keep `kaola-workflow-finalize` in
@@ -299,8 +299,10 @@ recovery are Agent decisions, not transport gates; PTY and ACP have the same aut
 Every new issue-backed ACP dispatch picks its real open issue first and names the session
 `<platform>-<PROJECT>-i<ISSUE>-<unique-purpose>` (`droid-KT-i274-parser`), where `PROJECT` is
 the short code the consuming project's heartbeat declares beside its canonical repository
-identity. Several workers may share one issue's run and Mission List under distinct names and
-distinct native sessions. This is control-plane scheduling policy in the main Skill
+identity. Several workers may share one issue's run and mission ledger under distinct names and
+distinct native sessions. The ledger is `kaola-workflow/.ledger/issue-<N>.jsonl` in the canonical
+root, one `{n,name,details,status}` line per mission; Workflow is its only writer, the Host reads
+`done` lines over total read-only, and an absent file means `unknown`. This is control-plane scheduling policy in the main Skill
 (`references/issue-dispatch.md`), not a transport gate: the `--session` syntax is unchanged, a
 running session is never renamed or restarted to adopt it, and a name never overrides the
 repository identity and claimed `issue_number` it is checked against.
@@ -339,7 +341,7 @@ This combination gives you:
 
 - **Cross-runtime collaboration:** choose an appropriate CLI while keeping the task's engineering
   process consistent. Each CLI retains its own tools, model options, and native behavior.
-- **Recoverable work:** Workflow's claim, Mission List, and results let an agent reconcile progress
+- **Recoverable work:** Workflow's claim, mission ledger, and results let an agent reconcile progress
   after an interruption. Runner can reconnect to a supported native conversation or start another
   session that reads those records; recovery remains an agent decision.
 - **Verifiable handoffs:** replies show what the CLI says; repository changes, validation evidence,

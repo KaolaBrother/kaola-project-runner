@@ -253,7 +253,7 @@ legacy worktree-rooted session by its own `--repo` behave exactly as before. The
 against accidental dispatch drift; it is not protection against a hostile controlling host, and it
 adds no registry, lock, or daemon.
 
-Inspect `git worktree list`, Workflow `workflow-state.md` / `mission-list.md`, and existing exact
+Inspect `git worktree list`, Workflow `workflow-state.md` / `kaola-workflow/.ledger/issue-<N>.jsonl`, and existing exact
 sessions before choosing where to start. Then, for ordinary Workflow-backed work, start at the
 canonical project root and ask that runtime's main conversation to invoke `workflow-next` so its
 Workflow creates or recovers the child worktree. Several exact sessions may share one canonical

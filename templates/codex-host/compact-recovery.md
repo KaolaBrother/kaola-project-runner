@@ -15,12 +15,12 @@ project-level decision or dispatch:
 3. Recover the live scene from the project's own records, newest first: current
    authorization (allowed CLIs, counts, models), the effective-now heartbeat,
    and run records — Runner session records, plus Workflow `workflow-state.md`
-   and `mission-list.md` when present.
+   and `kaola-workflow/.ledger/issue-<N>.jsonl` when present.
 4. Continue the same frontier. Do not re-intake, re-claim, restart Hosts or
    workers, resend prompts, or re-dispatch work whose locator is already in
    flight. Reconcile in-flight locators before any new dispatch.
 
 Boundaries: this hook performs no dispatch, edits no project state, and keeps
-no second copy of the Skill, Mission List, or heartbeat. Missing or conflicting
+no second copy of the Skill, mission ledger, or heartbeat. Missing or conflicting
 authorization facts are asked, never invented.
 <!-- KPR-COMPACT-RECOVERY-END -->

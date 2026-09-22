@@ -143,6 +143,7 @@ python_suites_all=(
   "test-issue-118-seat-cap.py"
   "test-issue-119-host-entry.py"
   "test-issue-123-shared-refs.py"
+  "test-issue-133-mission-ledger.py"
   "test-lifecycle-contract.py"
   "test-model-policy.sh"
 )
@@ -202,6 +203,7 @@ python_suites_b=(
   "test-issue-111-model-tiers.py"
   "test-issue-119-host-entry.py"
   "test-issue-123-shared-refs.py"
+  "test-issue-133-mission-ledger.py"
 )
 # Issue #128: the tmux-driven model-policy suite takes ~300 s on its own, so it
 # runs as a third concurrent lane rather than lengthening either Python lane.

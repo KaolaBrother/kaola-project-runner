@@ -259,7 +259,7 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("kaola-project-runner" in skill, "inner Project Runner named")
     check("zcode-kaola-project-runner" in skill, "Host is started through the ZCode worker")
     check("KAOLA_ACP_HEARTBEAT_HOST" not in skill, "external Skill does not bind per-worker heartbeat")
-    check("copy a Mission List" in skill_one, "external Skill refuses copying a Mission List")
+    check("copy a mission ledger" in skill_one, "external Skill refuses copying a mission ledger")
     check("Do not dispatch workers" in skill_one, "external Skill refuses worker dispatch")
     check("not executable" in skill, "missing ZCode Runner is a hard stop")
     check("`sess_*`" in skill, "Skill names native sess_* resume")
@@ -711,12 +711,13 @@ def test_new_standard_host_after_confirmed_stop() -> None:
     """
     sandbox = Sandbox("newhost")
     try:
-        workflow = sandbox.repo / "kaola-workflow"
-        workflow.mkdir()
-        auth = sandbox.repo / "kaola-workflow" / "mission-list.md"
+        ledger = sandbox.repo / "kaola-workflow" / ".ledger"
+        ledger.mkdir(parents=True)
+        auth = ledger / "issue-74.jsonl"
         auth.write_text(
-            "# isolation remaining=handoff isolation\n"
-            f"{ORIGINAL_TASK}\n",
+            json.dumps({"n": 1, "name": "isolation remaining=handoff isolation",
+                        "details": ORIGINAL_TASK, "status": "in-flight"},
+                       ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
         check(auth.is_file() and ORIGINAL_TASK in auth.read_text(encoding="utf-8"),
