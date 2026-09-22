@@ -1,0 +1,294 @@
+设计2:单 Host per repo + Delegator 触达即健康清扫 ACP 会话(收紧现有 One Host/恢复/停止规则)
+## 背景(Yanlei owner ruling,2026-09-22)
+症状:孤儿 ACP holder/第二 Host 存活(PID1 孤儿、陈旧 socket)。本单=**设计单**(Fable 设计;实现后跟)。与 mission-ledger 设计、#130 PTY 退役设计相互独立。inbox:.kaola/delegator-inbox-one-host-health-fable.txt。
+
+## A) 单 Host per consumer repo(--repo/canonical Git root)
+1. 每 canonical root 至多**一个**活 Host(orchestrator)。
+2. 新 Host start 前:用**现有** Runner status/回执/holder 记录查该 repo 是否已有 Host(不发明新注册表)。
+3. 已有且可续/可附:attach,**绝不另起第二个**。
+4. 已有但不可续(dead holder/unattachable/holder_instance_id 不匹配等):**先 exact-stop 该 Host、验证已亡,再启新**;绝不并叠。
+5. Delegator Skill 与 Host/Project Runner 双路径执行;将造出第二 Host 时 **fail-closed**。
+6. 最简:收紧现有 One Host/recover/stop 文本(核对 Delegator handoff.md「One Host」段,使 kill-before-restart 显式);不发明队列/账本/新子系统。
+
+## B) Delegator 每次触达 Host(status/start/send/steer/stop 交接路径)即令 Host 健康清扫
+- Delegator **每次**触达都要求 Host 检查该 repo **全部会话**(尤其 ACP)健康并清除孤儿(dead holders、已非活 Host/已受理 worker 的 PID1 孤儿、无主陈旧 ACP holder);**不得跳过**。Host 拥有 sweep+cleanup,Delegator 仅触发。
+- 保留仍有效的在飞 worker(已受理 live issue 席位);**只清孤儿,不猜杀活工作**。
+- 陈旧 socket 文件批量清理可记为关联 ops 但属次要;设计最简安全的 Host 侧孤儿移除。
+
+## 验收(设计层)
+- 设计写入本单(正文/评论),覆盖 A1-A6+B 全部口径;与现有 Skill/handoff 文本的具体落点逐条标注;可测验收条目;范围外项(socket 批量清理、非 Host worker 生命周期)显式标注。
+- **验收接受前零代码**。
+
+## 时序
+- 下一刀;不阻当前 Release(gate=#126 豁免+#128 关)。
+
+=====COMMENT 0 KaolaBrother 2026-09-22T03:43:19Z 
+ # 设计 #132(1/3):总纲 + A) 单 Host per consumer repo
+
+席位 `claude-code-KPR-i132-fable-design`(Fable High,宿主 `zcode-KPR-orchestrator-dsh-acp`)。**仅设计,零代码**;仓库只读;本设计以评论追加,不改写正文 owner 裁定原文。分三条评论:1/3 总纲+A;2/3 B+PID 复用教训+2026-09-22 案例;3/3 落点逐条标注+可测验收+范围外+最小代码差量清单。
+
+## 0. 读数基线(2026-09-22,main `16b42b2`,均为读取事实)
+
+| 事实 | 出处 |
+|---|---|
+| 活性判定 `pid_alive()` = `os.kill(pid, 0)`,纯 PID | `scripts/kaola-acp.py:862`;同样逻辑 `scripts/kaola-locate.py:249`(#102 `session.acp_holder_alive`) |
+| `list` 命令(`kaola-acp-list/1`,`--platform/--repo/--record-root`)按 record root 全量枚举,**只按 `pid_alive` 过滤**,另带独立 `socket_ok` 探针 | `kaola-acp.py:497-556`;`kaola-tmux.sh` 不分发 `list`(`docs/acp-watch/list-view.md`),但 `install-local.sh` 已装 `~/.local/bin/kaola-acp` 链接(本机已存在) |
+| 身份锚已存在:holder 每次启动生成 `holder_instance_id = secrets.token_hex(16)`,写入 `record.json` 并由 admin socket `state` op 回报 | `kaola-acp-holder.py:1312, 1428-1429, 1857-1873` |
+| 已有"身份四检"(record 存在 → `holder_pid` 活 → `holder_instance_id` 相等 → socket 存在),但只用于 worker `start` 校验派工 Host | `kaola-acp.py:1562-1580 verify_dispatcher_host_live` |
+| `start` 对已有 record 的判定:`holder_pid` 活 → `session-exists`;否则 `mkdir(exist_ok)` 直接覆盖启动 | `kaola-acp.py:2229-2244` |
+| 精确停:`stop --expected-holder-instance-id` 不匹配 → `holder-instance-mismatch`,零写入;holder 已亡时走 `force_kill_from_record`,只杀 `recorded_groups` 中**身份核对过**(pgid+记录的 lstart/spawn 时间)的进程组,并 unlink socket | `kaola-acp.py:987-990, 1076-1135, 1147-1180`;holder `2788-2800` |
+| Host 名识别已存在:`zcode-<CODE>-orchestrator-<purpose>` / `<platform>-<CODE>-orchestrator-<purpose>` | `kaola-acp.py:1712-1730 zcode_host_session / host_session`(#108/#119/#121 复用) |
+| 每个 holder 均 `start_new_session=True` 启动,因此 **PPID=1 是设计常态**(本机 7 个活 holder 全部 PPID=1) | `kaola-acp.py:2269-2272`;`ps` 实测 |
+| 既有 sweep 脚本只按"validate 自有临时根"匹配 holder argv 的 `--record-dir/--socket`,与 repo 无关 | `scripts/kaola-acp-sweep.py`(#63) |
+| 文本预算:`handoff.md` 8188/8192 B(余 4 B);主 Skill 17393/17408 B(余 15 B);`heartbeat-skeleton.md` 8191/8192 B(余 1 B);Delegator `SKILL.md` 3954/4096 B;`host-startup.md` 6675/8192;`zcode-host-dispatch.md` 7317/8192 | `templates/budgets.json` + `wc -c skills/...` |
+
+结论先行:**A 的机制全部可由既有原语组合而成**(`status`/`list`/`start` 的 `session-exists` 判定/`stop --expected-holder-instance-id`/`host_session()`),不需要注册表、锁、队列或账本;需要的是(a)把活性判定从"PID 存活"收紧为"身份锚核对",(b)把"kill-before-restart"和"第二 Host fail-closed"从散落的文本变成一条显式规则加一个类型化拒绝。
+
+## A1. 每 canonical root 至多一个活 Host
+
+**定义(设计口径,后续文本与测试统一引用):**
+
+- *repo*:`--repo` 经 `resolve_repo` 得到的 canonical Git root(与 #73 `KAOLA_PROJECT_RUNNER_CANONICAL_REPO` 同一口径);record 目录第三段即 `sha256(repo)[:16]`,所以"同 repo"在记录层是可机械判定的。
+- *Host 类会话*:`host_session(platform, session)` 为真的会话名(`kaola-acp.py:1723`)。不新增分类器。
+- *活 Host*:满足**身份核对**的 Host 类 holder——record 存在、`holder_pid` 活、admin socket 可达且 `state` op 回报的 `holder_instance_id` 与 record 相等。三者缺一即不是活 Host(见 2/3 §PID 复用)。
+- **不变量 A1**:对任一 repo,身份核对通过的 Host 类 holder 数 ≤ 1。跨平台一并计入(#119 非 ZCode Host 也是 Host 类)。
+
+A1 不由"名字唯一"保证(标准名可被旧名、`-main`/`-dsh-acp` 等 purpose 变体绕过),而由 A2 的**按 repo 查重**+A5 的 **start 时拒绝**保证。
+
+## A2. 新 Host start 前用现有记录查重(不发明注册表)
+
+查重数据源只有三个,全是既有物:
+
+1. **Runner `status`**(`"$ZCODE" status --repo "$PROJECT" --session "$HOST"`)——精确名的一手事实(`holder_instance_id`、`acp_session_id`、`state`、`heartbeat_host`)。
+2. **既有回执**(start/status 回执、`.kaola/heartbeat-prompt.json` 里的 Host 定位、Workflow/Issue 记录)——可能唯一指出一个**非标准名**的活 Host(handoff.md Recover 步 1 已写)。
+3. **holder 记录全量枚举**:`kaola-acp list --repo "$PROJECT"`——覆盖前两者漏掉的"名字不在任何回执里"的 Host 类 holder(重启前残留、改名前旧 Host、另一 Delegator 误起的第二 Host)。这是 A1 能闭合的关键:前两者只能证明"某个名字有/无",`list --repo` 才能证明"这个 repo 有几个 Host 类 holder"。
+
+**查重顺序**:`status $HOST` → 回执定位 → `list --repo` 过滤 `host_session()` 为真的行 → 对每一行做身份核对(设计要求 `list` 行自带核对结果,见 3/3 代码差量 D2;在其落地前,Agent 对每行再跑一次 `status`)。结果只有四种:
+
+| `list --repo` 的 Host 类行 | 结论 | 去向 |
+|---|---|---|
+| 0 行 | 无 Host | A4 之后 → 新启(仍先过 handoff 步 4 授权) |
+| 1 行,身份核对通过 | 活 Host | A3 attach(无论名字是否等于 `$HOST`) |
+| ≥1 行,全部核对失败 | 死/不可续 | A4 逐个 exact-stop、验亡,再新启 |
+| ≥2 行核对通过 | A1 已被破坏(仅可能是 #132 落地前的遗留) | 不 start;按 2/3 §B4 处理或 `HUMAN_DECISION_REQUIRED` |
+
+`list` 不带 `--platform` 时跨平台枚举,正合 A1 的跨平台口径。`acp_holder_alive`(locator)仍是 PID 事实,**不作为**查重依据(#49 测试禁止 locator 探 socket/glob,保持不动)。
+
+## A3. 已有且可续/可附:attach,绝不另起第二个
+
+- 可附的唯一定义 = 上表"身份核对通过"。`state` 为 `ready`,或正在 `prompt-in-progress`,都算可附(忙时走 `steer`/等 idle,handoff.md「Handoff and updates」已写)。
+- attach 不改名、不 `start`、不 `--resume`、不重发首次 handoff(handoff.md Recover 步 2 已写,保留)。
+- 名字不等于 `$HOST` 但唯一 → 采纳该定位(已写);**新增口径**:唯一性由 `list --repo` 的 Host 类行数 = 1 判定,而不再由"回执里只提到一个名字"判定。
+- `holder_instance_id` 与回执不一致但身份核对通过(即 holder 是活的、只是不是回执里的 H1)→ 它仍是本 repo 唯一活 Host:**attach 它并以 `status` 现值更新回执**,不因回执陈旧而另起第二个。handoff.md 步 2 现文"it is not H1 — do not send/stop as H1; re-verify" 保留,补一句"re-verify 的结论只能是 attach 现值或 A4,不能是 start"。
+
+## A4. 已有但不可续:先 exact-stop、验亡,再启新(kill-before-restart 显式化)
+
+"不可续"= 身份核对任一环失败:record 在而 `holder_pid` 亡;`holder_pid` 活但 socket 缺失/不可达(`holder-socket-missing`/`holder-unreachable`);socket 可达但 `state.holder_instance_id ≠ record.holder_instance_id`;或 `state ∈ {agent_exited, error, stopping, stopped}` 且 `--resume` 不适用。
+
+**kill-before-restart 三步,顺序不可换,缺一不得 `start`:**
+
+1. **exact-stop**:`"$ZCODE" stop --repo "$PROJECT" --session "<那一行的 session>" --expected-holder-instance-id "<那一行 record 的 holder_instance_id>" [--force]`。
+   - holder 已亡:Runner 走 `force_kill_from_record`,只杀身份核对过的记录组,unlink socket(既有)。
+   - holder 活但身份不符:`holder-instance-mismatch` → **不得升级为裸 kill**;这意味着 record 已被别的 holder 实例接管,回到 A2 重新枚举(它就是那唯一活 Host,或另一个待处理行)。
+   - holder 活、socket 不可达、`state` 无法读:用 record 的 `holder_instance_id` 发 stop,仍不匹配则以 holder argv 的 `--record-dir`(= 该 record 目录)作第二锚(`kaola-acp-sweep.matched_holders` 已用此锚)确认后 `--force`;argv 也对不上 → 视为 PID 复用,**不发信号**,只清理 record(见 2/3)。
+2. **验亡**:再跑 `status`,接受的终态只有 `outcome: stopped/holder_lost` 且 `residual_pids: []`(`kaola-acp.py:955-966` 已有此终态),或 `no-session`。`residual_pids` 非空 → 不得启新,报告并停在此。
+3. **再启新**:仍需 handoff.md 步 4 的授权前置;`--resume <sess_*>` 仅在回执 attest 的 native id 存在时先试(既有),失败才是全新 ACP 会话。
+
+"绝不并叠"的机械保证在 A5:即使 Agent 跳过 1-2 步直接 `start`,Runner 也会拒绝。
+
+## A5. Delegator 与 Host/Project Runner 双路径执行;造出第二 Host 即 fail-closed
+
+两条路径都最终经过同一处:`kaola-tmux.sh` → `kaola-acp.py start`。所以 fail-closed 只需**一个**类型化拒绝,落在 `command_start` 里、现有 `session-exists` 判定之前,与 #73/#104/#105/#108 拒绝同形(`result: refused`,`mutation_performed: false`,exit 1,未创建任何目录/进程):
+
+```json
+{"result":"refused","reason":"host-exists","action":"start",
+ "platform":"zcode","session":"zcode-KPR-orchestrator-main","repo":"/abs/root",
+ "existing_host":{"platform":"zcode","session":"zcode-KPR-orchestrator-dsh-acp",
+   "holder_pid":9428,"holder_instance_id":"9d31…","acp_session_id":"zcode-1","state":"ready"},
+ "mutation_performed":false}
+```
+
+触发条件:`host_session(platform, args.session)` 为真,且 `list --repo <同一 canonical root>` 中存在**另一个** session 名的 Host 类行通过身份核对。同名情况保持既有 `session-exists`(那是 attach 场景,不是第二 Host)。身份核对失败的行**不触发**拒绝(那是 A4 的领域;`start` 不替 Agent 做 kill)。
+
+路径覆盖:
+- **Delegator 路径**:handoff.md 步 5 的 `start` / 步 3 的 `--resume` 都命中该拒绝;Skill 文本要求 Delegator 收到 `host-exists` 时**回到 A2 attach `existing_host`**,不得改名重试、不得对 `existing_host` 做 stop(它是身份核对通过的活 Host)。
+- **Host/Project Runner 路径**:Host 自己派工时 `KAOLA_ACP_DISPATCHER` 已设;若派出的 worker 名是 Host 类名(误派"第二编排者"),同一拒绝命中。此外 #104 派工链已拒绝 PTY,#105/#121 拒绝构建偏斜,本拒绝与它们并列于"spawn 前"。
+- **Grok Bot 桥路径**:bridge 只 attest 后加载 Delegator Skill,不另有 start 通道,故无需单独落点。
+
+## A6. 最简:收紧既有 One Host/recover/stop 文本
+
+原则:**只改措辞和顺序,不加节、不加工具、不加文件**。需要改的既有段落(逐条落点见 3/3 §C):
+
+- `templates/kaola-delegator/SKILL.md.tmpl`「## One Host」:把"stopped Host may --resume … a new standard-named Host is a new ACP session"改写为显式三步(exact-stop → 验亡 → start),并加"`host-exists` 拒绝 = attach 其 `existing_host`"。
+- `templates/kaola-delegator/references/handoff.md.tmpl`「## Recover」步 2/3 与「## Afterward」:步 3 现文"Confirmed stopped and no other live orchestrator on this $PROJECT" 的"confirmed"和"no other"目前无操作定义 → 分别绑定到 A4 步 2 的终态和 A2 的 `list --repo` 计数;「Afterward」的 stop 段补"验亡终态"一句。
+- `templates/orchestrator/references/host-startup.md.tmpl`「## C」拒绝段:与 `worker-skill-build-skew`/`main-skill-build-skew` 并列加 `host-exists` 一句。
+- `templates/orchestrator/references/zcode-host-dispatch.md.tmpl`「Count before every start」:计数来源改为"身份核对通过的行",不是"PID 活的行"。
+
+不做的事(与 owner A6 一致):不加 Delegator 指针文件、不加锁文件、不加 Host 注册表、不加第二调度器、不加"Host 心跳保活";`list --repo` 是 #26 已有命令,不算新子系统。
+
+(→ 2/3:B 触达即清扫、PID 复用教训、2026-09-22 案例)
+
+
+=====COMMENT 1 KaolaBrother 2026-09-22T03:43:21Z 
+ # 设计 #132(2/3):B) 触达即健康清扫 + PID 复用教训 + 2026-09-22 案例
+
+## B0. 职责边界(owner 裁定原样落实)
+
+- **Delegator 只触发**:每次触达 Host 的交接路径——`status`、`start`(含 `--resume`)、`send`、`steer`(含 `--steer-mode interrupt`)、`stop`——Delegator 都必须让 Host 执行一次本 repo 的健康清扫。触发方式是**已有载体**,不新增命令:每个 turn-opening 提示词(首次 handoff、后续 update、resume/attach update)本就以 `/kaola-project-runner` 开头(handoff.md「Handoff and updates」),清扫要求作为该提示词的固定一行进入 Host;忙时 `steer` 注入的正文同样带这一行。
+- **Host 拥有 sweep + cleanup**:枚举、身份核对、分类、exact-stop、报告全在 Host 内完成,用既有 Runner 原语;Delegator 不 `list`、不 `stop` 内层会话(Delegator Skill「After the handoff」已禁止操作 inner sessions,保持)。
+- **不得跳过**:Delegator 侧"不得省略这一行";Host 侧"该拍先清扫再做别的"(与主 Skill 执行循环第 1 步"Recover and observe"同拍,不是新拍)。Delegator 的 `status`/`stop` 不开新 turn,无法携带提示词——此时清扫由**下一次**开 turn 的触达补上,且 Delegator 在 `stop` 前必须先做一次 `send`/`steer` 触达(handoff.md「Afterward」已要求 stop 前确认无在飞 worker,顺序天然满足)。
+- **只清孤儿,不猜杀活工作**:分类表 B2 是唯一杀/留依据;凡落在"报告不杀"列的,Host 只报告并在授权内决定,不自动 stop。
+
+## B1. Host 清扫程序(每次被触达的那一拍,第一步)
+
+```bash
+kaola-acp list --repo "$PROJECT"            # 跨平台枚举本 repo 全部 ACP holder 记录(#26 既有)
+# 对每一行:身份核对(record 存在 → holder_pid 活 → socket 可达 → state.holder_instance_id == record.holder_instance_id)
+# 落地前用 "$W" status --repo "$PROJECT" --session <row.session> 逐行核对;落地后 list 行自带 identity 字段(3/3 D2)
+```
+
+Host 记住自己的三元组(`platform/session/repo`,首拍提示词已给)与自己的 `holder_instance_id`(`KAOLA_ACP_DISPATCHER` 里就有,`kaola-acp.py:1533-1545`),据此把每一行归入 B2。PTY/tmux 会话不在本设计范围(#130 退役 PTY;当前 Host 派工已 ACP-only,#104)。
+
+## B2. 分类与动作(孤儿定义)
+
+| # | 行的事实(全部来自 `list`/`status`/record) | 类别 | 动作 |
+|---|---|---|---|
+| 1 | session == 自己且 `holder_instance_id` == 自己 | 本 Host | 保留 |
+| 2 | Host 类名(`host_session()`),身份核对通过,不是自己 | 第二活 Host(A1 违例) | **B4** |
+| 3 | Host 类名,身份核对失败(holder 亡 / socket 不可达 / id 不符) | 死 Host 残留 | exact-stop(A4 步 1 同法)→ 验亡 → 报告 |
+| 4 | worker 名,身份核对通过,record `heartbeat_host` 绑定到**自己**(`heartbeat_host.session` == 自己且 `dispatcher.holder_instance_id` == 自己) | 本 Host 在飞席位 | 保留(受理/验收由主循环决定,不属清扫) |
+| 5 | worker 名,身份核对通过,绑定到**另一个 Host 实例**(同名不同 `holder_instance_id`,即重启前的旧 Host;或另一名字的已亡 Host) | 前任 Host 的在飞席位 | **报告不杀**;若其名 `<platform>-<CODE>-i<ISSUE>-*` 对应本 Host 记录中仍开放的 claim,Host 可在授权内**收养**(继续用其 Skill `observe`/`send`);否则等主循环判定后 exact-stop |
+| 6 | worker 名,身份核对通过,`heartbeat_host` 为 `null`/`heartbeat_host_known:false`(无绑定:#70 之前的 holder、standalone Platform Runner 会话、他人手工会话) | 无主活会话 | **报告不杀**(owner:不猜杀活工作);Host 只在它是本 repo 已受理 claim 的席位时收养,否则留给人 |
+| 7 | worker 名,`holder_pid` 亡,record 在(agent 组可能仍活) | 死 holder | `stop --force --expected-holder-instance-id <record id>` → `force_kill_from_record` 清身份核对过的组 → unlink socket → 验亡 |
+| 8 | `holder_pid` 活,但 socket 缺失/不可达,`state` 读不到 | 僵 holder | 先 `stop --expected-holder-instance-id <record id>`;仍不可达则以 argv `--record-dir` 锚确认后 `--force`;argv 不匹配 → **B3 PID 复用**,不发信号 |
+| 9 | socket 可达但 `state.holder_instance_id ≠ record.holder_instance_id` | 记录被另一实例接管/记录陈旧 | 以 `state` 的现值为准重读一次 `status`;仍不一致 → 报告,不杀(两者中至少一个是活的真实 holder) |
+| 10 | `state ∈ {agent_exited, error}` 且身份核对通过 | 空壳 holder(agent 已退) | 若是本 Host 席位(#4)且非待验收:exact-stop;否则同 #5/#6 报告 |
+
+"PID1 孤儿"的口径:PPID=1 **不是**判据(所有 holder 都 PPID=1,`start_new_session`)。owner 所指的 PID1 孤儿在本表中即 #3、#5、#7、#8——判据是**所有权断裂**(绑定的 Host 实例不再存在)或**身份核对失败**,不是父进程。
+
+每拍清扫产出一段固定格式报告进入 Host 回复与 `.kaola/heartbeat-prompt.json` 的 `body`(不新建文件):`swept: stopped=[session:holder_instance_id…] kept=[…] adopt_candidates=[…] unowned=[…] residual_pids=[]`。`residual_pids` 非空是本拍的显式异常,不得静默。
+
+## B3. PID 复用教训(false positive),身份锚规则
+
+**事实**:`pid_alive()` 只做 `os.kill(pid, 0)`。PID 复用**不需要重启**:holder 崩溃或被 `kill -9` 后 `record.json` 原样残留,其 `holder_pid` 在长运行期被内核回收给任意新进程,`pid_alive` 便回答"活"。跨重启残留取决于 record root 位置:本机默认根 `$TMPDIR/kaola-501` 实测在 10:59 重启后被系统清空、11:19:27 才由新 Host 重建(所以 09-22 这次没有踩到),但 macOS 对 `/var/folders/.../T` 的清理不是契约,`KAOLA_ACP_RECORD_ROOT` 也可指向持久目录(validate 就用自有根),重启后 PID 从低位重新分配(本机 Host 9428、worker 64717/86124)使复用概率更高。后果分三种:
+
+- `list`/`status` 把死会话列为活 → 计数虚高,占用席位上限(`live N / authorized M` 失真);
+- `start` 因 `session-exists` 拒绝一个其实空着的名字 → Agent 被迫改名 → **第二 Host** 由此诞生(这正是 A1 被破坏的一条真实路径);
+- `stop --force` 若不做身份核对,可能向复用者发 SIGKILL。今天 `recorded_groups` 已用 pgid + `lstart`/spawn 时间做核对(`kaola-acp.py:1076-1135`),但 **holder 本身** 的存活判定没有等价核对。
+
+**规则(设计层强制,3/3 D1/D2 落地):**
+
+1. "活"= 身份核对通过,定义唯一:record 存在 ∧ `holder_pid` 活 ∧ socket 可达 ∧ `state.holder_instance_id == record.holder_instance_id`。PID 存活只是必要条件。
+2. 对任何 record,发信号(SIGTERM/SIGKILL)前必须有**至少一个身份锚**匹配:admin socket 回报的 `holder_instance_id`,或进程 argv 中的 `--record-dir`/`--socket` 指向该 record(`kaola-acp-sweep.matched_holders` 的既有锚)。都不匹配 → 只删/标记 record,**不发信号**。
+3. `session-exists` 只在身份核对通过时成立;PID 活但核对失败 → 视作无 holder,允许 `start`(在完成 A4 清理 record 之后,由 Runner 在同一 `start` 内先 unlink 旧 socket、再覆盖 record;不向那个 PID 发任何信号)。
+4. 回执里出现的 `holder_pid` 永远与 `holder_instance_id` 成对出现;Skill 文本禁止以 PID 单独作为"活"的证据(已在 handoff/zcode-host-dispatch 的"三身份"口径上加一句)。
+5. 可选的第四锚(不在本设计要求内,记为后续可做):record 增写 holder 的 `lstart`,与 `ps -o lstart` 比对;本设计不依赖它,因为 socket 与 argv 两锚已足够且零 schema 变化。
+
+## B4. 两个身份核对通过的 Host 并存(A1 违例)时
+
+这只可能出现在 #132 落地前的遗留状态,或 A5 拒绝被绕过(直接 `kaola-acp.py` 启动)。设计口径(依 owner 2026-09-22 `delegator-inbox-remove-stale-host.txt`:"Keep ONLY the single live Host for this exact session (the one serving this turn)"):
+
+- 正在被 Delegator 触达、执行清扫的那个 Host 保留;另一个 Host 类活 holder 由本 Host `stop --expected-holder-instance-id <其 id>` 精确停,验亡,报告;
+- 它名下绑定的 worker 立刻变成 B2 #5(前任 Host 的在飞席位)——同一拍第二遍分类后按 #5 处理(收养或报告),**不连带杀**;
+- 若两个 Host 都在处理 prompt(都 `prompt-in-progress`),不自动停,`HUMAN_DECISION_REQUIRED`(哪一个是 owner 认可的 Host 属价值选择)。
+
+## B5. 陈旧 socket 文件(关联 ops,次要)
+
+`$TMPDIR/kaola-<uid>-acp/<24hex>.sock` 路径由 record 目录哈希确定(`sock_path_for_directory`),holder 启动时 `unlink` 后重 `bind`(`kaola-acp-holder.py:3818-3819`),`force_kill_from_record` 也会 unlink——因此陈旧 `.sock` 不会阻塞同名重启,只占 inode。批量清理明确列为**范围外**(3/3 §E),仅记:安全做法是只删"无任何 record 目录哈希指向 + `connect` 失败"的文件,且永远不作为活性判据。
+
+## B6. 亲历案例(2026-09-22 CST,本仓;可作设计用例)
+
+- 10:59:30 Mac 重启(`kern.boottime`);前 Host `zcode-KPR-orchestrator-dsh-acp` 及全部 worker(含前一个 #132 设计席 `claude-code-KPR-fable-onehost`、旧 i130 席)随之死亡。
+- 11:19–11:22 新 Host 启动(本机 ps:`zcode-KPR-orchestrator-dsh-acp` holder PID 9428,`lstart 11:22:14`,PPID 1)。恢复路径按 `.kaola/delegator-inbox-crash-resume.txt`:`status` → 确认无活记录/无 tmux server → 全新启动(新 ACP 会话 `zcode-1`,新 `holder_instance_id 9d31…`),再从 Issue/Workflow 记录重建前沿;随后 owner 追加"REMOVE STALE HOSTS … keep ONLY the single live Host … verify gone"(`delegator-inbox-remove-stale-host.txt`)与"Orphan-sweep this repo on this reach-out"(`delegator-inbox-132-fable-now.txt`)。
+- 记录根 `$TMPDIR/kaola-501` 的 birth 时间 11:19:27 晚于 boot 10:59:30:这次重启系统清掉了旧 record,因此当时 `status` 报"无记录"是真无记录,不是 PID 复用误判;B3 的规则针对的是 record 残留的情形(未重启的 holder 崩溃、持久 record root)。
+- 本设计把这次手工恢复固化为:A2 的 `list --repo` 查重(当时靠 Host 自述"无记录",无机械枚举)、A4 的验亡终态(当时靠"无 tmux server"旁证)、B1 的每拍清扫(当时是 owner 逐次口头要求)、B3 的身份锚(当时若旧 record 残留而 PID 被复用,`status` 会误报活)。
+- 读数时(11:34)本 repo 记录:1 个 Host(#1)、2 个绑定到本 Host 的 claude-code 席位(#4);另有 4 条属于其他 repo(vrpcadcore、KW)的记录——`list --repo` 过滤后天然不在清扫范围,印证"不碰其他 repo"由 `--repo` 参数保证而非靠 Agent 自律。另观察到 2 个瞬时 holder 进程(PID 18018/18726,`lstart 11:34`)在两次 `ps` 之间消失,应为 i130 席位跑测试产生的 validate 自有根 holder,由 #63 sweep 自清——说明"进程存在"与"本 repo 会话"是两回事,清扫必须以 record 为单位而非以 `ps` 为单位。
+
+(→ 3/3:落点逐条标注、可测验收、范围外、最小代码差量)
+
+
+=====COMMENT 2 KaolaBrother 2026-09-22T03:43:24Z 
+ # 设计 #132(3/3):落点逐条标注 + 可测验收 + 范围外 + 最小代码差量
+
+## C. 文本落点(文件 + 段落级;均为 templates 源,`skills/`、`hosts/` 为生成物不手改)
+
+预算前提:三个面几乎满额(handoff.md 余 4 B、主 Skill 余 15 B、heartbeat-skeleton 余 1 B),**每处新增必须以等量删改换取**;下表给出建议删改来源。#133 的 PR #134 与本单同改主 Skill/skeleton(Mission List 措辞退役),实施前需先以合并后的字节数模拟。
+
+| # | 落点(模板 → 生成物:行) | 现文要点 | 改法(A/B 条目) | 字节来源 |
+|---|---|---|---|---|
+| C1 | `templates/kaola-delegator/SKILL.md.tmpl`「## One Host」→ `skills/kaola-delegator/SKILL.md:31-55` | "A stopped Host may --resume … a new standard-named Host is a new ACP session … Do not rename, restart, or cancel an in-flight Host." | 改为:"Before any Host `start`: enumerate this repo's Host-class holders (`list --repo`), attach the one that verifies (A2/A3); one that fails identity is exact-stopped with its `holder_instance_id` and proven gone (`stopped`/`holder_lost`, `residual_pids: []`) **before** `start` (A4); a `host-exists` refusal means attach its `existing_host`, never rename and retry (A5). Every reach-out prompt carries the sweep line (B0)." | 余 142 B;删"There is no Delegator continuation file"(与"pointer file is absent"重复)与"even if its recorded name is not the new form"的从句 |
+| C2 | `templates/kaola-delegator/references/handoff.md.tmpl`「## Recover」步 1 → `handoff.md:53-63` | "Read existing Runner records/receipts too: if they uniquely name a live Host…" | 加 `kaola-acp list --repo "$PROJECT"` 为第三数据源,"unique"改由 Host 类行数 = 1 定义(A2) | 余 4 B;删步 3 末"Do not `start` until step 4 completes."(步 5 首句已含)与 `session_meta` 段第二句 |
+| C3 | 同文件「## Recover」步 2 → `handoff.md:64-69` | "If `status` shows a different `holder_instance_id`, it is not H1 … re-verify." | 补:"re-verify ends in attach of the current holder or step 3, never in a second `start`"(A3) | 同上 |
+| C4 | 同文件「## Recover」步 3 → `handoff.md:70-84` | "**Confirmed stopped** and no other live orchestrator on this `$PROJECT`" | "Confirmed stopped" 绑定 A4 步 2 终态;"no other live orchestrator" 绑定 `list --repo` 零个身份核对通过的 Host 类行;不可续者先 exact-stop、验亡(A4 三步显式化,kill-before-restart) | 同上 |
+| C5 | 同文件「## Handoff and updates」handoff 文本块 → `handoff.md:130-147` | `project_context=…` 后一句 "Finish planning…" | 固定一行 `sweep=this repo, every beat: list --repo, verify identity, stop orphans only, keep in-flight, report`(B0 触发载体);"later updates alike" 段说明每次 update/steer 正文同样带此行 | 同上;必要时把 `quota_*` 三行说明并入一句 |
+| C6 | 同文件「## Afterward」→ `handoff.md:163-177` | "`holder-instance-mismatch` means this name now serves a different instance: do not stop it; re-read `status`." | 补验亡终态一句(A4 步 2);补"a PID alone is never liveness"(B3.4) | 同上 |
+| C7 | `templates/orchestrator/SKILL.md.tmpl`「### Hosts」→ `skills/kaola-project-runner/SKILL.md:84-108` | "A ZCode Host session is one named Runner session like any other…" | 一句:"One Host per canonical root: a Host-class `start` refuses `host-exists`; each reach-out beat starts with the repo sweep in [host-startup.md](…)."(A1/A5/B0) | 余 15 B;删"Do not create a Grok Bot Routine to run this Skill."(已由"Grok Bot is not an entry"覆盖)或压缩 `--platform grok-bot` 句 |
+| C8 | `templates/orchestrator/references/host-startup.md.tmpl`「## C」拒绝段 → `host-startup.md:84-97` | `worker-skill-build-skew` / `main-skill-build-skew` 两拒绝 | 并列加 `host-exists`(含 `existing_host` 字段含义、"attach, never rename");**新增一小段「Repo sweep, first step of every reach-out beat」**承载 B1/B2 表的精简版(10 类归 4 组:keep / exact-stop / report-adopt / report-unowned)与 B3 五条规则(A4/B 全部) | 余 1517 B,本设计主要正文放这里 |
+| C9 | `templates/orchestrator/references/zcode-host-dispatch.md.tmpl`「Count before every `start`」→ `zcode-host-dispatch.md:32-35` | "Count … live owned sessions from `status`/`observe` receipts, ACP holders included." | "live" 改为"identity-verified (`list --repo` rows whose holder answers with its recorded `holder_instance_id`); a PID alone is not a seat"(B3.1/B3.4) | 余 875 B |
+| C10 | 同文件「## Three identities, never interchangeable」→ `zcode-host-dispatch.md:6-11` | 三身份 | 加半句:"`holder_pid` is a fourth fact that proves nothing without `holder_instance_id`" | 同上 |
+| C11 | `templates/orchestrator/references/heartbeat-skeleton.txt` 每拍第 1 条 → `heartbeat-skeleton.md:25` | "恢复授权和现场,核对已派动作…" | 可选:加"先做本 repo 清扫(见主 Skill host-startup)"八字;余 1 B → 只有在 #133 合并后有余量时才做,否则**不改**(B 义务已由 C7/C8 承担) | 余 1 B |
+| C12 | `README.md` "One project, one Project Runner Agent" 段(55-72)与 `docs/api.md` 拒绝码表、`docs/zcode-host.md`「Two startup flows (Issue #66)」段 | 无 kill-before-restart、无 host-exists | 文档对接(不受字节预算):同步 A4 三步、`host-exists`、清扫职责;#74 测试逐句 pin README,改动需同步测试 | 无预算 |
+
+## D. 最小代码差量(实现阶段;本单零代码,仅列清单供验收范围核对)
+
+| # | 位置 | 差量 | 服务条目 |
+|---|---|---|---|
+| D1 | `scripts/kaola-acp.py command_start`(2229-2244 之前) | `host_session()` 为真时,枚举同 repo 的 Host 类 record,对每行做身份核对;有另一名字通过 → `host-exists` 类型化拒绝(形同 `heartbeat_host_refusal`,exit 1,零创建)。同名行保持 `session-exists`,但 `session-exists` 改为身份核对通过才成立;PID 活而核对失败 → unlink 旧 socket、覆盖 record、正常启动,不发信号 | A1/A5/B3.3 |
+| D2 | `scripts/kaola-acp.py command_list`(505-556) | 行内新增 `identity: verified\|dead\|unreachable\|mismatch`(socket `state` op 探针,5 s 上限)与 `heartbeat_host`(record 现值)、`host_class: bool`;schema 名不变(`kaola-acp-list/1` 加字段向后兼容,`docs/acp-watch/list-view.md` 记一行) | A2/B1/B2 |
+| D3 | `scripts/kaola-acp.py` `stop`(`op_or_holder_lost`/`force_kill_from_record`) | holder PID 活但 socket 不可达且 `--force` 时,发信号前以 `ps` argv `--record-dir` 锚核对该 PID(复用 `kaola-acp-sweep.matched_holders` 的匹配逻辑,可抽成共享函数);不匹配 → 只 unlink socket、把 record `state` 标 `stopped`,回执 `pid_reused: true`,不发信号 | A4/B3.2 |
+| D4 | `scripts/kaola-tmux.sh` | **不改**:`list` 继续经 `~/.local/bin/kaola-acp list` 或 `python3 <skills>/zcode-kaola-project-runner/scripts/kaola-acp.py list`;Skill 文本写后者(装机形态,不读源码) | A6 |
+| D5 | `scripts/kaola-locate.py` | **不改**:`acp_holder_alive` 保持 PID 语义,文档注明其不是身份事实(#49 禁 socket/glob) | B3 |
+| — | 不新增文件、不新增 schema、不新增子命令、不新增环境变量 | | A6 |
+
+## E. 可测验收条目(设计层;实施时逐条落为测试)
+
+编号 T1–T14,落点标注到既有套件(`scripts/validate.sh` 显式列套件,故新测试进既有文件):
+
+| # | 条目 | 套件落点 | 覆盖 |
+|---|---|---|---|
+| T1 | 同 repo 已有身份核对通过的 Host `H1`(名 X),以名 Y 的 Host 类名 `start` → `refused host-exists`,`existing_host.session == X`,`existing_host.holder_instance_id == H1`,record root 下无 Y 目录,`ps` 无新 holder | `tests/contract/test-issue-74-kaola-delegator.py`(fake app-server sandbox) | A1/A5 |
+| T2 | 同 T1,但 H1 的 holder 已被 kill(record 在、PID 亡)→ 名 Y `start` **不**被 `host-exists` 拒绝(核对失败行不触发) | 同上 | A5 |
+| T3 | 同名 `start` 于身份核对通过的 holder → `session-exists`(既有行为不变) | `tests/contract/test-acp-contract.py` | A3 |
+| T4 | **PID 复用夹具**:写一条 record,`holder_pid` = 测试进程自身 PID(必活、且无 socket/无 argv 锚)→ `list` 行 `identity != verified`;同名 `start` 成功且测试进程未收到任何信号;`stop --force` 回执 `pid_reused: true`、无信号 | `test-acp-contract.py` | B3.1-3 |
+| T5 | worker `start` 名为 Host 类名(误派第二编排者)在 `KAOLA_ACP_DISPATCHER` 下 → `host-exists`,拒绝先于 spawn | `tests/contract/test-issue-73-canonical-root.py`(已有 dispatcher 夹具) | A5 Host 路径 |
+| T6 | `list --repo R1` 不返回 R2 的行;R2 的 dead record 在 R1 的清扫中不被触碰 | `tests/contract/test-acp-sweep-contract.py` | B0"不碰其他 repo" |
+| T7 | 死 holder(record 在、PID 亡、agent 组活)经 `stop --force --expected-holder-instance-id <record id>` → 组被清、socket 被 unlink、后续 `status` 为 `stopped` 且 `residual_pids: []` | `test-acp-contract.py`(既有 force_kill 夹具扩展) | A4 步 1-2 / B2 #7 |
+| T8 | 绑定到已亡 Host 实例的活 worker(record `dispatcher.holder_instance_id` 指向不存在的 id)→ `list` 行 `identity: verified` 且 `heartbeat_host` 可见;清扫程序(Skill 文本)把它归为"报告不杀";测试断言 `list` 数据足以做此分类(不测 Agent 行为) | `test-acp-contract.py` | B2 #5 |
+| T9 | `heartbeat_host: null` 的活 holder → `list` 行可区分(`heartbeat_host` 字段存在且为 null) | 同上 | B2 #6 |
+| T10 | 文本 pin:Delegator `SKILL.md`「One Host」含 "exact-stop"、"proven gone"/"residual_pids"、"host-exists"、"attach its existing_host";handoff.md 步 3 含 `list --repo`;handoff 文本块含 `sweep=` 行;主 Skill「Hosts」含 "host-exists";host-startup.md 含清扫段标题与 "PID alone" | `tests/contract/test-issue-74-kaola-delegator.py`、`test-generated-skills.py`、`test-issue-41-orchestrator.py` | A6/B0/C1-C9 |
+| T11 | 反向 pin:任何 Skill/reference 不含 "registry"、"lock file"、"pointer file" 作为新机制(允许否定句);不出现 "PPID" 作为孤儿判据 | `test-generated-skills.py` | A6/B2 |
+| T12 | 预算:`render-skills.py --check` 通过,`tests/contract/test-progressive-disclosure.py` 全绿(handoff ≤ 8192、主 Skill ≤ 17408、skeleton ≤ 8192、Delegator ≤ 4096、bridge ≤ 2560) | 既有 | C |
+| T13 | 类型化拒绝形状:`host-exists` 回执含 `result/reason/action/platform/session/repo/existing_host/mutation_performed:false`,exit 1,与 `canonical-root-*`、`heartbeat-host-*` 同形 | `test-issue-73-canonical-root.py`(已 pin 拒绝形状) | A5 |
+| T14 | 活 UAT(不进 validate,记录到 run 的 evidence):真实 ZCode Host 上,由 Delegator 用带 `sweep=` 行的 update 触达一次,Host 回复含 `swept:` 报告行,`kept` 含自己与两个绑定席位,`stopped` 为空,`residual_pids: []` | run evidence | B1/B0 |
+
+可测验收条目数:**14**。
+
+## F. 范围外(显式)
+
+1. **socket 文件批量清理**(B5):记为关联 ops,不在本单;若做,另开单,规则见 B5。
+2. **非 Host 管辖的 worker 生命周期**:standalone Platform Runner 会话、人工 `kaola-acp start` 的会话、#70 之前无绑定的 holder——只报告(B2 #6),其停/续由人或其原 Agent决定。
+3. **PTY/tmux 会话**的健康与清扫:#130 退役 PTY;当前 Host 派工 ACP-only(#104),不在本单。
+4. **他 repo**:`--repo` 过滤天然排除;跨 repo 的"全机清扫"不设计。
+5. **`kaola-locate.py` 的 `acp_holder_alive` 语义升级**:保持 PID 事实(#49/#102 约束),不改。
+6. **holder record 增写 `lstart` 第四锚**(B3.5):可选后续,不作为本单验收。
+7. **Host 保活/自动重启**:A1 只禁并叠,不承诺 Host 永活;死后由下一次 Delegator 触达按 A4 重建。
+8. **两活 Host 都在 prompt 中的裁决**(B4):`HUMAN_DECISION_REQUIRED`,不自动化。
+
+## G. 覆盖对照
+
+| owner 条目 | 设计章节 | 落点 | 验收 |
+|---|---|---|---|
+| A1 | 1/3 §A1 | C1, C7 | T1, T5 |
+| A2 | 1/3 §A2 | C2, C4 | T2, T6, T8, T9 |
+| A3 | 1/3 §A3 | C1, C3 | T3 |
+| A4 | 1/3 §A4 | C1, C4, C6 | T7, T4 |
+| A5 | 1/3 §A5 | C1, C7, C8, D1 | T1, T5, T13 |
+| A6 | 1/3 §A6 | C1–C11, D4, D5 | T10, T11, T12 |
+| B 触发/所有权/不得跳过 | 2/3 §B0, B1 | C5, C7, C8 | T10, T14 |
+| B 孤儿定义/只清孤儿 | 2/3 §B2, B4 | C8, C9 | T6, T7, T8, T9 |
+| PID 复用 false positive | 2/3 §B3 | C6, C8, C10, D1–D3 | T4 |
+| socket 次要 | 2/3 §B5 | — | 范围外 F1 |
+| 案例 | 2/3 §B6 | — | — |
+
+验收接受前零代码;本席不实现、不建 worktree、不关 issue。
+
