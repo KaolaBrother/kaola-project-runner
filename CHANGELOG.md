@@ -2,6 +2,19 @@
 
 ## 0.5.8 — Unreleased
 
+- **devin tier presets land again on Devin CLI 3000.11.1 via spawn argv (Issue #140).** The 11.1
+  ACP `model` option offers only 76 catalog values and rejects every preset with `-32602`, so the
+  session silently ran `swe-2-high`. `platforms/devin.yaml` now declares per-tier
+  `acp_command_default`/`_upgrade`/`_alt` (`devin acp --model <preset id>`); the presets themselves
+  are unchanged (`swe-2-max`, `fusion-claude-fable-5-1-high-sidekick-swe-2-medium`,
+  `claude-fable-5-1-high`) and `acp_verified_versions` moves to `cli=3000.11.1`. `kaola-acp.py`
+  picks the spawn command as `--command` > `KAOLA_ACP_COMMAND` > the tier command > `acp_command`,
+  the tier command only when the tier preset selects the model (an explicit `--model` or a
+  preserved resume keeps the base). A model the spawn argv already carries is not re-sent as an
+  option: `config_application.model.applied_via: argv`, and `effective_selection` reports it with
+  `effective_model_source: launch-argv` beside the agent's stale `advertised_model`. The keys are
+  optional in `render-skills.py`; the other nine platforms are unchanged.
+
 - **Sticky-cwd Host brick: prevention and recovery procedure (Issue #137).** Project Runner's
   `workflow-worktree.md` tells a Host never to `cd` into paths Workflow finalize or sink move or
   remove (`.kw/worktrees/`, `kaola-workflow/issue-N/`) — use absolute paths, `git -C`, or a
