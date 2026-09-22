@@ -24,12 +24,14 @@ SKILL_IDS = (
     "codex-kaola-project-runner",
     "zcode-kaola-project-runner",
     "droid-kaola-project-runner",
+    "dsh-kaola-project-runner",
 )
 
 EXPECTED_MARKDOWN = {
     "SKILL.md",
     "references/acp.md",
     "references/platform.md",
+    "references/steering.md",
     "references/transport.md",
 }
 
@@ -38,6 +40,7 @@ EXPECTED_ACTIVE_TEMPLATES = {
     "agents/openai.yaml.tmpl",
     "references/acp.md.tmpl",
     "references/platform.md.tmpl",
+    "references/steering.md.tmpl",
     "references/transport.md.tmpl",
 }
 

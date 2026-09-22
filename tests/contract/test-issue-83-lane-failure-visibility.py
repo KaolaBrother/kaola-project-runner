@@ -90,6 +90,7 @@ HARNESS = textwrap.dedent("""\
     python_suites_all=({all})
     python_suites_a=({a})
     python_suites_b=({b})
+    python_suites_c=()
     {block}
     echo LANE-BLOCK-SURVIVED
 """)

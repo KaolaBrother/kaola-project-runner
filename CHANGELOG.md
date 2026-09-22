@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`validate.sh` now runs the model-policy and lifecycle contract suites (Issue #128).** Both
+  suites were outside the gate and had gone red on main without anyone noticing. Every failure was
+  a stale fixture; no product behavior changed. The lifecycle inventory now lists the
+  `references/steering.md` reference (added in #65) and its template, and its roster now includes
+  the `dsh` worker it had never covered. The model-policy fixtures now use the #111 Kimi default
+  (`Kimi K3 Max`, `kimi-code/k3`). The OpenCode fake now reads the caller model from
+  `OPENCODE_CONFIG_CONTENT`, the channel the V2 adapter uses (#112), and a new check requires that
+  channel and forbids `--model`/`--variant` in argv. The Droid fake no longer splits a
+  settings model that contains spaces. `test-lifecycle-contract.py` joins the first Python lane.
+  `test-model-policy.sh` (~300 s, tmux-driven) runs as a third concurrent lane, and the lane
+  runner now picks `bash` for `.sh` suites.
+
 - **Recorded CLI versions follow the 2026-09-22 harness-compat check (Issue #129).** ZCode
   `acp_verified_versions` is now `cli=0.16.9`. The installed ZCode.app 3.14.1 bundles that CLI.
   ZCode `acp_quirks` also names upstream `william0wang/zcode-acp` v0.46.6 (turnId and

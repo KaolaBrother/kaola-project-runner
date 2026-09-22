@@ -81,10 +81,10 @@ watched installer-runtimes bash "$repo_root/tests/contract/test-installer-runtim
 # The contract suites dominate validate wall time (measured ~200 s combined).
 # Every suite is a self-contained fixture under the validate-owned TMPDIR
 # root — its temp dirs, ACP record dirs, and the shared kaola-<uid>-acp
-# socket dir all descend from $validate_tmp — so they run as two balanced
+# socket dir all descend from $validate_tmp — so they run as concurrent
 # lanes instead of one serial list. Nothing is skipped: each suite runs the
 # identical command it ran serially, its log is replayed in the original
-# order after both lanes finish, and the logs live under $validate_tmp so
+# order after every lane finishes, and the logs live under $validate_tmp so
 # the Issue #63 sweep still covers exactly this invocation's holders and the
 # root removal takes the logs with it. A lane reports FAILED per failing
 # suite but still runs every suite, and the script exits nonzero only after
@@ -143,6 +143,8 @@ python_suites_all=(
   "test-issue-118-seat-cap.py"
   "test-issue-119-host-entry.py"
   "test-issue-123-shared-refs.py"
+  "test-lifecycle-contract.py"
+  "test-model-policy.sh"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -168,6 +170,7 @@ python_suites_a=(
   "test-issue-98-dsh-acp.py"
   "test-issue-101-validate-watchdog.py"
   "test-issue-118-seat-cap.py"
+  "test-lifecycle-contract.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"
@@ -200,11 +203,20 @@ python_suites_b=(
   "test-issue-119-host-entry.py"
   "test-issue-123-shared-refs.py"
 )
+# Issue #128: the tmux-driven model-policy suite takes ~300 s on its own, so it
+# runs as a third concurrent lane rather than lengthening either Python lane.
+python_suites_c=(
+  "test-model-policy.sh"
+)
 run_suite_lane() {
   local status=0 rc
   for suite in "$@"; do
     rc=0
-    watched "$suite" python3 "$repo_root/tests/contract/$suite" >"$validate_tmp/$suite.log" 2>&1 || rc=$?
+    if [[ "$suite" == *.sh ]]; then
+      watched "$suite" bash "$repo_root/tests/contract/$suite" >"$validate_tmp/$suite.log" 2>&1 || rc=$?
+    else
+      watched "$suite" python3 "$repo_root/tests/contract/$suite" >"$validate_tmp/$suite.log" 2>&1 || rc=$?
+    fi
     if (( rc == 124 )); then
       printf 'FAILED: %s (watchdog: still running after %s s, killed; receipt %s)\n' \
         "$suite" "$suite_budget" "$watchdog_dir/$suite.watchdog.txt"
@@ -218,9 +230,11 @@ run_suite_lane() {
 }
 run_suite_lane "${python_suites_a[@]}" & lane_a=$!
 run_suite_lane "${python_suites_b[@]}" & lane_b=$!
+run_suite_lane "${python_suites_c[@]}" & lane_c=$!
 python_status=0
 wait "$lane_a" || python_status=1
 wait "$lane_b" || python_status=1
+wait "$lane_c" || python_status=1
 for suite in "${python_suites_all[@]}"; do
   if [[ -f "$validate_tmp/$suite.log" ]]; then
     cat "$validate_tmp/$suite.log"

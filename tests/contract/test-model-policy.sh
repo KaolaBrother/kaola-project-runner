@@ -316,14 +316,15 @@ while (( index < ${#args[@]} )); do
     --settings)
       index=$((index + 1))
       if [[ -n "${args[$index]:-}" && -r "${args[$index]}" ]]; then
-        read -r settings_model settings_effort < <(SETTINGS_PATH="${args[$index]}" python3 - <<'PY'
+        # Unit-separated so a literal model containing spaces survives intact.
+        IFS=$'\x1f' read -r settings_model settings_effort < <(SETTINGS_PATH="${args[$index]}" python3 - <<'PY'
 import json
 import os
 try:
     data = json.load(open(os.environ["SETTINGS_PATH"], encoding="utf-8"))
 except Exception:
     raise SystemExit(0)
-print((str(data.get("model") or "")) + " " + (str(data.get("reasoningEffort") or "")))
+print((str(data.get("model") or "")) + "\x1f" + (str(data.get("reasoningEffort") or "")))
 PY
 )
         [[ -z "$selected" && -n "$settings_model" ]] && selected="$settings_model"
@@ -355,6 +356,23 @@ PY
   esac
   index=$((index + 1))
 done
+if [[ -z "$selected" && "$runtime" == opencode && -n "${OPENCODE_CONFIG_CONTENT:-}" ]]; then
+  # Issue #112: V2 rejects top-level --model/--variant, so the adapter carries a
+  # caller model as agents.build.model ("provider/model#variant") in this env.
+  printf 'event=config\topencode_config_content=%q\n' "$OPENCODE_CONFIG_CONTENT" >>"$argv_log"
+  IFS=$'\x1f' read -r selected config_effort < <(python3 - <<'PY'
+import json
+import os
+try:
+    ref = str(json.loads(os.environ["OPENCODE_CONFIG_CONTENT"]).get("agents", {}).get("build", {}).get("model") or "")
+except Exception:
+    ref = ""
+model, sep, variant = ref.rpartition("#")
+print((model if sep else ref) + "\x1f" + (variant if sep else ""))
+PY
+)
+  [[ -z "$effort" ]] && effort="${config_effort:-}"
+fi
 if [[ -z "$effort" && "$runtime" == kimi-cli ]]; then
   effort="${KIMI_MODEL_THINKING_EFFORT:-}"
 fi
@@ -453,7 +471,8 @@ for platform in "${platforms[@]}"; do
       override_id=openai/gpt-5.2-codex; override_effort=high
       ;;
     kimi-cli)
-      default_name='Kimi 2.8 Max'; default_id=kimi-code/kimi-for-coding; default_effort=max; binary_env=KIMI_BIN
+      # Issue #111 re-pointed the default preset at K3 Max (K2.8 is the alt tier).
+      default_name='Kimi K3 Max'; default_id=kimi-code/k3; default_effort=max; binary_env=KIMI_BIN
       upgrade_name='Kimi K3 Max'; upgrade_id=kimi-code/k3; upgrade_effort=max
       override_id=kimi-code/k2.5; override_effort=high
       ;;
@@ -578,6 +597,15 @@ for platform in "${platforms[@]}"; do
   else
     assert_model_evidence "test_${platform}_user_model_override" "$COMMAND_OUTPUT" \
       user "$override_id" "$override_id" "$override_id" true "$override_effort"
+    if [[ "$platform" == opencode ]]; then
+      # Issue #112: a V2 top-level --model/--variant aborts the launch; the
+      # caller model must ride OPENCODE_CONFIG_CONTENT instead.
+      if grep -Eq -- '--model|--variant' <<<"$(grep 'args=' "$argv_log" | tail -1)"; then
+        fail "test_${platform}_user_model_rides_config_not_argv" "V2-rejected flag in launch argv: $(cat "$argv_log")"
+      fi
+      grep -Fq "${override_id}#${override_effort}" <<<"$(grep 'event=config' "$argv_log" | tail -1)" || \
+        fail "test_${platform}_user_model_rides_config_not_argv" "caller model absent from OPENCODE_CONFIG_CONTENT: $(cat "$argv_log")"
+    fi
   fi
   assert_no_workflow_injection "test_${platform}_user_override_does_not_inject_workflow" "$input_log"
   stop_or_kill "$platform" "$repo" "$session"
