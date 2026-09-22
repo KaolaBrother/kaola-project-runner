@@ -241,6 +241,20 @@ HEARTBEAT_CONFIRMED_MEMORY = 8 * HEARTBEAT_EVENT_CAP
 
 
 
+def parse_dispatcher() -> dict[str, str] | None:
+    """The dispatching holder's identity this holder inherited, or None."""
+    try:
+        value = json.loads(os.environ.get(DISPATCHER_ENV) or "null")
+    except ValueError:
+        return None
+    if not isinstance(value, dict):
+        return None
+    keys = ("holder_instance_id", "platform", "repo", "session")
+    if not all(isinstance(value.get(key), str) and value[key] for key in keys):
+        return None
+    return {key: value[key] for key in keys}
+
+
 def parse_heartbeat_host() -> dict[str, str] | None:
     """The armed carrier target, or None. The CLI already validated it and
     died on anything invalid; this re-checks the shape so a hand-spawned
@@ -1372,6 +1386,7 @@ class Holder:
         self.undelivered_wakes: dict[str, dict[str, Any]] = {}
         self.undelivered_wakes_lock = threading.Lock()
         self.heartbeat_host = parse_heartbeat_host()
+        self.dispatched_by = parse_dispatcher()
         # Issue #119: the turn-opening Skill entry line and display name this
         # holder carries as a Host. Empty entry = not a carrier Host.
         entry = getattr(args, "host_entry", None)
@@ -1445,6 +1460,11 @@ class Holder:
             # plain unbound worker. A surface without the key predates Issue #70
             # and is unknown, never evidence of being unbound.
             "heartbeat_host": self.heartbeat_host,
+            # Issue #132: the Host holder that dispatched this one, from the
+            # inherited KAOLA_ACP_DISPATCHER the start already verified, or
+            # null for a start run under no holder. Its holder_instance_id
+            # tells a live Host's own seats from a predecessor's.
+            "dispatcher": getattr(self, "dispatched_by", None),
             "host_skill_entry": self.host_entry,
             "pending_permissions": list(self.pending_permissions.values()),
             "last_prompt": self.last_prompt,
