@@ -1,0 +1,1 @@
+{"agent_exit_code": 0, "agent_exit_signal": null, "git": {"branch": "master", "dirty": false}, "mutation_status": "not_started", "platform": "cursor-cli", "repo": "/private/tmp/kpr-i141-probe", "residual_pids": [], "schema_version": 3, "session": "cursor-cli-KPR-i141-verify-probe", "stopped": true, "swept_child_pgids": [], "transport": {"selected": "acp"}}
