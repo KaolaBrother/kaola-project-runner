@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.8 — Unreleased
+
+- **cursor-cli default tier lands Grok 4.7 Extra High again on Cursor CLI ≥ 2026.09.18 (Issue #135).**
+  Cursor's effort option id follows the selected model (`reasoning_effort` for Grok 4.7, `effort`
+  for Claude Fable 5.1), so `acp_effort_config_id` is now an ordered `;` candidate list
+  (`reasoning_effort;effort`) resolved against the options the agent advertises after the model
+  apply; with none advertised the first is sent literally. Receipts add
+  `config_application.effort.candidates`/`advertised` and `effective_selection.effort_config_id`.
+  `acp_verified_versions` records `cli=2026.09.18-9a7762b`.
+
 ## 0.5.7 — 2026-09-22
 
 - **One live Host per repo, and a repo sweep on every Delegator reach-out (Issue #132).** A

@@ -1674,7 +1674,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
                            caps="cursor-params")
         options = (receipt.get("transport") or {}).get("advertised_config_options") or []
         ids = {option.get("id") for option in options}
-        self.assertTrue({"model", "effort", "fast"} <= ids, f"options={options}")
+        self.assertTrue({"model", "reasoning_effort", "fast"} <= ids, f"options={options}")
         fast = next((o for o in options if o.get("id") == "fast"), {})
         self.assertEqual(set(fast.get("values") or []), {"false", "true"})
 
@@ -1688,11 +1688,18 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             self.config_events(),
             [
                 ("model", "grok-4.7"),
-                ("effort", "xhigh"),
+                ("reasoning_effort", "xhigh"),
                 ("fast", "false"),
             ],
         )
         application = receipt.get("config_application") or {}
+        effort = application.get("effort") or {}
+        self.assertEqual(effort.get("config_id"), "reasoning_effort")
+        self.assertIs(effort.get("advertised"), True)
+        self.assertEqual(effort.get("candidates"), ["reasoning_effort", "effort"])
+        self.assertEqual(receipt.get("effective_selection"), {
+            "effective_model": "grok-4.7", "effective_effort": "xhigh",
+            "effort_config_id": "reasoning_effort"})
         model = application.get("model") or {}
         self.assertTrue(model.get("applied"))
         self.assertEqual(model.get("requested_id"), "grok-4.7-xhigh")
@@ -1724,6 +1731,15 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         model = (receipt.get("config_application") or {}).get("model") or {}
         self.assertTrue(model.get("applied"))
         self.assertEqual(model.get("requested_id"), "claude-fable-5-1-high")
+        # Regression guard against a naive flip to reasoning_effort (#135):
+        # Claude Fable 5.1 advertises its effort option as ``effort``.
+        effort = (receipt.get("config_application") or {}).get("effort") or {}
+        self.assertTrue(effort.get("applied"))
+        self.assertEqual(effort.get("config_id"), "effort")
+        self.assertIs(effort.get("advertised"), True)
+        selection = receipt.get("effective_selection") or {}
+        self.assertEqual(selection.get("effective_effort"), "high")
+        self.assertEqual(selection.get("effort_config_id"), "effort")
 
     def test_cursor_explicit_fast_variant_id_decomposes(self) -> None:
         # A bare explicit fast-variant picker ID carries its semantics in the
@@ -1733,10 +1749,48 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             caps="cursor-params,strict-config",
         )
         self.assertIn(("model", "grok-4.7"), self.config_events())
-        self.assertIn(("effort", "xhigh"), self.config_events())
+        self.assertIn(("reasoning_effort", "xhigh"), self.config_events())
         self.assertIn(("fast", "true"), self.config_events())
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("effective"), "on")
+
+    def test_cursor_effort_candidates_fall_back_literally(self) -> None:
+        # A model that advertises neither candidate (gpt-5.6-sol: reasoning)
+        # gets the first candidate literally; the rejection is a limitation
+        # receipt and the session stays usable (#135).
+        receipt = self.start(
+            "cursor-cli", "--model", "gpt-5.6-sol", "--effort", "medium",
+            caps="cursor-params,strict-config",
+        )
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertIn(("model", "gpt-5.6-sol"), self.config_events())
+        effort = (receipt.get("config_application") or {}).get("effort") or {}
+        self.assertEqual(effort.get("config_id"), "reasoning_effort")
+        self.assertIs(effort.get("advertised"), False)
+        self.assertIs(effort.get("applied"), False)
+        self.assertIn("Unknown model config option: reasoning_effort",
+                      json.dumps(effort.get("error")))
+        self.assertIsNone((receipt.get("effective_selection") or {}).get("effective_effort"))
+        send = self.cli("send", "--text", "still usable", platform="cursor-cli")
+        self.assertEqual(send.get("outcome"), "turn_completed")
+
+    def test_cursor_manifest_declares_effort_candidates(self) -> None:
+        manifest = (PROJECT / "platforms" / "cursor-cli.yaml").read_text()
+        fields = dict(
+            (line.split(":", 1)[0], line.split(":", 1)[1].strip().strip('"'))
+            for line in manifest.splitlines() if line.startswith("acp_")
+        )
+        self.assertEqual(fields["acp_effort_config_id"], "reasoning_effort;effort")
+        self.assertIn("cli=2026.09.18-9a7762b", fields["acp_verified_versions"])
+
+    def test_single_effort_id_resolves_to_itself(self) -> None:
+        # Every other manifest names one id: it is sent unchanged.
+        receipt = self.start("grok", "--effort", "high", caps="strict-config")
+        effort = (receipt.get("config_application") or {}).get("effort") or {}
+        self.assertEqual(effort.get("config_id"), "reasoning_effort")
+        self.assertEqual(effort.get("candidates"), ["reasoning_effort"])
+        self.assertIs(effort.get("advertised"), True)
+        self.assertIn(("reasoning_effort", "high"), self.config_events())
 
     def test_cursor_fast_on_sends_string_true(self) -> None:
         # Cursor's fast option takes "true"/"false" strings, never the

@@ -1647,6 +1647,28 @@ def parse_manifest_value_map(raw: str) -> dict[str, str]:
     return mapping
 
 
+def parse_config_id_candidates(raw: str) -> list[str]:
+    """Parse an ordered ``a;b`` config-id candidate list (Issue #135)."""
+    return [part.strip() for part in (raw or "").split(";") if part.strip()]
+
+
+def resolve_config_id(candidates: list[str], state: Any) -> tuple[str, bool]:
+    """The first candidate the agent advertises, else the first literally.
+
+    Cursor's effort option id follows the selected model (grok-4.7
+    ``reasoning_effort``, claude-fable-5-1 ``effort``), so the id is read
+    from the options advertised after the model apply (Issue #135).
+    """
+    options = ((state.get("session_meta") or {}).get("configOptions")
+               if isinstance(state, dict) else None)
+    advertised = {option.get("id") for option in options or []
+                  if isinstance(option, dict)} if isinstance(options, list) else set()
+    for candidate in candidates:
+        if candidate in advertised:
+            return candidate, True
+    return (candidates[0] if candidates else ""), False
+
+
 def picker_effort_suffix(model_id: str) -> str:
     """Extract an effort encoded in a picker-style model ID.
 
@@ -2093,9 +2115,12 @@ def effective_selection(manifest: dict[str, str], state: Any) -> dict[str, Any]:
     config options - the agent's answer, not the value this client sent."""
     options = ((state.get("session_meta") or {}).get("configOptions")
                if isinstance(state, dict) else None)
+    effort_id, _ = resolve_config_id(
+        parse_config_id_candidates(manifest.get("acp_effort_config_id") or ""), state)
     wanted = {"model": manifest.get("acp_model_config_id") or "",
-              "effort": manifest.get("acp_effort_config_id") or ""}
-    found: dict[str, Any] = {"effective_model": None, "effective_effort": None}
+              "effort": effort_id}
+    found: dict[str, Any] = {"effective_model": None, "effective_effort": None,
+                             "effort_config_id": effort_id or None}
     if isinstance(options, list):
         for option in options:
             if not isinstance(option, dict):
@@ -2729,6 +2754,14 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 application[label] = {"applied": False, "reason": "no-resolved-value"}
                 continue
             config_id = args.manifest.get(key or "")
+            candidates: list[str] = []
+            advertised = False
+            if label == "effort" and config_id:
+                # The effort id follows the model just applied: resolve it
+                # against the options the agent now advertises (Issue #135).
+                candidates = parse_config_id_candidates(config_id)
+                config_id, advertised = resolve_config_id(
+                    candidates, socket_request(sock, "state", {}, 10.0))
             if not config_id:
                 application[label] = {
                     "applied": False,
@@ -2747,6 +2780,9 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 declared = acp_value_params(value)
                 if declared:
                     record["declared"] = declared
+            if label == "effort":
+                record["candidates"] = candidates
+                record["advertised"] = advertised
             if result.get("error"):
                 # A rejected option is a limitation receipt, not a session
                 # failure — the agent stays usable on its own selection.

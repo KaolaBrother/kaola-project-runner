@@ -36,8 +36,12 @@ flat YAML subset parsed without an external dependency. Transport fields are `ac
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
 `acp_effort_config_id`, `acp_mode_config_id`, `acp_fast_config_id`, `acp_fast_values`, `acp_model_map`, and
 `clientCapabilities._meta` during `initialize` — Cursor's `parameterizedModelPicker=true` makes
-its ACP surface advertise separate `model`/`effort`/`fast` options with base model IDs and string
-`"true"`/`"false"` fast values. `acp_model_map` is an optional `picker-id=acp-option-value;...`
+its ACP surface advertise separate model/effort/fast options with base model IDs and string
+`"true"`/`"false"` fast values; the model-scoped option set follows the selected model (Grok 4.7
+advertises `reasoning_effort`, Claude Fable 5.1 `effort`). `acp_effort_config_id` is an ordered
+`;` candidate list resolved against the options the agent advertises after the model apply; when
+none is advertised the first candidate is sent literally, and a rejection stays a limitation
+receipt. `acp_model_map` is an optional `picker-id=acp-option-value;...`
 list mapping resolved catalog model IDs onto the ACP model value the agent advertises for the same
 model; an effort encoded in the picker ID suffix travels through the effort option and Fast
 through `acp_fast_values`-converted values, so semantics are never substituted — an unmapped ID

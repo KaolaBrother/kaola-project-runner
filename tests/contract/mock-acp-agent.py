@@ -397,9 +397,12 @@ class MockAgent:
     ]
 
     # Cursor's parameterized picker surface (client _meta
-    # parameterizedModelPicker): separate model/effort/fast options with
-    # base model IDs and string "true"/"false" fast values.
-    CURSOR_CONFIG_OPTIONS = [
+    # parameterizedModelPicker): mode + model with base model IDs, then the
+    # option SET of the currently selected model (Issue #135, measured on cli
+    # 2026.09.18-9a7762b): grok-4.7 advertises reasoning_effort, grok-4.6 and
+    # claude-fable-5-1 advertise effort, gpt-5.6-sol advertises reasoning.
+    # Fast values are the strings "true"/"false".
+    CURSOR_BASE_OPTIONS = [
         {"id": "mode", "name": "Mode",
          "description": "Controls how the agent executes tasks",
          "category": "mode", "type": "select", "options": [
@@ -412,27 +415,71 @@ class MockAgent:
          "category": "model", "type": "select", "options": [
              {"value": "default", "name": "Auto"},
              {"value": "grok-4.7", "name": "Grok 4.7"},
+             {"value": "grok-4.6", "name": "Grok 4.6"},
              {"value": "claude-fable-5-1", "name": "Claude Fable 5.1"},
-         ]},
-        {"id": "effort", "name": "Effort",
-         "description": "Reasoning effort for the session",
-         "category": "effort", "type": "select", "options": [
-             {"value": "low", "name": "Low"},
-             {"value": "medium", "name": "Medium"},
-             {"value": "high", "name": "High"},
-             {"value": "xhigh", "name": "Extra High"},
-         ]},
-        {"id": "fast", "name": "Fast",
-         "description": "Fast serving tier for the session",
-         "category": "fast", "type": "select", "options": [
-             {"value": "false", "name": "Off"},
-             {"value": "true", "name": "Fast"},
+             {"value": "gpt-5.6-sol", "name": "GPT-5.6 Sol"},
          ]},
     ]
+    CURSOR_EFFORT_VALUES = [
+        {"value": "low", "name": "Low"},
+        {"value": "medium", "name": "Medium"},
+        {"value": "high", "name": "High"},
+        {"value": "xhigh", "name": "Extra High"},
+    ]
+    CURSOR_FAST = {"id": "fast", "name": "Fast",
+                   "description": "Fast serving tier for the session",
+                   "category": "fast", "type": "select", "options": [
+                       {"value": "false", "name": "Off"},
+                       {"value": "true", "name": "Fast"},
+                   ]}
+    CURSOR_MODEL_OPTIONS = {
+        "grok-4.7": [
+            {"id": "context", "name": "Context", "category": "model_config",
+             "type": "select", "options": [{"value": "256k", "name": "256K"}]},
+            {"id": "reasoning_effort", "name": "Effort", "category": "thought_level",
+             "type": "select", "options": CURSOR_EFFORT_VALUES},
+            CURSOR_FAST,
+        ],
+        "grok-4.6": [
+            {"id": "effort", "name": "Effort", "category": "thought_level",
+             "type": "select", "options": CURSOR_EFFORT_VALUES},
+            CURSOR_FAST,
+        ],
+        "claude-fable-5-1": [
+            {"id": "thinking", "name": "Thinking", "category": "thought_level",
+             "type": "select", "options": [{"value": "true", "name": "On"},
+                                           {"value": "false", "name": "Off"}]},
+            {"id": "context", "name": "Context", "category": "model_config",
+             "type": "select", "options": [{"value": "300k", "name": "300K"}]},
+            {"id": "effort", "name": "Effort", "category": "thought_level",
+             "type": "select", "options": CURSOR_EFFORT_VALUES},
+        ],
+        "gpt-5.6-sol": [
+            {"id": "context", "name": "Context", "category": "model_config",
+             "type": "select", "options": [{"value": "272k", "name": "272K"}]},
+            {"id": "reasoning", "name": "Reasoning", "category": "thought_level",
+             "type": "select", "options": [{"value": "medium", "name": "Medium"}]},
+            CURSOR_FAST,
+        ],
+    }
+
+    def cursor_config_options(self) -> list[dict[str, Any]]:
+        # The persisted-schema case: a plain launch advertises grok-4.7.
+        model = self.configured.get("model") or "grok-4.7"
+        options = []
+        for option in self.CURSOR_BASE_OPTIONS + self.CURSOR_MODEL_OPTIONS.get(model, []):
+            option = dict(option)
+            current = self.configured.get(option["id"])
+            if option["id"] == "model":
+                current = model
+            if current is not None:
+                option["currentValue"] = current
+            options.append(option)
+        return options
 
     def config_options(self) -> list[dict[str, Any]]:
         if "cursor-params" in self.caps:
-            return self.CURSOR_CONFIG_OPTIONS
+            return self.cursor_config_options()
         return self.CONFIG_OPTIONS
 
     def on_set_config(self, request_id: Any, params: dict[str, Any]) -> None:
@@ -461,15 +508,17 @@ class MockAgent:
             )
             values = {entry.get("value") for entry in (option or {}).get("options") or []}
             if option is None or (values and params.get("value") not in values):
-                respond(
-                    request_id,
-                    error={
-                        "code": -32602,
-                        "message": f"unsupported config option {config_id}={params.get('value')}",
-                    },
-                )
+                message = f"unsupported config option {config_id}={params.get('value')}"
+                if option is None and "cursor-params" in self.caps:
+                    message = f"Unknown model config option: {config_id}"  # live text
+                respond(request_id, error={"code": -32602, "message": message})
                 return
         if config_id is not None:
+            if config_id == "model" and "cursor-params" in self.caps:
+                # A model switch replaces the model-scoped option set.
+                for scoped in {o["id"] for opts in self.CURSOR_MODEL_OPTIONS.values()
+                               for o in opts}:
+                    self.configured.pop(scoped, None)
             self.configured[str(config_id)] = params.get("value")
         result = fixture.get("set_result")
         if not isinstance(result, dict):

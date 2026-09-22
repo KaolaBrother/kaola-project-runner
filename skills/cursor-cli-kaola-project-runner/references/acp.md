@@ -1,6 +1,6 @@
 # Cursor CLI ACP transport
 
-Command: `cursor-agent --yolo acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: agentInfo is empty; initialize with _meta.parameterizedModelPicker=true so ACP advertises separate model/effort/fast options (base model IDs, effort low..xhigh, fast true/false strings); picker IDs decompose via acp_model_map + effort suffix + fast option.
+Command: `cursor-agent --yolo acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: agentInfo is empty; initialize with _meta.parameterizedModelPicker=true so ACP advertises separate model/effort/fast options with base model IDs and string true/false fast values; the option SET follows the selected model (grok-4.7: context + reasoning_effort; grok-4.6 and claude-fable-5-1: effort; fable also thinking), so the effort id is resolved from the options advertised after the model apply; the CLI persists the selected model and parameters in ~/.cursor/cli-config.json and a plain launch advertises that persisted schema.
 
 ## Command surface
 
@@ -22,7 +22,10 @@ This platform's ACP steering facts, both modes, the receipt vocabulary and the r
 
 `start` resolves the tier/model/effort/Fast selection through the shared model policy and applies it through the
 agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
-`model`/`effort`/`fast` when non-empty.
+`model`/`reasoning_effort;effort`/`fast` when non-empty.
+An effort id may list `;`-separated candidates in order; the first one the agent advertises after
+the model apply is used (`config_application.effort.candidates`/`advertised`,
+`effective_selection.effort_config_id`), otherwise the first literally.
 A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
 during `initialize`): agents that negotiate a parameterized model picker advertise separate
 `model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead
