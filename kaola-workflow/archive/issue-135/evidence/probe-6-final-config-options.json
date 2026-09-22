@@ -1,0 +1,255 @@
+[
+ {
+  "category": "mode",
+  "currentValue": "agent",
+  "description": "Controls how the agent executes tasks",
+  "id": "mode",
+  "name": "Mode",
+  "options": [
+   {
+    "description": "Full agent capabilities with tool access",
+    "name": "Agent",
+    "value": "agent"
+   },
+   {
+    "description": "Read-only mode for planning and designing before implementation",
+    "name": "Plan",
+    "value": "plan"
+   },
+   {
+    "description": "Q&A mode - no edits or command execution",
+    "name": "Ask",
+    "value": "ask"
+   }
+  ],
+  "type": "select"
+ },
+ {
+  "category": "model",
+  "currentValue": "grok-4.7",
+  "description": "Controls which model is used for responses",
+  "id": "model",
+  "name": "Model",
+  "options": [
+   {
+    "name": "Auto",
+    "value": "default"
+   },
+   {
+    "name": "Grok 4.7",
+    "value": "grok-4.7"
+   },
+   {
+    "name": "Grok 4.6",
+    "value": "grok-4.6"
+   },
+   {
+    "name": "Composer 2.5",
+    "value": "composer-2.5"
+   },
+   {
+    "name": "Claude Opus 5",
+    "value": "claude-opus-5"
+   },
+   {
+    "name": "Claude Opus 4.8",
+    "value": "claude-opus-4-8"
+   },
+   {
+    "name": "GPT-5.6 Sol",
+    "value": "gpt-5.6-sol"
+   },
+   {
+    "name": "GPT-5.5",
+    "value": "gpt-5.5"
+   },
+   {
+    "name": "Claude Fable 5.1",
+    "value": "claude-fable-5-1"
+   },
+   {
+    "name": "Claude Fable 5",
+    "value": "claude-fable-5"
+   },
+   {
+    "name": "Grok 4.5",
+    "value": "grok-4.5"
+   },
+   {
+    "name": "Gemini 3.8 Flash",
+    "value": "gemini-3.8-flash"
+   },
+   {
+    "name": "Gemini 3.7 Flash",
+    "value": "gemini-3.7-flash"
+   },
+   {
+    "name": "Muse Spark 1.3",
+    "value": "muse-spark-1.3"
+   },
+   {
+    "name": "GPT-5.6 Terra",
+    "value": "gpt-5.6-terra"
+   },
+   {
+    "name": "Claude Sonnet 5",
+    "value": "claude-sonnet-5"
+   },
+   {
+    "name": "Claude Sonnet 4.6",
+    "value": "claude-sonnet-4-6"
+   },
+   {
+    "name": "Codex 5.3",
+    "value": "gpt-5.3-codex"
+   },
+   {
+    "name": "Claude Opus 4.7",
+    "value": "claude-opus-4-7"
+   },
+   {
+    "name": "GPT-5.4",
+    "value": "gpt-5.4"
+   },
+   {
+    "name": "Claude Opus 4.6",
+    "value": "claude-opus-4-6"
+   },
+   {
+    "name": "Claude Opus 4.5",
+    "value": "claude-opus-4-5"
+   },
+   {
+    "name": "GPT-5.2",
+    "value": "gpt-5.2"
+   },
+   {
+    "name": "GPT-5.6 Luna",
+    "value": "gpt-5.6-luna"
+   },
+   {
+    "name": "Gemini 3.6 Flash",
+    "value": "gemini-3.6-flash"
+   },
+   {
+    "name": "Gemini 3.1 Pro",
+    "value": "gemini-3.1-pro"
+   },
+   {
+    "name": "GPT-5.4 Mini",
+    "value": "gpt-5.4-mini"
+   },
+   {
+    "name": "GPT-5.4 Nano",
+    "value": "gpt-5.4-nano"
+   },
+   {
+    "name": "Claude Haiku 4.5",
+    "value": "claude-haiku-4-5"
+   },
+   {
+    "name": "Claude Sonnet 4.5",
+    "value": "claude-sonnet-4-5"
+   },
+   {
+    "name": "GPT-5.1",
+    "value": "gpt-5.1"
+   },
+   {
+    "name": "Gemini 3 Flash",
+    "value": "gemini-3-flash"
+   },
+   {
+    "name": "Gemini 3.5 Flash",
+    "value": "gemini-3.5-flash"
+   },
+   {
+    "name": "Claude Sonnet 4",
+    "value": "claude-sonnet-4"
+   },
+   {
+    "name": "GPT-5 Mini",
+    "value": "gpt-5-mini"
+   },
+   {
+    "name": "Gemini 2.5 Flash",
+    "value": "gemini-2.5-flash"
+   },
+   {
+    "name": "Kimi K3",
+    "value": "kimi-k3"
+   },
+   {
+    "name": "Kimi K2.7 Code",
+    "value": "kimi-k2.7-code"
+   },
+   {
+    "name": "GLM 5.2",
+    "value": "glm-5.2"
+   }
+  ],
+  "type": "select"
+ },
+ {
+  "category": "model_config",
+  "currentValue": "256k",
+  "description": "Context size the model has available.",
+  "id": "context",
+  "name": "Context",
+  "options": [
+   {
+    "name": "256K",
+    "value": "256k"
+   },
+   {
+    "name": "500K",
+    "value": "500k"
+   }
+  ],
+  "type": "select"
+ },
+ {
+  "category": "thought_level",
+  "currentValue": "xhigh",
+  "description": "Controls how much reasoning effort the model uses before responding.",
+  "id": "reasoning_effort",
+  "name": "Effort",
+  "options": [
+   {
+    "name": "Low",
+    "value": "low"
+   },
+   {
+    "name": "Medium",
+    "value": "medium"
+   },
+   {
+    "name": "High",
+    "value": "high"
+   },
+   {
+    "name": "Extra High",
+    "value": "xhigh"
+   }
+  ],
+  "type": "select"
+ },
+ {
+  "category": "model_config",
+  "currentValue": "false",
+  "description": "Significantly faster but consumes more usage",
+  "id": "fast",
+  "name": "Fast",
+  "options": [
+   {
+    "name": "Off",
+    "value": "false"
+   },
+   {
+    "name": "Fast​​",
+    "value": "true"
+   }
+  ],
+  "type": "select"
+ }
+]

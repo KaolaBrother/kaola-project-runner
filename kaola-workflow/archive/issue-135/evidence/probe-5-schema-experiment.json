@@ -1,0 +1,496 @@
+[
+ {
+  "step": "C1 set model=grok-4.6 (legacy schema)",
+  "request": {
+   "config_id": "model",
+   "value": "grok-4.6"
+  },
+  "reply": {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "grok-4.6",
+   "option_description": "Controls which model is used for responses",
+   "option_name": "Model",
+   "value": "grok-4.6",
+   "value_name": "Grok 4.6"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.6"
+   ],
+   [
+    "effort",
+    "high"
+   ],
+   [
+    "fast",
+    "true"
+   ]
+  ]
+ },
+ {
+  "step": "C2 set effort=xhigh on grok-4.6",
+  "request": {
+   "config_id": "effort",
+   "value": "xhigh"
+  },
+  "reply": {
+   "config_id": "effort",
+   "configured": true,
+   "current_value": "xhigh",
+   "option_description": "Effort the model uses to generate its response.",
+   "option_name": "Effort",
+   "value": "xhigh",
+   "value_name": "Extra High"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.6"
+   ],
+   [
+    "effort",
+    "xhigh"
+   ],
+   [
+    "fast",
+    "true"
+   ]
+  ]
+ },
+ {
+  "step": "C3 set reasoning_effort=xhigh on grok-4.6",
+  "request": {
+   "config_id": "reasoning_effort",
+   "value": "xhigh"
+  },
+  "reply": {
+   "error": {
+    "code": "config-option-failed",
+    "config_id": "reasoning_effort",
+    "detail": {
+     "code": -32602,
+     "data": {
+      "message": "Unknown model config option: reasoning_effort"
+     },
+     "message": "Invalid params"
+    }
+   }
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.6"
+   ],
+   [
+    "effort",
+    "xhigh"
+   ],
+   [
+    "fast",
+    "true"
+   ]
+  ]
+ },
+ {
+  "step": "C4 set model=grok-4.7 (plain launch + model via config option)",
+  "request": {
+   "config_id": "model",
+   "value": "grok-4.7"
+  },
+  "reply": {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "grok-4.7",
+   "option_description": "Controls which model is used for responses",
+   "option_name": "Model",
+   "value": "grok-4.7",
+   "value_name": "Grok 4.7"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.7"
+   ],
+   [
+    "context",
+    "256k"
+   ],
+   [
+    "reasoning_effort",
+    "xhigh"
+   ],
+   [
+    "fast",
+    "false"
+   ]
+  ]
+ },
+ {
+  "step": "C5 set effort=xhigh on grok-4.7 (stale id)",
+  "request": {
+   "config_id": "effort",
+   "value": "xhigh"
+  },
+  "reply": {
+   "error": {
+    "code": "config-option-failed",
+    "config_id": "effort",
+    "detail": {
+     "code": -32602,
+     "data": {
+      "message": "Unknown model config option: effort"
+     },
+     "message": "Invalid params"
+    }
+   }
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.7"
+   ],
+   [
+    "context",
+    "256k"
+   ],
+   [
+    "reasoning_effort",
+    "xhigh"
+   ],
+   [
+    "fast",
+    "false"
+   ]
+  ]
+ },
+ {
+  "step": "C6 set reasoning_effort=high on grok-4.7",
+  "request": {
+   "config_id": "reasoning_effort",
+   "value": "high"
+  },
+  "reply": {
+   "config_id": "reasoning_effort",
+   "configured": true,
+   "current_value": "high",
+   "option_description": "Controls how much reasoning effort the model uses before responding.",
+   "option_name": "Effort",
+   "value": "high",
+   "value_name": "High"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.7"
+   ],
+   [
+    "context",
+    "256k"
+   ],
+   [
+    "reasoning_effort",
+    "high"
+   ],
+   [
+    "fast",
+    "false"
+   ]
+  ]
+ },
+ {
+  "step": "C7 set reasoning_effort=xhigh on grok-4.7 (the open fact)",
+  "request": {
+   "config_id": "reasoning_effort",
+   "value": "xhigh"
+  },
+  "reply": {
+   "config_id": "reasoning_effort",
+   "configured": true,
+   "current_value": "xhigh",
+   "option_description": "Controls how much reasoning effort the model uses before responding.",
+   "option_name": "Effort",
+   "value": "xhigh",
+   "value_name": "Extra High"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.7"
+   ],
+   [
+    "context",
+    "256k"
+   ],
+   [
+    "reasoning_effort",
+    "xhigh"
+   ],
+   [
+    "fast",
+    "false"
+   ]
+  ]
+ },
+ {
+  "step": "C8 set model=claude-fable-5-1 (upgrade tier base id)",
+  "request": {
+   "config_id": "model",
+   "value": "claude-fable-5-1"
+  },
+  "reply": {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "claude-fable-5-1",
+   "option_description": "Controls which model is used for responses",
+   "option_name": "Model",
+   "value": "claude-fable-5-1",
+   "value_name": "Claude Fable 5.1"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "claude-fable-5-1"
+   ],
+   [
+    "thinking",
+    "true"
+   ],
+   [
+    "context",
+    "300k"
+   ],
+   [
+    "effort",
+    "high"
+   ]
+  ]
+ },
+ {
+  "step": "C9 set effort=high on claude-fable-5-1",
+  "request": {
+   "config_id": "effort",
+   "value": "high"
+  },
+  "reply": {
+   "config_id": "effort",
+   "configured": true,
+   "current_value": "high",
+   "option_description": "Effort the model uses to generate its response.",
+   "option_name": "Effort",
+   "value": "high",
+   "value_name": "High"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "claude-fable-5-1"
+   ],
+   [
+    "thinking",
+    "true"
+   ],
+   [
+    "context",
+    "300k"
+   ],
+   [
+    "effort",
+    "high"
+   ]
+  ]
+ },
+ {
+  "step": "C10 set reasoning_effort=high on claude-fable-5-1",
+  "request": {
+   "config_id": "reasoning_effort",
+   "value": "high"
+  },
+  "reply": {
+   "error": {
+    "code": "config-option-failed",
+    "config_id": "reasoning_effort",
+    "detail": {
+     "code": -32602,
+     "data": {
+      "message": "Unknown model config option: reasoning_effort"
+     },
+     "message": "Invalid params"
+    }
+   }
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "claude-fable-5-1"
+   ],
+   [
+    "thinking",
+    "true"
+   ],
+   [
+    "context",
+    "300k"
+   ],
+   [
+    "effort",
+    "high"
+   ]
+  ]
+ },
+ {
+  "step": "C11 restore model=grok-4.7",
+  "request": {
+   "config_id": "model",
+   "value": "grok-4.7"
+  },
+  "reply": {
+   "config_id": "model",
+   "configured": true,
+   "current_value": "grok-4.7",
+   "option_description": "Controls which model is used for responses",
+   "option_name": "Model",
+   "value": "grok-4.7",
+   "value_name": "Grok 4.7"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.7"
+   ],
+   [
+    "context",
+    "256k"
+   ],
+   [
+    "reasoning_effort",
+    "xhigh"
+   ],
+   [
+    "fast",
+    "false"
+   ]
+  ]
+ },
+ {
+  "step": "C12 restore reasoning_effort=xhigh",
+  "request": {
+   "config_id": "reasoning_effort",
+   "value": "xhigh"
+  },
+  "reply": {
+   "config_id": "reasoning_effort",
+   "configured": true,
+   "current_value": "xhigh",
+   "option_description": "Controls how much reasoning effort the model uses before responding.",
+   "option_name": "Effort",
+   "value": "xhigh",
+   "value_name": "Extra High"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.7"
+   ],
+   [
+    "context",
+    "256k"
+   ],
+   [
+    "reasoning_effort",
+    "xhigh"
+   ],
+   [
+    "fast",
+    "false"
+   ]
+  ]
+ },
+ {
+  "step": "C13 restore fast=false",
+  "request": {
+   "config_id": "fast",
+   "value": "false"
+  },
+  "reply": {
+   "config_id": "fast",
+   "configured": true,
+   "current_value": "false",
+   "option_description": "Significantly faster but consumes more usage",
+   "option_name": "Fast",
+   "value": "false",
+   "value_name": "Off"
+  },
+  "advertised_after": [
+   [
+    "mode",
+    "agent"
+   ],
+   [
+    "model",
+    "grok-4.7"
+   ],
+   [
+    "context",
+    "256k"
+   ],
+   [
+    "reasoning_effort",
+    "xhigh"
+   ],
+   [
+    "fast",
+    "false"
+   ]
+  ]
+ }
+]

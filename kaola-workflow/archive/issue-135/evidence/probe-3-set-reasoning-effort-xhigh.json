@@ -1,0 +1,9 @@
+{
+ "config_id": "reasoning_effort",
+ "configured": true,
+ "current_value": "xhigh",
+ "option_description": "Controls how much reasoning effort the model uses before responding.",
+ "option_name": "Effort",
+ "value": "xhigh",
+ "value_name": "Extra High"
+}
