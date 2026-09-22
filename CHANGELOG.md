@@ -2,6 +2,15 @@
 
 ## 0.5.8 — Unreleased
 
+- **Sticky-cwd Host brick: prevention and recovery procedure (Issue #137).** Project Runner's
+  `workflow-worktree.md` tells a Host never to `cd` into paths Workflow finalize or sink move or
+  remove (`.kw/worktrees/`, `kaola-workflow/issue-N/`) — use absolute paths, `git -C`, or a
+  subshell, and return to the project root before finalize or sink; subagents follow the same
+  rule, and a bricked Host reports `brick` and stops. A new Delegator reference
+  `host-brick.md` gives the outer Agent the recovery: exact-stop that Host, start a new
+  standard-named Host at the project root, and continue from existing project records; no
+  in-Skill resume until one is proven live.
+
 - **Grok Bot pin hygiene: one pin per machine, superseded pins refused (Issue #138).** The
   locator's registration receipt is the machine's one pin. `kaola-project-runner-locate
   --expect-revision E` where E is a proper ancestor of the registered accepted revision adds
