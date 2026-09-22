@@ -43,7 +43,7 @@ rather than stopped. Without the binding exported, none of this section applies.
 2. From that runtime's main conversation, ask it to invoke its installed
    `workflow-next`.
 3. Let that runtime and its Workflow create, resume, recover, or otherwise
-   reconcile the run, branch, Mission List, and child worktree.
+   reconcile the run, branch, mission ledger, and child worktree.
 4. Keep Runner responsible only for exact-session transport, model selection,
    observation, prompt delivery, and exact stop.
 5. Keep `kaola-workflow-finalize` in the worker conversation; the outer Agent
@@ -52,7 +52,7 @@ rather than stopped. Without the binding exported, none of this section applies.
 ## Evidence-backed exception
 
 Outside an Orchestrator binding, linked-worktree starts, outer-created branches
-and Mission Lists, and existing-run recovery are **Agent decisions rather than
+and runs, and existing-run recovery are **Agent decisions rather than
 transport gates**. The controlling Agent may choose a different startup or
 recovery path when current evidence, explicit authorization, review-only work, an
 existing handoff, a damaged run, or another concrete circumstance makes that
@@ -64,7 +64,7 @@ is unchanged.
 
 Several exact Runner sessions may share one canonical project root, each keeping
 its own name, transport identity, run, branch, and child worktree. Seeing another
-run's worktree or Mission List is not write authorization. Workers sharing one
+run's worktree or ledger is not write authorization. Workers sharing one
 issue's run follow [issue-dispatch.md](issue-dispatch.md).
 
 ## Recovery

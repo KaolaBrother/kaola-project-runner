@@ -77,7 +77,7 @@ class RenderedSurfacesStateTheRule(unittest.TestCase):
         self.assertIn("verify it in the start receipt", self.skill)
         self.assertIn("keep the rule on later dispatches and restarts", self.skill)
         self.assertIn("One run claims one real issue", self.skill)
-        self.assertIn("never a bundle claim, worktree, Mission List or session spanning several", self.skill)
+        self.assertIn("never a bundle claim, worktree, ledger or session spanning several", self.skill)
         self.assertIn("issue-less tasks carry no issue number and never an invented one", self.skill)
         self.assertIn("](references/issue-dispatch.md)", self.skill)
 

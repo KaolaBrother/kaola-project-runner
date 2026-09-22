@@ -3,7 +3,7 @@
 Outer Agents start, continue, or restore the project's one ZCode Host here;
 Project Runner inside it owns workers, heartbeat, and close-out. No new tool,
 queue, registry, scheduler, or Delegator pointer file — Git worktree, Workflow
-run / Mission List, Issues, and Runner records already hold durable facts.
+run / ledger, Issues, and Runner records already hold durable facts.
 
 ```bash
 ZCODE="<skills>/{{ZCODE_WORKER}}/scripts/runtime-tmux.sh"
@@ -79,7 +79,7 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    is backend-dependent; `session/close` may not spend it.
    On proven failure (`Session not found` or no attested id) a **new**
    `$HOST` is allowed after step 4. That is a new ACP session and a new
-   holder — say so. Rebuild the frontier from Git, Workflow claim / Mission List,
+   holder — say so. Rebuild the frontier from Git, Workflow claim / ledger,
    Issues, and run receipts — never re-claim, re-dispatch, or redo. Do not
    `start` until step 4 completes.
 4. A new Host (first start, or after failed `--resume`) needs current
