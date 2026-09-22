@@ -1,6 +1,6 @@
 # Cursor CLI ACP transport
 
-Command: `cursor-agent --yolo acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: agentInfo is empty; initialize with _meta.parameterizedModelPicker=true so ACP advertises separate model/effort/fast options with base model IDs and string true/false fast values; the option SET follows the selected model (grok-4.7: context + reasoning_effort; grok-4.6 and claude-fable-5-1: effort; fable also thinking), so the effort id is resolved from the options advertised after the model apply; the CLI persists the selected model and parameters in ~/.cursor/cli-config.json and a plain launch advertises that persisted schema.
+Command: `cursor-agent --yolo acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: agentInfo is empty; initialize with _meta.parameterizedModelPicker=true so ACP advertises separate model/effort/fast options with base model IDs and string true/false fast values; the model-scoped option SET follows the selected model (the default preset advertises reasoning_effort, the upgrade preset effort), so the effort id is resolved from the options advertised after the model apply; the CLI persists the selected model and parameters in ~/.cursor/cli-config.json and a plain launch advertises that persisted schema.
 
 ## Command surface
 

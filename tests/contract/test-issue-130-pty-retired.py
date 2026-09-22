@@ -437,7 +437,8 @@ class ModelPolicyOnAcp(_ACP.AcpSessionFixture, unittest.TestCase):
         self.assertNotEqual(receipt.get("result"), "refused")
         self.assertEqual(receipt["resolved_runtime_model_id"], "gpt-5.6-sol")
         self.assertEqual(receipt["effective_selection"],
-                         {"effective_model": "saved-picker/other", "effective_effort": "high"})
+                         {"effective_model": "saved-picker/other", "effective_effort": "high",
+                          "effort_config_id": "reasoning_effort"})
         # Loss: ACP computes no true/false verdict; the mismatch is the two facts above.
         self.assertEqual(receipt["model_verified"], "unknown")
         sent = self.cli("send", "--text", "still usable", platform="codex")
@@ -459,7 +460,8 @@ class ModelPolicyOnAcp(_ACP.AcpSessionFixture, unittest.TestCase):
         receipt = self.guarded_start()  # the default mock advertises no currentValue
         self.assertIsNone(receipt.get("error"), receipt)
         self.assertEqual(receipt["effective_selection"],
-                         {"effective_model": None, "effective_effort": None})
+                         {"effective_model": None, "effective_effort": None,
+                          "effort_config_id": "reasoning_effort"})
         self.assertIsNone(receipt["actual_runtime_model_id"])
         self.assertIsNone(receipt["actual_parameters"])
         self.assertEqual(receipt["model_verified"], "unknown")

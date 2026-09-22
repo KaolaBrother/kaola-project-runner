@@ -505,14 +505,16 @@ def test_opencode_explicit_selection_h2() -> None:
         plain = sandbox.cli("opencode", "start", session="opencode-KPR-i119-plain")
         check(plain.get("state") == "ready"
               and plain.get("effective_selection") == {"effective_model": "native/opening",
-                                                       "effective_effort": "default"},
+                                                       "effective_effort": "default",
+                                                       "effort_config_id": "effort"},
               f"no --model: the agent's own opening selection is reported ({plain.get('effective_selection')})")
         sandbox.cli("opencode", "stop", "--force", session="opencode-KPR-i119-plain")
         wanted = ("--model", "opencode-go/deepseek-v4.1-flash", "--effort", "max")
         honored = sandbox.cli("opencode", "start", *wanted, session="opencode-KPR-i119-ok")
         check(honored.get("state") == "ready" and honored.get("result") is None
               and honored.get("effective_selection") == {
-                  "effective_model": "opencode-go/deepseek-v4.1-flash", "effective_effort": "max"},
+                  "effective_model": "opencode-go/deepseek-v4.1-flash", "effective_effort": "max",
+                  "effort_config_id": "effort"},
               f"an honored explicit selection starts ({honored.get('effective_selection')})")
         sandbox.cli("opencode", "stop", "--force", session="opencode-KPR-i119-ok")
         session = "opencode-KPR-i119-ignored"
