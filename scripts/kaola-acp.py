@@ -939,25 +939,67 @@ def holder_identity(directory: Path, record: dict[str, Any],
     return "verified", state
 
 
-def holder_argv_anchor(pid: Any, directory: Path) -> bool | None:
-    """Issue #132: whether live ``pid`` is the holder of ``directory`` by its
-    own argv (``--record-dir`` names that directory, the anchor
-    kaola-acp-sweep matches on). ``None`` when the argv cannot be read, which
-    never licenses a signal."""
-    if not isinstance(pid, int) or pid <= 0:
-        return False
+def procargs_command(pid: int) -> str | None:
+    """``pid``'s argv from the macOS ``KERN_PROCARGS2`` sysctl, joined by
+    spaces, or None. Issue #120: under a Seatbelt profile the setuid ``ps``
+    cannot exec, but a process may still read its own user's arguments."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        mib = (ctypes.c_int * 3)(1, 49, pid)  # CTL_KERN, KERN_PROCARGS2
+        size = ctypes.c_size_t(0)
+        if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0 or size.value < 4:
+            return None
+        buffer = ctypes.create_string_buffer(size.value)
+        if libc.sysctl(mib, 3, buffer, ctypes.byref(size), None, 0) != 0:
+            return None
+    except (OSError, AttributeError):
+        return None
+    raw = buffer.raw[:size.value]
+    argc = int.from_bytes(raw[:4], sys.byteorder)
+    rest = raw[4:]
+    end = rest.find(b"\0")  # the exec path, then NUL padding, then argv
+    if end < 0:
+        return None
+    argv = rest[end:].lstrip(b"\0").split(b"\0")[:argc]
+    if len(argv) < argc:
+        return None
+    return " ".join(value.decode("utf-8", "replace") for value in argv)
+
+
+def process_command(pid: int) -> str | None:
+    """Live ``pid``'s command line from ``ps``, else from ``KERN_PROCARGS2``."""
     try:
         result = subprocess.run(["ps", "-p", str(pid), "-o", "command="],
                                 capture_output=True, text=True, env=PS_ENV)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
     except OSError:
-        return None
-    if result.returncode != 0:
+        pass
+    return procargs_command(pid)
+
+
+HOLDER_RECORD_DIR = re.compile(r" --record-dir (.+?) --socket ")
+
+
+def holder_argv_anchor(pid: Any, directory: Path) -> bool | None:
+    """Issue #132: whether live ``pid`` is the holder of ``directory`` by its
+    own argv (``--record-dir`` names that directory, the anchor
+    kaola-acp-sweep matches on), both sides resolved so ``/tmp`` and
+    ``/private/tmp`` spellings of one root agree. ``None`` when the argv
+    cannot be read, which never licenses a signal and never frees a root."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    command = process_command(pid)
+    if command is None:
         return None if pid_alive(pid) else False
-    command = f" {result.stdout.strip()} "
     if "kaola-acp-holder" not in command:
         return False
-    return any(f" --record-dir {value} " in command
-               for value in {str(directory), os.path.realpath(str(directory))})
+    match = HOLDER_RECORD_DIR.search(f" {command} ")
+    if match is None:
+        return False
+    return os.path.realpath(match.group(1)) == os.path.realpath(str(directory))
 
 
 def git_facts(repo: str) -> dict[str, Any]:
@@ -2340,11 +2382,15 @@ def verified_hosts(args: argparse.Namespace, repo: str) -> list[dict[str, Any]]:
                 and holder_argv_anchor(record.get("holder_pid"), path.parent) is False):
             continue
         facts = state if identity == "verified" and state else record
-        hosts.append({"platform": platform, "session": session, "identity": identity,
-                      "holder_pid": facts.get("holder_pid"),
-                      "holder_instance_id": facts.get("holder_instance_id"),
-                      "acp_session_id": facts.get("acp_session_id"),
-                      "state": facts.get("state")})
+        host = {"platform": platform, "session": session, "identity": identity,
+                "holder_pid": facts.get("holder_pid"),
+                "holder_instance_id": facts.get("holder_instance_id"),
+                "acp_session_id": facts.get("acp_session_id"),
+                "state": facts.get("state")}
+        if identity == "mismatch" and state:
+            # The record names one instance, the socket answers as another.
+            host["answering_holder_instance_id"] = state.get("holder_instance_id")
+        hosts.append(host)
     return hosts
 
 

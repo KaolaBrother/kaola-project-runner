@@ -1243,6 +1243,107 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual([row["repo"] for row in other_rows], [theirs["repo"]])
 
 
+class Issue132AnchorUnitTests(unittest.TestCase):
+    """Issue #132 re-review N1/N2/N6: the argv anchor resolves both path
+    spellings, reads argv without ``ps``, and an unreadable argv never frees a
+    root or licenses a signal; a reused-PID stop keeps a record whose groups
+    survive."""
+
+    def setUp(self) -> None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(f"acp132_{self._testMethodName}", CLI)
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+        self._tmp = tempfile.TemporaryDirectory(prefix="kaola-132-anchor-")
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def holder_command(self, record_dir: str) -> str:
+        return (f"/usr/bin/python3 /x/kaola-acp-holder.py --record-dir {record_dir} "
+                "--socket /x/s.sock --repo /r --platform grok --session s")
+
+    def test_n1_anchor_matches_across_path_spellings(self) -> None:
+        from unittest.mock import patch
+        real = Path(os.path.realpath(self.root)) / "rec"
+        real.mkdir()
+        spelled = str(self.root / "rec")
+        linked = self.root / "alias"
+        linked.symlink_to(real)
+        for argv_dir, directory in ((spelled, real), (str(real), Path(spelled)),
+                                    (str(linked), real)):
+            with patch.object(self.module, "process_command",
+                              return_value=self.holder_command(argv_dir)):
+                self.assertIs(self.module.holder_argv_anchor(os.getpid(), directory), True,
+                              (argv_dir, directory))
+        with patch.object(self.module, "process_command",
+                          return_value=self.holder_command(str(real) + "-other")):
+            self.assertIs(self.module.holder_argv_anchor(os.getpid(), real), False)
+
+    @unittest.skipUnless(sys.platform == "darwin", "KERN_PROCARGS2 is macOS")
+    def test_n2_argv_is_read_without_ps(self) -> None:
+        from unittest.mock import patch
+        with patch.object(self.module.subprocess, "run", side_effect=OSError("no ps")):
+            command = self.module.process_command(os.getpid())
+        self.assertIsNotNone(command)
+        self.assertIn("test-acp-contract", command)
+
+    def stale_host(self, holder_pid: int, **extra) -> tuple[object, Path]:
+        import argparse
+        repo = os.path.realpath(self.root)
+        args = argparse.Namespace(platform="grok", session="grok-KPR-orchestrator-new",
+                                  record_root=str(self.root / "records"), command="stop")
+        old = argparse.Namespace(**{**vars(args), "session": "grok-KPR-orchestrator-old"})
+        directory = self.module.record_dir(old, repo)
+        directory.mkdir(parents=True)
+        record = {"platform": "grok", "session": old.session, "repo": repo,
+                  "holder_pid": holder_pid, "holder_instance_id": "e" * 32,
+                  "state": "ready", **extra}
+        (directory / "record.json").write_text(json.dumps(record), encoding="utf-8")
+        return args, directory
+
+    def test_n6_unreadable_argv_holds_the_root_and_refuses_the_stop(self) -> None:
+        from unittest.mock import patch
+        args, directory = self.stale_host(os.getpid())
+        repo = os.path.realpath(self.root)
+        with patch.object(self.module, "process_command", return_value=None):
+            hosts = self.module.verified_hosts(args, repo)
+            self.assertEqual([host["identity"] for host in hosts], ["unreachable"])
+            record = json.loads((directory / "record.json").read_text())
+            with patch.object(self.module, "base_receipt", return_value={}), \
+                 patch.object(self.module.os, "kill") as kill:
+                refused = self.module.force_stop_unreachable(args, repo, directory, record,
+                                                             {"force": True})
+            self.assertEqual(refused["error"]["code"], "holder-unreachable")
+            self.assertEqual([call for call in kill.call_args_list if call.args[1] != 0], [],
+                             "only the kill(pid, 0) liveness probe, never a signal")
+        self.assertTrue((directory / "record.json").is_file(), "the record stays")
+        with patch.object(self.module, "process_command", return_value="/bin/sleep 60"):
+            self.assertEqual(self.module.verified_hosts(args, repo), [],
+                             "a provably reused PID frees the root")
+
+    def test_n6_reused_pid_stop_keeps_the_record_while_a_group_survives(self) -> None:
+        from unittest.mock import patch
+        args, directory = self.stale_host(os.getpid(), agent_pid=424242, agent_pgid=424242)
+        repo = os.path.realpath(self.root)
+        record = json.loads((directory / "record.json").read_text())
+        with patch.object(self.module, "process_command", return_value="/bin/sleep 60"), \
+             patch.object(self.module, "base_receipt", return_value={}), \
+             patch.object(self.module, "recorded_groups", return_value=[424242]), \
+             patch.object(self.module, "live_group_members", return_value=[424243]), \
+             patch.object(self.module.os, "kill", side_effect=PermissionError) as kill:
+            receipt = self.module.force_stop_unreachable(args, repo, directory, record,
+                                                         {"force": True})
+        self.assertIs(receipt["pid_reused"], True)
+        self.assertIs(receipt["stopped"], False, receipt)
+        self.assertEqual(receipt["residual_pids"], [424243])
+        self.assertIsNone(receipt["retired_record"])
+        self.assertTrue((directory / "record.json").is_file(), "a survivor keeps its record")
+        self.assertNotIn(os.getpid(), [call.args[0] for call in kill.call_args_list],
+                         "the reused holder PID is never signalled")
+
+
 class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
     """Issue #34: ACP applies resolved model → effort → Fast in order and
     reports each configuration as a receipt, never a hard gate."""

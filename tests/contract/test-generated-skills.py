@@ -640,7 +640,7 @@ def check_issue_132_one_host(assertions: Assertions, root: Path) -> None:
                                    "`host-exists`", "a PID alone is never liveness",
                                    "`HUMAN_DECISION_REQUIRED`", "Only orphans stop",
                                    "in-flight work is never guessed dead", "`swept: stopped=",
-                                   "--include-dead", "`pid_reused: true` signalled nothing",
+                                   "--include-dead", "`pid_reused: true` never signalled that reused PID",
                                    "`--force` only for `dead` or when that fails",
                                    "`unreachable` on a second `list`",
                                    "attach it if verified, else sweep it")),

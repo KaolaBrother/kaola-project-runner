@@ -84,7 +84,8 @@ the install to be refreshed from the accepted checkout. `main-skill-build-skew`
 is the same for an older copy of this Skill in a root the Host reads
 (`main_skill_skew` paths): that copy may be the one loaded instead of this build.
 `host-exists` (Issue #132, same shape) refuses a Host-named `start` while another
-Host-named holder of this canonical root passes the identity check below — any
+Host-named holder of this canonical root may be live (only a dead or reused PID
+frees it) — any
 platform, a dispatched Host-named worker included. `existing_host` (with its
 `identity`) holds the root: attach it if verified, else sweep it; never rename.
 
@@ -123,7 +124,7 @@ recorded `holder_instance_id`; a PID alone is never liveness. Your own id is in
 
 Stop = that platform Runner's `stop --expected-holder-instance-id <the row's
 id>`, `--force` only for `dead` or when that fails; gone = `status` reads `stopped` with `residual_pids: []`, or
-`no-session`. `pid_reused: true` signalled nothing and retired the record;
+`no-session`. `pid_reused: true` never signalled that reused PID;
 `holder-instance-mismatch` means re-list, never a bare kill. Only orphans stop;
 in-flight work is never guessed dead. End the reply and the heartbeat `body` with
 `swept: stopped=[session:id] kept=[] adopt_candidates=[] unowned=[] residual_pids=[]`;
