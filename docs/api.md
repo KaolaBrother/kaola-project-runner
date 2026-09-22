@@ -531,7 +531,8 @@ Model evidence under `model` on the `start`/`preflight` receipt includes `reques
 `actual_parameters` are always `null` and `model_verified` is always `unknown`
 (`model_mismatch_reason: actual-model-evidence-not-yet-read`): ACP computes no true/false verdict.
 The agent's actual selection is `effective_selection` on `start`, beside
-`resolved_runtime_model_id`. `status`/`observe` carry no request provenance; they report the
+`resolved_runtime_model_id`; its `effort_config_id` names the effort option id it was read from
+(the resolved `acp_effort_config_id` candidate). `status`/`observe` carry no request provenance; they report the
 agent's own `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
