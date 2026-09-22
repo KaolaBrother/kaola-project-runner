@@ -35,7 +35,7 @@ Loaded from the Grok Bot account bridge: before each Host `status`, `start`
 existing locator with full attestation. Codex and generic hosts skip this.
 
 ```bash
-kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
+kaola-project-runner-locate --target local|cloud \
   --project "$PROJECT" --worker zcode --session "$HOST"
 ```
 

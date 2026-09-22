@@ -15,11 +15,12 @@ bind.
    from the other. Never clone, install, update, or change anything on Local Computer; the cloud
    target manages only its own checkout.
 2. On the bound target run `{{LOCATOR}}` with `--target local|cloud --expect-revision
-   <accepted>`: the device-local locator registered there at first configuration. Its receipt
-   names ROOT (that target's checkout), the normalised origin, HEAD, whether the tree is clean,
-   and the host fingerprint; `--target` only echoes your declaration, so the locator itself
-   compares the running host fingerprint and that declaration with the registration receipt
-   kept beside its link and refuses on mismatch (a fresh conversation needs no memory of it).
+   <accepted>`, `<accepted>` being the line above and never a memory: the device-local locator
+   registered there. Its receipt names ROOT (that target's checkout), origin, HEAD, whether the
+   tree is clean, and the host fingerprint; `--target` only echoes your declaration, so the
+   locator itself compares the running host fingerprint and that declaration with the
+   registration receipt kept beside its link and refuses on mismatch (a fresh conversation needs
+   no memory of it).
    If the command is missing, ask for that target's workspace; never search the filesystem,
    and never enter, print, or pass a token (the target's own Git or GitHub CLI authentication
    is the only credential).

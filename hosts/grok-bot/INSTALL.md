@@ -2,7 +2,7 @@
 
 These steps are for the owner and for Grok Bot itself. They are not a Skill. The account
 receives **exactly one** small private Skill, `kaola-delegator` (Kaola-Delegator bridge,
-`hosts/grok-bot/kaola-delegator.md`, 2536 bytes, stage `content`). Every policy,
+`hosts/grok-bot/kaola-delegator.md`, 2555 bytes, stage `content`). Every policy,
 worker, reference, and script stays in the repository and is loaded on demand from a verified
 checkout on the bound execution target. Research on Grok Bot 0.51.0 found no supported automated
 way to create an account Skill (`NO_SUPPORTED_PATH`), so the one native skill write below is the
@@ -101,10 +101,11 @@ every call. That checkout never operates on Mac paths, CLIs, tmux, or sessions.
 A new pin (content R′, then pin P′) is one more account write and, on each target, a move to R′
 followed by `register` again (the receipt records the accepted revision; a stale registration
 is refused). Cloud: `git -C ROOT fetch origin <commit> && git -C ROOT checkout --detach
-<commit>`, then `register`. Rollback is a new pin commit naming an older R, applied the same
-way. Removal: delete the account Skill the same native way it was saved, and the link and its
-receipt (`rm "$BIN/kaola-project-runner-locate" "$BIN/.kaola-project-runner-locate.json"`, or
-`./scripts/install-local.sh --uninstall --bin-links` for the installer-managed link).
+<commit>`, then `register`. A revision older than the registered one is refused
+(`expect-revision-superseded`, `accepted-revision-superseded`). Rollback is a new pin commit
+naming an older R: on each target remove the receipt, move to R, then `register`. Removal:
+delete the account Skill the same native way it was saved, and the link and its receipt
+(`rm "$BIN/kaola-project-runner-locate" "$BIN/.kaola-project-runner-locate.json"`, or `./scripts/install-local.sh --uninstall --bin-links` for the installer-managed link).
 
 ## Boundaries
 

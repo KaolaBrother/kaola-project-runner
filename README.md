@@ -412,6 +412,7 @@ subset, or skip the orchestrator:
 # the account once, then register the device-local locator on each execution target:
 python3 scripts/kaola-locate.py register --target local --bin-dir <dir on PATH> --expect-revision <accepted commit>   # validates origin/revision/clean, links kaola-project-runner-locate, writes the registration receipt beside it
 kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt; the locator compares host fingerprint and target with its receipt
+# an --expect-revision older than the registered one is refused (expect-revision-superseded / accepted-revision-superseded); roll back by removing the receipt, then register
 # With --project --worker zcode --session the receipt adds session.acp_holder_alive (the holder record kaola-acp status reads); for an ACP Host, session.present is tmux-only and never aliveness on its own.
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.

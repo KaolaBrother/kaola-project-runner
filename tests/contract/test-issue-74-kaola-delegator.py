@@ -349,6 +349,8 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "Grok Bot Host ops attest with locator --worker zcode and exact session")
     check("--project \"$PROJECT\"" in handoff_doc, "Grok Bot Host ops attest with locator --project")
     check("kaola-project-runner-locate" in handoff_doc, "Grok Bot Host ops use the existing locator command")
+    check("--expect-revision" not in handoff_doc and "--expect-revision" not in handoff_one,
+          "Grok Bot Host ops carry no commit pin: the receipt binds HEAD (Issue #138)")
     check("Refuse any `refused` receipt" in handoff_one, "Grok Bot path refuses a refused locator receipt")
     check("Codex and generic" in handoff_one and "skip this" in handoff_one,
           "Codex and generic hosts are not given the locator")

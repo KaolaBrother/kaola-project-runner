@@ -215,7 +215,9 @@ kaola-project-runner-locate ...          # the registered bin link, same argumen
 clean state, the link path, and the receipt path are all checked before anything is touched,
 and a refusal (`origin-mismatch`, `origin-form-unsupported`, `revision-mismatch`, `dirty`,
 `expect-revision-required`, `expect-revision-not-40-hex`, `foreign-locator-link`, `locator-path-occupied`,
-`registration-path-occupied`) leaves an existing link and registration receipt unchanged
+`registration-path-occupied`, `accepted-revision-superseded` when an existing receipt's
+`accepted_revision` descends from the expected revision (rollback: remove the receipt first,
+Issue #138)) leaves an existing link and registration receipt unchanged
 (`locator.changed: false`, `registration.changed: false`). Only a clean, matching checkout
 links `kaola-project-runner-locate` in the owner-chosen `--bin-dir` (default: the link's own
 directory when run through the link, else the installer's `$HOME/.local/bin`, the same
@@ -241,7 +243,10 @@ origin), `worker` (id, script path under the same root, `under_root`, `executabl
 elsewhere and not ownership). A declared `--target` requires the registration receipt
 (`locator-not-registered`, `locator-registration-unreadable`) and every recorded fact must
 match (`host-fingerprint-mismatch`, `target-mismatch`, `registration-root-mismatch`,
-`registration-stale` when HEAD is no longer the registered accepted revision); a plain
+`registration-stale` when HEAD is no longer the registered accepted revision), and an
+`--expect-revision` that is a proper ancestor of the recorded accepted revision adds
+`expect-revision-superseded` beside `revision-mismatch` (an unknown or unrelated one does not,
+a descendant is only `revision-mismatch`); a plain
 discovery call without `--target` tolerates an absent receipt but still refuses a mismatching
 one. `result` is `ok` (exit 0) or `refused` (exit 1) with `reasons`; `--target` is required
 when any of `--project`, `--worker`, `--session` is given. Revision and clean facts are what

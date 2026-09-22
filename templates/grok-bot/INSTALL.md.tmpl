@@ -101,10 +101,11 @@ every call. That checkout never operates on Mac paths, CLIs, tmux, or sessions.
 A new pin (content R′, then pin P′) is one more account write and, on each target, a move to R′
 followed by `register` again (the receipt records the accepted revision; a stale registration
 is refused). Cloud: `git -C ROOT fetch origin <commit> && git -C ROOT checkout --detach
-<commit>`, then `register`. Rollback is a new pin commit naming an older R, applied the same
-way. Removal: delete the account Skill the same native way it was saved, and the link and its
-receipt (`rm "$BIN/{{LOCATOR}}" "$BIN/.{{LOCATOR}}.json"`, or
-`./scripts/install-local.sh --uninstall --bin-links` for the installer-managed link).
+<commit>`, then `register`. A revision older than the registered one is refused
+(`expect-revision-superseded`, `accepted-revision-superseded`). Rollback is a new pin commit
+naming an older R: on each target remove the receipt, move to R, then `register`. Removal:
+delete the account Skill the same native way it was saved, and the link and its receipt
+(`rm "$BIN/{{LOCATOR}}" "$BIN/.{{LOCATOR}}.json"`, or `./scripts/install-local.sh --uninstall --bin-links` for the installer-managed link).
 
 ## Boundaries
 

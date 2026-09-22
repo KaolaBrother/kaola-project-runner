@@ -145,6 +145,13 @@ link resolves to, and HEAD with that receipt and fails closed
 (`host-fingerprint-mismatch`, `target-mismatch`, `registration-root-mismatch`,
 `registration-stale`; `locator-not-registered` when a target is declared and no
 receipt exists), so a fresh conversation needs no memory of the fingerprint.
+The receipt is the machine's one pin (Issue #138): an `--expect-revision` that
+is a proper ancestor of its accepted revision adds `expect-revision-superseded`
+beside `revision-mismatch` (the caller's value is older than this machine's
+pin; a descendant is only `revision-mismatch`, the machine is behind; an
+unknown or unrelated one changes nothing), and `register` refuses such a value
+as `accepted-revision-superseded` before touching the link or receipt. Rollback
+is an owner act: remove the receipt, then `register` the older revision.
 The origin is accepted only in an explicit `https://`, `ssh://`, or scp
 `host:path` form and normalised without userinfo or port; a bare
 `github.com/Owner/repo`, `http://`, or local-path origin is
@@ -192,7 +199,8 @@ no content hashing is attempted. Reasons: `origin-mismatch`,
 `not-a-checkout`, `target-required`, `expect-revision-required`, `expect-revision-not-40-hex`,
 `locator-not-registered`, `locator-registration-unreadable`,
 `host-fingerprint-mismatch`, `target-mismatch`, `registration-root-mismatch`,
-`registration-stale`, `project-not-on-this-host`, `project-not-a-checkout`,
+`registration-stale`, `expect-revision-superseded`, `accepted-revision-superseded`,
+`project-not-on-this-host`, `project-not-a-checkout`,
 `worker-unknown`, `script-missing`, `script-outside-root`,
 `script-not-executable`, `foreign-locator-link`, `locator-path-occupied`,
 `registration-path-occupied`. A path that does not exist on the executing host

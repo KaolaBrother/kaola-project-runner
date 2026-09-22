@@ -316,6 +316,16 @@ def registration_facts(directory: Path, target: str | None, root: Path | None, h
     return facts, mismatches
 
 
+def superseded(root: Path, expect: str | None, accepted: object) -> bool:
+    """Issue #138: is ``expect`` a proper ancestor of this machine's accepted revision?
+
+    One Git call, only when the two differ; an unknown or unrelated revision is not
+    superseded (the caller stays fail-closed through ``revision-mismatch``)."""
+    if expect is None or not isinstance(accepted, str) or expect == accepted:
+        return False
+    return git(root, "merge-base", "--is-ancestor", expect, accepted) is not None
+
+
 def emit(receipt: dict[str, object]) -> int:
     line = json.dumps(receipt, ensure_ascii=False, sort_keys=True)
     if len(line.encode("utf-8")) > RECEIPT_LIMIT:
@@ -354,6 +364,8 @@ def receipt_command(args: argparse.Namespace) -> int:
     )
     receipt["registration"] = registration
     reasons.extend(more)
+    if root is not None and superseded(root, args.expect_revision, registration.get("accepted_revision")):
+        reasons.append("expect-revision-superseded")
     if args.project is not None:
         pf, more = project_facts(args.project)
         receipt["project"] = pf
@@ -381,7 +393,10 @@ def register_command(args: argparse.Namespace) -> int:
     foreign, dirty, or mismatched checkout can never replace an existing, good locator or
     its receipt. The link is replaced first and the receipt second, each atomically: a
     failure between the two leaves a receipt that no longer matches the link, which every
-    later call refuses (``registration-root-mismatch``) until ``register`` runs again.
+    later call refuses (``registration-root-mismatch``) until ``register`` runs again. An
+    expected revision that is a proper ancestor of the existing receipt's accepted revision is
+    refused (``accepted-revision-superseded``): rolling a machine back is an owner act that
+    removes the receipt first (Issue #138).
     """
     root, reasons = this_checkout()
     receipt: dict[str, object] = {"schema": SCHEMA, "host": host_facts(), "action": "register",
@@ -411,6 +426,10 @@ def register_command(args: argparse.Namespace) -> int:
     registered_before = registration_path.is_file() and not registration_path.is_symlink()
     if (registration_path.exists() or registration_path.is_symlink()) and not registered_before:
         reasons.append("registration-path-occupied")
+    if registered_before:
+        existing, _ = load_registration(bin_dir)
+        if existing is not None and superseded(root, args.expect_revision, existing.get("accepted_revision")):
+            reasons.append("accepted-revision-superseded")
     locator: dict[str, object] = {"path": str(link), "command": LOCATOR_COMMAND, "changed": False,
                                   "replaced": False}
     registration: dict[str, object] = {"path": str(registration_path), "schema": REGISTRATION_SCHEMA,

@@ -381,6 +381,10 @@ class Issue49SingleBridge(unittest.TestCase):
             self.assertIn(f"Accepted revision: `{accepted['commit']}` ({tag}).", self.text)
             self.assertNotIn("do not save it to any account", self.text)
         self.assertIn("`--target` only echoes your declaration", self.text)
+        # Issue #138: the accepted value is the Skill's own line, never a memory.
+        self.assertIn("`<accepted>` being the line above and never a memory", self.text)
+        self.assertNotIn("at first configuration", self.text)
+        self.assertNotIn("the normalised", self.text)
         self.assertIn("host fingerprint", self.text)
         self.assertIn("KaolaBrother/kaola-project-runner", self.text)
         self.assertIn(EXPECTED_ORIGIN, self.text)
@@ -715,6 +719,11 @@ class Issue49PinModel(unittest.TestCase):
             written = render(root, "--write")
             self.assertEqual(written.returncode, 0, written.stderr)
             self.assertIn(f"pinned at {content[:12]}, pin verified", written.stdout)
+            # Issue #138: the reworded bridge stays within budget with the pinned accepted line too.
+            pinned_bridge = (root / "hosts" / "grok-bot" / f"{EXTERNAL_ID}.md").read_text(encoding="utf-8")
+            self.assertIn(f"Accepted revision: `{content}`", pinned_bridge)
+            self.assertIn("`<accepted>` being the line above and never a memory", pinned_bridge)
+            self.assertLessEqual(len(pinned_bridge.encode("utf-8")), BUDGETS["bridge_bytes"])
             self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
             self.assertEqual(verify(root, "--repo", ".", "--require-pinned").returncode, 0)
             git(root, "add", "-A")
@@ -1165,6 +1174,53 @@ class Issue49LocatorAttestation(unittest.TestCase):
             self.assertEqual(registered["result"], "ok", registered)
             self.assertTrue(registered["registration"]["replaced"])
             rc, receipt = fx.via_link("--target", "local")
+            self.assertEqual(receipt["result"], "ok", receipt)
+
+    def test_superseded_revisions_are_refused_both_ways_and_rollback_removes_the_receipt(self) -> None:
+        """Issue #138: the registration receipt is the machine's one pin; an older value is refused."""
+        with tempfile.TemporaryDirectory() as temporary:
+            fx = LocatorFixture(temporary)
+            r1 = fx.revision
+            rc, registered = fx.register("--expect-revision", r1)
+            self.assertEqual(rc, 0, registered)
+            (fx.checkout / "next.txt").write_text("next\n", encoding="utf-8")
+            git(fx.checkout, "add", "-A")
+            git(fx.checkout, "commit", "-q", "-m", "R2 content commit")
+            r2 = git(fx.checkout, "rev-parse", "HEAD")
+            rc, registered = fx.register("--expect-revision", r2)
+            self.assertEqual(registered["result"], "ok", registered)
+            # 1. A remembered R1 against a machine pinned at R2: the caller's value is superseded.
+            rc, receipt = fx.via_link("--target", "local", "--expect-revision", r1)
+            self.assertEqual(rc, 1, receipt)
+            self.assertEqual(receipt["reasons"], ["revision-mismatch", "expect-revision-superseded"])
+            # 4. An unknown 40-hex fails closed exactly as before: no superseded reason.
+            rc, receipt = fx.via_link("--target", "local", "--expect-revision", "e" * 40)
+            self.assertEqual(receipt["reasons"], ["revision-mismatch"])
+            # 5. The machine's own pin needs no supplied value; the record shape is unchanged.
+            rc, receipt = fx.via_link("--target", "local")
+            self.assertEqual(receipt["result"], "ok", receipt)
+            self.assertTrue(receipt["registration"]["revision_current"])
+            self.assertEqual(set(json.loads(fx.registration.read_text(encoding="utf-8"))),
+                             {"schema", "root", "target", "host", "accepted_revision"})
+            # 2. A clean checkout at R1 cannot register the superseded R1 back; nothing is touched.
+            git(fx.checkout, "checkout", "-q", "--detach", r1)
+            link = fx.bin / LOCATOR_COMMAND
+            good_link, good_receipt = os.readlink(link), fx.registration.read_bytes()
+            rc, refused = fx.register("--expect-revision", r1)
+            self.assertEqual(rc, 1, refused)
+            self.assertEqual(refused["reasons"], ["accepted-revision-superseded"])
+            self.assertFalse(refused["locator"]["changed"] or refused["registration"]["changed"])
+            self.assertEqual((os.readlink(link), fx.registration.read_bytes()), (good_link, good_receipt))
+            # A descendant is only the machine being behind: revision-mismatch, never superseded.
+            rc, receipt = fx.via_link("--target", "local", "--expect-revision", r2)
+            self.assertIn("revision-mismatch", receipt["reasons"])
+            self.assertNotIn("expect-revision-superseded", receipt["reasons"])
+            # 3. Rollback is the owner removing the receipt, then registering the older revision.
+            fx.registration.unlink()
+            rc, registered = fx.register("--expect-revision", r1)
+            self.assertEqual(registered["result"], "ok", registered)
+            self.assertEqual(json.loads(fx.registration.read_text(encoding="utf-8"))["accepted_revision"], r1)
+            rc, receipt = fx.via_link("--target", "local", "--expect-revision", r1)
             self.assertEqual(receipt["result"], "ok", receipt)
 
     def test_origin_is_accepted_only_in_explicit_https_ssh_or_scp_forms(self) -> None:

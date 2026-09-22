@@ -2,6 +2,17 @@
 
 ## 0.5.8 — Unreleased
 
+- **Grok Bot pin hygiene: one pin per machine, superseded pins refused (Issue #138).** The
+  locator's registration receipt is the machine's one pin. `kaola-project-runner-locate
+  --expect-revision E` where E is a proper ancestor of the registered accepted revision adds
+  `expect-revision-superseded` beside `revision-mismatch`; `register` refuses such an E as
+  `accepted-revision-superseded` before touching the link or receipt, so a remembered stale
+  revision can no longer roll a machine back. Rollback stays an owner act: remove the receipt,
+  then `register`. The bridge step 2 now says `<accepted>` is the Skill's own line, never a
+  memory, and the Delegator's Grok Bot co-location attestation no longer passes
+  `--expect-revision` (the receipt's `registration-stale` already binds HEAD to the machine's
+  pin), so no commit pin travels into the Delegator or Host.
+
 - **cursor-cli default tier lands Grok 4.7 Extra High again on Cursor CLI ≥ 2026.09.18 (Issue #135).**
   Cursor's effort option id follows the selected model (`reasoning_effort` for Grok 4.7, `effort`
   for Claude Fable 5.1), so `acp_effort_config_id` is now an ordered `;` candidate list
