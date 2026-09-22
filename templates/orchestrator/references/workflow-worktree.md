@@ -66,6 +66,16 @@ its own name, transport identity, run, branch, and child worktree. Seeing anothe
 run's worktree or ledger is not write authorization. Workers sharing one
 issue's run follow [issue-dispatch.md](issue-dispatch.md).
 
+## Host shell cwd
+
+A Host shell may keep its working directory between calls, so a directory that
+finalize or sink moves or removes bricks every later call (for example
+`spawn /bin/bash ENOENT`). Never `cd` into `.kw/worktrees/` or
+`kaola-workflow/issue-N/`; use absolute paths, `git -C`, or a subshell
+`( cd ... && ... )`, and return to the project root before finalize or sink.
+Subagents follow the same rule. A bricked Host reports `brick`, asks to be
+replaced, and stops acting.
+
 ## Recovery
 
 Preserve existing work by default; after inspecting state the Agent chooses
