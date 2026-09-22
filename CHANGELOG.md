@@ -10,7 +10,10 @@
   the root until it is exact-stopped. A PID alone is no longer treated as liveness. `session-exists` requires that check (or a PID whose argv still
   names the record); a reused PID is replaced without a signal. `stop --force` signals a
   live-but-unreachable holder only when its argv anchors it to the record; for a reused PID it sweeps
-  only the dead holder's identity-checked groups and then retires the record. A dead holder's force stop marks the record `stopped` once nothing is left.
+  only the dead holder's identity-checked groups and then retires the record. A holder started
+  under another spelling of the record root is found through the socket its own argv names and
+  stopped over it, never signalled. Holders now record `agent_started`, and a dead holder's agent
+  group is swept only while its live leader still has that start time. A dead holder's force stop marks the record `stopped` once nothing is left.
   `kaola-acp-list/1` rows add `identity`, `host_class`, `dispatcher`, and the `heartbeat_host`
   binding, and `--include-dead` opts into dead records; the default view is unchanged. The
   Delegator's One Host rule and handoff now spell out attach-or-exact-stop-and-prove-gone before any

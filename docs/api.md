@@ -384,7 +384,9 @@ silent and whose argv is provably another process (compared as resolved paths; r
 under another instance id (`mismatch`), or is silent while its argv still names the record (an
 initializing or wedged holder) holds the root. `existing_host` carries its `platform`, `session`,
 `identity`, `holder_pid`, `holder_instance_id`, `acp_session_id`, and `state`, plus
-`answering_holder_instance_id` on `mismatch` (`existing_hosts`
+`answering_holder_instance_id` on `mismatch` and `argv: "unreadable"` when a silent holder's argv
+cannot be read, e.g. by a Seatbelt-sandboxed caller for another user's process or a zombie
+(`existing_hosts`
 lists all when there are several). The `list` identity probe is bounded at 2 s per row, the start
 guard's at 5 s. A same-name start keeps `session-exists`, now only for a holder that
 passes the check or whose live PID's argv still names this record directory (`error.identity`
@@ -392,10 +394,15 @@ reports the check). A live PID whose argv is provably another process is a reuse
 replaces the stale record without signalling it and reports `replaced_record.pid_reused: true`.
 `stop --force` on a live PID whose socket is absent or silent checks
 `--expected-holder-instance-id` against the record (`holder-instance-mismatch`, nothing written),
-then signals only a PID whose argv anchors it to the record (`holder_force_killed`); a reused PID
+stops a holder that answers on the `--socket` its own argv names (a holder started under another
+spelling of the same record root, e.g. `/tmp` vs `/private/tmp`, derives another socket path) with an
+ordinary stop over that socket (`answering_socket`), and signals only a silent PID whose argv anchors
+it to the record (`holder_force_killed`); a reused PID
 gets no signal (`pid_reused: true`, `holder_signalled: false`), the dead holder's recorded groups
-are swept exactly as for any dead holder (`force_killed_pids`: the agent's recorded process group,
-plus child groups that still match their recorded start time), and the record is retired once nothing of them is left
+are swept exactly as for any dead holder (`force_killed_pids`: the agent's own process group when
+its live leader still has the start time the holder recorded as `agent_started` at spawn, or has no
+live leader left; a record written before `agent_started` keeps the group trusted as before; plus
+child groups that still match their recorded start time), and the record is retired once nothing of them is left
 (later `status` reads `no-session`; a survivor keeps the record and appears in `residual_pids`). An
 unreadable argv refuses `holder-unreachable`. A force stop of a dead
 holder that leaves nothing of its recorded groups marks the record `stopped`, so `status` reads

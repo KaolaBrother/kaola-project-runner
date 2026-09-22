@@ -1076,8 +1076,25 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         child.wait()
         return child.pid
 
+    def acp_module(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(f"acp132_{self._testMethodName}", CLI)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
     def test_t3_same_name_start_on_a_verified_holder_is_session_exists(self) -> None:
         first = self.start()
+        # Review L2: the real spawn argv satisfies both anchors.
+        module = self.acp_module()
+        directory = self.record_path().parent
+        self.assertIs(module.holder_argv_anchor(first["holder_pid"], directory), True)
+        own = module.holder_argv_paths(first["holder_pid"])
+        self.assertEqual(os.path.realpath(own[1]), os.path.realpath(str(self.holder_sock())))
+        # Review N3: the holder records its agent's start time at spawn.
+        record = json.loads(self.record_path().read_text())
+        self.assertIsInstance(record.get("agent_started"), str, record)
+        self.assertIn(record["agent_pgid"], module.recorded_groups(record, directory))
         again = self.cli("start", check=False)
         self.assertEqual((again.get("error") or {}).get("code"), "session-exists", again)
         self.assertEqual(again["error"].get("identity"), "verified")
@@ -1191,7 +1208,12 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         # A surviving agent group of the dead holder.
         orphan = subprocess.Popen(["sleep", "60"], start_new_session=True)
         try:
-            record.update(agent_pid=orphan.pid, agent_pgid=orphan.pid)
+            # The stand-in agent carries its own recorded start time (#132 N3).
+            module = self.acp_module()
+            table = module.run_ps(["pid", "pgid", "state", "lstart"], env=module.PS_ENV)
+            started = next(line.split(None, 3)[3].strip() for line in table.stdout.splitlines()
+                           if line.split() and line.split()[0] == str(orphan.pid))
+            record.update(agent_pid=orphan.pid, agent_pgid=orphan.pid, agent_started=started)
             self.record_path().write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
             listed = self.row(self.list_rows("--repo", str(self.repo), "--include-dead"))
             self.assertEqual((listed or {}).get("identity"), "dead", listed)
@@ -1223,6 +1245,30 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(stop.get("holder_force_killed"), started["holder_pid"], stop)
         self.assertEqual(stop.get("residual_pids"), [], stop)
         self.assertTrue(wait_for(lambda: process_gone(started["holder_pid"]), 10))
+        self._started = False
+
+    def test_m1_other_spelling_of_the_root_reaches_the_live_holder(self) -> None:
+        """Review M1: a caller spelling the record root differently derives
+        another socket path; it must still verify the live holder through the
+        socket its argv names, and a force stop must stop it gracefully there
+        rather than signal a holder that answers."""
+        started = self.start()
+        alias = self.root / f"alias-{self._testMethodName}"
+        alias.symlink_to(self.record_root)
+        env = {"KAOLA_ACP_RECORD_ROOT": str(alias)}
+        listed = subprocess.run([sys.executable, str(CLI), "list", "--repo", str(self.repo)],
+                                capture_output=True, text=True, timeout=30,
+                                env={**self.env(), **env})
+        row = self.row(json.loads(listed.stdout)["rows"])
+        self.assertEqual((row or {}).get("identity"), "verified", row)
+        stop = self.cli("stop", "--force", "--expected-holder-instance-id",
+                        started["holder_instance_id"], check=False, extra_env=env)
+        self.assertNotIn("holder_force_killed", stop, stop)
+        self.assertEqual(os.path.realpath(stop.get("answering_socket") or ""),
+                         os.path.realpath(str(self.holder_sock())), stop)
+        self.assertTrue(wait_for(lambda: process_gone(started["holder_pid"]), 15))
+        status = self.cli("status", check=False)
+        self.assertIn(status.get("outcome"), ("stopped",), status)
         self._started = False
 
     def test_t6_list_repo_filter_never_reaches_another_repo(self) -> None:
@@ -1310,6 +1356,10 @@ class Issue132AnchorUnitTests(unittest.TestCase):
         with patch.object(self.module, "process_command", return_value=None):
             hosts = self.module.verified_hosts(args, repo)
             self.assertEqual([host["identity"] for host in hosts], ["unreachable"])
+            self.assertEqual(hosts[0].get("argv"), "unreadable", hosts)
+            with patch.object(self.module, "base_receipt", return_value={}):
+                refusal = self.module.host_exists_refusal(args, repo, hosts)
+            self.assertIn("unsandboxed shell", refusal["detail"], refusal)
             record = json.loads((directory / "record.json").read_text())
             with patch.object(self.module, "base_receipt", return_value={}), \
                  patch.object(self.module.os, "kill") as kill:
@@ -1322,6 +1372,24 @@ class Issue132AnchorUnitTests(unittest.TestCase):
         with patch.object(self.module, "process_command", return_value="/bin/sleep 60"):
             self.assertEqual(self.module.verified_hosts(args, repo), [],
                              "a provably reused PID frees the root")
+
+    def test_n3_agent_group_is_swept_only_under_its_recorded_start_time(self) -> None:
+        leader = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        try:
+            table = self.module.run_ps(["pid", "pgid", "state", "lstart"], env=self.module.PS_ENV)
+            started = next(line.split(None, 3)[3].strip() for line in table.stdout.splitlines()
+                           if line.split() and line.split()[0] == str(leader.pid))
+            base = {"agent_pid": leader.pid, "agent_pgid": leader.pid}
+            self.assertIn(leader.pid, self.module.recorded_groups(
+                dict(base, agent_started=started)), "the recorded agent group")
+            self.assertNotIn(leader.pid, self.module.recorded_groups(
+                dict(base, agent_started="Thu Jan  1 00:00:00 1970")),
+                "a live leader with another start time is a reused id")
+            self.assertIn(leader.pid, self.module.recorded_groups(base),
+                          "a record from before #132 keeps its trusted group")
+        finally:
+            leader.kill()
+            leader.wait()
 
     def test_n6_reused_pid_stop_keeps_the_record_while_a_group_survives(self) -> None:
         from unittest.mock import patch

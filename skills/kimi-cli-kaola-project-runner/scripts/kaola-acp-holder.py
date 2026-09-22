@@ -737,6 +737,12 @@ class AgentConnection:
             env=env,
             start_new_session=True,
         )
+        # Issue #132: the agent's own start time, so a sweep of this record
+        # after the holder is gone can tell the agent's process group from an
+        # unrelated group that reused its id.
+        self.holder.agent_started = next(
+            (started for pid, _ppid, _pgid, started in process_table() if pid == self.proc.pid),
+            None)
         self.stderr_pump = StderrPump(self.proc.stderr, self.holder.record_dir / "stderr.log")
         self.stderr_pump.start()
         self.reader = threading.Thread(target=self._read_loop, daemon=True)
@@ -1444,6 +1450,7 @@ class Holder:
             "holder_instance_id": self.holder_instance_id,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
+            "agent_started": getattr(self, "agent_started", None),
             "agent_child_pgids": sorted(self.agent_child_groups),
             "agent_child_groups": {str(pgid): {str(pid): started for pid, started in members.items()}
                                    for pgid, members in sorted(self.agent_child_groups.items())},

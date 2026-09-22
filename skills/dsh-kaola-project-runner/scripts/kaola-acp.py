@@ -920,6 +920,30 @@ IDENTITY_PROBE_TIMEOUT = 5.0
 LIST_IDENTITY_TIMEOUT = 2.0
 
 
+def answering_socket(directory: Path, record: dict[str, Any],
+                     timeout: float = IDENTITY_PROBE_TIMEOUT) -> tuple[Path | None, dict[str, Any] | None]:
+    """The admin socket the live holder of this record answers on, and its
+    ``state`` reply, or ``(None, None)``. The path derived from this caller's
+    spelling of the record root comes first; when it is absent or silent, the
+    ``--socket`` in the holder's own argv is tried, but only once that argv's
+    ``--record-dir`` resolves to this record (a holder started under another
+    spelling of the same root, e.g. ``/tmp`` vs ``/private/tmp``)."""
+    derived = sock_path_for_directory(directory)
+    candidates = [derived]
+    for index, sock in enumerate(candidates):
+        if sock.exists():
+            state = socket_request(sock, "state", {}, timeout)
+            if "holder_instance_id" in state:
+                return sock, state
+        if index == 0:
+            own = holder_argv_paths(record.get("holder_pid"))
+            if (own is not None and own[1]
+                    and os.path.realpath(own[0]) == os.path.realpath(str(directory))
+                    and os.path.realpath(own[1]) != os.path.realpath(str(derived))):
+                candidates.append(Path(own[1]))
+    return None, None
+
+
 def holder_identity(directory: Path, record: dict[str, Any],
                     timeout: float = IDENTITY_PROBE_TIMEOUT) -> tuple[str, dict[str, Any] | None]:
     """``verified``, ``dead`` (PID gone), ``unreachable`` (PID alive, socket
@@ -927,11 +951,8 @@ def holder_identity(directory: Path, record: dict[str, Any],
     instance id), plus the holder's ``state`` reply when it answered."""
     if not pid_alive(record.get("holder_pid")):
         return "dead", None
-    sock = sock_path_for_directory(directory)
-    if not sock.exists():
-        return "unreachable", None
-    state = socket_request(sock, "state", {}, timeout)
-    if "holder_instance_id" not in state:
+    _sock, state = answering_socket(directory, record, timeout)
+    if state is None:
         return "unreachable", None
     expected = record.get("holder_instance_id")
     if not isinstance(expected, str) or not expected or state["holder_instance_id"] != expected:
@@ -980,7 +1001,26 @@ def process_command(pid: int) -> str | None:
     return procargs_command(pid)
 
 
+# The holder argv order command_start spawns: --record-dir, --socket, --repo.
+# Both anchors below depend on it; test_t3 runs a real start through them.
 HOLDER_RECORD_DIR = re.compile(r" --record-dir (.+?) --socket ")
+HOLDER_SOCKET = re.compile(r" --socket (.+?) --repo ")
+
+
+def holder_argv_paths(pid: Any) -> tuple[str, str | None] | None:
+    """``(--record-dir, --socket)`` from live ``pid``'s argv when it is a
+    holder, else None (not a holder, or the argv is unreadable)."""
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    command = process_command(pid)
+    if command is None or "kaola-acp-holder" not in command:
+        return None
+    line = f" {command} "
+    record_dir = HOLDER_RECORD_DIR.search(line)
+    if record_dir is None:
+        return None
+    sock = HOLDER_SOCKET.search(line)
+    return record_dir.group(1), sock.group(1) if sock else None
 
 
 def holder_argv_anchor(pid: Any, directory: Path) -> bool | None:
@@ -1192,7 +1232,11 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
     (spawn record), so a reused pid or group id is never touched."""
     groups: list[int] = []
     pgid = record.get("agent_pgid")
-    if isinstance(pgid, int) and pgid > 0:
+    agent_started = record.get("agent_started")
+    checked = isinstance(agent_started, str) and bool(agent_started)
+    if isinstance(pgid, int) and pgid > 0 and not checked:
+        # A record written before Issue #132 names no agent start time: its
+        # group is trusted as before.
         groups.append(pgid)
     children = record.get("agent_child_groups") or {}
     spawned: list[dict[str, Any]] = []
@@ -1207,7 +1251,7 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
                     spawned.append(entry)
         except OSError:
             pass
-    if not children and not spawned:
+    if not children and not spawned and not (checked and isinstance(pgid, int) and pgid > 0):
         return groups
     # ``lstart`` is rendered in the caller's locale on macOS: pin C so it
     # parses and matches what the holder recorded under the same pin.
@@ -1218,6 +1262,13 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
         if (len(fields) == 4 and fields[0].isdigit() and fields[1].isdigit()
                 and not fields[2].upper().startswith("Z")):
             by_pid[int(fields[0])] = (int(fields[1]), fields[3].strip())
+    if checked and isinstance(pgid, int) and pgid > 0:
+        # Issue #132: the agent leads its own group (start_new_session). A live
+        # leader must be the recorded agent by start time; with the leader gone
+        # the id cannot have been reused while members still hold the group.
+        leader = by_pid.get(pgid)
+        if leader is None or leader == (pgid, agent_started):
+            groups.append(pgid)
     for child, members in children.items():
         if not str(child).isdigit() or int(child) in groups:
             continue
@@ -1322,7 +1373,9 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
     if anchor is None:
         receipt["error"] = {"code": "holder-unreachable",
                             "message": "holder PID alive, socket silent, and its argv is "
-                                       "unreadable: no identity anchor, nothing signalled",
+                                       "unreadable (a sandboxed caller cannot read another "
+                                       "user's process): no identity anchor, nothing "
+                                       "signalled; stop it from an unsandboxed shell",
                             "holder_pid": holder_pid}
         receipt.update(mutation_status="not_started", mutation_performed=False)
         return receipt
@@ -1367,7 +1420,15 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
             "residual_pids": leftover,
         })
         return receipt
-    # The live PID is this record's own wedged holder.
+    # The live PID is this record's own holder. One started under another
+    # spelling of this record root answers on the socket its argv names: stop
+    # it there, exactly as an ordinary stop - never signal a holder that answers.
+    sock, state = answering_socket(directory, record)
+    if sock is not None:
+        receipt.update(socket_request(sock, "stop", params, 30.0))
+        receipt["answering_socket"] = str(sock)
+        return receipt
+    # Silent on every socket it could use: a wedged holder.
     for sig, grace in ((signal.SIGTERM, 2.0), (signal.SIGKILL, 2.0)):
         try:
             os.kill(holder_pid, sig)
@@ -2378,15 +2439,20 @@ def verified_hosts(args: argparse.Namespace, repo: str) -> list[dict[str, Any]]:
         identity, state = holder_identity(path.parent, record)
         if identity == "dead":
             continue
-        if (identity == "unreachable"
-                and holder_argv_anchor(record.get("holder_pid"), path.parent) is False):
-            continue
+        anchor = None
+        if identity == "unreachable":
+            anchor = holder_argv_anchor(record.get("holder_pid"), path.parent)
+            if anchor is False:
+                continue
         facts = state if identity == "verified" and state else record
         host = {"platform": platform, "session": session, "identity": identity,
                 "holder_pid": facts.get("holder_pid"),
                 "holder_instance_id": facts.get("holder_instance_id"),
                 "acp_session_id": facts.get("acp_session_id"),
                 "state": facts.get("state")}
+        if identity == "unreachable" and anchor is None:
+            # Fail closed: nothing proves this live PID is not the Host.
+            host["argv"] = "unreadable"
         if identity == "mismatch" and state:
             # The record names one instance, the socket answers as another.
             host["answering_holder_instance_id"] = state.get("holder_instance_id")
@@ -2406,7 +2472,12 @@ def host_exists_refusal(args: argparse.Namespace, repo: str,
         "action": "start",
         "detail": (f"{hosts[0]['session']} holds this repo's Host "
                    f"(identity {hosts[0]['identity']}): attach it when verified, else "
-                   "exact-stop it and prove it gone before any Host start"),
+                   "exact-stop it and prove it gone before any Host start"
+                   + ("; its holder PID is alive but its argv is unreadable here (a "
+                      "Seatbelt-sandboxed caller cannot read another user's process or a "
+                      "zombie), so nothing proves it is not the Host - inspect or stop it "
+                      "from an unsandboxed shell" if hosts[0].get("argv") == "unreadable"
+                      else "")),
         "existing_host": hosts[0],
         "mutation_performed": False,
         "mutation_status": "not_started",
@@ -2531,6 +2602,8 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             return receipt
     directory.mkdir(parents=True, exist_ok=True)
     log_path = directory / "holder.out.log"
+    # Issue #132: keep --record-dir, --socket, --repo in this order; the
+    # identity anchors (HOLDER_RECORD_DIR, HOLDER_SOCKET) parse it.
     holder_argv = [
         sys.executable, str(HOLDER),
         "--record-dir", str(directory),
