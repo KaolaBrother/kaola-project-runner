@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.8 — Unreleased
+## 0.5.8 — 2026-09-23 (latest-CLI tier landing release)
 
 - **devin tier presets land again on Devin CLI 3000.11.1 via spawn argv (Issue #140).** The 11.1
   ACP `model` option offers only 76 catalog values and rejects every preset with `-32602`, so the
