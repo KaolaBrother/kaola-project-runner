@@ -793,7 +793,7 @@ class CodexCompactHookContract(unittest.TestCase):
             "kaola-project-runner",
             "kaola-delegator",
             "workflow-state.md",
-            "mission-list.md",
+            "kaola-workflow/.ledger/issue-<n>.jsonl",
             "do not re-intake, re-claim, restart",
         ):
             self.assertIn(needle.lower(), text.lower())

@@ -63,6 +63,6 @@ file-read or work-product evidence and the first dispatch receipt against the
 plan and authorization; do not trust the Host's self-description. Mismatch:
 correct on this Host; do not accept completion. Read results with `observe` /
 `capture`. Escalate only an unrecoverable human decision. Do not dispatch workers,
-copy a Mission List, maintain a heartbeat, create a Routine, operate on inner
+copy a mission ledger, maintain a heartbeat, create a Routine, operate on inner
 sessions, or `stop` the Host before close-out. Changing the outer Agent does not
 stop the Host.

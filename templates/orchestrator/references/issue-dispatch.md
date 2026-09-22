@@ -34,35 +34,63 @@ alone** - never stop or restart a live session solely to rename it, and the nati
 session id is unchanged by this rule.
 
 The outer orchestrator Host itself is not an issue-backed worker. Transport-only diagnostics
-and genuinely issue-less tasks have no Mission List association and must never be given one
-by name. Do not fabricate an issue number; project work that is meant to appear with Mission
-List progress selects its real open issue before dispatch.
+and genuinely issue-less tasks have no mission ledger and must never be given one by name.
+Do not fabricate an issue number; project work that is meant to appear with ledger progress
+selects its real open issue before dispatch.
 
 ## One issue per run
 
 One Workflow run claims one real GitHub issue. Do not use bundle/multi-issue mode to combine
-several issues into one worker claim, branch, child worktree, Mission List, or Runner
+several issues into one worker claim, branch, child worktree, mission ledger, or Runner
 session. Different issues need separate runs, names, and claims; that does not prohibit safe
 parallel work on independent issues.
 
 Several ACP workers may collaborate on the **same** issue. They share that issue run's
-Mission List while keeping distinct Runner names and distinct native sessions.
+ledger read-only while keeping distinct Runner names and distinct native sessions.
 
 Before issue-level progress is shown, the claimed `workflow-state.md` `issue_number` must
 equal the dispatch name's `ISSUE` under the same repository identity. Runs already in flight
 under the older bundle mode are grandfathered for safe close-out: do not rename them, restart
 them, or rewrite completed Mission results to retrofit this rule.
 
+## The mission ledger
+
+Path: `<canonical-root>/kaola-workflow/.ledger/issue-<N>.jsonl`. `canonical-root` is the main
+checkout the Runner binds with `--repo`; `N` is the issue number in the session name and in the
+run's `workflow-state.md` `issue_number`. The folder is gitignored and exists only in the main
+checkout, never in a child worktree. One JSON object per line, one line per mission, keys
+exactly `n`, `name`, `details`, `status` ∈ `todo | in-flight | done | failed | blocked`. The
+run's Workflow Main Orchestrator is the only writer. The Runner never writes.
+
+The Host reads it read-only. Absent file → no live Workflow run has recorded missions for this
+issue (`unknown`). Present → progress = `done` lines / total lines; per-mission status by `n`.
+Read only the `{n,status}` projection and open `details` only to decide one mission:
+
+```bash
+python3 -c 'import json,sys;r=[json.loads(l) for l in open(sys.argv[1]) if l.strip()];print(sum(x["status"]=="done" for x in r),"/",len(r),[ (x["n"],x["status"]) for x in r if x["status"] in ("failed","blocked")])' "$ROOT/kaola-workflow/.ledger/issue-$N.jsonl"
+```
+
+`todo` / `in-flight`: wait; never send a second worker to the same mission. `done`: counts
+toward progress. `failed`: one dispatch has one result; the run's orchestrator decides any new
+mission, the Host may redispatch a worker and never edits the line. `blocked`: escalate
+authorization or `HUMAN_DECISION_REQUIRED`, or supply the missing authorization so the worker
+returns to `in-flight`. On Workflow archive the file moves to
+`kaola-workflow/archive/<project>/mission-ledger.jsonl`; a vanished file means archive done.
+Every line terminal (`done`/`failed`) with the forge issue OPEN: finalize/archive is in
+progress, keep waiting. Every line terminal with the issue CLOSED, or the run already under
+`archive/`: the archive was forgotten - report it stuck and name its owner, neither `unknown`
+nor done. Session facts stay in Runner receipts and run facts in `workflow-state.md`.
+
 ## What the name does not decide
 
 The name is a scheduling and display fact. A consumer joining on it verifies the Runner
 record's repository identity together with the host-local active Workflow state's
 `claim_repository_id` and `issue_number`, archived runs excluded, and then shows one bar:
-**issue-run progress - completed Mission List items over total** - shared by every verified
+**issue-run progress - `done` ledger lines over total** - shared by every verified
 session on that host, repository, and issue. It never predicts when one ACP process will
 finish, and `all missions done` does not by itself mean review, finalize, merge, or issue
-close-out happened. A missing or malformed name, a repository mismatch, no active run, or two
-active runs for one issue each fall back to unknown; no mtime, newest-file, `session_marker`,
+close-out happened. A missing or malformed name, a repository mismatch, no active run, an
+absent ledger, or two active runs for one issue each fall back to unknown; no mtime, newest-file, `session_marker`,
 worktree location, or native ACP id may override a conflict.
 
 Whether any consumer displays that bar is outside this repository. Nothing here was verified

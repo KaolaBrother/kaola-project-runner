@@ -8,7 +8,7 @@ description: "Use when the controlling Agent should supervise explicitly authori
 This Skill is the main control-plane Skill. It is not a platform Runner and has
 no transport adapter. The nine platform Runner Skills are workers: they only
 identify, start, send, wait, permit, observe, capture, and stop an exact owned
-session. Kaola-Workflow, when used, owns worker-side claim, Mission List,
+session. Kaola-Workflow, when used, owns worker-side claim, mission ledger,
 child worktree, finalize, archive, and sink.
 
 You own scheduling and acceptance decisions. Helpers may research, inspect,
@@ -186,7 +186,7 @@ sink, and write ownership.
    first. Examine authorized remaining work and real parallel opportunities.
    At every heartbeat, match authorized idle workers to safe parallel work and dispatch every suitable match as a new session; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start). State the task, working location, write ownership,
    delivery requirements, and the doc-impact call in its prompt; merely seeing a
-   worktree or Mission List is not write authorization. Same-file collaboration needs explicit
+   worktree or ledger is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims.
 3. **Accept the delivery.** Mission-frontier done triggers review, not automatic finalize. Inspect the diff,
@@ -267,7 +267,7 @@ print `HUMAN_DECISION_REQUIRED` and wait.
 
 ### Issue-scoped names, one issue per run
 
-One run claims one real issue: never a bundle claim, worktree, Mission List or
+One run claims one real issue: never a bundle claim, worktree, ledger or
 session spanning several, and collaborating workers share that issue's run under
 distinct names. Choose the real open issue before start, name the session
 `<platform>-<CODE>-i<ISSUE>-<purpose>` (`droid-KT-i274-parser`) with `CODE` the

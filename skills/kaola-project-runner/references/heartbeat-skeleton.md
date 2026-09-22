@@ -18,7 +18,7 @@ Workflow、自执行、心跳间隔：{用户选择或默认值}
 
 派工命名与单 Issue 约束（每次新的 issue-backed ACP 派工都适用）：
 先选定那一个真实的开放 Issue，再用 `--session <platform>-<本项目短码>-i<ISSUE>-<用途>` 启动（例 `droid-KT-i274-parser`、`kimi-cli-KT-i274-review-2`），并在 start 回执里核对该名字。platform 取所选 Runner 平台 ID；字面量 `i` 与字段顺序不得改动；整名仍须满足 Runner 既有 1-80 会话语法，本规则不新增第二道校验。后续心跳派工与同 Issue 重启沿用同名规则，换 Issue 才换名字；已在运行的会话不因本规则改名或重启，原生 ACP 会话 ID 不变。宿主自身、纯运输诊断和确实无 Issue 的任务不带 Issue 号，也不得编造一个。
-一个 Workflow run 只认领一个真实 Issue：不用 bundle/多 Issue 模式把多个 Issue 合进同一个认领、分支、子 worktree、Mission List 或 Runner 会话；不同 Issue 用不同 run 与不同名字，独立 Issue 之间仍可安全并行。同一个 Issue 允许多个 ACP 工人协作，共享该 Issue run 的 Mission List，各自保留独立名字与原生会话。展示 Issue 级进度前，先核对所认领 `workflow-state.md` 的 `issue_number` 与派工名里的 `ISSUE` 在同一仓库身份下一致。既有在飞 bundle run 按原样安全收口，不为追溯本规则改名、重启或改写已完成 Mission 的 result。
+一个 Workflow run 只认领一个真实 Issue：不用 bundle/多 Issue 模式把多个 Issue 合进同一个认领、分支、子 worktree、任务台账或 Runner 会话；不同 Issue 用不同 run 与不同名字，独立 Issue 之间仍可安全并行。同一个 Issue 允许多个 ACP 工人协作，共享该 Issue run 的任务台账，各自保留独立名字与原生会话。展示 Issue 级进度前，先核对所认领 `workflow-state.md` 的 `issue_number` 与派工名里的 `ISSUE` 在同一仓库身份下一致。既有在飞 bundle run 按原样安全收口，不为追溯本规则改名、重启或改写已完成 Mission 的 result。
 下游那条 Mission 进度条是「该 Issue run 已完成 Mission 数 / 总数」，不是某个 ACP 进程何时结束的预测；`missions 都 done` 也不等于评审、finalize、合并或 Issue 收口已完成。
 
 每拍基于新鲜证据：

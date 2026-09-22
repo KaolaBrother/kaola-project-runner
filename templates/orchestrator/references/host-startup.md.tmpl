@@ -108,12 +108,12 @@ than from a second copy.
 | Record | Holds |
 |---|---|
 | Project Plan / authorized task plan | roles, authorization, lifecycle and stop boundary |
-| Workflow Mission List | engineering progress and delivery per run |
+| Workflow mission ledger `kaola-workflow/.ledger/issue-<N>.jsonl` | engineering progress per run; Workflow writes, the Runner only reads |
 | `.kaola/heartbeat-prompt.json` `body` | current identity, binding, run paths, next step |
 | Runner receipts and holder events | what actually happened |
 
 Keep them separate: no second plan is generated, no project history is rewritten,
-and the heartbeat body is not a copy of the Mission List. A `done`/`todo`
+and the heartbeat body is not a copy of the ledger. A `done`/`todo`
 contradiction goes back to the record's owner; the Runner never rules work
 complete. Report which main-Skill payload was loaded when a candidate checkout
 and an installed release both exist.

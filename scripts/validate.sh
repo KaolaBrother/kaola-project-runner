@@ -141,6 +141,7 @@ python_suites_all=(
   "test-issue-118-seat-cap.py"
   "test-issue-119-host-entry.py"
   "test-issue-123-shared-refs.py"
+  "test-issue-133-mission-ledger.py"
   "test-lifecycle-contract.py"
   "test-issue-22-bypass-all-approvals.py"
   "test-issue-130-pty-retired.py"
@@ -199,6 +200,7 @@ python_suites_b=(
   "test-issue-111-model-tiers.py"
   "test-issue-119-host-entry.py"
   "test-issue-123-shared-refs.py"
+  "test-issue-133-mission-ledger.py"
   "test-issue-22-bypass-all-approvals.py"
   "test-issue-130-pty-retired.py"
 )

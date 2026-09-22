@@ -5,3 +5,4 @@
 __pycache__/
 *.pyc
 build/
+kaola-workflow/.ledger/

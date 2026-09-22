@@ -73,4 +73,3 @@ the whole conversation.
 - `--cancel-timeout SECONDS` bounds the wait for the old turn to settle; without it the op's own
   `--timeout` applies. How fast a cancel settles is a platform fact, so a timeout shorter than this
   platform's real cancel latency buys a truthful `unknown`, not a faster steer.
-
