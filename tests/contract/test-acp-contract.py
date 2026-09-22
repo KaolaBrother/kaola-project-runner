@@ -1093,7 +1093,7 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(os.path.realpath(own[1]), os.path.realpath(str(self.holder_sock())))
         # Review N3: the holder records its agent's start time at spawn.
         record = json.loads(self.record_path().read_text())
-        self.assertIsInstance(record.get("agent_started"), str, record)
+        self.assertIsInstance(record.get("agent_started"), (int, float), record)
         self.assertIn(record["agent_pgid"], module.recorded_groups(record, directory))
         again = self.cli("start", check=False)
         self.assertEqual((again.get("error") or {}).get("code"), "session-exists", again)
@@ -1213,7 +1213,8 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
             table = module.run_ps(["pid", "pgid", "state", "lstart"], env=module.PS_ENV)
             started = next(line.split(None, 3)[3].strip() for line in table.stdout.splitlines()
                            if line.split() and line.split()[0] == str(orphan.pid))
-            record.update(agent_pid=orphan.pid, agent_pgid=orphan.pid, agent_started=started)
+            epoch = time.mktime(time.strptime(started, "%a %b %d %H:%M:%S %Y"))
+            record.update(agent_pid=orphan.pid, agent_pgid=orphan.pid, agent_started=epoch)
             self.record_path().write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
             listed = self.row(self.list_rows("--repo", str(self.repo), "--include-dead"))
             self.assertEqual((listed or {}).get("identity"), "dead", listed)
@@ -1379,17 +1380,47 @@ class Issue132AnchorUnitTests(unittest.TestCase):
             table = self.module.run_ps(["pid", "pgid", "state", "lstart"], env=self.module.PS_ENV)
             started = next(line.split(None, 3)[3].strip() for line in table.stdout.splitlines()
                            if line.split() and line.split()[0] == str(leader.pid))
+            epoch = time.mktime(time.strptime(started, "%a %b %d %H:%M:%S %Y"))
             base = {"agent_pid": leader.pid, "agent_pgid": leader.pid}
             self.assertIn(leader.pid, self.module.recorded_groups(
-                dict(base, agent_started=started)), "the recorded agent group")
+                dict(base, agent_started=epoch)), "the recorded agent group")
             self.assertNotIn(leader.pid, self.module.recorded_groups(
-                dict(base, agent_started="Thu Jan  1 00:00:00 1970")),
+                dict(base, agent_started=epoch - 3600)),
                 "a live leader with another start time is a reused id")
+            # Review M2: a caller under another time zone renders lstart
+            # differently; the epoch comparison still matches.
+            other_tz = "UTC" if time.strftime("%z") != "+0000" else "Asia/Shanghai"
+            probe = subprocess.run(
+                [sys.executable, "-c",
+                 "import importlib.util,json,sys;"
+                 f"s=importlib.util.spec_from_file_location('k',{str(CLI)!r});"
+                 "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+                 f"print(json.dumps({leader.pid} in m.recorded_groups("
+                 f"{{'agent_pid':{leader.pid},'agent_pgid':{leader.pid},'agent_started':{epoch}}})))"],
+                capture_output=True, text=True, timeout=30, env={**os.environ, "TZ": other_tz})
+            self.assertEqual(probe.stdout.strip(), "true", (other_tz, probe.stderr[-400:]))
             self.assertIn(leader.pid, self.module.recorded_groups(base),
                           "a record from before #132 keeps its trusted group")
         finally:
             leader.kill()
             leader.wait()
+
+    def test_l3_argv_socket_answering_as_another_instance_is_never_stopped(self) -> None:
+        from unittest.mock import patch
+        args, directory = self.stale_host(os.getpid())
+        repo = os.path.realpath(self.root)
+        record = json.loads((directory / "record.json").read_text())
+        with patch.object(self.module, "holder_argv_anchor", return_value=True), \
+             patch.object(self.module, "answering_socket",
+                          return_value=(Path("/x/other.sock"), {"holder_instance_id": "0" * 32})), \
+             patch.object(self.module, "base_receipt", return_value={}), \
+             patch.object(self.module, "socket_request") as request, \
+             patch.object(self.module.os, "kill") as kill:
+            receipt = self.module.force_stop_unreachable(args, repo, directory, record,
+                                                         {"force": True})
+        self.assertEqual(receipt["error"]["code"], "holder-instance-mismatch", receipt)
+        request.assert_not_called()
+        self.assertEqual([call for call in kill.call_args_list if call.args[1] != 0], [])
 
     def test_n6_reused_pid_stop_keeps_the_record_while_a_group_survives(self) -> None:
         from unittest.mock import patch

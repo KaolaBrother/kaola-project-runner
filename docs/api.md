@@ -387,20 +387,22 @@ initializing or wedged holder) holds the root. `existing_host` carries its `plat
 `answering_holder_instance_id` on `mismatch` and `argv: "unreadable"` when a silent holder's argv
 cannot be read, e.g. by a Seatbelt-sandboxed caller for another user's process or a zombie
 (`existing_hosts`
-lists all when there are several). The `list` identity probe is bounded at 2 s per row, the start
-guard's at 5 s. A same-name start keeps `session-exists`, now only for a holder that
+lists all when there are several). The `list` identity probe is bounded at 2 s per socket, the start
+guard's at 5 s; a silent derived socket is followed by at most one more probe of the socket the
+holder's own argv names. A same-name start keeps `session-exists`, now only for a holder that
 passes the check or whose live PID's argv still names this record directory (`error.identity`
 reports the check). A live PID whose argv is provably another process is a reused PID: the start
 replaces the stale record without signalling it and reports `replaced_record.pid_reused: true`.
 `stop --force` on a live PID whose socket is absent or silent checks
 `--expected-holder-instance-id` against the record (`holder-instance-mismatch`, nothing written),
-stops a holder that answers on the `--socket` its own argv names (a holder started under another
+stops a holder that answers, as the record's own instance, on the `--socket` its own argv names (a holder started under another
 spelling of the same record root, e.g. `/tmp` vs `/private/tmp`, derives another socket path) with an
 ordinary stop over that socket (`answering_socket`), and signals only a silent PID whose argv anchors
 it to the record (`holder_force_killed`); a reused PID
 gets no signal (`pid_reused: true`, `holder_signalled: false`), the dead holder's recorded groups
 are swept exactly as for any dead holder (`force_killed_pids`: the agent's own process group when
-its live leader still has the start time the holder recorded as `agent_started` at spawn, or has no
+its live leader still has the start time the holder recorded as `agent_started` (epoch seconds,
+so time zones do not matter) at spawn, or has no
 live leader left; a record written before `agent_started` keeps the group trusted as before; plus
 child groups that still match their recorded start time), and the record is retired once nothing of them is left
 (later `status` reads `no-session`; a survivor keeps the record and appears in `residual_pids`). An

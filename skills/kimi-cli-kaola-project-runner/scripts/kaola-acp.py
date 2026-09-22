@@ -1233,7 +1233,8 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
     groups: list[int] = []
     pgid = record.get("agent_pgid")
     agent_started = record.get("agent_started")
-    checked = isinstance(agent_started, str) and bool(agent_started)
+    checked = (isinstance(agent_started, (int, float)) and not isinstance(agent_started, bool)
+               and agent_started > 0)
     if isinstance(pgid, int) and pgid > 0 and not checked:
         # A record written before Issue #132 names no agent start time: its
         # group is trusted as before.
@@ -1267,8 +1268,17 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
         # leader must be the recorded agent by start time; with the leader gone
         # the id cannot have been reused while members still hold the group.
         leader = by_pid.get(pgid)
-        if leader is None or leader == (pgid, agent_started):
+        if leader is None:
             groups.append(pgid)
+        elif leader[0] == pgid:
+            try:
+                leader_started = time.mktime(time.strptime(leader[1], "%a %b %d %H:%M:%S %Y"))
+            except ValueError:
+                leader_started = None
+            # Both sides are epochs in their own process's time zone, so a
+            # caller under another TZ than the holder still matches.
+            if leader_started is not None and abs(leader_started - agent_started) <= 1.0:
+                groups.append(pgid)
     for child, members in children.items():
         if not str(child).isdigit() or int(child) in groups:
             continue
@@ -1425,6 +1435,15 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
     # it there, exactly as an ordinary stop - never signal a holder that answers.
     sock, state = answering_socket(directory, record)
     if sock is not None:
+        if (state or {}).get("holder_instance_id") != record.get("holder_instance_id"):
+            # Something answers there as another instance: never stop it on
+            # this record's behalf, and never signal a holder that answers.
+            receipt["error"] = {"code": "holder-instance-mismatch",
+                                "expected_holder_instance_id": record.get("holder_instance_id"),
+                                "holder_instance_id": (state or {}).get("holder_instance_id"),
+                                "answering_socket": str(sock)}
+            receipt.update(mutation_status="not_started", mutation_performed=False)
+            return receipt
         receipt.update(socket_request(sock, "stop", params, 30.0))
         receipt["answering_socket"] = str(sock)
         return receipt

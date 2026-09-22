@@ -737,12 +737,13 @@ class AgentConnection:
             env=env,
             start_new_session=True,
         )
-        # Issue #132: the agent's own start time, so a sweep of this record
-        # after the holder is gone can tell the agent's process group from an
-        # unrelated group that reused its id.
+        # Issue #132: the agent's own start time as epoch seconds (``lstart``
+        # text is local time, so it would not compare across time zones), so
+        # a sweep of this record after the holder is gone can tell the agent's
+        # process group from an unrelated group that reused its id.
         self.holder.agent_started = next(
-            (started for pid, _ppid, _pgid, started in process_table() if pid == self.proc.pid),
-            None)
+            (start_epoch(started) for pid, _ppid, _pgid, started in process_table()
+             if pid == self.proc.pid), None)
         self.stderr_pump = StderrPump(self.proc.stderr, self.holder.record_dir / "stderr.log")
         self.stderr_pump.start()
         self.reader = threading.Thread(target=self._read_loop, daemon=True)
