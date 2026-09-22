@@ -85,15 +85,14 @@ is the same for an older copy of this Skill in a root the Host reads
 (`main_skill_skew` paths): that copy may be the one loaded instead of this build.
 `host-exists` (Issue #132, same shape) refuses a Host-named `start` while another
 Host-named holder of this canonical root passes the identity check below — any
-platform, a dispatched Host-named worker included. `existing_host` is that live
-Host: attach it; never rename and retry, never stop it.
+platform, a dispatched Host-named worker included. `existing_host` (with its
+`identity`) holds the root: attach it if verified, else sweep it; never rename.
 
 The same `start` pinned this Host's model (Issue #108): a
 `zcode-<PROJECT_CODE>-orchestrator-<purpose>` session must run GLM 5.3 at effort
 `max`, applied then verified against the holder's advertised config and reported
 in the receipt's `host_selection`. A `host-model-mismatch` /
-`host-model-unverified` refusal is the outer Agent's evidence — a Host reading
-this was verified before it ran.
+`host-model-unverified` refusal is the outer Agent's evidence.
 
 The beat itself - starting workers here, non-blocking dispatch, the
 `dispatch_event_cursor` reading anchor, ending the turn as the wait, reading the
@@ -117,13 +116,13 @@ recorded `holder_instance_id`; a PID alone is never liveness. Your own id is in
 | Row | Action |
 |---|---|
 | you; a verified seat whose `dispatcher.holder_instance_id` is yours | keep |
-| `dead` / `unreachable` (Host or worker); your seat `agent_exited`/`error` whose delivery is accepted or abandoned | stop, prove gone |
+| `dead`; `unreachable` on a second `list`; your seat `agent_exited`/`error` whose delivery is accepted or abandoned | stop, prove gone |
 | another verified `host_class` row | stop, prove gone; both mid-prompt is `HUMAN_DECISION_REQUIRED` |
 | verified seat of another or dead Host instance | report; adopt only a seat of a claim you hold |
 | verified, `heartbeat_host` null/unknown; or `mismatch` | report, never stop |
 
-Stop = that platform Runner's `stop --force --expected-holder-instance-id <the
-row's id>`; gone = `status` reads `stopped` with `residual_pids: []`, or
+Stop = that platform Runner's `stop --expected-holder-instance-id <the row's
+id>`, `--force` only for `dead` or when that fails; gone = `status` reads `stopped` with `residual_pids: []`, or
 `no-session`. `pid_reused: true` signalled nothing and retired the record;
 `holder-instance-mismatch` means re-list, never a bare kill. Only orphans stop;
 in-flight work is never guessed dead. End the reply and the heartbeat `body` with

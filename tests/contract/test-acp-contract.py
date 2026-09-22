@@ -1114,7 +1114,8 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
                             stale["holder_instance_id"], check=False)
             self.assertIs(stop.get("pid_reused"), True, stop)
             self.assertIs(stop.get("stopped"), True, stop)
-            self.assertEqual(stop.get("signalled_pids"), [])
+            self.assertIs(stop.get("holder_signalled"), False, stop)
+            self.assertEqual(stop.get("force_killed_pids"), [], stop)
             self.assertNotIn("error", stop)
             gone = self.cli("status", check=False)
             self.assertEqual((gone.get("error") or {}).get("code"), "no-session", gone)
@@ -1130,6 +1131,44 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
             for sig, handler in previous.items():
                 signal.signal(sig, handler)
         self.assertEqual(received, [], "the reused PID's owner received a signal")
+
+    def test_reused_pid_stop_sweeps_surviving_agent_group_before_retiring(self) -> None:
+        """Review F2: the dead holder's own groups are swept like any dead
+        holder's; only the reused holder PID is spared."""
+        orphan = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        try:
+            stale = self.write_stale_record(os.getpid(), agent_pid=orphan.pid,
+                                            agent_pgid=orphan.pid)
+            stop = self.cli("stop", "--force", "--expected-holder-instance-id",
+                            stale["holder_instance_id"], check=False)
+            self.assertIs(stop.get("pid_reused"), True, stop)
+            self.assertIn(orphan.pid, stop.get("force_killed_pids") or [], stop)
+            self.assertNotIn(os.getpid(), stop.get("force_killed_pids") or [], stop)
+            self.assertEqual(stop.get("residual_pids"), [], stop)
+            orphan.wait(timeout=10)
+            gone = self.cli("status", check=False)
+            self.assertEqual((gone.get("error") or {}).get("code"), "no-session", gone)
+        finally:
+            if orphan.poll() is None:
+                orphan.kill()
+                orphan.wait()
+
+    def test_same_name_start_over_a_silent_anchored_holder_is_session_exists(self) -> None:
+        """Review F3: a live holder whose socket is gone (initializing or
+        wedged) keeps its session; no second holder is spawned over it."""
+        started = self.start()
+        self.holder_sock().unlink()
+        again = self.cli("start", check=False)
+        self.assertEqual((again.get("error") or {}).get("code"), "session-exists", again)
+        self.assertEqual(again["error"].get("identity"), "unreachable", again)
+        self.assertEqual(again["error"].get("holder_pid"), started["holder_pid"])
+        holders = [pid for pid, command in own_processes(self.root).items()
+                   if "kaola-acp-holder" in command and self.session in command]
+        self.assertEqual(holders, [started["holder_pid"]], holders)
+        self.cli("stop", "--force", "--expected-holder-instance-id",
+                 started["holder_instance_id"], check=False)
+        self.assertTrue(wait_for(lambda: process_gone(started["holder_pid"]), 10))
+        self._started = False
 
     def test_stop_force_mismatch_on_unreachable_holder_writes_nothing(self) -> None:
         stale = self.write_stale_record(os.getpid())

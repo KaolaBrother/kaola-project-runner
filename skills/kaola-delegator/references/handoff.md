@@ -66,9 +66,9 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    Do not replay the first handoff. An outer-Agent change neither stops the
    Host nor re-asks authorization; apply only the user's latest change.
 3. **Confirmed stopped** (`stopped` with `residual_pids: []`, or
-   `no-session`) and no verified Host row. A Host row failing identity is
-   first exact-stopped (`stop --force` with its record id) and proven gone
-   the same way. If receipts attest `sess_*`, try:
+   `no-session`) and no verified Host row. A `dead` Host row, or one
+   `unreachable` twice, is first exact-stopped by its own platform's Runner
+   with its record id and proven gone the same way; report a `mismatch`. If receipts attest `sess_*`, try:
 
    ```bash
    "$ZCODE" start --repo "$PROJECT" --session "$HOST" --resume "$NATIVE_SESS"
@@ -91,9 +91,8 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    session: do not re-ask the full set.
 5. With step 4 complete and no live Host: start once under `$HOST` at
    `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/`holder_instance_id`
-   from the start receipt, then send the first handoff. `$HOST` `start` /
-   `--resume` pins GLM 5.3 + effort `max`, verified in `host_selection`;
-   a `host-model-*` refusal escalates.
+   from the start receipt, then send the first handoff. `$HOST` pins GLM 5.3
+   + effort `max` (`host_selection`); a `host-model-*` refusal escalates.
 
 ## Handoff and updates
 

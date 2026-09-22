@@ -63,7 +63,9 @@ worktree is not an ACP id. Three facts stay separate on those receipts: Runner `
 ACP `acp_session_id`, and native `sess_*`. Never synthesize one from another. A live Host is
 attached in place; a uniquely recorded nonstandard live name is adopted. Ambiguous location
 does not start a second Host. One live Host per canonical root (Issue #132): a second
-Host-named `start` refuses `host-exists` and names the live `existing_host` to attach instead.
+Host-named `start` refuses `host-exists` and names the `existing_host` that holds the root — to
+attach when it verifies, and to exact-stop and prove gone when it does not; only a dead or reused
+holder PID leaves the root free.
 "Live" is an identity check — record present, holder PID alive, admin socket answering, and the
 socket's `holder_instance_id` equal to the record's; a PID alone is never liveness. A Host that
 fails the check is exact-stopped with its recorded `holder_instance_id` and proven gone

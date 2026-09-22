@@ -901,6 +901,16 @@ def test_one_host_per_repo_refuses_host_exists() -> None:
         check((row.get("heartbeat_host") or {}).get("session") == host,
               "T8: the seat row carries its recorded binding")
 
+        # Review F1: a live Host that cannot answer yet (initializing) or any
+        # more (wedged) still holds the root; only a dead or reused PID frees it.
+        socket_path = sandbox.record_dir(host) / "holder.sock"
+        real_socket = Path(os.path.realpath(socket_path))
+        real_socket.unlink()
+        code, silent = raw_start("zcode", second)
+        check(code == 1 and silent.get("reason") == "host-exists"
+              and (silent.get("existing_host") or {}).get("identity") == "unreachable",
+              f"F1: a silent anchored Host still refuses a second Host ({silent})")
+
         # T2: the Host dies without a stop; its record stays and fails the check.
         os.kill(first["holder_pid"], signal.SIGKILL)
         wait_until(lambda: not pid_alive(first["holder_pid"]), 10, "Host holder is gone")

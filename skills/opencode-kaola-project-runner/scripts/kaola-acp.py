@@ -532,7 +532,7 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             continue
         if repo_filter is not None and repo != repo_filter:
             continue
-        identity, _ = holder_identity(directory, record)
+        identity, _ = holder_identity(directory, record, LIST_IDENTITY_TIMEOUT)
         pending = record.get("pending_permissions") or []
         last = record.get("last_prompt") or {}
         mutation = last.get("mutation_status") if isinstance(last, dict) else None
@@ -915,9 +915,13 @@ def socket_request(sock_path: Path, op: str, params: dict[str, Any],
 # behind by a crashed holder whose PID the kernel handed to another process
 # fails the last two checks.
 IDENTITY_PROBE_TIMEOUT = 5.0
+# The frozen list view pays this per silent row; a holder that is initializing
+# its agent answers no op at all, so waiting longer only delays the reading.
+LIST_IDENTITY_TIMEOUT = 2.0
 
 
-def holder_identity(directory: Path, record: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+def holder_identity(directory: Path, record: dict[str, Any],
+                    timeout: float = IDENTITY_PROBE_TIMEOUT) -> tuple[str, dict[str, Any] | None]:
     """``verified``, ``dead`` (PID gone), ``unreachable`` (PID alive, socket
     absent or silent), or ``mismatch`` (socket answers with another or no
     instance id), plus the holder's ``state`` reply when it answered."""
@@ -926,7 +930,7 @@ def holder_identity(directory: Path, record: dict[str, Any]) -> tuple[str, dict[
     sock = sock_path_for_directory(directory)
     if not sock.exists():
         return "unreachable", None
-    state = socket_request(sock, "state", {}, IDENTITY_PROBE_TIMEOUT)
+    state = socket_request(sock, "state", {}, timeout)
     if "holder_instance_id" not in state:
         return "unreachable", None
     expected = record.get("holder_instance_id")
@@ -1281,22 +1285,44 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
         receipt.update(mutation_status="not_started", mutation_performed=False)
         return receipt
     if anchor is False:
-        retired = directory / f"record.pid-reused-{int(time.time())}.json"
-        try:
-            (directory / "record.json").replace(retired)
-        except OSError:
-            retired = None
+        # The holder is proven gone and its PID belongs to someone else: that
+        # PID gets no signal. The holder's identity-checked groups are swept as
+        # for any dead holder, and the record is retired only once nothing of
+        # them is left, so a survivor stays visible to the next sweep.
+        groups = recorded_groups(record, directory)
+        killed: list[int] = []
+        for pid in live_group_members(groups):
+            if pid == holder_pid:
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed.append(pid)
+            except (ProcessLookupError, PermissionError):
+                pass
+        leftover: list[int] = []
+        if groups:
+            time.sleep(0.1)
+            leftover = [pid for pid in live_group_members(groups) if pid != holder_pid]
+        retired = None
+        if not leftover:
+            retired = directory / f"record.pid-reused-{int(time.time())}.json"
+            try:
+                (directory / "record.json").replace(retired)
+            except OSError:
+                retired = None
         try:
             sock_path(args, repo).unlink()
         except OSError:
             pass
         receipt.update({
-            "stopped": True,
+            "stopped": not leftover,
             "pid_reused": True,
             "holder_pid": holder_pid,
-            "signalled_pids": [],
+            "holder_signalled": False,
+            "swept_pgids": groups,
+            "force_killed_pids": killed,
             "retired_record": str(retired) if retired else None,
-            "residual_pids": live_group_members(recorded_groups(record, directory)),
+            "residual_pids": leftover,
         })
         return receipt
     # The live PID is this record's own wedged holder.
@@ -2290,8 +2316,12 @@ def attach_binding_fact(receipt: dict[str, Any], facts: Any) -> dict[str, Any]:
 
 def verified_hosts(args: argparse.Namespace, repo: str) -> list[dict[str, Any]]:
     """Issue #132: every other Host-named holder recorded for this canonical
-    root, on any platform, that passes the identity check. A row that fails
-    it is dead or unreachable, the stop-and-verify path, never a refusal."""
+    root, on any platform, that is or may be live: it passes the identity
+    check, or its live PID still answers on the record's socket under another
+    instance id (``mismatch``), or it is silent but its argv names the record
+    (``unreachable``: initializing its agent, or wedged) or cannot be read.
+    Fail closed: only a dead PID or a provably reused one leaves the root
+    free; the others are attached, or exact-stopped and proven gone first."""
     digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
     hosts: list[dict[str, Any]] = []
     for path in sorted(record_root(args).glob(f"*/*/{digest}/record.json")):
@@ -2304,13 +2334,17 @@ def verified_hosts(args: argparse.Namespace, repo: str) -> list[dict[str, Any]]:
         if not record or record.get("repo") != repo:
             continue
         identity, state = holder_identity(path.parent, record)
-        if identity != "verified" or state is None:
+        if identity == "dead":
             continue
-        hosts.append({"platform": platform, "session": session,
-                      "holder_pid": state.get("holder_pid"),
-                      "holder_instance_id": state.get("holder_instance_id"),
-                      "acp_session_id": state.get("acp_session_id"),
-                      "state": state.get("state")})
+        if (identity == "unreachable"
+                and holder_argv_anchor(record.get("holder_pid"), path.parent) is False):
+            continue
+        facts = state if identity == "verified" and state else record
+        hosts.append({"platform": platform, "session": session, "identity": identity,
+                      "holder_pid": facts.get("holder_pid"),
+                      "holder_instance_id": facts.get("holder_instance_id"),
+                      "acp_session_id": facts.get("acp_session_id"),
+                      "state": facts.get("state")})
     return hosts
 
 
@@ -2324,8 +2358,9 @@ def host_exists_refusal(args: argparse.Namespace, repo: str,
         "result": "refused",
         "reason": "host-exists",
         "action": "start",
-        "detail": (f"{hosts[0]['session']} is this repo's identity-verified live Host; "
-                   "attach it instead of starting a second one"),
+        "detail": (f"{hosts[0]['session']} holds this repo's Host "
+                   f"(identity {hosts[0]['identity']}): attach it when verified, else "
+                   "exact-stop it and prove it gone before any Host start"),
         "existing_host": hosts[0],
         "mutation_performed": False,
         "mutation_status": "not_started",
