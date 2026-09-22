@@ -1,0 +1,17 @@
+validate: scrubbed inherited env: KAOLA_ACP_DISPATCHER KAOLA_ACP_HEARTBEAT_HOST KAOLA_ACP_HEARTBEAT_HOST_SOCKET KAOLA_CLAUDE_PROFILE_REQUIRED KAOLA_PROJECT_RUNNER_CANONICAL_REPO KAOLA_ZCODE_ENTRY KAOLA_ZCODE_NODE
+render-skills: PASS (10 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2536 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+installer migration acceptance: PASS
+installer runtimes acceptance: PASS
+{"killed_group_members": [], "matched_pids": [22386, 77502], "residual_pids": [], "results": [{"force_killed": false, "holder_alive": false, "pid": 22386, "stop_error": null, "stop_residual_pids": [], "via": "socket"}, {"force_killed": false, "holder_alive": false, "pid": 77502, "stop_error": null, "stop_residual_pids": [], "via": "socket"}], "root": "/tmp/kaola-val.IGcIbq", "swept_groups": [22453, 77517]}
