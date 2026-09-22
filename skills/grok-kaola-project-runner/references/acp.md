@@ -29,7 +29,11 @@ the model apply is used (`config_application.effort.candidates`/`advertised`,
 A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
 during `initialize`): agents that negotiate a parameterized model picker advertise separate
 `model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead
-of fixed variant descriptors. When a manifest declares `acp_model_map`, a resolved catalog model ID decomposes onto
+of fixed variant descriptors. A manifest may declare `acp_command_default`/`_upgrade`/`_alt`: the
+tier preset then spawns that command unless `--command`, `KAOLA_ACP_COMMAND`, `--model` or a preserved
+resume applies; a model the spawn argv carries as `--model` is not re-sent as an option
+(`config_application.model.applied_via: argv`, `effective_selection.effective_model_source: launch-argv`
+beside the agent's `advertised_model`). When a manifest declares `acp_model_map`, a resolved catalog model ID decomposes onto
 the ACP model value the agent advertises for the same model — effort encoded in the picker ID
 suffix then travels through the effort option and Fast through the fast option (values converted
 per `acp_fast_values`), recorded as `requested_id`/`mapped`/`declared` in the model application.

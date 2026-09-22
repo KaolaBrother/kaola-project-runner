@@ -264,6 +264,63 @@ class ThirdTierIsOptional(unittest.TestCase):
                     self.assertNotIn("Runner fable preset", reference)
 
 
+class TierAgentCommand(unittest.TestCase):
+    """Issue #140: devin's presets ride the spawn argv; every other platform
+    keeps its base acp_command for every tier."""
+
+    DEVIN = {
+        "default": "devin acp --model swe-2-max",
+        "upgrade": "devin acp --model fusion-claude-fable-5-1-high-sidekick-swe-2-medium",
+        "fable": "devin acp --model claude-fable-5-1-high",
+    }
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.acp = load("kaola-acp")
+
+    def args(self, platform: str, **overrides: Any) -> Any:
+        import argparse
+        values = {"model": None, "effort": None, "tier": None, "resume": None,
+                  "use_continue": False} | overrides
+        return argparse.Namespace(manifest=manifest(platform), **values)
+
+    def test_devin_tier_commands_carry_the_original_preset_ids(self) -> None:
+        values = manifest("devin")
+        self.assertEqual(values["acp_command"], "devin acp")
+        for tier, command in self.DEVIN.items():
+            with self.subTest(tier=tier):
+                self.assertEqual(self.acp.tier_agent_command(self.args("devin", tier=tier)), command)
+                prefix = self.acp.tier_prefix(values, tier)
+                self.assertEqual(self.acp.argv_model(command), values[f"{prefix}_model_id"])
+        self.assertEqual(self.acp.tier_agent_command(self.args("devin")), self.DEVIN["default"])
+
+    def test_explicit_model_and_preserved_resume_keep_the_base_command(self) -> None:
+        self.assertEqual(self.acp.tier_agent_command(
+            self.args("devin", tier="upgrade", model="swe-1-6")), "")
+        self.assertEqual(self.acp.tier_agent_command(
+            self.args("devin", resume="sess-1")), "")
+        self.assertEqual(self.acp.tier_agent_command(
+            self.args("devin", use_continue=True, tier="fable")), self.DEVIN["fable"])
+
+    def test_other_platforms_are_unchanged(self) -> None:
+        for platform in ALL_PLATFORMS:
+            if platform == "devin":
+                continue
+            values = manifest(platform)
+            with self.subTest(platform=platform):
+                self.assertFalse([k for k in values if k.startswith("acp_command_")])
+                self.assertEqual(self.acp.argv_model(values["acp_command"]), "")
+                for tier in ("default", "upgrade", values.get("alt_tier_label") or "default"):
+                    self.assertEqual(self.acp.tier_agent_command(self.args(platform, tier=tier)), "")
+
+    def test_render_rejects_empty_or_unlabelled_tier_commands(self) -> None:
+        render = load("render-skills")
+        for extra in ({"acp_command_default": ""},
+                      {"acp_command_alt": "codex-acp --model x"}):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                ThirdTierIsOptional._reparse(None, render, manifest("codex") | extra)
+
+
 class UndeclaredTierIsRefused(unittest.TestCase):
     """The one thing a third tier must never do is quietly become `default`."""
 

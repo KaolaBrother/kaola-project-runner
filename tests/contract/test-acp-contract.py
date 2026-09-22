@@ -1648,6 +1648,47 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(fast.get("effective"), "unknown")
         self.assertEqual(fast.get("applied_via"), "model-id")
 
+    def test_argv_carried_model_skips_the_redundant_option_apply(self) -> None:
+        # Issue #140: devin 3000.11.1 rejects its presets on the ACP model
+        # option (-32602) but honours `devin acp --model <id>`. When the spawn
+        # argv already carries the resolved model, the option apply is skipped
+        # and the receipt names the argv, keeping the stale advertised value.
+        command = self.mock_command(caps="strict-config") + " --model swe-2-max"
+        env = self.env()
+        # devin keeps advertising the stale initial value after the argv set it.
+        stale = [{"id": "model", "name": "Model", "category": "model", "type": "select",
+                  "currentValue": "swe-2-high",
+                  "options": [{"value": "swe-2-high", "name": "SWE-2"}]}]
+        env["MOCK_ACP_CONFIG"] = json.dumps(
+            {"new": stale, "set_result": {"configOptions": stale}})
+        result = subprocess.run(
+            [sys.executable, str(CLI), "devin", "start", "--repo", str(self.repo),
+             "--session", self.session, "--command", command,
+             "--tier", "default", "--mode", "agent"],
+            capture_output=True, text=True, env=env, timeout=30,
+        )
+        self._started = True
+        self._started_platform = "devin"
+        receipt = json.loads(result.stdout)
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertEqual(receipt.get("resolved_runtime_model_id"), "swe-2-max")
+        self.assertNotIn("model", [config_id for config_id, _ in self.config_events()])
+        self.assertEqual((receipt.get("config_application") or {}).get("model"),
+                         {"applied": True, "applied_via": "argv", "value": "swe-2-max"})
+        selection = receipt.get("effective_selection") or {}
+        self.assertEqual(selection.get("effective_model"), "swe-2-max")
+        self.assertEqual(selection.get("effective_model_source"), "launch-argv")
+        self.assertEqual(selection.get("advertised_model"), "swe-2-high")
+
+    def test_model_not_in_argv_still_goes_through_the_option(self) -> None:
+        # Issue #140: without an argv --model the apply path is unchanged.
+        receipt = self.start("devin", "--tier", "default", "--mode", "agent",
+                             caps="strict-config")
+        self.assertIn(("model", "swe-2-max"), self.config_events())
+        model = (receipt.get("config_application") or {}).get("model") or {}
+        self.assertNotIn("applied_via", model)
+        self.assertNotIn("effective_model_source", receipt.get("effective_selection") or {})
+
     # -- Cursor parameterized picker (client _meta parameterizedModelPicker) --
 
     def initialize_meta(self) -> dict:

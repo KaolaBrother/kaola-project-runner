@@ -67,6 +67,11 @@ REQUIRED = {
     "host_skill_entry",
 }
 
+# Issue #140: optional per-tier ACP spawn commands (``acp_command_default``,
+# ``acp_command_upgrade``, ``acp_command_alt``) for a preset the agent's ACP
+# model option does not offer; absent keys keep the base ``acp_command``.
+OPTIONAL = {"acp_command_default", "acp_command_upgrade", "acp_command_alt"}
+
 
 ALT_TIER_KEYS = (
     "alt_model_name", "alt_model_id", "alt_model_parameters", "alt_model_effort",
@@ -96,7 +101,7 @@ def parse_manifest(path: Path) -> dict[str, str]:
             raise ValueError(f"{path}:{number}: values must be strings")
         result[key] = parsed
     missing = REQUIRED - result.keys()
-    extra = result.keys() - REQUIRED
+    extra = result.keys() - REQUIRED - OPTIONAL
     if missing or extra:
         raise ValueError(f"{path}: missing={sorted(missing)} extra={sorted(extra)}")
     if path.stem != result["id"]:
@@ -116,6 +121,11 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: empty steering_summary")
     if not result["acp_command"]:
         raise ValueError(f"{path}: empty acp_command")
+    for key in OPTIONAL & result.keys():
+        if not result[key]:
+            raise ValueError(f"{path}: empty {key}")
+    if "acp_command_alt" in result and not result["alt_tier_label"]:
+        raise ValueError(f"{path}: acp_command_alt needs alt_tier_label")
     # Issue #111: the third preset slot is all-or-nothing. A label without a
     # model would advertise a tier that resolves to nothing, and a model
     # without a label would be unreachable from `--tier`.

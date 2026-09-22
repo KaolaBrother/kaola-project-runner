@@ -1474,6 +1474,38 @@ def tier_prefix(manifest: dict[str, str], tier: str) -> str:
     return "default"
 
 
+def tier_agent_command(args: argparse.Namespace) -> str:
+    """Issue #140: the manifest ``acp_command_<prefix>`` of the selected tier.
+
+    A preset the agent's ACP ``model`` option does not offer rides the spawn
+    argv instead (devin ``--model``). Only when the tier preset is what
+    selects the model (``resolve_selection``): an explicit ``--model`` or a
+    preserved resume keeps the base ``acp_command``. Platforms that declare no
+    such key fall through unchanged.
+    """
+    preserve = bool(args.resume or args.use_continue) and not (
+        args.model or args.effort or args.tier
+    )
+    if args.model or preserve:
+        return ""
+    prefix = tier_prefix(args.manifest, args.tier or "default")
+    return args.manifest.get(f"acp_command_{prefix}") or ""
+
+
+def argv_model(command: str) -> str:
+    """The model id the spawn argv itself passes as ``--model``, if any."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return ""
+    for index, word in enumerate(words):
+        if word == "--model" and index + 1 < len(words):
+            return words[index + 1]
+        if word.startswith("--model="):
+            return word.split("=", 1)[1]
+    return ""
+
+
 def tier_declared(manifest: dict[str, str], tier: str | None) -> bool:
     """Whether this platform declares the requested tier at all."""
     if not tier:
@@ -2753,6 +2785,13 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             if not value:
                 application[label] = {"applied": False, "reason": "no-resolved-value"}
                 continue
+            if label == "model" and value == argv_model(args.agent_command):
+                # Issue #140: the spawn argv already set this model; a
+                # redundant option apply is rejected by an agent that does not
+                # offer the id on its ACP option, without reverting it.
+                application[label] = {"applied": True, "applied_via": "argv",
+                                      "value": value}
+                continue
             config_id = args.manifest.get(key or "")
             candidates: list[str] = []
             advertised = False
@@ -2911,6 +2950,12 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         receipt.setdefault("fast", fast_report(args, policy, "none", False))
         # Issue #119 (H2): what the agent itself now reports, for every start.
         effective = effective_selection(args.manifest, socket_request(sock, "state", {}, 10.0))
+        if (application.get("model") or {}).get("applied_via") == "argv":
+            # Issue #140: devin's advertised currentValue stays the stale
+            # initial value when the argv set the model; keep it as evidence.
+            effective["advertised_model"] = effective.get("effective_model")
+            effective["effective_model"] = application["model"]["value"]
+            effective["effective_model_source"] = "launch-argv"
         receipt["effective_selection"] = effective
         explicit_model = acp_model_value if args.model else ""
         explicit_effort = effort_value if args.effort else ""
@@ -3025,6 +3070,7 @@ def main() -> int:
     args.agent_command = (
         args.agent_command
         or os.environ.get("KAOLA_ACP_COMMAND")
+        or tier_agent_command(args)
         or args.manifest["acp_command"]
     )
     if not args.agent_command:
