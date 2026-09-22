@@ -8,7 +8,8 @@ Host beat: [host-startup.md](host-startup.md). Outer start: Kaola-Delegator
 Runner session (what `--session` takes, chosen at `start`), ACP session id
 (`acp_session_id` in receipts) and native session id (`sess_…`, for `--resume`)
 are different things. A `sess_…` value is never a Runner session name. Never
-guess a session name.
+guess a session name. `holder_pid` is a fourth fact that proves nothing without
+`holder_instance_id`.
 
 Each installed Skill's `scripts/runtime-tmux.sh` is platform-pinned, so the
 commands below take **no** platform argument.
@@ -29,8 +30,10 @@ unbound. A PTY request is refused on every command
 (`transport-pty-retired`): the Runner is ACP-only. Worker names
 are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
-Count before every `start`: live owned sessions from `status`/`observe`
-receipts, ACP holders included. At the authorized count (a hard cap), exact-`stop`
+Count before every `start`: live owned sessions, ACP holders included -
+identity-verified (`list --repo` rows with `identity: verified`, the holder
+answering with its recorded `holder_instance_id`); a PID alone is not a seat. At
+the authorized count (a hard cap), exact-`stop`
 one seat first. A different task is a new session, never a prompt chained
 into a finished seat.
 

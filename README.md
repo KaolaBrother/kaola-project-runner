@@ -62,7 +62,18 @@ root plus the standard Runner session (`zcode-<PROJECT>-orchestrator-main`) and 
 worktree is not an ACP id. Three facts stay separate on those receipts: Runner `--session`,
 ACP `acp_session_id`, and native `sess_*`. Never synthesize one from another. A live Host is
 attached in place; a uniquely recorded nonstandard live name is adopted. Ambiguous location
-does not start a second Host. If the Host is confirmed stopped and `sess_*` cannot restore,
+does not start a second Host. One live Host per canonical root (Issue #132): a second
+Host-named `start` refuses `host-exists` and names the `existing_host` that holds the root — to
+attach when it verifies, to exact-stop and prove gone when it is dead or silent, and to report
+for a human when it answers under another instance (`mismatch`); only a dead or reused holder PID
+leaves the root free.
+"Live" is an identity check — record present, holder PID alive, admin socket answering, and the
+socket's `holder_instance_id` equal to the record's; a PID alone is never liveness. A Host that
+fails the check is exact-stopped with its recorded `holder_instance_id` and proven gone
+(`status` reads `stopped` with `residual_pids: []`, or `no-session`) before a new one starts.
+Every Delegator reach-out prompt carries a `sweep=` line: the Host lists this repo's holders
+(`kaola-acp list --repo ROOT --include-dead`), stops only orphans, keeps in-flight seats, and
+reports one `swept:` line. If the Host is confirmed stopped and `sess_*` cannot restore,
 start a new standard-named Host as a new ACP session only after current authorization is
 complete (goal, remaining work, platforms/members, counts/concurrency, quota, priority,
 delivery/stop boundary); missing key values: ask, do not `start`, do not guess a stale

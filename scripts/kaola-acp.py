@@ -499,6 +499,9 @@ def parse_list_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--platform", choices=PLATFORMS)
     parser.add_argument("--repo")
     parser.add_argument("--record-root")
+    # Issue #132: the default stays the frozen live-holder view; the repo
+    # sweep also needs the records whose holder PID is gone.
+    parser.add_argument("--include-dead", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -522,13 +525,14 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
         if not record:
             continue
         pid = record.get("holder_pid")
-        if not pid_alive(pid):
+        if not pid_alive(pid) and not args.include_dead:
             continue
         repo = record.get("repo")
         if not isinstance(repo, str):
             continue
         if repo_filter is not None and repo != repo_filter:
             continue
+        identity, _ = holder_identity(directory, record, LIST_IDENTITY_TIMEOUT)
         pending = record.get("pending_permissions") or []
         last = record.get("last_prompt") or {}
         mutation = last.get("mutation_status") if isinstance(last, dict) else None
@@ -553,7 +557,14 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             "pending_count": len(pending) if isinstance(pending, list) else 0,
             "socket_ok": probe_socket_ok(sock_path_for_directory(directory)),
             "transport": "acp",
+            # Issue #132: the identity check, the Host-name fact, and the
+            # recorded binding the repo sweep classifies a row by.
+            "identity": identity,
+            "host_class": host_session(record.get("platform") or platform,
+                                       record.get("session") or session),
+            "dispatcher": record.get("dispatcher"),
         })
+        attach_binding_fact(rows[-1], record)
     return {"schema": LIST_SCHEMA, "rows": rows}
 
 
@@ -898,6 +909,139 @@ def socket_request(sock_path: Path, op: str, params: dict[str, Any],
         connection.close()
 
 
+# Issue #132: a live PID is necessary, never sufficient. A holder is "live"
+# only when its record exists, its PID is alive, its admin socket answers,
+# and the socket reports the record's own holder_instance_id; a record left
+# behind by a crashed holder whose PID the kernel handed to another process
+# fails the last two checks.
+IDENTITY_PROBE_TIMEOUT = 5.0
+# The frozen list view pays this per silent row; a holder that is initializing
+# its agent answers no op at all, so waiting longer only delays the reading.
+LIST_IDENTITY_TIMEOUT = 2.0
+
+
+def answering_socket(directory: Path, record: dict[str, Any],
+                     timeout: float = IDENTITY_PROBE_TIMEOUT) -> tuple[Path | None, dict[str, Any] | None]:
+    """The admin socket the live holder of this record answers on, and its
+    ``state`` reply, or ``(None, None)``. The path derived from this caller's
+    spelling of the record root comes first; when it is absent or silent, the
+    ``--socket`` in the holder's own argv is tried, but only once that argv's
+    ``--record-dir`` resolves to this record (a holder started under another
+    spelling of the same root, e.g. ``/tmp`` vs ``/private/tmp``)."""
+    derived = sock_path_for_directory(directory)
+    candidates = [derived]
+    for index, sock in enumerate(candidates):
+        if sock.exists():
+            state = socket_request(sock, "state", {}, timeout)
+            if "holder_instance_id" in state:
+                return sock, state
+        if index == 0:
+            own = holder_argv_paths(record.get("holder_pid"))
+            if (own is not None and own[1]
+                    and os.path.realpath(own[0]) == os.path.realpath(str(directory))
+                    and os.path.realpath(own[1]) != os.path.realpath(str(derived))):
+                candidates.append(Path(own[1]))
+    return None, None
+
+
+def holder_identity(directory: Path, record: dict[str, Any],
+                    timeout: float = IDENTITY_PROBE_TIMEOUT) -> tuple[str, dict[str, Any] | None]:
+    """``verified``, ``dead`` (PID gone), ``unreachable`` (PID alive, socket
+    absent or silent), or ``mismatch`` (socket answers with another or no
+    instance id), plus the holder's ``state`` reply when it answered."""
+    if not pid_alive(record.get("holder_pid")):
+        return "dead", None
+    _sock, state = answering_socket(directory, record, timeout)
+    if state is None:
+        return "unreachable", None
+    expected = record.get("holder_instance_id")
+    if not isinstance(expected, str) or not expected or state["holder_instance_id"] != expected:
+        return "mismatch", state
+    return "verified", state
+
+
+def procargs_command(pid: int) -> str | None:
+    """``pid``'s argv from the macOS ``KERN_PROCARGS2`` sysctl, joined by
+    spaces, or None. Issue #120: under a Seatbelt profile the setuid ``ps``
+    cannot exec, but a process may still read its own user's arguments."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        mib = (ctypes.c_int * 3)(1, 49, pid)  # CTL_KERN, KERN_PROCARGS2
+        size = ctypes.c_size_t(0)
+        if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0 or size.value < 4:
+            return None
+        buffer = ctypes.create_string_buffer(size.value)
+        if libc.sysctl(mib, 3, buffer, ctypes.byref(size), None, 0) != 0:
+            return None
+    except (OSError, AttributeError):
+        return None
+    raw = buffer.raw[:size.value]
+    argc = int.from_bytes(raw[:4], sys.byteorder)
+    rest = raw[4:]
+    end = rest.find(b"\0")  # the exec path, then NUL padding, then argv
+    if end < 0:
+        return None
+    argv = rest[end:].lstrip(b"\0").split(b"\0")[:argc]
+    if len(argv) < argc:
+        return None
+    return " ".join(value.decode("utf-8", "replace") for value in argv)
+
+
+def process_command(pid: int) -> str | None:
+    """Live ``pid``'s command line from ``ps``, else from ``KERN_PROCARGS2``."""
+    try:
+        result = subprocess.run(["ps", "-p", str(pid), "-o", "command="],
+                                capture_output=True, text=True, env=PS_ENV)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except OSError:
+        pass
+    return procargs_command(pid)
+
+
+# The holder argv order command_start spawns: --record-dir, --socket, --repo.
+# Both anchors below depend on it; test_t3 runs a real start through them.
+HOLDER_RECORD_DIR = re.compile(r" --record-dir (.+?) --socket ")
+HOLDER_SOCKET = re.compile(r" --socket (.+?) --repo ")
+
+
+def holder_argv_paths(pid: Any) -> tuple[str, str | None] | None:
+    """``(--record-dir, --socket)`` from live ``pid``'s argv when it is a
+    holder, else None (not a holder, or the argv is unreadable)."""
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    command = process_command(pid)
+    if command is None or "kaola-acp-holder" not in command:
+        return None
+    line = f" {command} "
+    record_dir = HOLDER_RECORD_DIR.search(line)
+    if record_dir is None:
+        return None
+    sock = HOLDER_SOCKET.search(line)
+    return record_dir.group(1), sock.group(1) if sock else None
+
+
+def holder_argv_anchor(pid: Any, directory: Path) -> bool | None:
+    """Issue #132: whether live ``pid`` is the holder of ``directory`` by its
+    own argv (``--record-dir`` names that directory, the anchor
+    kaola-acp-sweep matches on), both sides resolved so ``/tmp`` and
+    ``/private/tmp`` spellings of one root agree. ``None`` when the argv
+    cannot be read, which never licenses a signal and never frees a root."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    command = process_command(pid)
+    if command is None:
+        return None if pid_alive(pid) else False
+    if "kaola-acp-holder" not in command:
+        return False
+    match = HOLDER_RECORD_DIR.search(f" {command} ")
+    if match is None:
+        return False
+    return os.path.realpath(match.group(1)) == os.path.realpath(str(directory))
+
+
 def git_facts(repo: str) -> dict[str, Any]:
     branch = subprocess.run(
         ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],
@@ -989,6 +1133,8 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
             receipt["error"] = {"code": "no-session",
                                 "message": "no ACP session record for this platform/session/repo"}
             return receipt
+        if op == "stop" and params.get("force") and pid_alive(record.get("holder_pid")):
+            return force_stop_unreachable(args, repo, directory, record, params)
         if pid_alive(record.get("holder_pid")):
             receipt = base_receipt(args, repo)
             receipt["error"] = {"code": "holder-socket-missing",
@@ -1003,6 +1149,8 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
             if op == "stop":
                 return force_kill_from_record(args, repo, record)
             return holder_lost_receipt(args, repo, record)
+        if record and op == "stop" and params.get("force"):
+            return force_stop_unreachable(args, repo, directory, record, params)
     receipt = base_receipt(args, repo)
     receipt.update(response)
     return receipt
@@ -1079,7 +1227,12 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
     (spawn record), so a reused pid or group id is never touched."""
     groups: list[int] = []
     pgid = record.get("agent_pgid")
-    if isinstance(pgid, int) and pgid > 0:
+    agent_started = record.get("agent_started")
+    checked = (isinstance(agent_started, (int, float)) and not isinstance(agent_started, bool)
+               and agent_started > 0)
+    if isinstance(pgid, int) and pgid > 0 and not checked:
+        # A record written before Issue #132 names no agent start time: its
+        # group is trusted as before.
         groups.append(pgid)
     children = record.get("agent_child_groups") or {}
     spawned: list[dict[str, Any]] = []
@@ -1094,7 +1247,7 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
                     spawned.append(entry)
         except OSError:
             pass
-    if not children and not spawned:
+    if not children and not spawned and not (checked and isinstance(pgid, int) and pgid > 0):
         return groups
     # ``lstart`` is rendered in the caller's locale on macOS: pin C so it
     # parses and matches what the holder recorded under the same pin.
@@ -1105,6 +1258,22 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
         if (len(fields) == 4 and fields[0].isdigit() and fields[1].isdigit()
                 and not fields[2].upper().startswith("Z")):
             by_pid[int(fields[0])] = (int(fields[1]), fields[3].strip())
+    if checked and isinstance(pgid, int) and pgid > 0:
+        # Issue #132: the agent leads its own group (start_new_session). A live
+        # leader must be the recorded agent by start time; with the leader gone
+        # the id cannot have been reused while members still hold the group.
+        leader = by_pid.get(pgid)
+        if leader is None:
+            groups.append(pgid)
+        elif leader[0] == pgid:
+            try:
+                leader_started = time.mktime(time.strptime(leader[1], "%a %b %d %H:%M:%S %Y"))
+            except ValueError:
+                leader_started = None
+            # Both sides are epochs in their own process's time zone, so a
+            # caller under another TZ than the holder still matches.
+            if leader_started is not None and abs(leader_started - agent_started) <= 1.0:
+                groups.append(pgid)
     for child, members in children.items():
         if not str(child).isdigit() or int(child) in groups:
             continue
@@ -1171,6 +1340,123 @@ def force_kill_from_record(args: argparse.Namespace, repo: str,
         sock.unlink()
     except OSError:
         pass
+    # Issue #132: a dead holder never records its own end. Once nothing of
+    # its recorded groups is left, say so in the record so a later `status`
+    # proves the session gone (`stopped`, `residual_pids: []`).
+    directory = spawn_record_dir(args, repo)
+    if directory is not None and not leftover and record.get("state") != "stopped":
+        path = directory / "record.json"
+        if read_record(directory) == record:
+            tmp = path.with_name(f"record.{secrets.token_hex(4)}.tmp")
+            try:
+                tmp.write_text(json.dumps(dict(record, state="stopped"), sort_keys=True),
+                               encoding="utf-8")
+                tmp.replace(path)
+            except OSError:
+                pass
+    return receipt
+
+
+def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
+                           record: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+    """Issue #132: ``stop --force`` on a record whose holder PID is alive but
+    whose socket is absent or silent. A signal needs an identity anchor: the
+    record's instance id must equal any expected one, and the live PID's argv
+    must name this record directory. A PID whose argv is provably another
+    process is a reused PID: nothing is signalled, the record is retired so
+    ``status`` reads ``no-session``. An unreadable argv refuses."""
+    receipt = base_receipt(args, repo)
+    holder_pid = record.get("holder_pid")
+    expected = params.get("expected_holder_instance_id")
+    if expected is not None and expected != record.get("holder_instance_id"):
+        receipt["error"] = {"code": "holder-instance-mismatch",
+                            "expected_holder_instance_id": expected,
+                            "holder_instance_id": record.get("holder_instance_id")}
+        receipt.update(mutation_status="not_started", mutation_performed=False)
+        return receipt
+    anchor = holder_argv_anchor(holder_pid, directory)
+    if anchor is None:
+        receipt["error"] = {"code": "holder-unreachable",
+                            "message": "holder PID alive, socket silent, and its argv is "
+                                       "unreadable (a sandboxed caller cannot read another "
+                                       "user's process): no identity anchor, nothing "
+                                       "signalled; stop it from an unsandboxed shell",
+                            "holder_pid": holder_pid}
+        receipt.update(mutation_status="not_started", mutation_performed=False)
+        return receipt
+    if anchor is False:
+        # The holder is proven gone and its PID belongs to someone else: that
+        # PID gets no signal. The holder's identity-checked groups are swept as
+        # for any dead holder, and the record is retired only once nothing of
+        # them is left, so a survivor stays visible to the next sweep.
+        groups = recorded_groups(record, directory)
+        killed: list[int] = []
+        for pid in live_group_members(groups):
+            if pid == holder_pid:
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed.append(pid)
+            except (ProcessLookupError, PermissionError):
+                pass
+        leftover: list[int] = []
+        if groups:
+            time.sleep(0.1)
+            leftover = [pid for pid in live_group_members(groups) if pid != holder_pid]
+        retired = None
+        if not leftover:
+            retired = directory / f"record.pid-reused-{int(time.time())}.json"
+            try:
+                (directory / "record.json").replace(retired)
+            except OSError:
+                retired = None
+        try:
+            sock_path(args, repo).unlink()
+        except OSError:
+            pass
+        receipt.update({
+            "stopped": not leftover,
+            "pid_reused": True,
+            "holder_pid": holder_pid,
+            "holder_signalled": False,
+            "swept_pgids": groups,
+            "force_killed_pids": killed,
+            "retired_record": str(retired) if retired else None,
+            "residual_pids": leftover,
+        })
+        return receipt
+    # The live PID is this record's own holder. One started under another
+    # spelling of this record root answers on the socket its argv names: stop
+    # it there, exactly as an ordinary stop - never signal a holder that answers.
+    sock, state = answering_socket(directory, record)
+    if sock is not None:
+        if (state or {}).get("holder_instance_id") != record.get("holder_instance_id"):
+            # Something answers there as another instance: never stop it on
+            # this record's behalf, and never signal a holder that answers.
+            receipt["error"] = {"code": "holder-instance-mismatch",
+                                "expected_holder_instance_id": record.get("holder_instance_id"),
+                                "holder_instance_id": (state or {}).get("holder_instance_id"),
+                                "answering_socket": str(sock)}
+            receipt.update(mutation_status="not_started", mutation_performed=False)
+            return receipt
+        receipt.update(socket_request(sock, "stop", params, 30.0))
+        receipt["answering_socket"] = str(sock)
+        return receipt
+    # Silent on every socket it could use: a wedged holder.
+    for sig, grace in ((signal.SIGTERM, 2.0), (signal.SIGKILL, 2.0)):
+        try:
+            os.kill(holder_pid, sig)
+        except (ProcessLookupError, PermissionError):
+            break
+        deadline = time.monotonic() + grace
+        while time.monotonic() < deadline and pid_alive(holder_pid):
+            time.sleep(0.05)
+        if not pid_alive(holder_pid):
+            break
+    receipt = force_kill_from_record(args, repo, record)
+    receipt["holder_force_killed"] = holder_pid
+    if pid_alive(holder_pid):
+        receipt["residual_pids"] = sorted(set(receipt["residual_pids"]) | {holder_pid})
     return receipt
 
 
@@ -2145,6 +2431,76 @@ def attach_binding_fact(receipt: dict[str, Any], facts: Any) -> dict[str, Any]:
     return receipt
 
 
+def verified_hosts(args: argparse.Namespace, repo: str) -> list[dict[str, Any]]:
+    """Issue #132: every other Host-named holder recorded for this canonical
+    root, on any platform, that is or may be live: it passes the identity
+    check, or its live PID still answers on the record's socket under another
+    instance id (``mismatch``), or it is silent but its argv names the record
+    (``unreachable``: initializing its agent, or wedged) or cannot be read.
+    Fail closed: only a dead PID or a provably reused one leaves the root
+    free; the others are attached, or exact-stopped and proven gone first."""
+    digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
+    hosts: list[dict[str, Any]] = []
+    for path in sorted(record_root(args).glob(f"*/*/{digest}/record.json")):
+        platform, session = path.parent.parent.parent.name, path.parent.parent.name
+        if platform not in PLATFORMS or not host_session(platform, session):
+            continue
+        if (platform, session) == (args.platform, args.session):
+            continue
+        record = read_record(path.parent)
+        if not record or record.get("repo") != repo:
+            continue
+        identity, state = holder_identity(path.parent, record)
+        if identity == "dead":
+            continue
+        anchor = None
+        if identity == "unreachable":
+            anchor = holder_argv_anchor(record.get("holder_pid"), path.parent)
+            if anchor is False:
+                continue
+        facts = state if identity == "verified" and state else record
+        host = {"platform": platform, "session": session, "identity": identity,
+                "holder_pid": facts.get("holder_pid"),
+                "holder_instance_id": facts.get("holder_instance_id"),
+                "acp_session_id": facts.get("acp_session_id"),
+                "state": facts.get("state")}
+        if identity == "unreachable" and anchor is None:
+            # Fail closed: nothing proves this live PID is not the Host.
+            host["argv"] = "unreadable"
+        if identity == "mismatch" and state:
+            # The record names one instance, the socket answers as another.
+            host["answering_holder_instance_id"] = state.get("holder_instance_id")
+        hosts.append(host)
+    return hosts
+
+
+def host_exists_refusal(args: argparse.Namespace, repo: str,
+                        hosts: list[dict[str, Any]]) -> dict[str, Any]:
+    """One live Host per canonical root: attach ``existing_host``, never
+    rename and retry. Nothing was written or spawned."""
+    receipt = base_receipt(args, repo)
+    receipt.pop("git", None)
+    receipt.update({
+        "result": "refused",
+        "reason": "host-exists",
+        "action": "start",
+        "detail": (f"{hosts[0]['session']} holds this repo's Host "
+                   f"(identity {hosts[0]['identity']}): attach it when verified, else "
+                   "exact-stop it and prove it gone before any Host start"
+                   + ("; its holder PID is alive but its argv is unreadable here (a "
+                      "Seatbelt-sandboxed caller cannot read another user's process or a "
+                      "zombie), so nothing proves it is not the Host - inspect or stop it "
+                      "from an unsandboxed shell" if hosts[0].get("argv") == "unreadable"
+                      else "")),
+        "existing_host": hosts[0],
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    if len(hosts) > 1:
+        receipt["existing_hosts"] = hosts
+    return receipt
+
+
 def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     # Issue #122: a Host-named start on a platform with no measured Host
     # Skill entry fails closed before anything exists,
@@ -2153,6 +2509,13 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         return heartbeat_host_refusal(args, repo, {
             "source": "none", "dispatcher": None,
             "refusal": host_entry_unsupported(args.platform, "Host")})
+    # Issue #132: at most one live Host per canonical root. Every start path -
+    # a Delegator's Host start or resume, and a Host dispatch that names a
+    # Host - reaches this one guard before anything exists.
+    if host_session(args.platform, args.session):
+        hosts = verified_hosts(args, repo)
+        if hosts:
+            return host_exists_refusal(args, repo, hosts)
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args))
     if any(not fact["present"] for fact in getattr(args, "agent_command_facts", [])):
@@ -2216,19 +2579,35 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     directory = record_dir(args, repo)
     record = read_record(directory)
     if record:
-        if pid_alive(record.get("holder_pid")):
-            receipt["error"] = {"code": "session-exists",
-                                "message": "a live ACP holder already owns this session",
-                                "holder_pid": record.get("holder_pid"),
-                                "acp_session_id": record.get("acp_session_id")}
-            # This start bound nothing: the reused holder keeps the target it
-            # was started with, so report that one and let the caller verify it.
-            return attach_binding_fact(receipt, record)
+        holder_pid = record.get("holder_pid")
+        if pid_alive(holder_pid):
+            identity, _ = holder_identity(directory, record)
+            # Issue #132: a live PID that fails the identity check and whose
+            # argv is provably not this record's holder is a reused PID. It is
+            # never signalled; the stale record is replaced by this start. An
+            # argv that cannot be read keeps the session occupied.
+            if identity == "verified" or holder_argv_anchor(holder_pid, directory) is not False:
+                receipt["error"] = {"code": "session-exists",
+                                    "message": "a live ACP holder already owns this session",
+                                    "holder_pid": holder_pid,
+                                    "identity": identity,
+                                    "acp_session_id": record.get("acp_session_id")}
+                # This start bound nothing: the reused holder keeps the target it
+                # was started with, so report that one and let the caller verify it.
+                return attach_binding_fact(receipt, record)
+            receipt["replaced_record"] = {"holder_pid": holder_pid, "pid_reused": True,
+                                          "holder_instance_id": record.get("holder_instance_id")}
+            try:
+                sock_path(args, repo).unlink()
+            except OSError:
+                pass
         if pid_alive(record.get("agent_pgid")) or pid_alive(record.get("agent_pid")):
             receipt.update(holder_lost_receipt(args, repo, record))
             return receipt
     directory.mkdir(parents=True, exist_ok=True)
     log_path = directory / "holder.out.log"
+    # Issue #132: keep --record-dir, --socket, --repo in this order; the
+    # identity anchors (HOLDER_RECORD_DIR, HOLDER_SOCKET) parse it.
     holder_argv = [
         sys.executable, str(HOLDER),
         "--record-dir", str(directory),

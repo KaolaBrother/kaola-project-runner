@@ -817,6 +817,121 @@ def test_new_standard_host_after_confirmed_stop() -> None:
         sandbox.cleanup()
 
 
+def test_one_host_per_repo_refuses_host_exists() -> None:
+    """Issue #132 T1/T2/T5/T8/T13: one identity-verified Host per canonical
+    root. A second Host-named start - a Delegator's, or a Host dispatch that
+    names a Host - refuses host-exists before anything exists; a Host that
+    fails the identity check does not block its replacement; list rows carry
+    the binding a sweep tells this Host's seats from a predecessor's by."""
+    sandbox = Sandbox("onehost")
+    try:
+        def raw_start(platform: str, session: str, **env: str):
+            argv = [PYTHON, str(CHECKOUT_CLI), platform, "start", "--repo", str(sandbox.repo),
+                    "--session", session, "--mode", "yolo"]
+            # Registered before the start so cleanup stops it even when a
+            # refusal this test expects does not happen.
+            sandbox.sessions.append(session)
+            if platform == "zcode":
+                env.setdefault("KAOLA_ZCODE_ENTRY", str(sandbox.entry_for(session)))
+            else:
+                argv += ["--command", f"{PYTHON} {FAKE}"]
+            result = subprocess.run(argv, capture_output=True, text=True,
+                                    env=sandbox.env(**env), timeout=120)
+            return result.returncode, json.loads(result.stdout.strip().splitlines()[-1])
+
+        def rows(*extra: str) -> list[dict]:
+            result = subprocess.run([PYTHON, str(CHECKOUT_CLI), "list", "--repo", str(sandbox.repo),
+                                     *extra], capture_output=True, text=True,
+                                    env=sandbox.env(), timeout=60)
+            return json.loads(result.stdout)["rows"]
+
+        def holders_named(session: str) -> list[str]:
+            table = subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True)
+            return [line for line in table.stdout.splitlines()
+                    if "kaola-acp-holder" in line and f"--session {session} " in line]
+
+        host = "zcode-KPR-orchestrator-one"
+        first = sandbox.cli("start", "--mode", "yolo", session=host)
+        check(first.get("state") == "ready", f"first Host ready ({first.get('error')})")
+        dispatcher = json.dumps({"holder_instance_id": first["holder_instance_id"],
+                                 "platform": "zcode", "repo": os.path.realpath(sandbox.repo),
+                                 "session": host}, sort_keys=True)
+        worker = "zcode-KPR-i132-seat"
+        seat = sandbox.cli("start", "--mode", "yolo", session=worker,
+                           KAOLA_ACP_DISPATCHER=dispatcher)
+        check(seat.get("heartbeat_host", {}).get("session") == host, "worker bound to the Host")
+
+        second = "zcode-KPR-orchestrator-two"
+        code, refused = raw_start("zcode", second)
+        sandbox.dump("30-host-exists.json", refused)
+        check(code == 1, f"T1: a second Host start exits 1 ({code})")
+        check(refused.get("result") == "refused" and refused.get("reason") == "host-exists",
+              f"T1: second Host start refuses host-exists ({refused})")
+        existing = refused.get("existing_host") or {}
+        check(existing.get("session") == host
+              and existing.get("holder_instance_id") == first["holder_instance_id"],
+              f"T1: existing_host names the live Host by its instance ({existing})")
+        for key in ("result", "reason", "action", "platform", "session", "repo",
+                    "existing_host", "mutation_performed"):
+            check(key in refused, f"T13: host-exists receipt carries {key}")
+        check(refused.get("action") == "start" and refused.get("mutation_performed") is False
+              and refused.get("mutation_status") == "not_started",
+              "T13: host-exists has the typed pre-mutation refusal shape")
+        check(not (sandbox.record_root / "zcode" / second).exists(),
+              "T1: no record directory for the refused Host")
+        check(holders_named(second) == [], "T1: no holder process for the refused Host")
+
+        code, dispatched = raw_start("claude-code", "claude-code-KPR-orchestrator-three",
+                                     KAOLA_ACP_DISPATCHER=dispatcher)
+        check(code == 1 and dispatched.get("reason") == "host-exists"
+              and (dispatched.get("existing_host") or {}).get("session") == host,
+              f"T5: a Host dispatch naming a Host refuses host-exists ({dispatched})")
+        check(not (sandbox.record_root / "claude-code").exists(),
+              "T5: the refusal comes before any record or spawn")
+
+        listed = {row["session"]: row for row in rows()}
+        sandbox.dump("31-list.json", listed)
+        check(listed.get(host, {}).get("identity") == "verified"
+              and listed[host].get("host_class") is True, "the live Host row verifies as a Host")
+        row = listed.get(worker) or {}
+        check(row.get("identity") == "verified" and row.get("host_class") is False,
+              f"T8: the seat row verifies as a worker ({row})")
+        check((row.get("dispatcher") or {}).get("holder_instance_id") == first["holder_instance_id"],
+              f"T8: the seat row names its dispatching Host instance ({row.get('dispatcher')})")
+        check((row.get("heartbeat_host") or {}).get("session") == host,
+              "T8: the seat row carries its recorded binding")
+
+        # Review F1: a live Host that cannot answer yet (initializing) or any
+        # more (wedged) still holds the root; only a dead or reused PID frees it.
+        socket_path = sandbox.record_dir(host) / "holder.sock"
+        real_socket = Path(os.path.realpath(socket_path))
+        real_socket.unlink()
+        code, silent = raw_start("zcode", second)
+        check(code == 1 and silent.get("reason") == "host-exists"
+              and (silent.get("existing_host") or {}).get("identity") == "unreachable",
+              f"F1: a silent anchored Host still refuses a second Host ({silent})")
+
+        # T2: the Host dies without a stop; its record stays and fails the check.
+        os.kill(first["holder_pid"], signal.SIGKILL)
+        wait_until(lambda: not pid_alive(first["holder_pid"]), 10, "Host holder is gone")
+        dead = {row["session"]: row for row in rows("--include-dead")}
+        check(dead.get(host, {}).get("identity") == "dead", f"T2: the dead Host row reads dead")
+        code, replacement = raw_start("zcode", second)
+        sandbox.dump("32-replacement.json", replacement)
+        check(code == 0 and replacement.get("state") == "ready",
+              f"T2: a dead Host row does not trigger host-exists ({replacement})")
+        after = {row["session"]: row for row in rows()}
+        verified_hosts = {row["holder_instance_id"] for row in after.values()
+                          if row.get("host_class") and row.get("identity") == "verified"}
+        check(verified_hosts == {replacement["holder_instance_id"]},
+              "T2: exactly one verified Host after the replacement")
+        check((after.get(worker, {}).get("dispatcher") or {}).get("holder_instance_id")
+              not in verified_hosts,
+              "T8: the seat's dispatcher is no live Host - a predecessor's seat, report not kill")
+    finally:
+        sandbox.cleanup()
+
+
 def main() -> int:
     tests = (
         test_generated_entry_matrix_and_no_engine_leak,
@@ -825,6 +940,7 @@ def main() -> int:
         test_existing_locator_accepts_zcode_host_full_attestation,
         test_missing_authorization_non_start_is_documentation_only,
         test_new_standard_host_after_confirmed_stop,
+        test_one_host_per_repo_refuses_host_exists,
     )
     failed = 0
     for test in tests:

@@ -497,6 +497,18 @@ recorded file is refused as
 nothing created (`main_skill_skew` names the path and both builds). The start
 only detects it; reinstall that root or remove the stale copy.
 
+At most one live Host serves a canonical root (Issue #132). A Host-named start
+is refused as `{"result": "refused", "reason": "host-exists"}` with exit 1 and
+nothing created while another Host-named holder of that root may be live:
+it passes the identity check (record, live PID, answering socket, matching
+`holder_instance_id`), answers under another instance (`mismatch`), or is
+silent while its argv names the record or cannot be read. `existing_host` is
+attached when verified, exact-stopped and proven gone first when dead or
+silent, and reported for a human on `mismatch`. A Host that fails
+the check is exact-stopped and proven gone before its replacement starts, and
+every Delegator reach-out asks the Host to sweep the repo's holders first
+(`references/host-startup.md`, "Repo sweep").
+
 The runtime scan stays scripts-only, but prose is no longer manual: a worker
 Skill copy carries only its own rendered prose, so it cannot know another
 platform's `SKILL.md`, and the accepted checkout is the one place every Skill's

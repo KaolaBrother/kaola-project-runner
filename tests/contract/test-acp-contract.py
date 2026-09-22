@@ -1038,6 +1038,411 @@ class Issue39HolderInstanceTests(AcpSessionFixture, unittest.TestCase):
             )
 
 
+class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
+    """Issue #132: a live PID is necessary, never sufficient. ``list`` rows
+    carry the identity check (record, PID, socket, holder_instance_id) and the
+    binding a repo sweep classifies by; ``start`` treats a reused PID as no
+    holder without signalling it; ``stop --force`` signals only a PID whose
+    argv anchors it to the record; a dead holder's stop proves it gone."""
+
+    def record_path(self, repo: Path | None = None, session: str | None = None) -> Path:
+        repo = os.path.realpath(str(repo or self.repo))
+        digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
+        return self.record_root / "grok" / (session or self.session) / digest / "record.json"
+
+    def write_stale_record(self, holder_pid: int, repo: Path | None = None,
+                           session: str | None = None, **extra) -> dict:
+        path = self.record_path(repo, session)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        record = {"transport": "acp", "platform": "grok", "session": session or self.session,
+                  "repo": os.path.realpath(str(repo or self.repo)), "holder_pid": holder_pid,
+                  "holder_instance_id": "f" * 32, "state": "ready", "agent_alive": True,
+                  "pending_permissions": [], "event_cursor": 0, **extra}
+        path.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+        return record
+
+    def list_rows(self, *args: str) -> list[dict]:
+        result = subprocess.run([sys.executable, str(CLI), "list", *args],
+                                capture_output=True, text=True, env=self.env(), timeout=30)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload.get("schema"), "kaola-acp-list/1")
+        return payload["rows"]
+
+    def row(self, rows: list[dict], session: str | None = None) -> dict | None:
+        return next((row for row in rows if row["session"] == (session or self.session)), None)
+
+    def dead_pid(self) -> int:
+        child = subprocess.Popen(["true"])
+        child.wait()
+        return child.pid
+
+    def acp_module(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(f"acp132_{self._testMethodName}", CLI)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_t3_same_name_start_on_a_verified_holder_is_session_exists(self) -> None:
+        first = self.start()
+        # Review L2: the real spawn argv satisfies both anchors.
+        module = self.acp_module()
+        directory = self.record_path().parent
+        self.assertIs(module.holder_argv_anchor(first["holder_pid"], directory), True)
+        own = module.holder_argv_paths(first["holder_pid"])
+        self.assertEqual(os.path.realpath(own[1]), os.path.realpath(str(self.holder_sock())))
+        # Review N3: the holder records its agent's start time at spawn.
+        record = json.loads(self.record_path().read_text())
+        self.assertIsInstance(record.get("agent_started"), (int, float), record)
+        self.assertIn(record["agent_pgid"], module.recorded_groups(record, directory))
+        again = self.cli("start", check=False)
+        self.assertEqual((again.get("error") or {}).get("code"), "session-exists", again)
+        self.assertEqual(again["error"].get("identity"), "verified")
+        self.assertEqual(again["error"].get("holder_pid"), first.get("holder_pid"))
+        row = self.row(self.list_rows("--repo", str(self.repo)))
+        self.assertIsNotNone(row)
+        self.assertEqual(row["identity"], "verified")
+        self.assertIs(row["host_class"], False)
+        self.assertEqual(row["holder_instance_id"], first["holder_instance_id"])
+
+    def test_t9_unbound_live_holder_row_says_unbound(self) -> None:
+        self.start()
+        row = self.row(self.list_rows("--repo", str(self.repo)))
+        self.assertIsNotNone(row)
+        self.assertIn("heartbeat_host", row)
+        self.assertIsNone(row["heartbeat_host"], "an ordinary worker is unbound, not unknown")
+        self.assertIs(row["heartbeat_host_known"], True)
+        self.assertIn("dispatcher", row)
+        self.assertIsNone(row["dispatcher"], "a start under no holder records no dispatcher")
+
+    def test_t4_reused_pid_is_never_live_and_never_signalled(self) -> None:
+        received: list[int] = []
+        caught = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT, signal.SIGUSR1)
+        previous = {sig: signal.signal(sig, lambda number, _frame: received.append(number))
+                    for sig in caught}
+        try:
+            # A record whose holder PID is this live test process: no socket,
+            # and its argv is not a holder of this record directory.
+            stale = self.write_stale_record(os.getpid())
+            row = self.row(self.list_rows("--repo", str(self.repo)))
+            self.assertIsNotNone(row, "a PID-alive record stays in the live-holder view")
+            self.assertNotEqual(row["identity"], "verified", row)
+            stop = self.cli("stop", "--force", "--expected-holder-instance-id",
+                            stale["holder_instance_id"], check=False)
+            self.assertIs(stop.get("pid_reused"), True, stop)
+            self.assertIs(stop.get("stopped"), True, stop)
+            self.assertIs(stop.get("holder_signalled"), False, stop)
+            self.assertEqual(stop.get("force_killed_pids"), [], stop)
+            self.assertNotIn("error", stop)
+            gone = self.cli("status", check=False)
+            self.assertEqual((gone.get("error") or {}).get("code"), "no-session", gone)
+            # Same fixture again, then a same-name start replaces it.
+            self.write_stale_record(os.getpid())
+            started = self.start()
+            self.assertEqual(started.get("state"), "ready", started)
+            self.assertEqual(started.get("replaced_record", {}).get("pid_reused"), True, started)
+            self.assertNotEqual(started.get("holder_pid"), os.getpid())
+            self.assertEqual(self.row(self.list_rows("--repo", str(self.repo)))["identity"],
+                             "verified")
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+        self.assertEqual(received, [], "the reused PID's owner received a signal")
+
+    def test_reused_pid_stop_sweeps_surviving_agent_group_before_retiring(self) -> None:
+        """Review F2: the dead holder's own groups are swept like any dead
+        holder's; only the reused holder PID is spared."""
+        orphan = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        try:
+            stale = self.write_stale_record(os.getpid(), agent_pid=orphan.pid,
+                                            agent_pgid=orphan.pid)
+            stop = self.cli("stop", "--force", "--expected-holder-instance-id",
+                            stale["holder_instance_id"], check=False)
+            self.assertIs(stop.get("pid_reused"), True, stop)
+            self.assertIn(orphan.pid, stop.get("force_killed_pids") or [], stop)
+            self.assertNotIn(os.getpid(), stop.get("force_killed_pids") or [], stop)
+            self.assertEqual(stop.get("residual_pids"), [], stop)
+            orphan.wait(timeout=10)
+            gone = self.cli("status", check=False)
+            self.assertEqual((gone.get("error") or {}).get("code"), "no-session", gone)
+        finally:
+            if orphan.poll() is None:
+                orphan.kill()
+                orphan.wait()
+
+    def test_same_name_start_over_a_silent_anchored_holder_is_session_exists(self) -> None:
+        """Review F3: a live holder whose socket is gone (initializing or
+        wedged) keeps its session; no second holder is spawned over it."""
+        started = self.start()
+        self.holder_sock().unlink()
+        again = self.cli("start", check=False)
+        self.assertEqual((again.get("error") or {}).get("code"), "session-exists", again)
+        self.assertEqual(again["error"].get("identity"), "unreachable", again)
+        self.assertEqual(again["error"].get("holder_pid"), started["holder_pid"])
+        holders = [pid for pid, command in own_processes(self.root).items()
+                   if "kaola-acp-holder" in command and self.session in command]
+        self.assertEqual(holders, [started["holder_pid"]], holders)
+        self.cli("stop", "--force", "--expected-holder-instance-id",
+                 started["holder_instance_id"], check=False)
+        self.assertTrue(wait_for(lambda: process_gone(started["holder_pid"]), 10))
+        self._started = False
+
+    def test_stop_force_mismatch_on_unreachable_holder_writes_nothing(self) -> None:
+        stale = self.write_stale_record(os.getpid())
+        refused = self.cli("stop", "--force", "--expected-holder-instance-id", "0" * 32,
+                           check=False)
+        self.assertEqual((refused.get("error") or {}).get("code"), "holder-instance-mismatch")
+        self.assertIs(refused.get("mutation_performed"), False)
+        self.assertEqual(json.loads(self.record_path().read_text())["holder_instance_id"],
+                         stale["holder_instance_id"], "the record was not retired")
+        self.record_path().unlink()
+
+    def test_t7_dead_holder_force_stop_sweeps_and_proves_gone(self) -> None:
+        started = self.start()
+        holder_pid = started["holder_pid"]
+        record = json.loads(self.record_path().read_text())
+        os.kill(holder_pid, signal.SIGKILL)
+        self.assertTrue(wait_for(lambda: process_gone(holder_pid), 10))
+        self.assertTrue(wait_for(lambda: process_gone(record.get("agent_pid")), 10),
+                        "the mock agent exits on stdin EOF")
+        # A surviving agent group of the dead holder.
+        orphan = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        try:
+            # The stand-in agent carries its own recorded start time (#132 N3).
+            module = self.acp_module()
+            table = module.run_ps(["pid", "pgid", "state", "lstart"], env=module.PS_ENV)
+            started = next(line.split(None, 3)[3].strip() for line in table.stdout.splitlines()
+                           if line.split() and line.split()[0] == str(orphan.pid))
+            epoch = time.mktime(time.strptime(started, "%a %b %d %H:%M:%S %Y"))
+            record.update(agent_pid=orphan.pid, agent_pgid=orphan.pid, agent_started=epoch)
+            self.record_path().write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+            listed = self.row(self.list_rows("--repo", str(self.repo), "--include-dead"))
+            self.assertEqual((listed or {}).get("identity"), "dead", listed)
+            self.assertIsNone(self.row(self.list_rows("--repo", str(self.repo))),
+                              "the default view stays live holders only")
+            stop = self.cli("stop", "--force", "--expected-holder-instance-id",
+                            record["holder_instance_id"], check=False)
+            self.assertIs(stop.get("holder_lost"), True, stop)
+            self.assertIn(orphan.pid, stop.get("force_killed_pids") or [], stop)
+            self.assertEqual(stop.get("residual_pids"), [], stop)
+            orphan.wait(timeout=10)
+            self.assertFalse(self.holder_sock().exists(), "the socket path was unlinked")
+            status = self.cli("status", check=False)
+            self.assertEqual(status.get("outcome"), "stopped", status)
+            self.assertEqual(status.get("residual_pids"), [], status)
+        finally:
+            if orphan.poll() is None:
+                orphan.kill()
+                orphan.wait()
+        self._started = False
+
+    def test_wedged_holder_without_socket_is_stopped_by_its_argv_anchor(self) -> None:
+        started = self.start()
+        self.holder_sock().unlink()
+        row = self.row(self.list_rows("--repo", str(self.repo)))
+        self.assertEqual((row or {}).get("identity"), "unreachable", row)
+        stop = self.cli("stop", "--force", "--expected-holder-instance-id",
+                        started["holder_instance_id"], check=False)
+        self.assertEqual(stop.get("holder_force_killed"), started["holder_pid"], stop)
+        self.assertEqual(stop.get("residual_pids"), [], stop)
+        self.assertTrue(wait_for(lambda: process_gone(started["holder_pid"]), 10))
+        self._started = False
+
+    def test_m1_other_spelling_of_the_root_reaches_the_live_holder(self) -> None:
+        """Review M1: a caller spelling the record root differently derives
+        another socket path; it must still verify the live holder through the
+        socket its argv names, and a force stop must stop it gracefully there
+        rather than signal a holder that answers."""
+        started = self.start()
+        alias = self.root / f"alias-{self._testMethodName}"
+        alias.symlink_to(self.record_root)
+        env = {"KAOLA_ACP_RECORD_ROOT": str(alias)}
+        listed = subprocess.run([sys.executable, str(CLI), "list", "--repo", str(self.repo)],
+                                capture_output=True, text=True, timeout=30,
+                                env={**self.env(), **env})
+        row = self.row(json.loads(listed.stdout)["rows"])
+        self.assertEqual((row or {}).get("identity"), "verified", row)
+        stop = self.cli("stop", "--force", "--expected-holder-instance-id",
+                        started["holder_instance_id"], check=False, extra_env=env)
+        self.assertNotIn("holder_force_killed", stop, stop)
+        self.assertEqual(os.path.realpath(stop.get("answering_socket") or ""),
+                         os.path.realpath(str(self.holder_sock())), stop)
+        self.assertTrue(wait_for(lambda: process_gone(started["holder_pid"]), 15))
+        status = self.cli("status", check=False)
+        self.assertIn(status.get("outcome"), ("stopped",), status)
+        self._started = False
+
+    def test_t6_list_repo_filter_never_reaches_another_repo(self) -> None:
+        other = self.root / f"other-{self._testMethodName}"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=other, check=True)
+        mine = self.write_stale_record(self.dead_pid())
+        theirs = self.write_stale_record(self.dead_pid(), repo=other)
+        theirs_bytes = self.record_path(other).read_bytes()
+        rows = self.list_rows("--repo", str(self.repo), "--include-dead")
+        self.assertTrue(rows and all(row["repo"] == mine["repo"] for row in rows), rows)
+        self.assertEqual(self.row(rows)["identity"], "dead")
+        self.cli("stop", "--force", "--expected-holder-instance-id",
+                 mine["holder_instance_id"], check=False)
+        self.assertEqual(self.record_path(other).read_bytes(), theirs_bytes,
+                         "another repo's dead record is untouched")
+        other_rows = self.list_rows("--repo", str(other), "--include-dead")
+        self.assertEqual([row["repo"] for row in other_rows], [theirs["repo"]])
+
+
+class Issue132AnchorUnitTests(unittest.TestCase):
+    """Issue #132 re-review N1/N2/N6: the argv anchor resolves both path
+    spellings, reads argv without ``ps``, and an unreadable argv never frees a
+    root or licenses a signal; a reused-PID stop keeps a record whose groups
+    survive."""
+
+    def setUp(self) -> None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(f"acp132_{self._testMethodName}", CLI)
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+        self._tmp = tempfile.TemporaryDirectory(prefix="kaola-132-anchor-")
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def holder_command(self, record_dir: str) -> str:
+        return (f"/usr/bin/python3 /x/kaola-acp-holder.py --record-dir {record_dir} "
+                "--socket /x/s.sock --repo /r --platform grok --session s")
+
+    def test_n1_anchor_matches_across_path_spellings(self) -> None:
+        from unittest.mock import patch
+        real = Path(os.path.realpath(self.root)) / "rec"
+        real.mkdir()
+        spelled = str(self.root / "rec")
+        linked = self.root / "alias"
+        linked.symlink_to(real)
+        for argv_dir, directory in ((spelled, real), (str(real), Path(spelled)),
+                                    (str(linked), real)):
+            with patch.object(self.module, "process_command",
+                              return_value=self.holder_command(argv_dir)):
+                self.assertIs(self.module.holder_argv_anchor(os.getpid(), directory), True,
+                              (argv_dir, directory))
+        with patch.object(self.module, "process_command",
+                          return_value=self.holder_command(str(real) + "-other")):
+            self.assertIs(self.module.holder_argv_anchor(os.getpid(), real), False)
+
+    @unittest.skipUnless(sys.platform == "darwin", "KERN_PROCARGS2 is macOS")
+    def test_n2_argv_is_read_without_ps(self) -> None:
+        from unittest.mock import patch
+        with patch.object(self.module.subprocess, "run", side_effect=OSError("no ps")):
+            command = self.module.process_command(os.getpid())
+        self.assertIsNotNone(command)
+        self.assertIn("test-acp-contract", command)
+
+    def stale_host(self, holder_pid: int, **extra) -> tuple[object, Path]:
+        import argparse
+        repo = os.path.realpath(self.root)
+        args = argparse.Namespace(platform="grok", session="grok-KPR-orchestrator-new",
+                                  record_root=str(self.root / "records"), command="stop")
+        old = argparse.Namespace(**{**vars(args), "session": "grok-KPR-orchestrator-old"})
+        directory = self.module.record_dir(old, repo)
+        directory.mkdir(parents=True)
+        record = {"platform": "grok", "session": old.session, "repo": repo,
+                  "holder_pid": holder_pid, "holder_instance_id": "e" * 32,
+                  "state": "ready", **extra}
+        (directory / "record.json").write_text(json.dumps(record), encoding="utf-8")
+        return args, directory
+
+    def test_n6_unreadable_argv_holds_the_root_and_refuses_the_stop(self) -> None:
+        from unittest.mock import patch
+        args, directory = self.stale_host(os.getpid())
+        repo = os.path.realpath(self.root)
+        with patch.object(self.module, "process_command", return_value=None):
+            hosts = self.module.verified_hosts(args, repo)
+            self.assertEqual([host["identity"] for host in hosts], ["unreachable"])
+            self.assertEqual(hosts[0].get("argv"), "unreadable", hosts)
+            with patch.object(self.module, "base_receipt", return_value={}):
+                refusal = self.module.host_exists_refusal(args, repo, hosts)
+            self.assertIn("unsandboxed shell", refusal["detail"], refusal)
+            record = json.loads((directory / "record.json").read_text())
+            with patch.object(self.module, "base_receipt", return_value={}), \
+                 patch.object(self.module.os, "kill") as kill:
+                refused = self.module.force_stop_unreachable(args, repo, directory, record,
+                                                             {"force": True})
+            self.assertEqual(refused["error"]["code"], "holder-unreachable")
+            self.assertEqual([call for call in kill.call_args_list if call.args[1] != 0], [],
+                             "only the kill(pid, 0) liveness probe, never a signal")
+        self.assertTrue((directory / "record.json").is_file(), "the record stays")
+        with patch.object(self.module, "process_command", return_value="/bin/sleep 60"):
+            self.assertEqual(self.module.verified_hosts(args, repo), [],
+                             "a provably reused PID frees the root")
+
+    def test_n3_agent_group_is_swept_only_under_its_recorded_start_time(self) -> None:
+        leader = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        try:
+            table = self.module.run_ps(["pid", "pgid", "state", "lstart"], env=self.module.PS_ENV)
+            started = next(line.split(None, 3)[3].strip() for line in table.stdout.splitlines()
+                           if line.split() and line.split()[0] == str(leader.pid))
+            epoch = time.mktime(time.strptime(started, "%a %b %d %H:%M:%S %Y"))
+            base = {"agent_pid": leader.pid, "agent_pgid": leader.pid}
+            self.assertIn(leader.pid, self.module.recorded_groups(
+                dict(base, agent_started=epoch)), "the recorded agent group")
+            self.assertNotIn(leader.pid, self.module.recorded_groups(
+                dict(base, agent_started=epoch - 3600)),
+                "a live leader with another start time is a reused id")
+            # Review M2: a caller under another time zone renders lstart
+            # differently; the epoch comparison still matches.
+            other_tz = "UTC" if time.strftime("%z") != "+0000" else "Asia/Shanghai"
+            probe = subprocess.run(
+                [sys.executable, "-c",
+                 "import importlib.util,json,sys;"
+                 f"s=importlib.util.spec_from_file_location('k',{str(CLI)!r});"
+                 "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+                 f"print(json.dumps({leader.pid} in m.recorded_groups("
+                 f"{{'agent_pid':{leader.pid},'agent_pgid':{leader.pid},'agent_started':{epoch}}})))"],
+                capture_output=True, text=True, timeout=30, env={**os.environ, "TZ": other_tz})
+            self.assertEqual(probe.stdout.strip(), "true", (other_tz, probe.stderr[-400:]))
+            self.assertIn(leader.pid, self.module.recorded_groups(base),
+                          "a record from before #132 keeps its trusted group")
+        finally:
+            leader.kill()
+            leader.wait()
+
+    def test_l3_argv_socket_answering_as_another_instance_is_never_stopped(self) -> None:
+        from unittest.mock import patch
+        args, directory = self.stale_host(os.getpid())
+        repo = os.path.realpath(self.root)
+        record = json.loads((directory / "record.json").read_text())
+        with patch.object(self.module, "holder_argv_anchor", return_value=True), \
+             patch.object(self.module, "answering_socket",
+                          return_value=(Path("/x/other.sock"), {"holder_instance_id": "0" * 32})), \
+             patch.object(self.module, "base_receipt", return_value={}), \
+             patch.object(self.module, "socket_request") as request, \
+             patch.object(self.module.os, "kill") as kill:
+            receipt = self.module.force_stop_unreachable(args, repo, directory, record,
+                                                         {"force": True})
+        self.assertEqual(receipt["error"]["code"], "holder-instance-mismatch", receipt)
+        request.assert_not_called()
+        self.assertEqual([call for call in kill.call_args_list if call.args[1] != 0], [])
+
+    def test_n6_reused_pid_stop_keeps_the_record_while_a_group_survives(self) -> None:
+        from unittest.mock import patch
+        args, directory = self.stale_host(os.getpid(), agent_pid=424242, agent_pgid=424242)
+        repo = os.path.realpath(self.root)
+        record = json.loads((directory / "record.json").read_text())
+        with patch.object(self.module, "process_command", return_value="/bin/sleep 60"), \
+             patch.object(self.module, "base_receipt", return_value={}), \
+             patch.object(self.module, "recorded_groups", return_value=[424242]), \
+             patch.object(self.module, "live_group_members", return_value=[424243]), \
+             patch.object(self.module.os, "kill", side_effect=PermissionError) as kill:
+            receipt = self.module.force_stop_unreachable(args, repo, directory, record,
+                                                         {"force": True})
+        self.assertIs(receipt["pid_reused"], True)
+        self.assertIs(receipt["stopped"], False, receipt)
+        self.assertEqual(receipt["residual_pids"], [424243])
+        self.assertIsNone(receipt["retired_record"])
+        self.assertTrue((directory / "record.json").is_file(), "a survivor keeps its record")
+        self.assertNotIn(os.getpid(), [call.args[0] for call in kill.call_args_list],
+                         "the reused holder PID is never signalled")
+
+
 class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
     """Issue #34: ACP applies resolved model → effort → Fast in order and
     reports each configuration as a receipt, never a hard gate."""

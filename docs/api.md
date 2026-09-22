@@ -306,7 +306,7 @@ ACP `observe`/`status` report `session_meta.configOptions` as the latest native-
 
 The ZCode adapter (Issue #62) reports three separately trackable session identities: the Runner session name (on every receipt), the ACP session id, and the native `sess_*` id. Once a backend session is materialized or faithfully resumed the adapter emits one credential-free `session/update {sessionUpdate: native_session_identity, acpSessionId, nativeSessionId}` notification, and `session/load` returns the adopted `sessionId` plus its `configOptions` so the holder's record and every receipt track which native session was loaded. Nested Host→Worker isolation is a process/session contract (separate process groups, separate record roots; the outer exact stop sweeps recorded inner sessions); the explicit runtime facts `KAOLA_ZCODE_ENTRY`/`KAOLA_ZCODE_NODE` are forwarded to a nested ZCode child, while the holder's `KAOLA_ACP_CHILD_RECORD` write handle and the denied credential names are never forwarded. See [ZCode host](zcode-host.md).
 
-Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` is the only command without a required platform positional or `--repo`; stdout is one `kaola-acp-list/1` object of live holders. `kaola-acp <platform> view --repo ROOT --session NAME [--since CURSOR]` stdout is one `kaola-acp-view/1` object. `kaola-acp <platform> follow --repo ROOT --session NAME [--since CURSOR] [--format text]` keeps the Unix socket open and writes NDJSON `{kind:snapshot|delta|heartbeat|eof|error}` lines; snapshot/delta payloads reuse `kaola-acp-view/1`. After the first `follow` op that FD is read-only (`prompt`/`permit`/`cancel`/`stop` reply `kind=error` and must use another short connection). A slow follower whose queue exceeds 256 lines gets `follow-dropped` and disconnects; other followers, `view`, and agent stdio continue. Killing the follow CLI does not stop holder/agent. Agent exit emits `kind=eof`, after which the holder closes that connection and the CLI exits; a dead holder emits `kind=error` `holder-lost`. View caps are enforced, not only flagged: thinking keeps an 8 KiB tail, one tool's content is clipped to 32 KiB, the timeline keeps the newest 200 messages, and a view over 256 KiB drops its oldest tools then oldest messages (`truncated=true`). Chunks without `messageId` join the previous same-role message until a tool call, new prompt, or turn end. `--format text` joins message/tool titles into tty text (not a TUI). Runtime facts use `error.code` in `holder-lost` / `holder-unreachable` / `no-session`. `kaola-tmux.sh PLATFORM view` prints `{"error":{"code":"view-unsupported","message":"view is not a Runner command; use kaola-acp"},"schema":"kaola-acp-view/1"}`, exit 1; `follow` is likewise `follow-unsupported` (`"kind":"error"`). `install-local.sh --bin-links` (default on for the Codex runtime destination) also installs owned `$HOME/.local/bin/kaola-acp`, `kaola-acp-holder`, and `kaola-project-runner-locate` symlinks.
+Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` is the only command without a required platform positional or `--repo`; stdout is one `kaola-acp-list/1` object of live holders; `--include-dead` (Issue #132) adds records whose holder PID is gone. Each row also carries `identity` (`verified` | `dead` | `unreachable` | `mismatch`: record, live PID, answering admin socket, and a `state` reply whose `holder_instance_id` equals the record's, probed with a 5 s bound), `host_class` (the standard Host name `<platform>-<CODE>-orchestrator-<purpose>`), `dispatcher` (the dispatching holder identity the holder inherited from `KAOLA_ACP_DISPATCHER`, or `null`), and the binding fact `heartbeat_host` / `heartbeat_host_known`. `kaola-acp <platform> view --repo ROOT --session NAME [--since CURSOR]` stdout is one `kaola-acp-view/1` object. `kaola-acp <platform> follow --repo ROOT --session NAME [--since CURSOR] [--format text]` keeps the Unix socket open and writes NDJSON `{kind:snapshot|delta|heartbeat|eof|error}` lines; snapshot/delta payloads reuse `kaola-acp-view/1`. After the first `follow` op that FD is read-only (`prompt`/`permit`/`cancel`/`stop` reply `kind=error` and must use another short connection). A slow follower whose queue exceeds 256 lines gets `follow-dropped` and disconnects; other followers, `view`, and agent stdio continue. Killing the follow CLI does not stop holder/agent. Agent exit emits `kind=eof`, after which the holder closes that connection and the CLI exits; a dead holder emits `kind=error` `holder-lost`. View caps are enforced, not only flagged: thinking keeps an 8 KiB tail, one tool's content is clipped to 32 KiB, the timeline keeps the newest 200 messages, and a view over 256 KiB drops its oldest tools then oldest messages (`truncated=true`). Chunks without `messageId` join the previous same-role message until a tool call, new prompt, or turn end. `--format text` joins message/tool titles into tty text (not a TUI). Runtime facts use `error.code` in `holder-lost` / `holder-unreachable` / `no-session`. `kaola-tmux.sh PLATFORM view` prints `{"error":{"code":"view-unsupported","message":"view is not a Runner command; use kaola-acp"},"schema":"kaola-acp-view/1"}`, exit 1; `follow` is likewise `follow-unsupported` (`"kind":"error"`). `install-local.sh --bin-links` (default on for the Codex runtime destination) also installs owned `$HOME/.local/bin/kaola-acp`, `kaola-acp-holder`, and `kaola-project-runner-locate` symlinks.
 
 ## Observation schema
 
@@ -369,6 +369,41 @@ recorded digest; extra files are ignored. Any difference is
 (re-run `install-local.sh` for that root or remove the copy). A passing Host `start` reports
 `main_skill_build`, which is `null` when there is no record to compare (a checkout invocation or a
 worker Skill built before the record).
+
+One live Host per canonical root (Issue #132). Before anything else a Host-named `start` (any
+platform, a `KAOLA_ACP_DISPATCHER`-dispatched one included) enumerates the other Host-named records
+of the same canonical root and refuses `{"result":"refused","reason":"host-exists"}`, exit 1,
+nothing created, unless every one is provably free: a dead holder PID, or a live PID that is
+silent and whose argv is provably another process (compared as resolved paths; read through
+`ps`, or `KERN_PROCARGS2` where a Seatbelt profile blocks `ps`). A row that passes the identity check, answers
+under another instance id (`mismatch`), or is silent while its argv still names the record (an
+initializing or wedged holder) holds the root. `existing_host` carries its `platform`, `session`,
+`identity`, `holder_pid`, `holder_instance_id`, `acp_session_id`, and `state`, plus
+`answering_holder_instance_id` on `mismatch` and `argv: "unreadable"` when a silent holder's argv
+cannot be read, e.g. by a Seatbelt-sandboxed caller for another user's process or a zombie
+(`existing_hosts`
+lists all when there are several). The `list` identity probe is bounded at 2 s per socket, the start
+guard's at 5 s; a silent derived socket is followed by at most one more probe of the socket the
+holder's own argv names. A same-name start keeps `session-exists`, now only for a holder that
+passes the check or whose live PID's argv still names this record directory (`error.identity`
+reports the check). A live PID whose argv is provably another process is a reused PID: the start
+replaces the stale record without signalling it and reports `replaced_record.pid_reused: true`.
+`stop --force` on a live PID whose socket is absent or silent checks
+`--expected-holder-instance-id` against the record (`holder-instance-mismatch`, nothing written),
+stops a holder that answers, as the record's own instance, on the `--socket` its own argv names (a holder started under another
+spelling of the same record root, e.g. `/tmp` vs `/private/tmp`, derives another socket path) with an
+ordinary stop over that socket (`answering_socket`), and signals only a silent PID whose argv anchors
+it to the record (`holder_force_killed`); a reused PID
+gets no signal (`pid_reused: true`, `holder_signalled: false`), the dead holder's recorded groups
+are swept exactly as for any dead holder (`force_killed_pids`: the agent's own process group when
+its live leader still has the start time the holder recorded as `agent_started` (epoch seconds,
+so time zones do not matter) at spawn, or has no
+live leader left; a record written before `agent_started` keeps the group trusted as before; plus
+child groups that still match their recorded start time), and the record is retired once nothing of them is left
+(later `status` reads `no-session`; a survivor keeps the record and appears in `residual_pids`). An
+unreadable argv refuses `holder-unreachable`. A force stop of a dead
+holder that leaves nothing of its recorded groups marks the record `stopped`, so `status` reads
+`stopped` with `residual_pids: []`.
 
 ### `steer` — Agent-chosen steering of a running turn (Issue #65)
 
