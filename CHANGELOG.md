@@ -41,7 +41,13 @@
   (`gpt-6-astra`/`high`) applies on the same surface. `acp_command` moves to those pins,
   `acp_verified_versions` to `cli=0.155.1;adapter=1.13.0;protocol=1`, and `acp_wrapper_pin` to
   `1.13.0`; the adapter still advertises `_meta.steering.supported=true` (source check; live
-  steering was measured on 1.11.0). Codex Host entry and Host model pin stay with #126.
+  steering was measured on 1.11.0). A `CODEX_PATH` override was also live-measured on adapter
+  1.13.0 (Owner ruling, 2026-09-23): `CODEX_PATH=/opt/homebrew/bin/codex` (codex-cli 0.156.0, the live
+  Homebrew binary) applies `gpt-6-sol`/`high` (effective read-back `high`), the `medium` discriminator,
+  and `gpt-6-astra`/`high` for the upgrade tier. The pinned npx default stays `@openai/codex@0.155.1`:
+  npm `@openai/codex@0.156.1` could not be installed through the measuring network (two bounded
+  attempts stalled), so no portable 0.156.1 pin is claimed. Codex Host entry and Host model pin stay
+  with #126.
 
 ## 0.5.8 — 2026-09-23 (latest-CLI tier landing release)
 
