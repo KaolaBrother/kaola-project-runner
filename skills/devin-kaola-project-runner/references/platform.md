@@ -7,8 +7,7 @@
 - Continue: `--continue`
 - Exact resume: `--resume <session-id>`
 - Runner default preset (`--tier default`): **SWE-2 Max** — `swe-2-max` with `effort=max (encoded in model ID)`
-- Runner upgrade preset (`--tier upgrade`): **Fusion High (Fable 5.1 High + SWE-2 Medium)** — `fusion-claude-fable-5-1-high-sidekick-swe-2-medium` with `effort=high (encoded in model ID)`
-- Runner fable preset (`--tier fable`): **Fable 5.1 High** — `claude-fable-5-1-high` with `effort=high (encoded in model ID)`
+- Runner upgrade preset (`--tier upgrade`): **Fusion High (Opus 5.5 High + SWE-2 Medium)** — `fusion-claude-opus-5-5-high-sidekick-swe-2-medium` with `effort=high (encoded in model ID)`
 - Fast support: Fast via catalog `-fast`/`-priority` model variants only when the resolved model advertises one; preset models have no fast variant
 
 ## Preflight

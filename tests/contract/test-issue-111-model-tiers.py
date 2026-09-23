@@ -64,7 +64,8 @@ LIVE_PRESETS = {
     },
     "devin": {
         "default": ("SWE-2 Max", "swe-2-max", ""),
-        "alt": ("fable", "Fable 5.1 High", "claude-fable-5-1-high", ""),
+        # Issue #144 retired the fable preset: no third tier.
+        "alt": None,
     },
 }
 
@@ -270,8 +271,7 @@ class TierAgentCommand(unittest.TestCase):
 
     DEVIN = {
         "default": "devin acp --model swe-2-max",
-        "upgrade": "devin acp --model fusion-claude-fable-5-1-high-sidekick-swe-2-medium",
-        "fable": "devin acp --model claude-fable-5-1-high",
+        "upgrade": "devin acp --model fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
     }
 
     @classmethod
@@ -300,7 +300,7 @@ class TierAgentCommand(unittest.TestCase):
         self.assertEqual(self.acp.tier_agent_command(
             self.args("devin", resume="sess-1")), "")
         self.assertEqual(self.acp.tier_agent_command(
-            self.args("devin", use_continue=True, tier="fable")), self.DEVIN["fable"])
+            self.args("devin", use_continue=True, tier="upgrade")), self.DEVIN["upgrade"])
 
     def test_other_platforms_are_unchanged(self) -> None:
         for platform in ALL_PLATFORMS:
@@ -335,11 +335,19 @@ class UndeclaredTierIsRefused(unittest.TestCase):
         self.assertEqual(receipt["mutation_status"], "not_started")
 
     def test_a_platform_refuses_another_platforms_tier_word(self) -> None:
-        """Devin declares `fable`, so `alternative` must not slip through."""
-        code, receipt = run_acp("devin", "--tier", "alternative")
+        """Droid declares `core`, so devin must not quietly accept it."""
+        code, receipt = run_acp("devin", "--tier", "core")
         self.assertEqual(code, 1)
         self.assertEqual(receipt["reason"], "tier-not-declared")
-        self.assertEqual(receipt["available_tiers"], ["default", "upgrade", "fable"])
+        self.assertEqual(receipt["available_tiers"], ["default", "upgrade"])
+
+    def test_devin_refuses_its_retired_fable_tier(self) -> None:
+        """Issue #144: devin no longer declares `fable`; no silent fallback."""
+        code, receipt = run_acp("devin", "--tier", "fable")
+        self.assertEqual(code, 1)
+        self.assertEqual(receipt["reason"], "tier-not-declared")
+        self.assertEqual(receipt["available_tiers"], ["default", "upgrade"])
+        self.assertFalse(receipt["mutation_performed"])
 
     def test_droid_refuses_its_deleted_alternative_tier(self) -> None:
         """Issue #117: droid no longer declares `alternative`; no silent fallback."""

@@ -1,6 +1,6 @@
 # Devin CLI ACP transport
 
-Command: `devin acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: agent reports affogato 0.0.0-dev; the ACP model option offers only 76 of the catalog values on cli 3000.11.1 and rejects the presets with -32602, so each tier sets its preset through acp_command_<tier> spawn argv --model (Issue #140) and the advertised model currentValue stays the stale initial swe-2-high; the --tier fable preset is the first-class pure model claude-fable-5-1-high, catalog name "Claude Fable 5.1 High", shortened here to "Fable 5.1 High" to match the existing fusion preset's wording; there is no effort config option, so every effort is encoded in the model id.
+Command: `devin acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: agent reports affogato 0.0.0-dev; the ACP model option offers only 76 of the catalog values on cli 3000.11.1 and rejects the presets with -32602, so each tier sets its preset through acp_command_<tier> spawn argv --model (Issue #140) and the advertised model currentValue stays the stale initial swe-2-high; the --tier upgrade preset is the fusion model fusion-claude-opus-5-5-high-sidekick-swe-2-medium, the only Opus 5.5 High id in the catalog (pure Opus 5.5 is offered at medium only), and no third tier is declared (Issue #144 retired the fable preset); there is no effort config option, so every effort is encoded in the model id.
 
 ## Command surface
 
