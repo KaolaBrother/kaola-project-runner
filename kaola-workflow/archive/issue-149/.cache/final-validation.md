@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: python3 kaola-workflow/issue-149/evidence/measurement/verify-receipts.py
+validated_candidate_hash: 106c2d3d65b92c0202fe28a7233bd9886b223af94e9c8a4cd61f31072ab1cfc4

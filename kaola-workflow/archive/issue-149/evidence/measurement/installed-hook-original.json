@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /private/tmp/kpr149-shadow.KPvJNs/.codex/kaola-project-runner/hooks/kaola-codex-compact-hook.py user-emit",
+            "timeout": 5
+          }
+        ],
+        "description": "Inject the Project Runner conditional compact-recovery prompt after context compaction (acted on only by a session already using kaola-delegator or kaola-project-runner)",
+        "id": "kaola-project-runner:user-compact-context"
+      }
+    ]
+  }
+}

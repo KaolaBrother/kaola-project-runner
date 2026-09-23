@@ -1,0 +1,12 @@
+{
+  "codex_cli": "0.156.1",
+  "codex_acp": "1.13.0",
+  "checkout_commit": "d62ab082c23f84cc54b2d1b9b50ee3c199181a5e",
+  "adapter_path": "/Users/ylmacstudio/.npm/_npx/dbf52506fe4ebb57/node_modules/.bin/codex-acp",
+  "codex_path": "/Users/ylmacstudio/.local/bin/codex",
+  "trigger": "ACP session/prompt text /compact",
+  "shadow_auth_status": "Logged in using ChatGPT",
+  "shadow_auth_exit": 0,
+  "hook_log_existed_after_compact_and_followup": false,
+  "positive_control_log_existed": true
+}

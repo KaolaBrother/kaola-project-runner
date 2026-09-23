@@ -1,0 +1,19 @@
+[
+  {
+    "ordinal": 25,
+    "type": "compacted",
+    "timestamp": "2026-09-23T12:46:06.527Z",
+    "window_number": 1,
+    "compaction_response_id": "resp_027d0d12e60da0d9016ab3ca02a36887d2b0e007131c9ba31d"
+  },
+  {
+    "ordinal": 28,
+    "type": "item_completed",
+    "timestamp": "2026-09-23T12:46:06.531Z",
+    "item": {
+      "type": "ContextCompaction",
+      "id": "01a0ce4d-1907-7993-8211-76adb0639dbd"
+    },
+    "completed_at_ms": 1790167566531
+  }
+]
