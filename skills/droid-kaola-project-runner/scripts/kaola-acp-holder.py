@@ -893,7 +893,14 @@ def quota_module():
             _QUOTA = False
             return None
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        # A generated Skill must stay byte-identical to the render. Importing the
+        # sibling catalog must not drop a __pycache__ next to it.
+        previous = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = previous
         _QUOTA = module
     return _QUOTA
 FOLLOW_QUEUE_CAP = 256
