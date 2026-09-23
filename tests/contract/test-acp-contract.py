@@ -1509,26 +1509,29 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         if self.mock_log.is_file():
             self.mock_log.write_text("", encoding="utf-8")
 
-    def test_codex_default_applies_model_effort_fast_mode_in_order(self) -> None:
+    def test_codex_default_applies_model_fast_mode_in_order_without_effort(self) -> None:
+        # Issue #142: gpt-6-sol advertises no effort option on the pinned ACP
+        # surface (reasoning_effort is rejected -32602), so the default tier
+        # sends no effort at all.
         receipt = self.start("codex")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         self.assertEqual(
             self.config_events(),
             [
-                ("model", "gpt-5.6-sol"),
-                ("reasoning_effort", "high"),
+                ("model", "gpt-6-sol"),
                 ("fast-mode", "off"),
                 ("mode", "agent-full-access"),
             ],
         )
         application = receipt.get("config_application") or {}
         self.assertTrue((application.get("model") or {}).get("applied"))
-        self.assertTrue((application.get("effort") or {}).get("applied"))
+        self.assertFalse((application.get("effort") or {}).get("applied"))
+        self.assertEqual((application.get("effort") or {}).get("reason"), "no-resolved-value")
         self.assertTrue((application.get("fast") or {}).get("applied"))
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("source"), "runner-default")
         self.assertEqual(selection.get("tier"), "default")
-        self.assertEqual(selection.get("resolved_model"), "gpt-5.6-sol")
+        self.assertEqual(selection.get("resolved_model"), "gpt-6-sol")
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("requested"), "off")
         self.assertEqual(fast.get("effective"), "off")
@@ -1609,9 +1612,9 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             self.assertIn(config_id, advertised)
         options = (receipt.get("transport") or {}).get("advertised_config_options") or []
         model_option = next((o for o in options if o.get("id") == "model"), {})
-        self.assertIn("gpt-5.6-sol", model_option.get("values") or [])
+        self.assertIn("gpt-6-sol", model_option.get("values") or [])
         selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("resolved_model"), "gpt-5.6-sol")
+        self.assertEqual(selection.get("resolved_model"), "gpt-6-sol")
         self.assertFalse((receipt.get("config_application") or {}).get("applied"))
 
     def test_codex_rejected_fast_config_reports_unknown(self) -> None:

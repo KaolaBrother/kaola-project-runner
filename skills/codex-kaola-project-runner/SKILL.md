@@ -46,8 +46,8 @@ SESSION="codex-kaola-<purpose>"
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**GPT-5.6 Sol High**: `gpt-5.6-sol`,
-effort=high) and `--tier upgrade` (**GPT-6 Astra High**:
+presets — `--tier default` (**GPT-6 Sol**: `gpt-6-sol`,
+no Runner effort override) and `--tier upgrade` (**GPT-6 Astra High**:
 `gpt-6-astra`, effort=high) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,

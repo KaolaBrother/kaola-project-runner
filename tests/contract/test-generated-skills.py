@@ -66,7 +66,7 @@ PLATFORMS = {
         # "codex" alone is the controlling runtime name and legitimately
         # appears in every package's description, so only Codex-specific facts
         # are leakage tokens.
-        "tokens": ("codex-kaola-project-runner", "gpt-5.6-sol", "gpt-6-astra", "codex-acp"),
+        "tokens": ("codex-kaola-project-runner", "gpt-6-sol", "gpt-6-astra", "codex-acp"),
     },
     "zcode-kaola-project-runner": {
         "display": "ZCode Kaola Project Runner",

@@ -6,7 +6,7 @@
 - Default session prefix: `codex-kaola`
 - Continue: `resume --last`
 - Exact resume: `resume <session-id>`
-- Runner default preset (`--tier default`): **GPT-5.6 Sol High** — `gpt-5.6-sol` with `effort=high`
+- Runner default preset (`--tier default`): **GPT-6 Sol** — `gpt-6-sol` with `no Runner effort override`
 - Runner upgrade preset (`--tier upgrade`): **GPT-6 Astra High** — `gpt-6-astra` with `effort=high`
 - Fast support: Codex fast mode via ACP `fast-mode` configId (off/on); explicit off is applied, not assumed
 

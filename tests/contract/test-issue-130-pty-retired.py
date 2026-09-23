@@ -333,7 +333,7 @@ _ACP = _load_acp_contract()
 _MODEL_TESTS = _ACP.Issue34ModelSelectionAcpTests
 MISMATCH_CONFIG = {"set_result": {"configOptions": [
     {"id": "model", "type": "select", "currentValue": "saved-picker/other",
-     "options": [{"value": "gpt-5.6-sol"}, {"value": "gpt-6-astra"}]},
+     "options": [{"value": "gpt-6-sol"}, {"value": "gpt-6-astra"}]},
     {"id": "reasoning_effort", "type": "select", "currentValue": "high", "options": []},
 ]}}
 
@@ -435,7 +435,7 @@ class ModelPolicyOnAcp(_ACP.AcpSessionFixture, unittest.TestCase):
         receipt = self.guarded_start(extra_env={"MOCK_ACP_CONFIG": json.dumps(MISMATCH_CONFIG)})
         self.assertIsNone(receipt.get("error"), receipt)
         self.assertNotEqual(receipt.get("result"), "refused")
-        self.assertEqual(receipt["resolved_runtime_model_id"], "gpt-5.6-sol")
+        self.assertEqual(receipt["resolved_runtime_model_id"], "gpt-6-sol")
         self.assertEqual(receipt["effective_selection"],
                          {"effective_model": "saved-picker/other", "effective_effort": "high",
                           "effort_config_id": "reasoning_effort"})

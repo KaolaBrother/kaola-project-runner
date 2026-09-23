@@ -20,6 +20,14 @@
   launch argv). The also-measured `fusion-gpt-6-astra-high-sidekick-swe-2-medium` is documented
   only and wired to no tier. The default tier (`swe-2-max`) and `acp_verified_versions` are
   unchanged.
+- **codex default tier is now GPT-6 Sol (Issue #142).** `--tier default` selects `gpt-6-sol`
+  (was `gpt-5.6-sol`/`high`). The pinned ACP surface applies it through the plain `model` option
+  even though the pre-apply catalog omits it (measured live on 2026-09-23: `applied: true`,
+  `currentValue gpt-6-sol`, name "6 Sol"). Under `gpt-6-sol` the adapter advertises no effort
+  option (`reasoning_effort` is rejected `-32602` for both `high` and `medium`), so the preset
+  sends no effort (`no Runner effort override`); an explicit `--effort` stays a limitation
+  receipt. The upgrade tier (`gpt-6-astra`/`high`), `acp_verified_versions`, and the npx pins are
+  unchanged.
 
 ## 0.5.8 — 2026-09-23 (latest-CLI tier landing release)
 
