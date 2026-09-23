@@ -1,14 +1,15 @@
 {
-  "build": "d9ca66088dfb",
+  "build": "89c9e07a4079",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "918d80e40f89878cd9d61f1a4cba615873f23785b26af032b41f474ff2bbb960",
+    "SKILL.md": "5d413b3dab5e17034d3381e0a3b68cd4f1d0070b59057240685ff7fdcd63c90b",
     "agents/openai.yaml": "6be231d68d0b91c783f794a88ddc61058f4f2c92f0f3079273e90c85d73a129b",
     "references/doc-maintenance.md": "30e1e5870e4d7edf83611d5e21ebbeaa4b66da0ee98ba797a668bfd69c72a584",
     "references/heartbeat-skeleton.md": "63f1079b51398c24658323273f2f08580f0ae4ffe995f1364078d4947441849a",
     "references/host-entry-matrix.md": "9cb9e0df270b8c68d35548d4dddbeef7959e644f932b3975177602623ce95c2d",
     "references/host-startup.md": "c20fb129b75e02efff46f9f26d652ec088f7e4aef6e2db18a6d04f3afb290d8b",
     "references/issue-dispatch.md": "1d4fd6b84ca322f47954dd8f0bf20313dbb1b18b67f1939f33391afa9a41abc1",
+    "references/quota-packages.md": "ebbd338babe0e8f6b099ae4f7ce908da2b1405abf578a94f0fa1461f6488a990",
     "references/workflow-worktree.md": "9c8550a6fb2e335f1123598ff560851b067a0837f387ea32db437f5044538709",
     "references/zcode-host-dispatch.md": "34997ad6cb9b8446aef332e65c7f908621d948cbda2511575f0b6ede31e60bf8",
     "references/zcode-native-skill-entry.md": "2c544a1ab49e2319be2fd9d815b8894476e3f2dbb25312744015fa0a1f1acedf"

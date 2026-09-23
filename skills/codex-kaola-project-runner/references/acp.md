@@ -7,6 +7,7 @@ Command: `npx --yes --package @openai/codex@0.155.1 --package @agentclientprotoc
 Use `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; there are no other native keys and no editor replacement. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
 
 Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Installed CLIs are the host-wide, read-only `kaola-acp survey` (login PATH; starts nothing). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
+Read-only `packages`/`model-package`; model rows add `quotaPool`.
 
 ## Level-zero receipt
 

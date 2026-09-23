@@ -569,7 +569,9 @@ Authentication and workspace trust remain native CLI concerns.
 For ACP session watching, use `kaola-acp list`, `kaola-acp PLATFORM view`, or
 `kaola-acp PLATFORM follow` with the relevant repository and session arguments. To learn which
 platform CLIs are installed on the host, including login-shell installs a narrow-PATH app cannot
-see, use the read-only `kaola-acp survey`: it starts no agent, session, or holder. Full transport,
+see, use the read-only `kaola-acp survey`: it starts no agent, session, or holder. To
+resolve a model to its quota package without spending a turn, use `kaola-acp packages`
+and `kaola-acp model-package`; an id with no verified rule is `unmapped`. Full transport,
 permission, key, recovery, and receipt details are in the [command reference](docs/api.md) and
 [ACP watch guide](docs/acp-watch/README.md).
 
