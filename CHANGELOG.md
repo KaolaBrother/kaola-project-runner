@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.9 — 2026-09-23 (codex Host admission patch release)
 
 - **Codex can be a Project Runner Host (Issue #126).** Codex's measured Host entry is its `$`
   Skill mention, `$kaola-project-runner` (`host_skill_entry` in `platforms/codex.yaml` and the
