@@ -1,0 +1,19 @@
+{
+ "agent_exit_code": 0,
+ "agent_exit_signal": null,
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "mutation_status": "completed",
+ "platform": "codex",
+ "repo": "/private/tmp/kpr126-d3/codex",
+ "residual_pids": [],
+ "schema_version": 3,
+ "session": "codex-KPR-orchestrator-d3",
+ "stopped": true,
+ "swept_child_pgids": [],
+ "transport": {
+  "selected": "acp"
+ }
+}

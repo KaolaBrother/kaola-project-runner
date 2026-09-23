@@ -1,0 +1,29 @@
+{
+ "platform": "codex",
+ "host": "codex-KPR-orchestrator-d3",
+ "worker": "codex-KPR-i126-wcodex",
+ "repo": "/private/tmp/kpr126-d3/codex",
+ "entry": "$kaola-project-runner",
+ "host_start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "requested_tier": "default",
+  "resolved_runtime_model_id": "gpt-6-sol",
+  "effective_selection": {
+   "effective_effort": "high",
+   "effective_model": "gpt-6-sol",
+   "effort_config_id": "reasoning_effort"
+  }
+ },
+ "handoff_dispatch_cursor": 6,
+ "timed_out": false,
+ "pending_permissions_seen": [],
+ "worker_state_before_cleanup": "stopped",
+ "host_stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

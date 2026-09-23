@@ -1,0 +1,24 @@
+{
+ "platform": "codex",
+ "session": "codex-KPR-i126-kpr",
+ "prompt": "$kaola-project-runner\nIn this turn do not call any tool except one whose only purpose is to load a skill. Quote verbatim the third sentence of the first paragraph under the heading \"Hosts\" of the loaded Project Runner Skill body and nothing else; if that Skill body is not in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "error",
+  "error": {
+   "code": "acp-initialize-timeout",
+   "message": "no initialize response",
+   "seatbelt_confined": false
+  },
+  "result": null,
+  "reason": null,
+  "acp_session_id": null,
+  "resolved_runtime_model_id": null,
+  "raw_stderr": null
+ },
+ "agent_info": {},
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

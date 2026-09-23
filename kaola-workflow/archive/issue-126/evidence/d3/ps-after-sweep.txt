@@ -1,0 +1,6 @@
+34633     1 /opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Users/ylminiserver/.zcode/skills/claude-code-kaola-project-runner/scripts/kaola-
+70616     1 /opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner-accepted/skills/z
+73038     1 /opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner-accepted/skills/z
+84897     1 /opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Users/ylminiserver/.zcode/skills/claude-code-kaola-project-runner/scripts/kaola-
+# 2026-09-23 after the final sweep: processes whose argv contains kpr126 (the shadow HOME, records, repos): 0
+# the four kaola-acp-holder lines above are foreign live holders (ZCode Host + this run's own claude-code worker holder + kaola-project-runner-accepted sessions), none under /tmp/kpr126-records

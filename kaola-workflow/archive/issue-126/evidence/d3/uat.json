@@ -1,0 +1,69 @@
+{
+ "codex": {
+  "host_start": {
+   "state": "ready",
+   "error": null,
+   "result": null,
+   "reason": null,
+   "requested_tier": "default",
+   "resolved_runtime_model_id": "gpt-6-sol",
+   "effective_selection": {
+    "effective_effort": "high",
+    "effective_model": "gpt-6-sol",
+    "effort_config_id": "reasoning_effort"
+   }
+  },
+  "host_stop": {
+   "stopped": true,
+   "residual_pids": [],
+   "error": null
+  },
+  "worker_bound_to": {
+   "platform": "codex",
+   "repo": "/private/tmp/kpr126-d3/codex",
+   "session": "codex-KPR-orchestrator-d3",
+   "socket": "/var/folders/8s/y93yqng93xb4__nl4jlh_g9c0000gn/T/kaola-501-acp/950d0485f645d3899ecfc889.sock"
+  },
+  "carrier_delivered": [
+   [
+    251,
+    [
+     "codex/codex-KPR-i126-wcodex/idle/18"
+    ]
+   ],
+   [
+    459,
+    [
+     "codex/codex-KPR-i126-wcodex/terminated/20"
+    ]
+   ]
+  ],
+  "carrier_confirmed": [
+   [
+    458,
+    [
+     "codex/codex-KPR-i126-wcodex/idle/18"
+    ]
+   ],
+   [
+    530,
+    [
+     "codex/codex-KPR-i126-wcodex/terminated/20"
+    ]
+   ]
+  ],
+  "turn_end_cursors": [
+   250,
+   457,
+   529
+  ],
+  "carrier_fingerprint_match": true,
+  "carrier_lines_1_2": [
+   "$kaola-project-runner",
+   "kaola-host-notify/1: event-driven heartbeat carrier (Codex CLI Host)"
+  ],
+  "worker_state_after": "stopped",
+  "driver_had_to_stop_worker": false,
+  "heartbeat_file_body_now": "deep test complete; nothing to do."
+ }
+}

@@ -1,0 +1,24 @@
+{
+ "platform": "codex",
+ "session": "codex-KPR-i126-neg",
+ "prompt": "In this turn do not call any tool at all. Quote verbatim the third sentence of the first paragraph under the heading \"Hosts\" of the Project Runner Skill body if that body is already in your context, and nothing else; if it is not in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "error",
+  "error": {
+   "code": "acp-initialize-timeout",
+   "message": "no initialize response",
+   "seatbelt_confined": false
+  },
+  "result": null,
+  "reason": null,
+  "acp_session_id": null,
+  "resolved_runtime_model_id": null,
+  "raw_stderr": null
+ },
+ "agent_info": {},
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

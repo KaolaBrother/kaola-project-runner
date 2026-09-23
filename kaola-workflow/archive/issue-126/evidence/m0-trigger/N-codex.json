@@ -1,0 +1,68 @@
+{
+ "platform": "codex",
+ "session": "codex-KPR-i126-neg",
+ "prompt": "In this turn do not call any tool at all. Quote verbatim the third sentence of the first paragraph under the heading \"Hosts\" of the Project Runner Skill body if that body is already in your context, and nothing else; if it is not in your context, reply exactly SKILL-NOT-LOADED.",
+ "start": {
+  "state": "ready",
+  "error": null,
+  "result": null,
+  "reason": null,
+  "acp_session_id": "01a0cd75-b504-71b1-b4f0-6d957a5c5fef",
+  "resolved_runtime_model_id": "gpt-6-sol",
+  "raw_stderr": null
+ },
+ "agent_info": {
+  "name": "@agentclientprotocol/codex-acp",
+  "title": "Codex",
+  "version": "1.13.0"
+ },
+ "send": {
+  "error": null,
+  "stop_reason": "end_turn",
+  "turn_outcome": null
+ },
+ "turn_ended": {
+  "cursor": 21,
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "available_commands": [
+  "plan",
+  "mcp",
+  "skills",
+  "status",
+  "review",
+  "review-branch",
+  "review-commit",
+  "compact",
+  "goal",
+  "rename",
+  "logout",
+  "$claude-code-kaola-project-runner",
+  "$codex-kaola-project-runner",
+  "$cursor-cli-kaola-project-runner",
+  "$devin-kaola-project-runner",
+  "$droid-kaola-project-runner",
+  "$dsh-kaola-project-runner",
+  "$grok-kaola-project-runner",
+  "$kaola-delegator",
+  "$kaola-project-runner",
+  "$kimi-cli-kaola-project-runner",
+  "$opencode-kaola-project-runner",
+  "$zcode-kaola-project-runner",
+  "$imagegen",
+  "$openai-docs",
+  "$plugin-creator",
+  "$review-agent",
+  "$skill-creator",
+  "$skill-installer"
+ ],
+ "tool_calls": [],
+ "reply": "SKILL-NOT-LOADED",
+ "event_cursor": 21,
+ "stop": {
+  "stopped": true,
+  "residual_pids": [],
+  "error": null
+ }
+}

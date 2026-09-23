@@ -1,0 +1,22 @@
+{
+ "acp_session_id": "01a0cd77-9aa4-7b93-baab-2e09b3387b7c",
+ "dispatch_event_cursor": 6,
+ "duplicate_warning": null,
+ "event_cursor": 6,
+ "git": {
+  "branch": "master",
+  "dirty": true
+ },
+ "mutation_performed": true,
+ "mutation_status": "in_progress",
+ "outcome": "in_progress",
+ "platform": "codex",
+ "prompt_fingerprint": "sha256:a26a031673939e2d3ea65983183754c6b6d6346a4c966c9058435998c3c07406",
+ "repo": "/private/tmp/kpr126-d3/codex",
+ "schema_version": 3,
+ "session": "codex-KPR-orchestrator-d3",
+ "transport": {
+  "selected": "acp"
+ },
+ "turn_request_id": 7
+}
