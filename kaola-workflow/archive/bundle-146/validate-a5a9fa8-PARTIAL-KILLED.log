@@ -1,0 +1,17 @@
+validate: scrubbed inherited env: KAOLA_ACP_DISPATCHER KAOLA_ACP_HEARTBEAT_HOST KAOLA_ACP_HEARTBEAT_HOST_SOCKET KAOLA_CLAUDE_PROFILE_REQUIRED KAOLA_PROJECT_RUNNER_CANONICAL_REPO KAOLA_ZCODE_ENTRY KAOLA_ZCODE_NODE
+render-skills: PASS (10 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2555 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+installer migration acceptance: PASS
+Terminated: 15             "$script_dir/validate-watchdog.sh" --label "$label" --budget "$suite_budget" --receipt-dir "$watchdog_dir" -- "$@"
+{"killed_group_members": [], "matched_pids": [], "residual_pids": [], "results": [], "root": "/tmp/kaola-val.GqUBH3", "swept_groups": []}
