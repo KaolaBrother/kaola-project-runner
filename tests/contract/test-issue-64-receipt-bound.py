@@ -43,6 +43,18 @@ def load_cli_module() -> Any:
     return module
 
 
+def emitted_devin(options: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The observe/status copy. Devin's single rule stamps every model leaf."""
+    spec = importlib.util.spec_from_file_location(
+        "kaola_quota_i64", PROJECT / "scripts" / "kaola-quota.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    copied = copy.deepcopy(options)
+    module.annotate_config_options(copied, module.load_catalog("devin", PROJECT / "scripts"))
+    return copied
+
+
 def options_list(min_bytes: int) -> list[dict[str, Any]]:
     """A realistic ACP ``configOptions`` list: a model option carrying a small
     ``currentValue`` beside a large option catalog, padded deterministically
@@ -235,7 +247,7 @@ class ObserveExposesTheModelThroughTheRealCli(unittest.TestCase):
             fields = receipt["truncated"]["fields"]
             self.assertEqual(set(fields), {"record"}, command)
             self.assertEqual(receipt["record"]["omitted"], True, command)
-            self.assertEqual(receipt["session_meta"]["configOptions"], self.options, command)
+            self.assertEqual(receipt["session_meta"]["configOptions"], emitted_devin(self.options), command)
             model = next(o for o in receipt["session_meta"]["configOptions"] if o.get("id") == "model")
             self.assertEqual(model["currentValue"], MODEL, command)
 

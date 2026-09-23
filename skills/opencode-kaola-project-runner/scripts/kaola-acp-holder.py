@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import copy
 import ctypes
+import importlib.util
 import hashlib
 import json
 import os
@@ -874,6 +875,27 @@ TOOL_VIEW_BYTES = 32 * 1024
 VIEW_BYTES = 256 * 1024
 TIMELINE_MAX = 200
 VIEW_SCHEMA = "kaola-acp-view/1"
+_QUOTA = None
+
+
+def quota_module():
+    """Sibling quota catalog, or None when this holder copy has no ``kaola-quota.py``."""
+    global _QUOTA
+    if _QUOTA is False:
+        return None
+    if _QUOTA is None:
+        path = Path(__file__).resolve().parent / "kaola-quota.py"
+        if not path.is_file():
+            _QUOTA = False
+            return None
+        spec = importlib.util.spec_from_file_location("kaola_quota_holder", path)
+        if spec is None or spec.loader is None:
+            _QUOTA = False
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _QUOTA = module
+    return _QUOTA
 FOLLOW_QUEUE_CAP = 256
 FOLLOW_HEARTBEAT_SECONDS = 5.0
 FOLLOW_SNDBUF = 4096
@@ -3427,8 +3449,22 @@ class Holder:
             },
             "unparsed_update_count": self.agent.unknown_updates,
         }
+        models = self._quota_models()
+        if models is not None:
+            payload["models"] = models
         self._fit_view(payload)
         return payload
+
+    def _quota_models(self) -> dict[str, Any] | None:
+        """Stamped model rows for the view payload. ``session_meta`` is not modified."""
+        module = quota_module()
+        if module is None:
+            return None
+        try:
+            catalog = module.load_catalog(self.args.platform, Path(__file__).resolve().parent)
+        except module.QuotaError:
+            return {"availableModels": [], "options": []}
+        return module.view_models(self.session_meta, catalog)
 
     @staticmethod
     def _fit_view(payload: dict[str, Any]) -> None:

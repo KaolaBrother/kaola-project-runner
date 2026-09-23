@@ -14,7 +14,9 @@ Fixtures are driven through ``MOCK_ACP_CONFIG`` (see mock-acp-agent.py).
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import importlib.util
 import json
 import os
 import secrets
@@ -35,6 +37,26 @@ CONFIG_ENV = "MOCK_ACP_CONFIG"
 # opencode resolves to the CLI-native opening model: no implicit preset or
 # mode-skip set_config_option calls, so fixtures fully control native state.
 PLATFORM = "opencode"
+
+
+def _load_quota():
+    spec = importlib.util.spec_from_file_location(
+        "kaola_quota_i33", PROJECT / "scripts" / "kaola-quota.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+QUOTA = _load_quota()
+OPENCODE = QUOTA.load_catalog(PLATFORM, PROJECT / "scripts")
+
+
+def emitted(option_list):
+    """Observe/status copy. Model leaves carry quotaPool; the stored record stays native."""
+    copied = copy.deepcopy(option_list)
+    QUOTA.annotate_config_options(copied, OPENCODE)
+    return copied
 
 
 def wait_for(predicate, timeout: float, interval: float = 0.05):
@@ -204,12 +226,12 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         self.start(config={"new": baseline})
         obs = self.cli("observe")
         meta = obs.get("session_meta") or {}
-        self.assertEqual(meta.get("configOptions"), baseline)
-        self.assertEqual(obs.get("initial_config_options"), baseline)
+        self.assertEqual(meta.get("configOptions"), emitted(baseline))
+        self.assertEqual(obs.get("initial_config_options"), emitted(baseline))
         self.assertTrue(meta.get("sessionId"))
         status = self.cli("status")
         self.assertEqual(
-            (status.get("session_meta") or {}).get("configOptions"), baseline)
+            (status.get("session_meta") or {}).get("configOptions"), emitted(baseline))
 
     def test_successful_set_reports_native_not_requested(self) -> None:
         baseline = options(model="init-a", mode="read-only")
@@ -225,9 +247,9 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         for command in ("observe", "status"):
             receipt = self.cli(command)
             meta = receipt.get("session_meta") or {}
-            self.assertEqual(meta.get("configOptions"), native_b,
+            self.assertEqual(meta.get("configOptions"), emitted(native_b),
                              f"{command} did not report native current options")
-            self.assertEqual(receipt.get("initial_config_options"), baseline)
+            self.assertEqual(receipt.get("initial_config_options"), emitted(baseline))
             self.assertEqual(receipt.get("acp_session_id"), sid)
             self.assertEqual(meta.get("sessionId"), sid)
         record = self.record()
@@ -255,7 +277,7 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         self.assertEqual(
             current_value((obs.get("session_meta") or {}).get("configOptions"), "model"),
             "native-b")
-        self.assertEqual(obs.get("initial_config_options"), baseline)
+        self.assertEqual(obs.get("initial_config_options"), emitted(baseline))
 
     def test_config_option_update_notification_updates_meta(self) -> None:
         baseline = options(model="init-a", mode="agent")
@@ -272,8 +294,8 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         )
         self.assertTrue(landed, "config_option_update notification never reached observe")
         obs = self.cli("observe")
-        self.assertEqual((obs.get("session_meta") or {}).get("configOptions"), notify_c)
-        self.assertEqual(obs.get("initial_config_options"), baseline)
+        self.assertEqual((obs.get("session_meta") or {}).get("configOptions"), emitted(notify_c))
+        self.assertEqual(obs.get("initial_config_options"), emitted(baseline))
         record = self.record()
         self.assertEqual(
             (record.get("session_meta") or {}).get("configOptions"), notify_c)
@@ -286,9 +308,9 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         self.assertEqual((result.get("error") or {}).get("code"), "config-option-failed")
         obs = self.cli("observe")
         meta = obs.get("session_meta") or {}
-        self.assertEqual(meta.get("configOptions"), baseline)
+        self.assertEqual(meta.get("configOptions"), emitted(baseline))
         self.assertNotEqual(current_value(meta.get("configOptions"), "model"), "wanted-b")
-        self.assertEqual(obs.get("initial_config_options"), baseline)
+        self.assertEqual(obs.get("initial_config_options"), emitted(baseline))
 
     def test_missing_result_facts_no_fabrication(self) -> None:
         baseline = options(model="init-a", mode="agent")
@@ -299,7 +321,7 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         obs = self.cli("observe")
         meta = obs.get("session_meta") or {}
         # the fact-free response leaves the last proven state untouched
-        self.assertEqual(meta.get("configOptions"), baseline)
+        self.assertEqual(meta.get("configOptions"), emitted(baseline))
         self.assertNotEqual(current_value(meta.get("configOptions"), "model"), "wanted-b")
 
     def test_timeout_keeps_prior_proven_state(self) -> None:
@@ -308,8 +330,8 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         result = self.set_config("model", "wanted-b", timeout=30)
         self.assertEqual((result.get("error") or {}).get("code"), "config-option-timeout")
         obs = self.cli("observe")
-        self.assertEqual((obs.get("session_meta") or {}).get("configOptions"), baseline)
-        self.assertEqual(obs.get("initial_config_options"), baseline)
+        self.assertEqual((obs.get("session_meta") or {}).get("configOptions"), emitted(baseline))
+        self.assertEqual(obs.get("initial_config_options"), emitted(baseline))
 
     def test_resume_reports_native_config_truth(self) -> None:
         resume_options = options(model="resume-model", mode="agent")
@@ -324,9 +346,9 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         self.assertEqual(receipt.get("acp_session_id"), "resume-target")
         obs = self.cli("observe")
         meta = obs.get("session_meta") or {}
-        self.assertEqual(meta.get("configOptions"), resume_options)
+        self.assertEqual(meta.get("configOptions"), emitted(resume_options))
         self.assertEqual(meta.get("sessionId"), "resume-target")
-        self.assertEqual(obs.get("initial_config_options"), resume_options)
+        self.assertEqual(obs.get("initial_config_options"), emitted(resume_options))
 
     def test_absent_config_options_not_invented(self) -> None:
         native_x = options(model="native-x", mode="agent")
@@ -339,7 +361,7 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         result = self.set_config("model", "wanted-x")
         self.assertIsNone(result.get("error"), f"set failed: {result}")
         obs = self.cli("observe")
-        self.assertEqual((obs.get("session_meta") or {}).get("configOptions"), native_x)
+        self.assertEqual((obs.get("session_meta") or {}).get("configOptions"), emitted(native_x))
         self.assertIsNone(obs.get("initial_config_options"))
 
 

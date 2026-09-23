@@ -42,6 +42,7 @@ package. Package tokens and rule targets are checked when the manifest loads.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from pathlib import Path
@@ -438,3 +439,19 @@ def annotate_observe(receipt: dict[str, Any], catalog: Catalog) -> None:
             annotate_model_rows(models.get("availableModels"), catalog)
         annotate_model_rows(meta.get("availableModels"), catalog)
     annotate_config_options(receipt.get("initial_config_options"), catalog)
+
+
+def view_models(session_meta: Any, catalog: Catalog) -> dict[str, Any]:
+    """Model rows for a view payload. The caller's ``session_meta`` is not modified."""
+    meta = copy.deepcopy(session_meta) if isinstance(session_meta, dict) else {}
+    annotate_observe({"session_meta": meta}, catalog)
+    nested = meta.get("models") if isinstance(meta.get("models"), dict) else {}
+    available = nested.get("availableModels")
+    if not isinstance(available, list):
+        available = meta.get("availableModels") if isinstance(meta.get("availableModels"), list) else []
+    options = meta.get("configOptions") if isinstance(meta.get("configOptions"), list) else []
+    model_options = [
+        option for option in options
+        if isinstance(option, dict) and option.get("id") == catalog.model_config_id
+    ]
+    return {"availableModels": available, "options": model_options}

@@ -196,6 +196,37 @@ class QuotaSchemaTest(unittest.TestCase):
         self.assertEqual(bare["quotaPoolStatus"], "unmapped")
         initial = receipt["initial_config_options"][0]["options"][0]
         self.assertEqual(initial["quotaPool"], "dsh:opencode-go")
+        native = {"configOptions": json.loads(json.dumps(options))}
+        receipt = {"session_meta": native, "record": {"session_meta": native["configOptions"]}}
+        # ``record`` is a different object here; annotate must not walk it.
+        stored = json.loads(json.dumps(receipt["record"]))
+        self.quota.annotate_observe({"session_meta": receipt["session_meta"], "record": receipt["record"]}, catalog)
+        self.assertEqual(receipt["record"], stored)
+
+    def test_view_models_copies_and_keeps_only_the_model_option(self) -> None:
+        catalog = self.catalogs["droid"]
+        meta = {
+            "configOptions": [
+                {
+                    "id": "model",
+                    "options": [
+                        {"value": "core-model", "name": "Core", "billingPool": "core"},
+                        {"value": "mystery", "name": "Mystery"},
+                    ],
+                },
+                {"id": "mode", "options": [{"value": "agent", "name": "Agent"}]},
+            ],
+            "models": {"availableModels": [{"id": "named", "billingPool": "standard"}]},
+        }
+        snapshot = json.dumps(meta, sort_keys=True)
+        view = self.quota.view_models(meta, catalog)
+        self.assertEqual(json.dumps(meta, sort_keys=True), snapshot)
+        self.assertEqual([option["id"] for option in view["options"]], ["model"])
+        self.assertEqual(view["options"][0]["options"][0]["quotaPool"], "droid:core")
+        self.assertNotIn("quotaPoolStatus", view["options"][0]["options"][0])
+        self.assertEqual(view["options"][0]["options"][1]["quotaPool"], None)
+        self.assertEqual(view["options"][0]["options"][1]["quotaPoolStatus"], "unmapped")
+        self.assertEqual(view["availableModels"][0]["quotaPool"], "droid:standard")
 
     def test_schema_rejects_a_guess_shaped_rule(self) -> None:
         packages = json.dumps([
@@ -335,6 +366,84 @@ class QuotaQueryCliTest(unittest.TestCase):
         missing = self.run_cli("model-package", "--platform", "grok")
         self.assertNotEqual(missing.returncode, 0)
         self.assertFalse(self.record_root.exists())
+
+
+class QuotaEmissionCliTest(unittest.TestCase):
+    """Live observe/view stamps are copies. The stored record stays native."""
+
+    def test_observe_and_view_stamp_copies_only(self) -> None:
+        mock = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
+        native = [
+            {
+                "id": "model",
+                "name": "Model",
+                "currentValue": "opencode-go/deepseek-v4.1-flash",
+                "options": [
+                    {"value": "opencode-go/deepseek-v4.1-flash", "name": "Flash"},
+                    {"value": "zen/glm-4.6", "name": "Zen"},
+                ],
+            },
+            {
+                "id": "mode",
+                "name": "Mode",
+                "currentValue": "agent",
+                "options": [{"value": "agent", "name": "Agent"}],
+            },
+        ]
+        with tempfile.TemporaryDirectory(prefix="kaola-148-emit-") as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            records = root / "records"
+            env = {key: value for key, value in os.environ.items()
+                   if not key.startswith("KAOLA_")}
+            env["KAOLA_ACP_RECORD_ROOT"] = str(records)
+            env["MOCK_ACP_CONFIG"] = json.dumps({"new": native})
+            session = "i148-emit"
+            base = [
+                sys.executable, str(CLI), "opencode",
+                "--repo", str(repo), "--session", session,
+                "--command", f"{sys.executable} {mock} --scenario normal",
+            ]
+
+            def run(*args: str) -> dict:
+                completed = subprocess.run(
+                    [*base[:3], args[0], *base[3:], *args[1:]],
+                    capture_output=True, text=True, env=env, timeout=60,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+                return json.loads(completed.stdout)
+
+            try:
+                run("start")
+                observed = run("observe")
+                viewed = run("view")
+            finally:
+                subprocess.run([*base[:3], "stop", *base[3:], "--force"],
+                               capture_output=True, text=True, env=env, timeout=20)
+            model = next(option for option in observed["session_meta"]["configOptions"]
+                         if option["id"] == "model")
+            leaves = {leaf["value"]: leaf for leaf in model["options"]}
+            self.assertEqual(leaves["opencode-go/deepseek-v4.1-flash"]["quotaPool"], "opencode:opencode-go")
+            self.assertNotIn("quotaPoolStatus", leaves["opencode-go/deepseek-v4.1-flash"])
+            self.assertEqual(leaves["zen/glm-4.6"]["quotaPool"], None)
+            self.assertEqual(leaves["zen/glm-4.6"]["quotaPoolStatus"], "unmapped")
+            mode = next(option for option in observed["session_meta"]["configOptions"]
+                        if option["id"] == "mode")
+            self.assertNotIn("quotaPool", mode["options"][0])
+            view_model = viewed["models"]["options"][0]
+            view_leaves = {leaf["value"]: leaf for leaf in view_model["options"]}
+            self.assertEqual(view_leaves["zen/glm-4.6"]["quotaPoolStatus"], "unmapped")
+            self.assertEqual(view_leaves["opencode-go/deepseek-v4.1-flash"]["quotaPool"], "opencode:opencode-go")
+            self.assertEqual([option["id"] for option in viewed["models"]["options"]], ["model"])
+            matches = list(records.rglob("record.json"))
+            self.assertEqual(len(matches), 1, matches)
+            stored = json.loads(matches[0].read_text(encoding="utf-8"))
+            stored_model = next(option for option in stored["session_meta"]["configOptions"]
+                                if option["id"] == "model")
+            self.assertEqual(stored_model["options"], native[0]["options"])
+            self.assertNotIn("quotaPool", json.dumps(stored))
 
 
 if __name__ == "__main__":

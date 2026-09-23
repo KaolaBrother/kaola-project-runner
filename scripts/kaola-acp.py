@@ -824,6 +824,18 @@ def command_packages(args: argparse.Namespace) -> dict[str, Any]:
     return payload
 
 
+def stamp_quota_emission(receipt: dict[str, Any], platform: str) -> None:
+    """Stamp model rows on an observe/status receipt. ``record`` is not walked."""
+    if not isinstance(receipt, dict) or not (SCRIPT_DIR / "kaola-quota.py").is_file():
+        return
+    quota = quota_module()
+    try:
+        catalog = quota.load_catalog(platform, SCRIPT_DIR)
+    except quota.QuotaError:
+        return
+    quota.annotate_observe(receipt, catalog)
+
+
 def command_model_package(args: argparse.Namespace) -> dict[str, Any]:
     quota = quota_module()
     try:
@@ -3522,6 +3534,8 @@ def main() -> int:
             attach_binding_fact(
                 receipt, receipt if "heartbeat_host" in receipt else record
             )
+        # Emission copy only. The holder object and receipt["record"] stay native.
+        stamp_quota_emission(receipt, args.platform)
         receipt = bound_state_receipt(receipt)
     elif args.command == "capture":
         receipt = op_or_holder_lost(
