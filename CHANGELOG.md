@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Read-only installed-platforms survey: `kaola-acp survey` (Issue #147).** A new host-wide
+  command answers which platform CLIs are installed, as one `kaola-acp-survey/1` object with a
+  row per platform (`status` `present` | `absent` | `unknown`, `path`, `source`,
+  `process_path`, `login_path`) plus the `login_env` fact. Binaries resolve on the invoking PATH
+  and in the login environment (one non-interactive `SHELL -l -c` from a fresh minimal
+  environment), so a narrow-PATH app subprocess sees login-shell installs such as Codex CLI and
+  OpenCode. It starts no agent, opens no ACP session, creates no holder or record, and runs no
+  platform binary; `unknown` marks a row the login environment could not settle. ZCode keeps
+  its explicit `KAOLA_ZCODE_ENTRY`/`KAOLA_ZCODE_NODE` rule. `kaola-acp list` is unchanged.
+
 - **cursor-cli upgrade tier is now Claude Opus 5.5 High (Issue #143).** `--tier upgrade` selects
   `claude-opus-5-5-high` (was `claude-fable-5-1-high`); `acp_model_map` maps it onto the live
   picker base id `claude-opus-5-5`, and `high` is applied through the model's advertised `effort`

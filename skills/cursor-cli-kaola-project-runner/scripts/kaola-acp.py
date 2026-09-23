@@ -14,6 +14,7 @@ import ctypes
 import hashlib
 import json
 import os
+import pwd
 import re
 import secrets
 import shlex
@@ -567,6 +568,168 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
         attach_binding_fact(rows[-1], record)
     return {"schema": LIST_SCHEMA, "rows": rows}
 
+
+
+# Issue #147: the read-only installed-platforms survey. A host-wide fact like
+# ``list``, but about installs, not sessions: which platform CLIs resolve on
+# this host. It runs no platform binary (not even ``--version``), opens no ACP
+# session, spawns no holder, and reads no record root; its only child is one
+# non-interactive login shell that prints its environment, so a client with a
+# narrow PATH (a GUI app subprocess) still sees login-shell installs. The
+# table mirrors each manifest's runtime_name/binary_name/binary_env (a
+# contract test pins it), because an installed worker Skill ships only its
+# own platform.yaml. ZCode keeps its launch rule: installed only when both
+# explicit ZCode paths are set, never by PATH or an application bundle.
+SURVEY_SCHEMA = "kaola-acp-survey/1"
+SURVEY_RUNTIMES = {
+    "claude-code": ("Claude Code", "claude", "CLAUDE_BIN"),
+    "codex": ("Codex CLI", "codex", "CODEX_BIN"),
+    "cursor-cli": ("Cursor CLI", "cursor-agent", "CURSOR_AGENT_BIN"),
+    "devin": ("Devin CLI", "devin", "DEVIN_BIN"),
+    "droid": ("Droid", "droid", "DROID_BIN"),
+    "dsh": ("dsh", "dsh", "DSH_BIN"),
+    "grok": ("Grok CLI", "grok", "GROK_BIN"),
+    "kimi-cli": ("Kimi CLI", "kimi", "KIMI_BIN"),
+    "opencode": ("OpenCode", "opencode", "OPENCODE_BIN"),
+    "zcode": ("ZCode", "zcode", "ZCODE_BIN"),
+}
+SURVEY_ZCODE_ENV = (ZCODE_ENTRY_ENV, ZCODE_NODE_ENV)
+SURVEY_LOGIN_TIMEOUT = 10.0
+SURVEY_LOGIN_MARKER = "__KAOLA_ACP_SURVEY_LOGIN_ENV__"
+SURVEY_BASE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+
+
+def parse_survey_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="kaola-acp.py survey")
+    parser.add_argument("--platform", choices=PLATFORMS)
+    parser.add_argument("--login-shell")
+    return parser.parse_args(argv)
+
+
+def survey_login_shell(explicit: str | None) -> tuple[str, str]:
+    """The login shell to ask, and where that choice came from."""
+    if explicit:
+        return explicit, "argument"
+    try:
+        account = pwd.getpwuid(os.getuid()).pw_shell
+    except (KeyError, OSError):
+        account = ""
+    if account:
+        return account, "account"
+    if os.environ.get("SHELL"):
+        return os.environ["SHELL"], "SHELL"
+    return "/bin/zsh", "default"
+
+
+def survey_login_env(shell: str, source: str) -> tuple[dict[str, Any], dict[str, str] | None]:
+    """Run ``<shell> -l -c`` from a fresh minimal environment and return its
+    environment, as a new login would see it. Never interactive, stdin closed,
+    bounded, and killed as a group on timeout."""
+    fact: dict[str, Any] = {"shell": shell, "shell_source": source,
+                            "status": "unavailable", "detail": None, "path": None}
+    try:
+        home = pwd.getpwuid(os.getuid()).pw_dir
+    except (KeyError, OSError):
+        home = os.environ.get("HOME") or "/"
+    env = {"HOME": home, "SHELL": shell, "PATH": SURVEY_BASE_PATH, "TERM": "dumb"}
+    for name in ("USER", "LOGNAME", "TMPDIR", "LANG"):
+        if os.environ.get(name):
+            env[name] = os.environ[name]
+    try:
+        proc = subprocess.Popen(
+            [shell, "-l", "-c", f"echo {SURVEY_LOGIN_MARKER}; exec /usr/bin/env -0"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            env=env, cwd=home if os.path.isdir(home) else "/", start_new_session=True,
+        )
+    except OSError as error:
+        fact["detail"] = f"login shell could not run: {error}"
+        return fact, None
+    try:
+        out, _ = proc.communicate(timeout=SURVEY_LOGIN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        proc.communicate()
+        fact["detail"] = f"login shell did not answer within {SURVEY_LOGIN_TIMEOUT:g} s"
+        return fact, None
+    marker = (SURVEY_LOGIN_MARKER + "\n").encode()
+    if marker not in out:
+        fact["detail"] = f"login shell exited {proc.returncode} without printing its environment"
+        return fact, None
+    login: dict[str, str] = {}
+    for item in out.rsplit(marker, 1)[1].split(b"\0"):
+        key, separator, value = item.decode("utf-8", "replace").partition("=")
+        if separator and key:
+            login[key] = value
+    fact.update(status="ok", path=login.get("PATH"))
+    return fact, login
+
+
+def survey_resolve(value: str | None, path: str | None) -> str | None:
+    """An executable file for ``value`` on ``path`` (absolute values as-is), or None."""
+    if not value:
+        return None
+    if os.path.isabs(value):
+        return value if os.path.isfile(value) and os.access(value, os.X_OK) else None
+    if path is None:
+        return None
+    found = shutil.which(value, path=path)
+    return os.path.abspath(found) if found else None
+
+
+def survey_zcode_row(row: dict[str, Any], login: dict[str, str] | None) -> None:
+    for source, env in (("process_env", dict(os.environ)), ("login_env", login)):
+        if env is None:
+            continue
+        entry, node = (env.get(name) or "" for name in SURVEY_ZCODE_ENV)
+        if os.path.isabs(entry) and os.path.isfile(entry) and survey_resolve(node, None):
+            row.update(status="present", installed=True, path=entry, source=source)
+            return
+
+
+def command_survey(args: argparse.Namespace) -> dict[str, Any]:
+    shell, source = survey_login_shell(args.login_shell)
+    login_fact, login = survey_login_env(shell, source)
+    login_path = login.get("PATH") if login is not None else None
+    rows: list[dict[str, Any]] = []
+    for platform in PLATFORMS:
+        if args.platform and platform != args.platform:
+            continue
+        runtime_name, binary, binary_env = SURVEY_RUNTIMES[platform]
+        zcode = platform == "zcode"
+        row: dict[str, Any] = {
+            "platform": platform,
+            "runtime_name": runtime_name,
+            "status": "absent",
+            "installed": False,
+            "path": None,
+            "source": None,
+            "binary": None if zcode else binary,
+            "binary_env": None if zcode else binary_env,
+            "requires_env": list(SURVEY_ZCODE_ENV) if zcode else [],
+            "process_path": None if zcode else survey_resolve(binary, os.environ.get("PATH")),
+            "login_path": None if zcode else survey_resolve(binary, login_path),
+        }
+        if zcode:
+            survey_zcode_row(row, login)
+        else:
+            # The Runner's own launch order (runtime_binary): the override
+            # first, then PATH; the invoking process before the login shell.
+            for found, where in (
+                (survey_resolve(os.environ.get(binary_env), os.environ.get("PATH")), "binary_env"),
+                (row["process_path"], "process_path"),
+                (survey_resolve((login or {}).get(binary_env), login_path), "login_binary_env"),
+                (row["login_path"], "login_path"),
+            ):
+                if found:
+                    row.update(status="present", installed=True, path=found, source=where)
+                    break
+        if row["status"] == "absent" and login is None:
+            row["status"] = "unknown"
+        rows.append(row)
+    return {"schema": SURVEY_SCHEMA, "login_env": login_fact, "platforms": rows}
 
 def view_error(code: str, message: str) -> dict[str, Any]:
     return {"schema": VIEW_SCHEMA, "error": {"code": code, "message": message}}
@@ -3011,6 +3174,10 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "list":
         payload = command_list(parse_list_args(sys.argv[2:]))
+        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        return 0
+    if len(sys.argv) > 1 and sys.argv[1] == "survey":
+        payload = command_survey(parse_survey_args(sys.argv[2:]))
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
         return 0
 
