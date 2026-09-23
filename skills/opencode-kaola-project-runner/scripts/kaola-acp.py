@@ -152,7 +152,7 @@ DISPATCHER_ENV = "KAOLA_ACP_DISPATCHER"
 # evidence is the only admission.
 HOST_SKILL_ENTRIES = {
     "claude-code": "/kaola-project-runner",
-    "codex": "",
+    "codex": "$kaola-project-runner",
     "cursor-cli": "/kaola-project-runner",
     "devin": "/kaola-project-runner",
     "droid": "/kaola-project-runner",
