@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -65,6 +66,9 @@ REQUIRED = {
     # runs as a Host (templates/orchestrator/references/host-entry-matrix.md);
     # empty = no measured entry. An entry fact, never a model or tier field.
     "host_skill_entry",
+    # Issue #148: quota package catalog and the model→package rule. Both values
+    # are JSON documents encoded as JSON strings. kaola-quota.py owns the schema.
+    "quota_packages", "model_package_rule",
 }
 
 # Issue #140: optional per-tier ACP spawn commands (``acp_command_default``,
@@ -154,7 +158,28 @@ def parse_manifest(path: Path) -> dict[str, str]:
                 raise ValueError(f"{path}: alt_tier_label needs {key}")
     elif alt_declared:
         raise ValueError(f"{path}: {sorted(alt_declared)} need alt_tier_label")
+    try:
+        quota_api().validate_manifest(result)
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
     return result
+
+
+_QUOTA_API = None
+
+
+def quota_api():
+    """The Issue #148 catalog checker. Loaded lazily so a syntax error names the file."""
+    global _QUOTA_API
+    if _QUOTA_API is None:
+        path = ROOT / "scripts" / "kaola-quota.py"
+        spec = importlib.util.spec_from_file_location("kaola_quota", path)
+        if spec is None or spec.loader is None:
+            raise ValueError(f"cannot load quota schema checker: {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _QUOTA_API = module
+    return _QUOTA_API
 
 
 STEERING_SUPPORTED = """## Steering a running turn
