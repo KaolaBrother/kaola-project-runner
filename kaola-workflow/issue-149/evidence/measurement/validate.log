@@ -1,3 +1,0 @@
-validate: scrubbed inherited env: KAOLA_ACP_CHILD_RECORD KAOLA_ACP_DISPATCHER KAOLA_ACP_HEARTBEAT_HOST KAOLA_ACP_HEARTBEAT_HOST_SOCKET KAOLA_ZCODE_ENTRY KAOLA_ZCODE_NODE
-pin: P may differ from 628c8d50a55b only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found kaola-workflow/release/validate-v0559.log
-{"killed_group_members": [], "matched_pids": [], "residual_pids": [], "results": [], "root": "/tmp/kaola-val.f0UEos", "swept_groups": []}

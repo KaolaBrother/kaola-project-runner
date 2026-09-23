@@ -1,1 +1,0 @@
-Shadow directory removed after receipt capture; copied auth.json existed only inside that shadow directory.

@@ -1,5 +1,0 @@
-[SYSTEM_ERROR] Error handling Codex session notification: Error: ACP connection closed
-Error: ACP connection closed
-    at Connection.close (file:///Users/ylmacstudio/.npm/_npx/dbf52506fe4ebb57/node_modules/@agentclientprotocol/codex-acp/dist/index.js:25581:35)
-    at Connection.receive (file:///Users/ylmacstudio/.npm/_npx/dbf52506fe4ebb57/node_modules/@agentclientprotocol/codex-acp/dist/index.js:25642:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
