@@ -400,7 +400,8 @@ class MockAgent:
     # parameterizedModelPicker): mode + model with base model IDs, then the
     # option SET of the currently selected model (Issue #135, measured on cli
     # 2026.09.18-9a7762b): grok-4.7 advertises reasoning_effort, grok-4.6 and
-    # claude-fable-5-1 advertise effort, gpt-5.6-sol advertises reasoning.
+    # claude-fable-5-1 advertise effort, gpt-5.6-sol advertises reasoning;
+    # claude-opus-5-5 advertises effort (Issue #143, measured 2026-09-23).
     # Fast values are the strings "true"/"false".
     CURSOR_BASE_OPTIONS = [
         {"id": "mode", "name": "Mode",
@@ -417,6 +418,7 @@ class MockAgent:
              {"value": "grok-4.7", "name": "Grok 4.7"},
              {"value": "grok-4.6", "name": "Grok 4.6"},
              {"value": "claude-fable-5-1", "name": "Claude Fable 5.1"},
+             {"value": "claude-opus-5-5", "name": "Claude Opus 5.5"},
              {"value": "gpt-5.6-sol", "name": "GPT-5.6 Sol"},
          ]},
     ]
@@ -451,6 +453,10 @@ class MockAgent:
                                            {"value": "false", "name": "Off"}]},
             {"id": "context", "name": "Context", "category": "model_config",
              "type": "select", "options": [{"value": "300k", "name": "300K"}]},
+            {"id": "effort", "name": "Effort", "category": "thought_level",
+             "type": "select", "options": CURSOR_EFFORT_VALUES},
+        ],
+        "claude-opus-5-5": [
             {"id": "effort", "name": "Effort", "category": "thought_level",
              "type": "select", "options": CURSOR_EFFORT_VALUES},
         ],

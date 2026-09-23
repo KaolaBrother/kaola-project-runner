@@ -7,7 +7,7 @@
 - Continue: `--continue`
 - Exact resume: `--resume <chat-id>`
 - Runner default preset (`--tier default`): **Grok 4.7 Extra High** — `grok-4.7-xhigh` with `effort=xhigh (encoded in model ID), fast=false`
-- Runner upgrade preset (`--tier upgrade`): **Claude Fable 5.1 High** — `claude-fable-5-1-high` with `effort=high (encoded in model ID)`
+- Runner upgrade preset (`--tier upgrade`): **Claude Opus 5.5 High** — `claude-opus-5-5-high` with `effort=high (encoded in model ID)`
 - Fast support: Fast via the ACP parameterized `fast` option (true/false strings), which applies to any model; a `-fast` catalog id (e.g. grok-4.7-xhigh-fast) decomposes onto that option; an unsupported variant is reported rather than invented
 
 ## Preflight

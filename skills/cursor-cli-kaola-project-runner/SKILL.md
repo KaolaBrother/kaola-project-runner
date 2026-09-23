@@ -47,8 +47,8 @@ SESSION="cursor-cli-kaola-<purpose>"
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Grok 4.7 Extra High**: `grok-4.7-xhigh`,
-effort=xhigh (encoded in model ID), fast=false) and `--tier upgrade` (**Claude Fable 5.1 High**:
-`claude-fable-5-1-high`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
+effort=xhigh (encoded in model ID), fast=false) and `--tier upgrade` (**Claude Opus 5.5 High**:
+`claude-opus-5-5-high`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.

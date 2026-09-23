@@ -1757,23 +1757,23 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         send = self.cli("send", "--text", "verify exact semantics", platform="cursor-cli")
         self.assertEqual(send.get("outcome"), "turn_completed")
 
-    def test_cursor_upgrade_tier_maps_fable_base_id(self) -> None:
+    def test_cursor_upgrade_tier_maps_opus_base_id(self) -> None:
         receipt = self.start(
             "cursor-cli", "--tier", "upgrade", caps="cursor-params,strict-config",
         )
         self.assertEqual(
             self.config_events(),
             [
-                ("model", "claude-fable-5-1"),
+                ("model", "claude-opus-5-5"),
                 ("effort", "high"),
                 ("fast", "false"),
             ],
         )
         model = (receipt.get("config_application") or {}).get("model") or {}
         self.assertTrue(model.get("applied"))
-        self.assertEqual(model.get("requested_id"), "claude-fable-5-1-high")
+        self.assertEqual(model.get("requested_id"), "claude-opus-5-5-high")
         # Regression guard against a naive flip to reasoning_effort (#135):
-        # Claude Fable 5.1 advertises its effort option as ``effort``.
+        # Claude Opus 5.5 advertises its effort option as ``effort`` (#143).
         effort = (receipt.get("config_application") or {}).get("effort") or {}
         self.assertTrue(effort.get("applied"))
         self.assertEqual(effort.get("config_id"), "effort")
@@ -1861,7 +1861,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertTrue(mapped_values)
         for value in mapped_values:
             self.assertNotIn("[", value, f"descriptor substitution in map: {value}")
-            self.assertIn(value, {"grok-4.7", "claude-fable-5-1"})
+            self.assertIn(value, {"grok-4.7", "claude-opus-5-5"})
 
 
 class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):

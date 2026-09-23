@@ -237,12 +237,12 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
     text = text.replace("grok golden-contract parity target", "")
     if package_id == "cursor-cli-kaola-project-runner":
         # Cursor's user-selected Runner presets are intentionally Cursor Grok /
-        # Claude Fable models. Remove only those exact declared model facts
+        # Claude Opus models. Remove only those exact declared model facts
         # before checking for accidental adapter/protocol leakage.
         text = text.replace("grok 4.7 extra high", "cursor-default-model")
         text = text.replace("grok-4.7-xhigh", "cursor-default-model-id")
-        text = text.replace("claude fable 5.1 high", "cursor-upgrade-model")
-        text = text.replace("claude-fable-5-1-high", "cursor-upgrade-model-id")
+        text = text.replace("claude opus 5.5 high", "cursor-upgrade-model")
+        text = text.replace("claude-opus-5-5-high", "cursor-upgrade-model-id")
         # Cursor's ACP option values are the adapter's own bracketed model
         # descriptors; they are declared manifest facts, not Grok adapter
         # leakage. Remove only the exact advertised value strings.

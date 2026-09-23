@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **cursor-cli upgrade tier is now Claude Opus 5.5 High (Issue #143).** `--tier upgrade` selects
+  `claude-opus-5-5-high` (was `claude-fable-5-1-high`); `acp_model_map` maps it onto the live
+  picker base id `claude-opus-5-5`, and `high` is applied through the model's advertised `effort`
+  option, as measured live on 2026-09-23 (`effective_model=claude-opus-5-5`,
+  `effective_effort=high`, `effort_config_id=effort`). The default tier (`grok-4.7-xhigh`) and
+  `acp_verified_versions` are unchanged; Devin's Fable presets are a different platform and are
+  untouched.
+
 ## 0.5.8 — 2026-09-23 (latest-CLI tier landing release)
 
 - **devin tier presets land again on Devin CLI 3000.11.1 via spawn argv (Issue #140).** The 11.1
