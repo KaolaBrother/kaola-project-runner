@@ -50,7 +50,11 @@ is sent literally and a rejection is reported as a limitation. `acp_command_defa
 Devin declares them, as `devin acp --model <preset id>`): when the tier preset selects the model,
 `kaola-acp.py` spawns that command instead of `acp_command`, while `--command`,
 `KAOLA_ACP_COMMAND`, an explicit `--model`, or a preserved resume keep the base; an empty value, or
-`acp_command_alt` without `alt_tier_label`, is rejected. Model-selection fields are
+`acp_command_alt` without `alt_tier_label`, is rejected. `acp_session_new_timeout` is an optional
+positive number of seconds the holder waits for the `session/new` answer in `start` and the
+`preflight` probe (Issue #146; absent keeps 15 s; only Codex declares it, `60`, because live Codex
+answered after ~18 s); the start window and the probe bound grow by the same amount, and a
+missing answer is still `acp-session-timeout`. Model-selection fields are
 `default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`,
 `upgrade_model_name`/`upgrade_model_id`/`upgrade_model_parameters`/`upgrade_model_effort`,
 `alt_tier_label`/`alt_model_name`/`alt_model_id`/`alt_model_parameters`/`alt_model_effort`, and

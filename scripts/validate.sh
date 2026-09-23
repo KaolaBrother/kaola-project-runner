@@ -143,6 +143,7 @@ python_suites_all=(
   "test-issue-123-shared-refs.py"
   "test-issue-133-mission-ledger.py"
   "test-issue-147-installed-survey.py"
+  "test-issue-146-session-new-wait.py"
   "test-lifecycle-contract.py"
   "test-issue-22-bypass-all-approvals.py"
   "test-issue-130-pty-retired.py"
@@ -169,6 +170,7 @@ python_suites_a=(
   "test-issue-98-dsh-acp.py"
   "test-issue-101-validate-watchdog.py"
   "test-issue-118-seat-cap.py"
+  "test-issue-146-session-new-wait.py"
   "test-lifecycle-contract.py"
 )
 python_suites_b=(

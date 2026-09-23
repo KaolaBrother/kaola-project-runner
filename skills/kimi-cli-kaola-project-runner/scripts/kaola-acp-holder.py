@@ -44,6 +44,9 @@ CANCEL_GRACE = 5.0
 STEER_TIMEOUT = 30.0
 EXIT_GRACE = 5.0
 TERM_GRACE = 3.0
+# Issue #146: the shared session/new wait; a manifest `acp_session_new_timeout`
+# overrides it per platform (codex measured past 15 s on live starts).
+SESSION_NEW_TIMEOUT = 15.0
 SENSITIVE_KEYS = ("_API_KEY", "TOKEN", "Authorization")
 
 
@@ -1583,7 +1586,9 @@ class Holder:
             request_id = self.agent.send_request(
                 "session/new", {"cwd": self.args.repo, "mcpServers": []}
             )
-            response = self.agent.wait_response(request_id, 15.0)
+            # Issue #146: the platform's measured session/new latency sets this
+            # wait (manifest `acp_session_new_timeout`, default 15 s).
+            response = self.agent.wait_response(request_id, self.args.session_new_timeout)
             if response is None:
                 return {"error": {"code": "acp-session-timeout", "message": "no session/new response"}}
             if "error" in response:
@@ -3992,7 +3997,8 @@ def run_probe(args: argparse.Namespace) -> int:
             result["error"] = {"code": "acp-protocol-version-unsupported",
                                "agent_version": result["protocol_version"]}
         else:
-            response = wait(send("session/new", {"cwd": args.repo, "mcpServers": []}), 15.0)
+            response = wait(send("session/new", {"cwd": args.repo, "mcpServers": []}),
+                            args.session_new_timeout)
             if response and "error" in response:
                 message = str((response["error"] or {}).get("message", "")).lower()
                 if "auth" in message or (response["error"] or {}).get("code") in (-32000, -32001):
@@ -4061,6 +4067,7 @@ def main() -> int:
     parser.add_argument("--resume")
     parser.add_argument("--continue", dest="use_continue", action="store_true")
     parser.add_argument("--init-meta", default="")
+    parser.add_argument("--session-new-timeout", type=float, default=SESSION_NEW_TIMEOUT)
     parser.add_argument("--host-entry", default=None)
     parser.add_argument("--host-name", default=None)
     parser.add_argument("--cli-version", default="")

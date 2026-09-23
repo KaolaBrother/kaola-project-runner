@@ -26,6 +26,8 @@ agent's advertised `session/set_config_option` IDs — model first, then effort,
 An effort id may list `;`-separated candidates in order; the first one the agent advertises after
 the model apply is used (`config_application.effort.candidates`/`advertised`,
 `effective_selection.effort_config_id`), otherwise the first literally.
+`start` and `preflight` wait for the `session/new` answer up to the manifest's
+`acp_session_new_timeout` seconds (15 when absent); no answer by then is `acp-session-timeout`.
 A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
 during `initialize`): agents that negotiate a parameterized model picker advertise separate
 `model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead

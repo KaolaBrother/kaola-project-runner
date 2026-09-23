@@ -35,6 +35,11 @@ FAST_VARIANT_SUFFIXES = ("-fast", "-priority")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli", "opencode", "zcode")
 START_WAIT = 20.0
+# Issue #146: the holder's shared session/new wait. A manifest
+# `acp_session_new_timeout` raises it per platform, and the start window and
+# preflight probe bound grow by the same amount so they still enclose it.
+SESSION_NEW_TIMEOUT = 15.0
+PROBE_WAIT = 60.0
 SESSION_PREFIX = "kaola"
 # Issue #22: default start sets session/set_config_option configId=mode to each
 # platform's measured skip-all value. Omitted platforms have no ACP mode skip
@@ -387,6 +392,21 @@ def cli_version_fact(args: argparse.Namespace, env: dict[str, str]) -> dict[str,
         "version": binary_version(path, env) if path else None,
         "verified_versions": args.manifest.get("acp_verified_versions") or None,
     }
+
+
+def session_new_timeout(args: argparse.Namespace) -> float:
+    """Issue #146: this platform's session/new wait in seconds. Absent or
+    unparsable keeps the shared default (render-skills rejects a bad value)."""
+    try:
+        seconds = float(args.manifest.get("acp_session_new_timeout") or SESSION_NEW_TIMEOUT)
+    except ValueError:
+        return SESSION_NEW_TIMEOUT
+    return seconds if 0 < seconds < float("inf") else SESSION_NEW_TIMEOUT
+
+
+def session_new_extra(args: argparse.Namespace) -> float:
+    """Seconds this platform's session/new wait exceeds the shared default."""
+    return max(0.0, session_new_timeout(args) - SESSION_NEW_TIMEOUT)
 
 
 def die(message: str, code: int = 2) -> None:
@@ -1948,13 +1968,15 @@ def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     probe_argv = [
         sys.executable, str(HOLDER), "--probe", "--repo", repo,
         "--platform", args.platform, "--command", args.agent_command,
+        "--session-new-timeout", repr(session_new_timeout(args)),
     ]
     init_meta = parse_manifest_meta(args.manifest.get("acp_init_meta") or "")
     if init_meta:
         probe_argv += ["--init-meta", json.dumps(init_meta)]
     result = subprocess.run(
         probe_argv,
-        capture_output=True, text=True, timeout=60, env=agent_environment(args),
+        capture_output=True, text=True, timeout=PROBE_WAIT + session_new_extra(args),
+        env=agent_environment(args),
     )
     try:
         probe = json.loads(result.stdout)
@@ -2851,6 +2873,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     # own manifest, never from the platform id.
     holder_argv += ["--host-entry", args.manifest.get("host_skill_entry") or "",
                     "--host-name", args.manifest.get("runtime_name") or args.platform]
+    holder_argv += ["--session-new-timeout", repr(session_new_timeout(args))]
     init_meta = parse_manifest_meta(args.manifest.get("acp_init_meta") or "")
     if init_meta:
         holder_argv += ["--init-meta", json.dumps(init_meta)]
@@ -2875,7 +2898,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     if child_record is not None:
         receipt["child_record"] = child_record
     sock = sock_path(args, repo)
-    deadline = time.monotonic() + START_WAIT
+    deadline = time.monotonic() + START_WAIT + session_new_extra(args)
     state: dict[str, Any] | None = None
     while time.monotonic() < deadline:
         if sock.exists():

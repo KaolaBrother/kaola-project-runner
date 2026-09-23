@@ -70,7 +70,11 @@ REQUIRED = {
 # Issue #140: optional per-tier ACP spawn commands (``acp_command_default``,
 # ``acp_command_upgrade``, ``acp_command_alt``) for a preset the agent's ACP
 # model option does not offer; absent keys keep the base ``acp_command``.
-OPTIONAL = {"acp_command_default", "acp_command_upgrade", "acp_command_alt"}
+OPTIONAL = {"acp_command_default", "acp_command_upgrade", "acp_command_alt",
+            # Issue #146: seconds the holder waits for the `session/new`
+            # response; absent keeps the shared 15 s. A measured per-platform
+            # latency fact, never a gate.
+            "acp_session_new_timeout"}
 
 
 ALT_TIER_KEYS = (
@@ -124,6 +128,13 @@ def parse_manifest(path: Path) -> dict[str, str]:
     for key in OPTIONAL & result.keys():
         if not result[key]:
             raise ValueError(f"{path}: empty {key}")
+    if "acp_session_new_timeout" in result:
+        try:
+            seconds = float(result["acp_session_new_timeout"])
+        except ValueError:
+            seconds = 0.0
+        if not 0 < seconds < float("inf"):
+            raise ValueError(f"{path}: acp_session_new_timeout must be positive seconds")
     if "acp_command_alt" in result and not result["alt_tier_label"]:
         raise ValueError(f"{path}: acp_command_alt needs alt_tier_label")
     # Issue #111: the third preset slot is all-or-nothing. A label without a

@@ -285,6 +285,11 @@ class MockAgent:
                 error={"code": -32000, "message": "authentication required"},
             )
             return
+        # Issue #146: a slow adapter (live codex answered session/new ~18 s
+        # after spawn). The delay precedes the answer, never replaces it.
+        delay_ms = int(os.environ.get("MOCK_ACP_SESSION_NEW_DELAY_MS") or 0)
+        if delay_ms > 0:
+            time.sleep(delay_ms / 1000.0)
         self.session_counter += 1
         session_id = f"mock-session-{self.session_counter}"
         self.sessions[session_id] = {"cwd": params.get("cwd", "")}
