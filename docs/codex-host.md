@@ -5,7 +5,10 @@ whose post-compaction recovery this page adapts. It covers the Codex host
 surface: skill installation and the two Runner-owned `SessionStart(compact)`
 recovery entries — the **user-level** entry that `--runtime codex` installs
 (Issue #97, the default) and the **project-level** bound-Host entry (Issue #75,
-kept for direct Project Runner Hosts).
+kept for direct Project Runner Hosts). Codex can also run as an ACP-started,
+event-driven Project Runner Host (Issue #126): every turn opens with
+`$kaola-project-runner`; entry and evidence are in the main Skill's
+`references/host-entry-matrix.md`.
 
 ## Skill installation
 

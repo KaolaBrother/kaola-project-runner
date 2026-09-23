@@ -174,7 +174,7 @@ worker agent terminated / worker turn ended (one idle episode)
   `KAOLA_ACP_HEARTBEAT_HOST` still works as before (`source: "explicit"`,
   fail closed with a usage error on a self-referential or malformed
   target); a start under a dispatcher, or naming a target, whose platform
-  has no measured `host_skill_entry` (codex) is refused
+  has no measured `host_skill_entry` (no shipped platform since Issue #126) is refused
   `host-entry-unsupported` (Issue #122), as is a Host-named start on that
   platform; a start under no holder
   at all is `none` and unbound, exactly as before. Runner dispatch is

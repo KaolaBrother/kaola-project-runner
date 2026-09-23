@@ -23,7 +23,8 @@ dispatcher-no-carrier`), and a start whose `KAOLA_ACP_HEARTBEAT_HOST` names it
 all refuse `reason: host-entry-unsupported` before any record, socket or holder
 exists (`mutation_performed: false`, exit 1); its holder still refuses
 `worker_event`. As an ordinary worker it is unaffected. Admission is the
-measurement: fill the entry from a row below, then it may host.
+measurement: fill the entry from a row below, then it may host. Since #126
+every shipped row has an entry; the rule holds for any platform without one.
 
 A row is filled only from a live run with trigger evidence:
 
@@ -38,7 +39,7 @@ deep test (D3) where the handoff (step 2) and the carrier-woken beat (step 5)
 each produced E1 or E2. In that turn no tool read or grepped the main Skill, and
 the quoted sentence exists only in this build.
 
-## Matrix (measured 2026-09-21, ACP, this Mac)
+## Matrix (measured 2026-09-21, codex 2026-09-23, ACP, this Mac)
 
 | Platform | `host_skill_entry` | Probe; D3 step 2 / 5 | User Skill roots discovered | Version |
 |---|---|---|---|---|
@@ -51,7 +52,7 @@ the quoted sentence exists only in this build.
 | dsh | `/kaola-project-runner` | E2; E2 / E2 | `~/.agents/skills` | harness 0.0.1 |
 | opencode | `/kaola-project-runner` | E1 (`skill` tool); E1+E2 / E2 | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | 2.0.11 |
 | kimi-cli | `/skill:kaola-project-runner ` | E2; E2 / E2 | `~/.agents/skills` | 2.0.2 |
-| codex | (empty) | none; Host refused `host-entry-unsupported` | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.11.0 |
+| codex | `$kaola-project-runner` | E2; E2 / E2 | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.13.0 |
 
 Notes:
 
@@ -59,10 +60,14 @@ Notes:
   `skill:<name>` commands and reads the command name up to the first space, so
   `/skill:kaola-project-runner` followed directly by a newline is answered
   `Unknown ACP command`; bare `/kaola-project-runner` is unknown too.
-- **codex** - `available_commands` lists `$kaola-project-runner`, but every turn
-  on this account answered a usage-limit notice (until 2026-09-23 15:48), so no
-  E1/E2 evidence exists yet and the entry stays empty. Measure `$kaola-project-runner`
-  as the first candidate once turns run again.
+- **codex** (#126) - the entry is Codex's `$` Skill mention, as advertised in
+  `available_commands`; not `/`. Until 2026-09-23 every turn answered a
+  usage-limit notice, so codex stayed refused. Measured then on gpt-6-sol/high:
+  E2 in a fresh session, and the negative control answered `SKILL-NOT-LOADED`.
+  D3 as below with a codex worker (under the shadow `HOME` dsh had no
+  credentials and claude-code no login). Like every Host, a codex Host's beat
+  rewrites `.kaola/heartbeat-prompt.json`; Codex's own timer serves only a
+  Codex supervisor that is not a Host.
 - **dsh** has an entry despite advertising no commands: `/kaola-project-runner`
   loads the Skill from `~/.agents/skills` (E2 plus negative control).
 - Project-level roots were discovered too (`<repo>/.claude/skills`,
@@ -74,7 +79,7 @@ Notes:
   cursor-cli), so the start also compares every main Skill in those roots
   (#121) and refuses `main-skill-build-skew` naming the stale path. Reinstall
   every root the Host reads.
-- D3, all eight rows (2026-09-21): run under a shadow `HOME` whose Skill roots
+- D3, every non-ZCode row (2026-09-21; codex 2026-09-23): run under a shadow `HOME` whose Skill roots
   held only this build and an isolated `KAOLA_ACP_RECORD_ROOT`. Each Host
   started on its default tier (opencode on the explicit
   `opencode-go/deepseek-v4.1-flash` / `max`). The worker bound to it

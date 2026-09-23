@@ -353,7 +353,8 @@ A `start` receipt also says where its request came from (Issue #104): `heartbeat
 `none` (no dispatching holder, no variable), `explicit` (`KAOLA_ACP_HEARTBEAT_HOST` given),
 `dispatcher` (derived from the holder-set `KAOLA_ACP_DISPATCHER` identity fact: `holder_instance_id`,
 `platform`, `repo`, `session`, echoed as `dispatcher`), or `dispatcher-no-carrier` (a dispatcher
-whose platform has no measured `host_skill_entry`, today codex). Issue #122: that row, an explicit
+whose platform has no measured `host_skill_entry`; since Issue #126 admitted codex, no shipped
+platform). Issue #122: that row, an explicit
 variable naming such a platform, and a Host-named `start` on it are refused `host-entry-unsupported`
 (`detail` names the platform and the empty entry), exit 1, before anything exists. On the `dispatcher` path the script verifies the named Host holder is live
 before anything exists and otherwise refuses with `{"result":"refused","reason":

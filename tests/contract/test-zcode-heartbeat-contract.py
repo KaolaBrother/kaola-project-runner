@@ -647,9 +647,30 @@ def test_bounded_queue_dedup_and_single_batch_flush() -> None:
         sandbox.cleanup()
 
 
+def entryless_cli(sandbox, platform: str) -> Path:
+    """Issue #126: every shipped platform has a measured Host entry, so the
+    Issue #122 fail-closed rows run on an installed copy of ``platform``'s
+    worker Skill with codex's entry emptied (the pre-#126 shipped state): its
+    code table always, and its manifest when the tree is codex's own."""
+    tree = sandbox.dir / "installed" / f"{platform}-kaola-project-runner"
+    if not tree.exists():
+        shutil.copytree(ROOT / "skills" / f"{platform}-kaola-project-runner", tree)
+        edits = [("kaola-acp.py", '"codex": "$kaola-project-runner",', '"codex": "",')]
+        if platform == "codex":
+            edits.append(("platform.yaml", 'host_skill_entry: "$kaola-project-runner"',
+                          'host_skill_entry: ""'))
+        for name, old, new in edits:
+            path = tree / "scripts" / name
+            text = path.read_text(encoding="utf-8")
+            check(text.count(old) == 1, f"fixture: {platform} {name} carries the codex entry once")
+            path.write_text(text.replace(old, new), encoding="utf-8")
+    return tree / "scripts" / "kaola-acp.py"
+
+
 def test_carrier_needs_host_skill_entry() -> None:
     """Issue #119: the carrier is open to every platform with a measured Host
-    Skill entry; a platform without one (codex today) still fails closed."""
+    Skill entry; a platform without one (an emptied-entry fixture since
+    Issue #126 admitted codex) still fails closed."""
     sandbox = Sandbox("zcodeonly")
     try:
         host = sandbox.session()
@@ -659,6 +680,7 @@ def test_carrier_needs_host_skill_entry() -> None:
         bad_target = sandbox.session()
         result, refused = sandbox.invoke(
             "start", "--mode", "yolo", session=bad_target, scenario="basic",
+            cli_path=entryless_cli(sandbox, "zcode"),
             **{HEARTBEAT_HOST_ENV: json.dumps(
                 {"platform": "codex", "session": host, "repo": str(sandbox.repo)})})
         refused = refused or {}
@@ -686,8 +708,9 @@ def test_carrier_needs_host_skill_entry() -> None:
         fake_agent.write_text(FAKE_ACP_AGENT, encoding="utf-8")
         fake_agent.chmod(fake_agent.stat().st_mode | 0o755)
         other = f"hb-other-{uuid.uuid4().hex[:8]}"
+        codex_cli = entryless_cli(sandbox, "codex")
         receipt = sandbox.cli("start", "--command", f"{PYTHON} {fake_agent}",
-                              session=other, scenario=None, platform="codex")
+                              session=other, scenario=None, platform="codex", cli_path=codex_cli)
         check(receipt.get("state") == "ready", f"entry-less holder starts ({receipt.get('error')})")
         other_dir = sandbox.record_dir(other, platform="codex")
         rejection = holder_op(holder_socket(other_dir), "worker_event",
@@ -696,7 +719,7 @@ def test_carrier_needs_host_skill_entry() -> None:
                                "reason": "r", "event_cursor": 1})
         check((rejection.get("error") or {}).get("code") == "worker-event-unsupported",
               f"an entry-less host holder rejects the carrier op ({rejection})")
-        stop = sandbox.cli("stop", "--force", session=other, platform="codex")
+        stop = sandbox.cli("stop", "--force", session=other, platform="codex", cli_path=codex_cli)
         check(stop.get("residual_pids") == [], "entry-less holder stop leaves no residue")
         host_stop = sandbox.cli("stop", "--force", session=host)
         check(host_stop.get("residual_pids") == [], "host stop leaves no residue")
@@ -1510,8 +1533,9 @@ def test_issue_104_dispatcher_refusals_open_nothing() -> None:
 
 def test_issue_104_explicit_and_no_carrier_rows() -> None:
     """Design §e P4, P5, P7: the explicit variable equal to the dispatcher
-    binds as before; an entry-less dispatcher (Issue #119: codex, not merely
-    non-ZCode) refuses host-entry-unsupported (Issue #122 fail-closed); a
+    binds as before; an entry-less dispatcher (Issue #119: not merely non-ZCode;
+    an emptied-entry fixture since Issue #126 admitted codex) refuses
+    host-entry-unsupported (Issue #122 fail-closed); a
     reused live holder keeps its binding and exact stop/start binds."""
     sandbox = Sandbox("i104-rows")
     try:
@@ -1536,6 +1560,7 @@ def test_issue_104_explicit_and_no_carrier_rows() -> None:
         worker = sandbox.session()
         result, receipt = sandbox.invoke(
             "start", "--mode", "yolo", session=worker, scenario="basic",
+            cli_path=entryless_cli(sandbox, "zcode"),
             **{DISPATCHER_ENV: json.dumps(dict(dispatcher, platform="codex",
                                                session="codex-host"))})
         receipt = receipt or {}

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Codex can be a Project Runner Host (Issue #126).** Codex's measured Host entry is its `$`
+  Skill mention, `$kaola-project-runner` (`host_skill_entry` in `platforms/codex.yaml` and the
+  `HOST_SKILL_ENTRIES` table). Before this, codex had no entry and was refused as a Host
+  (`host-entry-unsupported`, Issue #122). A Host-named codex `start`, a worker a codex Host
+  dispatches, and a heartbeat target naming codex are now admitted; the carrier opens with
+  `$kaola-project-runner` and names `(Codex CLI Host)`. The entry was measured live on 2026-09-23
+  (codex-acp 1.13.0, gpt-6-sol/high, under a shadow `HOME` that held only this build and an
+  isolated record root). The entry loaded the Skill with no tool call, and the same question
+  without it answered `SKILL-NOT-LOADED`. In the deep test, the handoff turn and the turn woken by
+  a worker event both quoted the loaded Skill without reading it. The worker bound to the codex
+  Host, the Host exact-stopped it, and the sweep found nothing left. The Issue #122 rule is
+  unchanged: any platform without an entry still fails closed. Its tests now use an installed
+  copy with codex's entry emptied.
+
 - **Codex start no longer fails early on a slow `session/new` (Issue #146).** The holder waited a
   fixed 15 s for the `session/new` answer, and live Codex sometimes answered after ~18 s: the
   start failed with `acp-session-timeout` even though the session would have come up (the late
