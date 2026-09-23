@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Issue #148: quota package schema, seeded rules, and quotaPool stamping.
+"""Issue #148: quota package schema, query tool, and quotaPool stamping.
 
 The research table is not on this machine. Seeds are the package ids and rule
 kinds named in the issue. A model id with no verified rule is unmapped.
@@ -10,12 +10,17 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
 PROJECT = Path(__file__).resolve().parents[2]
+CLI = PROJECT / "scripts" / "kaola-acp.py"
 QUOTA_PATH = PROJECT / "scripts" / "kaola-quota.py"
 RENDER_PATH = PROJECT / "scripts" / "render-skills.py"
 PLATFORMS = PROJECT / "platforms"
@@ -222,11 +227,114 @@ class QuotaSchemaTest(unittest.TestCase):
             source = (PLATFORMS / "grok.yaml").read_text(encoding="utf-8")
             (script_dir / "platform.yaml").write_text(source, encoding="utf-8")
             loaded = self.quota.load_catalog("grok", script_dir)
+            self.assertEqual(self.quota.available_platforms(script_dir), ["grok"])
         self.assertEqual(loaded.public_packages(), catalog.public_packages())
         self.assertEqual(
             self.quota.resolve_model(loaded, "anything"),
             {"packageId": "grok:account", "status": "mapped"},
         )
+
+
+def write_exec(path: Path, body: str) -> None:
+    path.write_text(body, encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+class QuotaQueryCliTest(unittest.TestCase):
+    """``packages`` and ``model-package`` are read-only and do not start an agent."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="kaola-148-")
+        root = Path(self.tmp.name)
+        self.markers = root / "markers"
+        self.markers.mkdir()
+        self.login_bin = root / "login-bin"
+        self.login_bin.mkdir()
+        self.record_root = root / "records"
+        write_exec(self.login_bin / "codex", f"#!/bin/sh\n: > '{self.markers}/codex-ran'\n")
+        self.login_shell = root / "fake-login-shell"
+        write_exec(self.login_shell, (
+            "#!/bin/sh\n"
+            f": > '{self.markers}/login-shell-ran'\n"
+            '[ "$1" = "-l" ] && [ "$2" = "-c" ] || exit 64\n'
+            f"export PATH='{self.login_bin}:/usr/bin:/bin'\n"
+            'exec /bin/sh -c "$3"\n'
+        ))
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def env(self) -> dict[str, str]:
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith("KAOLA_") and not key.endswith("_BIN")}
+        env["PATH"] = "/usr/bin:/bin"
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
+        return env
+
+    def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(CLI), *args],
+            capture_output=True, text=True, timeout=60, env=self.env(),
+        )
+
+    def test_packages_lists_every_platform_without_a_login_shell(self) -> None:
+        result = self.run_cli("packages")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(set(payload), {"schema", "installed_only", "platforms"})
+        self.assertEqual(payload["schema"], "kaola-acp-packages/1")
+        self.assertIs(payload["installed_only"], False)
+        self.assertEqual([row["platform"] for row in payload["platforms"]], PLATFORM_ORDER)
+        droid = next(row for row in payload["platforms"] if row["platform"] == "droid")
+        self.assertEqual(
+            [package["id"] for package in droid["packages"]],
+            ["droid:standard", "droid:core", "droid:extra_usage"],
+        )
+        self.assertIsNone(droid["packages"][0]["windows"])
+        self.assertFalse(self.record_root.exists())
+        self.assertFalse((self.markers / "login-shell-ran").exists())
+        self.assertFalse((self.markers / "codex-ran").exists())
+
+    def test_installed_only_keeps_survey_present_rows(self) -> None:
+        result = self.run_cli("packages", "--installed-only", "--login-shell", str(self.login_shell))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertIs(payload["installed_only"], True)
+        self.assertEqual(payload["login_env"]["status"], "ok")
+        self.assertEqual([row["platform"] for row in payload["platforms"]], ["codex"])
+        self.assertEqual(payload["platforms"][0]["packages"][0]["id"], "codex:primary")
+        self.assertTrue((self.markers / "login-shell-ran").exists())
+        self.assertFalse((self.markers / "codex-ran").exists())
+        self.assertFalse(self.record_root.exists())
+
+    def test_model_package_shapes(self) -> None:
+        mapped = self.run_cli("model-package", "--platform", "grok", "--model", "grok-4.7")
+        self.assertEqual(mapped.returncode, 0, mapped.stderr)
+        self.assertEqual(json.loads(mapped.stdout), {
+            "schema": "kaola-acp-model-package/1",
+            "platform": "grok",
+            "model": "grok-4.7",
+            "packageId": "grok:account",
+            "status": "mapped",
+        })
+        unmapped = self.run_cli(
+            "model-package", "--platform", "droid", "--model", "claude-opus-5-5",
+        )
+        self.assertEqual(unmapped.returncode, 0, unmapped.stderr)
+        self.assertEqual(json.loads(unmapped.stdout), {
+            "schema": "kaola-acp-model-package/1",
+            "platform": "droid",
+            "model": "claude-opus-5-5",
+            "packageId": None,
+            "status": "unmapped",
+        })
+        self.assertFalse(self.record_root.exists())
+        self.assertFalse((self.markers / "login-shell-ran").exists())
+
+    def test_model_package_requires_platform_and_model(self) -> None:
+        missing = self.run_cli("model-package", "--platform", "grok")
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertFalse(self.record_root.exists())
 
 
 if __name__ == "__main__":

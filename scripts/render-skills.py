@@ -488,6 +488,7 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         (shared_root / "kaola-acp-holder.py", "scripts/kaola-acp-holder.py"),
         (PLATFORMS / f"{manifest['id']}.yaml", "scripts/platform.yaml"),
         (shared_root / "kaola-model-policy.py", "scripts/kaola-model-policy.py"),
+        (shared_root / "kaola-quota.py", "scripts/kaola-quota.py"),
         (adapter, f"scripts/adapters/{adapter.name}"),
     )
     for source, target in shared_sources:

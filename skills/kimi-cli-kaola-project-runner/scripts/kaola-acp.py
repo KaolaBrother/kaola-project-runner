@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import hashlib
+import importlib.util
 import json
 import os
 import pwd
@@ -757,6 +758,87 @@ def command_survey(args: argparse.Namespace) -> dict[str, Any]:
             row["status"] = "unknown"
         rows.append(row)
     return {"schema": SURVEY_SCHEMA, "login_env": login_fact, "platforms": rows}
+
+
+# Issue #148: read-only quota catalog. No agent, no holder, no record, no
+# platform binary. ``--installed-only`` reuses the survey and keeps platforms
+# whose install status is ``present``.
+PACKAGES_SCHEMA = "kaola-acp-packages/1"
+MODEL_PACKAGE_SCHEMA = "kaola-acp-model-package/1"
+_QUOTA = None
+
+
+def quota_module():
+    """Sibling ``kaola-quota.py``. A Skill copy and the checkout both ship it."""
+    global _QUOTA
+    if _QUOTA is None:
+        path = SCRIPT_DIR / "kaola-quota.py"
+        spec = importlib.util.spec_from_file_location("kaola_quota", path)
+        if spec is None or spec.loader is None:
+            die(f"quota catalog checker missing: {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _QUOTA = module
+    return _QUOTA
+
+
+def parse_packages_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="kaola-acp.py packages")
+    parser.add_argument("--platform", choices=PLATFORMS)
+    parser.add_argument("--installed-only", action="store_true")
+    parser.add_argument("--login-shell")
+    return parser.parse_args(argv)
+
+
+def parse_model_package_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="kaola-acp.py model-package")
+    parser.add_argument("--platform", required=True, choices=PLATFORMS)
+    parser.add_argument("--model", required=True)
+    return parser.parse_args(argv)
+
+
+def command_packages(args: argparse.Namespace) -> dict[str, Any]:
+    quota = quota_module()
+    present = None
+    login_env = None
+    if args.installed_only:
+        survey = command_survey(argparse.Namespace(
+            platform=args.platform, login_shell=args.login_shell))
+        login_env = survey["login_env"]
+        present = {row["platform"] for row in survey["platforms"] if row["status"] == "present"}
+    rows: list[dict[str, Any]] = []
+    for platform in quota.available_platforms(SCRIPT_DIR):
+        if args.platform and platform != args.platform:
+            continue
+        if present is not None and platform not in present:
+            continue
+        catalog = quota.load_catalog(platform, SCRIPT_DIR)
+        rows.append({"platform": platform, "packages": catalog.public_packages()})
+    payload: dict[str, Any] = {
+        "schema": PACKAGES_SCHEMA,
+        "installed_only": bool(args.installed_only),
+        "platforms": rows,
+    }
+    if args.installed_only:
+        payload["login_env"] = login_env
+    return payload
+
+
+def command_model_package(args: argparse.Namespace) -> dict[str, Any]:
+    quota = quota_module()
+    try:
+        catalog = quota.load_catalog(args.platform, SCRIPT_DIR)
+    except quota.QuotaError as exc:
+        die(str(exc))
+    resolved = quota.resolve_model(catalog, args.model)
+    return {
+        "schema": MODEL_PACKAGE_SCHEMA,
+        "platform": args.platform,
+        "model": args.model,
+        "packageId": resolved["packageId"],
+        "status": resolved["status"],
+    }
+
 
 def view_error(code: str, message: str) -> dict[str, Any]:
     return {"schema": VIEW_SCHEMA, "error": {"code": code, "message": message}}
@@ -3208,6 +3290,14 @@ def main() -> int:
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "survey":
         payload = command_survey(parse_survey_args(sys.argv[2:]))
+        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        return 0
+    if len(sys.argv) > 1 and sys.argv[1] == "packages":
+        payload = command_packages(parse_packages_args(sys.argv[2:]))
+        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        return 0
+    if len(sys.argv) > 1 and sys.argv[1] == "model-package":
+        payload = command_model_package(parse_model_package_args(sys.argv[2:]))
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
         return 0
 
