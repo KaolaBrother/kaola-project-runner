@@ -10,14 +10,16 @@
   `acp_verified_versions` are unchanged; Devin's Fable presets are a different platform and are
   untouched.
 
-- **devin upgrade tier is now Fusion Opus 5.5 High; the `fable` tier is retired (Issue #144).**
-  `--tier upgrade` selects `fusion-claude-opus-5-5-high-sidekick-swe-2-medium` ("Fusion High
-  (Opus 5.5 High + SWE-2 Medium)", was the Fable 5.1 fusion) through `acp_command_upgrade` spawn
-  argv, measured live on cli 3000.11.1 on 2026-09-23 (ready session, `effective_model` from
-  launch argv). The catalog has no pure Opus 5.5 High id (pure Opus 5.5 is medium only), so none
-  is invented. Devin now declares no third tier: `alt_*` is empty, `acp_command_alt` is gone, and
-  `--tier fable` is a typed `tier-not-declared` refusal. The default tier (`swe-2-max`) and
-  `acp_verified_versions` are unchanged.
+- **devin tiers are two fusions: upgrade = Opus 5.5 High fusion, fable = Fable 5.1 High fusion
+  (Issue #144).** `--tier upgrade` selects `fusion-claude-opus-5-5-high-sidekick-swe-2-medium`
+  ("Fusion High (Opus 5.5 High + SWE-2 Medium)", was the Fable fusion) because Devin has no pure
+  Opus 5.5 High (pure Opus 5.5 is medium only). `--tier fable` stays declared but now selects
+  `fusion-claude-fable-5-1-high-sidekick-swe-2-medium` ("Fusion High (Fable 5.1 High + SWE-2
+  Medium)") through `acp_command_alt`; the pure `claude-fable-5-1-high` preset is retired. Both
+  ids were spawn-measured on cli 3000.11.1 on 2026-09-23 (ready session, `effective_model` from
+  launch argv). The also-measured `fusion-gpt-6-astra-high-sidekick-swe-2-medium` is documented
+  only and wired to no tier. The default tier (`swe-2-max`) and `acp_verified_versions` are
+  unchanged.
 
 ## 0.5.8 — 2026-09-23 (latest-CLI tier landing release)
 

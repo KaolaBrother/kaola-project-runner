@@ -249,10 +249,12 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         text = text.replace("grok-4.7[effort=high,fast=true]", "cursor-acp-model-value")
         text = text.replace("claude-fable-5-1[thinking=true,context=300k,effort=high]", "cursor-acp-model-value")
     if package_id == "devin-kaola-project-runner":
-        # Devin's declared upgrade preset ID is a Fusion combo that literally
-        # names the Claude Opus sidecar (Issue #144). Remove only that exact
-        # declared fact.
+        # Devin's declared upgrade and fable preset IDs are Fusion combos that
+        # literally name the Claude sidecar (Issue #144); the quirks also name
+        # the retired pure fable ID. Remove only those exact declared facts.
         text = text.replace("fusion-claude-opus-5-5-high-sidekick-swe-2-medium", "devin-upgrade-model-id")
+        text = text.replace("fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "devin-fable-model-id")
+        text = text.replace("claude-fable-5-1-high", "devin-retired-fable-model-id")
     if package_id == "droid-kaola-project-runner":
         # Issue #111/#117: Droid's catalog carries first-class Kimi-family
         # models, and its Runner core preset selects kimi-k3 (Issue #125). That is a

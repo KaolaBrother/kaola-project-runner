@@ -534,6 +534,9 @@ Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the r
 Droid's default and upgrade are both Auto Model (`auto`, no effort pin); Kimi K3 Max (`kimi-k3` at
 `reasoning_effort=max`) is its third tier, `--tier core`, not an upgrade. Its `-fast` catalog IDs are explicit
 `--model` choices, not a separate Fast toggle.
+Devin's default is SWE-2 Max (`swe-2-max`); `--tier upgrade` is the Opus 5.5 High fusion
+(`fusion-claude-opus-5-5-high-sidekick-swe-2-medium`, as Devin has no pure Opus 5.5 High) and
+`--tier fable` is the Fable 5.1 High fusion (`fusion-claude-fable-5-1-high-sidekick-swe-2-medium`).
 
 **Permission defaults matter:** the default is per platform, not one guarantee across all ten.
 Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-all option at start
