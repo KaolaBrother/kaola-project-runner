@@ -39,6 +39,7 @@ START_WAIT = 20.0
 # `acp_session_new_timeout` raises it per platform, and the start window and
 # preflight probe bound grow by the same amount so they still enclose it.
 SESSION_NEW_TIMEOUT = 15.0
+SESSION_NEW_TIMEOUT_MAX = 600.0
 PROBE_WAIT = 60.0
 SESSION_PREFIX = "kaola"
 # Issue #22: default start sets session/set_config_option configId=mode to each
@@ -401,7 +402,7 @@ def session_new_timeout(args: argparse.Namespace) -> float:
         seconds = float(args.manifest.get("acp_session_new_timeout") or SESSION_NEW_TIMEOUT)
     except ValueError:
         return SESSION_NEW_TIMEOUT
-    return seconds if 0 < seconds < float("inf") else SESSION_NEW_TIMEOUT
+    return seconds if 0 < seconds <= SESSION_NEW_TIMEOUT_MAX else SESSION_NEW_TIMEOUT
 
 
 def session_new_extra(args: argparse.Namespace) -> float:

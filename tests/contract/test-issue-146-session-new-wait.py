@@ -95,7 +95,9 @@ class TestManifestFact(unittest.TestCase):
     def test_render_rejects_a_non_positive_or_non_numeric_wait(self) -> None:
         self.render.parse_manifest(self.manifest_with(None))
         self.render.parse_manifest(self.manifest_with("45"))
-        for bad in ("", "0", "-5", "abc", "inf", "nan"):
+        self.render.parse_manifest(self.manifest_with("600"))
+        # 1e10 would overflow threading.TIMEOUT_MAX inside the holder's wait.
+        for bad in ("", "0", "-5", "abc", "inf", "nan", "601", "1e10"):
             with self.subTest(value=bad):
                 with self.assertRaises(ValueError):
                     self.render.parse_manifest(self.manifest_with(bad))
@@ -115,6 +117,8 @@ class TestManifestFact(unittest.TestCase):
         args.manifest = {"acp_session_new_timeout": "5"}
         self.assertEqual(self.acp.session_new_extra(args), 0.0)
         args.manifest = {"acp_session_new_timeout": "garbage"}
+        self.assertEqual(self.acp.session_new_timeout(args), 15.0)
+        args.manifest = {"acp_session_new_timeout": "1e10"}
         self.assertEqual(self.acp.session_new_timeout(args), 15.0)
 
     def test_generated_codex_skill_carries_the_fact(self) -> None:
@@ -177,14 +181,15 @@ class TestStartWait(unittest.TestCase):
         lines.append(f"acp_session_new_timeout: {json.dumps(value)}")
         manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    def acp(self, command: str, *args: str, timeout: float = 60) -> dict[str, Any]:
+    def acp(self, command: str, *args: str, timeout: float = 90,
+            delay_ms: int = DELAY_MS) -> dict[str, Any]:
         result = subprocess.run(
             [sys.executable, str(self.skill / "scripts" / "kaola-acp.py"), "grok", command,
              "--repo", str(self.repo), "--session", self.session,
              "--command", mock_command(), *args],
             capture_output=True, text=True, timeout=timeout,
             env=hermetic_env(KAOLA_ACP_RECORD_ROOT=str(self.record_root),
-                             **{DELAY_ENV: str(DELAY_MS)}),
+                             **{DELAY_ENV: str(delay_ms)}),
         )
         try:
             return json.loads(result.stdout)
@@ -192,10 +197,10 @@ class TestStartWait(unittest.TestCase):
             self.fail(f"kaola-acp {command}: rc={result.returncode}\n"
                       f"stdout={result.stdout!r}\nstderr={result.stderr!r}")
 
-    def start(self) -> dict[str, Any]:
+    def start(self, delay_ms: int = DELAY_MS) -> dict[str, Any]:
         # A holder never self-exits: register its force-stop before the start.
         self.addCleanup(lambda: self.acp("stop", "--force", timeout=30))
-        return self.acp("start")
+        return self.acp("start", delay_ms=delay_ms)
 
     def test_short_declared_wait_fails_start_and_the_late_answer_is_orphaned(self) -> None:
         self.declare("1")
@@ -218,6 +223,25 @@ class TestStartWait(unittest.TestCase):
         self.assertNotIn("error", receipt, receipt)
         self.assertEqual(receipt.get("state"), "ready")
         self.assertTrue(receipt.get("acp_session_id"))
+
+    # The next two cases cross the shared 15 s / 20 s bounds for real, so they
+    # prove the client half: kaola-acp.py must hand the holder the declared wait
+    # and widen its own start window, not just compute the numbers.
+
+    def test_declared_wait_widens_the_client_start_window(self) -> None:
+        # session/new answers ~21 s after spawn: past the shared 20 s start
+        # window, inside the 35 s window a declared 30 s wait earns.
+        self.declare("30")
+        receipt = self.start(delay_ms=21000)
+        self.assertNotIn("error", receipt, receipt)
+        self.assertEqual(receipt.get("state"), "ready")
+
+    def test_preflight_hands_the_probe_the_declared_wait(self) -> None:
+        # session/new answers ~16 s after spawn: past the holder's 15 s default.
+        self.declare("20")
+        receipt = self.acp("preflight", delay_ms=16000)
+        self.assertNotEqual((receipt.get("error") or {}).get("code"), "acp-session-timeout", receipt)
+        self.assertTrue(receipt.get("session_probe"), receipt)
 
 
 if __name__ == "__main__":

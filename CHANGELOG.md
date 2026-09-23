@@ -6,11 +6,12 @@
   fixed 15 s for the `session/new` answer, and live Codex sometimes answered after ~18 s: the
   start failed with `acp-session-timeout` even though the session would have come up (the late
   answer showed up as `orphan_response`). An optional manifest key, `acp_session_new_timeout`
-  (seconds), now sets this wait per platform for `start` and the `preflight` probe. The start
-  window (20 s) and the probe bound (60 s) grow by the same amount, so they still cover it. Codex
-  declares `60`. Every other platform declares nothing and keeps 15 s / 20 s / 60 s exactly. A
-  real non-answer is still `acp-session-timeout`, and a late answer is still not adopted. No new
-  gate or retry was added.
+  (seconds, up to 600), now sets this wait per platform for `start` and the `preflight` probe.
+  The client start window (20 s) and the probe bound (60 s) grow by the amount it exceeds 15 s,
+  so they keep the margins they had over the default wait. Codex declares `60`. Every other
+  platform declares nothing and keeps 15 s / 20 s / 60 s exactly. The holder still reports no
+  answer in time as `acp-session-timeout`, and a late answer is still not adopted. No new gate
+  or retry was added.
 
 - **Read-only installed-platforms survey: `kaola-acp survey` (Issue #147).** A new host-wide
   command answers which platform CLIs are installed, as one `kaola-acp-survey/1` object with a

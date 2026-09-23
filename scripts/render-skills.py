@@ -133,8 +133,10 @@ def parse_manifest(path: Path) -> dict[str, str]:
             seconds = float(result["acp_session_new_timeout"])
         except ValueError:
             seconds = 0.0
-        if not 0 < seconds < float("inf"):
-            raise ValueError(f"{path}: acp_session_new_timeout must be positive seconds")
+        # Capped at the holder's 600 s idle exit (and far below
+        # threading.TIMEOUT_MAX, which an unbounded wait would overflow).
+        if not 0 < seconds <= 600:
+            raise ValueError(f"{path}: acp_session_new_timeout must be seconds in (0, 600]")
     if "acp_command_alt" in result and not result["alt_tier_label"]:
         raise ValueError(f"{path}: acp_command_alt needs alt_tier_label")
     # Issue #111: the third preset slot is all-or-nothing. A label without a
