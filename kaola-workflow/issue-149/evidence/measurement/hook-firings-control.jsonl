@@ -1,0 +1,1 @@
+{"timestamp_utc": "2026-09-23T12:47:45.198756+00:00", "matcher": "compact", "raw_stdin": "{\"session_id\":\"positive-control\",\"cwd\":\"/tmp\",\"hook_event_name\":\"SessionStart\",\"source\":\"compact\"}\n", "parsed_stdin": {"session_id": "positive-control", "cwd": "/tmp", "hook_event_name": "SessionStart", "source": "compact"}}
