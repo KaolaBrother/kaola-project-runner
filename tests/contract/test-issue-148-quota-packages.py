@@ -87,11 +87,19 @@ class QuotaSchemaTest(unittest.TestCase):
 
     def test_partial_rules_leave_unverified_ids_unmapped(self) -> None:
         cases = [
-            ("claude-code", "opus", None),
+            ("claude-code", "opus", "claude-code:subscription"),
+            ("claude-code", "sonnet", "claude-code:subscription"),
+            ("claude-code", "haiku", "claude-code:subscription"),
+            ("claude-code", "default", "claude-code:subscription"),
             ("claude-code", "fable", "claude-code:scoped-weekly"),
             ("claude-code", "claude-fable-5", None),
             ("cursor-cli", "auto", "cursor-cli:cursor-models"),
-            ("cursor-cli", "grok-4.7-xhigh", None),
+            ("cursor-cli", "grok-4.7", "cursor-cli:other-models"),
+            ("cursor-cli", "grok-4.7-xhigh", "cursor-cli:other-models"),
+            ("cursor-cli", "grok-4.7-xhigh-fast", "cursor-cli:other-models"),
+            ("cursor-cli", "claude-opus-5-5", "cursor-cli:other-models"),
+            ("cursor-cli", "claude-opus-5-5-high", "cursor-cli:other-models"),
+            ("cursor-cli", "brand-new-model", None),
             ("droid", "claude-opus-5-5", None),
             ("dsh", "opencode-go/deepseek-v4.1-flash", "dsh:opencode-go"),
             ("dsh", '["opencode-go","deepseek-v4.1-flash"]', "dsh:opencode-go"),
