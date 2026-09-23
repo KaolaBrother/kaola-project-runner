@@ -14,7 +14,10 @@
   a worker event both quoted the loaded Skill without reading it. The worker bound to the codex
   Host, the Host exact-stopped it, and the sweep found nothing left. The Issue #122 rule is
   unchanged: any platform without an entry still fails closed. Its tests now use an installed
-  copy with codex's entry emptied.
+  copy with codex's entry emptied. The heartbeat skeleton now says every Host (not only ZCode)
+  rewrites `.kaola/heartbeat-prompt.json`; Codex's own timer carrier is for a Codex that is not a
+  Host. Pass the `$` entry single-quoted or via `--stdin`, because in double quotes a shell expands
+  `$kaola`.
 
 - **Codex start no longer fails early on a slow `session/new` (Issue #146).** The holder waited a
   fixed 15 s for the `session/new` answer, and live Codex sometimes answered after ~18 s: the

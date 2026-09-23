@@ -65,7 +65,9 @@ Notes:
   usage-limit notice, so codex stayed refused. Measured then on gpt-6-sol/high:
   E2 in a fresh session, and the negative control answered `SKILL-NOT-LOADED`.
   D3 as below with a codex worker (under the shadow `HOME` dsh had no
-  credentials and claude-code no login). Like every Host, a codex Host's beat
+  credentials and claude-code no login). The roots column is #119's 1.11.0
+  probe; #126 held only `~/.codex/skills`. A shell must pass the entry
+  single-quoted or via `--stdin`: in double quotes `$kaola` expands. Like every Host, a codex Host's beat
   rewrites `.kaola/heartbeat-prompt.json`; Codex's own timer serves only a
   Codex supervisor that is not a Host.
 - **dsh** has an entry despite advertising no commands: `/kaola-project-runner`

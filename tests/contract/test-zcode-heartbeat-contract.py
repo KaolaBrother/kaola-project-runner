@@ -1369,8 +1369,10 @@ def test_canonical_heartbeat_spec_stays_one_set() -> None:
           "the ZCode event-carrier mechanism is specified in the Skill, not re-specified in the skeleton")
     check(text.count(".kaola/heartbeat-prompt.json") == 1,
           "the ZCode prompt carrier is named exactly once in the skeleton (one set)")
-    check("ZCode Host 更新项目根 `.kaola/heartbeat-prompt.json`" in text,
-          "the skeleton scopes that carrier to the ZCode Host and leaves other hosts their own")
+    check("Host 更新项目根 `.kaola/heartbeat-prompt.json`" in text
+          and "非 Host 的 Codex 更新其定时系统" in text,
+          "the skeleton scopes that carrier to every event-driven Host (ZCode and, since "
+          "Issue #126, codex) and leaves a non-Host Codex its own timer carrier")
     rendered = sorted((ROOT / "skills" / "kaola-project-runner").glob("**/heartbeat-skeleton*"))
     check(len(rendered) == 1, f"the orchestrator package carries exactly one skeleton ({rendered})")
 
