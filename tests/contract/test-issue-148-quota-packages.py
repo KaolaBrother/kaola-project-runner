@@ -94,6 +94,7 @@ class QuotaSchemaTest(unittest.TestCase):
             ("claude-code", "fable", "claude-code:scoped-weekly"),
             ("claude-code", "claude-fable-5", None),
             ("cursor-cli", "auto", "cursor-cli:cursor-models"),
+            ("cursor-cli", "default", "cursor-cli:cursor-models"),
             ("cursor-cli", "grok-4.7", "cursor-cli:other-models"),
             ("cursor-cli", "grok-4.7-xhigh", "cursor-cli:other-models"),
             ("cursor-cli", "grok-4.7-xhigh-fast", "cursor-cli:other-models"),
