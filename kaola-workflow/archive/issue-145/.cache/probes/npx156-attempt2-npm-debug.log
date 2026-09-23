@@ -1,0 +1,237 @@
+0 verbose cli /opt/homebrew/Cellar/node@24/24.18.0/bin/node /opt/homebrew/Cellar/node@24/24.18.0/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@11.16.0
+2 info using node@v24.18.0
+3 silly config load:file:/opt/homebrew/Cellar/node@24/24.18.0/lib/node_modules/npm/npmrc
+4 silly config load:file:/private/tmp/kpr145/.npmrc
+5 silly config load:file:/Users/ylminiserver/.npmrc
+6 silly config load:file:/opt/homebrew/etc/npmrc
+7 verbose title npm exec codex --version
+8 verbose argv "exec" "--yes" "--package" "@openai/codex@0.156.1" "--package" "@agentclientprotocol/codex-acp@1.13.0" "--" "codex" "--version"
+9 verbose logfile logs-max:10 dir:/Users/ylminiserver/.npm/_logs/2026-09-23T03_50_02_803Z-
+10 verbose logfile /Users/ylminiserver/.npm/_logs/2026-09-23T03_50_02_803Z-debug-0.log
+11 silly logfile start cleaning logs, removing 1 files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 silly logfile done cleaning log files
+14 http fetch GET 200 https://registry.npmjs.org/@agentclientprotocol%2fcodex-acp 1155ms (cache revalidated)
+15 http fetch GET 200 https://registry.npmjs.org/@openai%2fcodex 27481ms (cache updated)
+16 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+17 silly idealTree buildDeps
+18 silly fetch manifest @agentclientprotocol/codex-acp@1.13.0
+19 silly packumentCache full:https://registry.npmjs.org/@agentclientprotocol%2fcodex-acp cache-miss
+20 http fetch GET 200 https://registry.npmjs.org/@agentclientprotocol%2fcodex-acp 229ms (cache revalidated)
+21 silly packumentCache full:https://registry.npmjs.org/@agentclientprotocol%2fcodex-acp set size:248890 disposed:false
+22 silly fetch manifest @openai/codex@0.156.1
+23 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+24 http fetch GET 200 https://registry.npmjs.org/@openai%2fcodex 31555ms (cache updated)
+25 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:undefined disposed:false
+26 silly placeDep ROOT @agentclientprotocol/codex-acp@1.13.0 OK for:  want: 1.13.0
+27 silly placeDep ROOT @openai/codex@0.156.1 OK for:  want: 0.156.1
+28 silly fetch manifest zod@^4.0.0
+29 silly packumentCache full:https://registry.npmjs.org/zod cache-miss
+30 silly fetch manifest diff@^9.0.0
+31 silly packumentCache full:https://registry.npmjs.org/diff cache-miss
+32 silly fetch manifest open@^11.0.1
+33 silly packumentCache full:https://registry.npmjs.org/open cache-miss
+34 silly fetch manifest @openai/codex@^0.155.1
+35 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+36 silly fetch manifest vscode-jsonrpc@^9.0.1
+37 silly packumentCache full:https://registry.npmjs.org/vscode-jsonrpc cache-miss
+38 silly fetch manifest @agentclientprotocol/sdk@^1.5.0
+39 silly packumentCache full:https://registry.npmjs.org/@agentclientprotocol%2fsdk cache-miss
+40 silly fetch manifest @openai/codex-linux-x64@npm:@openai/codex@0.156.1-linux-x64
+41 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+42 silly fetch manifest @openai/codex-win32-x64@npm:@openai/codex@0.156.1-win32-x64
+43 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+44 silly fetch manifest @openai/codex-darwin-x64@npm:@openai/codex@0.156.1-darwin-x64
+45 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+46 http cache https://registry.npmjs.org/@openai%2fcodex 21ms (cache hit)
+47 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+48 silly fetch manifest @openai/codex-linux-arm64@npm:@openai/codex@0.156.1-linux-arm64
+49 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+50 http cache https://registry.npmjs.org/@openai%2fcodex 70ms (cache hit)
+51 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+52 silly fetch manifest @openai/codex-win32-arm64@npm:@openai/codex@0.156.1-win32-arm64
+53 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+54 http cache https://registry.npmjs.org/@openai%2fcodex 108ms (cache hit)
+55 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+56 silly fetch manifest @openai/codex-darwin-arm64@npm:@openai/codex@0.156.1-darwin-arm64
+57 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+58 http cache https://registry.npmjs.org/@openai%2fcodex 158ms (cache hit)
+59 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+60 http cache https://registry.npmjs.org/@openai%2fcodex 133ms (cache hit)
+61 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+62 http cache https://registry.npmjs.org/@openai%2fcodex 93ms (cache hit)
+63 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+64 http cache https://registry.npmjs.org/@openai%2fcodex 173ms (cache hit)
+65 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+66 http fetch GET 200 https://registry.npmjs.org/diff 310ms (cache revalidated)
+67 silly packumentCache full:https://registry.npmjs.org/diff set size:154400 disposed:false
+68 http fetch GET 200 https://registry.npmjs.org/vscode-jsonrpc 311ms (cache revalidated)
+69 silly packumentCache full:https://registry.npmjs.org/vscode-jsonrpc set size:400356 disposed:false
+70 http fetch GET 200 https://registry.npmjs.org/zod 1078ms (cache revalidated)
+71 silly packumentCache full:https://registry.npmjs.org/zod set size:4166672 disposed:false
+72 http fetch GET 200 https://registry.npmjs.org/open 1128ms (cache revalidated)
+73 silly packumentCache full:https://registry.npmjs.org/open set size:145310 disposed:false
+74 http fetch GET 200 https://registry.npmjs.org/@agentclientprotocol%2fsdk 1978ms (cache revalidated)
+75 silly packumentCache full:https://registry.npmjs.org/@agentclientprotocol%2fsdk set size:184332 disposed:false
+76 silly placeDep ROOT @agentclientprotocol/sdk@1.5.0 OK for: @agentclientprotocol/codex-acp@1.13.0 want: ^1.5.0
+77 silly placeDep ROOT zod@4.6.5 OK for: @agentclientprotocol/sdk@1.5.0 want: ^3.25.0 || ^4.0.0
+78 silly placeDep node_modules/@agentclientprotocol/codex-acp @openai/codex@0.155.1 OK for: @agentclientprotocol/codex-acp@1.13.0 want: ^0.155.1
+79 silly placeDep ROOT diff@9.0.0 OK for: @agentclientprotocol/codex-acp@1.13.0 want: ^9.0.0
+80 silly placeDep ROOT open@11.0.4 OK for: @agentclientprotocol/codex-acp@1.13.0 want: ^11.0.1
+81 silly placeDep ROOT vscode-jsonrpc@9.0.2 OK for: @agentclientprotocol/codex-acp@1.13.0 want: ^9.0.1
+82 silly fetch manifest @openai/codex-linux-x64@npm:@openai/codex@0.155.1-linux-x64
+83 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+84 silly fetch manifest @openai/codex-win32-x64@npm:@openai/codex@0.155.1-win32-x64
+85 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+86 silly fetch manifest @openai/codex-darwin-x64@npm:@openai/codex@0.155.1-darwin-x64
+87 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+88 silly fetch manifest @openai/codex-linux-arm64@npm:@openai/codex@0.155.1-linux-arm64
+89 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+90 silly fetch manifest @openai/codex-win32-arm64@npm:@openai/codex@0.155.1-win32-arm64
+91 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+92 silly fetch manifest @openai/codex-darwin-arm64@npm:@openai/codex@0.155.1-darwin-arm64
+93 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex cache-miss
+94 silly fetch manifest is-in-ssh@^1.0.0
+95 silly packumentCache full:https://registry.npmjs.org/is-in-ssh cache-miss
+96 silly fetch manifest wsl-utils@^1.0.0
+97 silly packumentCache full:https://registry.npmjs.org/wsl-utils cache-miss
+98 silly fetch manifest default-browser@^5.5.1
+99 silly packumentCache full:https://registry.npmjs.org/default-browser cache-miss
+100 http cache https://registry.npmjs.org/@openai%2fcodex 29ms (cache hit)
+101 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+102 silly fetch manifest define-lazy-prop@^3.0.0
+103 silly packumentCache full:https://registry.npmjs.org/define-lazy-prop cache-miss
+104 http cache https://registry.npmjs.org/@openai%2fcodex 78ms (cache hit)
+105 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+106 silly fetch manifest powershell-utils@^0.2.1
+107 silly packumentCache full:https://registry.npmjs.org/powershell-utils cache-miss
+108 http cache https://registry.npmjs.org/@openai%2fcodex 118ms (cache hit)
+109 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+110 silly fetch manifest is-inside-container@^1.0.0
+111 silly packumentCache full:https://registry.npmjs.org/is-inside-container cache-miss
+112 http cache https://registry.npmjs.org/@openai%2fcodex 156ms (cache hit)
+113 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+114 http cache https://registry.npmjs.org/@openai%2fcodex 200ms (cache hit)
+115 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+116 http cache https://registry.npmjs.org/@openai%2fcodex 238ms (cache hit)
+117 silly packumentCache full:https://registry.npmjs.org/@openai%2fcodex set size:15211366 disposed:false
+118 http fetch GET 200 https://registry.npmjs.org/default-browser 264ms (cache revalidated)
+119 silly packumentCache full:https://registry.npmjs.org/default-browser set size:33554 disposed:false
+120 http fetch GET 200 https://registry.npmjs.org/wsl-utils 264ms (cache revalidated)
+121 silly packumentCache full:https://registry.npmjs.org/wsl-utils set size:17165 disposed:false
+122 http fetch GET 200 https://registry.npmjs.org/is-in-ssh 266ms (cache revalidated)
+123 silly packumentCache full:https://registry.npmjs.org/is-in-ssh set size:3973 disposed:false
+124 http fetch GET 200 https://registry.npmjs.org/powershell-utils 371ms (cache revalidated)
+125 silly packumentCache full:https://registry.npmjs.org/powershell-utils set size:12045 disposed:false
+126 http fetch GET 200 https://registry.npmjs.org/is-inside-container 336ms (cache revalidated)
+127 silly packumentCache full:https://registry.npmjs.org/is-inside-container set size:4403 disposed:false
+128 http fetch GET 200 https://registry.npmjs.org/define-lazy-prop 421ms (cache revalidated)
+129 silly packumentCache full:https://registry.npmjs.org/define-lazy-prop set size:9337 disposed:false
+130 silly placeDep ROOT @openai/codex-darwin-arm64@0.156.1-darwin-arm64 OK for: @openai/codex@0.156.1 want: npm:@openai/codex@0.156.1-darwin-arm64
+131 silly placeDep ROOT @openai/codex-darwin-x64@0.156.1-darwin-x64 OK for: @openai/codex@0.156.1 want: npm:@openai/codex@0.156.1-darwin-x64
+132 silly placeDep ROOT @openai/codex-linux-arm64@0.156.1-linux-arm64 OK for: @openai/codex@0.156.1 want: npm:@openai/codex@0.156.1-linux-arm64
+133 silly placeDep ROOT @openai/codex-linux-x64@0.156.1-linux-x64 OK for: @openai/codex@0.156.1 want: npm:@openai/codex@0.156.1-linux-x64
+134 silly placeDep ROOT @openai/codex-win32-arm64@0.156.1-win32-arm64 OK for: @openai/codex@0.156.1 want: npm:@openai/codex@0.156.1-win32-arm64
+135 silly placeDep ROOT @openai/codex-win32-x64@0.156.1-win32-x64 OK for: @openai/codex@0.156.1 want: npm:@openai/codex@0.156.1-win32-x64
+136 silly placeDep ROOT default-browser@5.5.1 OK for: open@11.0.4 want: ^5.5.1
+137 silly placeDep ROOT define-lazy-prop@3.0.0 OK for: open@11.0.4 want: ^3.0.0
+138 silly placeDep ROOT is-in-ssh@1.0.0 OK for: open@11.0.4 want: ^1.0.0
+139 silly placeDep ROOT is-inside-container@1.0.0 OK for: open@11.0.4 want: ^1.0.0
+140 silly placeDep ROOT powershell-utils@0.2.1 OK for: open@11.0.4 want: ^0.2.1
+141 silly placeDep ROOT wsl-utils@1.0.0 OK for: open@11.0.4 want: ^1.0.0
+142 silly fetch manifest bundle-name@^4.1.0
+143 silly packumentCache full:https://registry.npmjs.org/bundle-name cache-miss
+144 silly fetch manifest default-browser-id@^5.0.0
+145 silly packumentCache full:https://registry.npmjs.org/default-browser-id cache-miss
+146 silly fetch manifest is-docker@^3.0.0
+147 silly packumentCache full:https://registry.npmjs.org/is-docker cache-miss
+148 silly fetch manifest is-wsl@^3.1.0
+149 silly packumentCache full:https://registry.npmjs.org/is-wsl cache-miss
+150 silly fetch manifest powershell-utils@^0.1.0
+151 silly packumentCache full:https://registry.npmjs.org/powershell-utils cache-hit
+152 http fetch GET 200 https://registry.npmjs.org/is-docker 217ms (cache revalidated)
+153 silly packumentCache full:https://registry.npmjs.org/is-docker set size:23690 disposed:false
+154 http fetch GET 200 https://registry.npmjs.org/bundle-name 220ms (cache revalidated)
+155 silly packumentCache full:https://registry.npmjs.org/bundle-name set size:17344 disposed:false
+156 http fetch GET 200 https://registry.npmjs.org/default-browser-id 220ms (cache revalidated)
+157 silly packumentCache full:https://registry.npmjs.org/default-browser-id set size:24398 disposed:false
+158 http fetch GET 200 https://registry.npmjs.org/is-wsl 221ms (cache revalidated)
+159 silly packumentCache full:https://registry.npmjs.org/is-wsl set size:20683 disposed:false
+160 silly placeDep ROOT bundle-name@4.1.0 OK for: default-browser@5.5.1 want: ^4.1.0
+161 silly placeDep ROOT default-browser-id@5.0.1 OK for: default-browser@5.5.1 want: ^5.0.0
+162 silly fetch manifest run-applescript@^7.0.0
+163 silly packumentCache full:https://registry.npmjs.org/run-applescript cache-miss
+164 http fetch GET 200 https://registry.npmjs.org/run-applescript 234ms (cache revalidated)
+165 silly packumentCache full:https://registry.npmjs.org/run-applescript set size:27897 disposed:false
+166 silly placeDep ROOT run-applescript@7.1.0 OK for: bundle-name@4.1.0 want: ^7.0.0
+167 silly placeDep ROOT is-docker@3.0.0 OK for: is-inside-container@1.0.0 want: ^3.0.0
+168 silly placeDep ROOT is-wsl@3.1.1 OK for: wsl-utils@1.0.0 want: ^3.1.0
+169 silly placeDep node_modules/wsl-utils powershell-utils@0.1.0 OK for: wsl-utils@1.0.0 want: ^0.1.0
+170 silly placeDep node_modules/@agentclientprotocol/codex-acp @openai/codex-darwin-arm64@0.155.1-darwin-arm64 OK for: @openai/codex@0.155.1 want: npm:@openai/codex@0.155.1-darwin-arm64
+171 silly placeDep node_modules/@agentclientprotocol/codex-acp @openai/codex-darwin-x64@0.155.1-darwin-x64 OK for: @openai/codex@0.155.1 want: npm:@openai/codex@0.155.1-darwin-x64
+172 silly placeDep node_modules/@agentclientprotocol/codex-acp @openai/codex-linux-arm64@0.155.1-linux-arm64 OK for: @openai/codex@0.155.1 want: npm:@openai/codex@0.155.1-linux-arm64
+173 silly placeDep node_modules/@agentclientprotocol/codex-acp @openai/codex-linux-x64@0.155.1-linux-x64 OK for: @openai/codex@0.155.1 want: npm:@openai/codex@0.155.1-linux-x64
+174 silly placeDep node_modules/@agentclientprotocol/codex-acp @openai/codex-win32-arm64@0.155.1-win32-arm64 OK for: @openai/codex@0.155.1 want: npm:@openai/codex@0.155.1-win32-arm64
+175 silly placeDep node_modules/@agentclientprotocol/codex-acp @openai/codex-win32-x64@0.155.1-win32-x64 OK for: @openai/codex@0.155.1 want: npm:@openai/codex@0.155.1-win32-x64
+176 silly reify moves {}
+177 silly audit bulk request {
+177 silly audit   '@agentclientprotocol/codex-acp': [ '1.13.0' ],
+177 silly audit   '@openai/codex': [
+177 silly audit     '0.156.1',
+177 silly audit     '0.155.1',
+177 silly audit     '0.156.1-darwin-arm64',
+177 silly audit     '0.156.1-darwin-x64',
+177 silly audit     '0.156.1-linux-arm64',
+177 silly audit     '0.156.1-linux-x64',
+177 silly audit     '0.156.1-win32-arm64',
+177 silly audit     '0.156.1-win32-x64',
+177 silly audit     '0.155.1-darwin-arm64',
+177 silly audit     '0.155.1-darwin-x64',
+177 silly audit     '0.155.1-linux-arm64',
+177 silly audit     '0.155.1-linux-x64',
+177 silly audit     '0.155.1-win32-arm64',
+177 silly audit     '0.155.1-win32-x64'
+177 silly audit   ],
+177 silly audit   '@agentclientprotocol/sdk': [ '1.5.0' ],
+177 silly audit   zod: [ '4.6.5' ],
+177 silly audit   diff: [ '9.0.0' ],
+177 silly audit   open: [ '11.0.4' ],
+177 silly audit   'vscode-jsonrpc': [ '9.0.2' ],
+177 silly audit   'default-browser': [ '5.5.1' ],
+177 silly audit   'define-lazy-prop': [ '3.0.0' ],
+177 silly audit   'is-in-ssh': [ '1.0.0' ],
+177 silly audit   'is-inside-container': [ '1.0.0' ],
+177 silly audit   'powershell-utils': [ '0.2.1', '0.1.0' ],
+177 silly audit   'wsl-utils': [ '1.0.0' ],
+177 silly audit   'bundle-name': [ '4.1.0' ],
+177 silly audit   'default-browser-id': [ '5.0.1' ],
+177 silly audit   'run-applescript': [ '7.1.0' ],
+177 silly audit   'is-docker': [ '3.0.0' ],
+177 silly audit   'is-wsl': [ '3.1.1' ]
+177 silly audit }
+178 http cache is-wsl@https://registry.npmjs.org/is-wsl/-/is-wsl-3.1.1.tgz 0ms (cache hit)
+179 http cache run-applescript@https://registry.npmjs.org/run-applescript/-/run-applescript-7.1.0.tgz 0ms (cache hit)
+180 http cache is-docker@https://registry.npmjs.org/is-docker/-/is-docker-3.0.0.tgz 0ms (cache hit)
+181 http cache default-browser-id@https://registry.npmjs.org/default-browser-id/-/default-browser-id-5.0.1.tgz 0ms (cache hit)
+182 http cache bundle-name@https://registry.npmjs.org/bundle-name/-/bundle-name-4.1.0.tgz 0ms (cache hit)
+183 http cache wsl-utils@https://registry.npmjs.org/wsl-utils/-/wsl-utils-1.0.0.tgz 0ms (cache hit)
+184 http cache powershell-utils@https://registry.npmjs.org/powershell-utils/-/powershell-utils-0.2.1.tgz 0ms (cache hit)
+185 http cache is-inside-container@https://registry.npmjs.org/is-inside-container/-/is-inside-container-1.0.0.tgz 0ms (cache hit)
+186 http cache define-lazy-prop@https://registry.npmjs.org/define-lazy-prop/-/define-lazy-prop-3.0.0.tgz 0ms (cache hit)
+187 http cache default-browser@https://registry.npmjs.org/default-browser/-/default-browser-5.5.1.tgz 0ms (cache hit)
+188 http cache @openai/codex-darwin-arm64@https://registry.npmjs.org/@openai/codex/-/codex-0.156.1-darwin-arm64.tgz 0ms (cache hit)
+189 http cache vscode-jsonrpc@https://registry.npmjs.org/vscode-jsonrpc/-/vscode-jsonrpc-9.0.2.tgz 0ms (cache hit)
+190 http cache open@https://registry.npmjs.org/open/-/open-11.0.4.tgz 0ms (cache hit)
+191 http cache diff@https://registry.npmjs.org/diff/-/diff-9.0.0.tgz 0ms (cache hit)
+192 http cache zod@https://registry.npmjs.org/zod/-/zod-4.6.5.tgz 0ms (cache hit)
+193 http cache @agentclientprotocol/sdk@https://registry.npmjs.org/@agentclientprotocol/sdk/-/sdk-1.5.0.tgz 0ms (cache hit)
+194 http cache @openai/codex@https://registry.npmjs.org/@openai/codex/-/codex-0.156.1.tgz 0ms (cache hit)
+195 http cache @agentclientprotocol/codex-acp@https://registry.npmjs.org/@agentclientprotocol/codex-acp/-/codex-acp-1.13.0.tgz 0ms (cache hit)
+196 http cache @openai/codex-darwin-arm64@https://registry.npmjs.org/@openai/codex/-/codex-0.155.1-darwin-arm64.tgz 0ms (cache hit)
+197 http cache powershell-utils@https://registry.npmjs.org/powershell-utils/-/powershell-utils-0.1.0.tgz 0ms (cache hit)
+198 http cache @openai/codex@https://registry.npmjs.org/@openai/codex/-/codex-0.155.1.tgz 0ms (cache hit)
+199 http cache is-in-ssh@https://registry.npmjs.org/is-in-ssh/-/is-in-ssh-1.0.0.tgz 0ms (cache hit)
+200 silly tarball no local data for @openai/codex-darwin-arm64@https://registry.npmjs.org/@openai/codex/-/codex-0.156.1-darwin-arm64.tgz. Extracting by manifest.
+201 http fetch POST 200 https://registry.npmjs.org/-/npm/v1/security/advisories/bulk 303ms
+202 silly audit report {}
