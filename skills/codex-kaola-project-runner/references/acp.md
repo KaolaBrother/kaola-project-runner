@@ -1,6 +1,6 @@
 # Codex CLI ACP transport
 
-Command: `npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0 codex-acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: adapter translates ACP stdio to Codex App Server; CODEX_PATH selects the Codex binary, otherwise its bundled @openai/codex pin; session capabilities advertise empty objects; native ACP mode read-only is upstream 'Ask for approval' (workspace-write + on-request, permits workspace writes) and agent is 'Approve for me' (auto_review) — ACP read-only is upstream on-request approval, not an OS sandbox; the Runner has no path to OS read-only.
+Command: `npx --yes --package @openai/codex@0.155.1 --package @agentclientprotocol/codex-acp@1.13.0 codex-acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: adapter translates ACP stdio to Codex App Server; CODEX_PATH selects the Codex binary, otherwise its bundled @openai/codex pin; session capabilities advertise empty objects; native ACP mode read-only is upstream 'Ask for approval' (workspace-write + on-request, permits workspace writes) and agent is 'Approve for me' (auto_review) — ACP read-only is upstream on-request approval, not an OS sandbox; the Runner has no path to OS read-only.
 
 ## Command surface
 

@@ -1509,29 +1509,30 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         if self.mock_log.is_file():
             self.mock_log.write_text("", encoding="utf-8")
 
-    def test_codex_default_applies_model_fast_mode_in_order_without_effort(self) -> None:
-        # Issue #142: gpt-6-sol advertises no effort option on the pinned ACP
-        # surface (reasoning_effort is rejected -32602), so the default tier
-        # sends no effort at all.
+    def test_codex_default_applies_model_effort_fast_mode_in_order(self) -> None:
+        # Issue #145: on codex-acp 1.13.0 (codex 0.155.1) gpt-6-sol advertises
+        # reasoning_effort and applies high (corrects the Issue #142 no-effort
+        # finding, which was specific to the old 1.11.0 bundled catalog).
         receipt = self.start("codex")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         self.assertEqual(
             self.config_events(),
             [
                 ("model", "gpt-6-sol"),
+                ("reasoning_effort", "high"),
                 ("fast-mode", "off"),
                 ("mode", "agent-full-access"),
             ],
         )
         application = receipt.get("config_application") or {}
         self.assertTrue((application.get("model") or {}).get("applied"))
-        self.assertFalse((application.get("effort") or {}).get("applied"))
-        self.assertEqual((application.get("effort") or {}).get("reason"), "no-resolved-value")
+        self.assertTrue((application.get("effort") or {}).get("applied"))
         self.assertTrue((application.get("fast") or {}).get("applied"))
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("source"), "runner-default")
         self.assertEqual(selection.get("tier"), "default")
         self.assertEqual(selection.get("resolved_model"), "gpt-6-sol")
+        self.assertEqual(selection.get("resolved_effort"), "high")
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("requested"), "off")
         self.assertEqual(fast.get("effective"), "off")

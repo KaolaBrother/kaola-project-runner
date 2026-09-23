@@ -377,7 +377,7 @@ class MockAgent:
          "description": "Model Codex uses for the session",
          "category": "model", "type": "select", "options": [
              {"value": "gpt-6-sol", "name": "6 Sol",
-              "description": "Default Runner model (Issue #142)."},
+              "description": "Default Runner model (Issues #142, #145)."},
              {"value": "gpt-5.6-sol", "name": "5.6 Sol",
               "description": "Fast and affordable agentic coding model."},
              {"value": "gpt-6-astra", "name": "6 Astra",

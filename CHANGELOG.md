@@ -27,7 +27,21 @@
   option (`reasoning_effort` is rejected `-32602` for both `high` and `medium`), so the preset
   sends no effort (`no Runner effort override`); an explicit `--effort` stays a limitation
   receipt. The upgrade tier (`gpt-6-astra`/`high`), `acp_verified_versions`, and the npx pins are
-  unchanged.
+  unchanged. The no-effort finding held only for the old 1.11.0 adapter; the Issue #145 correction
+  below supersedes it.
+- **codex default tier is GPT-6 Sol High on codex-acp 1.13.0 (Issue #145, Owner correction of
+  #142).** `--tier default` now selects `gpt-6-sol` with `effort=high`. The #142 no-effort result
+  was specific to the old pinned surface: codex-acp derives effort options from the selected
+  model, and the 1.11.0 bundled codex 0.153.4 catalog did not know `gpt-6-sol`. Measured live on
+  2026-09-23 without a turn: on `npx @openai/codex@0.155.1` + `@agentclientprotocol/codex-acp@1.13.0`
+  the model option lists `gpt-6-sol` before any apply and, under it, `reasoning_effort` offers
+  `low`/`medium`/`high`/`xhigh`/`max`/`ultra`; `high` applies (`effective_model=gpt-6-sol`,
+  `effective_effort=high`, `effort_config_id=reasoning_effort`), and a `medium` probe read back
+  `medium`, proving the set is applied, not a config default. The upgrade tier
+  (`gpt-6-astra`/`high`) applies on the same surface. `acp_command` moves to those pins,
+  `acp_verified_versions` to `cli=0.155.1;adapter=1.13.0;protocol=1`, and `acp_wrapper_pin` to
+  `1.13.0`; the adapter still advertises `_meta.steering.supported=true` (source check; live
+  steering was measured on 1.11.0). Codex Host entry and Host model pin stay with #126.
 
 ## 0.5.8 — 2026-09-23 (latest-CLI tier landing release)
 

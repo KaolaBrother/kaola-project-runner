@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport
 
-ACP is the only transport (Issue #130). The ACP command is `npx --yes --package @openai/codex@0.153.4 --package @agentclientprotocol/codex-acp@1.11.0 codex-acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
+ACP is the only transport (Issue #130). The ACP command is `npx --yes --package @openai/codex@0.155.1 --package @agentclientprotocol/codex-acp@1.13.0 codex-acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
 
 | `mutation_status` | Safe interpretation |
 |---|---|
@@ -46,8 +46,8 @@ SESSION="codex-kaola-<purpose>"
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**GPT-6 Sol**: `gpt-6-sol`,
-no Runner effort override) and `--tier upgrade` (**GPT-6 Astra High**:
+presets — `--tier default` (**GPT-6 Sol High**: `gpt-6-sol`,
+effort=high) and `--tier upgrade` (**GPT-6 Astra High**:
 `gpt-6-astra`, effort=high) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,

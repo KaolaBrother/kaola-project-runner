@@ -19,8 +19,8 @@ PLATFORMS = {
     "claude-code": ("acp", "node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js"),
     "codex": (
         "acp",
-        "npx --yes --package @openai/codex@0.153.4 "
-        "--package @agentclientprotocol/codex-acp@1.11.0 codex-acp",
+        "npx --yes --package @openai/codex@0.155.1 "
+        "--package @agentclientprotocol/codex-acp@1.13.0 codex-acp",
     ),
     "zcode": ("acp", "$SKILL_DIR/scripts/kaola-zcode-acp.py"),
 }

@@ -1,7 +1,7 @@
 # Codex CLI steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**supported** (entry `_session/steering`). Native ACP steering extension: adapter 1.11.0 advertises `_meta.steering.supported=true` at `initialize` and serves `_session/steering`, returning `injected` while a turn runs (live: the original `session/prompt` still settled `end_turn` and absorbed the steer), so this is the one channel here that really acknowledges consumption. An idle call returns `startedNewTurn` - a detached turn - so the Runner refuses to steer an idle session.
+**supported** (entry `_session/steering`). Native ACP steering extension: adapters 1.11.0 and 1.13.0 advertise `_meta.steering.supported=true` at `initialize` and serve `_session/steering`, returning `injected` while a turn runs (live on 1.11.0: the original `session/prompt` still settled `end_turn` and absorbed the steer), so this is the one channel here that really acknowledges consumption. An idle call returns `startedNewTurn` - a detached turn - so the Runner refuses to steer an idle session.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
