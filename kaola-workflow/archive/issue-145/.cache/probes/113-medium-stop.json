@@ -1,0 +1,1 @@
+{"agent_exit_code": 0, "agent_exit_signal": null, "git": {"branch": "main", "dirty": true}, "mutation_status": "not_started", "platform": "codex", "repo": "/Volumes/WorkspaceA/ylminiserver/workspace/kaola-project-runner", "residual_pids": [], "schema_version": 3, "session": "codex-KPR-i145-probe-113m", "stopped": true, "swept_child_pgids": [], "transport": {"selected": "acp"}}

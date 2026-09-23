@@ -1,0 +1,10 @@
+{
+ "agent_info": {
+  "name": "@agentclientprotocol/codex-acp",
+  "title": "Codex",
+  "version": "1.13.0"
+ },
+ "protocol_version": 1,
+ "initial_config_options": [],
+ "final_config_options": []
+}

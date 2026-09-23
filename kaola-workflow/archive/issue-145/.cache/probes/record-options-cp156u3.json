@@ -1,0 +1,89 @@
+{
+ "agent_info": {
+  "name": "@agentclientprotocol/codex-acp",
+  "title": "Codex",
+  "version": "1.13.0"
+ },
+ "protocol_version": 1,
+ "initial_config_options": [
+  {
+   "id": "mode",
+   "currentValue": "agent",
+   "values": [
+    "read-only",
+    "agent",
+    "agent-full-access"
+   ]
+  },
+  {
+   "id": "collaboration_mode",
+   "currentValue": "default",
+   "values": [
+    "default",
+    "plan"
+   ]
+  },
+  {
+   "id": "model",
+   "currentValue": "gpt-6-sol",
+   "values": [
+    "gpt-6-sol",
+    "gpt-6-astra",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5"
+   ]
+  }
+ ],
+ "final_config_options": [
+  {
+   "id": "mode",
+   "currentValue": "agent-full-access",
+   "values": [
+    "read-only",
+    "agent",
+    "agent-full-access"
+   ]
+  },
+  {
+   "id": "collaboration_mode",
+   "currentValue": "default",
+   "values": [
+    "default",
+    "plan"
+   ]
+  },
+  {
+   "id": "model",
+   "currentValue": "gpt-6-astra",
+   "values": [
+    "gpt-6-astra",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5"
+   ]
+  },
+  {
+   "id": "reasoning_effort",
+   "currentValue": "high",
+   "values": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra"
+   ]
+  },
+  {
+   "id": "fast-mode",
+   "currentValue": "off",
+   "values": [
+    "off",
+    "on"
+   ]
+  }
+ ]
+}
