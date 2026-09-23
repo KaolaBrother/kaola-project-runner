@@ -243,7 +243,7 @@ class QuotaSchemaTest(unittest.TestCase):
             {"id": "extra_usage", "name": "Extra usage", "binds_models": False},
         ])
         with self.assertRaises(self.quota.QuotaError):
-            self.quota.parse_rule(json.dumps({"kind": "fallback", "package": "standard"}), 
+            self.quota.parse_rule(json.dumps({"kind": "fallback", "package": "standard"}),
                                    self.quota.parse_packages(packages))
         parsed = self.quota.parse_packages(packages)
         with self.assertRaises(self.quota.QuotaError):

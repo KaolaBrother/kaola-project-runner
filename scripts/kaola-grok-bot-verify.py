@@ -3,7 +3,7 @@
 
 Grok Bot is a bridge host: the account holds exactly **one** thin private Skill,
 ``kaola-delegator`` (the bridge), and everything else -- the Kaola-Delegator
-Skill, Project Runner, the nine platform workers, their references and scripts --
+Skill, Project Runner, the ten platform workers, their references and scripts --
 stays in the repository and is loaded on demand from a verified checkout on the
 bound execution target. This verifier proves that shape structurally:
 

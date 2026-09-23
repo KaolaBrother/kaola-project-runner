@@ -73,7 +73,7 @@ usage() {
     'Delegator stays in the plan on later reinstall/uninstall even when this' \
     '--platform omits zcode, so it is not left stale. Neither control-plane Skill' \
     'is a platform ID.' \
-    'With no --platform, installs all nine worker Skills plus the control-plane' \
+    'With no --platform, installs all ten worker Skills plus the control-plane' \
     'Skills for that destination (unless skipped). With no destination flags the' \
     'legacy Codex destination is used. Existing foreign paths are never replaced.' \
     'Installed Skills are shared blocks counted by reference: each receipt lists' \

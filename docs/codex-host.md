@@ -14,7 +14,7 @@ event-driven Project Runner Host (Issue #126): every turn opens with
 
 `./scripts/install-local.sh --runtime codex` installs the generated Skills into
 `${CODEX_HOME:-~/.codex}/skills` — `kaola-project-runner`, `kaola-delegator`
-(when `zcode` is in the plan), plus the nine `<platform>-kaola-project-runner`
+(when `zcode` is in the plan), plus the ten `<platform>-kaola-project-runner`
 workers as sibling directories — and, whenever the control-plane Skills are in
 the plan, the user-level recovery entry described next. `--method link|copy`
 and `--bin-links` behave as documented in the installer reference. A generic
