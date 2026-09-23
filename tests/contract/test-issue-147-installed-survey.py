@@ -13,10 +13,12 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -213,6 +215,33 @@ class InstalledSurveyTest(unittest.TestCase):
         self.assertEqual(rows["grok"]["status"], "present")
         self.assertEqual(rows["codex"]["status"], "unknown")
         self.assertIs(rows["codex"]["installed"], False)
+
+    def test_hung_login_shell_is_bounded(self) -> None:
+        # The shell hangs and a detached child outside its process group keeps
+        # stdout open; the survey still returns, reporting the login env
+        # unavailable instead of waiting on either.
+        pid_file = Path(self.tmp.name) / "daemon.pid"
+        hung = write_exec(Path(self.tmp.name) / "hung-shell", (
+            "#!/bin/sh\n"
+            f"'{sys.executable}' -c 'import os,time; os.setsid(); "
+            f"open(\"{pid_file}\",\"w\").write(str(os.getpid())); time.sleep(30)' &\n"
+            "sleep 30\n"
+        ))
+        module = load_cli_module()
+        module.SURVEY_LOGIN_TIMEOUT = 0.5
+        started = time.monotonic()
+        try:
+            fact, login = module.survey_login_env(str(hung), "argument")
+        finally:
+            if pid_file.exists():
+                try:
+                    os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                except (OSError, ValueError):
+                    pass
+        self.assertLess(time.monotonic() - started, 10.0)
+        self.assertIsNone(login)
+        self.assertEqual(fact["status"], "unavailable")
+        self.assertIn("did not answer", fact["detail"])
 
     def test_binary_env_overrides_win_in_launch_order(self) -> None:
         override = write_exec(Path(self.tmp.name) / "my-codex", "#!/bin/sh\nexit 0\n")

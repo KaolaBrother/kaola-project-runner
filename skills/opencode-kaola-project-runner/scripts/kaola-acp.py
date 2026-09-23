@@ -651,7 +651,13 @@ def survey_login_env(shell: str, source: str) -> tuple[dict[str, Any], dict[str,
             os.killpg(proc.pid, signal.SIGKILL)
         except OSError:
             pass
-        proc.communicate()
+        try:
+            proc.communicate(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            # A profile daemon outside the group still holds stdout open.
+            proc.kill()
+            if proc.stdout is not None:
+                proc.stdout.close()
         fact["detail"] = f"login shell did not answer within {SURVEY_LOGIN_TIMEOUT:g} s"
         return fact, None
     marker = (SURVEY_LOGIN_MARKER + "\n").encode()
