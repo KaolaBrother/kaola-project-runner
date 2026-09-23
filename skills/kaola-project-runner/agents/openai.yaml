@@ -1,6 +1,6 @@
 interface:
   display_name: "Project Runner"
-  short_description: "Supervise authorized CLI workers through the nine platform Runner Skills"
+  short_description: "Supervise authorized CLI workers through the ten platform Runner Skills"
   default_prompt: "Use $kaola-project-runner to recover authorization, supervise named CLI workers, review evidence, and finalize only after acceptance."
 policy:
   allow_implicit_invocation: true

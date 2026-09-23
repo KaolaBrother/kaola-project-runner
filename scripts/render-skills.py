@@ -334,13 +334,13 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         # description is otherwise a ScannerError under yaml.safe_load.
         "DESCRIPTION": json.dumps(
             "Use when the controlling Agent should supervise explicitly authorized "
-            "CLI workers through the nine platform Runner Skills: recover live "
+            "CLI workers through the ten platform Runner Skills: recover live "
             "authorization, dispatch and review work, accept deliveries before "
             "finalize, cap live workers at the authorized count, and stop each "
             "accepted seat without dropping close-out duties."
         ),
         "SHORT_DESCRIPTION": (
-            "Supervise authorized CLI workers through the nine platform Runner Skills"
+            "Supervise authorized CLI workers through the ten platform Runner Skills"
         ),
         "DEFAULT_PROMPT": (
             f"Use ${ORCHESTRATOR_NAME} to recover authorization, supervise named "

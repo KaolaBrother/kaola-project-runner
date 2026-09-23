@@ -1,12 +1,12 @@
 ---
 name: kaola-project-runner
-description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the nine platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, cap live workers at the authorized count, and stop each accepted seat without dropping close-out duties."
+description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the ten platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, cap live workers at the authorized count, and stop each accepted seat without dropping close-out duties."
 ---
 
 # Project Runner
 
 This Skill is the main control-plane Skill. It is not a platform Runner and has
-no transport adapter. The nine platform Runner Skills are workers: they only
+no transport adapter. The ten platform Runner Skills are workers: they only
 identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, mission ledger,
 child worktree, finalize, archive, and sink.
@@ -121,7 +121,7 @@ Quota packages: [references/quota-packages.md](references/quota-packages.md).
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | None until named; all nine platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
+| Allowed CLIs | None until named; all ten platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
 | Count | Named CLI without a count: one; it bounds live processes. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
 | Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
