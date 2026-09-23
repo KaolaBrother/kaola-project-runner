@@ -31,6 +31,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 - Focused validation: `./scripts/render-skills.py --check` and `./scripts/validate.sh`
 - Required integration validation: live ACP smoke per platform (start/observe/send/capture/stop)
 - Environment or service acceptance: requires python3 and the target CLI binary
+- Full-contract dev machine: `tmux`, bash >= 4 (`mapfile`/`BASHPID`), and Python >= 3.10; a missing prerequisite skips its affected rows with a named receipt (#151)
 
 ## Documentation Map
 

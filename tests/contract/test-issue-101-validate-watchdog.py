@@ -47,6 +47,25 @@ def alive(pid: int) -> bool:
     return True
 
 
+# Issue #151: the watchdog's monitor/kill path needs bash >= 4 (mapfile,
+# BASHPID). The rows below run the watchdog through `bash` from PATH, so probe
+# that same interpreter: on bash 3.2 (the macOS /bin/bash) mapfile is not a
+# builtin and the monitor dies at trip, so the hung suite it was meant to kill
+# is never killed and the row times out instead. Detection, not weakening:
+# with bash >= 4 both rows run unchanged; without it they skip with a named
+# receipt.
+BASH_VERSION_TEXT = subprocess.run(
+    ["bash", "-c", 'printf %s "$BASH_VERSION"'], capture_output=True, text=True,
+).stdout.strip()
+BASH4_WATCHDOG_OK = subprocess.run(
+    ["bash", "-c", 'type mapfile >/dev/null 2>&1 && [[ -n "${BASHPID:-}" ]]'],
+).returncode == 0
+BASH4_WATCHDOG_RECEIPT = (
+    "prerequisite missing: bash >= 4 with mapfile/BASHPID (watchdog "
+    f"monitor/kill path); detected bash {BASH_VERSION_TEXT or 'unknown'}"
+)
+
+
 class TestValidateWatchdog(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -54,6 +73,7 @@ class TestValidateWatchdog(unittest.TestCase):
         self.receipts = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
 
+    @unittest.skipUnless(BASH4_WATCHDOG_OK, BASH4_WATCHDOG_RECEIPT)
     def test_a_hung_suite_is_killed_diagnosed_and_reported(self) -> None:
         started = time.monotonic()
         result = run_watchdog(self.receipts, "hung", 2, 1, "bash", "-c", "sleep 300")
@@ -76,6 +96,7 @@ class TestValidateWatchdog(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.receipts.iterdir()), ["hung.watchdog.txt"],
                          "markers or sample temp files were left behind")
 
+    @unittest.skipUnless(BASH4_WATCHDOG_OK, BASH4_WATCHDOG_RECEIPT)
     def test_a_finished_suite_passes_its_status_through(self) -> None:
         started = time.monotonic()
         result = run_watchdog(self.receipts, "done", 60, 5, "bash", "-c", "echo out; echo err >&2; exit 3")

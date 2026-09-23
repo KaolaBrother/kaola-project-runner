@@ -46,6 +46,20 @@ done
   exit 2
 }
 
+# Issue #151: the monitor below needs bash >= 4 (mapfile, BASHPID). On bash 3.2
+# (the macOS /bin/bash) mapfile is not a builtin, so under set -e the monitor
+# dies the moment it trips and the hung suite it was meant to kill outlives
+# it. Detection, not weakening: with the features present the monitor below
+# runs unchanged; without them, print one receipt and run the command
+# unwatched, its own exit status passing through.
+if ! type mapfile >/dev/null 2>&1 || [[ -z "${BASHPID:-}" ]]; then
+  printf 'validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash %s); running %s unwatched\n' \
+    "${BASH_VERSION:-unknown}" "$label" >&2
+  status=0
+  "$@" || status=$?
+  exit "$status"
+fi
+
 owner=$$
 command_text="$*"
 receipt="$receipt_dir/$label.watchdog.txt"

@@ -586,6 +586,10 @@ The offline suite checks generated Skills, installer behavior, shell syntax, tra
 and regression cases in an isolated temporary home directory. Live validation separately exercises
 start, read, send, read-back, and exact-session stop with the actual CLI and account.
 
+The full contract suite needs a dev machine with `tmux`, bash >= 4 (`mapfile`/`BASHPID`), and
+Python >= 3.10; a missing prerequisite makes the affected rows skip with a named receipt instead
+of failing (#151).
+
 Published evidence includes [historical PTY-era communication tests](docs/live-smoke-issue-9-2026-08-31.md),
 [Grok and Kimi ACP experiments](docs/poc-acp-transport-2026-09-11.md), and
 [Cursor, Devin, and OpenCode ACP verification](docs/acp-live-verification-2026-09-11.md), and

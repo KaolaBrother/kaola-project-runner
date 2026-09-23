@@ -88,6 +88,25 @@ FAKE_ACP_AGENT = (
 
 CHECKS: list[str] = []
 
+# Issue #151: three rows assert that a refused start created no tmux session
+# (`tmux has-session`), which needs tmux installed to mean anything; without
+# it subprocess raises FileNotFoundError instead. Those rows skip with a
+# counted, named receipt when tmux is absent (the same shutil.which detection
+# the #119/#123/#130 rows already use); with tmux present they run unchanged.
+TMUX_PRESENT = shutil.which("tmux") is not None
+TMUX_RECEIPT = "prerequisite missing: tmux not installed"
+
+
+def prerequisite(condition: bool, receipt: str):
+    """Issue #151: mark a test row with an explicit skip receipt when its
+    dev-machine prerequisite is absent. main() prints and counts the receipt;
+    with the prerequisite present the row runs unchanged."""
+    def mark(test):
+        if not condition:
+            test.__skip_receipt__ = receipt
+        return test
+    return mark
+
 
 def check(condition: bool, label: str) -> None:
     if not condition:
@@ -1794,6 +1813,7 @@ def sha12(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
 
 
+@prerequisite(TMUX_PRESENT, TMUX_RECEIPT)
 def test_issue_105_worker_skill_build_skew_refuses_before_spawn() -> None:
     """Issue #105: a ZCode Host `start` run from an installed Skill tree refuses
     before anything exists when the worker Skills its agent would load are a
@@ -1888,6 +1908,7 @@ def test_issue_105_worker_skill_build_skew_refuses_before_spawn() -> None:
         sandbox.cleanup()
 
 
+@prerequisite(TMUX_PRESENT, TMUX_RECEIPT)
 def test_issue_106_unreadable_discovery_root_is_a_typed_refusal() -> None:
     """Issue #106: an existing default ZCode discovery root that cannot be
     listed makes the Issue #105 comparison impossible, so a Host `start` refuses
@@ -1951,6 +1972,7 @@ def record_config_current(record_dir: Path, option_id: str) -> object:
     return None
 
 
+@prerequisite(TMUX_PRESENT, TMUX_RECEIPT)
 def test_issue_108_host_requires_glm53_max() -> None:
     """Issue #108: a Host-shaped ZCode start must run GLM 5.3 at effort max.
 
@@ -2150,7 +2172,13 @@ def main() -> int:
         if name.startswith("test_") and callable(value)
     ]
     failures = 0
+    skips = 0
     for test in tests:
+        receipt = getattr(test, "__skip_receipt__", None)
+        if receipt is not None:
+            skips += 1
+            print(f"SKIP {test.__name__} ({receipt})")
+            continue
         before = len(CHECKS)
         try:
             test()
@@ -2159,8 +2187,8 @@ def main() -> int:
             failures += 1
             print(f"FAIL {test.__name__}: {type(exc).__name__}: {exc}", file=sys.stderr)
     print(
-        f"test-zcode-heartbeat-contract: {len(tests) - failures}/{len(tests)} tests, "
-        f"{len(CHECKS)} checks"
+        f"test-zcode-heartbeat-contract: {len(tests) - failures - skips}/{len(tests)} tests, "
+        f"{skips} skipped (prerequisite receipts), {len(CHECKS)} checks"
     )
     return 1 if failures else 0
 
