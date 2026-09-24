@@ -286,8 +286,11 @@ class InstalledSurveyTest(unittest.TestCase):
         api = API_DOC.read_text(encoding="utf-8")
         for phrase in ("kaola-acp survey", "kaola-acp-survey/1", "login_path", "unknown"):
             self.assertIn(phrase, api)
-        for path in (ACP_TMPL, ACP_REF, README):
-            self.assertIn("kaola-acp survey", path.read_text(encoding="utf-8"), path)
+        self.assertIn("kaola-acp survey", README.read_text(encoding="utf-8"), README)
+        # Issue #157 (W-A8): the worker reference calls the Skill's own script by
+        # absolute path; `kaola-acp` is on PATH only where helper links exist.
+        for path in (ACP_TMPL, ACP_REF):
+            self.assertIn('"$SKILL_DIR/scripts/kaola-acp.py" survey', path.read_text(encoding="utf-8"), path)
 
 
 if __name__ == "__main__":

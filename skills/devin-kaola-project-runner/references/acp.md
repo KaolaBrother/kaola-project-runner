@@ -1,13 +1,12 @@
 # Devin CLI ACP transport
 
-Command: `devin acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: agent reports affogato 0.0.0-dev; the ACP model option offers only 76 of the catalog values on cli 3000.11.1 and rejects the presets with -32602, so each tier sets its preset through acp_command_<tier> spawn argv --model (Issue #140) and the advertised model currentValue stays the stale initial swe-2-high; both non-default tiers are fusion models (Issue #144): --tier upgrade is fusion-claude-opus-5-5-high-sidekick-swe-2-medium because the catalog has no pure Opus 5.5 High (pure Opus 5.5 is medium only), and --tier fable is fusion-claude-fable-5-1-high-sidekick-swe-2-medium, replacing the retired pure claude-fable-5-1-high; there is no effort config option, so every effort is encoded in the model id.
+Command: `devin acp`. Login: see SKILL.md §Transport. Platform quirks: agent reports affogato 0.0.0-dev; the ACP model option offers only 76 of the catalog values on cli 3000.11.1 and rejects the presets with -32602, so each tier sets its preset through acp_command_<tier> spawn argv --model (Issue #140) and the advertised model currentValue stays the stale initial swe-2-high; both non-default tiers are fusion models (Issue #144): --tier upgrade is fusion-claude-opus-5-5-high-sidekick-swe-2-medium because the catalog has no pure Opus 5.5 High (pure Opus 5.5 is medium only), and --tier fable is fusion-claude-fable-5-1-high-sidekick-swe-2-medium, replacing the retired pure claude-fable-5-1-high; there is no effort config option, so every effort is encoded in the model id.
 
 ## Command surface
 
 Use `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; there are no other native keys and no editor replacement. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
 
-Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Installed CLIs are the host-wide, read-only `kaola-acp survey` (login PATH; starts nothing). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
-Read-only `packages`/`model-package`; model rows add `quotaPool`.
+Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Host-wide, read-only: `"$SKILL_DIR/scripts/kaola-acp.py" survey|list|packages|model-package` (`survey` reads installed CLIs from the login PATH and starts nothing; model rows add `quotaPool`). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
 
 ## Level-zero receipt
 

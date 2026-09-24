@@ -1,13 +1,12 @@
 # Droid ACP transport
 
-Command: `droid exec --output-format acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `true`). Platform quirks: native ACP agent (no bridge, no translator, acp_wrapper_pin empty); config options are declared in the session/new result, never initialize: model, reasoning_effort, autonomy_level (full bypass = auto-high); the default ACP session is already auto-high; the Runner's --permission-mode names translate onto autonomy values over ACP (bypassPermissions/high→auto-high, medium→auto-medium, low→auto-low, manual→normal) because the agent has no mode configId; launch flags do not shape ACP sessions; session/resume preferred and the native session id surfaces in the session/new result and session/list (resume/load do not echo it); auth stays native (device-pairing or FACTORY_API_KEY), never handled by the Runner.
+Command: `droid exec --output-format acp`. Login: see SKILL.md §Transport. Platform quirks: native ACP agent (no bridge, no translator, acp_wrapper_pin empty); config options are declared in the session/new result, never initialize: model, reasoning_effort, autonomy_level (full bypass = auto-high); the default ACP session is already auto-high; the Runner's --permission-mode names translate onto autonomy values over ACP (bypassPermissions/high→auto-high, medium→auto-medium, low→auto-low, manual→normal) because the agent has no mode configId; launch flags do not shape ACP sessions; session/resume preferred and the native session id surfaces in the session/new result and session/list (resume/load do not echo it); auth stays native (device-pairing or FACTORY_API_KEY), never handled by the Runner.
 
 ## Command surface
 
 Use `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; there are no other native keys and no editor replacement. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
 
-Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Installed CLIs are the host-wide, read-only `kaola-acp survey` (login PATH; starts nothing). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
-Read-only `packages`/`model-package`; model rows add `quotaPool`.
+Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Host-wide, read-only: `"$SKILL_DIR/scripts/kaola-acp.py" survey|list|packages|model-package` (`survey` reads installed CLIs from the login PATH and starts nothing; model rows add `quotaPool`). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
 
 ## Level-zero receipt
 

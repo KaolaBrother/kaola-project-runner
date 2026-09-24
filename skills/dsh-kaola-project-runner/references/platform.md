@@ -3,9 +3,8 @@
 - Platform ID: `dsh`
 - Default binary: `dsh`
 - Binary override: `DSH_BIN`
-- Default session prefix: `dsh-kaola`
-- Continue: `unsupported`
-- Exact resume: `session/resume <session-id> over ACP`
+- Standalone session prefix: `dsh-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
+- Resume: `session/resume`/`session/load` per advertised capability; Continue: `unsupported`
 - Runner default preset (`--tier default`): **DeepSeek V4.1 Flash (OpenCode Go)** — `opencode-go/deepseek-v4.1-flash` with `no Runner effort override`
 - Runner upgrade preset (`--tier upgrade`): **DeepSeek V4.1 Flash (OpenCode Go)** — `opencode-go/deepseek-v4.1-flash` with `no Runner effort override`
 - Fast support: no native Fast toggle and no Fast config option on the ACP surface; the catalog's flash-named routes are explicit model choices, not a Fast switch
@@ -30,7 +29,7 @@ blocks ordinary observe, capture, send, cancel, or stop transport chosen by the 
 
 ## Launch
 
-Launch `dsh --profile acp`, the shipped automation-only ACP v1 stdio server; the acp profile accepts no application arguments. The profile bundle pins provider deepseek-official and ignores the user's agent-default-model, so a session can start ready and still fail its first prompt with `no API key for provider route "deepseek-official"`: supply DEEPSEEK_API_KEY in the environment or pass --model to select a credentialed route. The Runner default preset selects opencode-go/deepseek-v4.1-flash, whose ACP wire value is the JSON-encoded pair ["opencode-go","deepseek-v4.1-flash"] already carried by acp_model_map; "DeepSeek V4.1 Flash (OpenCode Go)" is a Runner-side display name, not a catalog string -- the catalog's own display name is the bare lowercase deepseek-v4.1-flash, and the similarly spelled deepseek-official/deepseek-flash (displayed "DeepSeek-V41-Flash") is a different route. Because the shipped profile pins deepseek-official, this opencode-go default now needs its own credentialed provider on the ordinary path. dsh's ACP composition never sends session/request_permission; its permission mode is the launch variable DSH_PERMISSION_MODE, and the Runner starts dsh with danger-full-access (no Seatbelt sandbox, approval never) — the same full-access default as every other platform's measured bypass — unless the caller sets DSH_PERMISSION_MODE or passes --mode (read-only, workspace-write or danger-full-access; bypassPermissions maps to danger-full-access). A caller that wants the sandbox sets it explicitly: under dsh's own default workspace-write, shell writes outside the workspace, /tmp and $TMPDIR are denied, and a Runner start run from that shell inherits the sandbox (Issue #120). The Issue #98 outside-workspace probe wrote to /tmp, which is inside that writable set.
+ACP runs dsh --profile acp, the shipped automation-only ACP v1 stdio server; the acp profile accepts no application arguments and dsh advertises no ACP mode option, so ACP start sets no mode and instead launches with DSH_PERMISSION_MODE (see acp.md). The Runner default preset selects opencode-go/deepseek-v4.1-flash, whose ACP wire value is the JSON-encoded pair ["opencode-go","deepseek-v4.1-flash"] already carried by acp_model_map; "DeepSeek V4.1 Flash (OpenCode Go)" is a Runner-side display name, not a catalog string -- the catalog's own display name is the bare lowercase deepseek-v4.1-flash, and the similarly spelled deepseek-official/deepseek-flash (displayed "DeepSeek-V41-Flash") is a different route. Because the shipped profile pins deepseek-official, this opencode-go default needs its own credentialed provider on the ordinary path.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, steer, permit, cancel, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill
@@ -38,8 +37,7 @@ directory containing SKILL.md (quote it — the destination may contain spaces).
 [acp.md](acp.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy session matches.
 
-Runner `--continue` and `--resume` select the native continuation/resume syntax listed above;
-adapters translate these options for the platform. The native session ID is the CLI's own
+Runner `--resume` and `--continue` map onto the ACP methods listed above. The native session ID is the CLI's own
 conversation identifier, distinct from the Runner's `--session` name. What a platform persists and can resume is its own verified behavior, not a
 universal Runner promise; when exact resume is unavailable or ambiguous, the Agent chooses
 `--continue`, a new session, or existing work records. `stop` releases only the owned runtime
@@ -52,7 +50,7 @@ Runner does not classify this runtime for the Agent. The Agent decides whether t
 prompt, settle a permission with `permit`, cancel the turn, open a clean conversation, or surface a
 human decision.
 
-Transfer the chosen prompt with `send`; an optional snapshot only correlates the receipt. Then
+Transfer the chosen prompt with `send`. Then
 immediately `observe` and `capture` again to read the runtime's actual response. Give changed
 evidence to the Agent rather than blocking the action. If the Agent chose a Workflow task, it
 separately verifies the relevant durable repository and forge state.

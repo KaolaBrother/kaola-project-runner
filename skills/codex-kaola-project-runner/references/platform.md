@@ -3,9 +3,8 @@
 - Platform ID: `codex`
 - Default binary: `codex`
 - Binary override: `CODEX_BIN`
-- Default session prefix: `codex-kaola`
-- Continue: `resume --last`
-- Exact resume: `resume <session-id>`
+- Standalone session prefix: `codex-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
+- Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
 - Runner default preset (`--tier default`): **GPT-6 Sol High** — `gpt-6-sol` with `effort=high`
 - Runner upgrade preset (`--tier upgrade`): **GPT-6 Astra High** — `gpt-6-astra` with `effort=high`
 - Fast support: Codex fast mode via ACP `fast-mode` configId (off/on); explicit off is applied, not assumed
@@ -30,7 +29,7 @@ blocks ordinary observe, capture, send, cancel, or stop transport chosen by the 
 
 ## Launch
 
-Launch codex --cd <repo> --no-alt-screen with literal --model, -c model_reasoning_effort, and the mapped sandbox/approval pair (default agent-full-access). ACP process is the pinned npx codex-acp wrapper.
+ACP runs the pinned npx codex-acp wrapper (@openai/codex plus @agentclientprotocol/codex-acp); ACP start sets mode=agent-full-access after initialize.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, steer, permit, cancel, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill
@@ -38,8 +37,7 @@ directory containing SKILL.md (quote it — the destination may contain spaces).
 [acp.md](acp.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy session matches.
 
-Runner `--continue` and `--resume` select the native continuation/resume syntax listed above;
-adapters translate these options for the platform. The native session ID is the CLI's own
+Runner `--resume` and `--continue` map onto the ACP methods listed above. The native session ID is the CLI's own
 conversation identifier, distinct from the Runner's `--session` name. What a platform persists and can resume is its own verified behavior, not a
 universal Runner promise; when exact resume is unavailable or ambiguous, the Agent chooses
 `--continue`, a new session, or existing work records. `stop` releases only the owned runtime
@@ -52,7 +50,7 @@ Runner does not classify this runtime for the Agent. The Agent decides whether t
 prompt, settle a permission with `permit`, cancel the turn, open a clean conversation, or surface a
 human decision.
 
-Transfer the chosen prompt with `send`; an optional snapshot only correlates the receipt. Then
+Transfer the chosen prompt with `send`. Then
 immediately `observe` and `capture` again to read the runtime's actual response. Give changed
 evidence to the Agent rather than blocking the action. If the Agent chose a Workflow task, it
 separately verifies the relevant durable repository and forge state.

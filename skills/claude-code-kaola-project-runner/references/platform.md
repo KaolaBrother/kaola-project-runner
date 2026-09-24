@@ -3,9 +3,8 @@
 - Platform ID: `claude-code`
 - Default binary: `claude`
 - Binary override: `CLAUDE_BIN`
-- Default session prefix: `claude-code-kaola`
-- Continue: `--continue`
-- Exact resume: `--resume <session-id>`
+- Standalone session prefix: `claude-code-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
+- Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
 - Runner default preset (`--tier default`): **Opus High** — `opus` with `effort=high`
 - Runner upgrade preset (`--tier upgrade`): **Fable High** — `fable` with `effort=high`
 - Fast support: Fast via process-scoped `--settings '{"fastMode": ...}'` at launch: `--fast on` passes fastMode=true, `--fast off` pins fastMode=false for the session; the native CLI determines model support — effective stays unknown without native evidence and the selected model is never changed
@@ -30,7 +29,7 @@ blocks ordinary observe, capture, send, cancel, or stop transport chosen by the 
 
 ## Launch
 
-Launch Claude from the canonical repository root with --permission-mode bypassPermissions (default). ACP runs the vendored claude-code-acp bridge (node, Skill-relative dist) that drives the exact claude binary as one subscription subprocess per turn; ACP start sets mode=bypassPermissions after a working initialize.
+ACP runs the vendored claude-code-acp bridge (node, Skill-relative dist), which drives the exact claude binary as one subscription subprocess per turn; ACP start sets mode=bypassPermissions after a working initialize.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, steer, permit, cancel, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill
@@ -38,8 +37,7 @@ directory containing SKILL.md (quote it — the destination may contain spaces).
 [acp.md](acp.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy session matches.
 
-Runner `--continue` and `--resume` select the native continuation/resume syntax listed above;
-adapters translate these options for the platform. The native session ID is the CLI's own
+Runner `--resume` and `--continue` map onto the ACP methods listed above. The native session ID is the CLI's own
 conversation identifier, distinct from the Runner's `--session` name. What a platform persists and can resume is its own verified behavior, not a
 universal Runner promise; when exact resume is unavailable or ambiguous, the Agent chooses
 `--continue`, a new session, or existing work records. `stop` releases only the owned runtime
@@ -52,7 +50,7 @@ Runner does not classify this runtime for the Agent. The Agent decides whether t
 prompt, settle a permission with `permit`, cancel the turn, open a clean conversation, or surface a
 human decision.
 
-Transfer the chosen prompt with `send`; an optional snapshot only correlates the receipt. Then
+Transfer the chosen prompt with `send`. Then
 immediately `observe` and `capture` again to read the runtime's actual response. Give changed
 evidence to the Agent rather than blocking the action. If the Agent chose a Workflow task, it
 separately verifies the relevant durable repository and forge state.

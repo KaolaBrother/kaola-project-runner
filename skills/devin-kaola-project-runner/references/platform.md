@@ -3,9 +3,8 @@
 - Platform ID: `devin`
 - Default binary: `devin`
 - Binary override: `DEVIN_BIN`
-- Default session prefix: `devin-kaola`
-- Continue: `--continue`
-- Exact resume: `--resume <session-id>`
+- Standalone session prefix: `devin-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
+- Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
 - Runner default preset (`--tier default`): **SWE-2 Max** — `swe-2-max` with `effort=max (encoded in model ID)`
 - Runner upgrade preset (`--tier upgrade`): **Fusion High (Opus 5.5 High + SWE-2 Medium)** — `fusion-claude-opus-5-5-high-sidekick-swe-2-medium` with `effort=high (encoded in model ID)`
 - Runner fable preset (`--tier fable`): **Fusion High (Fable 5.1 High + SWE-2 Medium)** — `fusion-claude-fable-5-1-high-sidekick-swe-2-medium` with `effort=high (encoded in model ID)`
@@ -31,7 +30,7 @@ blocks ordinary observe, capture, send, cancel, or stop transport chosen by the 
 
 ## Launch
 
-Launch devin from the canonical repository root with --permission-mode dangerous (default) and --respect-workspace-trust false. ACP start sets mode=bypass.
+ACP runs devin acp, each tier spawned with its preset --model (acp_command_<tier>, Issue #140); ACP start sets mode=bypass after initialize.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, steer, permit, cancel, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill
@@ -39,8 +38,7 @@ directory containing SKILL.md (quote it — the destination may contain spaces).
 [acp.md](acp.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy session matches.
 
-Runner `--continue` and `--resume` select the native continuation/resume syntax listed above;
-adapters translate these options for the platform. The native session ID is the CLI's own
+Runner `--resume` and `--continue` map onto the ACP methods listed above. The native session ID is the CLI's own
 conversation identifier, distinct from the Runner's `--session` name. What a platform persists and can resume is its own verified behavior, not a
 universal Runner promise; when exact resume is unavailable or ambiguous, the Agent chooses
 `--continue`, a new session, or existing work records. `stop` releases only the owned runtime
@@ -53,7 +51,7 @@ Runner does not classify this runtime for the Agent. The Agent decides whether t
 prompt, settle a permission with `permit`, cancel the turn, open a clean conversation, or surface a
 human decision.
 
-Transfer the chosen prompt with `send`; an optional snapshot only correlates the receipt. Then
+Transfer the chosen prompt with `send`. Then
 immediately `observe` and `capture` again to read the runtime's actual response. Give changed
 evidence to the Agent rather than blocking the action. If the Agent chose a Workflow task, it
 separately verifies the relevant durable repository and forge state.

@@ -69,6 +69,9 @@ REQUIRED = {
     # Issue #148: quota package catalog and the model→package rule. Both values
     # are JSON documents encoded as JSON strings. kaola-quota.py owns the schema.
     "quota_packages", "model_package_rule",
+    # Issue #157: the per-platform login fact (W-A11) and the `start` permission
+    # default plus its override (W-A10), rendered into the worker SKILL.md.
+    "login_summary", "permission_summary",
 }
 
 # Issue #140: optional per-tier ACP spawn commands (``acp_command_default``,
@@ -192,8 +195,8 @@ turn already running — not a Runner policy:
 ```
 
 Read `steer_outcome` with `steer_confirmation`: only `injected` means the agent
-acknowledged consumption, `written` means the text reached the running turn but
-this platform confirms nothing, and `not_consumed`/`unknown` mean do not resend
+acknowledged consumption, `written` means flushed but unacknowledged (read the
+turn's own output), and `not_consumed`/`unknown` mean do not resend
 blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
 cancels the turn first. See [references/steering.md](references/steering.md).
 """
@@ -283,8 +286,18 @@ def alt_tier_line(manifest: dict[str, str]) -> str:
     )
 
 
+def continue_fact(manifest: dict[str, str]) -> str:
+    """Issue #157 (W-A2): `--continue` is the holder's latest `session/list`
+    entry; `continue_syntax` is a PTY-era field with no runtime consumer, kept
+    only to say where the platform cannot continue."""
+    if manifest["continue_syntax"] == "unsupported":
+        return "`unsupported`"
+    return "the latest `session/list` entry for the canonical cwd"
+
+
 def variables(manifest: dict[str, str]) -> dict[str, str]:
     values = {key.upper(): value for key, value in manifest.items()}
+    values["CONTINUE_FACT"] = continue_fact(manifest)
     values["STEERING_BLOCK"] = steering_block(manifest)
     values["TIER_BLOCK"] = tier_block(manifest)
     values["ALT_TIER_LINE"] = alt_tier_line(manifest)

@@ -260,8 +260,15 @@ class NoNewMechanism(unittest.TestCase):
     def test_no_worker_skill_learned_an_issue_rule(self) -> None:
         for worker in WORKER_IDS:
             body = (PROJECT / "skills" / f"{worker}-kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8")
-            for leak in ("i<ISSUE>", "one issue per run", "issue-dispatch.md", "project short code"):
+            for leak in ("one issue per run", "issue-dispatch.md", "project short code"):
                 self.assertNotIn(leak, body, f"{worker} worker Skill must stay transport-only ({leak!r})")
+            # Issue #157 (W-C1, Owner-accepted): the worker example names the
+            # issue-scoped form once, as a comment on the exact name it passes,
+            # so it no longer contradicts the orchestrator; the rule itself
+            # (grammar, one issue per run) stays in the orchestrator.
+            self.assertEqual(body.count("i<ISSUE>"), 1, worker)
+            self.assertIn('SESSION="<exact-name>"   # under Project Runner: '
+                          "<platform>-<CODE>-i<ISSUE>-<purpose>", body, worker)
 
     def test_no_budget_was_raised_and_the_main_skill_clears_the_probe_ceiling(self) -> None:
         limits = json.loads(BUDGETS.read_text(encoding="utf-8"))

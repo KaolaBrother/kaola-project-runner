@@ -1,13 +1,12 @@
 # OpenCode ACP transport
 
-Command: `opencode acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `false`). Platform quirks: no ACP skip-all measured on 2.0.11 - session/request_permission offers only allow_once/allow_always/reject_once and configOptions carries model/effort/mode only; there is no skip-all, and permit settles each request. V2 reaches its own server over loopback HTTP, and a forward proxy on that hop leaves initialize working while every session method answers ClientError; so when HTTP(S)_PROXY is set, the Runner appends any missing 127.0.0.1/localhost to NO_PROXY/no_proxy in the opencode child env only, keeping operator entries and never touching the Runner env.
+Command: `opencode acp`. Login: see SKILL.md §Transport. Platform quirks: no ACP skip-all measured on 2.0.11 - session/request_permission offers only allow_once/allow_always/reject_once and configOptions carries model/effort/mode only; there is no skip-all, and permit settles each request. V2 reaches its own server over loopback HTTP, and a forward proxy on that hop leaves initialize working while every session method answers ClientError; so when HTTP(S)_PROXY is set, the Runner appends any missing 127.0.0.1/localhost to NO_PROXY/no_proxy in the opencode child env only, keeping operator entries and never touching the Runner env.
 
 ## Command surface
 
 Use `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; there are no other native keys and no editor replacement. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
 
-Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Installed CLIs are the host-wide, read-only `kaola-acp survey` (login PATH; starts nothing). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
-Read-only `packages`/`model-package`; model rows add `quotaPool`.
+Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Host-wide, read-only: `"$SKILL_DIR/scripts/kaola-acp.py" survey|list|packages|model-package` (`survey` reads installed CLIs from the login PATH and starts nothing; model rows add `quotaPool`). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
 
 ## Level-zero receipt
 

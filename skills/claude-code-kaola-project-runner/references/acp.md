@@ -1,13 +1,12 @@
 # Claude Code ACP transport
 
-Command: `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `true`). Platform quirks: vendored pinned fork of harukitosa/claude-code-acp (MIT), never npm or npx; one claude -p subprocess per turn, driven with --input-format stream-json over an open stdin (later turns add --resume) - the same channel that carries native mid-turn steering behind _session/steering; the bridge drops ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN so the subscription login and native Settings resolve inside claude; login is a human act in a native terminal, outside the Runner; permit settles only the reported tool_call status because the child takes no --permission-prompt-tool, so a permission answer cannot gate or resume it (cli 2.1.272 emitted no permission_request).
+Command: `node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js`. Login: see SKILL.md §Transport. Platform quirks: vendored pinned fork of harukitosa/claude-code-acp (MIT), never npm or npx; one claude -p subprocess per turn, driven with --input-format stream-json over an open stdin (later turns add --resume) - the same channel that carries native mid-turn steering behind _session/steering; the bridge drops ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN so the subscription login and native Settings resolve inside claude; login is a human act in a native terminal, outside the Runner; permit settles only the reported tool_call status because the child takes no --permission-prompt-tool, so a permission answer cannot gate or resume it (cli 2.1.272 emitted no permission_request).
 
 ## Command surface
 
 Use `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, and `stop` with the same platform/session/repository identity. `key escape` maps to cancellation; there are no other native keys and no editor replacement. `permit` / `cancel` / `stop` settle each permission `request_id` at most once; a second settler is `unknown-request`.
 
-Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Installed CLIs are the host-wide, read-only `kaola-acp survey` (login PATH; starts nothing). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
-Read-only `packages`/`model-package`; model rows add `quotaPool`.
+Humans watch with Terminal or host-wide `list`, session `view`, and local `follow`. Host-wide, read-only: `"$SKILL_DIR/scripts/kaola-acp.py" survey|list|packages|model-package` (`survey` reads installed CLIs from the login PATH and starts nothing; model rows add `quotaPool`). Orchestrator ordinary turns must not poll raw frames as a human UI. ACP is the only transport; a request for PTY is refused with `transport-pty-retired`.
 
 ## Level-zero receipt
 

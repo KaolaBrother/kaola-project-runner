@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport
 
-ACP is the only transport (Issue #130). The ACP command is `droid exec --output-format acp`. Login is a human act in a native terminal, outside the Runner (needs a terminal: `true`). This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
+ACP is the only transport (Issue #130). The ACP command is `droid exec --output-format acp`; prompts travel over its stdio JSON-RPC, never shell eval. Login is a human act outside the Runner: ACP advertises device-pairing or FACTORY_API_KEY. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
 
 | `mutation_status` | Safe interpretation |
 |---|---|
@@ -37,8 +37,8 @@ explicit, unbounded request:
 
 ```bash
 SKILL_DIR="/absolute/path/to/droid-kaola-project-runner"   # the directory containing this file
-REPO="$(git rev-parse --show-toplevel)"
-SESSION="droid-kaola-<purpose>"
+REPO="/abs/canonical/root"   # canonical Git root, not a linked worktree
+SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<purpose>
 "$SKILL_DIR/scripts/runtime-tmux.sh" preflight --repo "$REPO" --session "$SESSION"
 "$SKILL_DIR/scripts/runtime-tmux.sh" start --repo "$REPO" --session "$SESSION"
 "$SKILL_DIR/scripts/runtime-tmux.sh" observe --repo "$REPO" --session "$SESSION"
@@ -66,19 +66,20 @@ Fast support: no separate Fast toggle; `-fast` catalog ids are explicit `--model
 ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
 conflict honestly if it is also passed with `--fast off`.
 
-`preflight`, `start`, `observe`, and `status` report requested, resolved, configured, and actual
-model evidence, including unavailable, unsupported, and unknown outcomes. `--resume`/`--continue`
+`preflight` and `start` report the requested and resolved selection, and `start` what it applied
+(`config_application`, `effective_selection`), including unavailable, unsupported, and unknown
+outcomes; `observe`/`status` show the agent's `configOptions` `currentValue`. `--resume`/`--continue`
 preserve the saved native session model and effort unless the caller supplies `--tier`, `--model`,
 or `--effort`; Fast stays a per-run request (off unless explicitly on). All of this is per-run
 input and never rewrites global CLI configuration. A mismatch or unreadable actual model remains
 evidence for the Agent and does not disable the communication channel.
 
 `preflight` reports runtime and optional Kaola carrier evidence. Missing Workflow commands,
-configuration health, account state, trust state, editor state, activity hints, or a changed
+configuration health, account state, activity hints, or a changed
 snapshot do not authorize or block starting the CLI communication channel.
 
 Use the evidence internally to choose the next communication action. Do not narrate raw holder,
-process, snapshot, model, editor, or activity fields in user progress updates; report only visible
+process, snapshot, model, or activity fields in user progress updates; report only visible
 task progress, an actual transport failure, or a decision that genuinely needs the user.
 
 After reading current evidence, the controlling Agent chooses what to send:
@@ -109,8 +110,11 @@ nothing and reports `unknown`. See [references/steering.md](references/steering.
 ## Cancel and permissions
 
 `key --key escape` (or `cancel`) cancels the running turn; there are no other native keys, menus,
-or editor replacement. A pending permission `request_id` is settled with `permit` (see
-[references/acp.md](references/acp.md)). Read the resulting output before choosing another action.
+or editor replacement. Settle a pending permission `request_id` with
+`permit [--request-id ID] --option OPTION_ID` (an option the request offers); omitting `--option`
+answers `cancelled`, which denies. Read the resulting output before choosing another action.
+
+Permission default: `start` sets ACP `autonomy_level=auto-high`; `--permission-mode MODE` translates (bypassPermissions/high→auto-high, medium→auto-medium, low→auto-low, manual→normal).
 
 When the Agent decides the exact session is finished, end only that owned session:
 

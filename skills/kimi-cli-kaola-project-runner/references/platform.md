@@ -3,9 +3,8 @@
 - Platform ID: `kimi-cli`
 - Default binary: `kimi`
 - Binary override: `KIMI_BIN`
-- Default session prefix: `kimi-cli-kaola`
-- Continue: `--continue`
-- Exact resume: `--session <session-id>`
+- Standalone session prefix: `kimi-cli-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
+- Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
 - Runner default preset (`--tier default`): **Kimi K3 Max** — `kimi-code/k3` with `thinking=max`
 - Runner upgrade preset (`--tier upgrade`): **Kimi K3 Max** — `kimi-code/k3` with `thinking=max`
 - Runner alternative preset (`--tier alternative`): **Kimi K2.8** — `kimi-code/kimi-for-coding` with `thinking=max`
@@ -31,7 +30,7 @@ blocks ordinary observe, capture, send, cancel, or stop transport chosen by the 
 
 ## Launch
 
-Launch kimi --yolo from the canonical repository root. On Kimi Code CLI 2.x --yolo is Ask When Needed (routine edits and commands auto-run; risky actions, questions, and plans still ask) and is mutually exclusive with --auto (Never Ask), which the Runner no longer passes; --yes/--auto-approve are hidden aliases of --yolo. Runner --resume renders --session <session-id> (-r/--resume is a hidden alias) and Runner --continue renders --continue; 2.x rejects --session together with --continue at startup because both mean resume, so the Runner sends at most one. Thinking effort travels through thinking.effort (env KIMI_MODEL_THINKING_EFFORT: low/medium/high/xhigh/max), not a reasoning_effort wire parameter; ACP start sets mode=yolo and applies effort through the ACP thinking config option, whose ladder is the three values low/high/max rather than that five-level env ladder -- max is valid on both, but the two sets are not the same. The ACP model currentValue is kimi-code/kimi-for-coding, so the kimi-code/k3 default preset is applied, never inherited, and "Kimi K3 Max" names the composition model=kimi-code/k3 plus thinking=max: the catalog carries no "Max" in any display name. Workspace-trust remains a separate TUI surface.
+ACP runs kimi acp; ACP start sets mode=yolo after initialize and applies effort through the ACP thinking config option, whose ladder is low/high/max rather than the five-level KIMI_MODEL_THINKING_EFFORT env ladder (low/medium/high/xhigh/max) -- max is valid on both, but the two sets are not the same. The ACP model currentValue is kimi-code/kimi-for-coding, so the kimi-code/k3 default preset is applied, never inherited, and "Kimi K3 Max" names the composition model=kimi-code/k3 plus thinking=max: the catalog carries no "Max" in any display name.
 
 Use `"$SKILL_DIR/scripts/runtime-tmux.sh"` for every preflight, start, observe, status, capture,
 send, steer, permit, cancel, and stop operation, where `SKILL_DIR` is the absolute path of the installed Skill
@@ -39,8 +38,7 @@ directory containing SKILL.md (quote it — the destination may contain spaces).
 [acp.md](acp.md) before any action that can change the runtime.
 Do not reconstruct ownership checks from process names or fuzzy session matches.
 
-Runner `--continue` and `--resume` select the native continuation/resume syntax listed above;
-adapters translate these options for the platform. The native session ID is the CLI's own
+Runner `--resume` and `--continue` map onto the ACP methods listed above. The native session ID is the CLI's own
 conversation identifier, distinct from the Runner's `--session` name. What a platform persists and can resume is its own verified behavior, not a
 universal Runner promise; when exact resume is unavailable or ambiguous, the Agent chooses
 `--continue`, a new session, or existing work records. `stop` releases only the owned runtime
@@ -53,7 +51,7 @@ Runner does not classify this runtime for the Agent. The Agent decides whether t
 prompt, settle a permission with `permit`, cancel the turn, open a clean conversation, or surface a
 human decision.
 
-Transfer the chosen prompt with `send`; an optional snapshot only correlates the receipt. Then
+Transfer the chosen prompt with `send`. Then
 immediately `observe` and `capture` again to read the runtime's actual response. Give changed
 evidence to the Agent rather than blocking the action. If the Agent chose a Workflow task, it
 separately verifies the relevant durable repository and forge state.
