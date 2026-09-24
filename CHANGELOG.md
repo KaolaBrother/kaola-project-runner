@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.6.0 — 2026-09-24 (quota packages, ten-platform wording, prerequisite-tolerant validation)
+
+- **Read-only quota catalog queries: `kaola-acp packages` / `model-package` (Issue #148).**
+  `kaola-acp packages [--platform P] [--installed-only]` lists every platform's quota packages
+  from `platforms/*.yaml` (rows `{id, name, windows, binds_models}`, ids `<platform>:<token>`,
+  `windows` null until a release seeds one); `kaola-acp model-package --platform P --model ID`
+  resolves the package or answers `status: unmapped` with `packageId: null` — an id the rule
+  does not name never gets a guessed package (droid's `billingPool` is read from a live row,
+  codex's `absent` default is `primary`, provider-prefix platforms honor `gaps`). Both commands
+  start no agent, open no session, create no holder or record, and spend no quota; a usage
+  error exits 2. Verified id mappings ship seeded: claude-code `default`/`opus`/`sonnet`/
+  `haiku` → `subscription`, `fable` → `scoped-weekly`; cursor-cli `auto` and the live picker's
+  advertised wire id `default` → `cursor-models`, `grok-4.7` family and `claude-opus-5-5` family
+  → `other-models`; unknown ids → unmapped. Contract: `docs/api.md` §Quota packages and the
+  Project Runner `references/quota-packages.md`.
+
+- **ACP quota stamps on observe/status/view receipts (Issue #148).** `observe` and `status`
+  stamp model leaves on the emitted receipt copy only — the model `configOptions` entry
+  (including one nested group), `session_meta.models.availableModels`, `session_meta
+  .availableModels`, and `initial_config_options` — setting `quotaPool` to the qualified id for
+  a mapped leaf, or `quotaPool: null` plus `quotaPoolStatus: "unmapped"` for one that is not;
+  `view` adds `models.availableModels` and the model `options` from a copy. Stored
+  `session_meta` and `record.json` stay the native ACP payload. Live-verified on Mac Studio:
+  cursor-cli Auto/`default` stamps `cursor-cli:cursor-models`, and every model leaf across the
+  droid and cursor-cli seats carried a stamp or an explicit unmapped marker — zero silent
+  blanks.
+
+- **Ten platforms everywhere a user looks (Issues #150, #152).** The main orchestrator Skill,
+  its description, `install-local.sh --help`, `kaola-grok-bot-verify.py` prose, and the host
+  docs (`docs/codex-host.md`, `docs/zcode-host.md`) now say ten platforms — dsh became the
+  tenth in #98; the rendered tree and docs carry no user-visible "nine" count anymore.
+
+- **Version-tolerant contract suite (Issue #151).** `./scripts/validate.sh` no longer fails on a
+  machine that lacks a dev-machine prerequisite: the python 3.9 pathlib probe rows
+  (`test-issue-51-runner-integration.py`), the tmux rows (`test-zcode-heartbeat-contract.py`),
+  and the bash-4 `mapfile`/`BASHPID` watchdog rows (`validate-watchdog.sh`,
+  `test-issue-101-validate-watchdog.py`) skip with printed, named receipts when the
+  prerequisite is absent and run unchanged where it is present — assertions are not weakened.
+  The prerequisites are documented in `README.md` and `AGENTS.md`. Full-suite green on a
+  machine missing all three (Mac Studio: exit 0, 7 receipted skips).
+
+- **Studio Codex compaction-hook evidence archived (Issue #149).** The measured outcome — the
+  user-level SessionStart(compact) hook does not fire for ACP compaction, so Host recovery
+  keeps relying on the turn-opening Skill entry — is recorded in the issue's Studio evidence;
+  no behavior changed in this release.
+
 ## 0.5.9 — 2026-09-23 (codex Host admission patch release)
 
 - **Codex can be a Project Runner Host (Issue #126).** Codex's measured Host entry is its `$`
