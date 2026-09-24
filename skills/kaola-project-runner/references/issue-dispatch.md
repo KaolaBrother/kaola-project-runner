@@ -58,9 +58,8 @@ them, or rewrite completed Mission results to retrofit this rule.
 Path: `<canonical-root>/kaola-workflow/.ledger/issue-<N>.jsonl`. `canonical-root` is the main
 checkout the Runner binds with `--repo`; `N` is the issue number in the session name and in the
 run's `workflow-state.md` `issue_number`. The folder is gitignored and exists only in the main
-checkout, never in a child worktree. One JSON object per line, one line per mission, keys
-exactly `n`, `name`, `details`, `status` ∈ `todo | in-flight | done | failed | blocked`. The
-run's Workflow Main Orchestrator is the only writer. The Runner never writes.
+checkout, never in a child worktree. Schema (keys, statuses, sole writer): the global Workflow
+contract. The Runner never writes.
 
 The Host reads it read-only. Absent file → no live Workflow run has recorded missions for this
 issue (`unknown`). Present → progress = `done` lines / total lines; per-mission status by `n`.

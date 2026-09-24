@@ -56,9 +56,9 @@ receipt (`--expected-holder-instance-id`); a different holder is not that Host.
 
 ## After the handoff
 
-Relay later user changes to that same Host using idle `send` or, when busy, the
-Runner's existing `steer` / a held undelivered update. A `--no-wait` admission or
-a Host `end_turn` is not project delivery. After the first Host beat, check
+Relay later user changes to that same Host using idle `send`; when busy,
+`steer` or hold the update yourself until idle - the Runner has no queue. A
+`--no-wait` admission or a Host `end_turn` is not project delivery. After the first Host beat, check
 file-read or work-product evidence and the first dispatch receipt against the
 plan and authorization; do not trust the Host's self-description. Mismatch:
 correct on this Host; do not accept completion. Read results with `observe` /

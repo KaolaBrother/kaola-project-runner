@@ -70,8 +70,8 @@ class LedgerProjection(unittest.TestCase):
         for needle in (
             "Path: `<canonical-root>/kaola-workflow/.ledger/issue-<N>.jsonl`.",
             "exists only in the main checkout, never in a child worktree",
-            "keys exactly `n`, `name`, `details`, `status` ∈ `todo | in-flight | done | failed | blocked`",
-            "The run's Workflow Main Orchestrator is the only writer. The Runner never writes.",
+            # Issue #157 (§1.2): the schema is the global Workflow contract's.
+            "Schema (keys, statuses, sole writer): the global Workflow contract. The Runner never writes.",
             "progress = `done` lines / total lines; per-mission status by `n`",
             "`kaola-workflow/archive/<project>/mission-ledger.jsonl`",
         ):

@@ -37,20 +37,14 @@ Do not start the Host from this file. Follow Kaola-Delegator (`kaola-delegator`)
 and its `references/handoff.md`. Exceptions reach you; worker
 handling does not. Do not take that over session by session.
 
-   Every turn-opening prompt to the Host — the first handoff, a resume or
-   attach update, a worker-event notification, and the round after any
-   compaction — opens with `/kaola-project-runner` as its first line (a
-   non-ZCode Host: its platform's `host_skill_entry`, per
-   [host-entry-matrix.md](host-entry-matrix.md); an empty entry cannot host
-   and refuses `host-entry-unsupported`). A busy
-   `steer` guide is not a new prompt: it enters the running turn verbatim,
-   keeps the already-loaded context, and is no new Skill invocation. The
-   composite `steer --steer-mode interrupt` ends the turn and resends on a
-   new one verbatim — not a Host recovery entry; supply the first line
-   yourself if a resend must open a Host round. That
-   native invocation is the whole recovery mechanism; no `AGENTS.md` block,
-   role check, or compact detection is involved. Facts and boundaries:
-   [zcode-native-skill-entry.md](zcode-native-skill-entry.md).
+Every turn-opening prompt to the Host — the first handoff, a resume or attach
+update, a worker-event notification, and the round after any compaction — opens
+with `/kaola-project-runner` as its first line (non-ZCode: its
+`host_skill_entry`, [host-entry-matrix.md](host-entry-matrix.md); empty refuses
+`host-entry-unsupported`). A busy `steer` guide is not a new prompt: it keeps
+the already-loaded context, no new Skill invocation; `steer --steer-mode
+interrupt` resends verbatim, not a Host recovery entry. Detail:
+[zcode-native-skill-entry.md](zcode-native-skill-entry.md).
 
 ## C. The Host's own startup and beat
 
@@ -89,9 +83,9 @@ platform, a dispatched Host-named worker included. `existing_host` (with its
 `identity`) holds the root: attach it if verified, else sweep it; never rename.
 
 The same `start` pinned this Host's model (Issue #108): a
-`zcode-<PROJECT_CODE>-orchestrator-<purpose>` session must run GLM 5.3 at effort
-`max`, applied then verified against the holder's advertised config and reported
-in the receipt's `host_selection`. A `host-model-mismatch` /
+`zcode-<PROJECT_CODE>-orchestrator-<purpose>` session gets the manifest's Host
+model/effort, applied then verified against the holder's advertised config and
+reported in the receipt's `host_selection`; a `host-model-mismatch` /
 `host-model-unverified` refusal is the outer Agent's evidence.
 
 The beat itself - starting workers here, non-blocking dispatch, the

@@ -65,7 +65,7 @@ REFERENCE_MARKERS = (
     "## Normal path",
     "## Evidence-backed exception",
     "## Concurrent sessions",
-    "## Migration",
+    "## Recovery and migration",  # Issue #157 (§1.4): Recovery and Migration merged
 )
 DOC_MARKERS = (
     "canonical project root",

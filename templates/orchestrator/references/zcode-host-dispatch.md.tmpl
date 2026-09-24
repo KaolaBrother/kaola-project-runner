@@ -34,9 +34,8 @@ are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 Count before every `start`: live owned sessions, ACP holders included -
 identity-verified (`list --repo` rows with `identity: verified`, the holder
 answering with its recorded `holder_instance_id`); a PID alone is not a seat. At
-the authorized count (a hard cap), exact-`stop`
-one seat first. A different task is a new session, never a prompt chained
-into a finished seat.
+the hard cap: stop-before-start (main Skill step 2). A different task is a new
+session (main Skill §Ending a run).
 
 ### Read the binding in force, new worker or reused
 
@@ -87,8 +86,7 @@ establish it with `observe` before re-sending.
 
 Do the rest of this beat, update the heartbeat prompt at
 `<project>/.kaola/heartbeat-prompt.json` (`body`: project facts, pace, plans),
-report per platform `live N / authorized M` and the seats stopped this beat,
-then **end your reply normally**.
+report as main Skill §Report says, then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
 `sleep`, poll in a loop, or hold this turn open with a blocking `wait` — an
@@ -128,8 +126,8 @@ Confirm you read the turn you dispatched: `observe`'s
 `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
 and `turn_outcome`/`stop_reason` must show it finished. No assistant text
 means the window was wrong — widen it. Then accept or send the repair (the
-same assignment); once accepted, exact-`stop` that seat in this same beat,
-before ending the turn. Update the heartbeat prompt, and end the turn.
+same assignment); once accepted, exact-`stop` that seat this beat (main Skill
+step 5). Update the heartbeat prompt, and end the turn.
 
 `kind` is `idle` when the worker's turn ended (`reason`
 `outcome=<turn_completed|turn_failed> stop_reason=<…>`) and `terminated` when

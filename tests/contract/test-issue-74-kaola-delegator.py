@@ -313,7 +313,9 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "fixture names a numeric token budget")
     check("delivery_stop_boundary=" in ORIGINAL_TASK,
           "fixture names a delivery/stop boundary")
-    check("Do not guess and do not reuse a stale quota" in handoff_one,
+    # Issue #157 (KD-R3): handoff step 4 points at SKILL §Extract once, the authority.
+    check("reuse a stale quota" in skill_one
+          and "authorization per SKILL §Extract once" in handoff_one,
           "new Host does not guess stale quota")
     check("authorization **before** `start`" in handoff_one
           or "authorization before `start`" in handoff_one,
@@ -378,7 +380,9 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "Host stop passes existing Runner --expected-holder-instance-id")
     check("holder-instance-mismatch" in handoff_one,
           "a different holder on the same session name is refused, not stopped")
-    check("holder_instance_id" in handoff_one and "not H1" in handoff_one,
+    # Issue #157 (KD-A2): the undefined "H1" is named as the recorded Host instance.
+    check("holder_instance_id" in handoff_one and "it is not the recorded Host instance" in handoff_one
+          and "H1" not in handoff_one,
           "live attach re-verifies holder_instance_id, not repo+session name alone")
     check("`--expected-holder-instance-id`" in skill_one
           or "--expected-holder-instance-id" in skill,

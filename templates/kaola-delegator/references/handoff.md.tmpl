@@ -61,7 +61,8 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
 2. **Live Host** (exact platform/repo/session still serves, and
    `holder_instance_id` plus `acp_session_id` match the receipts): do not
    `start`. Continue on that holder. If `status` shows a different
-   `holder_instance_id`, it is not H1 — do not `send`/`stop` as H1; re-verify
+   `holder_instance_id`, it is not the recorded Host instance — do not
+   `send`/`stop` it as that Host; re-verify
    to attach it or step 3, never a second `start`.
    Do not replay the first handoff. An outer-Agent change neither stops the
    Host nor re-asks authorization; apply only the user's latest change.
@@ -82,17 +83,14 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    holder — say so. Rebuild the frontier from Git, Workflow claim / ledger,
    Issues, and run receipts — never re-claim, re-dispatch, or redo.
 4. A new Host (first start, or after failed `--resume`) needs current
-   authorization **before** `start`: goal and remaining work; allowed worker
-   platforms/members; counts and concurrency; the quota given, in its own
-   units; priority; delivery and stop boundary. Missing, conflicting, or expired key
-   values: ask the user; do not `start`. A unit the user never gave is none
-   of those: send it `unspecified`. Do not guess and do not reuse a stale
-   quota. Do not open a blank Host. A live Host A→B attach is not a new
-   session: do not re-ask the full set.
+   authorization **before** `start`: authorization per SKILL §Extract once,
+   confirmed with the user. Do not open a blank Host. A live Host A→B attach
+   is not a new session: do not re-ask the full set.
 5. With step 4 complete and no live Host: start once under `$HOST` at
    `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/`holder_instance_id`
-   from the start receipt, then send the first handoff. `$HOST` pins GLM 5.3
-   + effort `max` (`host_selection`); a `host-model-*` refusal escalates.
+   from the start receipt, then send the first handoff. The start pins the
+   manifest's Host model/effort (`host_selection`); a `host-model-*` refusal
+   is evidence and escalates.
 
 ## Handoff and updates
 
@@ -116,10 +114,9 @@ Every turn-opening Host prompt — handoff and later updates alike, each with
 the `sweep=` line — opens
 with `/kaola-project-runner` as its own first line: the native Skill entry,
 idempotent across re-invocation and after compaction (non-ZCode: its
-`host_skill_entry`). Install the generated
-Skill under a discovered root — default `<repo>/.zcode/skills/`,
-`<repo>/.agents/skills/`, `~/.zcode/skills/`, or `~/.agents/skills/`
-(configured `skills.roots`/`plugins.dirs` roots also scan); else plain text. No `AGENTS.md` block or manual `SKILL.md` read is the carrier.
+`host_skill_entry`). Install per Project Runner's discovery precondition
+(`zcode-native-skill-entry.md`); a missing `Skill` tool_call means a bad
+install, never a manual read. No `AGENTS.md` block or manual `SKILL.md` read is the carrier.
 
 Handoff text (quota units never merge; `unspecified` is not unlimited):
 

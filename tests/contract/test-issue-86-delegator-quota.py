@@ -71,14 +71,16 @@ def main() -> int:
     # --- the replacement rule ---------------------------------------------
     check("the quota the user actually gave, each figure in its own unit" in skill_one,
           "Skill collects the quota the user actually gave, each figure in its own unit")
-    check("the quota given, in its own units" in handoff_one,
-          "new-Host authorization takes the quota given, in its own units")
+    # Issue #157 (KD-R3): handoff step 4 no longer restates the set; it points
+    # at SKILL §Extract once, which keeps every rule below.
+    check("authorization per SKILL §Extract once, confirmed with the user" in handoff_one,
+          "new-Host authorization is the SKILL §Extract once set")
     check("A quota unit the user never gave is not a missing key value" in skill_one,
           "Skill: an ungiven quota unit is not a missing key value")
     check("carry it as unspecified and start" in skill_one,
           "Skill: an ungiven quota unit is carried as unspecified rather than blocking start")
-    check("A unit the user never gave is none of those: send it `unspecified`" in handoff_one,
-          "handoff step 4: an ungiven unit is not a missing/conflicting/expired key value")
+    check("A unit the user never gave is none of those" not in handoff_one,
+          "handoff step 4 does not restate the SKILL quota rule")
     for slot in ("quota_concurrency=<as given>", "quota_account=<as given>",
                  "quota_token=<as given>"):
         check(slot in handoff, f"the handoff carries what the user gave ({slot})")
@@ -98,10 +100,10 @@ def main() -> int:
     check("quota units never merge" in handoff_one, "handoff still forbids merging units")
     check("a quota whose unit is unclear is, so ask" in skill_one,
           "an ambiguous quota unit is still a missing key value and still asks")
-    check("Missing, conflicting, or expired key values: ask the user; do not `start`"
-          in handoff_one,
+    check("missing, conflicting, or expired key values must be confirmed before `start`"
+          in skill_one,
           "a genuinely missing key value still asks and still refuses start")
-    check("Do not guess and do not reuse a stale quota" in handoff_one,
+    check("reuse a stale quota" in skill_one,
           "a new Host still does not guess or reuse a stale quota")
     check("Do not open a blank Host" in handoff_one and "Do not open a blank Host" in skill_one,
           "a blank Host is still refused")
@@ -152,8 +154,8 @@ def main() -> int:
     handoff_tmpl = one_line(HANDOFF_TMPL.read_text(encoding="utf-8"))
     check("A quota unit the user never gave is not a missing key value" in skill_tmpl,
           "the Skill rule comes from the shared template, not a hand-edited skills/ file")
-    check("A unit the user never gave is none of those: send it `unspecified`" in handoff_tmpl,
-          "the handoff rule comes from the shared template, not a hand-edited skills/ file")
+    check("authorization per SKILL §Extract once" in handoff_tmpl,
+          "the handoff pointer comes from the shared template, not a hand-edited skills/ file")
 
     print(f"PASS test-issue-86-delegator-quota.py ({len(CHECKS)} checks)")
     return 0

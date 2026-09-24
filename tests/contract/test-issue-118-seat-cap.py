@@ -131,14 +131,17 @@ class ZCodeHostDispatch(unittest.TestCase):
 
     def test_count_before_start(self) -> None:
         self.assertIn("Count before every `start`", self.text)
-        self.assertRegex(self.text, r"At the authorized count \(a hard cap\), exact-`stop` one seat first")
+        # Issue #157 (§1.2): stop-before-start is stated once, in main Skill step 2.
+        self.assertIn("At the hard cap: stop-before-start (main Skill step 2)", self.text)
 
     def test_stop_in_same_beat_after_acceptance(self) -> None:
-        self.assertIn("once accepted, exact-`stop` that seat in this same beat, before ending the turn", self.text)
+        # Issue #157 (§1.2): same-beat exact-stop is stated in main Skill step 5.
+        self.assertIn("once accepted, exact-`stop` that seat this beat (main Skill step 5)", self.text)
         self.assertNotIn("Then accept, fix, or dispatch more", self.text)
 
     def test_finish_the_beat_reports_live_over_authorized(self) -> None:
-        self.assertIn("report per platform `live N / authorized M` and the seats stopped this beat", self.text)
+        # Issue #157 (§1.2): `live N / authorized M` lives in main Skill §Report.
+        self.assertIn("report as main Skill §Report says", self.text)
 
 
 class IssueDispatch(unittest.TestCase):

@@ -200,11 +200,10 @@ class Templates(unittest.TestCase):
         self.assertIn("turn-opening Host prompt", text)
         self.assertIn("opens with `/kaola-project-runner` as its own first line", text)
         self.assertIn("idempotent across re-invocation and after compaction", text)
-        for needle in ("`<repo>/.zcode/skills/`", "`<repo>/.agents/skills/`",
-                       "`~/.zcode/skills/`", "`~/.agents/skills/`"):
-            self.assertIn(needle, text)
-        self.assertIn("configured `skills.roots`/`plugins.dirs` roots also scan",
-                      text)
+        # Issue #157 (KD-A3): install roots are Project Runner's discovery
+        # precondition; the handoff points there instead of restating them.
+        self.assertIn("Install per Project Runner's discovery precondition", text)
+        self.assertIn("a missing `Skill` tool_call means a bad install, never a manual read", text)
         self.assertIn("No `AGENTS.md` block or manual `SKILL.md` read is the "
                       "carrier", text)
         self.assertIn("`Skill` tool_call for that entry", text)
@@ -308,12 +307,9 @@ class GeneratedSurface(unittest.TestCase):
 
     def test_generated_surface_carries_steer_and_root_facts(self) -> None:
         text = flat(self.handoff)
-        self.assertIn("`<repo>/.agents/skills/`", text)
-        self.assertIn("`~/.agents/skills/`", text)
+        self.assertIn("Install per Project Runner's discovery precondition", text)
         self.assertIn("`steer` injects the running turn verbatim", text)
         self.assertIn("steer --steer-mode interrupt", text)
-        self.assertIn("configured `skills.roots`/`plugins.dirs` roots also scan",
-                      text)
         self.assertIn("busy `steer` guide is not a new prompt", flat(self.startup))
         self.assertIn("steer --steer-mode interrupt", flat(self.startup))
 

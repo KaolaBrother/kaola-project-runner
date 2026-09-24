@@ -30,11 +30,10 @@ measured entry, and supervise workers on event-driven beats. Outer Agents
 start or continue a ZCode Host through Kaola-Delegator (`kaola-delegator`).
 Role, authorization and lifecycle boundary come from the
 project's existing Project Plan or already-authorized task plan - never a new
-schema, never this session's claim of having loaded this Skill. Startup
-receipt, one Host per root (`host-exists`), the repo sweep first in every beat
-a Delegator opens, and the entry line opening every Host turn, also after
-compaction: [host-startup.md](references/host-startup.md),
-[zcode-native-skill-entry.md](references/zcode-native-skill-entry.md),
+schema, never this session's claim of having loaded this Skill. Startup, one
+Host per root (`host-exists`), the repo sweep first in every beat and the entry
+line: [host-startup.md](references/host-startup.md) ·
+[zcode-native-skill-entry.md](references/zcode-native-skill-entry.md) ·
 [host-entry-matrix.md](references/host-entry-matrix.md).
 
 ## Consumer-project boundary
@@ -240,11 +239,8 @@ Honor a user stop request within its stated scope; otherwise the heartbeat ends
 on step 5's conditions.
 
 New authorized work, or a different task, gets a new session: a fresh `start`
-under a new standard name, never a prompt chained into a finished seat.
+under a new standard name, never a prompt chained into a finished seat;
 `--resume` (native id known) or `--continue` recover the same assignment only.
-Reuse existing Runner `stop` / `start` / `--resume` /
-`--continue`, and do not invent a session state machine, quota engine, or extra
-dashboards.
 
 ## Dispatch notes
 
@@ -277,5 +273,6 @@ model mismatches, blockers, and next action. Per platform, report `live N /
 authorized M` and the seats stopped this beat; N > M with no stop that beat
 violates the cap. Do not keep stale stopped
 rows in every report. Keep duties traceable in
-existing records; no separate acceptance, finalize, rebase or close-out
-dashboard, state machine or ledger.
+existing records; reuse existing Runner `stop`/`start`, and invent no session
+state machine, quota engine, or acceptance, finalize, rebase or close-out
+dashboard or ledger.

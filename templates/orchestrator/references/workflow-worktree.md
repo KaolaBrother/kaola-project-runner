@@ -76,19 +76,15 @@ finalize or sink moves or removes bricks every later call (for example
 Subagents follow the same rule. A bricked Host reports `brick`, asks to be
 replaced, and stops acting.
 
-## Recovery
+## Recovery and migration
 
-Preserve existing work by default; after inspecting state the Agent chooses
-resume, repair, handoff, or a fresh run. Do not mechanically rebuild, delete,
-move, or adopt an existing run, and do not force an outer-created worktree onto a
-worker that can invoke `workflow-next` itself.
-
-## Migration
-
-A session already running in a child worktree is advisory, not a defect: preserve
-work, read Git plus Workflow records, then choose whether to continue there,
-restart at the canonical project root with in-session `workflow-next`, or use
-another Workflow recovery path.
+Preserve existing work by default; after inspecting Git plus Workflow records the
+Agent chooses resume, repair, handoff, or a fresh run. A session already running
+in a child worktree is advisory, not a defect: continue there, restart at the
+canonical project root with in-session `workflow-next`, or use another Workflow
+recovery path. Do not mechanically rebuild, delete, move, or adopt an existing
+run, and do not force an outer-created worktree onto a worker that can invoke
+`workflow-next` itself.
 
 ## Non-goals
 

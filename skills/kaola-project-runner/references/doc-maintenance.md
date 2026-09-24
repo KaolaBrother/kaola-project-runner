@@ -1,8 +1,7 @@
 # Documentation maintenance boundary
 
-The Runner owns documentation *judgment*, never a documentation subsystem:
-no doc ledger, no second acceptance gate, no scheduled full-doc scan. The four
-duties below attach to the existing main-loop steps; everything else about the
+The Runner owns documentation *judgment*, never a documentation subsystem or a
+scheduled full-doc scan. The four duties below attach to the existing main-loop steps; everything else about the
 loop is unchanged.
 
 ## Dispatch — the worker judges impact
