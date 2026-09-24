@@ -1396,10 +1396,14 @@ def test_canonical_heartbeat_spec_stays_one_set() -> None:
     check(len(rendered) == 1, f"the orchestrator package carries exactly one skeleton ({rendered})")
 
     skill = (ROOT / "skills" / "kaola-project-runner" / "SKILL.md").read_text(encoding="utf-8")
-    check("KAOLA_ACP_HEARTBEAT_HOST" in skill,
-          "the shared Skill documents the ZCode event-carrier override")
-    check(skill.count("KAOLA_ACP_HEARTBEAT_HOST") == 1,
-          "the override appears once; no duplicated second spec")
+    # Issue #157 (PR-R1): beat mechanics live once, in the Host dispatch
+    # reference; the main Skill points there instead of restating them.
+    dispatch = (ROOT / "skills" / "kaola-project-runner" / "references"
+                / "zcode-host-dispatch.md").read_text(encoding="utf-8")
+    check(dispatch.count("KAOLA_ACP_HEARTBEAT_HOST") == 1
+          and "KAOLA_ACP_HEARTBEAT_HOST" not in skill
+          and "references/zcode-host-dispatch.md" in skill,
+          "the event-carrier override is documented once, in the dispatch reference")
     check("30 minutes unless specified" in skill,
           "other hosts' default periodic heartbeat wording is unchanged")
     check(len(skill.encode("utf-8")) <= 17408, "the main Skill stays within its byte budget")

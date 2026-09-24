@@ -41,11 +41,14 @@ class HeartbeatGuidanceObligation(unittest.TestCase):
         self.assertRegex(self.skeleton, r"不给 ZCode 加定时器")
         self.assertRegex(self.skeleton, r"不把 Codex 改成事件触发")
         self.assertRegex(self.skeleton, r"Grok Bot 不加载本 Skill")
+        # Issue #157 (PR-C1): any platform with a host_skill_entry is an
+        # event-driven Host; Codex's own timer serves only a non-Host supervisor.
         self.assertRegex(
             self.skill,
             re.compile(
-                r"heartbeat is the working prompt itself.{0,200}own timer.{0,120}"
-                r"worker return or event.{0,120}host-native\s+carriers",
+                r"heartbeat is the working prompt itself.{0,120}any platform with a\s+"
+                r"`host_skill_entry`.{0,40}each worker event.{0,40}own timer serves only\s+"
+                r"a non-Host Codex supervisor.{0,40}host-native carriers",
                 re.S,
             ),
         )

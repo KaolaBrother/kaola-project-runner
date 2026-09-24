@@ -398,7 +398,11 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
 
     runner = (RUNNER / "SKILL.md").read_text(encoding="utf-8")
     check("Grok Bot is not an entry for this Skill" in runner, "Project Runner withdraws Grok Bot")
-    check("Codex, generic" in runner and "ZCode" in runner, "Project Runner entries are Codex/generic/ZCode")
+    # Issue #157 (PR-C4): any installer runtime or --skills-dir installs it;
+    # Host admission is the entry matrix, not a hand-written runtime list.
+    check("Any `install-local.sh --runtime`, or\n`--skills-dir`" in runner
+          and "Host\nadmission per platform is [host-entry-matrix.md]" in runner,
+          "Project Runner installs through any installer runtime; Host admission per matrix")
     check((RUNNER / "references" / "grok-bot-host.md").exists() is False,
           "Project Runner no longer ships a Grok Bot host reference")
 

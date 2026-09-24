@@ -61,18 +61,25 @@ class HostDispatchContract(unittest.TestCase):
     # -- the main Skill carries the action rules, not only the principle -----
 
     def test_main_skill_states_the_end_turn_rule(self) -> None:
+        # Issue #157 (PR-R1): the main Skill keeps the event-driven invariant and
+        # points at the reference, which alone carries the beat mechanics.
+        self.assertRegex(self.main, r"A Host \(any platform with a `host_skill_entry`\) is\s+"
+                                    r"event-driven: no\s+Routine, cron, or sleep loop")
+        self.assertRegex(self.main, r"ending the\s+turn as the wait: \[references/zcode-host-dispatch\.md\]")
         for fragment in (
             "KAOLA_ACP_HEARTBEAT_HOST",
+            "heartbeat-host-conflict",
             "heartbeat_host",
-            "send --no-wait",
-            "end the turn normally",
+            "--no-wait",
+            "end your reply normally",
             ".kaola/heartbeat-prompt.json",
         ):
             with self.subTest(fragment=fragment):
-                self.assertIn(fragment, self.main)
+                self.assertIn(fragment, self.ref)
         # the prohibitions must be explicit, not implied
-        rule = re.search(r"Never sleep, poll, blocking-`wait`[^.]*\.", self.main)
-        self.assertIsNotNone(rule, "the main Skill must forbid sleep/poll/blocking wait")
+        rule = re.search(r"Do not\s+`sleep`, poll in a loop, or hold this turn open with a blocking `wait`",
+                         self.ref)
+        self.assertIsNotNone(rule, "the reference must forbid sleep/poll/blocking wait")
 
     def test_main_skill_protects_a_waiting_host_from_idle_stop(self) -> None:
         self.assertIn("is not an idle worker", self.main)
@@ -91,7 +98,9 @@ class HostDispatchContract(unittest.TestCase):
         # without the variable and the receipt that proves the source.
         self.assertNotIn("KAOLA_ACP_HEARTBEAT_HOST='{", self.ref)
         self.assertIn('"heartbeat_host_source": "dispatcher"', self.ref)
-        self.assertIn('"session":"zcode-kaola-host"', self.ref)
+        # Issue #157 (X6): the Host example is a standard Host name.
+        self.assertIn('"session":"zcode-KT-orchestrator-main"', self.ref)
+        self.assertNotIn("zcode-kaola-host", self.ref)
         self.assertIn("start --repo", self.ref)
         # Issue #130: the Host-only PTY refusal is absorbed by the universal one.
         self.assertIn("transport-pty-retired", self.ref)
@@ -137,8 +146,9 @@ class HostDispatchContract(unittest.TestCase):
                 self.assertIn(fragment, self.ref)
 
     def test_reference_keeps_turn_end_and_exit_as_equal_triggers(self) -> None:
-        self.assertIn("`kind` is `idle` when the worker's turn ended and `terminated` when its "
-                      "process exited", self.ref)
+        self.assertRegex(self.ref, r"`kind` is `idle` when the worker's turn ended \(`reason`\s+"
+                                   r"`outcome=<turn_completed\|turn_failed> stop_reason=<…>`\) and `terminated` when\s+"
+                                   r"its process exited \(`exit_code=N` or `exit_signal=N`\)")
         self.assertIn("never kill a worker to be notified", self.ref)
 
     # -- the wording must still describe the real implementation -------------

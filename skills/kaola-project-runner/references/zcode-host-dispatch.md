@@ -1,4 +1,4 @@
-# ZCode Host: dispatch, end the turn, wake on worker events
+# Host: dispatch, end the turn, wake on worker events
 
 Host beat: [host-startup.md](host-startup.md). Outer start: Kaola-Delegator
 (`kaola-delegator`).
@@ -14,7 +14,7 @@ guess a session name. `holder_pid` is a fourth fact that proves nothing without
 Each installed Skill's `scripts/runtime-tmux.sh` is platform-pinned, so the
 commands below take **no** platform argument.
 
-## 2. ZCode Host Agent — one beat
+## One Host beat
 
 ### Start a worker from this Host
 
@@ -26,7 +26,8 @@ WORK_REPO="/abs/path/to/project"      # the worker's repo
 
 Run `start` from your own session: it binds the worker to you and refuses
 (`result: refused`, `reason: heartbeat-host-…`, exit 1) instead of starting
-unbound. A PTY request is refused on every command
+unbound. The binding derives from `KAOLA_ACP_DISPATCHER`; an explicit
+`KAOLA_ACP_HEARTBEAT_HOST` that differs refuses `heartbeat-host-conflict`. A PTY request is refused on every command
 (`transport-pty-retired`): the Runner is ACP-only. Worker names
 are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
@@ -41,9 +42,9 @@ into a finished seat.
 
 ```json
 "heartbeat_host_known": true,
-"heartbeat_host": {"platform":"zcode","session":"zcode-kaola-host","repo":"…","socket":"…"},
+"heartbeat_host": {"platform":"zcode","session":"zcode-KT-orchestrator-main","repo":"…","socket":"…"},
 "heartbeat_host_source": "dispatcher",
-"dispatcher": {"holder_instance_id":"…","platform":"zcode","repo":"…","session":"zcode-kaola-host"}
+"dispatcher": {"holder_instance_id":"…","platform":"zcode","repo":"…","session":"zcode-KT-orchestrator-main"}
 ```
 
 `heartbeat_host` is the running holder's own binding; `heartbeat_host_requested`
@@ -101,7 +102,8 @@ then `kaola-host-notify/1`, one JSON object per event —
 
 ```json
 {"event_cursor":19,"event_id":"codex/codex-KT-i274-parser/idle/19","kind":"idle",
- "platform":"codex","repo":"/abs/path/to/project","reason":"turn-end","session":"codex-KT-i274-parser"}
+ "platform":"codex","repo":"/abs/path/to/project","session":"codex-KT-i274-parser",
+ "reason":"outcome=turn_completed stop_reason=end_turn"}
 ```
 
 — then your heartbeat body verbatim between `<<<heartbeat-prompt` and
@@ -129,15 +131,16 @@ means the window was wrong — widen it. Then accept or send the repair (the
 same assignment); once accepted, exact-`stop` that seat in this same beat,
 before ending the turn. Update the heartbeat prompt, and end the turn.
 
-`kind` is `idle` when the worker's turn ended and `terminated` when its
-process exited; a finished turn is a full trigger, and you never kill a
+`kind` is `idle` when the worker's turn ended (`reason`
+`outcome=<turn_completed|turn_failed> stop_reason=<…>`) and `terminated` when
+its process exited (`exit_code=N` or `exit_signal=N`); a finished turn is a full trigger, and you never kill a
 worker to be notified. `permission_required` is a bound worker's agent raising
 `session/request_permission` mid-turn — a wake, not an idle; the ordinary
 `idle` still arrives at turn end. The event carries only `request_id`:
 decide it from the worker's live `pending_permissions` — inside existing
 authorization or escalated to the user.
 
-## 3. Workers and the notification carrier
+## Workers and the notification carrier
 
 The worker Agent owns its delivery; it never fabricates events and never writes
 to your stdin — its holder sends the event over your holder's admin socket.

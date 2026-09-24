@@ -39,7 +39,7 @@ deep test (D3) where the handoff (step 2) and the carrier-woken beat (step 5)
 each produced E1 or E2. In that turn no tool read or grepped the main Skill, and
 the quoted sentence exists only in this build.
 
-## Matrix (measured 2026-09-21, codex 2026-09-23, ACP, this Mac)
+## Matrix (measured 2026-09-21, codex 2026-09-23, ACP, the maintainer Mac Studio)
 
 | Platform | `host_skill_entry` | Probe; D3 step 2 / 5 | User Skill roots discovered | Version |
 |---|---|---|---|---|
@@ -70,7 +70,7 @@ Notes:
   worker (under the shadow `HOME` dsh had no
   credentials and claude-code no login). The roots column is #119's 1.11.0
   probe; #126 held only `~/.codex/skills`. A shell must pass the entry
-  single-quoted or via `--stdin`: in double quotes `$kaola` expands. Like every Host, a codex Host's beat
+  single-quoted, or omit `--text` and pipe stdin: in double quotes `$kaola` expands. Like every Host, a codex Host's beat
   rewrites `.kaola/heartbeat-prompt.json`; Codex's own timer serves only a
   Codex supervisor that is not a Host.
 - **dsh** has an entry despite advertising no commands: `/kaola-project-runner`

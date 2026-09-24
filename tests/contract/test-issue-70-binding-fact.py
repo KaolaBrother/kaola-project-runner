@@ -318,9 +318,14 @@ def test_worker_examples_use_issue_scoped_names() -> None:
           f"the event example names the same issue-scoped worker ({worker})")
     check("`<platform>-<CODE>-i<ISSUE>-<purpose>`" in ref,
           "the reference states the rule, so the example reads as a pattern")
-    # Deliberate, recorded exception: the Host example is project-level for now.
-    check('"session":"zcode-kaola-host"' in ref and not pattern.match("zcode-kaola-host"),
-          "the Host example stays project-level pending Issue #74")
+    # Issue #157 (X6): the Host example is the standard Host name, never an
+    # issue-scoped worker name and never the old non-standard example.
+    host = re.compile(r"^zcode-[A-Za-z0-9_.]+-orchestrator-[A-Za-z0-9][A-Za-z0-9_.-]*$")
+    check('"session":"zcode-KT-orchestrator-main"' in ref
+          and host.match("zcode-KT-orchestrator-main")
+          and not pattern.match("zcode-KT-orchestrator-main")
+          and "zcode-kaola-host" not in ref,
+          "the Host example is a standard Host name, not a worker name")
 
 
 def main() -> int:

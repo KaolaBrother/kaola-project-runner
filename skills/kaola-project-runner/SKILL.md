@@ -84,23 +84,16 @@ platform's default transport is ACP:
 
 ### Hosts
 
-This Skill is host-neutral. Consuming entries are Codex, generic
-`--skills-dir`, and ZCode. Claude Code, Cursor and Devin also install natively,
-the workers as sibling Skill directories. A ZCode Host session is one named
-Runner session like any other: each inner worker, ZCode or not, is a separate
-session and process group - an inner stop never reaches the Host, and the
-Host's stop sweeps only recorded inner sessions. A ZCode Host's heartbeat is event-driven: no Routine, cron, or sleep loop; it
-cannot discover its own `platform`/`session`/`repo` - give them in its first
-prompt. Each beat: a worker `start` run from this Host binds to it by itself
-(`KAOLA_ACP_HEARTBEAT_HOST` is derived; the receipt's `heartbeat_host` names you,
-and a refused `start` opened nothing and names why), dispatch with `send --no-wait`
-(`in_progress` is accepted, not done) keeping its `dispatch_event_cursor` as the
-reading anchor, update the project's `.kaola/heartbeat-prompt.json`, then **end
-the turn normally** - that is the wait. Never sleep, poll, blocking-`wait`, or
-stop/cancel anything to manufacture a wake-up. A worker turn-end or exit delivers one
-full pass here; read the reply through that worker's own Skill from the dispatch
-anchor, not the event's `event_cursor`, which sits after it. Beat, event and carrier detail:
-[references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
+This Skill is host-neutral. Any `install-local.sh --runtime`, or
+`--skills-dir`, installs it with the workers as sibling Skill directories; Host
+admission per platform is [host-entry-matrix.md](references/host-entry-matrix.md).
+Each inner worker, ZCode or not, is its own session and process group: an inner
+stop never reaches the Host, and the Host's stop sweeps only recorded inner
+sessions. A Host (any platform with a `host_skill_entry`) is event-driven: no
+Routine, cron, or sleep loop. Its first prompt names its
+`platform`/`session`/`repo`; `KAOLA_ACP_DISPATCHER` carries them to its shell.
+Beat mechanics - binding, non-blocking dispatch, the reading anchor, ending the
+turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
 Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
 which starts one ZCode Host that then loads this Skill. `--platform grok` is the
 Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
@@ -115,7 +108,7 @@ whole files into context: receipts, hashes, counts and bounded excerpts are the
 evidence. Ordinary `observe`, `status` and `capture --lines` receipts are bounded,
 keeping the newest part and naming what a `truncated` block
 dropped; `capture --full` is the only unbounded request.
-Quota packages: [references/quota-packages.md](references/quota-packages.md).
+Quota packages (read-only catalog; never changes the count cap): [references/quota-packages.md](references/quota-packages.md).
 
 ### Defaults
 
@@ -126,7 +119,7 @@ Quota packages: [references/quota-packages.md](references/quota-packages.md).
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
 | Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
-| Heartbeat | 30 minutes unless specified; zero or "no heartbeat" means one-shot. One host-native carrier, else same-session sleep, never both. |
+| Heartbeat | Non-Host: 30 minutes unless specified; zero or "no heartbeat" means one-shot; one host-native carrier, else same-session sleep, never both. Host: event-driven only (see Hosts). |
 | Permissions | Per platform, not one global bypass. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
 | Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
@@ -139,15 +132,14 @@ workflow-next. Without that binding, linked-worktree starts and existing-run
 recovery are Agent decisions, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
 
-`self_hosting_risk` and model mismatches are reported evidence, not automatic
-start gates. Bypass is not broader authorization. With no verified ACP skip-all,
+Model mismatches are reported evidence, not automatic start gates. Bypass is not broader authorization. With no verified ACP skip-all,
 permission may still arise: `permit` settles it; never add a gate.
 
 ## Heartbeat
 
-The heartbeat is the working prompt itself: Codex runs it from its
-own timer, a ZCode Host from each worker return or event, on host-native
-carriers. Render it from the skeleton in
+The heartbeat is the working prompt itself: a Host (any platform with a
+`host_skill_entry`) runs it on each worker event; Codex's own timer serves only
+a non-Host Codex supervisor; host-native carriers. Render it from the skeleton in
 [references/heartbeat-skeleton.md](references/heartbeat-skeleton.md),
 authorization, and project instructions. It is the effective-now snapshot, not a
 log: update the **same** heartbeat, replacing superseded quota, priority and
@@ -155,7 +147,7 @@ plans, and keeping in-flight locators and unfinished duties. A confirmed change
 applies in that beat; a lowered quota alone cancels nothing. A report-only
 request disables execution actions.
 
-On a ZCode Host session worker events are the only heartbeat trigger (see
+On a Host session worker events are the only heartbeat trigger (see
 Hosts). After close-out, cancel the native heartbeat or stop scheduling the next
 sleep. No allowlist, no heartbeat. Temporarily having no ready task is not
 project completion. Do not hard-code other hosts' scheduler APIs.
