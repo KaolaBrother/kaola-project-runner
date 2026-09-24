@@ -33,8 +33,7 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
-`cancel-confirmed` (the composite saw the old turn stop), or `none`. An `injected` claim without
-`agent-confirmed` is a bug, not an optimism.
+`cancel-confirmed` (the composite saw the old turn stop), or `none`.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is

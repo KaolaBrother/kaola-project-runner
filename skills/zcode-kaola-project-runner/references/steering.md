@@ -1,7 +1,7 @@
 # ZCode steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**supported** (entry `_session/steering`). ZCode 3.12+ (app-server 0.16+) moved mid-turn steering to the v4 command surface, live-proven on installed 3.12.3 (Issue #81): `v4/command sendText{requestedDelivery:"guide"}` is admitted as a guide input and injected at the next tool/message boundary inside the running turn. The adapter sends it with an `expectedTurnId` per-turn CAS learned from `turn.started`, and decides the outcome from the events alone — the sendText ack is a measured trap (`result.delivery` reads "queue" even for admitted guide input) — so `injected` requires `turn.steerQueued{delivery:"guide"}` plus `turn.steerDrained{injectedMessageIds}` naming the same `targetTurnId`, and that turn must be the one the steer targeted. Queue-only admission maps to `not_consumed`, a turn-end race or silence to `unknown`, a platform rejection surfaces its `reasonCode`, and `-32601` on pre-0.16 backends yields `unsupported`. The events ride the existing session/event stream; the adapter primes `v4/conversation/subscribe` lazily inside the steer path. `--steer-mode interrupt` remains the explicitly chosen alternative (0.16.5 accepts session/cancel at once but the turn was measured settling `cancelled` only after ~70-100 s, finishing shell steps meanwhile, so a short `--cancel-timeout` buys a truthful `unknown`, not a faster steer).
+**supported** (entry `_session/steering`). ZCode 3.12+ (app-server 0.16+) steers through `v4/command sendText{requestedDelivery:"guide"}`, injected at the next tool/message boundary of the running turn (live on 3.12.3, Issue #81). The outcome comes from events alone, never the sendText ack: `injected` requires `turn.steerQueued{delivery:"guide"}` plus `turn.steerDrained` naming the targeted turn; queue-only admission is `not_consumed`, a turn-end race or silence `unknown`, a platform rejection surfaces its `reasonCode`, and `-32601` on pre-0.16 backends is `unsupported`. `--steer-mode interrupt` is the explicitly chosen alternative; a cancel was measured settling only after ~70-100 s on 0.16.5, so a short `--cancel-timeout` buys a truthful `unknown`, not a faster steer.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
@@ -33,8 +33,7 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
-`cancel-confirmed` (the composite saw the old turn stop), or `none`. An `injected` claim without
-`agent-confirmed` is a bug, not an optimism.
+`cancel-confirmed` (the composite saw the old turn stop), or `none`.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is

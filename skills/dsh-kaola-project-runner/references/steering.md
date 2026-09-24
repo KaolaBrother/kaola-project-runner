@@ -1,7 +1,7 @@
 # dsh steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unsupported** (entry ``). No steering entry on the ACP surface: `_session/steering`, `session/steering`, `session/steer` and `_session/steer` all answer JSON-RPC -32601 on dsh 0.1.5-rc.2 (agent deepseek-harness-acp/0.0.1) and `initialize` advertises no steering `_meta`. The composite `--steer-mode interrupt` is the usable path and needs no raised timeout: `session/cancel` is accepted as a notification and the running turn settles in about 0.01 s with stopReason `cancelled`, measured live.
+**unsupported**. No steering entry on the ACP surface: `_session/steering`, `session/steering`, `session/steer` and `_session/steer` all answer JSON-RPC -32601 on dsh 0.1.5-rc.2 (agent deepseek-harness-acp/0.0.1) and `initialize` advertises no steering `_meta`. The composite `--steer-mode interrupt` is the usable path and needs no raised timeout: `session/cancel` is accepted as a notification and the running turn settles in about 0.01 s with stopReason `cancelled`, measured live.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
@@ -33,8 +33,7 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
-`cancel-confirmed` (the composite saw the old turn stop), or `none`. An `injected` claim without
-`agent-confirmed` is a bug, not an optimism.
+`cancel-confirmed` (the composite saw the old turn stop), or `none`.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is

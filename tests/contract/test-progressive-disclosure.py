@@ -141,7 +141,9 @@ class ActivationBoundaries(unittest.TestCase):
             text = raw.decode("utf-8")
             for marker in ORCHESTRATOR_MARKERS:
                 self.assertNotIn(marker, text, f"{skill_id}: {marker}")
-            self.assertIn("Progressive disclosure: load this Skill only when this platform is selected", re.sub(r"\s+", " ", text))
+            # Issue #157 (T8): the self-referential "load this Skill only when..." clause is gone;
+            # the reference-on-demand rule is what the loaded Skill still states.
+            self.assertIn("Progressive disclosure: open a reference only when the current operation needs it", re.sub(r"\s+", " ", text))
             bodies[skill_id] = frontmatter(text)[1]
         main_body = frontmatter((PROJECT / "skills" / ORCHESTRATOR_ID / "SKILL.md").read_text(encoding="utf-8"))[1]
         for skill_id, body in bodies.items():
@@ -198,7 +200,8 @@ class RendererEnforcesBudgets(unittest.TestCase):
                 "templates/orchestrator/SKILL.md.tmpl": (r"budget: kaola-project-runner/SKILL\.md is \d+ B > \d+ B \(main_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
                 "templates/SKILL.md.tmpl": (r"budget: claude-code-kaola-project-runner/SKILL\.md is \d+ B > \d+ B \(worker_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
                 "templates/kaola-delegator/SKILL.md.tmpl": (r"budget: kaola-delegator/SKILL\.md is \d+ B > \d+ B \(external_skill_bytes\)", "\n" + "padding " * 400 + "\n"),
-                "templates/references/acp.md.tmpl": (r"budget: codex-kaola-project-runner/references/acp\.md is \d+ B > \d+ B \(reference_bytes\)", "\n" + "padding " * 400 + "\n"),
+                # Issue #157: the worker acp.md shrank to ~4.2 KB, so the probe pads past 8192 B.
+                "templates/references/acp.md.tmpl": (r"budget: codex-kaola-project-runner/references/acp\.md is \d+ B > \d+ B \(reference_bytes\)", "\n" + "padding " * 800 + "\n"),
                 "templates/grok-bot/INSTALL.md.tmpl": (r"budget: grok-bot/INSTALL\.md is \d+ B > \d+ B \(bridge_guide_bytes\)", "\n" + "padding " * 600 + "\n"),
             }
             for relative, (pattern, padding) in cases.items():

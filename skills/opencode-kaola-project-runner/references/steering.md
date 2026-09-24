@@ -1,7 +1,7 @@
 # OpenCode steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unknown** (entry ``). Historical evidence, OpenCode 1.18.17: no steering entry on the ACP surface - all four candidate methods answered JSON-RPC -32601 and `initialize` advertised no steering `_meta`. That probe is a 1.18.17 result, not a measurement of the newer verified builds; V2 rewrote the CLI around a background service, and while 2.0.11 `initialize` was observed to advertise no steering `_meta` either, no steering method was re-probed on 2.0.11 or on the record's 2.0.15 build (record-only since the 2026-09-24 Pink batch, no separate verification), so treat its native-steering capability as unknown until a live probe settles it, and do not read the 1.18.17 outcome as a current-version claim. The composite `--steer-mode interrupt` is unaffected and was exercised live on 1.18.31.
+**unknown**. Historical evidence, OpenCode 1.18.17: all four candidate steering methods answered JSON-RPC -32601 and `initialize` advertised no steering `_meta`. That is not a measurement of the verified 2.0.x builds: 2.0.11 `initialize` also advertised no steering `_meta`, but no steering method was re-probed on 2.0.11 or on the recorded 2.0.15, so native steering is unknown until a live probe settles it. The composite `--steer-mode interrupt` was exercised live on 1.18.31.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
@@ -33,8 +33,7 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
-`cancel-confirmed` (the composite saw the old turn stop), or `none`. An `injected` claim without
-`agent-confirmed` is a bug, not an optimism.
+`cancel-confirmed` (the composite saw the old turn stop), or `none`.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is

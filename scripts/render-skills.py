@@ -295,9 +295,59 @@ def continue_fact(manifest: dict[str, str]) -> str:
     return "the latest `session/list` entry for the canonical cwd"
 
 
+def config_ids(manifest: dict[str, str]) -> str:
+    """Issue #157 (T14): only the config IDs this manifest declares, so an
+    empty slot never renders as an empty code span."""
+    declared = [manifest[key] for key in (
+        "acp_model_config_id", "acp_effort_config_id", "acp_fast_config_id") if manifest[key]]
+    return "/".join(f"`{value}`" for value in declared) or "none declared"
+
+
+def tiers_equal(manifest: dict[str, str]) -> bool:
+    return all(manifest[f"default_model_{key}"] == manifest[f"upgrade_model_{key}"]
+               for key in ("name", "id", "parameters"))
+
+
+def preset(manifest: dict[str, str], tier: str) -> str:
+    """One SKILL.md preset as **name**: `id`, parameters; an undeclared id is omitted (T14)."""
+    model_id = manifest[f"{tier}_model_id"]
+    shown = f"`{model_id}`, " if model_id else ""
+    return f"**{manifest[f'{tier}_model_name']}**: {shown}{manifest[f'{tier}_model_parameters']}"
+
+
+def presets(manifest: dict[str, str]) -> str:
+    """Issue #157 (T15): identical default/upgrade presets render once."""
+    default = f"`--tier default` ({preset(manifest, 'default')})"
+    if tiers_equal(manifest):
+        return f"{default}; `--tier upgrade` equals default here"
+    return f"{default} and `--tier upgrade` ({preset(manifest, 'upgrade')})"
+
+
+def preset_line(manifest: dict[str, str], tier: str) -> str:
+    """One references/platform.md preset bullet; an undeclared model id is omitted (T14)."""
+    model_id = manifest[f"{tier}_model_id"]
+    parameters = f"`{manifest[f'{tier}_model_parameters']}`"
+    detail = f"`{model_id}` with {parameters}" if model_id else parameters
+    return (f"- Runner {tier} preset (`--tier {tier}`): "
+            f"**{manifest[f'{tier}_model_name']}** — {detail}")
+
+
+def preset_lines(manifest: dict[str, str]) -> str:
+    """The references/platform.md default and upgrade bullets (T14, T15)."""
+    upgrade = ("- Runner upgrade preset (`--tier upgrade`): equals default here"
+               if tiers_equal(manifest) else preset_line(manifest, "upgrade"))
+    return preset_line(manifest, "default") + "\n" + upgrade
+
+
 def variables(manifest: dict[str, str]) -> dict[str, str]:
     values = {key.upper(): value for key, value in manifest.items()}
     values["CONTINUE_FACT"] = continue_fact(manifest)
+    values["ACP_CONFIG_IDS"] = config_ids(manifest)
+    values["ACP_QUIRKS"] = manifest["acp_quirks"] or "none recorded"
+    values["PRESETS"] = presets(manifest)
+    values["PRESET_LINES"] = preset_lines(manifest)
+    values["STEER_ENTRY"] = (f" (entry `{manifest['acp_steer_method']}`)"
+                             if manifest["acp_steer_method"] else "")
     values["STEERING_BLOCK"] = steering_block(manifest)
     values["TIER_BLOCK"] = tier_block(manifest)
     values["ALT_TIER_LINE"] = alt_tier_line(manifest)

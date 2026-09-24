@@ -28,6 +28,14 @@
   measurements and the fixtures that model them keep the versions they were measured on. No
   release was cut and `~/.dsh` is untouched.
 
+- **Worker Skill prompts: codex measurement narrative leaves the loaded quirks (Issue #157).**
+  `platforms/codex.yaml` `acp_quirks` no longer carries the dated measurement narrative; the
+  facts stay recorded here: the 2026-09-23 `CODEX_PATH=/opt/homebrew/bin/codex` run (codex-cli
+  0.156.0 on codex-acp 1.13.0) applied `gpt-6-sol`/`high` with `high` read back, the `medium`
+  discriminator, and `gpt-6-astra`/`high` (0.5.9, Issue #145); the 0.156.1/1.13.1 pins follow the
+  2026-09-24 Pink class-2 report as a record-only pin with no local CLI upgrade and no live run on
+  1.13.1 (Issue #153, above). The loaded quirk keeps only that the pins are record-only.
+
 ## 0.6.0 — 2026-09-24 (quota packages, ten-platform wording, prerequisite-tolerant validation)
 
 - **Read-only quota catalog queries: `kaola-acp packages` / `model-package` (Issue #148).**

@@ -23,15 +23,14 @@ ACP is the only transport (Issue #130). The ACP command is `node $SKILL_DIR/scri
 | `completed` | The turn reached a reported stop reason. |
 | `unknown` | Partial mutation cannot be ruled out. |
 
-Runner never auto-falls back or resends. Read the receipt and decide whether another prompt is appropriate.
+Runner never auto-falls back or resends, and never restarts or resumes a session on its own. Read the receipt and decide whether another prompt is appropriate.
 
 ## Communication loop
 
 Resolve this Skill's installed directory once and call its scripts by absolute path — the install
 destination may contain spaces, and the user's project is passed only through `--repo` (relative
 paths in these references resolve against the Skill, never the project cwd). Progressive
-disclosure: load this Skill only when this platform is selected, open a reference only when the
-current operation needs it, run the scripts and never read their source, and prefer bounded
+disclosure: open a reference only when the current operation needs it, run the scripts and never read their source, and prefer bounded
 receipts (`observe`, `status`, `capture --lines`) over whole-history dumps — `capture --full` is an
 explicit, unbounded request:
 
@@ -42,13 +41,11 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 "$SKILL_DIR/scripts/runtime-tmux.sh" preflight --repo "$REPO" --session "$SESSION"
 "$SKILL_DIR/scripts/runtime-tmux.sh" start --repo "$REPO" --session "$SESSION"
 "$SKILL_DIR/scripts/runtime-tmux.sh" observe --repo "$REPO" --session "$SESSION"
-"$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 160
+"$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 200
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**Opus High**: `opus`,
-effort=high) and `--tier upgrade` (**Fable High**:
-`fable`, effort=high) — and `default` applies whenever the user did
+presets — `--tier default` (**Opus High**: `opus`, effort=high) and `--tier upgrade` (**Fable High**: `fable`, effort=high) — and `default` applies whenever the user did
 not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.
@@ -120,47 +117,42 @@ When the Agent decides the exact session is finished, end only that owned sessio
 ```
 
 Use `--force` only when the Agent explicitly chooses forced containment for this exact owned
-session. Never use broad session/process cleanup.
+session. Never use broad session/process cleanup, and never reconstruct ownership from process
+names or fuzzy session matches.
 
 ## Ending, releasing, and resuming
 
-The controlling Agent owns every completion judgment; the Runner only executes the chosen
-operation and reports the true result. These are suggestions, never gates:
+The controlling Agent owns every completion judgment; the Runner executes the chosen operation
+and reports the true result. These are suggestions, never gates:
 
-- A finished reply is not a finished task. An `end_turn` event, an idle terminal, or a
-  successful `send` receipt never establishes completion; the Agent reads the result and
-  decides whether to continue, review, fix, or end.
+- A finished reply is not a finished task: an `end_turn` event, an idle terminal, or a
+  successful `send` receipt never establishes completion.
 - When this delegation's work is delivered and no immediate interaction is expected, the
   default recommendation is to `stop` the exactly-owned running session. Keep it running
   when the Agent expects to resume interacting right away or the user asked for it to stay.
-- `stop` releases the owned runtime (the ACP holder and its agent). It
-  does not delete CLI history, session records, work artifacts, or unrelated resources, and
-  it is never coupled to a history wipe. Judge success by the `stop`/`status` result
-  evidence, not by a completed call.
-- Before stopping, the Agent may keep whatever resume facts are already available —
-  platform, canonical repo, any reported native session ID, outcome, remaining work —
-  from existing receipts and Workflow records. The native session ID is the CLI's own
-  conversation identifier, never the Runner's `--session` name. Missing identifiers
-  never block a chosen `stop`; nothing here is a required checkpoint.
-- Later work resumes through the Agent's choice: `start --resume <native-session-id>`,
-  `start --continue` for the platform's latest conversation, or a fresh `start` plus
-  existing records where the platform cannot resume. The Runner never auto-falls back,
-  resends an old prompt, or restarts on its own.
+- `stop` releases the owned runtime (the ACP holder and its agent). It never deletes CLI
+  history, session records, work artifacts, or unrelated resources. Judge success by the
+  `stop`/`status` result evidence, not by a completed call.
+- Before stopping, the Agent may keep available resume facts (platform, canonical repo, any
+  reported native session ID, outcome, remaining work) from existing receipts and Workflow
+  records. The native session ID is the CLI's own conversation identifier, never the Runner's
+  `--session` name. Missing identifiers never block a chosen `stop`.
+- Later work resumes by the Agent's choice: `start --resume <native-session-id>`,
+  `start --continue` for the platform's latest conversation, or a fresh `start` plus existing
+  records where the platform cannot resume.
 
 ## Optional Kaola Workflow recommendation
 
 For project work, when Kaola Workflow is available to Claude Code and fits the user's task,
-consider telling the user it is available and whether you plan to use it, then asking the CLI to
-start or resume with `workflow-next` using its installed native Workflow instructions. Ordinary
-Workflow-backed work: prefer `--repo` bound to the consuming project's canonical Git root, then ask
-this CLI to invoke its installed `workflow-next` so that runtime's Workflow creates or recovers the
-child worktree. This Skill only transports the exact session. Linked-worktree starts, outer-prepared
-bundles, and existing-run recovery are Agent decisions, not transport gates. Inspect Git and Workflow evidence first, report the chosen Git root, and allow several
-exact sessions at one canonical root with separate Workflow worktrees. A session already in a child
-worktree is advisory: preserve work, then continue, stop/restart at root, or use another Workflow
-recovery path. Existing carrier evidence can help; installation for another runtime alone does not
-establish availability here. The controlling Agent decides whether to adopt this recommendation,
-including for diagnosis or ordinary CLI tasks.
+consider telling the user whether you plan to use it. Ordinary Workflow-backed work binds `--repo`
+to the consuming project's canonical Git root and asks this CLI to invoke its installed
+`workflow-next`, so that runtime's Workflow creates or recovers the child worktree; this Skill only
+transports the exact session. Linked-worktree starts, outer-prepared bundles, and existing-run
+recovery are Agent decisions, not transport gates. Inspect Git and Workflow evidence first, report
+the chosen Git root, and allow several exact sessions at one canonical root with separate Workflow
+worktrees. A session already in a child worktree is advisory: preserve work, then continue,
+stop/restart at root, or use another Workflow recovery path. Installation for another runtime alone
+does not establish availability here; the Agent decides whether to adopt this recommendation.
 
 If adopted, consider supervising `kaola-workflow-finalize` through the selected merge/sync or PR
 delivery, verifying the actual result and cleanup of this task's workspace, worktrees, and branches.

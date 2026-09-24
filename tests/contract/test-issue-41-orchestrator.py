@@ -56,14 +56,16 @@ COPY_IGNORE = shutil.ignore_patterns(".git", ".kw", "__pycache__", "node_modules
 
 # Worker transport contract that must survive Issue #41 (optional pointer to the
 # main Skill is allowed elsewhere; these obligations must not be rewritten).
+# Issue #157 (T7): the worker Skill states each of these once; the no-auto-
+# fallback/restart rule lives in §Transport (R8), the rest in §Ending.
 WORKER_STOP_RESUME = (
-    "Before stopping, the Agent may keep whatever resume facts are already available",
-    "Later work resumes through the Agent's choice: `start --resume",
-    "The Runner never auto-falls back, resends an old prompt, or restarts on its own",
+    "Before stopping, the Agent may keep available resume facts",
+    "Later work resumes by the Agent's choice: `start --resume",
+    "Runner never auto-falls back or resends, and never restarts or resumes a session on its own",
 )
 WORKER_RECEIPT_NOT_COMPLETION = (
     "A finished reply is not a finished task",
-    "An `end_turn` event, an idle terminal, or a successful `send` receipt never establishes completion",
+    "an `end_turn` event, an idle terminal, or a successful `send` receipt never establishes completion",
 )
 WORKER_NO_PROJECT_POLICY = (
     "At every heartbeat, match authorized idle workers",

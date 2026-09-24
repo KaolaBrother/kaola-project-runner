@@ -1,7 +1,7 @@
 # Cursor CLI steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unsupported** (entry ``). No steering entry on the ACP surface: `_session/steering`, `session/steering`, `session/steer`, and `_session/steer` all answer JSON-RPC -32601 on cli 2026.09.10-fd3934a, and `initialize` advertises no steering `_meta`. A second `session/prompt` during a live turn CANCELS the original turn (`stopReason: cancelled`) instead of steering it, so it is not a substitute.
+**unsupported**. No steering entry on the ACP surface: `_session/steering`, `session/steering`, `session/steer`, and `_session/steer` all answer JSON-RPC -32601 on cli 2026.09.10-fd3934a, and `initialize` advertises no steering `_meta`. A second `session/prompt` during a live turn CANCELS the original turn (`stopReason: cancelled`) instead of steering it, so it is not a substitute.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
@@ -33,8 +33,7 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
-`cancel-confirmed` (the composite saw the old turn stop), or `none`. An `injected` claim without
-`agent-confirmed` is a bug, not an optimism.
+`cancel-confirmed` (the composite saw the old turn stop), or `none`.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is
