@@ -11,6 +11,10 @@
 - [ZCode Host](zcode-host.md): ZCode as worker platform and as native skill-directory host, the
   generic ACP entry, the event-driven heartbeat carrier and its prompt-file defect receipt, and
   the two startup flows (ordinary worker supervision vs Orchestrator/Host supervision)
+- [Host entry evidence](host-entry-evidence.md): probe method, versions, negative controls and
+  deep-test record behind the loaded Host entry matrix and the ZCode native Skill entry
+- [Issue-scoped names: consumer display](issue-dispatch-display.md): how a consumer may show
+  issue-run progress from the dispatch name, its unknown fallbacks, and the non-goals
 - [Conventions](conventions.md): change boundary, source-of-truth, safety, and validation
 - [Runner v2 transport design (2026-09-11)](runner-v2-dual-transport-design-2026-09-11.md) (historical, PTY retired by #130)
   (v0.3): the original ACP design record, low-token receipts, PoC conclusions, and the

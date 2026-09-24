@@ -34,6 +34,7 @@ PROJECT = Path(__file__).resolve().parents[2]
 ORCHESTRATOR = PROJECT / "skills" / "kaola-project-runner"
 SKILL = ORCHESTRATOR / "SKILL.md"
 SKELETON = ORCHESTRATOR / "references" / "heartbeat-skeleton.md"
+DISPLAY_DOC = PROJECT / "docs" / "issue-dispatch-display.md"
 DISPATCH = ORCHESTRATOR / "references" / "issue-dispatch.md"
 WORKTREE_REF = ORCHESTRATOR / "references" / "workflow-worktree.md"
 TEMPLATES = PROJECT / "templates" / "orchestrator"
@@ -101,7 +102,12 @@ class RenderedSurfacesStateTheRule(unittest.TestCase):
         self.assertIn("never stop or restart a live session solely to rename it", normalize(self.dispatch))
         self.assertIn("native ACP session id is unchanged by this rule", normalize(self.dispatch))
         self.assertIn("grandfathered for safe close-out", self.dispatch)
-        joined = normalize(self.dispatch)
+        # Issue #157 (PR-R4): consumer display semantics moved to docs; the loaded
+        # reference keeps one line and points there.
+        self.assertIn("never overrides repository identity or `issue_number`, and `--resume` stays "
+                      "same-issue recovery only", normalize(self.dispatch))
+        self.assertIn("`docs/issue-dispatch-display.md`", self.dispatch)
+        joined = normalize(DISPLAY_DOC.read_text(encoding="utf-8"))
         self.assertIn("`claim_repository_id` and `issue_number`", joined)
         self.assertIn("It never predicts when one ACP process will finish", joined)
         self.assertIn("`all missions done` does not by itself mean review, finalize, merge, or issue close-out happened", joined)
@@ -289,7 +295,7 @@ class NoNewMechanism(unittest.TestCase):
         text = DISPATCH.read_text(encoding="utf-8") + SKILL.read_text(encoding="utf-8")
         for invented in ("session_identity", "session registry", "naming daemon", "name_index"):
             self.assertNotIn(invented, text, f"Issue #72 must not introduce {invented!r}")
-        joined = normalize(DISPATCH.read_text(encoding="utf-8"))
+        joined = normalize(DISPLAY_DOC.read_text(encoding="utf-8"))
         self.assertIn("Do not add a blocking classifier, a registry, a daemon, or a new Workflow state field", joined)
         self.assertIn("Nothing here was verified end to end against a consumer", joined)
 

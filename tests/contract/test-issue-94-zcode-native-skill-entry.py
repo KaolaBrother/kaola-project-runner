@@ -37,6 +37,8 @@ ORCH = SKILLS / "kaola-project-runner"
 DELEG = SKILLS / "kaola-delegator"
 HOLDER = PROJECT / "scripts" / "kaola-acp-holder.py"
 DOC = PROJECT / "docs" / "zcode-host.md"
+# Issue #157 (PR-M2): the dated measurement record left the loaded reference.
+EVIDENCE = PROJECT / "docs" / "host-entry-evidence.md"
 
 ENTRY = "/kaola-project-runner"
 
@@ -61,6 +63,7 @@ class Templates(unittest.TestCase):
             encoding="utf-8")
         cls.handoff = (DELEG_T / "references" / "handoff.md.tmpl").read_text(
             encoding="utf-8")
+        cls.evidence = EVIDENCE.read_text(encoding="utf-8")
 
     def test_old_carrier_reference_is_deleted(self) -> None:
         self.assertFalse((ORCH_T / "references" / "zcode-compact-recovery.md").exists())
@@ -94,7 +97,7 @@ class Templates(unittest.TestCase):
                       "verbatim", text)
         self.assertIn("no new `Skill` tool_call is produced, needed, or "
                       "promised", text)
-        self.assertIn("a `Skill` tool_call from a busy `steer` guide", text)
+        self.assertIn("a `Skill` tool_call from a busy `steer` guide", flat(self.evidence))
 
     def test_reference_interrupt_steer_is_not_a_host_entry(self) -> None:
         text = flat(self.entry_ref)
@@ -105,8 +108,8 @@ class Templates(unittest.TestCase):
         self.assertIn("verbatim", text)
         self.assertIn("never infers Host identity from prompt content", text)
         self.assertIn("the caller supplies `/kaola-project-runner`", text)
-        self.assertIn("Composite interrupt steer", text)
-        self.assertIn("contract-tested", text)
+        self.assertIn("Composite interrupt steer", flat(self.evidence))
+        self.assertIn("contract-tested", flat(self.evidence))
         self.assertNotIn("host_skill_entry_prepended", text)
         self.assertNotIn("entry Host", text)
 
@@ -121,15 +124,15 @@ class Templates(unittest.TestCase):
         self.assertIn("default", text)
         self.assertIn("ancestor", text)
         self.assertIn("plugin cache", text)
-        self.assertIn("createSkillsService", text)
+        self.assertIn("createSkillsService", flat(self.evidence))
 
     def test_reference_names_configured_roots(self) -> None:
         text = flat(self.entry_ref)
         self.assertIn("`skills.roots` in `~/.zcode/cli/config.json`", text)
-        self.assertIn("extraRoots", text)
+        self.assertIn("extraRoots", flat(self.evidence))
         self.assertIn("`plugins.dirs`", text)
         self.assertIn("`<plugin>:<skill>`", text)
-        self.assertIn("kpr-extra:kaola-project-runner", text)
+        self.assertIn("kpr-extra:kaola-project-runner", flat(self.evidence))
         self.assertIn("outside every discovered root", text)
         self.assertIn("default or configured", text)
 
@@ -139,13 +142,18 @@ class Templates(unittest.TestCase):
                       "no compaction detection, and no manual `read` of a "
                       "`SKILL.md` file is involved anywhere", text)
         self.assertIn("ordinary Agents in the same repo carry no Host "
-                      "instruction at all", text)
+                      "instruction at all", flat(self.evidence))
         self.assertIn("no hook, plugin, command registry, scheduler, "
                       "polling loop, role classifier, session marker, "
                       "cursor ledger, or state machine", text)
 
     def test_reference_keeps_honest_runtime_facts_and_bounds(self) -> None:
-        text = flat(self.entry_ref)
+        # Issue #157 (PR-M2): the loaded reference points at the evidence and
+        # carries no dated version claim; the record keeps the honest bounds.
+        self.assertIn("`docs/host-entry-evidence.md`", flat(self.entry_ref))
+        self.assertNotIn("3.12.3", self.entry_ref)
+        self.assertIn("do not fall back to reading `SKILL.md` by hand", flat(self.entry_ref))
+        text = flat(self.evidence)
         for needle in ("no compaction hook", "`startup`/`resume`",
                        "no compaction through ACP", "context_usage` stays null",
                        "trigger:\"auto\"", "contextWindow",

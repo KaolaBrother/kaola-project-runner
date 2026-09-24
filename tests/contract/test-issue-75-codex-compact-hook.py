@@ -866,14 +866,21 @@ class ZcodeNativeEntrySurface(unittest.TestCase):
         for needle in (
             "/kaola-project-runner",
             "native `Skill` tool_call",
+            "No `AGENTS.md` block",
+            "`docs/host-entry-evidence.md`",
+        ):
+            self.assertIn(needle, self.ref)
+        # Issue #157 (PR-M2): the dated compaction facts and the honest bounds
+        # moved out of the loaded reference into the evidence record.
+        evidence = (PROJECT / "docs" / "host-entry-evidence.md").read_text(encoding="utf-8")
+        for needle in (
             "trigger:\"auto\"",
             "no compaction hook",
-            "No `AGENTS.md` block",
             "never a per-send check",
             "Not verified",
             "real-model",
         ):
-            self.assertIn(needle, self.ref)
+            self.assertIn(needle, evidence)
 
     def test_old_carrier_file_is_gone(self) -> None:
         self.assertFalse(

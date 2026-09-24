@@ -137,7 +137,9 @@ class AbsentLedger(unittest.TestCase):
         self.assertIn(
             "Absent file → no live Workflow run has recorded missions for this issue (`unknown`).", text
         )
-        self.assertIn("an absent ledger, or two active runs for one issue each fall back to unknown", text)
+        # Issue #157 (PR-R4): the consumer-display fallback list moved to docs.
+        display = re.sub(r"\s+", " ", (PROJECT / "docs" / "issue-dispatch-display.md").read_text(encoding="utf-8"))
+        self.assertIn("an absent ledger, or two active runs for one issue each fall back to unknown", display)
         self.assertNotIn("mission-list.md", text)
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "kaola-workflow").mkdir()
