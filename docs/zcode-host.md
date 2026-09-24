@@ -207,6 +207,31 @@ worker agent terminated / worker turn ended (one idle episode)
   fact entirely. Treat it as a pre-#104 worker — exact-stop it, report the
   install as the blocker, and refresh the install before dispatching again
   (Issue #105).
+- **Pre-binding holders (moved out of the loaded Skill, Issue #157 S3).** The
+  recovery text for holders and worker Skill copies older than automatic binding
+  (v0.5.2-era) no longer loads with every Host beat. The Host reference
+  `zcode-host-dispatch.md` carried it verbatim until then:
+
+  ```text
+  - `heartbeat_host_known: false` — a holder or record older than the field:
+    unknown; treat it as unbound.
+  - No `heartbeat_host_source` key at all — the worker Skill copy that ran this
+    `start` predates automatic binding. Exact-`stop` it, report `BLOCKED` with the
+    install as the cause, and dispatch again only after it is refreshed.
+  - `"error": {"code": "session-exists"}` — you reused a live holder, which keeps
+    its binding; a `null` there predates automatic binding.
+
+  #### A worker without a binding
+
+  A worker started before automatic binding shows `heartbeat_host: null`: read
+  its in-flight result with the bounded `wait --timeout <seconds>` (the recovery
+  exception, never the ordinary wait or a poll loop), then exact `stop` and
+  `start` it at that idle point. A refused `start`, or a session that is gone, is
+  the exception you report with the decision you need. Never auto-cancel, re-send
+  work you cannot show was dropped, switch platform, or stop the Host to force a
+  wake-up.
+  ```
+
 - **Events.** `terminated` fires once from the worker holder's existing
   `on_agent_exit` path, before the exit bookkeeping, so an exact stop waits
   out the send; `idle` fires once per ended turn with the agent still alive

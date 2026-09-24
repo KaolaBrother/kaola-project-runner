@@ -49,9 +49,7 @@ Several ACP workers may collaborate on the **same** issue. They share that issue
 ledger read-only while keeping distinct Runner names and distinct native sessions.
 
 Before issue-level progress is shown, the claimed `workflow-state.md` `issue_number` must
-equal the dispatch name's `ISSUE` under the same repository identity. Runs already in flight
-under the older bundle mode are grandfathered for safe close-out: do not rename them, restart
-them, or rewrite completed Mission results to retrofit this rule.
+equal the dispatch name's `ISSUE` under the same repository identity.
 
 ## The mission ledger
 

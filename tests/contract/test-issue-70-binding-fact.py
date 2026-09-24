@@ -200,19 +200,23 @@ def test_recovery_is_internal_bounded_and_only_exceptions_go_outward() -> None:
     flat_ref = re.sub(r"\s+", " ", ref)
     flat_startup = re.sub(r"\s+", " ", startup)
 
-    # Issue #104: the binding is mechanical, so the reference keeps only the
-    # transitional case (a worker started before automatic binding) and the
-    # same recovery: bounded read, then exact stop/start at the idle point.
-    check("A worker started before automatic binding shows `heartbeat_host: null`" in flat_ref,
-          "the reference scopes a null binding to the pre-change worker")
-    check("read its in-flight result with the bounded `wait --timeout <seconds>`" in flat_ref,
-          "the reference reuses the existing bounded wait to read the in-flight result")
-    check("the recovery exception, never the ordinary wait or a poll loop" in flat_ref,
+    # Issue #104: the binding is mechanical. Issue #157 (S3): the pre-binding
+    # recovery (bounded read, then exact stop/start at the idle point) left the
+    # loaded reference and is kept verbatim in docs/zcode-host.md.
+    doc = re.sub(r"\s+", " ", (ROOT / "docs" / "zcode-host.md").read_text(encoding="utf-8"))
+    check("A worker started before automatic binding" not in flat_ref
+          and "heartbeat_host_known: false" not in flat_ref,
+          "the loaded reference no longer carries pre-binding recovery")
+    check("A worker started before automatic binding shows `heartbeat_host: null`" in doc,
+          "the docs scope a null binding to the pre-change worker")
+    check("read its in-flight result with the bounded `wait --timeout <seconds>`" in doc,
+          "the docs keep the bounded wait to read the in-flight result")
+    check("the recovery exception, never the ordinary wait or a poll loop" in doc,
           "the bounded read is scoped as an exception, not the event wait")
-    check("then exact `stop` and `start` it at that idle point" in flat_ref,
+    check("then exact `stop` and `start` it at that idle point" in doc,
           "rebinding stays the existing exact stop/start")
     check("A refused `start`, or a session that is gone, is the exception you report "
-          "with the decision you need" in flat_ref,
+          "with the decision you need" in doc,
           "only an unresolvable case is reported outward")
     check("binds the worker to you and refuses" in flat_ref,
           "the reference says the start binds by itself and refuses instead of starting unbound")

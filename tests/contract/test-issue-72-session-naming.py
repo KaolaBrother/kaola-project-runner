@@ -101,7 +101,9 @@ class RenderedSurfacesStateTheRule(unittest.TestCase):
         self.assertIn("never infer an issue from an arbitrary substring or from the purpose", normalize(self.dispatch))
         self.assertIn("never stop or restart a live session solely to rename it", normalize(self.dispatch))
         self.assertIn("native ACP session id is unchanged by this rule", normalize(self.dispatch))
-        self.assertIn("grandfathered for safe close-out", self.dispatch)
+        # Issue #157 (S1, Owner ruling): the in-flight bundle grandfather clause is retired.
+        self.assertNotIn("grandfathered", self.dispatch)
+        self.assertNotIn("既有在飞 bundle run", self.skeleton)
         # Issue #157 (PR-R4): consumer display semantics moved to docs; the loaded
         # reference keeps one line and points there.
         self.assertIn("never overrides repository identity or `issue_number`, and `--resume` stays "

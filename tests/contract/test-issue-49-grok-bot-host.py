@@ -1286,7 +1286,9 @@ class Issue49OrchestratorSemantics(unittest.TestCase):
         self.assertIsNotNone(clause_present(text, (r"--platform grok.{0,40}Grok CLI worker",)))
         self.assertIsNotNone(clause_present(text, (r"--platform grok-bot` is invalid",)))
         self.assertIsNotNone(clause_present(text, (r"Do not create a Grok Bot\s+Routine",)))
-        self.assertIsNotNone(clause_present(text, (r"not renamed, restarted, or cancelled",)))
+        # Issue #157 (S2, Owner ruling): the legacy in-flight Grok Bot Project
+        # Runner entry clause is retired.
+        self.assertNotIn("old Grok Bot Project Runner entry", " ".join(text.split()))
         for stale in REMOVED_SURFACES + ("eight account-private Skills", "one single Markdown"):
             self.assertNotIn(stale, text, stale)
 

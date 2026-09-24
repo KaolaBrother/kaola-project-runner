@@ -49,23 +49,8 @@ session (main Skill §Ending a run).
 `heartbeat_host` is the running holder's own binding; `heartbeat_host_requested`
 is only the request; `observe` reports the binding any time.
 
-- `heartbeat_host_known: false` — a holder or record older than the field:
-  unknown; treat it as unbound.
-- No `heartbeat_host_source` key at all — the worker Skill copy that ran this
-  `start` predates automatic binding. Exact-`stop` it, report `BLOCKED` with the
-  install as the cause, and dispatch again only after it is refreshed.
 - `"error": {"code": "session-exists"}` — you reused a live holder, which keeps
-  its binding; a `null` there predates automatic binding.
-
-### A worker without a binding
-
-A worker started before automatic binding shows `heartbeat_host: null`: read
-its in-flight result with the bounded `wait --timeout <seconds>` (the recovery
-exception, never the ordinary wait or a poll loop), then exact `stop` and
-`start` it at that idle point. A refused `start`, or a session that is gone, is
-the exception you report with the decision you need. Never auto-cancel, re-send
-work you cannot show was dropped, switch platform, or stop the Host to force a
-wake-up.
+  its binding.
 
 ### Dispatch without blocking
 
