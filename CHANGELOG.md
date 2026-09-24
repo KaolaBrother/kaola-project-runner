@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **`install-local.sh` refreshes an owned `kaola-delegator` leftover under a Host root that must not install it (Issue #160).**
+  A `--runtime zcode` (or any non-Codex/generic Host runtime) install never introduces
+  `kaola-delegator`, but if an **owned** copy already sits under the Host root — left by an
+  earlier `--skills-dir` / generic install — a reinstall left it stale (neither updated nor
+  removed), so it could stay on an older build while `kaola-project-runner` and the worker
+  pin advanced. Control-plane planning now refreshes an already-owned Delegator's **content**
+  on a Host-runtime reinstall without registering the Host runtime as an owner: referrers
+  stay exactly as recorded, so the copy's lifetime stays tied to its original referrers
+  (e.g. `generic`), the documented `--skills-dir ~/.zcode/skills --uninstall` remediation
+  still removes it after a refresh, and zcode alone can never keep it alive. A same-build
+  reinstall is a no-op, a foreign unowned tree or a foreign/broken symlink is refused before
+  any write (like any other foreign Skill path), and `--no-orchestrator` skips this planning
+  entirely. The fresh-install `no_external` default is unchanged. Contract coverage:
+  `tests/contract/test-installer-runtimes.sh` pins the default (fresh `--runtime zcode` and
+  `claude-code` never introduce the Delegator) plus owner-preserving refresh under both
+  roots (referrers stay `[generic]`), the no-op, the zcode uninstall that keeps the copy
+  both with and without a prior refresh, the generic-removal remediation after a refresh,
+  the foreign tree and foreign/broken-symlink refusals, and the `--no-orchestrator`
+  untouched leftover.
+
 - **`--runtime kimi-cli` dual-installs into both Kimi Code user Skill roots (Issue #159).**
   Kimi Code CLI scans `~/.agents/skills` and `${KIMI_CODE_HOME:-~/.kimi-code}/skills`, but
   `install-local.sh` wrote only the shared root, so a pin/Host refresh that followed the

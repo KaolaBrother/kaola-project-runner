@@ -129,6 +129,169 @@ assert_link "test_runtime_zcode_install" "$home/.zcode/skills/grok-kaola-project
 assert_absent "test_runtime_zcode_no_external" "$home/.zcode/skills/kaola-delegator"
 assert_absent "test_runtime_zcode_no_bin_links" "$home/.local/bin/kaola-acp"
 
+# Issue #160: a Host runtime that must not *introduce* kaola-delegator (zcode,
+# claude-code, ...) still plans an OWNED leftover under its own root so its
+# content is refreshed to the accepted build, but NEVER registers the Host
+# runtime as an owner: referrers stay exactly as recorded, the original owner
+# (generic) still keeps the Skill alive and its --skills-dir --uninstall still
+# removes it, and zcode alone can never keep it alive. A fresh --runtime zcode
+# install never creates it (asserted above); a foreign (unowned) tree or a
+# foreign/broken symlink is refused like any other foreign Skill path, before
+# any write; --no-orchestrator skips this planning entirely (the owned leftover
+# is neither refreshed nor touched).
+repo="$tmp_root/repo-zcode-leftover"
+home_z="$tmp_root/home-zcode-leftover"
+mkdir -p "$home_z"
+make_fixture "$repo"
+
+# An owned Delegator pre-exists under the ZCode Host root: it was installed
+# earlier through the explicit generic destination (--skills-dir).
+output="$(run_installer "$repo" "$home_z" --skills-dir "$home_z/.zcode/skills" --method copy --platform grok,zcode 2>&1)" \
+  || fail "test_zcode_leftover_seed" "seed install failed: $output"
+assert_dir "test_zcode_leftover_seed" "$home_z/.zcode/skills/kaola-delegator"
+
+# The accepted build advances after the seed (as on a pin bump).
+printf '%s\n' '# updated fixture' >>"$repo/skills/kaola-delegator/SKILL.md"
+
+# A --runtime zcode reinstall must refresh the owned leftover to the accepted
+# build (refresh-if-present), never remove it and never leave it stale, and
+# must NOT register zcode as an owner: referrers stay exactly ["generic"].
+output="$(run_installer "$repo" "$home_z" --runtime zcode --method copy --platform grok 2>&1)" \
+  || fail "test_zcode_leftover_refresh" "zcode reinstall failed: $output"
+assert_dir "test_zcode_leftover_refresh_kept" "$home_z/.zcode/skills/kaola-delegator"
+grep -q 'updated fixture' "$home_z/.zcode/skills/kaola-delegator/SKILL.md" \
+  || fail "test_zcode_leftover_refresh" "owned leftover kaola-delegator not refreshed to the accepted build"
+[[ "$output" == *"update: $home_z/.zcode/skills/kaola-delegator"* ]] \
+  || fail "test_zcode_leftover_refresh" "expected an update report for kaola-delegator, got: $output"
+# Owner-preserving: the zcode Host root never becomes a referrer.
+python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get("referrers") == ["generic"] else 1)' \
+  "$home_z/.zcode/skills/.kaola-install-receipts/kaola-delegator.json" \
+  || fail "test_zcode_leftover_refresh_ledger" "expected referrers to stay [generic] after a zcode refresh"
+
+# Same build again: the refreshed Delegator is a no-op, still owned by generic.
+output="$(run_installer "$repo" "$home_z" --runtime zcode --method copy --platform grok 2>&1)" \
+  || fail "test_zcode_leftover_noop" "second zcode reinstall failed: $output"
+[[ "$output" == *"already installed: $home_z/.zcode/skills/kaola-delegator"* ]] \
+  || fail "test_zcode_leftover_noop" "expected an already-installed no-op, got: $output"
+python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get("referrers") == ["generic"] else 1)' \
+  "$home_z/.zcode/skills/.kaola-install-receipts/kaola-delegator.json" \
+  || fail "test_zcode_leftover_noop_ledger" "expected referrers to stay [generic] after a no-op reinstall"
+
+# A zcode --uninstall after a refresh withdraws nothing (zcode never owned the
+# copy): the generic-owned Delegator stays (shared block, Issue #123).
+output="$(run_installer "$repo" "$home_z" --runtime zcode --platform grok --uninstall 2>&1)" \
+  || fail "test_zcode_leftover_uninstall" "zcode uninstall failed: $output"
+assert_dir "test_zcode_leftover_uninstall_kept" "$home_z/.zcode/skills/kaola-delegator"
+[[ "$output" == *"kept: $home_z/.zcode/skills/kaola-delegator (still referenced by generic)"* ]] \
+  || fail "test_zcode_leftover_uninstall_kept" "expected kept for generic, got: $output"
+python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get("referrers") == ["generic"] else 1)' \
+  "$home_z/.zcode/skills/.kaola-install-receipts/kaola-delegator.json" \
+  || fail "test_zcode_leftover_uninstall_ledger" "expected referrers to stay [generic] after a zcode uninstall"
+
+# After a zcode refresh, the documented remediation (generic --skills-dir
+# --uninstall) still REMOVES the Delegator: zcode never kept it alive.
+output="$(run_installer "$repo" "$home_z" --skills-dir "$home_z/.zcode/skills" --platform grok --uninstall 2>&1)" \
+  || fail "test_zcode_leftover_remove" "generic uninstall failed: $output"
+assert_absent "test_zcode_leftover_remove" "$home_z/.zcode/skills/kaola-delegator"
+
+# Issue exact state (review minor 3): zcode --uninstall with NO prior refresh
+# keeps the generic-owned copy — zcode was never in the referrers ledger.
+repo="$tmp_root/repo-zcode-unonly"
+home_u="$tmp_root/home-zcode-unonly"
+mkdir -p "$home_u"
+make_fixture "$repo"
+output="$(run_installer "$repo" "$home_u" --skills-dir "$home_u/.zcode/skills" --method copy --platform grok,zcode 2>&1)" \
+  || fail "test_zcode_unonly_seed" "seed install failed: $output"
+output="$(run_installer "$repo" "$home_u" --runtime zcode --platform grok --uninstall 2>&1)" \
+  || fail "test_zcode_unonly_uninstall" "zcode uninstall failed: $output"
+assert_dir "test_zcode_unonly_kept" "$home_u/.zcode/skills/kaola-delegator"
+python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get("referrers") == ["generic"] else 1)' \
+  "$home_u/.zcode/skills/.kaola-install-receipts/kaola-delegator.json" \
+  || fail "test_zcode_unonly_ledger" "expected referrers to stay [generic]"
+
+# A generic --skills-dir --uninstall still removes the copy after a refresh
+# with no intervening zcode uninstall (refresh never creates a referrer).
+repo="$tmp_root/repo-zcode-rmafter"
+home_r="$tmp_root/home-zcode-rmafter"
+mkdir -p "$home_r"
+make_fixture "$repo"
+output="$(run_installer "$repo" "$home_r" --skills-dir "$home_r/.zcode/skills" --method copy --platform grok,zcode 2>&1)" \
+  || fail "test_zcode_rmafter_seed" "seed install failed: $output"
+output="$(run_installer "$repo" "$home_r" --runtime zcode --method copy --platform grok 2>&1)" \
+  || fail "test_zcode_rmafter_refresh" "zcode refresh failed: $output"
+output="$(run_installer "$repo" "$home_r" --skills-dir "$home_r/.zcode/skills" --platform grok --uninstall 2>&1)" \
+  || fail "test_zcode_rmafter_remove" "generic uninstall failed: $output"
+assert_absent "test_zcode_rmafter_remove" "$home_r/.zcode/skills/kaola-delegator"
+
+# --no-orchestrator skips the leftover planning entirely: a stale owned
+# Delegator is neither refreshed nor removed (review minor 2).
+repo="$tmp_root/repo-zcode-noorch"
+home_n="$tmp_root/home-zcode-noorch"
+mkdir -p "$home_n"
+make_fixture "$repo"
+output="$(run_installer "$repo" "$home_n" --skills-dir "$home_n/.zcode/skills" --method copy --platform grok,zcode 2>&1)" \
+  || fail "test_zcode_noorch_seed" "seed install failed: $output"
+printf '%s\n' '# updated fixture' >>"$repo/skills/kaola-delegator/SKILL.md"
+output="$(run_installer "$repo" "$home_n" --runtime zcode --method copy --platform grok --no-orchestrator 2>&1)" \
+  || fail "test_zcode_noorch_install" "no-orchestrator install failed: $output"
+grep -q 'updated fixture' "$home_n/.zcode/skills/kaola-delegator/SKILL.md" \
+  && fail "test_zcode_noorch_untouched" "--no-orchestrator must not refresh the leftover"
+python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get("referrers") == ["generic"] else 1)' \
+  "$home_n/.zcode/skills/.kaola-install-receipts/kaola-delegator.json" \
+  || fail "test_zcode_noorch_ledger" "--no-orchestrator must not change referrers"
+
+# A foreign (unowned) kaola-delegator under a Host root is refused like any
+# other foreign Skill path, before the first byte lands.
+repo="$tmp_root/repo-zcode-foreign"
+home_f="$tmp_root/home-zcode-foreign"
+mkdir -p "$home_f"
+make_fixture "$repo"
+mkdir -p "$home_f/.zcode/skills/kaola-delegator"
+printf '%s\n' 'kaola-delegator' >"$home_f/.zcode/skills/kaola-delegator/.generated-by-kaola-project-runner"
+printf '%s\n' '# foreign' >"$home_f/.zcode/skills/kaola-delegator/SKILL.md"
+set +e
+output="$(run_installer "$repo" "$home_f" --runtime zcode --platform grok --method copy 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_zcode_foreign_delegator_refused" "unexpected success"
+[[ "$output" == *"refusing to replace foreign directory without ownership receipt"* ]] \
+  || fail "test_zcode_foreign_delegator_refused" "expected ownership refusal, got: $output"
+assert_absent "test_zcode_foreign_delegator_refused_no_partial" "$home_f/.zcode/skills/grok-kaola-project-runner"
+
+# A foreign or broken symlink kaola-delegator under a Host root is also
+# refused before any write (review minor 1).
+repo="$tmp_root/repo-zcode-foreignlink"
+home_l="$tmp_root/home-zcode-foreignlink"
+mkdir -p "$home_l/.zcode/skills"
+make_fixture "$repo"
+ln -s /foreign/path "$home_l/.zcode/skills/kaola-delegator"
+set +e
+output="$(run_installer "$repo" "$home_l" --runtime zcode --platform grok --method copy 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_zcode_foreign_symlink_refused" "unexpected success"
+assert_link "test_zcode_foreign_symlink_refused" "$home_l/.zcode/skills/kaola-delegator" "/foreign/path"
+assert_absent "test_zcode_foreign_symlink_refused_no_partial" "$home_l/.zcode/skills/grok-kaola-project-runner"
+
+# The policy generalizes to every other Host runtime that asserts no_external;
+# claude-code is the second root asserted in this file.
+repo="$tmp_root/repo-claude-leftover"
+home_cc="$tmp_root/home-claude-leftover"
+mkdir -p "$home_cc"
+make_fixture "$repo"
+output="$(run_installer "$repo" "$home_cc" --skills-dir "$home_cc/.claude/skills" --method copy --platform grok,zcode 2>&1)" \
+  || fail "test_claude_leftover_seed" "seed install failed: $output"
+printf '%s\n' '# updated fixture' >>"$repo/skills/kaola-delegator/SKILL.md"
+output="$(run_installer "$repo" "$home_cc" --runtime claude-code --method copy --platform grok 2>&1)" \
+  || fail "test_claude_leftover_refresh" "claude-code reinstall failed: $output"
+grep -q 'updated fixture' "$home_cc/.claude/skills/kaola-delegator/SKILL.md" \
+  || fail "test_claude_leftover_refresh" "owned leftover kaola-delegator not refreshed under claude-code"
+[[ "$output" == *"update: $home_cc/.claude/skills/kaola-delegator"* ]] \
+  || fail "test_claude_leftover_refresh" "expected an update report under claude-code, got: $output"
+python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get("referrers") == ["generic"] else 1)' \
+  "$home_cc/.claude/skills/.kaola-install-receipts/kaola-delegator.json" \
+  || fail "test_claude_leftover_refresh_ledger" "expected referrers to stay [generic] under claude-code"
+
 # Issue #119: measured Skill roots of the non-ZCode Host platforms; each
 # install is reversible by --uninstall on the same runtime. kimi-cli is not
 # in this loop: Issue #159 gives it two user roots (next block).

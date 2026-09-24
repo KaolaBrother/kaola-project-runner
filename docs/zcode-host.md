@@ -473,6 +473,18 @@ worker opens unbound and exits 0. Every pin bump therefore ends with:
 2. From that accepted checkout, `./scripts/install-local.sh --runtime zcode
    --method copy` (a project with a workspace `.zcode/skills` or
    `.agents/skills` root installs there with the matching `--skills-dir`).
+   A fresh `--runtime zcode` never introduces `kaola-delegator` (the ZCode
+   Host root does not ship the Delegator), but if an **owned** `kaola-delegator`
+   already sits under the same root — left by an earlier `--skills-dir` /
+   generic install — the same reinstall refreshes its content to the accepted
+   build (Issue #160) without registering ZCode as an owner: the copy's
+   lifetime stays tied to its original referrers (e.g. `generic`), so a zcode
+   `--uninstall` never keeps it alive on its own and the documented
+   `--skills-dir ~/.zcode/skills --uninstall` remediation still removes it. A
+   foreign unowned `kaola-delegator` tree — or a foreign/broken symlink — under
+   the root is refused before any write, same as any other foreign Skill path;
+   `--no-orchestrator` skips this planning entirely (the leftover is neither
+   refreshed nor touched).
 3. Verify alignment mechanically from the accepted checkout. `--verify-install`
    compares every generated Skill present under the destination against a fresh
    render of this checkout — every byte, `SKILL.md` prose and `references/`

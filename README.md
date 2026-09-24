@@ -435,6 +435,15 @@ On Codex and generic destinations, `kaola-delegator` is control-plane: a first
 install still needs `zcode` in this `--platform` (or no `--platform`); an
 already-installed Delegator is included on later reinstall/uninstall even when
 this `--platform` omits `zcode`, so a filtered pass does not leave a stale copy.
+A Host runtime that does not install the Delegator (`--runtime zcode`,
+`claude-code`, and the other Host roots) still plans an **owned** leftover
+`kaola-delegator` under its root so its content is refreshed to the accepted
+build (Issue #160) — but never registers the Host runtime as an owner: the
+Skill's lifetime stays tied to its original referrers (e.g. `generic`), whose
+`--skills-dir --uninstall` still removes it. A fresh `--runtime zcode` never
+creates it, a foreign or broken symlink under a Host root is refused like any
+other foreign Skill path (before any write), and `--no-orchestrator` skips this
+planning entirely (the owned leftover is neither refreshed nor touched).
 The Codex destination (`--runtime codex`, or no destination flag) also installs one
 Runner-owned user-level `SessionStart(compact)` recovery entry in
 `${CODEX_HOME:-$HOME/.codex}/hooks.json` whenever the control-plane Skills are in the plan,

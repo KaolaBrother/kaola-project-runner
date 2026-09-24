@@ -74,8 +74,15 @@ usage() {
     'kaola-delegator as control-plane unless that flag is passed: a first install' \
     'requires zcode in this --platform (or no --platform); an already-installed' \
     'Delegator stays in the plan on later reinstall/uninstall even when this' \
-    '--platform omits zcode, so it is not left stale. Neither control-plane Skill' \
-    'is a platform ID.' \
+    '--platform omits zcode, so it is not left stale. A Host runtime that must' \
+    'not install Delegator (zcode, claude-code, ...) still plans an owned' \
+    'leftover kaola-delegator under its root so its content is refreshed to the' \
+    'accepted build, but never registers the Host runtime as an owner: the' \
+    'Skill'"'"'s lifetime stays tied to its original referrers (e.g. generic), whose' \
+    '--skills-dir --uninstall still removes it, and a fresh install never' \
+    'creates it. A foreign or broken symlink under a Host root is refused like' \
+    'any other foreign Skill path; --no-orchestrator skips this planning.' \
+    'Neither control-plane Skill is a platform ID.' \
     'With no --platform, installs all ten worker Skills plus the control-plane' \
     'Skills for that destination (unless skipped). With no destination flags the' \
     'legacy Codex destination is used. Existing foreign paths are never replaced.' \
@@ -568,14 +575,30 @@ if os.path.lexists(backup) and keep_previous != "1":
 
 # Plan every action before any write; a refusal anywhere aborts the whole run.
 # $1 is the generated Skill directory name. $2 is the worker platform id, or
-# empty for the main orchestrator Skill (not a platform id). Every row ends
+# empty for the main orchestrator Skill (not a platform id). $3 (preserve=1)
+# plans an owned external leftover on a Host runtime that must not own
+# kaola-delegator: content is refreshed, but the runtime is never registered
+# as a referrer, so owners stay exactly as before (Issue #160). Every row ends
 # with the Skill's referrers as they must read after the action (Issue #123).
 plan_skill() {
   local name="$1"
   local platform="${2-}"
+  local preserve="${3-}"
   local source="$repo_root/skills/$name"
   local target="$target_parent/$name"
   local refs remaining
+
+  # Owner-preserving refresh (Issue #160): keep the recorded referrers verbatim
+  # instead of adding this runtime, so the original owner (e.g. generic) stays
+  # the only one that keeps the Skill alive and its uninstall still removes it.
+  refs_with_owner() {
+    local list="$1"
+    if [[ "$preserve" == 1 ]]; then
+      printf '%s\n' "$list"
+    else
+      printf '%s\n' "$(add_ref "$list" "$self_ref")"
+    fi
+  }
 
   if [[ "$mode" == install ]]; then
     [[ -f "$source/SKILL.md" && -f "$source/.generated-by-kaola-project-runner" ]] || {
@@ -587,13 +610,13 @@ plan_skill() {
         current="$(canonical_existing_target "$target" || true)"
         if [[ -n "$current" && "$current" -ef "$source" ]]; then
           refs="$(skill_refs "$name" 1)"
-          if has_ref "$refs" "$self_ref"; then
+          if has_ref "$refs" "$self_ref" || [[ "$preserve" == 1 ]]; then
             actions+=("already|$name|$source|$target|$refs")
           else
-            actions+=("refer|$name|$source|$target|$(add_ref "$refs" "$self_ref")")
+            actions+=("refer|$name|$source|$target|$(refs_with_owner "$refs")")
           fi
         elif [[ "$platform" == grok && -n "$current" && "$current" -ef "$repo_root" ]]; then
-          actions+=("migrate|$name|$source|$target|$(add_ref "$(skill_refs "$name" 1)" "$self_ref")")
+          actions+=("migrate|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name" 1)")")
         else
           printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
           exit 1
@@ -601,7 +624,7 @@ plan_skill() {
       elif [[ -d "$target" ]]; then
         recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
         actual="$(tree_digest "$target")"
-        refs="$(add_ref "$(skill_refs "$name")" "$self_ref")"
+        refs="$(refs_with_owner "$(skill_refs "$name")")"
         if [[ -n "$recorded" && "$actual" == "$recorded" ]]; then
           actions+=("relink|$name|$source|$target|$refs")
         elif [[ -n "$recorded" ]]; then
@@ -614,13 +637,13 @@ plan_skill() {
         printf 'refusing to replace existing path: %s\n' "$target" >&2
         exit 1
       else
-        actions+=("install|$name|$source|$target|$(add_ref "$(skill_refs "$name")" "$self_ref")")
+        actions+=("install|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name")")")
       fi
     else
       if [[ -L "$target" ]]; then
         current="$(canonical_existing_target "$target" || true)"
         if [[ -n "$current" && ( "$current" -ef "$source" || ( "$platform" == grok && "$current" -ef "$repo_root" ) ) ]]; then
-          actions+=("copy-over-link|$name|$source|$target|$(add_ref "$(skill_refs "$name" 1)" "$self_ref")")
+          actions+=("copy-over-link|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name" 1)")")
         else
           printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
           exit 1
@@ -634,23 +657,23 @@ plan_skill() {
         refs="$(skill_refs "$name")"
         actual="$(tree_digest "$target")"
         if [[ "$actual" != "$recorded" ]]; then
-          actions+=("repair|$name|$source|$target|$(add_ref "$refs" "$self_ref")")
+          actions+=("repair|$name|$source|$target|$(refs_with_owner "$refs")")
         elif [[ "$actual" == "$(tree_digest "$source")" ]]; then
           # Same build already in place: reference it instead of reinstalling.
-          if has_ref "$refs" "$self_ref"; then
+          if has_ref "$refs" "$self_ref" || [[ "$preserve" == 1 ]]; then
             actions+=("already|$name|$source|$target|$refs")
           else
-            actions+=("refer|$name|$source|$target|$(add_ref "$refs" "$self_ref")")
+            actions+=("refer|$name|$source|$target|$(refs_with_owner "$refs")")
           fi
         else
           # Another build: update the one shared copy, keeping every referrer.
-          actions+=("update|$name|$source|$target|$(add_ref "$refs" "$self_ref")")
+          actions+=("update|$name|$source|$target|$(refs_with_owner "$refs")")
         fi
       elif [[ -e "$target" ]]; then
         printf 'refusing to replace existing path: %s\n' "$target" >&2
         exit 1
       else
-        actions+=("install|$name|$source|$target|$(add_ref "$(skill_refs "$name")" "$self_ref")")
+        actions+=("install|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name")")")
       fi
     fi
   else
@@ -749,6 +772,17 @@ destination_plan() {
       else
         printf 'skipping %s: needs the ZCode worker Skill (not in --platform)\n' "$external_skill_name"
       fi
+    elif [[ -e "$target_parent/$external_skill_name" || -L "$target_parent/$external_skill_name" ]]; then
+      # Issue #160: a Host runtime that must not introduce kaola-delegator
+      # (zcode, claude-code, ...) still plans an owned leftover under its own
+      # root so its content is refreshed to the accepted build, but never
+      # registers the Host runtime as an owner (preserve=1): referrers stay
+      # exactly as recorded, so the original owner (e.g. generic) still keeps
+      # the Skill alive and its --skills-dir --uninstall still removes it, and
+      # zcode alone can never keep it alive. plan_skill refuses a foreign tree
+      # or a foreign/broken symlink; a fresh install never creates it
+      # (no_external default).
+      plan_skill "$external_skill_name" "" 1
     fi
   fi
 
