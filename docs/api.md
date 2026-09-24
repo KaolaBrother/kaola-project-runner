@@ -447,9 +447,11 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
   `native_steering` is `supported`, and `steering_summary` records the versioned evidence. Read the
   current roster out of `platforms/*.yaml` rather than from this page: which platforms qualify
   changes as surfaces are investigated, so no count or list is pinned here. One case worth knowing is
-  `opencode`, whose `-32601` probe ran on 1.18.17 while `acp_verified_versions` names 2.0.11: it is
-  `unknown`, and the Runner reports an unverified capability (`steer_outcome: unknown`,
-  `steer-capability-unknown`) instead of a proven absence. The refusal, the explicit composite and
+  `opencode`, whose `-32601` probe ran on 1.18.17 and whose 2.0.11 `initialize` advertised no
+  steering `_meta`, while `acp_verified_versions` names 2.0.15 (record-only since the 2026-09-24
+  Pink batch) and no steering method was re-probed on either newer build: it is `unknown`, and the
+  Runner reports an unverified capability (`steer_outcome: unknown`, `steer-capability-unknown`)
+  instead of a proven absence. The refusal, the explicit composite and
   the no-auto-degrade rule are identical for `unsupported` and `unknown` alike.
 - `--steer-mode interrupt` is the composite and works on every platform: cancel the running turn,
   confirm it actually stopped, then send the text **once** as the next prompt on the same ACP
