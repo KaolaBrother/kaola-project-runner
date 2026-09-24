@@ -151,7 +151,10 @@ workspace `.zcode/skills` and `.agents/skills`, which `--skills-dir` covers — 
 [ZCode host](zcode-host.md)),
 and (Issue #119, each measured as that CLI's Skill root) `grok-cli` → `$HOME/.grok/skills`,
 `droid` → `$HOME/.factory/skills`, `opencode` → `$HOME/.config/opencode/skills`, and
-`kimi-cli` / `dsh` → `$HOME/.agents/skills`; which platforms can run Project Runner as a Host,
+`dsh` → `$HOME/.agents/skills`; `kimi-cli` (Issue #159) → BOTH
+`$HOME/.agents/skills` (the cross-tool root, shared with `dsh`) and
+`${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills` (the Kimi-specific root, which moves with
+`$KIMI_CODE_HOME`), each with its own receipt set; which platforms can run Project Runner as a Host,
 and with which first line, is the `host_skill_entry` table in the main Skill's
 `references/host-entry-matrix.md`.
 `--runtime grok-bot` (and `grokbot`) is refused: Grok Bot is a bridge host with no installer
@@ -181,7 +184,11 @@ every referrer. `--uninstall`, including a Skill that is already absent, only re
 runtime's id: while ids remain, the Skill and receipt stay (`kept: … (still referenced by …)`),
 and when none remain the Skill is removed as before. A receipt without `referrers` predates the
 ledger and counts as referenced by every runtime mapped to that root (`kimi-cli,dsh` for
-`$HOME/.agents/skills`), so a guess never removes it.
+`$HOME/.agents/skills`), so a guess never removes it. A pre-ledger receipt in the
+Kimi-specific root instead counts as referenced by `kimi-cli` alone — its only
+installer — so a kimi-cli `--uninstall` withdraws the kimi-cli reference from BOTH roots
+it owns: the shared root keeps its Skills while `dsh` still refers to them, and the
+Kimi-specific root removes them because no referrer remains.
 
 `--bin-links` additionally manages the `$HOME/.local/bin/kaola-acp`, `kaola-acp-holder`, and
 `kaola-project-runner-locate` symlinks to this repository's scripts. It defaults on only for the
