@@ -20,33 +20,17 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 
 This platform's ACP steering facts, both modes, the receipt vocabulary and the races: [steering.md](steering.md).
 
-`start` resolves the tier/model/effort/Fast selection through the shared model policy and applies it through the
-agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
-`model`/`reasoning_effort;effort`/`fast` when non-empty.
-An effort id may list `;`-separated candidates in order; the first one the agent advertises after
-the model apply is used (`config_application.effort.candidates`/`advertised`,
-`effective_selection.effort_config_id`), otherwise the first literally.
-`start` and `preflight` wait for the `session/new` answer up to the manifest's
-`acp_session_new_timeout` seconds (15 when absent); no answer by then is `acp-session-timeout`.
-A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
-during `initialize`): agents that negotiate a parameterized model picker advertise separate
-`model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead
-of fixed variant descriptors. A manifest may declare `acp_command_default`/`_upgrade`/`_alt`: the
-tier preset then spawns that command unless `--command`, `KAOLA_ACP_COMMAND`, `--model` or a preserved
-resume applies; a model the spawn argv carries as `--model` is not re-sent as an option
-(`config_application.model.applied_via: argv`, `effective_selection.effective_model_source: launch-argv`
-beside the agent's `advertised_model`). When a manifest declares `acp_model_map`, a resolved catalog model ID decomposes onto
-the ACP model value the agent advertises for the same model — effort encoded in the picker ID
-suffix then travels through the effort option and Fast through the fast option (values converted
-per `acp_fast_values`), recorded as `requested_id`/`mapped`/`declared` in the model application.
-Model semantics are never substituted: an unmapped ID is sent literally and its rejection is
-reported as a limitation. `config_application` records each attempted option's requested value and
-applied result; `configured_options` carries the adapter's returned receipts. An option with no
-advertised config ID, or one the adapter rejects, is reported as a limitation — the session stays
-usable. The `fast` receipt's `effective` reflects proven native state only: a rejected fast option
-or an unapplied fast-variant model ID reports `unknown`, and an applied model value's own
-descriptor (e.g. `[..,fast=true]`) is reported as the effective fast evidence with any request
-conflict noted — never a false on/off.
+## Model selection receipts
+
+`start` applies the resolved selection through the agent's advertised `session/set_config_option`
+IDs — model, then effort, then Fast (`model`/`reasoning_effort;effort`/`fast` when non-empty).
+Read `config_application` (each option's requested value and applied result), `effective_selection`
+(what the agent then reports), `configured_options` (the adapter's returned receipts), and
+`fast.effective` (proven native state only, otherwise `unknown`). An unapplied option — no
+advertised config ID, or rejected by the adapter — is a reported limitation: the session stays
+usable and no other model is substituted. `start` and `preflight` wait for the `session/new` answer
+up to the manifest's `acp_session_new_timeout` seconds (15 when absent); no answer by then is
+`acp-session-timeout`.
 
 ## Ending and resuming an ACP session
 

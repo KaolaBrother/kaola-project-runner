@@ -1,6 +1,6 @@
 # ZCode ACP transport
 
-Command: `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`. Login: see SKILL.md §Transport. Platform quirks: Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only (Apache-2.0 pin 80aa4e2), never vendored and never npm; cli=0.16.9 (ZCode.app 3.14.1) and upstream v0.46.6 (turnId, permissions) are harness-compat 2026-09-22 records, not a live ACP run; check the actual CLI version before the next live run; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider is registered in memory per backend process -- on ZCode 3.12+ via provider/updateAccountConfig plus session/setModel on the account:* provider with the credential supplied only through interaction/requestProviderRuntimeHeaders, and on pre-3.12 app-servers via the runtimeModel overlay on session/create, session/resume and session/setModel (launch facts in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; the Runner default and upgrade presets both pin GLM-5.3 at thought=max, the same pair the Issue #108 Host gate enforces (ZCODE_HOST_MODEL_ID/ZCODE_HOST_EFFORT in kaola-acp.py; their equality with this manifest is asserted by a test, so there is no second source of truth); the bare id is what this manifest declares because the live ACP option value is provider-qualified with a backslash (builtin:bigmodel-coding-plan\GLM-5.3 on the builtin plan, account:*\GLM-5.3 once the plan is registered) and comparison uses the tail after \ or /, so GLM-5.3-Flash never matches; the live effort config id is thoughtLevel while this manifest declares thought, which both the Runner read path and the adapter write path accept alongside thought_level; neither model nor thoughtLevel advertises a currentValue at session/new, so a selection is verified only after it is applied; login happens in the ZCode desktop App; the bundled runtime ships no terminal UI.
+Command: `python3 $SKILL_DIR/scripts/kaola-zcode-acp.py`. Login: see SKILL.md §Transport. Platform quirks: Runner-owned ACP translator over the installed ZCode app-server --stdio (Gate 2); william0wang/zcode-acp is a protocol reference only, never vendored and never npm; cli=0.16.9 is a record, not a live ACP run: check the actual CLI version before the next live run; explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE, never PATH; child env allowlist with no auth injection; the enabled Coding Plan provider is registered in memory per backend process (mechanics in platform.md); agentInfo._meta.zcode reports providerId, baseURL, plan-cache status and model ids; both presets pin GLM-5.3 at thought=max, the pair the Issue #108 Host gate enforces (ZCODE_HOST_MODEL_ID/ZCODE_HOST_EFFORT in kaola-acp.py, test-asserted equal to this manifest); the live ACP model value is provider-qualified with a backslash (builtin:bigmodel-coding-plan\GLM-5.3, account:*\GLM-5.3 once the plan is registered) and comparison uses the tail after \ or /, so GLM-5.3-Flash never matches; the live effort config id is thoughtLevel while this manifest declares thought, and both the Runner read path and the adapter write path accept either alongside thought_level; neither model nor thoughtLevel advertises a currentValue at session/new, so a selection is verified only after it is applied.
 
 ## Command surface
 
@@ -20,33 +20,17 @@ Every receipt identifies `schema_version`, `platform`, `session`, `repo`, `trans
 
 This platform's ACP steering facts, both modes, the receipt vocabulary and the races: [steering.md](steering.md).
 
-`start` resolves the tier/model/effort/Fast selection through the shared model policy and applies it through the
-agent's advertised `session/set_config_option` IDs — model first, then effort, then Fast — using
-`model`/`thought`/`` when non-empty.
-An effort id may list `;`-separated candidates in order; the first one the agent advertises after
-the model apply is used (`config_application.effort.candidates`/`advertised`,
-`effective_selection.effort_config_id`), otherwise the first literally.
-`start` and `preflight` wait for the `session/new` answer up to the manifest's
-`acp_session_new_timeout` seconds (15 when absent); no answer by then is `acp-session-timeout`.
-A manifest may declare `acp_init_meta` (`key=value` pairs sent as `clientCapabilities._meta`
-during `initialize`): agents that negotiate a parameterized model picker advertise separate
-`model`/`effort`/`fast` options with base model IDs and string `true`/`false` fast values instead
-of fixed variant descriptors. A manifest may declare `acp_command_default`/`_upgrade`/`_alt`: the
-tier preset then spawns that command unless `--command`, `KAOLA_ACP_COMMAND`, `--model` or a preserved
-resume applies; a model the spawn argv carries as `--model` is not re-sent as an option
-(`config_application.model.applied_via: argv`, `effective_selection.effective_model_source: launch-argv`
-beside the agent's `advertised_model`). When a manifest declares `acp_model_map`, a resolved catalog model ID decomposes onto
-the ACP model value the agent advertises for the same model — effort encoded in the picker ID
-suffix then travels through the effort option and Fast through the fast option (values converted
-per `acp_fast_values`), recorded as `requested_id`/`mapped`/`declared` in the model application.
-Model semantics are never substituted: an unmapped ID is sent literally and its rejection is
-reported as a limitation. `config_application` records each attempted option's requested value and
-applied result; `configured_options` carries the adapter's returned receipts. An option with no
-advertised config ID, or one the adapter rejects, is reported as a limitation — the session stays
-usable. The `fast` receipt's `effective` reflects proven native state only: a rejected fast option
-or an unapplied fast-variant model ID reports `unknown`, and an applied model value's own
-descriptor (e.g. `[..,fast=true]`) is reported as the effective fast evidence with any request
-conflict noted — never a false on/off.
+## Model selection receipts
+
+`start` applies the resolved selection through the agent's advertised `session/set_config_option`
+IDs — model, then effort, then Fast (`model`/`thought`/`` when non-empty).
+Read `config_application` (each option's requested value and applied result), `effective_selection`
+(what the agent then reports), `configured_options` (the adapter's returned receipts), and
+`fast.effective` (proven native state only, otherwise `unknown`). An unapplied option — no
+advertised config ID, or rejected by the adapter — is a reported limitation: the session stays
+usable and no other model is substituted. `start` and `preflight` wait for the `session/new` answer
+up to the manifest's `acp_session_new_timeout` seconds (15 when absent); no answer by then is
+`acp-session-timeout`.
 
 ## Ending and resuming an ACP session
 
