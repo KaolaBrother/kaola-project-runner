@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 — 2026-09-24 (codex pin refresh, Skill prompt trim, dsh refusal wording)
 
 - **Pink harness-compat 2026-09-24 class 2: Codex pins 0.156.1 / codex-acp 1.13.1, zcode-acp
   0.47.x precheck, batched CLI records (Issue #153).** `platforms/codex.yaml` moves to the
@@ -55,6 +55,22 @@
   2026-09-24 Pink class-2 report as a record-only pin with no local CLI upgrade and no live run on
   1.13.1 (Issue #153, above). The loaded quirk keeps only that the pins are record-only.
 
+- **dsh: an invalid `--permission-mode` refusal names the flag the Agent passed (Issue #158).**
+  `kaola-tmux.sh start --platform dsh --permission-mode VALUE` with a value outside the dsh set
+  now refuses with `--permission-mode for dsh must be one of read-only, workspace-write,
+  danger-full-access or bypassPermissions` instead of naming `kaola-acp.py`'s internal `--mode`
+  flag, which the wrapper forwards the Agent's value to. The accepted value set is unchanged; the
+  dsh contract test (`test-issue-98-dsh-acp.py`) pins the new wording and the vendored worker
+  copies of `kaola-acp.py` are regenerated.
+
+- **Studio ZCode 3.14.3 adapter fitness recorded: no pin or adapter change (Issue #154).** The
+  2026-09-24 investigation against the Pink zcode-acp 0.47.x desk targets (compact busy windows,
+  `usage_update`, boot-resume handshake) concluded verdict A: ZCode.app 3.14.3 still bundles CLI
+  0.16.9, so `acp_verified_versions cli=0.16.9;adapter=kaola-zcode-acp;protocol=1` and the
+  reference pin `80aa4e2` stay. The Runner adapter keeps refusing a second prompt during a running
+  turn (`prompt-in-progress`) rather than adding a queue layer, and zcode receipts keep
+  `context_usage {used: null, size: null}` because the zcode wire carries no occupancy fields.
+  Evidence lives in the issue's verdict comment; no behavior changed in this release.
 ## 0.6.0 — 2026-09-24 (quota packages, ten-platform wording, prerequisite-tolerant validation)
 
 - **Read-only quota catalog queries: `kaola-acp packages` / `model-package` (Issue #148).**
