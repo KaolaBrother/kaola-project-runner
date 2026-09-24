@@ -130,9 +130,10 @@ assert_absent "test_runtime_zcode_no_external" "$home/.zcode/skills/kaola-delega
 assert_absent "test_runtime_zcode_no_bin_links" "$home/.local/bin/kaola-acp"
 
 # Issue #119: measured Skill roots of the non-ZCode Host platforms; each
-# install is reversible by --uninstall on the same runtime.
+# install is reversible by --uninstall on the same runtime. kimi-cli is not
+# in this loop: Issue #159 gives it two user roots (next block).
 for pair in "grok-cli:.grok/skills" "droid:.factory/skills" \
-            "opencode:.config/opencode/skills" "kimi-cli:.agents/skills" "dsh:.agents/skills"; do
+            "opencode:.config/opencode/skills" "dsh:.agents/skills"; do
   rt="${pair%%:*}"; rel="${pair#*:}"
   output="$(run_installer "$repo" "$home" --runtime "$rt" --platform grok --method link 2>&1)" \
     || fail "test_runtime_${rt}_install" "install failed: $output"
@@ -145,6 +146,76 @@ for pair in "grok-cli:.grok/skills" "droid:.factory/skills" \
   assert_absent "test_runtime_${rt}_uninstall" "$home/$rel/grok-kaola-project-runner"
   assert_absent "test_runtime_${rt}_uninstall_main" "$home/$rel/kaola-project-runner"
 done
+
+# --- Issue #159: --runtime kimi-cli dual-installs into BOTH user roots -------
+# Kimi Code CLI scans ~/.agents/skills and ${KIMI_CODE_HOME:-~/.kimi-code}/
+# skills; the installer must write both, respect $KIMI_CODE_HOME, and keep the
+# referrers ledger covering both destinations on install and uninstall.
+repo="$tmp_root/repo-kimi"
+home="$tmp_root/home-kimi"
+kimi_home="$tmp_root/kimi-code-home"
+make_fixture "$repo"
+
+output="$(KIMI_CODE_HOME="$kimi_home" run_installer "$repo" "$home" --runtime kimi-cli --platform grok --method link 2>&1)" \
+  || fail "test_runtime_kimi_cli_dual_install" "install failed: $output"
+assert_link "test_runtime_kimi_cli_agents_root" "$home/.agents/skills/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+assert_link "test_runtime_kimi_cli_agents_main" "$home/.agents/skills/kaola-project-runner" \
+  "$(source_for "$repo" kaola-project-runner)"
+assert_link "test_runtime_kimi_cli_kimi_root" "$kimi_home/skills/grok-kaola-project-runner" \
+  "$(source_for "$repo" grok-kaola-project-runner)"
+assert_link "test_runtime_kimi_cli_kimi_main" "$kimi_home/skills/kaola-project-runner" \
+  "$(source_for "$repo" kaola-project-runner)"
+
+# the referrers ledger records kimi-cli in BOTH destination roots
+set +e
+ledger_out="$(python3 - "$home/.agents/skills" "$kimi_home/skills" <<'PY'
+import json, os, sys
+for root in sys.argv[1:]:
+    receipts = os.path.join(root, ".kaola-install-receipts")
+    if not os.path.isdir(receipts):
+        raise AssertionError("missing receipt dir: %s" % receipts)
+    data = {os.path.basename(p).removesuffix(".json"): json.load(open(os.path.join(receipts, p), encoding="utf-8"))
+            for p in os.listdir(receipts)}
+    if set(data) != {"grok-kaola-project-runner", "kaola-project-runner"}:
+        raise AssertionError("unexpected receipt set: %s" % sorted(data))
+    for name, receipt in data.items():
+        if sorted(receipt.get("referrers") or []) != ["kimi-cli"]:
+            raise AssertionError("%s referrers are %r, expected ['kimi-cli']"
+                                 % (name, receipt.get("referrers")))
+print("ledger ok")
+PY
+)"
+rc=$?
+set -e
+[[ "$rc" -eq 0 ]] \
+  || fail "test_runtime_kimi_cli_ledger_both_roots" "referrers ledger missed a root: $ledger_out"
+
+output="$(KIMI_CODE_HOME="$kimi_home" run_installer "$repo" "$home" --runtime kimi-cli --platform grok --uninstall 2>&1)" \
+  || fail "test_runtime_kimi_cli_dual_uninstall" "uninstall failed: $output"
+assert_absent "test_runtime_kimi_cli_dual_uninstall_agents" "$home/.agents/skills/grok-kaola-project-runner"
+assert_absent "test_runtime_kimi_cli_dual_uninstall_agents_main" "$home/.agents/skills/kaola-project-runner"
+assert_absent "test_runtime_kimi_cli_dual_uninstall_kimi" "$kimi_home/skills/grok-kaola-project-runner"
+assert_absent "test_runtime_kimi_cli_dual_uninstall_kimi_main" "$kimi_home/skills/kaola-project-runner"
+assert_absent "test_runtime_kimi_cli_dual_uninstall_agents_receipts" \
+  "$home/.agents/skills/.kaola-install-receipts"
+assert_absent "test_runtime_kimi_cli_dual_uninstall_kimi_receipts" \
+  "$kimi_home/skills/.kaola-install-receipts"
+
+# with $KIMI_CODE_HOME unset the kimi-specific root defaults to ~/.kimi-code/skills
+home_default="$tmp_root/home-kimi-default"
+output="$(unset KIMI_CODE_HOME; run_installer "$repo" "$home_default" --runtime kimi-cli --platform grok --method link 2>&1)" \
+  || fail "test_runtime_kimi_cli_default_kimi_root" "install failed: $output"
+assert_link "test_runtime_kimi_cli_default_kimi_root" \
+  "$home_default/.kimi-code/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
+assert_link "test_runtime_kimi_cli_default_agents_root" \
+  "$home_default/.agents/skills/grok-kaola-project-runner" "$(source_for "$repo" grok-kaola-project-runner)"
+output="$(unset KIMI_CODE_HOME; run_installer "$repo" "$home_default" --runtime kimi-cli --platform grok --uninstall 2>&1)" \
+  || fail "test_runtime_kimi_cli_default_kimi_uninstall" "uninstall failed: $output"
+assert_absent "test_runtime_kimi_cli_default_kimi_uninstall_root" \
+  "$home_default/.kimi-code/skills/grok-kaola-project-runner"
+assert_absent "test_runtime_kimi_cli_default_agents_uninstall_root" \
+  "$home_default/.agents/skills/grok-kaola-project-runner"
 
 # --- argument validation -----------------------------------------------------
 set +e

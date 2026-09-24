@@ -39,7 +39,7 @@ measurement: a row is filled only from a live run with trigger evidence. Since
 | droid | `/kaola-project-runner` | `~/.factory/skills`, `~/.agents/skills` |
 | dsh | `/kaola-project-runner` | `~/.agents/skills` |
 | opencode | `/kaola-project-runner` | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` |
-| kimi-cli | `/skill:kaola-project-runner ` | `~/.agents/skills` |
+| kimi-cli | `/skill:kaola-project-runner ` | `~/.agents/skills`, `${KIMI_CODE_HOME:-~/.kimi-code}/skills` |
 | codex | `$kaola-project-runner` | `~/.codex/skills`, `~/.agents/skills` |
 
 Notes:
@@ -48,6 +48,14 @@ Notes:
   `skill:<name>` commands and reads the command name up to the first space, so
   `/skill:kaola-project-runner` followed directly by a newline is answered
   `Unknown ACP command`; bare `/kaola-project-runner` is unknown too.
+- **kimi-cli (Issue #159)** - Kimi Code CLI scans BOTH user-level Skill roots:
+  the cross-tool `~/.agents/skills` (shared with dsh) and the Kimi-specific
+  `${KIMI_CODE_HOME:-~/.kimi-code}/skills`, which moves with `$KIMI_CODE_HOME`
+  (upstream docs; measured lineage starts at Issue #119 on Kimi Code 2.0.2 and
+  is re-measured for 2.0.2+ in docs/host-entry-evidence.md). `--runtime
+  kimi-cli` installs into both roots, each with its own receipt set; reinstall
+  every root the Host reads, and uninstall withdraws the kimi-cli reference
+  from both.
 - **codex** (#126) - the entry is Codex's `$` Skill mention, as advertised in
   `available_commands`; not `/`. A shell must pass the entry single-quoted, or
   omit `--text` and pipe stdin: in double quotes `$kaola` expands. Like every

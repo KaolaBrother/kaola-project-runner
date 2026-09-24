@@ -407,7 +407,7 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime grok-cli   # ~/.grok/skills
 ./scripts/install-local.sh --runtime droid      # ~/.factory/skills
 ./scripts/install-local.sh --runtime opencode   # ~/.config/opencode/skills
-./scripts/install-local.sh --runtime kimi-cli   # ~/.agents/skills (shared with --runtime dsh)
+./scripts/install-local.sh --runtime kimi-cli   # ~/.agents/skills AND ${KIMI_CODE_HOME:-~/.kimi-code}/skills (both user roots; dsh shares the first)
 
 # Grok Bot: no installer destination. Save hosts/grok-bot/kaola-delegator.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:
@@ -454,13 +454,18 @@ diagnostic and does not gate Runner communication. Uninstall still refuses to
 delete a modified copy.
 
 Installed Skills are shared blocks counted by reference, so runtimes install and uninstall
-independently (Issue #123). `kimi-cli` and `dsh` both use `~/.agents/skills`. Each Skill
+independently (Issue #123). `kimi-cli` installs into both its user-level roots —
+`~/.agents/skills` (shared with `dsh`) and `${KIMI_CODE_HOME:-~/.kimi-code}/skills`,
+which moves with `$KIMI_CODE_HOME` (Issue #159) — each with its own receipt set.
+Each Skill
 receipt lists the runtimes that use it. When the same build is already installed, a second
 runtime only records its reference (`refer`). A different build updates the one shared copy
 and keeps every referrer, so every root stays on one build for the #105 check. `--uninstall`
 withdraws only this runtime's reference; the Skill stays (`kept`) while another runtime still
-uses it. A receipt written before this ledger counts as used by every runtime mapped to that
-root, so it is never removed on a guess.
+uses it, and a kimi-cli uninstall withdraws the reference from every root it owns (the shared
+root keeps its Skills for dsh; the kimi-specific root's Skills are removed). A receipt written
+before this ledger counts as used by every runtime mapped to that root, so it is never removed
+on a guess.
 
 Use the host's Skill discovery mechanism, or have the agent read the installed `SKILL.md` directly.
 In Codex, a Skill can be invoked as `$claude-code-kaola-project-runner`, for example.

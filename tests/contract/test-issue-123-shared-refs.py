@@ -17,6 +17,12 @@ acceptance cases from the issue's review comment:
 * T-a3 - an older build installed by dsh is updated in place when kimi-cli
   installs a newer one, every referrer is kept, and the #105 build comparison
   from either installed Skill finds no skew (a dsh Host start is not refused).
+* T-a1/T-a2 (Issue #159) - ``--runtime kimi-cli`` installs into BOTH user
+  roots: the shared ``~/.agents/skills`` (with dsh) and the kimi-specific
+  ``${KIMI_CODE_HOME:-~/.kimi-code}/skills``. The referrers ledger covers both
+  destinations, so uninstalling kimi-cli withdraws its reference from the
+  shared root (dsh keeps every Skill) and removes the kimi-specific root's
+  Skills (kimi-cli is its only referrer).
 * T-c1 - existing ``~/.local/bin`` helper links that resolve to a usable
   executable are referenced, not refused, by a default ``--runtime codex``
   install; a dangling link is still refused before anything is written.
@@ -251,19 +257,34 @@ def test_a1_second_install_only_refers() -> None:
     for first, second in (("kimi-cli", "dsh"), ("dsh", "kimi-cli")):
         sandbox = Sandbox(f"a1-{first}")
         try:
-            sandbox.install("--runtime", first)
+            kimi_home = sandbox.dir / "kimi-code-home"
+            sandbox.install("--runtime", first, KIMI_CODE_HOME=str(kimi_home))
             before = snapshot(sandbox.shared)
             skills = installed_skills(sandbox.shared)
             check(len(skills) == 11, f"T-a1 {first}: all Skills installed ({skills})")
-            output = sandbox.install("--runtime", second)
-            check(output.count("refer: ") == len(skills)
-                  and "install: " not in output and "update: " not in output,
-                  f"T-a1 {first}->{second}: every Skill is referred, none reinstalled ({output[-400:]})")
+            output = sandbox.install("--runtime", second, KIMI_CODE_HOME=str(kimi_home))
+            # Issue #159: kimi-cli's shared-root install must only refer; its
+            # kimi-specific root is where a fresh copy may land instead.
+            shared_lines = [line for line in output.splitlines()
+                            if str(sandbox.shared) in line]
+            check(len([line for line in shared_lines if line.startswith("refer: ")]) == len(skills)
+                  and not any(line.startswith(("install: ", "update: ", "already installed: "))
+                              for line in shared_lines),
+                  f"T-a1 {first}->{second}: every shared .agents Skill is referred, "
+                  f"none reinstalled there ({output[-400:]})")
             check(snapshot(sandbox.shared) == before,
                   f"T-a1 {first}->{second}: shared bytes and mtimes unchanged")
             refs = {name: data.get("referrers") for name, data in receipts(sandbox.shared).items()}
             check(set(refs) == set(skills) and all(v == ["dsh", "kimi-cli"] for v in refs.values()),
                   f"T-a1 {first}->{second}: every receipt lists both referrers ({refs})")
+            if second == "kimi-cli":
+                check(installed_skills(kimi_home / "skills") == skills,
+                      f"T-a1 {first}->kimi-cli: the kimi-specific root receives every Skill")
+                kimi_refs = {name: data.get("referrers")
+                             for name, data in receipts(kimi_home / "skills").items()}
+                check(set(kimi_refs) == set(skills)
+                      and all(v == ["kimi-cli"] for v in kimi_refs.values()),
+                      f"T-a1 {first}->kimi-cli: the kimi root receipts list only kimi-cli ({kimi_refs})")
         finally:
             sandbox.cleanup()
 
@@ -272,19 +293,30 @@ def test_a2_one_sided_uninstall_keeps_the_other_working() -> None:
     for leaving, staying in (("kimi-cli", "dsh"), ("dsh", "kimi-cli")):
         sandbox = Sandbox(f"a2-{leaving}")
         try:
+            kimi_home = sandbox.dir / "kimi-code-home"
             sandbox.install("--runtime", "dsh")
-            sandbox.install("--runtime", "kimi-cli")
+            sandbox.install("--runtime", "kimi-cli", KIMI_CODE_HOME=str(kimi_home))
             before = snapshot(sandbox.shared)
-            output = sandbox.install("--runtime", leaving, "--uninstall")
-            check("uninstalled: " not in output and f"still referenced by {staying}" in output,
-                  f"T-a2 uninstall {leaving}: nothing removed, each Skill kept for {staying}")
+            output = sandbox.install("--runtime", leaving, "--uninstall",
+                                     KIMI_CODE_HOME=str(kimi_home))
+            removed = [line[len("uninstalled: "):] for line in output.splitlines()
+                       if line.startswith("uninstalled: ")]
+            check(not any(path.startswith(str(sandbox.shared)) for path in removed)
+                  and f"still referenced by {staying}" in output,
+                  f"T-a2 uninstall {leaving}: nothing removed from the shared root, "
+                  f"each Skill kept for {staying} ({output[-500:]})")
             check(snapshot(sandbox.shared) == before,
                   f"T-a2 uninstall {leaving}: {staying}'s Skills keep bytes and mtimes")
+            if leaving == "kimi-cli":
+                check(installed_skills(kimi_home / "skills") == []
+                      and not (kimi_home / "skills" / RECEIPTS).exists(),
+                      "T-a2 uninstall kimi-cli: the kimi-specific root is fully withdrawn")
             refs = {name: data.get("referrers") for name, data in receipts(sandbox.shared).items()}
             check(len(refs) == 11 and all(v == [staying] for v in refs.values()),
                   f"T-a2 uninstall {leaving}: receipts remain with referrers [{staying}] ({refs})")
             worker_chain(sandbox, staying)
-            output = sandbox.install("--runtime", staying, "--uninstall")
+            output = sandbox.install("--runtime", staying, "--uninstall",
+                                     KIMI_CODE_HOME=str(kimi_home))
             check(installed_skills(sandbox.shared) == [] and not (sandbox.shared / RECEIPTS).exists(),
                   f"T-a2 uninstall {staying} last: Skills and receipt directory removed ({output[-300:]})")
         finally:
@@ -437,6 +469,17 @@ def test_b1_install_roots_are_scanned_by_the_105_gate() -> None:
             relative = str(Path(result.stdout.strip()).relative_to(home))
             scanned = module.HOST_SKILL_DISCOVERY_DIRS[platform_for.get(runtime, runtime)]
             check(relative in scanned, f"T-b1: {runtime} install root {relative} is scanned by #105 ({scanned})")
+        # Issue #159: the kimi-specific user root (kimi_extra_skills_dir) is a
+        # #105 scan root too, so a stale copy there refuses a Host start.
+        result = subprocess.run(
+            ["bash", "-c", 'eval "$(sed -n "/^kimi_extra_skills_dir()/,/^}/p" "$1")"; '
+                           'kimi_extra_skills_dir', "_", str(INSTALLER)],
+            capture_output=True, text=True,
+            env={"PATH": "/usr/bin:/bin", "HOME": str(home)})
+        relative = str(Path(result.stdout.strip()).relative_to(home))
+        check(relative in module.HOST_SKILL_DISCOVERY_DIRS["kimi-cli"],
+              f"T-b1: kimi-cli extra root {relative} is scanned by #105 "
+              f"({module.HOST_SKILL_DISCOVERY_DIRS['kimi-cli']})")
     finally:
         shutil.rmtree(home, ignore_errors=True)
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **`--runtime kimi-cli` dual-installs into both Kimi Code user Skill roots (Issue #159).**
+  Kimi Code CLI scans `~/.agents/skills` and `${KIMI_CODE_HOME:-~/.kimi-code}/skills`, but
+  `install-local.sh` wrote only the shared root, so a pin/Host refresh that followed the
+  matrix could leave Kimi Code without Runner Skills. `--runtime kimi-cli` now installs and
+  uninstalls BOTH roots, each with its own receipts set: the referrers ledger records
+  `kimi-cli` in every root it owns (the shared root keeps its Skills while `dsh` still refers
+  to them, and a kimi-cli uninstall also withdraws the kimi-specific root, whose only
+  referrer is kimi-cli). Every destination is planned read-only before any write, so a
+  refusal in either root still aborts the whole run before the first byte lands. The host
+  entry matrix, `docs/host-entry-evidence.md`, and the #105 build-skew scan
+  (`kaola-acp.py` `HOST_SKILL_DISCOVERY_DIRS`) now cover both roots, with the Issue #119
+  lineage re-measured for Kimi Code 2.0.2+ (upstream skill-location docs retrieved
+  2026-09-24; the installed binary on the maintainer Mac Studio is 2.0.2). Contract coverage:
+  `tests/contract/test-installer-runtimes.sh` asserts both documented roots receive the
+  install and the referrers ledger covers both; `test-issue-123-shared-refs.py` T-a1/T-a2
+  assert the dual-root refer semantics and T-b1 asserts the kimi-specific root is a #105
+  scan root.
+
 ## 0.6.1 — 2026-09-24 (codex pin refresh, Skill prompt trim, dsh refusal wording)
 
 - **Pink harness-compat 2026-09-24 class 2: Codex pins 0.156.1 / codex-acp 1.13.1, zcode-acp

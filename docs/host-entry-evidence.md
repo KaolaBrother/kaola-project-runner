@@ -1,4 +1,4 @@
-# Host entry evidence (Issue #119, #126)
+# Host entry evidence (Issue #119, #126, #159)
 
 Measurement record behind the loaded reference
 `skills/kaola-project-runner/references/host-entry-matrix.md` (source
@@ -8,8 +8,9 @@ notes; this page keeps the probe method, versions, negative controls, and the
 deep-test narrative. Moved out of the loaded Skill by Issue #157 (PR-M1 for
 the cross-platform matrix, PR-M2 for the ZCode native entry). The text below is
 unchanged from the references as of `26cee00`, except that "this Mac" names the
-maintainer Mac Studio and the codex note no longer names a `--stdin` flag the
-Runner wrapper does not have (omit `--text` and pipe stdin instead).
+maintainer Mac Studio, the codex note no longer names a `--stdin` flag the
+Runner wrapper does not have (omit `--text` and pipe stdin instead), and Issue
+#159 re-measures the kimi-cli row to both user roots (see the kimi-cli note).
 
 ## Probe method
 
@@ -38,7 +39,7 @@ the quoted sentence exists only in this build.
 | droid | `/kaola-project-runner` | E2; E2 / E2 | `~/.factory/skills`, `~/.agents/skills` | 0.220.0 |
 | dsh | `/kaola-project-runner` | E2; E2 / E2 | `~/.agents/skills` | harness 0.0.1 |
 | opencode | `/kaola-project-runner` | E1 (`skill` tool); E1+E2 / E2 | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | 2.0.11 |
-| kimi-cli | `/skill:kaola-project-runner ` | E2; E2 / E2 | `~/.agents/skills` | 2.0.2 |
+| kimi-cli | `/skill:kaola-project-runner ` | E2; E2 / E2 | `~/.agents/skills`, `${KIMI_CODE_HOME:-~/.kimi-code}/skills` | 2.0.2 |
 | codex | `$kaola-project-runner` | E2; E2 / E2 | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.13.1 |
 
 ## Notes
@@ -57,6 +58,22 @@ the quoted sentence exists only in this build.
   rewrites `.kaola/heartbeat-prompt.json`; Codex's own timer serves only a
   Codex supervisor that is not a Host.
 - **dsh** - E2 plus negative control.
+- **kimi-cli (Issue #159 re-measure, Kimi Code 2.0.2+)** - the entry and both
+  rows' lineage start at Issue #119 on Kimi Code 2.0.2 (E2; E2 / E2 for
+  `~/.agents/skills`). Kimi Code CLI scans two user-level Skill roots per the
+  upstream skill-location docs (moonshotai.github.io/kimi-code/en/customization/
+  skills, retrieved 2026-09-24): the cross-tool `~/.agents/skills` and the
+  Kimi-specific `${KIMI_CODE_HOME:-~/.kimi-code}/skills`, which moves with
+  `$KIMI_CODE_HOME`. The kimi-specific root is additionally evidenced by fleet
+  use on the 2026-09-24 failure this re-measure tracks (Issue #159): Workflow
+  Skills deployed there by `install-kimi.sh --global` were loaded by the
+  installed Kimi 2.0.2 while Runner Skills were absent from both roots. The
+  root is documented and installed to; a dedicated live D3 for the added root
+  (real-CLI session, E1/E2 + negative control) is the standing follow-up, kept
+  pending here because it needs a real provider session. The installed binary
+  on the maintainer Mac Studio is Kimi Code 2.0.2 (`~/.kimi-code/bin/kimi`);
+  the `platforms/kimi-cli.yaml` `cli=2.1.0` record is the un-probed optional
+  same-commit record (bundle-153), not a re-measure.
 - D3, every non-ZCode row (2026-09-21; codex 2026-09-23): run under a shadow `HOME` whose Skill roots
   held only this build and an isolated `KAOLA_ACP_RECORD_ROOT`. Each Host
   started on its default tier (opencode on the explicit

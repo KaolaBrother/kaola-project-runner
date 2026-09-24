@@ -177,7 +177,7 @@ HOST_SKILL_DISCOVERY_DIRS = {
     "droid": (".factory/skills", ".agents/skills"),
     "dsh": (".agents/skills",),
     "grok": (".grok/skills", ".agents/skills", ".claude/skills", ".cursor/skills"),
-    "kimi-cli": (".agents/skills",),
+    "kimi-cli": (".agents/skills", ".kimi-code/skills"),
     "opencode": (".config/opencode/skills", ".config/opencode/skill",
                  ".opencode/skills", ".claude/skills", ".agents/skills"),
     "zcode": (".zcode/skills", ".agents/skills"),

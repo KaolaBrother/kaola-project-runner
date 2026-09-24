@@ -40,7 +40,10 @@ usage() {
     '  grok-cli     $HOME/.grok/skills (Grok CLI Host)' \
     '  droid        $HOME/.factory/skills' \
     '  opencode     $HOME/.config/opencode/skills' \
-    '  kimi-cli     $HOME/.agents/skills (shared with dsh; see referrers below)' \
+    '  kimi-cli     $HOME/.agents/skills AND ${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills' \
+    '               (Issue #159: Kimi Code scans both user roots; ~/.agents/skills' \
+    '               is the cross-tool root shared with dsh, the kimi-specific root' \
+    '               follows $KIMI_CODE_HOME)' \
     '  dsh          $HOME/.agents/skills (shared with kimi-cli)' \
     'Each root above was measured as a Skill root of that CLI (Issue #119,' \
     'host-entry-matrix.md in the Project Runner Skill).' \
@@ -81,6 +84,12 @@ usage() {
     'already installed only records a reference (refer); another build updates the' \
     'one shared copy and keeps every referrer. --uninstall withdraws only this' \
     'runtime'"'"'s reference and removes a Skill only when no referrer is left (kept).' \
+    'Issue #159: --runtime kimi-cli installs into BOTH user roots, each with its' \
+    'own receipt set: $HOME/.agents/skills (shared with dsh) and' \
+    '${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills. A kimi-cli --uninstall withdraws' \
+    'the kimi-cli reference from every root it owns: the shared root keeps its' \
+    'Skills while dsh still refers to them, and the kimi-specific root removes' \
+    'them (its only referrer is kimi-cli).' \
     '--bin-links also manages the $HOME/.local/bin/kaola-acp* helper links and the' \
     'kaola-project-runner-locate locator link; it is on by default only for the' \
     'Codex runtime destination. Uninstall never removes bin' \
@@ -125,13 +134,23 @@ runtime_skills_dir() {
     devin) printf '%s\n' "${DEVIN_CONFIG_DIR:-$HOME/.config/devin}/skills" ;;
     zcode) printf '%s\n' "$HOME/.zcode/skills" ;;
     # Issue #119: user roots measured live for each non-ZCode Host platform
-    # (templates/orchestrator/references/host-entry-matrix.md).
+    # (templates/orchestrator/references/host-entry-matrix.md). kimi-cli and
+    # dsh share the cross-tool root; Issue #159 adds the Kimi-specific user
+    # root (kimi_extra_skills_dir) as a second destination for kimi-cli.
     grok-cli) printf '%s\n' "$HOME/.grok/skills" ;;
     droid) printf '%s\n' "$HOME/.factory/skills" ;;
     opencode) printf '%s\n' "$HOME/.config/opencode/skills" ;;
     kimi-cli|dsh) printf '%s\n' "$HOME/.agents/skills" ;;
     *) return 1 ;;
   esac
+}
+
+# Issue #159: Kimi Code's own user-level Skill root. Kimi Code CLI scans both
+# user roots (cross-tool ~/.agents/skills and this kimi-specific one, which
+# moves with $KIMI_CODE_HOME; default ~/.kimi-code/skills). Only the kimi-cli
+# runtime installs here; dsh stays single-root.
+kimi_extra_skills_dir() {
+  printf '%s\n' "${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills"
 }
 
 append_selection() {
@@ -197,32 +216,34 @@ fi
 
 if [[ -n "$skills_dir" ]]; then
   [[ "$skills_dir" == /* ]] || { printf '%s\n' '--skills-dir must be an absolute path' >&2; exit 2; }
-  target_parent="$skills_dir"
-  resolved_runtime=generic
+  base_parent="$skills_dir"
+  base_runtime=generic
 elif [[ -n "$runtime_alias" ]]; then
-  target_parent="$(runtime_skills_dir "$runtime_alias")"
-  resolved_runtime="$runtime_alias"
+  base_parent="$(runtime_skills_dir "$runtime_alias")"
+  base_runtime="$runtime_alias"
 else
-  target_parent="${CODEX_HOME:-$HOME/.codex}/skills"
-  resolved_runtime=codex
+  base_parent="${CODEX_HOME:-$HOME/.codex}/skills"
+  base_runtime=codex
 fi
-receipts_dir="$target_parent/.kaola-install-receipts"
 
-# Issue #123: this install's reference id, and who a pre-ledger receipt in this
+# Issue #159: kimi-cli maps to BOTH user-level Skill roots (the cross-tool
+# root and the Kimi-specific root that follows $KIMI_CODE_HOME); every other
+# runtime has one destination. Each destination gets its own receipt set, so
+# the referrers ledger covers both install and uninstall.
+if [[ "$base_runtime" == kimi-cli ]]; then
+  dest_parents=("$HOME/.agents/skills" "$(kimi_extra_skills_dir)")
+else
+  dest_parents=("$base_parent")
+fi
+
+# Issue #123: this install's reference id, and who a pre-ledger receipt in a
 # root counts as referenced by (every runtime mapped to the same root, e.g.
-# kimi-cli and dsh for $HOME/.agents/skills).
-self_ref="$resolved_runtime"
+# kimi-cli and dsh for $HOME/.agents/skills). Resolved per destination at
+# planning time below.
 canonical_dir() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"; }
-target_key="$(canonical_dir "$target_parent")"
-legacy_referrers=""
-for known_runtime in codex claude-code cursor devin zcode grok-cli droid opencode kimi-cli dsh; do
-  [[ "$(canonical_dir "$(runtime_skills_dir "$known_runtime")")" == "$target_key" ]] \
-    && legacy_referrers="${legacy_referrers:+$legacy_referrers,}$known_runtime"
-done
-[[ -n "$legacy_referrers" ]] || legacy_referrers="$self_ref"
 
 if [[ "$mode" == install ]]; then
-  if [[ "$bin_links_request" == on || ( -z "$bin_links_request" && "$resolved_runtime" == codex ) ]]; then
+  if [[ "$bin_links_request" == on || ( -z "$bin_links_request" && "$base_runtime" == codex ) ]]; then
     want_bin_links=true
   else
     want_bin_links=false
@@ -678,83 +699,128 @@ plan_skill() {
   fi
 }
 
-actions=()
-for platform in "${selection[@]}"; do
-  plan_skill "$(skill_name_for "$platform")" "$platform"
-done
-if [[ "$install_orchestrator" == true ]]; then
-  plan_skill "$orchestrator_skill_name"
-  if [[ "$resolved_runtime" == "codex" || "$resolved_runtime" == "generic" ]]; then
-    zcode_selected=false
-    for item in "${selection[@]}"; do
-      [[ "$item" == zcode ]] && zcode_selected=true
-    done
-    if [[ "$zcode_selected" == true ]]; then
-      plan_skill "$external_skill_name"
-    elif [[ -e "$target_parent/$external_skill_name" || -L "$target_parent/$external_skill_name" ]]; then
-      # Already installed: keep it in this control-plane plan so a filtered
-      # reinstall updates it and a filtered uninstall removes it.
-      plan_skill "$external_skill_name"
-    else
-      printf 'skipping %s: needs the ZCode worker Skill (not in --platform)\n' "$external_skill_name"
-    fi
-  fi
-fi
-
+# Per-destination planning and application (Issue #159). Every destination is
+# planned read-only before any write, so a refusal anywhere (generated Skill
+# missing, foreign path, dangling bin link, malformed user hooks.json) still
+# aborts the whole run before the first byte lands; then each destination
+# applies in order, each with its own receipts set and referrers.
 bin_dir="$HOME/.local/bin"
 bin_specs=(
   "kaola-acp|$script_dir/kaola-acp.py"
   "kaola-acp-holder|$script_dir/kaola-acp-holder.py"
   "kaola-project-runner-locate|$script_dir/kaola-locate.py"
 )
-bin_actions=()
-bin_ledger=""
-if [[ "$want_bin_links" == true ]]; then
-  # Issue #123: the helper links are shared blocks counted in the sidecar
-  # ledger beside them; an existing link to a usable target is referenced,
-  # not refused, and uninstall keeps a link while anything still refers to it.
-  bin_plan="$(refs_tool bin-plan "$mode" "$bin_dir" "$self_ref" "$repo_root" \
-    "${bin_specs[@]/|/=}")" || exit 1
-  while IFS= read -r row; do
-    if [[ "$row" == ledger\|* ]]; then
-      bin_ledger="${row#ledger|}"
-    else
-      bin_actions+=("$row")
-    fi
-  done < <(printf '%s\n' "$bin_plan")
-fi
-
-# Issue #97: the Codex runtime destination owns one user-level
-# SessionStart(compact) recovery entry beside the control-plane Skills. The
-# hook tool refuses a malformed user hooks.json before any write, so that
-# refusal is planned here, before the first Skill write, and aborts the run.
-# A generic --skills-dir destination is never a Codex user-level install.
 hook_tool="$script_dir/kaola-codex-compact-hook.py"
 codex_home="${CODEX_HOME:-$HOME/.codex}"
-want_user_hook=false
-if [[ "$resolved_runtime" == codex && "$install_orchestrator" == true ]]; then
-  want_user_hook=true
-  if [[ -d "$codex_home" ]]; then
-    hook_status="$("$installer_python" "$hook_tool" user-status --codex-home "$codex_home")" || {
-      printf 'refusing: Codex user-level hooks.json cannot be merged: %s\n' "$hook_status" >&2
-      exit 1
-    }
-    if [[ "$mode" == install ]]; then
-      hook_blockers="$("$installer_python" -c 'import json,sys; print("\n".join(json.loads(sys.argv[1]).get("install_blockers") or []))' "$hook_status")"
-      [[ -z "$hook_blockers" ]] || {
-        printf 'refusing: Codex user-level compact-recovery hook cannot be installed:\n%s\n' "$hook_blockers" >&2
+
+destination_plan() {
+  local prefix="$1" parent="$2" rt="$3" role="$4"
+  target_parent="$parent"
+  resolved_runtime="$rt"
+  receipts_dir="$target_parent/.kaola-install-receipts"
+  self_ref="$resolved_runtime"
+  target_key="$(canonical_dir "$target_parent")"
+  legacy_referrers=""
+  for known_runtime in codex claude-code cursor devin zcode grok-cli droid opencode kimi-cli dsh; do
+    [[ "$(canonical_dir "$(runtime_skills_dir "$known_runtime")")" == "$target_key" ]] \
+      && legacy_referrers="${legacy_referrers:+$legacy_referrers,}$known_runtime"
+  done
+  [[ -n "$legacy_referrers" ]] || legacy_referrers="$self_ref"
+
+  local -a actions=() bin_actions=()
+  local bin_ledger="" want_user_hook=false hook_status=""
+
+  for platform in "${selection[@]}"; do
+    plan_skill "$(skill_name_for "$platform")" "$platform"
+  done
+  if [[ "$install_orchestrator" == true ]]; then
+    plan_skill "$orchestrator_skill_name"
+    if [[ "$resolved_runtime" == "codex" || "$resolved_runtime" == "generic" ]]; then
+      zcode_selected=false
+      for item in "${selection[@]}"; do
+        [[ "$item" == zcode ]] && zcode_selected=true
+      done
+      if [[ "$zcode_selected" == true ]]; then
+        plan_skill "$external_skill_name"
+      elif [[ -e "$target_parent/$external_skill_name" || -L "$target_parent/$external_skill_name" ]]; then
+        # Already installed: keep it in this control-plane plan so a filtered
+        # reinstall updates it and a filtered uninstall removes it.
+        plan_skill "$external_skill_name"
+      else
+        printf 'skipping %s: needs the ZCode worker Skill (not in --platform)\n' "$external_skill_name"
+      fi
+    fi
+  fi
+
+  if [[ "$role" == primary && "$want_bin_links" == true ]]; then
+    # Issue #123: the helper links are shared blocks counted in the sidecar
+    # ledger beside them; an existing link to a usable target is referenced,
+    # not refused, and uninstall keeps a link while anything still refers to it.
+    bin_plan="$(refs_tool bin-plan "$mode" "$bin_dir" "$self_ref" "$repo_root" \
+      "${bin_specs[@]/|/=}")" || exit 1
+    while IFS= read -r row; do
+      if [[ "$row" == ledger\|* ]]; then
+        bin_ledger="${row#ledger|}"
+      else
+        bin_actions+=("$row")
+      fi
+    done < <(printf '%s\n' "$bin_plan")
+  fi
+
+  if [[ "$resolved_runtime" == codex && "$install_orchestrator" == true ]]; then
+    # Issue #97: the Codex runtime destination owns one user-level
+    # SessionStart(compact) recovery entry beside the control-plane Skills.
+    # The hook tool refuses a malformed user hooks.json before any write, so
+    # that refusal is planned here, before the first Skill write, and aborts
+    # the run. A generic --skills-dir destination is never a Codex user-level
+    # install.
+    want_user_hook=true
+    if [[ -d "$codex_home" ]]; then
+      hook_status="$("$installer_python" "$hook_tool" user-status --codex-home "$codex_home")" || {
+        printf 'refusing: Codex user-level hooks.json cannot be merged: %s\n' "$hook_status" >&2
         exit 1
       }
+      if [[ "$mode" == install ]]; then
+        hook_blockers="$("$installer_python" -c 'import json,sys; print("\n".join(json.loads(sys.argv[1]).get("install_blockers") or []))' "$hook_status")"
+        [[ -z "$hook_blockers" ]] || {
+          printf 'refusing: Codex user-level compact-recovery hook cannot be installed:\n%s\n' "$hook_blockers" >&2
+          exit 1
+        }
+      fi
+    elif [[ "$mode" == uninstall ]]; then
+      want_user_hook=false
     fi
-  elif [[ "$mode" == uninstall ]]; then
-    want_user_hook=false
   fi
-fi
 
-[[ "$mode" == install ]] && mkdir -p "$target_parent"
-[[ "$want_bin_links" == true && "$mode" == install ]] && mkdir -p "$bin_dir"
+  # Percent-q output is re-parsed as part of the eval'd assignment, so scalars
+  # (any ordinary string) survive plan -> apply untouched; guarded expansions
+  # below keep bash 3.2's set -u from erroring on an empty array.
+  eval "${prefix}_parent=$(printf '%q' "$parent")"
+  eval "${prefix}_rt=$(printf '%q' "$rt")"
+  eval "${prefix}_want_user_hook=$(printf '%q' "$want_user_hook")"
+  eval "${prefix}_hook_status=$(printf '%q' "$hook_status")"
+  eval "${prefix}_bin_ledger=$(printf '%q' "$bin_ledger")"
+  eval "${prefix}_actions=(\${actions[@]+\"\${actions[@]}\"})"
+  eval "${prefix}_bin_actions=(\${bin_actions[@]+\"\${bin_actions[@]}\"})"
+}
 
-for row in "${actions[@]}"; do
+destination_apply() {
+  local prefix="$1"
+  local target_parent="" resolved_runtime="" want_user_hook=false hook_status="" bin_ledger=""
+  eval "target_parent=\"\${${prefix}_parent}\""
+  eval "resolved_runtime=\"\${${prefix}_rt}\""
+  eval "want_user_hook=\"\${${prefix}_want_user_hook}\""
+  eval "hook_status=\"\${${prefix}_hook_status}\""
+  eval "bin_ledger=\"\${${prefix}_bin_ledger}\""
+  eval "local -a actions=(\${${prefix}_actions[@]+\"\${${prefix}_actions[@]}\"})"
+  eval "local -a bin_actions=(\${${prefix}_bin_actions[@]+\"\${${prefix}_bin_actions[@]}\"})"
+  receipts_dir="$target_parent/.kaola-install-receipts"
+  self_ref="$resolved_runtime"
+
+  [[ "$mode" == install ]] && mkdir -p "$target_parent"
+  [[ "$mode" == install && ${#bin_actions[@]} -gt 0 ]] && mkdir -p "$bin_dir"
+
+  for row in "${actions[@]}"; do
   IFS='|' read -r action name source target refs < <(printf '%s\n' "$row")
   case "$action" in
     already)
@@ -844,27 +910,27 @@ for row in "${actions[@]}"; do
       printf 'already absent: %s\n' "$target"
       ;;
   esac
-done
-[[ "$mode" == uninstall ]] && rmdir "$receipts_dir" 2>/dev/null || true
+  done
+  [[ "$mode" == uninstall ]] && rmdir "$receipts_dir" 2>/dev/null || true
 
-if [[ "$want_user_hook" == true ]]; then
-  if [[ "$mode" == install ]]; then
-    hook_receipt="$("$installer_python" "$hook_tool" user-install --codex-home "$codex_home")" || {
-      printf 'Codex user-level compact-recovery hook install failed: %s\n' "$hook_receipt" >&2
-      exit 1
-    }
-    printf 'codex user hook: %s\n' "$hook_receipt"
-    printf 'codex user hook: review and trust the new entry in /hooks; it loads from the next Codex session\n'
-  else
-    hook_receipt="$("$installer_python" "$hook_tool" user-uninstall --codex-home "$codex_home")" || {
-      printf 'Codex user-level compact-recovery hook uninstall failed: %s\n' "$hook_receipt" >&2
-      exit 1
-    }
-    printf 'codex user hook: %s\n' "$hook_receipt"
+  if [[ "$want_user_hook" == true ]]; then
+    if [[ "$mode" == install ]]; then
+      hook_receipt="$("$installer_python" "$hook_tool" user-install --codex-home "$codex_home")" || {
+        printf 'Codex user-level compact-recovery hook install failed: %s\n' "$hook_receipt" >&2
+        exit 1
+      }
+      printf 'codex user hook: %s\n' "$hook_receipt"
+      printf 'codex user hook: review and trust the new entry in /hooks; it loads from the next Codex session\n'
+    else
+      hook_receipt="$("$installer_python" "$hook_tool" user-uninstall --codex-home "$codex_home")" || {
+        printf 'Codex user-level compact-recovery hook uninstall failed: %s\n' "$hook_receipt" >&2
+        exit 1
+      }
+      printf 'codex user hook: %s\n' "$hook_receipt"
+    fi
   fi
-fi
 
-for row in ${bin_actions[@]+"${bin_actions[@]}"}; do
+  for row in ${bin_actions[@]+"${bin_actions[@]}"}; do
   IFS='|' read -r action source target note < <(printf '%s\n' "$row")
   case "$action" in
     already)
@@ -897,5 +963,18 @@ os.replace(sys.argv[1], sys.argv[2])' "$temp" "$target"
       printf 'already absent: %s\n' "$target"
       ;;
   esac
+  done
+  [[ -z "$bin_ledger" ]] || refs_tool bin-write "$bin_dir" "$bin_ledger"
+}
+
+# Issue #159: plan every destination read-only first, then apply in order.
+declare -a plan_prefixes=()
+for plan_i in "${!dest_parents[@]}"; do
+  plan_prefix="plan_$plan_i"
+  if [[ "$plan_i" -eq 0 ]]; then dest_role="primary"; else dest_role="secondary"; fi
+  destination_plan "$plan_prefix" "${dest_parents[$plan_i]}" "$base_runtime" "$dest_role"
+  plan_prefixes+=("$plan_prefix")
 done
-[[ -z "$bin_ledger" ]] || refs_tool bin-write "$bin_dir" "$bin_ledger"
+for plan_prefix in "${plan_prefixes[@]}"; do
+  destination_apply "$plan_prefix"
+done
