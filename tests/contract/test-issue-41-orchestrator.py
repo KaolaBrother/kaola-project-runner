@@ -914,16 +914,10 @@ class Issue47DeliveryPathMeaning(unittest.TestCase):
             ),
             "actionable PR priority, permitted-CLI parallel work, blocked-PR ownership",
         )
-        self.assertIsNotNone(
-            clause_present(
-                heartbeat,
-                (
-                    r"已选 Workflow 同步/合并.{0,20}不为交接单独开 PR.{0,80}"
-                    r"有开放 PR 时争用容量优先推进可执行项.{0,80}已许可 CLI",
-                ),
-            ),
-            "heartbeat recalls merge path and conditional PR priority on permitted CLIs",
-        )
+        # Issue #157 (PR-R3): the skeleton points at SKILL §Delivery instead of
+        # restating the merge path and PR priority.
+        self.assertIn("交付路径与开放 PR 优先级见主 Skill §Delivery", heartbeat)
+        self.assertNotIn("有开放 PR 时争用容量优先推进可执行项", heartbeat)
         for label, raw in worker_idle_stop_policy_surfaces():
             body = normalize(raw)
             for marker in WORKER_NO_OPEN_PR_PRIORITY_POLICY:

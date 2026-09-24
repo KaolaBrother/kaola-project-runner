@@ -32,23 +32,21 @@ authorization.
 If the installed ZCode Runner (`zcode-kaola-project-runner`) is missing, report
 that this Skill is not executable; claim no Host.
 
-Recover from the canonical Git root plus the standard Host name
-`zcode-<PROJECT_CODE>-orchestrator-<purpose>` and existing Runner `status` /
-receipts. A Git worktree is not an ACP id. One live Host per repo: a **live**
-Host is attached in place — do not `start` again, even if its recorded name is
-not the new form, when that locator is unique. `host-exists` means attach its
+One live Host per repo, recovered from the canonical Git root plus the standard
+Host name `zcode-<PROJECT_CODE>-orchestrator-<purpose>` and existing Runner
+`status` / receipts. A Git worktree is not an ACP id. A **live** Host is
+attached in place, never started again, even if its recorded name is not the
+new form; `host-exists` means attach its
 `existing_host`; never rename and retry. A missing standard name or pointer
 file never justifies a second Host. There is no Delegator continuation file.
-A Host failing its identity check is exact-stopped, proven gone (`residual_pids: []`), then replaced. A **stopped** Host may
-`--resume` an attested native
-`sess_*`; if the backend cannot restore it, a **new** standard-named Host is
-a new ACP session — confirm current authorization first, then start, and
-continue the frontier from existing project records.
-[Bricked Host](references/host-brick.md). Loaded from the Grok Bot
-account bridge: before each Host `status`, `start` (also `--resume`),
-`send`, and `stop`, attest with the existing locator's
-full parameters (`--project`, `--worker zcode`, exact `--session`) and refuse
-`refused`. Codex and generic hosts do not. Commands, identities, the
+A Host failing its identity check is exact-stopped, proven gone
+(`residual_pids: []`), then replaced. A **stopped** Host is
+resumed (attested native `sess_*`) or replaced only per handoff §Recover: a
+new Host is a new ACP session, with current authorization confirmed before
+`start`.
+[Bricked Host](references/host-brick.md). From the Grok Bot account bridge,
+attest every Host `status`/`start`/`send`/`stop` with the locator first
+(handoff); Codex and generic hosts do not. Commands, identities, the
 prompt's `sweep=` line: [handoff.md](references/handoff.md).
 
 Pass no per-worker `--repo`, scheduling, or heartbeat instructions. Do not

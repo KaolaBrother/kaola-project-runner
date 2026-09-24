@@ -34,12 +34,13 @@ class HeartbeatGuidanceObligation(unittest.TestCase):
         self.skeleton = SKELETON.read_text(encoding="utf-8")
 
     def test_heartbeat_is_defined_per_host_without_a_shared_implementation(self) -> None:
-        # Codex: its own timer. ZCode Host: worker return / worker event. Grok Bot does not load this Skill.
-        self.assertRegex(self.skeleton, r"Codex 由其定时系统触发投递")
-        self.assertRegex(self.skeleton, r"ZCode Host 由每次 Worker 返回或既有 Worker 事件触发投递")
+        # Issue #157 (PR-C2): every Host (any platform with a host_skill_entry) is
+        # event-driven; only a non-Host Codex supervisor keeps its own timer.
+        self.assertRegex(self.skeleton, r"非 Host 的 Codex 监督者由其定时系统触发投递")
+        self.assertRegex(self.skeleton, r"Host（任一有 host_skill_entry 的平台）由 Worker 事件触发投递")
         self.assertRegex(self.skeleton, r"不要求各平台同路径同 schema")
-        self.assertRegex(self.skeleton, r"不给 ZCode 加定时器")
-        self.assertRegex(self.skeleton, r"不把 Codex 改成事件触发")
+        self.assertRegex(self.skeleton, r"不给 Host 加定时器")
+        self.assertNotRegex(self.skeleton, r"不把 Codex 改成事件触发")
         self.assertRegex(self.skeleton, r"Grok Bot 不加载本 Skill")
         # Issue #157 (PR-C1): any platform with a host_skill_entry is an
         # event-driven Host; Codex's own timer serves only a non-Host supervisor.

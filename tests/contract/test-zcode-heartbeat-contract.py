@@ -1413,7 +1413,9 @@ def test_canonical_heartbeat_spec_stays_one_set() -> None:
         capture_output=True,
     )
     check(grok_golden.returncode == 0, "templates/grok-golden stays frozen")
-    check("Codex 由其定时系统触发投递" in text, "Codex keeps its timer trigger")
+    check("非 Host 的 Codex 监督者由其定时系统触发投递" in text
+          and "不把 Codex 改成事件触发" not in text,
+          "only a non-Host Codex supervisor keeps its timer trigger (Issue #157, PR-C2)")
     check("Grok Bot 不加载本 Skill" in text, "Grok Bot is not a Project Runner heartbeat host")
     rendered_text = rendered[0].read_text(encoding="utf-8")
     check("PROJECT_RUNNER_HEARTBEAT_V2" in rendered_text, "the generated skeleton matches the canonical marker")

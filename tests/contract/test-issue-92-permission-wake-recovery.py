@@ -1504,7 +1504,7 @@ def test_the_host_contract_requires_fresh_verification() -> None:
             ("已消失的请求幂等忽略", "idempotently ignore a request that has vanished"),
             ("事件本身不批准任何操作", "the event itself approves nothing"),
             ("只是定位符", "the arriving event is only a locator"),
-            ("可能在送达途中就已被批准或结束", "and may already have been settled in flight")):
+            ("是回合内唤醒、不是 idle", "the wake is mid-turn, not idle")):
         check(fragment in skeleton, f"the heartbeat prompt states: {label}")
 
     # Behaviour, not just wording: a stale request cannot be approved.
