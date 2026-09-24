@@ -294,7 +294,7 @@ class PlatformFactsStayTheSingleSource(unittest.TestCase):
         values = manifest_values(OPENCODE_MANIFEST)
         quirks = values["acp_quirks"]
         self.assertIn("2.0.11", quirks)
-        self.assertIn("cli=2.0.11", values["acp_verified_versions"])
+        self.assertIn("cli=2.0.15", values["acp_verified_versions"])
         for choice in ("allow_once", "allow_always", "reject_once"):
             self.assertIn(
                 choice,
@@ -313,8 +313,8 @@ class PlatformFactsStayTheSingleSource(unittest.TestCase):
 
 
 class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
-    """1.18.17 is history; the verified 2.0.11 build was never probed for
-    steering and must read as unknown."""
+    """1.18.17 is history; neither verified build (2.0.11, or 2.0.15 since
+    the 2026-09-24 record) was probed for steering and must read as unknown."""
 
     def test_summary_marks_the_probe_as_historical(self) -> None:
         summary = manifest_values(OPENCODE_MANIFEST)["steering_summary"]
@@ -329,15 +329,20 @@ class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
         values = manifest_values(OPENCODE_MANIFEST)
         summary = values["steering_summary"]
         self.assertIn(
-            "2.0.11",
+            "2.0.15",
             summary,
             "the summary must name the currently verified version it does NOT cover",
         )
-        self.assertIn("cli=2.0.11", values["acp_verified_versions"])
+        self.assertIn(
+            "2.0.11",
+            summary,
+            "the summary must keep the 2.0.11 initialize observation versioned",
+        )
+        self.assertIn("cli=2.0.15", values["acp_verified_versions"])
         self.assertRegex(
             summary,
             r"not a measurement of",
-            f"the summary must deny that 1.18.17 measured 2.0.11: {summary!r}",
+            f"the summary must deny that 1.18.17 measured the verified build: {summary!r}",
         )
         self.assertRegex(
             summary,

@@ -52,7 +52,7 @@ the quoted sentence exists only in this build.
 | dsh | `/kaola-project-runner` | E2; E2 / E2 | `~/.agents/skills` | harness 0.0.1 |
 | opencode | `/kaola-project-runner` | E1 (`skill` tool); E1+E2 / E2 | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | 2.0.11 |
 | kimi-cli | `/skill:kaola-project-runner ` | E2; E2 / E2 | `~/.agents/skills` | 2.0.2 |
-| codex | `$kaola-project-runner` | E2; E2 / E2 | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.13.0 |
+| codex | `$kaola-project-runner` | E2; E2 / E2 | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.13.1 |
 
 Notes:
 
@@ -64,7 +64,10 @@ Notes:
   `available_commands`; not `/`. Until 2026-09-23 every turn answered a
   usage-limit notice, so codex stayed refused. Measured then on gpt-6-sol/high:
   E2 in a fresh session, and the negative control answered `SKILL-NOT-LOADED`.
-  D3 as below with a codex worker (under the shadow `HOME` dsh had no
+  That E2/D3 row was measured on codex-acp 1.13.0; the pinned adapter moved
+  record-only to 1.13.1 with `@openai/codex@0.156.1` on 2026-09-24 (Pink
+  class-2 report, Issue #153), with no new live run. D3 as below with a codex
+  worker (under the shadow `HOME` dsh had no
   credentials and claude-code no login). The roots column is #119's 1.11.0
   probe; #126 held only `~/.codex/skills`. A shell must pass the entry
   single-quoted or via `--stdin`: in double quotes `$kaola` expands. Like every Host, a codex Host's beat

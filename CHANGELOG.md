@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- **Pink harness-compat 2026-09-24 class 2: Codex pins 0.156.1 / codex-acp 1.13.1, zcode-acp
+  0.47.x precheck, batched CLI records (Issue #153).** `platforms/codex.yaml` moves to the
+  Pink report pins — `acp_command` pins `@openai/codex@0.156.1` +
+  `@agentclientprotocol/codex-acp@1.13.1`, `acp_verified_versions` to
+  `cli=0.156.1;adapter=1.13.1;protocol=1`, `acp_wrapper_pin` to `1.13.1` — a record-only pin:
+  no local CLI was upgraded and no live ACP run backs it. The #145 acp_quirks note that npm
+  `@openai/codex@0.156.1` could not be installed on the 2026-09-23 measuring network is
+  superseded: the pin now follows the 2026-09-24 Pink class-2 report, and the dated 2026-09-23
+  CODEX_PATH measurement (codex-cli 0.156.0 on adapter 1.13.0) stays a dated fact. Hardcoded
+  copies of the old pins move with it: `test-runner-v2.py`, `test-issue-22-bypass-all-approvals.py`,
+  the `test-acp-contract.py` comment, and the host-entry-matrix codex row (its E2/D3 evidence
+  was measured on 1.13.0; the row now names the pinned 1.13.1 with that provenance). The
+  zcode-acp 0.47.x precheck (usage_update, compaction busy-window) is recorded in
+  `docs/harness-acp-compat-2026-09-24.md`: upstream 0.47.x (through v0.47.10) holds prompts
+  during auto-compact and reports the compaction window busy for both auto and manual
+  `/compact` so prompts queue instead of erroring, and `usage_update` reports context occupancy
+  only — verified from upstream release notes and source, no live run. ZCode
+  `acp_verified_versions` stays `cli=0.16.9`: the generated zcode ACP reference sits at 8179 of
+  its 8192-byte budget, so the platform record keeps its 2026-09-22 phrasing and the precheck
+  conclusion lives in the evidence doc. Same-commit optional records, none separately
+  verified: kimi-cli `cli=2.1.0`, opencode `cli=2.0.15` (its steering summary now names 2.0.15
+  as the un-probed record while keeping the 2.0.11 initialize observation), claude-code
+  `cli=2.1.280`, droid `cli=0.225.1` (live `droid --version` on the dev machine). Dated
+  measurements and the fixtures that model them keep the versions they were measured on. No
+  release was cut and `~/.dsh` is untouched.
+
 ## 0.6.0 — 2026-09-24 (quota packages, ten-platform wording, prerequisite-tolerant validation)
 
 - **Read-only quota catalog queries: `kaola-acp packages` / `model-package` (Issue #148).**

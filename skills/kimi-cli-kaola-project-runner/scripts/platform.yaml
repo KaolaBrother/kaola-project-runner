@@ -33,7 +33,7 @@ fast_summary: "no native Fast toggle; speed-named catalog models such as kimi-co
 acp_command: "kimi acp"
 acp_client_capabilities: "terminal:false,fs:false"
 acp_quirks: ""
-acp_verified_versions: "cli=2.0.2;protocol=1"
+acp_verified_versions: "cli=2.1.0;protocol=1"
 acp_env_allowlist: "KIMI_API_KEY,KIMI_BASE_URL"
 acp_login_requires_pty: "false"
 acp_init_meta: ""

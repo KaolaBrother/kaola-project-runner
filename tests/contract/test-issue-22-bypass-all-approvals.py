@@ -283,8 +283,8 @@ class Issue22CodexPermissionMappings(unittest.TestCase):
 
     def test_manifest_pins_codex_acp_command(self) -> None:
         self.assertIn(
-            'acp_command: "npx --yes --package @openai/codex@0.155.1 '
-            '--package @agentclientprotocol/codex-acp@1.13.0 codex-acp"',
+            'acp_command: "npx --yes --package @openai/codex@0.156.1 '
+            '--package @agentclientprotocol/codex-acp@1.13.1 codex-acp"',
             self.manifest,
         )
         self.assertNotIn("default_transport", self.manifest)

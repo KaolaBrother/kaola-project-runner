@@ -33,7 +33,7 @@ fast_summary: "Fast via process-scoped `--settings '{\"fastMode\": ...}'` at lau
 acp_command: "node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js"
 acp_client_capabilities: "terminal:false,fs:false"
 acp_quirks: "vendored pinned fork of harukitosa/claude-code-acp (MIT), never npm or npx; one claude -p subprocess per turn, driven with --input-format stream-json over an open stdin (later turns add --resume) - the same channel that carries native mid-turn steering behind _session/steering; the bridge drops ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN so the subscription login and native Settings resolve inside claude; login is a human act in a native terminal, outside the Runner; permit settles only the reported tool_call status because the child takes no --permission-prompt-tool, so a permission answer cannot gate or resume it (cli 2.1.272 emitted no permission_request)"
-acp_verified_versions: "cli=2.1.278;bridge=6c20f28;protocol=1"
+acp_verified_versions: "cli=2.1.280;bridge=6c20f28;protocol=1"
 acp_env_allowlist: "CLAUDE_BIN,CLAUDE_CONFIG_DIR"
 acp_login_requires_pty: "true"
 acp_init_meta: ""

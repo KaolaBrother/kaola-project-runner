@@ -1510,9 +1510,11 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             self.mock_log.write_text("", encoding="utf-8")
 
     def test_codex_default_applies_model_effort_fast_mode_in_order(self) -> None:
-        # Issue #145: on codex-acp 1.13.0 (codex 0.155.1) gpt-6-sol advertises
-        # reasoning_effort and applies high (corrects the Issue #142 no-effort
-        # finding, which was specific to the old 1.11.0 bundled catalog).
+        # Issue #145: on codex-acp (measured 1.13.0 on codex 0.155.1; pins at
+        # 1.13.1 / 0.156.1 since the 2026-09-24 Pink class-2 report) gpt-6-sol
+        # advertises reasoning_effort and applies high (corrects the Issue #142
+        # no-effort finding, which was specific to the old 1.11.0 bundled
+        # catalog).
         receipt = self.start("codex")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         self.assertEqual(
