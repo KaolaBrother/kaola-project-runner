@@ -28,6 +28,25 @@
   measurements and the fixtures that model them keep the versions they were measured on. No
   release was cut and `~/.dsh` is untouched.
 
+- **Skill prompts: accuracy fixes, budget relief, and evidence moved to docs (Issues #156, #157).**
+  The Project Runner, Kaola-Delegator, and ten worker Skills land the #156 review. Accuracy: every
+  platform with a `host_skill_entry` is an event-driven Host, and Codex's own timer serves only a
+  non-Host Codex supervisor (main Skill and heartbeat skeleton). Any `install-local.sh --runtime`
+  or `--skills-dir` installs the main Skill. The binding derives from `KAOLA_ACP_DISPATCHER`
+  (`heartbeat-host-conflict` on a differing explicit target). The event `reason` formats and the
+  Host example name (`zcode-KT-orchestrator-main`) are corrected. Worker Skills now state the
+  `permit [--request-id ID] --option OPTION_ID` form (omitting `--option` answers cancelled),
+  the default `--permission-mode` per platform (new manifest keys `permission_summary` and
+  `login_summary`), and the issue-scoped and canonical-root `SESSION`/`REPO` examples. Every
+  `launch_summary` now names the ACP command in place of PTY-era argv. Measurement history moves out of the
+  loaded references into `docs/host-entry-evidence.md` (Host entry matrix and ZCode native entry),
+  `docs/issue-dispatch-display.md` (consumer progress display), and `docs/zcode-host.md`
+  (pre-binding holder recovery). The in-flight bundle-run grandfather clause and the legacy Grok
+  Bot Project Runner entry clause are retired. The heartbeat skeleton keeps its intake,
+  stop-boundary, and close-out lines, because a non-Host Codex timer carrier is not shown to
+  reload the main Skill. No budget ceiling was raised. Loaded prompt bytes drop by about 10.8 KB
+  in Project Runner, 0.5 KB in Kaola-Delegator, and 56 KB across the ten workers.
+
 - **Worker Skill prompts: codex measurement narrative leaves the loaded quirks (Issue #157).**
   `platforms/codex.yaml` `acp_quirks` no longer carries the dated measurement narrative; the
   facts stay recorded here: the 2026-09-23 `CODEX_PATH=/opt/homebrew/bin/codex` run (codex-cli

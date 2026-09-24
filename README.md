@@ -401,8 +401,9 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime zcode
 ./scripts/install-local.sh --skills-dir "$PWD/.zcode/skills"
 
-# Issue #119: measured Skill roots of the other Host-capable CLIs (entry lines and
-# evidence: skills/kaola-project-runner/references/host-entry-matrix.md).
+# Issue #119: measured Skill roots of the other Host-capable CLIs (entry lines:
+# skills/kaola-project-runner/references/host-entry-matrix.md; evidence:
+# docs/host-entry-evidence.md).
 ./scripts/install-local.sh --runtime grok-cli   # ~/.grok/skills
 ./scripts/install-local.sh --runtime droid      # ~/.factory/skills
 ./scripts/install-local.sh --runtime opencode   # ~/.config/opencode/skills

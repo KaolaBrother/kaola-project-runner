@@ -66,7 +66,9 @@ about it is rendered. It reaches the generated Skill through the computed `TIER_
 (SKILL.md) and `ALT_TIER_LINE` (references/platform.md) blocks, never an unconditional
 template sentence. They render as `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY`
 template variables; `acp_login_requires_pty` only records whether login needs a native terminal —
-login is a human act outside the Runner. The manifest key `default_transport` is removed
+login is a human act outside the Runner. `login_summary` and `permission_summary` (Issue #157)
+are required prose keys rendered into the worker SKILL.md: the platform's own login fact, and the
+permission mode `start` sets by default plus the `--permission-mode` override. The manifest key `default_transport` is removed
 (Issue #130); the parser rejects it as an unexpected key, so `--check` fails closed if it returns.
 
 An `acp_command` word may start with `$SKILL_DIR/scripts/` to name a file shipped inside the
