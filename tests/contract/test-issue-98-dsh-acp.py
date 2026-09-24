@@ -495,7 +495,12 @@ class Issue120DshPermissionModeThroughTheRunner(unittest.TestCase):
         """A caller asking for less access must never silently get full access."""
         result = self.cli("start", "--mode", "manual")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("--mode for dsh must be one of", result.stderr)
+        # Issue #158: the refusal names the wrapper flag Agents pass, and the
+        # accepted value set is unchanged.
+        self.assertIn(
+            "--permission-mode for dsh must be one of read-only, workspace-write, "
+            "danger-full-access or bypassPermissions", result.stderr)
+        self.assertNotIn("--mode for dsh", result.stderr)
         self.assertFalse(self.seen.exists())
         self.assertFalse((self.root / "records").exists())
 

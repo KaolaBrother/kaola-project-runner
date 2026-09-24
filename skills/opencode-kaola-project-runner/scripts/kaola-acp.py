@@ -3371,7 +3371,8 @@ def main() -> int:
             die("invalid or missing --session name")
     if (args.platform == "dsh" and args.command == "start" and args.mode
             and dsh_permission_mode(args)[0] not in DSH_PERMISSION_MODES):
-        die(f"--mode for dsh must be one of {', '.join(DSH_PERMISSION_MODES)} "
+        # Issue #158: name the Agent-facing wrapper flag, not the internal one.
+        die(f"--permission-mode for dsh must be one of {', '.join(DSH_PERMISSION_MODES)} "
             "or bypassPermissions")
     args.agent_command = (
         args.agent_command
