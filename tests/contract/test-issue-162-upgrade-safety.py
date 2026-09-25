@@ -241,13 +241,16 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertEqual(match[0].get("stale_reasons"), ["restart-required"], match[0])
 
     def test_legacy_record_without_a_quota_entry_is_silent(self) -> None:
-        """A record that never captured kaola-quota.py has no quota drift.
+        """A record that never captured kaola-quota.py stays silent.
 
-        Issue #179: the quota file is restart-required now, so an unrecorded
-        quota entry is simply absent from restart_files - not a new value.
+        Issue #179: the quota file is restart-required now, but a record with
+        no quota entry has nothing to compare, so a changed quota file that was
+        never recorded is simply absent from restart_files - not a new value.
         """
         acp = load_module(CLI, "acp166legacy")
         cli = self._installed_cli()
+        quota = cli.parent / "kaola-quota.py"
+        quota.write_bytes(quota.read_bytes() + b"\n# quota changed after legacy record\n")
         holder = cli.parent / "kaola-acp-holder.py"
         holder_digest = __import__("hashlib").sha256(holder.read_bytes()).hexdigest()
 

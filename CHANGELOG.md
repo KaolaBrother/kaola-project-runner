@@ -22,18 +22,21 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   running seat only picks up its new bytes by restarting, while the per-call
   CLI re-imports it every call and would otherwise stamp `view` with the old
   code and `observe`/`status` with the new. This **reverses #166's
-  quota-only "restart not required"**: a release that changes only
-  `kaola-quota.py` is now `Seats: restart required`, a non-exempt seat reports
-  `stale: true` with `restart_files: ["kaola-quota.py"]`, and an exempt
-  checkout seat reports `checkout-drift`. A contract test asserts every holder
-  `SIBLING_MODULES` entry is restart-required. No `cli-drift`/`quota-drift`
-  merge and no changed-file list on `cli-drift`.
-  **Seats: restart required.** The operator test
+  quota-only "restart not required" for future releases**: a release that
+  changes `kaola-quota.py` is now `Seats: restart required`, and a
+  non-exempt seat reports `stale: true` with
+  `restart_files: ["kaola-quota.py"]` (an exempt checkout seat reports
+  `checkout-drift`). A contract test asserts every holder `SIBLING_MODULES`
+  entry is restart-required. No `cli-drift`/`quota-drift` merge and no
+  changed-file list on `cli-drift`.
+  **Seats: restart not required.** The operator test
   `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
-  changed its file set and, more to the point, `kaola-quota.py` is now in the
-  restart-required set, so an operator must restart seats to pick up this
-  change's reporting. No holder, bridge, or adapter bytes changed: a seat that
-  is restarted comes up on identical protocol and can also simply be stopped.
+  is empty for this change: the new classification runs in the per-call CLI,
+  and live holders already record `kaola-quota.py` in `script_paths`, so
+  running seats pick up the new reporting immediately - the file set in the
+  operator test changed, but no holder, bridge, adapter, or protocol bytes
+  did. A seat whose `kaola-quota.py` already differs on disk will now report
+  `stale: true` with `restart_files: ["kaola-quota.py"]`.
   Contract coverage: `tests/contract/test-issue-168-drift-enumeration.py`,
   `tests/contract/test-issue-165-path-drift.py`,
   `tests/contract/test-issue-162-upgrade-safety.py`.

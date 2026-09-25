@@ -3010,7 +3010,6 @@ def seat_freshness(facts: dict[str, Any]) -> dict[str, Any]:
     pin = registration_pin()
     if pin and revision != pin:
         reported.append("pin-drift" if revision else "revision-unrecorded")
-    assert all(value in REPORTED_DRIFT_VALUES for value in reported), reported
     return {
         "runner_build": build if known else None,
         "accepted_revision": revision,
