@@ -727,8 +727,6 @@ class AgentConnection:
     def spawn(self, command: str, cwd: str, env: dict[str, str] | None = None) -> None:
         argv = shlex.split(command)
         env = dict(os.environ if env is None else env)
-        # The accepted revision is holder argv only. The agent must not see it.
-        env.pop(ACCEPTED_REVISION_ENV, None)
         # Lets an agent that spawns detached children record their identity
         # at spawn so stop can find them even if the agent dies first. The
         # record survives agent instances; keep only entries still identifying
@@ -934,7 +932,6 @@ RUNNER_BUILD_FILES = (
     "kaola-tmux.sh",
     "platform.yaml",
 )
-ACCEPTED_REVISION_ENV = "KAOLA_ACCEPTED_REVISION"
 _RUNNER_IDENTITY: dict[str, Any] | None = None
 
 
@@ -4142,7 +4139,6 @@ class Holder:
 def run_probe(args: argparse.Namespace) -> int:
     """Short-lived preflight probe: spawn, initialize, session/new, close, exit."""
     env = dict(os.environ)
-    env.pop(ACCEPTED_REVISION_ENV, None)
     env["NO_BROWSER"] = "true"
     result: dict[str, Any] = {"probe": True}
     try:

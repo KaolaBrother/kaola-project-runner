@@ -195,10 +195,12 @@ worker agent terminated / worker turn ended (one idle episode)
   returns `session-exists` together with the binding in force) cannot alter it,
   and there is no rebind operation — recovery is the existing exact
   `stop`/`start` at a safe idle point. `drain-restart` is that recovery as one
-  command: it waits until the seat is idle, exact-stops the holder
-  (`require_idle`, so a busy seat is left running), proves the old process is
-  gone, then `start --resume` or `start --continue`. The new process adopts the
-  dispatcher in the environment that ran the command. It does not hot-replace
+  command: it refuses `drain-not-idle` at once when the seat is busy (nothing
+  is stopped, and the caller owns the retry), otherwise one exact-stop of the
+  idle holder (`require_idle`), proves the old process is gone, then
+  `start --resume` or `start --continue`. There is no idle polling loop. The
+  new process adopts the dispatcher in the environment that ran the command,
+  read directly from that start. It does not hot-replace
   the live holder, and it does not rewrite other seats' `dispatcher` fields. A worker started before automatic
   binding (`heartbeat_host: null`) wakes nobody, so the Host reads its
   in-flight result inside the beat with the existing bounded `wait --timeout`
@@ -518,11 +520,11 @@ worker opens unbound and exits 0. Every pin bump therefore ends with:
    report-only path as its start-side baseline exemption. A `~/.local/bin`
    start is not: the link resolves into the checkout, and a restart-required
    change still blocks. A live holder is never hot-replaced:
-   `drain-restart --continue` or `drain-restart --resume ID` waits for idle,
-   exact-stops, and starts again (the recovery rule above). A Host started on
+   `drain-restart --continue` or `drain-restart --resume ID` refuses at once if
+   the seat is busy, otherwise exact-stops the idle holder and starts again
+   (the recovery rule above). A Host started on
    an older build needs the same treatment; workers that still name its
-   previous `holder_instance_id` are on the receipt as
-   `seats_naming_previous_instance` and are adopted only by their own
+   previous `holder_instance_id` are adopted only by their own
    drain-restart under the new Host, not by editing the live record.
 
 A Host `start` now refuses this skew mechanically instead of trusting the

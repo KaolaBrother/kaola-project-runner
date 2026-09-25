@@ -409,14 +409,18 @@ so the resolved holder path is not the exemption. The pin is read from the regis
 on `PATH`, else `~/.local/bin`. `drain-restart` runs the start pre-spawn refusals
 before it stops; a refusal there leaves the seat up (`mutation_performed: false`).
 A refusal that still occurs after the exact-stop reports `mutation_performed: true`
-and `drain_stopped`. The restart carries the recorded `start_selection`
+and `drain_stopped`. A seat that is not idle is refused `drain-not-idle`
+immediately and left running - there is no idle polling loop, so retry timing
+belongs to the caller. The restart carries the recorded `start_selection`
 (model, effort, tier, fast, mode) unless the command passes those flags.
-When mode is neither recorded nor passed, drain-restart applies and reports
-the platform default permission mode a fresh start applies (Claude Code
-`bypassPermissions`, and the same per-platform value `start` sets). An
-explicit mode wins, and a recorded mode wins over that default. It refuses
+The recorded mode is the *effective* mode the previous start applied
+(Issue #181): the platform default is resolved once, at the start that applies
+it, so nothing here re-derives one. An explicit `--mode` wins over the record,
+and there is no other candidate. It refuses
 `drain-restart-selection-unknown` before stopping when the seat recorded no
 start selection and the command passed none of `--model/--effort/--tier/--fast/--mode`.
+Adoption is a direct read of the new start's own `dispatcher`; no other seat is
+scanned.
 Roots that ZCode reaches only through ancestor directories, `skills.roots`, or `plugins.dirs` are not
 compared.
 

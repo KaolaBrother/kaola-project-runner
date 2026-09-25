@@ -520,9 +520,10 @@ def main() -> int:
     receipt.add_argument("--project")
     receipt.add_argument("--worker")
     receipt.add_argument("--session")
-    receipt.add_argument("--intent", choices=("start", "resume", "status", "send", "stop", "observe"),
-                         help="the Host verb this attestation feeds; start and resume "
-                              "with --worker zcode refuse a missing or non-file ZCode runtime")
+    receipt.add_argument("--intent", choices=("start", "resume"),
+                         help="the launching verb this attestation feeds; start and resume "
+                              "with --worker zcode refuse a missing or non-file ZCode runtime. "
+                              "status/send/stop/observe attestations omit --intent")
     receipt.add_argument("--bin-dir", help="directory of the locator link and its registration receipt "
                                            "(default: the link's own directory, else the installer's bin directory)")
     register = sub.add_parser("register", help=f"link {LOCATOR_COMMAND} to this checkout and write its "

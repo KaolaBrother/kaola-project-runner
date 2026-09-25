@@ -64,10 +64,11 @@ true only for a direct checkout start; a `~/.local/bin` start is not exempt.
 Do not dispatch a `stale: true` seat. An operator-confirmed exception on that
 one `send`/`steer` is the orchestrator's own call; there is no flag.
 There is still no rebind. `drain-restart --continue` or `--resume ID` checks
-start refusals first, waits for idle, exact-stops, and starts again carrying
-the recorded model/effort/tier/fast. Run it from this Host so the new start
-adopts your instance. `seats_naming_previous_instance` names seats still bound
-to the old Host; they are not edited in place.
+start refusals first, refuses `drain-not-idle` at once if the seat is busy
+(leaving it up - you own the retry), otherwise exact-stops the idle seat and
+starts again carrying the recorded model/effort/tier/fast. Run it from this
+Host so the new start adopts your instance. Nothing scans other seats: the
+`adoption` fact is the new start's own dispatcher.
 
 ### Dispatch without blocking
 

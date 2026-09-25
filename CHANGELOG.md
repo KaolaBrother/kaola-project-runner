@@ -6,6 +6,33 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **One default-fill site, explicit flags by argparse `None`, and a slimmed `drain-restart` (Issue #181, following the bba3733..fe480d3 architecture review).**
+  `command_start` now records the *effective* permission mode (`--mode`, else
+  the platform `ACP_SKIP_MODE` default) in the holder's `start_selection`, so a
+  fresh `start` without `--mode` records what it applied -
+  `bypassPermissions` for claude-code, `auto-high` for droid - while a
+  platform with no default (`dsh`, `cursor-cli`, `opencode`) still records
+  `null`. The second fill site #163 added to `apply_recorded_selection` is
+  gone, along with the third copy of the same table in `kaola-tmux.sh`, which
+  duplicated `ACP_SKIP_MODE` exactly; that layer now forwards only an explicit
+  `--mode`. `_selection_explicit` no longer re-reads `sys.argv`, which missed
+  prefix abbreviations and the `--flag=value` form: every selection flag,
+  including `--fast`, defaults to `None`, so explicitness is `None`-ness and
+  argparse's own parsing decides. An absent `--fast` still means off.
+  `drain-restart` gives up its 0.2 s idle poll for one idle read followed by
+  the holder's already-atomic `require_idle` stop - a busy seat gets an
+  immediate `drain-not-idle` refusal and retry timing stays with the Agent -
+  and its post-`start` scan over `command_list` is gone, leaving `adoption` as
+  a direct read of the new start's own `dispatcher`. The locator's no-op
+  `--intent` values (`status`, `send`, `stop`, `observe`) are removed; only
+  `start`/`resume` were ever read.
+  **Seats: restart required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+  reports `scripts/kaola-acp-holder.py`: the unused `KAOLA_ACCEPTED_REVISION`
+  environment scrubs are removed, and nothing in the repository ever set that
+  variable - the accepted revision travels as holder argv. A running holder
+  must restart to pick up the new file.
+
 - **`pre_spawn_refusal` is the single start-decision site (Issue #180, superseding #171 and resolving #172).**
   `command_start`'s five refusal branches repeating its checks could never
   fire and are deleted; it returns the alignments and heartbeat resolution

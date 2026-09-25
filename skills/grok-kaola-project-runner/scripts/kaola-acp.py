@@ -117,8 +117,6 @@ NO_PROXY_ENV = ("NO_PROXY", "no_proxy")
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
 ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
 ZCODE_NODE_ENV = "KAOLA_ZCODE_NODE"
-# Issue #162: the locator pin (or this checkout's HEAD) handed to the holder.
-ACCEPTED_REVISION_ENV = "KAOLA_ACCEPTED_REVISION"
 LOCATOR_REGISTRATION_NAME = ".kaola-project-runner-locate.json"
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 # Issue #62 phase 2: a worker start may declare the ZCode Host session whose
@@ -1890,6 +1888,16 @@ def tier_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     return receipt
 
 
+def fast_intent(args: argparse.Namespace) -> str:
+    """The Fast state this invocation asked for: ``on`` or ``off``.
+
+    Issue #181: ``--fast`` defaults to ``None`` so absence is distinguishable
+    from an explicit ``off``, but "not passed" still means Fast off for every
+    intent consumer and receipt.
+    """
+    return args.fast or "off"
+
+
 def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     """Resolve tier/model/effort/Fast through the shared model-policy helper.
 
@@ -1936,7 +1944,7 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                     "--repo", repo, "--source", source,
                     "--requested-name", requested, "--candidate-id", candidate,
                     "--effort", effort,
-                    "--fast", "true" if args.fast == "on" else "false",
+                    "--fast", "true" if fast_intent(args) == "on" else "false",
                     "--tier", tier, "--fast-mechanism", mechanism,
                 ],
                 capture_output=True, text=True, timeout=45,
@@ -1950,7 +1958,7 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             "requested_model_source": source,
             "requested_model_name": requested,
             "requested_tier": tier,
-            "requested_fast": args.fast,
+            "requested_fast": fast_intent(args),
             "resolved_runtime_model_id": candidate,
             "resolved_runtime_model_display": None,
             "resolved_parameters": {"effort": effort} if effort else {},
@@ -2100,7 +2108,7 @@ def fast_report(args: argparse.Namespace, policy: dict[str, Any],
                 effective: str | None = None) -> dict[str, Any]:
     provenance_fast = (policy.get("model_evidence_provenance") or {}).get("fast") or {}
     report = {
-        "requested": args.fast,
+        "requested": fast_intent(args),
         "support": args.manifest.get("fast_support") or "none",
         # ``effective`` reflects proven native state only: a resolved intent is
         # reported when nothing had to be applied, but a failed or unapplied
@@ -3270,6 +3278,11 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt["heartbeat_host_requested"] = heartbeat_host
     receipt["heartbeat_host_source"] = resolution["source"]
     receipt["dispatcher"] = resolution["dispatcher"]
+    # Issue #181: the one default-fill site. The effective permission mode is
+    # resolved here and used both for the recorded start_selection and for the
+    # ACP config option below, so a recorded mode is never a raw None that a
+    # later command has to re-derive.
+    mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
     directory = record_dir(args, repo)
     record = read_record(directory)
     if record:
@@ -3324,9 +3337,8 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     if init_meta:
         holder_argv += ["--init-meta", json.dumps(init_meta)]
     holder_env = agent_environment(args)
-    # Holder-side only. The agent inherits the holder's environment, so the
-    # revision must not ride in it, including a copy this process inherited.
-    holder_env.pop(ACCEPTED_REVISION_ENV, None)
+    # Issue #162: the accepted revision is holder argv, never an agent
+    # environment variable, so nothing carries it into the holder's env.
     accepted = current_accepted_revision()
     holder_argv += ["--accepted-revision", accepted or ""]
     holder_argv += ["--baseline-exempt", "1" if skew_baseline_dir() is None else "0"]
@@ -3334,8 +3346,12 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         "model": args.model,
         "effort": args.effort,
         "tier": args.tier,
-        "fast": args.fast,
-        "mode": getattr(args, "mode", None),
+        # Issue #181: effective values, not raw flags. Absent --fast means the
+        # seat runs with Fast off, and an omitted --mode means the platform
+        # default resolved above; recording either as None would make
+        # drain-restart lose a state this start really applied.
+        "fast": fast_intent(args),
+        "mode": mode_value,
     }, sort_keys=True)]
     cli_version = cli_version_fact(args, holder_env)
     if cli_version is not None:
@@ -3421,7 +3437,6 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             acp_model_value = ZCODE_HOST_MODEL_ID
             effort_value = ZCODE_HOST_EFFORT
         application: dict[str, Any] = {}
-        mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
         # A platform whose option values are not the Runner permission-mode
         # names (droid: autonomy_level) translates before sending; unknown
         # values pass through so the agent's rejection stays a limitation.
@@ -3492,14 +3507,14 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 # --fast flag decides. Values convert per platform
                 # (acp_fast_values: Cursor true/false, Codex on/off).
                 resolved_fast_state = policy.get("resolved_fast")
-                fast_intent = (
+                fast_state = (
                     resolved_fast_state
                     if resolved_fast_state in ("on", "off")
-                    else args.fast
+                    else fast_intent(args)
                 )
                 fast_value = parse_manifest_value_map(
                     args.manifest.get("acp_fast_values") or ""
-                ).get(fast_intent, fast_intent)
+                ).get(fast_state, fast_state)
                 result = socket_request(
                     sock, "set_config_option",
                     {"config_id": fast_id, "value": fast_value}, 20.0,
@@ -3520,7 +3535,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                                            "value": fast_value}
                     receipt["fast"] = fast_report(
                         args, policy, "acp-config", True,
-                        effective="on" if fast_intent == "on" else "off",
+                        effective="on" if fast_state == "on" else "off",
                     )
             else:
                 model_applied = application.get("model", {}).get("applied") is True
@@ -3541,9 +3556,9 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                         detail=f"applied model value declares fast={declared_fast}",
                         effective=effective,
                     )
-                    if args.fast != effective:
+                    if fast_intent(args) != effective:
                         receipt["fast"]["conflict"] = (
-                            f"requested --fast {args.fast}; applied model value "
+                            f"requested --fast {fast_intent(args)}; applied model value "
                             f"declares fast={declared_fast} and ACP exposes no "
                             "separate fast toggle"
                         )
@@ -3672,17 +3687,21 @@ def _seat_idle(state: dict[str, Any]) -> bool:
     return holder_state == "ready" and state.get("activity_hint") in (None, "idle")
 
 
-def _selection_explicit() -> dict[str, bool]:
-    """Which selection flags this argv actually passed. ``--fast`` defaults to off,
-    so absence and an explicit off are different."""
-    flags = set(sys.argv)
+def _selection_explicit(args: argparse.Namespace) -> dict[str, bool]:
+    """Which selection flags this invocation actually passed.
+
+    Every selection flag defaults to ``None`` (Issue #181), so absence is a
+    ``None`` value: argparse handles prefix abbreviations, ``--flag=value``,
+    and every other spelling the parser accepts, which a ``sys.argv`` re-read
+    could not.
+    """
     return {
-        "model": "--model" in flags or any(item.startswith("--model=") for item in sys.argv),
-        "effort": "--effort" in flags or any(item.startswith("--effort=") for item in sys.argv),
-        "tier": "--tier" in flags or any(item.startswith("--tier=") for item in sys.argv),
-        "fast": "--fast" in flags or any(item.startswith("--fast=") for item in sys.argv),
-        "mode": "--mode" in flags or any(item.startswith("--mode=") for item in sys.argv),
-        "command": "--command" in flags,
+        "model": args.model is not None,
+        "effort": args.effort is not None,
+        "tier": args.tier is not None,
+        "fast": args.fast is not None,
+        "mode": args.mode is not None,
+        "command": args.agent_command_given,
     }
 
 
@@ -3691,17 +3710,15 @@ def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -
 
     Returns None when the record has no selection and the caller passed none
     of model, effort, tier, fast, or mode, so drain-restart can refuse before
-    it stops the seat. An explicit flag wins over the record. A mode that is
-    neither recorded nor passed becomes the platform default a fresh start
-    applies (``ACP_SKIP_MODE``; the same values ``kaola-tmux.sh`` passes as
-    ``--mode`` on ``start``). Platforms with no such default, including dsh
-    whose default is the launch env, stay unset. The agent command is
-    re-resolved when the caller did not pass ``--command``, because a tier
-    can change it.
+    it stops the seat. An explicit flag wins over the record. The recorded
+    mode is the effective mode the previous start applied (Issue #181), so
+    there is no default to re-derive here: a platform with no default recorded
+    ``null`` and the restart stays unset. The agent command is re-resolved when
+    the caller did not pass ``--command``, because a tier can change it.
     """
     saved = record.get("start_selection")
     saved = saved if isinstance(saved, dict) else None
-    explicit = _selection_explicit()
+    explicit = _selection_explicit(args)
     if saved is None and not any(explicit[key] for key in ("model", "effort", "tier", "fast", "mode")):
         return None
     if saved:
@@ -3715,13 +3732,6 @@ def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -
             args.fast = saved["fast"]
         if not explicit["mode"] and isinstance(saved.get("mode"), str):
             args.mode = saved["mode"]
-    # A recorded string and an explicit --mode/--permission-mode already won.
-    # Filling only the remaining gap keeps the shell from passing --mode on
-    # every drain-restart, which would look explicit and hide the record.
-    if not explicit["mode"] and not isinstance(getattr(args, "mode", None), str):
-        default_mode = ACP_SKIP_MODE.get(args.platform)
-        if default_mode:
-            args.mode = default_mode
     if not explicit["command"] and not os.environ.get("KAOLA_ACP_COMMAND"):
         args.agent_command = (
             tier_agent_command(args) or args.manifest.get("acp_command") or args.agent_command
@@ -3733,7 +3743,7 @@ def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -
         "effort": args.effort,
         "tier": args.tier,
         "fast": args.fast,
-        "mode": getattr(args, "mode", None),
+        "mode": args.mode,
     }
 
 
@@ -3760,15 +3770,17 @@ def _note_post_stop_result(started: dict[str, Any], old_id: Any,
 
 
 def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]:
-    """Wait until the seat is idle, exact-stop it, then start --resume/--continue.
+    """Exact-stop an idle seat, then start --resume/--continue with its selection.
 
     Not a rebind and not a hot replace. Refusals that ``start`` can decide
     without spawning are run first, so a skewed install does not take the seat
-    down. If a refusal still happens after the stop, the receipt says the stop
-    happened. The recorded model/effort/tier/fast/mode are carried unless this
-    argv names them. When mode is neither recorded nor passed, the restart
-    applies and reports the platform default a fresh start applies. Adoption
-    is the new start's dispatcher, and only when that new instance id is present.
+    down. A seat that is not idle is refused immediately with ``drain-not-idle``
+    and left running; the Agent owns retry timing. If a refusal still happens
+    after the stop, the receipt says the stop happened. The recorded
+    model/effort/tier/fast/mode are carried unless this argv names them; the
+    recorded mode is already the effective one the previous start applied, so
+    nothing re-derives a platform default here (Issue #181). Adoption is the new
+    start's own dispatcher, read directly.
     """
     if not args.resume and not args.use_continue:
         receipt = base_receipt(args, repo)
@@ -3822,27 +3834,25 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
         refused["mutation_status"] = "not_started"
         refused["start_selection"] = selection
         return refused
-    timeout = args.timeout if args.timeout is not None else 30.0
-    deadline = time.monotonic() + max(0.0, timeout)
-    while pid_alive((read_record(directory) or {}).get("holder_pid")):
-        state = op_or_holder_lost(args, repo, directory, "state", {}, 10.0)
-        if _seat_idle(state):
-            break
-        if time.monotonic() >= deadline:
-            receipt = base_receipt(args, repo)
-            receipt.update({
-                "result": "refused",
-                "reason": "drain-not-idle",
-                "action": "drain-restart",
-                "detail": "the seat did not reach idle before the timeout; nothing was stopped",
-                "state": state.get("state"),
-                "activity_hint": state.get("activity_hint"),
-                "turn_active": state.get("turn_active"),
-                "mutation_performed": False,
-                "mutation_status": "not_started",
-            })
-            return receipt
-        time.sleep(0.2)
+    # Issue #181: one idle read, no polling loop. The holder's ``require_idle``
+    # stop below is already atomic — it refuses a busy seat itself — so this
+    # check only makes the busy refusal explicit before anything is signalled.
+    # Retry timing belongs to the Agent, not to a 0.2 s poll against a timeout.
+    state = op_or_holder_lost(args, repo, directory, "state", {}, 10.0)
+    if not _seat_idle(state):
+        receipt = base_receipt(args, repo)
+        receipt.update({
+            "result": "refused",
+            "reason": "drain-not-idle",
+            "action": "drain-restart",
+            "detail": "the seat is not idle; nothing was stopped",
+            "state": state.get("state"),
+            "activity_hint": state.get("activity_hint"),
+            "turn_active": state.get("turn_active"),
+            "mutation_performed": False,
+            "mutation_status": "not_started",
+        })
+        return receipt
     old = read_record(directory) or {}
     old_id = old.get("holder_instance_id")
     old_pid = old.get("holder_pid")
@@ -3907,6 +3917,9 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
     started["start_selection"] = selection
     if did_stop:
         _note_post_stop_result(started, old_id, stop)
+    # Issue #181: adoption is a direct read of the new start's own dispatcher,
+    # never a second scan over command_list. The restart runs from the Host
+    # that should own the seat, so that is the binding the new start records.
     new_dispatcher = started.get("dispatcher")
     old_instance = old_dispatcher.get("holder_instance_id") if isinstance(old_dispatcher, dict) else None
     new_instance = new_dispatcher.get("holder_instance_id") if isinstance(new_dispatcher, dict) else None
@@ -3916,22 +3929,6 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
         "dispatcher": new_dispatcher if isinstance(new_dispatcher, dict) else None,
         "adopted_on_restart": bool(new_instance) and old_instance != new_instance,
     }
-    if host_session(args.platform, args.session):
-        listed = command_list(argparse.Namespace(
-            platform=None, repo=repo, record_root=getattr(args, "record_root", None),
-            include_dead=False,
-        ))
-        still = []
-        for row in listed.get("rows") or []:
-            dispatcher = row.get("dispatcher")
-            if (isinstance(dispatcher, dict) and dispatcher.get("holder_instance_id") == old_id
-                    and (row.get("platform"), row.get("session")) != (args.platform, args.session)):
-                still.append({
-                    "platform": row.get("platform"),
-                    "session": row.get("session"),
-                    "holder_instance_id": row.get("holder_instance_id"),
-                })
-        started["seats_naming_previous_instance"] = still
     return started
 
 
@@ -3988,11 +3985,16 @@ def main() -> int:
     # Issue #111: validated against the manifest after it loads, so an
     # undeclared third tier answers a typed refusal instead of argparse exit 2.
     parser.add_argument("--tier")
-    parser.add_argument("--fast", choices=("on", "off"), default="off")
+    # Issue #181: None means "not passed", so explicit detection is None-ness.
+    # Every consumer that relied on the old "off" default treats None as off.
+    parser.add_argument("--fast", choices=("on", "off"))
     parser.add_argument("--mode")
     parser.add_argument("--steer-mode", choices=("native", "interrupt"))
     parser.add_argument("--cancel-timeout", type=float)
     args = parser.parse_args()
+    # Issue #181: ``--command`` is resolved below, so its raw presence must be
+    # captured now — None-ness is what makes it explicit.
+    args.agent_command_given = args.agent_command is not None
 
     args.manifest = load_manifest(args.platform)
     repo = resolve_repo(args.repo)

@@ -16,6 +16,7 @@ from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[2]
 RUNNER = PROJECT / "scripts" / "kaola-tmux.sh"
+ACP = PROJECT / "scripts" / "kaola-acp.py"
 MODEL_POLICY = PROJECT / "scripts" / "kaola-model-policy.py"
 ADAPTER = PROJECT / "scripts" / "adapters" / "devin.sh"
 
@@ -340,11 +341,13 @@ class DevinNoFlagPermissionModeTests(unittest.TestCase):
 
     def test_core_assigns_acp_bypass_when_caller_omits_permission_mode(self):
         runner = RUNNER.read_text(encoding="utf-8")
-        self.assertIn(
-            "devin) acp_args+=(--mode bypass) ;;",
-            runner,
-            "no-flag Devin ACP start must forward --mode bypass",
-        )
+        acp = ACP.read_text(encoding="utf-8")
+        # Issue #181: the no-flag default is supplied (and recorded) once, by
+        # kaola-acp.py's ACP_SKIP_MODE; the tmux entry forwards only an
+        # explicit --permission-mode and no longer repeats the table.
+        self.assertIn('"devin": "bypass"', acp)
+        self.assertIn("permission_mode_given", runner)
+        self.assertNotIn("devin) acp_args+=(--mode bypass) ;;", runner)
         # The PTY no-flag mapping went with the tmux branch.
         self.assertNotIn("devin) permission_mode=dangerous ;;", runner)
 

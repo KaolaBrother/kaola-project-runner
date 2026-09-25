@@ -184,31 +184,19 @@ acp_args=("$PYTHON_BIN" "$ACP_CLI" "$platform" "$command_name" --repo "$repo")
 [[ "$capture_inline" == true ]] && acp_args+=(--inline)
 if [[ "$command_name" == start || "$command_name" == preflight || "$command_name" == drain-restart ]]; then
   # Selection inputs pass through raw; kaola-acp.py resolves presets,
-  # explicit overrides, resume preservation, and Fast itself through the
-  # shared model-policy helper. drain-restart carries the same flags; omitted
-  # ones are filled from the seat's recorded start selection. Do not inject
-  # the platform default --mode on drain-restart: an explicit --mode beats a
-  # recorded mode, and kaola-acp.py supplies that default only when neither
-  # is set.
+  # explicit overrides, resume preservation, Fast, and the platform permission
+  # default itself through the shared model-policy helper. drain-restart
+  # carries the same flags; omitted ones are filled from the seat's recorded
+  # start selection.
   [[ "$model_given" == true ]] && acp_args+=(--model "$model")
   [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
   [[ "$tier_given" == true ]] && acp_args+=(--tier "$tier")
   [[ "$fast_given" == true ]] && acp_args+=(--fast "$fast")
 fi
-if [[ "$permission_mode_given" == true ]]; then
-  acp_args+=(--mode "$permission_mode")
-elif [[ "$command_name" == start ]]; then
-  # Measured ACP skip knobs only. Cursor/OpenCode have no configOptions.mode skip
-  # value; Grok ACP is agent always-approve with no approval option.
-  case "$platform" in
-    kimi-cli) acp_args+=(--mode yolo) ;;
-    devin) acp_args+=(--mode bypass) ;;
-    claude-code) acp_args+=(--mode bypassPermissions) ;;
-    codex) acp_args+=(--mode agent-full-access) ;;
-    zcode) acp_args+=(--mode yolo) ;;
-    droid) acp_args+=(--mode auto-high) ;;
-  esac
-fi
+# Issue #181: the per-platform permission-mode default lives once, in
+# kaola-acp.py's ACP_SKIP_MODE. This layer forwards only an explicit choice;
+# absent one, the default is resolved (and recorded) by the start itself.
+[[ "$permission_mode_given" == true ]] && acp_args+=(--mode "$permission_mode")
 [[ "$command_name" == capture ]] && acp_args+=(--lines "$lines")
 [[ "$command_name" == key ]] && acp_args+=(--key "$key_name")
 [[ -n "$decision_id" ]] && acp_args+=(--request-id "$decision_id")

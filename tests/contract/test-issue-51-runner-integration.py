@@ -630,10 +630,14 @@ def test_skip_all_mode_is_yolo_on_acp() -> None:
     acp = load_module(CHECKOUT_CLI, "kaola_acp_i51_mode")
     check(acp.ACP_SKIP_MODE.get("zcode") == "yolo", "ACP_SKIP_MODE zcode is yolo")
     tmux = TMUX.read_text(encoding="utf-8")
+    # Issue #181: the per-platform default lives once, in ACP_SKIP_MODE. The
+    # tmux entry forwards only an explicit --permission-mode, so it carries no
+    # zcode mode case; the behavioural check below proves the default lands.
     check(
-        re.search(r"\bzcode\) acp_args\+=\(--mode yolo\)", tmux) is not None,
-        "ACP start without caller --mode sends yolo",
+        re.search(r"\bzcode\) acp_args\+=\(--mode yolo\)", tmux) is None,
+        "the tmux entry no longer repeats the platform mode table",
     )
+    check("permission_mode_given" in tmux, "tmux forwards an explicit mode")
     adapter_src = ADAPTER_SRC.read_text(encoding="utf-8")
     check(
         re.search(r'add_argument\("--mode".*default="yolo"', adapter_src) is not None,

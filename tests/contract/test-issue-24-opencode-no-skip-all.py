@@ -84,14 +84,19 @@ def acp_skip_mode(source: str) -> dict[str, str]:
 
 
 def acp_start_skip_case(runner: str) -> str:
+    """The tmux entry's platform-mode table, if this build still has one.
+
+    Issue #181 removed it: the per-platform default lives once, in
+    ``kaola-acp.py``'s ``ACP_SKIP_MODE``. An empty string therefore means
+    "nothing is forwarded by the shell", which is the no-skip outcome these
+    tests assert for opencode.
+    """
     match = re.search(
-        r'elif \[\[ "\$command_name" == start \]\]; then.*?case "\$platform" in(.*?)esac',
+        r'case "\$platform" in(.*?)esac',
         runner,
         flags=re.DOTALL,
     )
-    if match is None:
-        raise AssertionError("ACP start skip-mode case not found in kaola-tmux.sh")
-    return match.group(1)
+    return match.group(1) if match is not None else ""
 
 
 def skill_quirks_pointer(text: str) -> str | None:

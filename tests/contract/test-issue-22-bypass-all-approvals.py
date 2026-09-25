@@ -240,33 +240,29 @@ class Issue22AcpDefaultStart(unittest.TestCase):
 
     Issue #130 removed the PTY no-flag ``permission_mode`` mapping with the
     tmux branch; the no-flag ACP ``--mode`` mapping is the one that remains.
+
+    Issue #181 consolidated that mapping into one place. ``kaola-acp.py``'s
+    ``ACP_SKIP_MODE`` supplies the default and records it as the effective
+    mode; the tmux entry forwards only an explicit ``--permission-mode``, so
+    the same per-platform value still reaches the agent.
     """
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.runner = RUNNER.read_text(encoding="utf-8")
+        cls.acp = (PROJECT / "scripts" / "kaola-acp.py").read_text(encoding="utf-8")
 
     def test_devin_acp_default_forwards_bypass(self) -> None:
-        self.assertIn(
-            "devin) acp_args+=(--mode bypass) ;;",
-            self.runner,
-            "no-flag Devin ACP start must forward --mode bypass",
-        )
+        self.assertIn('"devin": "bypass"', self.acp)
+        self.assertIn("permission_mode_given", self.runner)
 
     def test_claude_acp_default_forwards_bypass_permissions(self) -> None:
-        self.assertIn(
-            "claude-code) acp_args+=(--mode bypassPermissions) ;;",
-            self.runner,
-            "no-flag Claude ACP start must forward --mode bypassPermissions",
-        )
+        self.assertIn('"claude-code": "bypassPermissions"', self.acp)
         self.assertNotIn("claude-code) permission_mode=bypassPermissions ;;", self.runner)
+        self.assertNotIn("claude-code) acp_args+=(--mode bypassPermissions) ;;", self.runner)
 
     def test_codex_acp_default_forwards_agent_full_access(self) -> None:
-        self.assertIn(
-            "codex) acp_args+=(--mode agent-full-access) ;;",
-            self.runner,
-            "no-flag Codex ACP start must forward --mode agent-full-access",
-        )
+        self.assertIn('"codex": "agent-full-access"', self.acp)
 
 
 class Issue22CodexPermissionMappings(unittest.TestCase):
