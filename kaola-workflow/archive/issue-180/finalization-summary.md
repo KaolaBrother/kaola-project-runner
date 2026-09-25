@@ -181,3 +181,10 @@ the unpushed branch so the sink merges exactly the reviewed candidate
 `validated_candidate_hash` bb9ffaff237163bd828c49d6696284f51e118f56ca0c34e7698766ea83a46527;
 this file is the summary's durable home, with the transaction's measured
 `## Validation` and `## Changed Paths` sections filled in above.
+
+## Sink Findings
+
+post_rebase_tests: skipped
+
+archived_paths:
+- kaola-workflow/archive/issue-180/finalization-summary.md
