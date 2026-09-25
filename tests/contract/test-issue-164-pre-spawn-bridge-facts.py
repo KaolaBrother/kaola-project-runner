@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Issue #164: pre-spawn bridge and ZCode-runtime refusals carry preflight facts.
 
+Since #180 the refusal carries those facts without the ``--version``
+probe: its runtime-binary facts match preflight's minus ``version``, only
+``preflight`` still reports it, and a refusal never waits on the runtime.
+
 Offline only. A live seat, when one is required, is the mock ACP agent under
 an isolated HOME and record root, and each one is force-stopped before the
 temporary directory is removed. No platform CLI is launched.
@@ -14,6 +18,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -108,6 +113,16 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
     def bridge_facts(self, receipt: dict) -> dict:
         return {key: receipt[key] for key in BRIDGE_FACT_KEYS if key in receipt}
 
+    def bridge_facts_without_version(self, receipt: dict) -> dict:
+        # A rebuilt dict, never a mutation: bridge_facts() copies only the top
+        # level, so popping "version" in place would edit the caller's receipt.
+        facts = self.bridge_facts(receipt)
+        binary = facts.get("runtime_binary")
+        if isinstance(binary, dict):
+            facts["runtime_binary"] = {key: value for key, value in binary.items()
+                                       if key != "version"}
+        return facts
+
     def assert_preflight_facts(self, refusal: dict, preflight: dict, code: str) -> None:
         self.assertEqual(refusal.get("error", {}).get("code"), code, refusal)
         self.assertEqual(preflight.get("error", {}).get("code"), code, preflight)
@@ -117,7 +132,7 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
         )
         facts = self.bridge_facts(refusal)
         self.assertTrue(facts, refusal)
-        self.assertEqual(facts, self.bridge_facts(preflight))
+        self.assertEqual(facts, self.bridge_facts_without_version(preflight))
         bridge = facts.get("bridge")
         if bridge is not None:
             self.assertNotIn("token", bridge)
@@ -125,6 +140,7 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
                 self.assertIn(key, bridge, bridge)
         binary = facts.get("runtime_binary")
         if binary is not None:
+            self.assertNotIn("version", binary, refusal)
             for key in RUNTIME_SHAPE:
                 self.assertIn(key, binary, binary)
         self.assertIs(refusal.get("mutation_performed"), False, refusal)
@@ -151,7 +167,8 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
         self.assertIsNone(refusal["bridge"]["path"])
         self.assertEqual(refusal["runtime_binary"]["path"], str(self.claude_bin))
         self.assertIs(refusal["runtime_binary"]["present"], True)
-        self.assertEqual(refusal["runtime_binary"]["version"], "claude-stub 9.9.9")
+        self.assertNotIn("version", refusal["runtime_binary"], refusal)
+        self.assertEqual(preflight["runtime_binary"]["version"], "claude-stub 9.9.9")
         self.assertNotIn("result", refusal)
         self.assert_no_record("claude-code", session)
 
@@ -171,6 +188,38 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
         self.assertNotIn("version", refusal["runtime_binary"])
         self.assertNotIn("version", preflight["runtime_binary"])
         self.assert_no_record("claude-code", session)
+
+    def test_refusals_return_without_waiting_on_a_hanging_version(self) -> None:
+        # #171, folded into #180: a refused start/drain-restart never runs
+        # the runtime --version probe, so a hanging runtime cannot stall it
+        # (the old probe bound was 15 s; both refusals stay well under it).
+        session = "claude-code-KPR-i180-hang"
+        hanging = self.root / "claude-hangs"
+        hanging.write_text("#!/bin/sh\nsleep 60\n", encoding="utf-8")
+        hanging.chmod(hanging.stat().st_mode | stat.S_IXUSR)
+        live = self.env(CLAUDE_BIN=str(self.claude_bin))
+        refuse = self.env(CLAUDE_BIN=str(hanging))
+        began = time.monotonic()
+        _result, refusal = self.run_cli(
+            "claude-code", "start", session=session, agent=MISSING_BRIDGE,
+            check=False, env=refuse)
+        self.assertLess(time.monotonic() - began, 10.0,
+                        "the start refusal waited on the --version probe")
+        self.assertEqual(refusal.get("error", {}).get("code"), "acp-bridge-missing",
+                         refusal)
+        started = self.run_cli("claude-code", "start", session=session, env=live)[1]
+        self.assertEqual(started.get("state"), "ready", started)
+        pid = started["holder_pid"]
+        began = time.monotonic()
+        _result, refusal = self.run_cli(
+            "claude-code", "drain-restart", "--resume", started["acp_session_id"],
+            session=session, agent=MISSING_BRIDGE, check=False, env=refuse)
+        self.assertLess(time.monotonic() - began, 10.0,
+                        "the drain-restart refusal waited on the --version probe")
+        self.assertEqual(refusal.get("error", {}).get("code"), "acp-bridge-missing",
+                         refusal)
+        self.assertNotIn("version", refusal["runtime_binary"], refusal)
+        self.assertTrue(_pid_alive(pid), "the pre-stop refusal took the seat down")
 
     def test_start_missing_zcode_runtime_matches_preflight(self) -> None:
         session = "zcode-KPR-i164-runtime"
@@ -203,7 +252,7 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
         self.assertIsInstance(refusal.get("start_selection"), dict, refusal)
         self.assertIn("fast", refusal["start_selection"])
         self.assertTrue(_pid_alive(pid), refusal)
-        self.assertEqual(refusal["runtime_binary"]["version"], "claude-stub 9.9.9")
+        self.assertNotIn("version", refusal["runtime_binary"], refusal)
 
     def test_drain_restart_missing_zcode_runtime_keeps_facts_and_the_seat(self) -> None:
         session = "zcode-KPR-i164-drainrt"

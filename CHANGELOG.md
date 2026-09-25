@@ -6,6 +6,18 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **`pre_spawn_refusal` is the single start-decision site (Issue #180, superseding #171 and resolving #172).**
+  `command_start`'s five refusal branches repeating its checks could never
+  fire and are deleted; it returns the alignments and heartbeat resolution
+  it computed for `command_start` to reuse, so every installed Skill root
+  is hashed once per `start` (a `drain-restart` scans twice: the pre-stop
+  decision plus the post-stop start). The refusal path drops the
+  `--version` probe: a refused `start`/`drain-restart` never waits on the
+  runtime binary and keeps its bridge and runtime-binary facts minus
+  `version`; `preflight` still reports `version`.
+  **Seats: restart not required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+  is empty: only the per-call CLI, its rendered copies, and tests changed.
 - **`docs/api.md` names the field that carries the current model selection, and the droid model preset is confirmed applied on every start (Issue #183).**
   Owner-requested check: droid seats must run the first-class `auto`
   routing, not the CLI default promo `gpt-5.6-sol`. Direct ACP probes

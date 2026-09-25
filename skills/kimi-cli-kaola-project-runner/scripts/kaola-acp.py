@@ -3192,57 +3192,67 @@ def host_exists_refusal(args: argparse.Namespace, repo: str,
     return receipt
 
 
-def pre_spawn_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any] | None:
-    """The start refusals that can be decided before any holder is stopped or spawned.
+def pre_spawn_refusal(args: argparse.Namespace,
+                      repo: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """The start refusals decided before any holder is stopped or spawned,
+    plus the facts that decision already computed.
 
-    ``drain-restart`` runs this first. A refusal here leaves the live seat up.
+    Returns ``(refusal, facts)``: the refusal receipt, or ``None`` when the
+    start may proceed (``facts`` then carries the worker Skill alignment,
+    the main Skill alignment - ``None`` unless the worker alignment applies
+    - and the heartbeat resolution, so ``command_start`` reuses them instead
+    of rescanning every Skill root). ``drain-restart`` runs this first; a
+    refusal there leaves the live seat up.
     """
     if not host_capable(args.platform) and host_session(args.platform, args.session):
         return heartbeat_host_refusal(args, repo, {
             "source": "none", "dispatcher": None,
-            "refusal": host_entry_unsupported(args.platform, "Host")})
+            "refusal": host_entry_unsupported(args.platform, "Host")}), {}
     if host_session(args.platform, args.session):
         hosts = verified_hosts(args, repo)
         if hosts:
-            return host_exists_refusal(args, repo, hosts)
+            return host_exists_refusal(args, repo, hosts), {}
     error = bridge_runtime_error(args)
     if error is not None:
         receipt = base_receipt(args, repo)
-        # Same fact set and shape as preflight, including ``--version`` only
-        # when that runtime binary is already an absolute executable.
-        # ``bridge_facts`` does not spawn the bridge or the holder.
-        receipt.update(bridge_facts(args, with_version=True))
+        # Bridge and runtime-binary facts, no ``--version`` probe (#171):
+        # the refusal returns without waiting on the runtime binary, and
+        # never spawns the bridge or the holder.
+        receipt.update(bridge_facts(args))
         receipt["error"] = error
         receipt["mutation_status"] = "not_started"
         receipt["mutation_performed"] = False
-        return receipt
+        return receipt, {}
     hostish = args.platform == "zcode" or (
         host_capable(args.platform) and host_session(args.platform, args.session))
     alignment = worker_skill_alignment(repo, args.platform)
+    main_alignment = None
     if alignment["applies"]:
         if alignment["unreadable_roots"]:
-            return worker_skill_root_refusal(args, repo, alignment)
+            return worker_skill_root_refusal(args, repo, alignment), {}
         if alignment["skew"]:
-            return worker_skill_skew_refusal(args, repo, alignment)
+            return worker_skill_skew_refusal(args, repo, alignment), {}
         main_alignment = main_skill_alignment(repo, args.platform)
         if main_alignment["skew"]:
-            return main_skill_skew_refusal(args, repo, main_alignment)
+            return main_skill_skew_refusal(args, repo, main_alignment), {}
     if hostish and args.platform == "zcode" and zcode_host_session(args.session):
         problem = zcode_host_request_problem(args)
         if problem is not None:
-            return zcode_host_refusal(args, repo, problem)
+            return zcode_host_refusal(args, repo, problem), {}
     resolution = resolve_heartbeat_host(args, repo)
     if resolution["refusal"]:
-        return heartbeat_host_refusal(args, repo, resolution)
-    return None
+        return heartbeat_host_refusal(args, repo, resolution), {}
+    return None, {"alignment": alignment, "main_alignment": main_alignment,
+                  "resolution": resolution}
 
 
 def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
-    refused = pre_spawn_refusal(args, repo)
+    refused, facts = pre_spawn_refusal(args, repo)
     if refused is not None:
         return refused
-    # The host-entry (#122), host-exists (#132), bridge-file, and ZCode-runtime
-    # refusals already returned from pre_spawn_refusal.
+    # Every pre-spawn refusal - host entry (#122), a second Host (#132), the
+    # bridge/runtime files, Skill skew (#105/#106/#121), the ZCode Host model
+    # (#108), the heartbeat binding - already returned; the facts ride along.
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args))
     # Issue #162: every platform's worker start, not only ZCode and Host-named
@@ -3250,34 +3260,20 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     # ~/.local/bin start does: the link's target is the accepted checkout.
     hostish = args.platform == "zcode" or (
         host_capable(args.platform) and host_session(args.platform, args.session))
-    alignment = worker_skill_alignment(repo, args.platform)
+    alignment = facts["alignment"]
+    main_alignment = facts["main_alignment"]
     if alignment["applies"]:
-        # Issue #106: an existing default root that cannot be listed means no
-        # comparison was possible at all; refuse it by name, never a traceback.
-        if alignment["unreadable_roots"]:
-            return worker_skill_root_refusal(args, repo, alignment)
-        if alignment["skew"]:
-            return worker_skill_skew_refusal(args, repo, alignment)
         receipt["worker_skill_build"] = alignment["build"]
         receipt["worker_skill_roots"] = alignment["roots"]
         # Issue #121: the main Skill ships no scripts, so it is not in #105's set.
-        main_alignment = main_skill_alignment(repo, args.platform)
-        if main_alignment["skew"]:
-            return main_skill_skew_refusal(args, repo, main_alignment)
         receipt["main_skill_build"] = main_alignment["build"]
     elif hostish:
-        # Checkout invocation of a ZCode or Host-named start: unknown, not aligned.
+        # Checkout invocation, not aligned: no worker baseline means no
+        # main-Skill record either, so both builds stay unknown.
         receipt["worker_skill_build"] = alignment["build"]
         receipt["worker_skill_roots"] = alignment["roots"]
-        receipt["main_skill_build"] = main_skill_alignment(repo, args.platform)["build"]
-    # Issue #108: a Host-shaped ZCode session must run GLM 5.3 at effort max.
-    if hostish and args.platform == "zcode" and zcode_host_session(args.session):
-        problem = zcode_host_request_problem(args)
-        if problem is not None:
-            return zcode_host_refusal(args, repo, problem)
-    resolution = resolve_heartbeat_host(args, repo)
-    if resolution["refusal"]:
-        return heartbeat_host_refusal(args, repo, resolution)
+        receipt["main_skill_build"] = None
+    resolution = facts["resolution"]
     heartbeat_host = resolution["target"]
     # What this command asked for, and where that request came from. The fact
     # that decides whether a worker can wake a Host is the holder's own, read
@@ -3829,7 +3825,9 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
             "mutation_status": "not_started",
         })
         return receipt
-    refused = pre_spawn_refusal(args, repo)
+    # Pre-stop decision only: past the stop below, the post-stop start
+    # re-decides on post-stop state, so these facts are not reused.
+    refused, _pre_stop_facts = pre_spawn_refusal(args, repo)
     if refused is not None:
         refused["action"] = "drain-restart"
         refused["mutation_performed"] = False
