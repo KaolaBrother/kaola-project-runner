@@ -126,6 +126,23 @@ registry, daemon, or Workflow state field is added, and a running session is nev
 restarted to adopt the rule. Whether any consumer displays issue-run progress from these names
 is outside this repository and is not verified here.
 
+## Release notes
+
+Every `CHANGELOG.md` release section states whether running seats must restart,
+as its own line: `Seats: restart required` or `Seats: restart not required`.
+Seats must restart when the holder, the ZCode bridge, or the ACP protocol
+changed. The operator test is a non-empty diff:
+
+```bash
+git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms
+```
+
+`OLD` and `NEW` are the previous release tag and the commit being released.
+A pin bump whose holder, bridge, and protocol are byte-identical still says
+`Seats: restart not required` when that diff is empty: running seats keep the
+code they started with, and the note is what tells the operator they may stay
+up. The note is part of cutting the release. It does not itself tag or publish.
+
 ## Tests and live evidence
 
 Behavioral changes require baseline-failing acceptance. Offline tests use temporary repositories,

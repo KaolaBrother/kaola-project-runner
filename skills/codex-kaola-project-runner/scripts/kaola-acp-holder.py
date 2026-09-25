@@ -722,6 +722,8 @@ class AgentConnection:
     def spawn(self, command: str, cwd: str, env: dict[str, str] | None = None) -> None:
         argv = shlex.split(command)
         env = dict(os.environ if env is None else env)
+        # The accepted revision is holder argv only. The agent must not see it.
+        env.pop(ACCEPTED_REVISION_ENV, None)
         # Lets an agent that spawns detached children record their identity
         # at spawn so stop can find them even if the agent dies first. The
         # record survives agent instances; keep only entries still identifying
@@ -879,7 +881,12 @@ _QUOTA = None
 
 
 def quota_module():
-    """Sibling quota catalog, or None when this holder copy has no ``kaola-quota.py``."""
+    """Sibling quota catalog, or None when this holder copy has no ``kaola-quota.py``.
+
+    The module object is cached. Callers must not be the first import after
+    ``install-local`` has swapped this directory: ``load_sibling_modules``
+    runs at startup so the bytes are the ones this process began with.
+    """
     global _QUOTA
     if _QUOTA is False:
         return None
@@ -903,6 +910,117 @@ def quota_module():
             sys.dont_write_bytecode = previous
         _QUOTA = module
     return _QUOTA
+
+
+# Scripts whose bytes this process must pin at startup. ``install-local``
+# replaces the Skill directory with ``os.replace``; a later import would
+# execute the replacement and mix two builds in one holder.
+SIBLING_MODULES = ("kaola-quota.py",)
+RUNNER_BUILD_FILES = (
+    "kaola-acp-holder.py",
+    "kaola-zcode-acp.py",
+    "kaola-acp.py",
+    "kaola-quota.py",
+    "kaola-tmux.sh",
+    "platform.yaml",
+)
+ACCEPTED_REVISION_ENV = "KAOLA_ACCEPTED_REVISION"
+_RUNNER_IDENTITY: dict[str, Any] | None = None
+
+
+def _hex_revision(value: str) -> str | None:
+    if len(value) == 40 and all(character in "0123456789abcdef" for character in value):
+        return value
+    return None
+
+
+def _snapshot_file(found: dict[str, dict[str, str]], key: str, path: Path) -> None:
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return
+    found[key] = {"path": str(path), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+def capture_script_paths() -> dict[str, dict[str, str]]:
+    """Absolute path and sha256 of the runner files beside this process, read now.
+
+    Includes the restart-required set (holder, ZCode bridge, adapters, platform
+    manifest) and the per-call CLI files, which are reported and do not by
+    themselves require a restart.
+    """
+    script_dir = Path(__file__).resolve().parent
+    found: dict[str, dict[str, str]] = {}
+    for name in RUNNER_BUILD_FILES:
+        _snapshot_file(found, name, script_dir / name)
+    adapters = script_dir / "adapters"
+    if adapters.is_dir():
+        for path in sorted(adapters.glob("*.sh")):
+            _snapshot_file(found, f"adapters/{path.name}", path)
+    checkout = script_dir.parent
+    if (checkout / "platforms").is_dir() and not (checkout / "SKILL.md").is_file():
+        for path in sorted((checkout / "platforms").glob("*.yaml")):
+            _snapshot_file(found, f"platforms/{path.name}", path)
+    return found
+
+
+def _import_sibling(name: str):
+    """Load one sibling module from this process's directory. None when absent."""
+    path = Path(__file__).resolve().parent / name
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "kaola_holder_" + name[:-3].replace("-", "_"), path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    # A generated Skill must stay byte-identical to the render. Importing a
+    # sibling must not drop a __pycache__ next to it.
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    return module
+
+
+def load_sibling_modules() -> None:
+    """Import every sibling in ``SIBLING_MODULES`` and snapshot script bytes.
+
+    Issue #162: a running holder must not import a sibling on a later request
+    after ``install-local`` has swapped the directory. ``runner_build`` is the
+    holder file this process executes, not the per-call CLI.
+    """
+    global _QUOTA, _RUNNER_IDENTITY
+    for name in SIBLING_MODULES:
+        module = _import_sibling(name)
+        if name == "kaola-quota.py":
+            _QUOTA = module if module is not None else False
+    paths = capture_script_paths()
+    primary = paths.get("kaola-acp-holder.py") or {}
+    digest = primary.get("sha256") or ""
+    _RUNNER_IDENTITY = {
+        "runner_build": digest[:12] or None,
+        "script_paths": paths,
+    }
+
+
+load_sibling_modules()
+
+
+def runner_identity(accepted_revision: str = "") -> dict[str, Any]:
+    """Build identity pinned at import, plus the accepted revision from argv.
+
+    ``start`` passes ``--accepted-revision`` on the holder argv only. It is not
+    exported to the agent. The script digests stay the startup snapshot.
+    """
+    pinned = _RUNNER_IDENTITY or {"runner_build": None, "script_paths": capture_script_paths()}
+    return {
+        "runner_build": pinned.get("runner_build"),
+        "accepted_revision": _hex_revision(accepted_revision or ""),
+        "script_paths": pinned.get("script_paths") or {},
+    }
 FOLLOW_QUEUE_CAP = 256
 FOLLOW_HEARTBEAT_SECONDS = 5.0
 FOLLOW_SNDBUF = 4096
@@ -1442,6 +1560,22 @@ class Holder:
             cli_version = None
         self.cli_version: dict[str, Any] | None = (
             cli_version if isinstance(cli_version, dict) else None)
+        # Issue #162: pinned at process start. write_record and op_state both
+        # publish it so status/list can see which build this seat is running.
+        # The revision and the start selection arrive on argv, not the agent env.
+        self.runner_identity = runner_identity(getattr(args, "accepted_revision", "") or "")
+        raw_selection = getattr(args, "start_selection", "") or ""
+        try:
+            parsed_selection = json.loads(raw_selection) if raw_selection else None
+        except ValueError:
+            parsed_selection = None
+        self.start_selection = parsed_selection if isinstance(parsed_selection, dict) else None
+        # True only for a direct checkout invocation, which start does not
+        # compare to installed Skills. A ~/.local/bin start resolves to the
+        # same files and is not exempt; the parent passes the fact because
+        # Path.resolve follows that link.
+        flag = getattr(args, "baseline_exempt", "") or ""
+        self.baseline_exempt = True if flag == "1" else False if flag == "0" else None
 
     # -- record ---------------------------------------------------------------
 
@@ -1481,6 +1615,11 @@ class Holder:
             "repo": self.args.repo,
             "holder_pid": os.getpid(),
             "holder_instance_id": self.holder_instance_id,
+            "runner_build": self.runner_identity["runner_build"],
+            "accepted_revision": self.runner_identity["accepted_revision"],
+            "script_paths": self.runner_identity["script_paths"],
+            "start_selection": self.start_selection,
+            "baseline_exempt": self.baseline_exempt,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
             "agent_started": getattr(self, "agent_started", None),
@@ -1928,6 +2067,11 @@ class Holder:
             "state": self.state,
             "holder_pid": os.getpid(),
             "holder_instance_id": self.holder_instance_id,
+            "runner_build": self.runner_identity["runner_build"],
+            "accepted_revision": self.runner_identity["accepted_revision"],
+            "script_paths": self.runner_identity["script_paths"],
+            "start_selection": self.start_selection,
+            "baseline_exempt": self.baseline_exempt,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
@@ -2047,6 +2191,11 @@ class Holder:
         if refusal is not None:
             return refusal
         with self.lock:
+            if self.stop_requested:
+                return {"outcome": "stopping", "mutation_status": "not_started",
+                        "mutation_performed": False,
+                        "error": {"code": "stopping",
+                                  "message": "this holder is stopping; the prompt was not started"}}
             if self.turn["active"]:
                 return {"error": {"code": "prompt-in-progress",
                                   "message": "a prompt turn is already active"},
@@ -3580,8 +3729,22 @@ class Holder:
         if expected is not None and expected != self.holder_instance_id:
             with self.lock:
                 return self._holder_instance_mismatch("stop", expected)
+        # Issue #162: drain-restart asks for an idle stop. The check and the
+        # claim share self.lock with op_prompt, so a prompt cannot start a turn
+        # in the gap and then be cancelled by this stop.
+        if params.get("require_idle"):
+            with self.lock:
+                pending = len(self.pending_permissions)
+                busy = bool(
+                    self.turn["active"] or pending or self.state not in ("ready", "agent_exited"))
+                if busy:
+                    return {"stopped": False, "idle": False, "state": self.state,
+                            "turn_active": bool(self.turn["active"]),
+                            "pending_permissions": pending}
+                self.stop_requested = True
+        else:
+            self.stop_requested = True
         force = bool(params.get("force"))
-        self.stop_requested = True
         self.state = "stopping"
         self.write_record()
         self._cancel_pending_permissions()
@@ -3938,6 +4101,7 @@ class Holder:
 def run_probe(args: argparse.Namespace) -> int:
     """Short-lived preflight probe: spawn, initialize, session/new, close, exit."""
     env = dict(os.environ)
+    env.pop(ACCEPTED_REVISION_ENV, None)
     env["NO_BROWSER"] = "true"
     result: dict[str, Any] = {"probe": True}
     try:
@@ -4114,6 +4278,9 @@ def main() -> int:
     parser.add_argument("--host-entry", default=None)
     parser.add_argument("--host-name", default=None)
     parser.add_argument("--cli-version", default="")
+    parser.add_argument("--accepted-revision", default="")
+    parser.add_argument("--start-selection", default="")
+    parser.add_argument("--baseline-exempt", default="")
     parser.add_argument("--probe", action="store_true")
     args = parser.parse_args()
     if args.probe:

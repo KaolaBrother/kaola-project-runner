@@ -400,10 +400,10 @@ def test_non_zcode_host_build_skew_refuses() -> None:
               and not sandbox.record_dir("droid", host).exists(),
               f"AC9 #105: skewed ~/.factory worker Skill refuses the droid Host ({refused})")
         worker = "droid-KPR-i119-worker"
-        receipt = sandbox.cli("droid", "start", session=worker, cli=cli)
-        check(receipt.get("state") == "ready",
-              "a worker-named droid start is not a Host and is not compared")
-        sandbox.invoke("droid", "stop", "--force", session=worker, cli=cli)
+        result, refused = sandbox.invoke("droid", "start", session=worker, cli=cli)
+        check(result.returncode == 1 and (refused or {}).get("reason") == "worker-skill-build-skew"
+              and not sandbox.record_dir("droid", worker).exists(),
+              "Issue #162: a worker-named start is compared too")
     finally:
         sandbox.cleanup()
 
@@ -461,12 +461,11 @@ def test_issue_121_main_skill_build_skew_refuses() -> None:
         check(skill_md.read_bytes().endswith(b"Older heartbeat wording.\n") and backup.is_dir(),
               "#121: detection only; the user roots are untouched")
 
-        # A worker-named start is not a Host and is not compared.
+        # Issue #162: a worker-named start runs the same main-skill comparison.
         worker = "droid-KPR-i121-worker"
-        started = sandbox.cli("droid", "start", session=worker, cli=cli)
-        check(started.get("state") == "ready" and "main_skill_build" not in started,
-              "#121: a worker-named start is not compared")
-        sandbox.invoke("droid", "stop", "--force", session=worker, cli=cli)
+        result, refused = sandbox.invoke("droid", "start", session=worker, cli=cli)
+        check(result.returncode == 1 and (refused or {}).get("reason") == "main-skill-build-skew",
+              "#162: a worker-named start is compared")
     finally:
         sandbox.cleanup()
 

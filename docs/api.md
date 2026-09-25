@@ -374,9 +374,10 @@ different Host than the dispatcher is `heartbeat-host-conflict`. The former #104
 `heartbeat-host-pty-unsupported` is retired: a `--transport pty` request is now refused
 `transport-pty-retired` for every caller, ahead of these checks. Every refusal carries `mutation_performed: false`; standalone starts are unchanged.
 
-A ZCode `start` also checks, before anything is spawned, that the worker Skill copies its agent will
-load are the same build as the Skill tree this CLI was loaded from (Issue #105). The Issue #104
-binding lives in the copy a worker `start` executes, so a Host on a new build with an older installed
+Every platform's `start` checks, before anything is spawned, that the worker Skill copies its agent will
+load are the same build as the Skill tree this CLI was loaded from (Issue #105, extended to every
+platform's worker starts and to `~/.local/bin` launches by Issue #162). The Issue #104
+binding lives in the copy a worker `start` executes, so a caller on a new build with an older installed
 worker Skill dispatches unbound workers and exits 0. The check hashes `kaola-acp.py`,
 `kaola-acp-holder.py`, `kaola-tmux.sh` (and `kaola-zcode-acp.py` where both sides ship it) in every
 Skill directory under the four default ZCode discovery roots — `<repo>/.zcode/skills`,
@@ -386,7 +387,29 @@ exit 1, nothing created; `worker_skill_skew` names the differing paths with both
 `worker_skill_skew_count` the total. A passing `start` reports `worker_skill_build` (this build's
 `kaola-acp.py` digest) and `worker_skill_roots` (each root and the Skill names compared), so `status`
 reconciliation has the fact. Both are `null` when the CLI ran from a repository checkout rather than
-an installed Skill tree: no Skill build to be the baseline, so the answer is unknown, not aligned.
+an installed Skill tree or `~/.local/bin`: no Skill build to be the baseline, so the answer is unknown, not aligned.
+A start whose `sys.argv[0]` lives in `~/.local/bin` uses the link target (the checkout `scripts/`) as
+the baseline and compares the platform's discovery roots the same way.
+
+`status` and `list` report `runner_build` (sha256 prefix of the holder file that seat
+executes), `accepted_revision`, `stale`, `stale_reasons`, `restart_files`, and
+`reported_drift` (Issue #162). `stale: true` is only the release-note restart set:
+`kaola-acp-holder.py`, `kaola-zcode-acp.py`, `scripts/adapters/`, and the platform
+manifest (`platforms/*.yaml` or the installed `scripts/platform.yaml`), when the bytes
+now at the path the seat recorded differ from the digest it captured at startup.
+`send` and `steer` refuse `seat-stale` unless `--confirm-stale` is passed. `stop` and
+`status` are not gated. `reported_drift` may contain `pin-drift`, `cli-drift`
+(`kaola-acp.py`, `kaola-tmux.sh`), `build-unrecorded`, or `checkout-drift`; none of
+those set `stale` or refuse a dispatch. `baseline_exempt` is recorded at start:
+true only for a direct checkout invocation, which reports drift and does not block.
+A start through `~/.local/bin` records false. That link resolves into the checkout,
+so the resolved holder path is not the exemption. The pin is read from the registration beside `kaola-project-runner-locate`
+on `PATH`, else `~/.local/bin`. `drain-restart` runs the start pre-spawn refusals
+before it stops; a refusal there leaves the seat up (`mutation_performed: false`).
+A refusal that still occurs after the exact-stop reports `mutation_performed: true`
+and `drain_stopped`. The restart carries the recorded `start_selection`
+(model, effort, tier, fast, mode) unless the command passes those flags, and
+refuses `drain-restart-selection-unknown` before stopping when it has neither.
 Roots that ZCode reaches only through ancestor directories, `skills.roots`, or `plugins.dirs` are not
 compared.
 

@@ -17,7 +17,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 - Install: `./scripts/render-skills.py --write && ./scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH] [--method link|copy] [--platform ID[,ID...]] [--no-orchestrator]`
 - Test: `./scripts/validate.sh`
 - Lint/typecheck/build: `./scripts/render-skills.py --check`
-- **Release: before tagging/publishing any new version, verify every platform's pin/adapter requirements are met — e.g. the Grok Bot bridge must have a `saveable: true` pin (pin commit P naming content commit R at the release tag) — or explicitly record why a platform is intentionally not pinned this release.**
+- **Release: before tagging/publishing any new version, verify every platform's pin/adapter requirements are met — e.g. the Grok Bot bridge must have a `saveable: true` pin (pin commit P naming content commit R at the release tag) — or explicitly record why a platform is intentionally not pinned this release. Every CHANGELOG release section states whether running seats must restart (`Seats: restart required` or `Seats: restart not required`). The operator test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms` (holder, bridge, or protocol). See `docs/conventions.md`.**
 - Dev server: N/A
 
 ## Project Constraints

@@ -35,7 +35,13 @@ worker preflight proves). A ZCode Host runs as an ACP holder with no same-named 
 so for ``--worker zcode`` the receipt also carries ``session.acp_holder_alive``: whether the
 holder record that ``kaola-acp status`` reads for that platform, session, and project names a
 live holder pid (``null`` when no project checkout is named). For an ACP Host
-``session.present`` alone is never aliveness (Issue #102). ``root.path`` and ``project.path``
+``session.present`` alone is never aliveness (Issue #102). Every receipt carries ``zcode_runtime`` (whether ``KAOLA_ZCODE_ENTRY`` and
+``KAOLA_ZCODE_NODE`` are absolute files on this host). That fact does not refuse the
+receipt. ``--intent start`` or ``--intent resume`` with ``--worker zcode`` is the
+attestation that feeds a ZCode launch: a missing pair refuses ``zcode-runtime-unset``
+and a set path that is not a file here refuses ``zcode-runtime-invalid``. Status, send,
+and stop attestations omit ``--intent`` and stay usable when the bridge shell has no
+ZCode paths. A non-zcode ``--worker`` is never refused for those paths. ``root.path`` and ``project.path``
 are real local paths and may include the user's home directory: bounded local evidence for
 the bound target, never to be stored in any account Skill. Revision and clean-state facts are what the target's own Git
 reports (``rev-parse``, ``status --porcelain``); index tricks such as ``assume-unchanged`` or
@@ -227,6 +233,40 @@ def session_facts(name: str) -> dict[str, object]:
 
 
 ACP_RECORD_ROOT_ENV = "KAOLA_ACP_RECORD_ROOT"
+ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
+ZCODE_NODE_ENV = "KAOLA_ZCODE_NODE"
+
+
+def _zcode_path_state(path: str, *, executable: bool) -> str:
+    """Why one ZCode path cannot be used on this host, or ``ok``. No PATH search."""
+    if not path:
+        return "missing"
+    if not os.path.isabs(path):
+        return "not-absolute"
+    if not os.path.isfile(path):
+        return "not-a-file"
+    if executable and not os.access(path, os.X_OK):
+        return "not-executable"
+    return "ok"
+
+
+def zcode_runtime_facts() -> dict[str, object]:
+    """Host-consistency facts for ``KAOLA_ZCODE_ENTRY`` / ``KAOLA_ZCODE_NODE``.
+
+    A path copied from another machine shows up here as ``not-a-file`` before
+    preflight would report ``acp-runtime-missing``. This function does not
+    decide the receipt: only a zcode ``--intent start|resume`` turns the fact
+    into a refusal.
+    """
+    entry = os.environ.get(ZCODE_ENTRY_ENV) or ""
+    node = os.environ.get(ZCODE_NODE_ENV) or ""
+    entry_state = _zcode_path_state(entry, executable=False)
+    node_state = _zcode_path_state(node, executable=True)
+    set_any = bool(entry or node)
+    ok: bool | None = entry_state == "ok" and node_state == "ok"
+    if not set_any:
+        ok = None
+    return {"ok": ok, "entry": entry_state, "node": node_state, "set": set_any}
 
 
 def acp_holder_alive(platform: str, session: str, repo: str) -> bool:
@@ -378,6 +418,17 @@ def receipt_command(args: argparse.Namespace) -> int:
             session["acp_holder_alive"] = (
                 acp_holder_alive("zcode", args.session, toplevel) if isinstance(toplevel, str) else None)
         receipt["session"] = session
+    # Issue #162: every receipt reports the ZCode paths. Only an attestation
+    # that feeds a zcode start or resume refuses. status/send/stop and any
+    # non-zcode worker keep the fact and do not refuse for it.
+    zcode_facts = zcode_runtime_facts()
+    launches = args.worker == "zcode" and args.intent in ("start", "resume")
+    zcode_facts["required"] = launches
+    if launches and zcode_facts["ok"] is False:
+        reasons.append("zcode-runtime-invalid")
+    elif launches and zcode_facts["ok"] is not True:
+        reasons.append("zcode-runtime-unset")
+    receipt["zcode_runtime"] = zcode_facts
     receipt["result"] = "ok" if not reasons else "refused"
     if reasons:
         receipt["reasons"] = reasons
@@ -469,6 +520,9 @@ def main() -> int:
     receipt.add_argument("--project")
     receipt.add_argument("--worker")
     receipt.add_argument("--session")
+    receipt.add_argument("--intent", choices=("start", "resume", "status", "send", "stop", "observe"),
+                         help="the Host verb this attestation feeds; start and resume "
+                              "with --worker zcode refuse a missing or non-file ZCode runtime")
     receipt.add_argument("--bin-dir", help="directory of the locator link and its registration receipt "
                                            "(default: the link's own directory, else the installer's bin directory)")
     register = sub.add_parser("register", help=f"link {LOCATOR_COMMAND} to this checkout and write its "

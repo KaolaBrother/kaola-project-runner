@@ -148,6 +148,7 @@ python_suites_all=(
   "test-lifecycle-contract.py"
   "test-issue-22-bypass-all-approvals.py"
   "test-issue-130-pty-retired.py"
+  "test-issue-162-upgrade-safety.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -209,6 +210,7 @@ python_suites_b=(
   "test-issue-148-quota-packages.py"
   "test-issue-22-bypass-all-approvals.py"
   "test-issue-130-pty-retired.py"
+  "test-issue-162-upgrade-safety.py"
 )
 run_suite_lane() {
   local status=0 rc

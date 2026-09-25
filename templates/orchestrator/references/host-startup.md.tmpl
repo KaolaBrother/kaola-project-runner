@@ -105,7 +105,9 @@ python3 "${WORKER%/*}/kaola-acp.py" list --repo "$PROJECT" --include-dead
 
 Live means `identity: verified`: record, live PID, answering socket, and the
 recorded `holder_instance_id`; a PID alone is never liveness. Your own id is in
-`KAOLA_ACP_DISPATCHER`.
+`KAOLA_ACP_DISPATCHER`. A row with `stale: true` means the holder, bridge,
+adapter, or platform manifest changed (`reported_drift` is not a block). See
+zcode-host-dispatch.md. drain-restart adopts it; nothing hot-replaces the holder.
 
 | Row | Action |
 |---|---|

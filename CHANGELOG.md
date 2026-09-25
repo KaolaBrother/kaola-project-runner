@@ -1,5 +1,36 @@
 # Changelog
 
+Every release section states whether running seats must restart. The operator
+test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+(see `docs/conventions.md`).
+
+## Unreleased
+
+- **Running seats record their build and accepted revision; status and list flag drift; a skewed seat is not dispatched; drain-restart replaces the process at idle (Issue #162).**
+  The holder writes `runner_build`, `accepted_revision`, and `script_paths`
+  into its record and state at startup, and loads `kaola-quota.py` then so a
+  later `install-local` directory swap cannot mix two builds in one process.
+  `status` and `list` report that build. `stale` blocks `send`/`steer` only
+  for the release-note restart set (holder, ZCode bridge, adapters, platform
+  manifest). Pin drift and CLI-file drift (`kaola-acp.py`, `kaola-tmux.sh`)
+  are reported and do not refuse. A holder-identical pin bump does not refuse
+  sends. `baseline_exempt` is true only for a direct checkout invocation;
+  a `~/.local/bin` start is not exempt, because that link resolves into the
+  checkout. The #105/#121 build-skew check runs on every platform's `start`,
+  including worker starts and starts via `~/.local/bin`. `send` and `steer`
+  refuse `seat-stale` unless `--confirm-stale` is passed. `drain-restart
+  --resume`/`--continue` runs start's pre-spawn refusals before it stops,
+  then waits for idle, exact-stops, and starts a new holder carrying the
+  recorded model, effort, tier, and fast. It is not a rebind, and a live
+  holder is still never hot-replaced. A refusal after that stop reports
+  `mutation_performed: true`. `kaola-locate.py` reports `zcode_runtime` on
+  every receipt and refuses `zcode-runtime-invalid` or `zcode-runtime-unset`
+  only for `--worker zcode --intent start|resume`, before preflight's
+  `acp-runtime-missing`.
+  **Seats: restart required.** This release changes the holder (build identity
+  and eager sibling import) and the stop request (`require_idle`). Operator
+  test: `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`.
+
 ## 0.6.2 — 2026-09-25 (kimi-cli dual root, Delegator owner-preserving refresh, api runtime table)
 
 - **`install-local.sh` refreshes an owned `kaola-delegator` leftover under a Host root that must not install it (Issue #160).**

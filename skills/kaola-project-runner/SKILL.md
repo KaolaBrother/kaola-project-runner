@@ -174,7 +174,10 @@ sink, and write ownership.
 2. **Decide and dispatch.** Resolve worker questions within existing
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
-   first. Examine authorized remaining work and real parallel opportunities.
+   first. A seat whose `status` says `stale: true` is not a dispatch target
+   unless that one `send`/`steer` passes `--confirm-stale`; replace it with
+   `drain-restart` at idle (see zcode-host-dispatch.md). There is no rebind.
+   Examine authorized remaining work and real parallel opportunities.
    At every heartbeat, match authorized idle workers to safe parallel work and dispatch every suitable match as a new session; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start). State the task, working location, write ownership,
    delivery requirements, and the doc-impact call in its prompt; merely seeing a
    worktree or ledger is not write authorization. Same-file collaboration needs explicit

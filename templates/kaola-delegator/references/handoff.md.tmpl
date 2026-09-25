@@ -30,13 +30,17 @@ or Host events; never synthesize one from another:
 
 ## Grok Bot co-location (account bridge only)
 
-Loaded from the Grok Bot account bridge: before each Host `status`, `start`
-(including `--resume`), `send`, and `stop` on that bound target, run the
-existing locator with full attestation. Codex and generic hosts skip this.
+Loaded from the Grok Bot account bridge. Before Host `status`, `send`, and
+`stop`, attest without `--intent` (those verbs do not launch ZCode). Before
+`start` or `start --resume`, add `--intent start` or `--intent resume`: only
+then a missing or non-file `KAOLA_ZCODE_*` refuses. Every receipt carries
+`zcode_runtime`. Codex and generic hosts skip this.
 
 ```bash
 kaola-project-runner-locate --target local|cloud \
   --project "$PROJECT" --worker zcode --session "$HOST"
+kaola-project-runner-locate --target local|cloud \
+  --project "$PROJECT" --worker zcode --session "$HOST" --intent start
 ```
 
 `$HOST` is the exact session used: the standard name, or a

@@ -351,8 +351,13 @@ class MockAgent:
             return
         session_id = params.get("sessionId", "")
         if session_id not in self.sessions:
-            respond(request_id, error={"code": -32002, "message": "unknown sessionId"})
-            return
+            # Opt-in for contract tests: a new process can resume an id the
+            # previous process minted. Production agents persist that id themselves.
+            if os.environ.get("MOCK_ACP_RESUME_ANY") == "1" and session_id:
+                self.sessions[session_id] = {"cwd": params.get("cwd", "")}
+            else:
+                respond(request_id, error={"code": -32002, "message": "unknown sessionId"})
+                return
         result: dict[str, Any] = {"sessionId": session_id}
         if self.config_fixture.get("resume") is not None:
             result["configOptions"] = self.config_fixture["resume"]

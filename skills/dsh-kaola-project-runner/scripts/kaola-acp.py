@@ -117,6 +117,10 @@ NO_PROXY_ENV = ("NO_PROXY", "no_proxy")
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
 ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
 ZCODE_NODE_ENV = "KAOLA_ZCODE_NODE"
+# Issue #162: the locator pin (or this checkout's HEAD) handed to the holder.
+ACCEPTED_REVISION_ENV = "KAOLA_ACCEPTED_REVISION"
+LOCATOR_REGISTRATION_NAME = ".kaola-project-runner-locate.json"
+REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 # Issue #62 phase 2: a worker start may declare the ZCode Host session whose
 # holder carries worker events back into that host session (the event-driven
 # heartbeat carrier). JSON: {"platform": "zcode", "session": ..., "repo": ...}.
@@ -224,6 +228,19 @@ def record_holder_child_spawn(proc: subprocess.Popen) -> dict[str, Any] | None:
     return {"path": path, "recorded": recorded, "pid": proc.pid, "pgid": pgid}
 
 
+def zcode_path_state(path: str, *, executable: bool) -> str:
+    """Why ``path`` cannot launch ZCode, or ``ok``. Never searches PATH."""
+    if not path:
+        return "missing"
+    if not os.path.isabs(path):
+        return "not-absolute"
+    if not os.path.isfile(path):
+        return "not-a-file"
+    if executable and not os.access(path, os.X_OK):
+        return "not-executable"
+    return "ok"
+
+
 def zcode_runtime_error() -> str | None:
     """Fail closed unless both ZCode paths are explicit, absolute, and present.
 
@@ -231,17 +248,19 @@ def zcode_runtime_error() -> str | None:
     """
     entry = os.environ.get(ZCODE_ENTRY_ENV) or ""
     node = os.environ.get(ZCODE_NODE_ENV) or ""
-    if not entry:
+    entry_state = zcode_path_state(entry, executable=False)
+    node_state = zcode_path_state(node, executable=True)
+    if entry_state == "missing":
         return "no explicit ZCode entry: set KAOLA_ZCODE_ENTRY to an absolute path"
-    if not node:
+    if node_state == "missing":
         return "no explicit ZCode node runtime: set KAOLA_ZCODE_NODE to an absolute path"
-    if not os.path.isabs(entry) or not os.path.isabs(node):
+    if entry_state == "not-absolute" or node_state == "not-absolute":
         return "ZCode entry and node runtime must be absolute paths"
-    if not os.path.isfile(entry):
+    if entry_state == "not-a-file":
         return f"ZCode entry is not a file: {entry}"
-    if not os.path.isfile(node):
+    if node_state == "not-a-file":
         return f"ZCode node runtime is not a file: {node}"
-    if not os.access(node, os.X_OK):
+    if node_state == "not-executable":
         return f"ZCode node runtime is not executable: {node}"
     return None
 
@@ -587,6 +606,15 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
                                        record.get("session") or session),
             "dispatcher": record.get("dispatcher"),
         })
+        fresh = seat_freshness(record.get("platform") or platform, repo, record)
+        rows[-1].update({
+            "runner_build": fresh["runner_build"],
+            "accepted_revision": fresh["accepted_revision"],
+            "stale": fresh["stale"],
+            "stale_reasons": fresh["stale_reasons"],
+            "reported_drift": fresh["reported_drift"],
+            "baseline_exempt": fresh["baseline_exempt"],
+        })
         attach_binding_fact(rows[-1], record)
     return {"schema": LIST_SCHEMA, "rows": rows}
 
@@ -708,13 +736,24 @@ def survey_resolve(value: str | None, path: str | None) -> str | None:
 
 
 def survey_zcode_row(row: dict[str, Any], login: dict[str, str] | None) -> None:
+    problem: str | None = None
     for source, env in (("process_env", dict(os.environ)), ("login_env", login)):
         if env is None:
             continue
         entry, node = (env.get(name) or "" for name in SURVEY_ZCODE_ENV)
-        if os.path.isabs(entry) and os.path.isfile(entry) and survey_resolve(node, None):
+        if not entry and not node:
+            continue
+        entry_state = zcode_path_state(entry, executable=False)
+        node_state = zcode_path_state(node, executable=True)
+        if entry_state == "ok" and node_state == "ok":
             row.update(status="present", installed=True, path=entry, source=source)
             return
+        # A copied path that is not a file on this host is not "not installed".
+        problem = problem or (
+            f"{ZCODE_ENTRY_ENV} is {entry_state}; {ZCODE_NODE_ENV} is {node_state}"
+        )
+    if problem and row["status"] == "absent":
+        row["detail"] = problem
 
 
 def command_survey(args: argparse.Namespace) -> dict[str, Any]:
@@ -2536,6 +2575,62 @@ def invoking_skill_tree() -> Path | None:
     return tree if (tree / "SKILL.md").is_file() else None
 
 
+def invoked_via_local_bin() -> bool:
+    """True when this process was started through ``~/.local/bin``.
+
+    ``install-local --bin-links`` points those names at this checkout's
+    ``scripts/``. ``Path.resolve`` on ``__file__`` follows the link, so the
+    invocation path is ``sys.argv[0]``, not ``SCRIPT_DIR``.
+    """
+    raw = sys.argv[0] if sys.argv else ""
+    if not raw:
+        return False
+    path = Path(raw)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    local_bin = Path.home() / ".local" / "bin"
+    try:
+        return path.parent.resolve() == local_bin.resolve()
+    except OSError:
+        return False
+
+
+def skew_baseline_dir() -> Path | None:
+    """Directory whose scripts are the build this start is running, or None.
+
+    An installed Skill tree is the baseline. A ``~/.local/bin`` start is too:
+    the link resolves to the checkout scripts, which are what the operator
+    just accepted. A direct checkout invocation stays the development path
+    and is not a baseline (``applies`` false).
+    """
+    tree = invoking_skill_tree()
+    if tree is not None:
+        return tree / "scripts"
+    if invoked_via_local_bin():
+        return SCRIPT_DIR
+    return None
+
+
+def main_skill_record_file(baseline: Path) -> Path | None:
+    """The main-skill build record for this baseline.
+
+    Worker Skills ship it beside their scripts. A ``~/.local/bin`` baseline
+    is the checkout ``scripts/`` directory, which does not; the rendered
+    record lives in each generated worker Skill of that checkout.
+    """
+    direct = baseline / MAIN_SKILL_BUILD_FILE
+    if direct.is_file():
+        return direct
+    skills = baseline.parent / "skills"
+    if not skills.is_dir():
+        return None
+    for child in sorted(skills.glob("*-kaola-project-runner")):
+        candidate = child / "scripts" / MAIN_SKILL_BUILD_FILE
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def is_worker_skill(path: Path) -> bool:
     return (path / "scripts" / "kaola-acp.py").is_file()
 
@@ -2601,17 +2696,17 @@ def installed_worker_skills(repo: str, platform: str = "zcode",
 def worker_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]:
     """Compare every installed worker Skill's shared scripts with this build.
 
-    Returns ``applies`` (False for a checkout invocation, which has no Skill
-    build to be the baseline), ``build`` (the baseline ``kaola-acp.py`` digest,
+    Returns ``applies`` (False for a direct checkout invocation, which has no
+    Skill build to be the baseline; a ``~/.local/bin`` start does apply),
+    ``build`` (the baseline ``kaola-acp.py`` digest,
     12 hex), ``roots`` (what was compared, for the receipt), ``skew`` (the
     differing files) and ``unreadable_roots`` (Issue #106: existing default
     roots that could not be listed, so no comparison was possible). Read-only:
     nothing is written, probed, or spawned."""
-    tree = invoking_skill_tree()
-    if tree is None:
+    baseline_dir = skew_baseline_dir()
+    if baseline_dir is None:
         return {"applies": False, "build": None, "roots": None, "skew": [],
                 "unreadable_roots": []}
-    baseline_dir = tree / "scripts"
     baseline = {name: file_sha256(baseline_dir / name)
                 for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS}
     roots: list[dict[str, Any]] = []
@@ -2655,8 +2750,8 @@ def main_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]:
     for a checkout invocation or a worker Skill built before the record
     existed. A copy is aligned when every recorded file has the recorded
     digest; extra files are ignored. Read-only."""
-    tree = invoking_skill_tree()
-    record_path = tree / "scripts" / MAIN_SKILL_BUILD_FILE if tree else None
+    baseline_dir = skew_baseline_dir()
+    record_path = main_skill_record_file(baseline_dir) if baseline_dir else None
     try:
         record = json.loads(record_path.read_text(encoding="utf-8")) if record_path else None
     except (OSError, ValueError):
@@ -2680,6 +2775,183 @@ def main_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]:
                 "files": sorted(name for name in files if installed[name] != files[name]),
             })
     return {"applies": True, "build": build, "skills": found, "skew": skew}
+
+
+def _pin_file(directory: Path) -> str | None:
+    path = directory / LOCATOR_REGISTRATION_NAME
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    accepted = data.get("accepted_revision") if isinstance(data, dict) else None
+    if isinstance(accepted, str) and REVISION_RE.fullmatch(accepted):
+        return accepted
+    return None
+
+
+def registration_directories() -> list[Path]:
+    """Bin directories that may hold the locator link and its registration.
+
+    The owner-chosen directory is the one on ``PATH`` (``hosts/grok-bot/INSTALL.md``).
+    ``~/.local/bin`` remains the installer's default when the link is not on PATH.
+    """
+    found: list[Path] = []
+    seen: set[str] = set()
+
+    def add(directory: Path) -> None:
+        try:
+            key = str(directory.resolve())
+        except OSError:
+            key = str(directory)
+        if key in seen:
+            return
+        seen.add(key)
+        found.append(directory)
+
+    located = shutil.which("kaola-project-runner-locate")
+    if located:
+        add(Path(located).parent)
+    add(Path.home() / ".local" / "bin")
+    return found
+
+
+def registration_pin() -> str | None:
+    """The locator registration's accepted revision, the pin a seat is measured against."""
+    for directory in registration_directories():
+        pin = _pin_file(directory)
+        if pin:
+            return pin
+    return None
+
+
+def current_accepted_revision() -> str | None:
+    """What a new holder should record: the pin when one is registered, else
+    this checkout's HEAD when the CLI itself lives in the runner checkout."""
+    pin = registration_pin()
+    if pin:
+        return pin
+    root = SCRIPT_DIR.parent
+    if not (root / "platforms").is_dir() or not (root / "scripts" / "kaola-locate.py").is_file():
+        return None
+    result = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        capture_output=True, text=True,
+    )
+    head = (result.stdout or "").strip()
+    if result.returncode == 0 and REVISION_RE.fullmatch(head):
+        return head
+    return None
+
+
+def _stored_script_digests(facts: dict[str, Any]) -> dict[str, str]:
+    paths = facts.get("script_paths")
+    found: dict[str, str] = {}
+    if not isinstance(paths, dict):
+        return found
+    for name, entry in paths.items():
+        if isinstance(entry, dict) and isinstance(entry.get("sha256"), str):
+            found[str(name)] = entry["sha256"]
+    return found
+
+
+def _restart_required_name(name: str) -> bool:
+    """Files the release-note operator test treats as a seat restart.
+
+    ``git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py
+    scripts/adapters platforms``. ``kaola-acp.py`` and ``kaola-tmux.sh`` are
+    per-call CLI files. A pin bump is not in the set.
+    """
+    return (
+        name in ("kaola-acp-holder.py", "kaola-zcode-acp.py", "platform.yaml")
+        or name.startswith("adapters/")
+        or name.startswith("platforms/")
+    )
+
+
+def _seat_from_checkout(facts: dict[str, Any]) -> bool:
+    """True when this seat's holder was started from a repository checkout.
+
+    That is the development path ``start`` does not compare to installed
+    Skills. An installed Skill tree has ``SKILL.md`` beside ``scripts/``.
+    """
+    holder = (_stored_script_digests(facts) and
+              (facts.get("script_paths") or {}).get("kaola-acp-holder.py"))
+    if not isinstance(holder, dict) or not holder.get("path"):
+        return False
+    tree = Path(str(holder["path"])).parent.parent
+    return not (tree / "SKILL.md").is_file()
+
+
+def _changed_recorded_files(stored_paths: dict[str, Any], wanted) -> list[str]:
+    """Recorded names whose bytes at the recorded path differ now."""
+    changed: list[str] = []
+    if not isinstance(stored_paths, dict):
+        return changed
+    for name, entry in stored_paths.items():
+        if not wanted(str(name)) or not isinstance(entry, dict):
+            continue
+        recorded = entry.get("sha256")
+        path = entry.get("path")
+        if not isinstance(recorded, str) or not isinstance(path, str):
+            continue
+        current = file_sha256(Path(path))
+        if current is not None and current != recorded:
+            changed.append(str(name))
+    return changed
+
+
+def seat_freshness(platform: str, repo: str, facts: dict[str, Any],
+                   installed: tuple[list[tuple[Path, list[Path]]], list[str]] | None = None
+                   ) -> dict[str, Any]:
+    """Report build drift. ``stale`` blocks dispatch only for the restart-required set.
+
+    ``baseline_exempt`` is the start-side fact: a direct checkout invocation
+    reports drift and does not block. A ``~/.local/bin`` start is not exempt,
+    even though its link resolves into the checkout. Pin drift and CLI-file
+    drift (``kaola-acp.py``, ``kaola-tmux.sh``) are reported in
+    ``reported_drift`` and do not set ``stale``. ``installed`` is accepted for
+    callers that already scanned and is unused: the comparison is the seat's
+    own recorded paths, which is where a later install replaces the bytes.
+    """
+    del platform, repo, installed  # the seat's own paths are the comparison
+    build = facts.get("runner_build")
+    known = isinstance(build, str) and len(build) == 12
+    revision = facts.get("accepted_revision")
+    if not isinstance(revision, str) or not REVISION_RE.fullmatch(revision):
+        revision = None
+    paths = facts.get("script_paths") if isinstance(facts.get("script_paths"), dict) else {}
+    blocking: list[str] = []
+    reported: list[str] = []
+    if not known:
+        reported.append("build-unrecorded")
+    restart_changed = _changed_recorded_files(paths, _restart_required_name)
+    cli_changed = _changed_recorded_files(
+        paths, lambda name: name in ("kaola-acp.py", "kaola-tmux.sh"))
+    if cli_changed:
+        reported.append("cli-drift")
+    # The start-side fact, not the resolved holder path. ~/.local/bin links
+    # resolve into the checkout and still have a baseline.
+    exempt = facts.get("baseline_exempt")
+    if not isinstance(exempt, bool):
+        exempt = _seat_from_checkout(facts)
+    if exempt:
+        if restart_changed:
+            reported.append("checkout-drift")
+    elif restart_changed:
+        blocking.append("restart-required")
+    pin = registration_pin()
+    if pin and revision != pin:
+        reported.append("pin-drift" if revision else "revision-unrecorded")
+    return {
+        "runner_build": build if known else None,
+        "accepted_revision": revision,
+        "stale": bool(blocking),
+        "stale_reasons": blocking,
+        "restart_files": restart_changed,
+        "reported_drift": reported,
+        "baseline_exempt": exempt,
+        "pin": pin,
+    }
 
 
 def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
@@ -2851,7 +3123,59 @@ def host_exists_refusal(args: argparse.Namespace, repo: str,
     return receipt
 
 
+def pre_spawn_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any] | None:
+    """The start refusals that can be decided before any holder is stopped or spawned.
+
+    ``drain-restart`` runs this first. A refusal here leaves the live seat up.
+    """
+    if not host_capable(args.platform) and host_session(args.platform, args.session):
+        return heartbeat_host_refusal(args, repo, {
+            "source": "none", "dispatcher": None,
+            "refusal": host_entry_unsupported(args.platform, "Host")})
+    if host_session(args.platform, args.session):
+        hosts = verified_hosts(args, repo)
+        if hosts:
+            return host_exists_refusal(args, repo, hosts)
+    if any(not fact["present"] for fact in getattr(args, "agent_command_facts", []) or []):
+        receipt = base_receipt(args, repo)
+        receipt["error"] = {"code": "acp-bridge-missing",
+                            "message": "the Skill-relative ACP command did not resolve to a file"}
+        receipt["mutation_status"] = "not_started"
+        receipt["mutation_performed"] = False
+        return receipt
+    if args.platform == "zcode":
+        missing = zcode_runtime_error()
+        if missing:
+            receipt = base_receipt(args, repo)
+            receipt["error"] = {"code": "acp-runtime-missing", "message": missing}
+            receipt["mutation_status"] = "not_started"
+            receipt["mutation_performed"] = False
+            return receipt
+    hostish = args.platform == "zcode" or (
+        host_capable(args.platform) and host_session(args.platform, args.session))
+    alignment = worker_skill_alignment(repo, args.platform)
+    if alignment["applies"]:
+        if alignment["unreadable_roots"]:
+            return worker_skill_root_refusal(args, repo, alignment)
+        if alignment["skew"]:
+            return worker_skill_skew_refusal(args, repo, alignment)
+        main_alignment = main_skill_alignment(repo, args.platform)
+        if main_alignment["skew"]:
+            return main_skill_skew_refusal(args, repo, main_alignment)
+    if hostish and args.platform == "zcode" and zcode_host_session(args.session):
+        problem = zcode_host_request_problem(args)
+        if problem is not None:
+            return zcode_host_refusal(args, repo, problem)
+    resolution = resolve_heartbeat_host(args, repo)
+    if resolution["refusal"]:
+        return heartbeat_host_refusal(args, repo, resolution)
+    return None
+
+
 def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
+    refused = pre_spawn_refusal(args, repo)
+    if refused is not None:
+        return refused
     # Issue #122: a Host-named start on a platform with no measured Host
     # Skill entry fails closed before anything exists,
     # the bridge included.
@@ -2881,41 +3205,36 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             receipt["mutation_status"] = "not_started"
             receipt["mutation_performed"] = False
             return receipt
-    # Issue #119: every ZCode start as before, plus a Host-named start on any
-    # other platform with a measured Host Skill entry.
-    if args.platform == "zcode" or (host_capable(args.platform)
-                                    and host_session(args.platform, args.session)):
-        # Issue #105: this agent dispatches workers by running an installed
-        # worker Skill's own `start`, and that copy carries the Issue #104
-        # binding. Refuse a Host whose installed worker Skills are a different
-        # build before anything exists, rather than letting the binding fail
-        # silently one dispatch later.
-        alignment = worker_skill_alignment(repo, args.platform)
+    # Issue #162: every platform's worker start, not only ZCode and Host-named
+    # sessions. A direct checkout invocation still has no baseline. A
+    # ~/.local/bin start does: the link's target is the accepted checkout.
+    hostish = args.platform == "zcode" or (
+        host_capable(args.platform) and host_session(args.platform, args.session))
+    alignment = worker_skill_alignment(repo, args.platform)
+    if alignment["applies"]:
         # Issue #106: an existing default root that cannot be listed means no
         # comparison was possible at all; refuse it by name, never a traceback.
         if alignment["unreadable_roots"]:
             return worker_skill_root_refusal(args, repo, alignment)
         if alignment["skew"]:
             return worker_skill_skew_refusal(args, repo, alignment)
-        # What this Host would load into a dispatched worker. `null` means the
-        # CLI was not run from an installed Skill tree, so there was no build
-        # to compare - unknown, never reported as aligned.
         receipt["worker_skill_build"] = alignment["build"]
         receipt["worker_skill_roots"] = alignment["roots"]
-        # Issue #121: the same comparison for the main Skill this Host's
-        # runtime loads, which ships no scripts and so is not in #105's set.
+        # Issue #121: the main Skill ships no scripts, so it is not in #105's set.
         main_alignment = main_skill_alignment(repo, args.platform)
         if main_alignment["skew"]:
             return main_skill_skew_refusal(args, repo, main_alignment)
         receipt["main_skill_build"] = main_alignment["build"]
-        # Issue #108: a Host-shaped session must run GLM 5.3 at effort max.
-        # An explicit --model/--effort that contradicts that is refused
-        # before anything exists; an absent one is pinned after the session
-        # is ready and verified against the holder's advertised state.
-        if args.platform == "zcode" and zcode_host_session(args.session):
-            problem = zcode_host_request_problem(args)
-            if problem is not None:
-                return zcode_host_refusal(args, repo, problem)
+    elif hostish:
+        # Checkout invocation of a ZCode or Host-named start: unknown, not aligned.
+        receipt["worker_skill_build"] = alignment["build"]
+        receipt["worker_skill_roots"] = alignment["roots"]
+        receipt["main_skill_build"] = main_skill_alignment(repo, args.platform)["build"]
+    # Issue #108: a Host-shaped ZCode session must run GLM 5.3 at effort max.
+    if hostish and args.platform == "zcode" and zcode_host_session(args.session):
+        problem = zcode_host_request_problem(args)
+        if problem is not None:
+            return zcode_host_refusal(args, repo, problem)
     resolution = resolve_heartbeat_host(args, repo)
     if resolution["refusal"]:
         return heartbeat_host_refusal(args, repo, resolution)
@@ -2980,6 +3299,19 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     if init_meta:
         holder_argv += ["--init-meta", json.dumps(init_meta)]
     holder_env = agent_environment(args)
+    # Holder-side only. The agent inherits the holder's environment, so the
+    # revision must not ride in it, including a copy this process inherited.
+    holder_env.pop(ACCEPTED_REVISION_ENV, None)
+    accepted = current_accepted_revision()
+    holder_argv += ["--accepted-revision", accepted or ""]
+    holder_argv += ["--baseline-exempt", "1" if skew_baseline_dir() is None else "0"]
+    holder_argv += ["--start-selection", json.dumps({
+        "model": args.model,
+        "effort": args.effort,
+        "tier": args.tier,
+        "fast": args.fast,
+        "mode": getattr(args, "mode", None),
+    }, sort_keys=True)]
     cli_version = cli_version_fact(args, holder_env)
     if cli_version is not None:
         holder_argv += ["--cli-version", json.dumps(cli_version, sort_keys=True)]
@@ -3023,6 +3355,7 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         "agent_pid": state.get("agent_pid"),
         "acp_session_id": state.get("acp_session_id"),
         "state": state.get("state"),
+        "baseline_exempt": state.get("baseline_exempt"),
     })
     attach_binding_fact(receipt, state)
     receipt["transport"]["protocol_version"] = state.get("protocol_version")
@@ -3302,6 +3635,308 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     return receipt
 
 
+def refuse_if_stale(args: argparse.Namespace, repo: str, directory: Path) -> dict[str, Any] | None:
+    """Issue #162: do not dispatch into a seat whose running build has drifted.
+
+    ``--confirm-stale`` is the explicit confirmation. Stop, status, and
+    drain-restart are not dispatches and do not call this.
+    """
+    record = read_record(directory)
+    if not record:
+        return None
+    fresh = seat_freshness(args.platform, repo, record)
+    if not fresh["stale"]:
+        return None
+    if getattr(args, "confirm_stale", False):
+        return None
+    receipt = base_receipt(args, repo)
+    receipt.update({
+        "result": "refused",
+        "reason": "seat-stale",
+        "action": args.command,
+        "detail": (
+            f"this seat is stale ({', '.join(fresh['stale_reasons'])}"
+            f"{(': ' + ', '.join(fresh['restart_files'])) if fresh.get('restart_files') else ''}"
+            "): the holder, ZCode bridge, adapter, or platform manifest it loaded "
+            "differs from the bytes at that path now. Pin drift and CLI-file drift "
+            "are reported and do not block. Nothing was dispatched. Drain-restart "
+            "it once it is idle, or pass --confirm-stale to dispatch this once. "
+            "A live holder is never hot-replaced."
+        ),
+        "stale": True,
+        "stale_reasons": fresh["stale_reasons"],
+        "restart_files": fresh.get("restart_files") or [],
+        "reported_drift": fresh.get("reported_drift") or [],
+        "runner_build": fresh["runner_build"],
+        "accepted_revision": fresh["accepted_revision"],
+        "pin": fresh["pin"],
+        "mutation_performed": False,
+        "mutation_status": "not_started",
+    })
+    return receipt
+
+
+def _seat_idle(state: dict[str, Any]) -> bool:
+    if state.get("turn_active"):
+        return False
+    pending = state.get("pending_permissions") or []
+    if isinstance(pending, list) and pending:
+        return False
+    holder_state = state.get("state")
+    if holder_state == "agent_exited":
+        return True
+    return holder_state == "ready" and state.get("activity_hint") in (None, "idle")
+
+
+def _selection_explicit() -> dict[str, bool]:
+    """Which selection flags this argv actually passed. ``--fast`` defaults to off,
+    so absence and an explicit off are different."""
+    flags = set(sys.argv)
+    return {
+        "model": "--model" in flags or any(item.startswith("--model=") for item in sys.argv),
+        "effort": "--effort" in flags or any(item.startswith("--effort=") for item in sys.argv),
+        "tier": "--tier" in flags or any(item.startswith("--tier=") for item in sys.argv),
+        "fast": "--fast" in flags or any(item.startswith("--fast=") for item in sys.argv),
+        "mode": "--mode" in flags or any(item.startswith("--mode=") for item in sys.argv),
+        "command": "--command" in flags,
+    }
+
+
+def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -> dict[str, Any] | None:
+    """Fill omitted model/effort/tier/fast/mode from the seat's recorded start.
+
+    Returns None when the record has no selection and the caller passed none,
+    so drain-restart can refuse before it stops the seat. An explicit flag
+    wins over the record. The agent command is re-resolved when the caller
+    did not pass ``--command``, because a tier can change it.
+    """
+    saved = record.get("start_selection")
+    saved = saved if isinstance(saved, dict) else None
+    explicit = _selection_explicit()
+    if saved is None and not any(explicit[key] for key in ("model", "effort", "tier", "fast", "mode")):
+        return None
+    if saved:
+        if not explicit["model"] and isinstance(saved.get("model"), str):
+            args.model = saved["model"]
+        if not explicit["effort"] and isinstance(saved.get("effort"), str):
+            args.effort = saved["effort"]
+        if not explicit["tier"] and isinstance(saved.get("tier"), str):
+            args.tier = saved["tier"]
+        if not explicit["fast"] and saved.get("fast") in ("on", "off"):
+            args.fast = saved["fast"]
+        if not explicit["mode"] and isinstance(saved.get("mode"), str):
+            args.mode = saved["mode"]
+    if not explicit["command"] and not os.environ.get("KAOLA_ACP_COMMAND"):
+        args.agent_command = (
+            tier_agent_command(args) or args.manifest.get("acp_command") or args.agent_command
+        )
+        args.agent_command, args.agent_command_facts = resolve_agent_command(args.agent_command)
+    return {
+        "source": "caller" if any(explicit.values()) else "record",
+        "model": args.model,
+        "effort": args.effort,
+        "tier": args.tier,
+        "fast": args.fast,
+        "mode": getattr(args, "mode", None),
+    }
+
+
+def _note_post_stop_result(started: dict[str, Any], old_id: Any,
+                           stop: dict[str, Any] | None) -> None:
+    """A start refusal after the exact-stop must not claim that nothing changed."""
+    failed = started.get("result") == "refused" or isinstance(started.get("error"), dict)
+    if not failed:
+        return
+    started["mutation_performed"] = True
+    if started.get("mutation_status") in (None, "not_started"):
+        started["mutation_status"] = "completed"
+    started["drain_stopped"] = {
+        "stopped": True,
+        "previous_holder_instance_id": old_id,
+        "residual_pids": (stop or {}).get("residual_pids") or [],
+    }
+    note = "The previous holder was exact-stopped before this result."
+    detail = started.get("detail")
+    if isinstance(detail, str) and detail:
+        started["detail"] = f"{detail} {note}"
+    else:
+        started["detail"] = note
+
+
+def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]:
+    """Wait until the seat is idle, exact-stop it, then start --resume/--continue.
+
+    Not a rebind and not a hot replace. Refusals that ``start`` can decide
+    without spawning are run first, so a skewed install does not take the seat
+    down. If a refusal still happens after the stop, the receipt says the stop
+    happened. The recorded model/effort/tier/fast/mode are carried unless this
+    argv names them. Adoption is the new start's dispatcher, and only when
+    that new instance id is present.
+    """
+    if not args.resume and not args.use_continue:
+        receipt = base_receipt(args, repo)
+        receipt.update({
+            "result": "refused",
+            "reason": "drain-restart-mode-required",
+            "action": "drain-restart",
+            "detail": (
+                "pass --resume ID or --continue. A fresh start would be a new "
+                "session, and a live holder is never hot-replaced."
+            ),
+            "mutation_performed": False,
+            "mutation_status": "not_started",
+        })
+        return receipt
+    directory = record_dir(args, repo)
+    record = read_record(directory)
+    if not record or (not pid_alive(record.get("holder_pid")) and record.get("state") != "stopped"):
+        receipt = base_receipt(args, repo)
+        receipt.update({
+            "result": "refused",
+            "reason": "no-session",
+            "action": "drain-restart",
+            "detail": "no live holder to drain",
+            "mutation_performed": False,
+            "mutation_status": "not_started",
+        })
+        return receipt
+    selection = apply_recorded_selection(args, record)
+    if selection is None:
+        receipt = base_receipt(args, repo)
+        receipt.update({
+            "result": "refused",
+            "reason": "drain-restart-selection-unknown",
+            "action": "drain-restart",
+            "detail": (
+                "this seat recorded no model, effort, tier, or fast, and this "
+                "command did not pass them. Nothing was stopped. Pass "
+                "--model/--effort/--tier/--fast to name the restart, or restart "
+                "a seat that stored its start selection."
+            ),
+            "mutation_performed": False,
+            "mutation_status": "not_started",
+        })
+        return receipt
+    refused = pre_spawn_refusal(args, repo)
+    if refused is not None:
+        refused["action"] = "drain-restart"
+        refused["mutation_performed"] = False
+        refused["mutation_status"] = "not_started"
+        refused["start_selection"] = selection
+        return refused
+    timeout = args.timeout if args.timeout is not None else 30.0
+    deadline = time.monotonic() + max(0.0, timeout)
+    while pid_alive((read_record(directory) or {}).get("holder_pid")):
+        state = op_or_holder_lost(args, repo, directory, "state", {}, 10.0)
+        if _seat_idle(state):
+            break
+        if time.monotonic() >= deadline:
+            receipt = base_receipt(args, repo)
+            receipt.update({
+                "result": "refused",
+                "reason": "drain-not-idle",
+                "action": "drain-restart",
+                "detail": "the seat did not reach idle before the timeout; nothing was stopped",
+                "state": state.get("state"),
+                "activity_hint": state.get("activity_hint"),
+                "turn_active": state.get("turn_active"),
+                "mutation_performed": False,
+                "mutation_status": "not_started",
+            })
+            return receipt
+        time.sleep(0.2)
+    old = read_record(directory) or {}
+    old_id = old.get("holder_instance_id")
+    old_pid = old.get("holder_pid")
+    old_dispatcher = old.get("dispatcher")
+    stop: dict[str, Any] | None = None
+    did_stop = False
+    if pid_alive(old_pid):
+        stop = op_or_holder_lost(
+            args, repo, directory, "stop",
+            {"expected_holder_instance_id": old_id, "require_idle": True}, 30.0,
+        )
+        if stop.get("idle") is False or stop.get("stopped") is False:
+            receipt = base_receipt(args, repo)
+            receipt.update({
+                "result": "refused",
+                "reason": "drain-not-idle",
+                "action": "drain-restart",
+                "detail": (
+                    "exact stop refused because the seat was not idle; the holder "
+                    "was not replaced"
+                ),
+                "mutation_performed": False,
+                "mutation_status": "not_started",
+            })
+            return receipt
+        error = stop.get("error") if isinstance(stop.get("error"), dict) else None
+        if error:
+            receipt = base_receipt(args, repo)
+            receipt.update({
+                "result": "refused",
+                "reason": "drain-stop-failed",
+                "action": "drain-restart",
+                "detail": error.get("message") or "exact stop failed; the new holder was not started",
+                "mutation_performed": False,
+                "mutation_status": "not_started",
+            })
+            return receipt
+        did_stop = True
+        wait_deadline = time.monotonic() + 10.0
+        while pid_alive(old_pid) and time.monotonic() < wait_deadline:
+            time.sleep(0.1)
+        if pid_alive(old_pid) or (stop.get("residual_pids") or []):
+            receipt = base_receipt(args, repo)
+            receipt.update({
+                "result": "refused",
+                "reason": "drain-stop-failed",
+                "action": "drain-restart",
+                "detail": "the old holder is not fully gone; the new holder was not started",
+                "residual_pids": stop.get("residual_pids") or [],
+                "mutation_performed": True,
+                "mutation_status": "completed",
+                "drain_stopped": {
+                    "stopped": False,
+                    "previous_holder_instance_id": old_id,
+                    "residual_pids": stop.get("residual_pids") or [],
+                },
+            })
+            return receipt
+    started = command_start(args, repo)
+    started["action"] = "drain-restart"
+    started["previous_holder_instance_id"] = old_id
+    started["start_selection"] = selection
+    if did_stop:
+        _note_post_stop_result(started, old_id, stop)
+    new_dispatcher = started.get("dispatcher")
+    old_instance = old_dispatcher.get("holder_instance_id") if isinstance(old_dispatcher, dict) else None
+    new_instance = new_dispatcher.get("holder_instance_id") if isinstance(new_dispatcher, dict) else None
+    started["adoption"] = {
+        "previous_holder_instance_id": old_id,
+        "previous_dispatcher": old_dispatcher if isinstance(old_dispatcher, dict) else None,
+        "dispatcher": new_dispatcher if isinstance(new_dispatcher, dict) else None,
+        "adopted_on_restart": bool(new_instance) and old_instance != new_instance,
+    }
+    if host_session(args.platform, args.session):
+        listed = command_list(argparse.Namespace(
+            platform=None, repo=repo, record_root=getattr(args, "record_root", None),
+            include_dead=False,
+        ))
+        still = []
+        for row in listed.get("rows") or []:
+            dispatcher = row.get("dispatcher")
+            if (isinstance(dispatcher, dict) and dispatcher.get("holder_instance_id") == old_id
+                    and (row.get("platform"), row.get("session")) != (args.platform, args.session)):
+                still.append({
+                    "platform": row.get("platform"),
+                    "session": row.get("session"),
+                    "holder_instance_id": row.get("holder_instance_id"),
+                })
+        started["seats_naming_previous_instance"] = still
+    return started
+
+
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "list":
         payload = command_list(parse_list_args(sys.argv[2:]))
@@ -3325,7 +3960,7 @@ def main() -> int:
     parser.add_argument("command", choices=[
         "preflight", "start", "send", "steer", "wait", "observe", "capture",
         "permit", "key", "answer", "cancel", "stop", "status", "view",
-        "follow",
+        "follow", "drain-restart",
     ])
     parser.add_argument("--repo", required=True)
     parser.add_argument("--session")
@@ -3342,6 +3977,8 @@ def main() -> int:
     parser.add_argument("--request-id")
     parser.add_argument("--option")
     parser.add_argument("--expected-holder-instance-id")
+    # Issue #162: the explicit confirmation that dispatches to a stale seat.
+    parser.add_argument("--confirm-stale", action="store_true")
     parser.add_argument("--key")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--lines", type=int)
@@ -3396,6 +4033,10 @@ def main() -> int:
         # A typed refusal is a pre-mutation decision, exit 1 like the shell's
         # canonical-root refusal; transport errors stay exit-0 receipts.
         return 1 if receipt.get("result") == "refused" else 0
+    if args.command == "drain-restart":
+        receipt = command_drain_restart(args, repo)
+        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        return 1 if receipt.get("result") == "refused" else 0
     if args.command == "view":
         if directory is None:
             die("invalid or missing --session name")
@@ -3416,6 +4057,10 @@ def main() -> int:
             text = sys.stdin.read()
         if not text:
             die("send requires --text or --stdin")
+        refused = refuse_if_stale(args, repo, directory)
+        if refused:
+            print(json.dumps(refused, ensure_ascii=False, sort_keys=True))
+            return 1
         receipt = op_or_holder_lost(
             args, repo, directory, "prompt",
             {"text": text, "wait": args.wait, "timeout": timeout,
@@ -3428,6 +4073,10 @@ def main() -> int:
             text = sys.stdin.read()
         if not text:
             die("steer requires --text or --stdin")
+        refused = refuse_if_stale(args, repo, directory)
+        if refused:
+            print(json.dumps(refused, ensure_ascii=False, sort_keys=True))
+            return 1
         # Issue #65: the manifest carries the platform's investigated ACP
         # capability and its entry. `unsupported` and `unknown` are different
         # answers and must not collapse: only a platform investigated to have no
@@ -3542,6 +4191,12 @@ def main() -> int:
             attach_binding_fact(
                 receipt, receipt if "heartbeat_host" in receipt else record
             )
+        merged = dict(record or {})
+        for key in ("runner_build", "accepted_revision", "script_paths", "baseline_exempt"):
+            if key in receipt:
+                merged[key] = receipt[key]
+        if merged:
+            receipt.update(seat_freshness(args.platform, repo, merged))
         # Emission copy only. The holder object and receipt["record"] stay native.
         stamp_quota_emission(receipt, args.platform)
         receipt = bound_state_receipt(receipt)
