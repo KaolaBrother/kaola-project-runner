@@ -414,7 +414,7 @@ the platform default permission mode a fresh start applies (Claude Code
 `bypassPermissions`, and the same per-platform value `start` sets). An
 explicit mode wins, and a recorded mode wins over that default. It refuses
 `drain-restart-selection-unknown` before stopping when the seat recorded no
-model, effort, tier, or fast and the command passed none.
+start selection and the command passed none of `--model/--effort/--tier/--fast/--mode`.
 Roots that ZCode reaches only through ancestor directories, `skills.roots`, or `plugins.dirs` are not
 compared.
 
