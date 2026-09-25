@@ -171,6 +171,50 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertTrue(stopped.get("stopped") or stopped.get("state") == "stopped"
                         or stopped.get("residual_pids") == [], stopped)
 
+    def test_quota_only_drift_is_reported_and_not_stale_in_status_and_list(self) -> None:
+        session = "codex-KPR-i166-quota"
+        cli = self._installed_cli()
+        self.run_cli("codex", "start", session=session, argv0=cli)
+        quota = cli.parent / "kaola-quota.py"
+        quota.write_bytes(quota.read_bytes() + b"\n# quota only\n")
+
+        _result, status = self.run_cli("codex", "status", session=session, argv0=cli)
+        self.assertIs(status["stale"], False, status)
+        self.assertIn("quota-drift", status.get("reported_drift"), status)
+        self.assertEqual(status.get("stale_reasons"), [], status)
+
+        listed = subprocess.run(
+            [PYTHON, str(CLI), "list", "--repo", str(self.repo),
+             "--record-root", str(self.records)],
+            capture_output=True, text=True, env=self.env(), timeout=30, check=True,
+        )
+        rows = json.loads(listed.stdout)
+        match = [row for row in rows["rows"] if row["session"] == session]
+        self.assertEqual(len(match), 1)
+        self.assertIs(match[0]["stale"], False, match[0])
+        self.assertIn("quota-drift", match[0].get("reported_drift"), match[0])
+
+    def test_legacy_record_without_quota_digest_is_silent(self) -> None:
+        acp = load_module(CLI, "acp166legacy")
+        cli = self._installed_cli()
+        quota = cli.parent / "kaola-quota.py"
+        quota.write_bytes(quota.read_bytes() + b"\n# quota changed after legacy record\n")
+        holder = cli.parent / "kaola-acp-holder.py"
+        holder_digest = __import__("hashlib").sha256(holder.read_bytes()).hexdigest()
+
+        fresh = acp.seat_freshness("codex", str(self.repo), {
+            "runner_build": holder_digest[:12],
+            "accepted_revision": "a" * 40,
+            "script_paths": {
+                "kaola-acp-holder.py": {
+                    "path": str(holder),
+                    "sha256": holder_digest,
+                },
+            },
+        })
+        self.assertIs(fresh["stale"], False, fresh)
+        self.assertNotIn("quota-drift", fresh["reported_drift"], fresh)
+
     def test_worker_start_and_local_bin_see_build_skew(self) -> None:
         stale = self.home / ".codex" / "skills" / "claude-code-kaola-project-runner" / "scripts"
         stale.mkdir(parents=True)
@@ -197,7 +241,7 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertEqual(refused.get("reason"), "worker-skill-build-skew", refused)
         self.assertIs(refused.get("mutation_performed"), False)
 
-    def test_pin_drift_is_stale_without_a_skill_difference(self) -> None:
+    def test_pin_drift_is_reported_not_stale_without_a_skill_difference(self) -> None:
         acp = load_module(CLI, "acp162pin")
         previous = os.environ.get("HOME")
         previous_path = os.environ.get("PATH")
@@ -248,6 +292,7 @@ class UpgradeSafetyTests(unittest.TestCase):
             })
             self.assertEqual(via_path["pin"], "c" * 40)
             self.assertIs(via_path["stale"], False, via_path)
+            self.assertNotIn("quota-drift", via_path["reported_drift"], via_path)
         finally:
             if previous is None:
                 os.environ.pop("HOME", None)
@@ -259,6 +304,7 @@ class UpgradeSafetyTests(unittest.TestCase):
                 os.environ["PATH"] = previous_path
         self.assertIs(fresh["stale"], False, fresh)
         self.assertIn("pin-drift", fresh["reported_drift"])
+        self.assertNotIn("quota-drift", fresh["reported_drift"], fresh)
         self.assertEqual(fresh["stale_reasons"], [])
 
     def test_baseline_exempt_follows_the_start_not_the_resolved_path(self) -> None:

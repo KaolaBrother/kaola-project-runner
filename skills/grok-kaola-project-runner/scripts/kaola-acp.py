@@ -2924,11 +2924,12 @@ def seat_freshness(platform: str, repo: str, facts: dict[str, Any],
 
     ``baseline_exempt`` is the start-side fact: a direct checkout invocation
     reports drift and does not block. A ``~/.local/bin`` start is not exempt,
-    even though its link resolves into the checkout. Pin drift and CLI-file
-    drift (``kaola-acp.py``, ``kaola-tmux.sh``) are reported in
-    ``reported_drift`` and do not set ``stale``. ``installed`` is accepted for
-    callers that already scanned and is unused: the comparison is the seat's
-    own recorded paths, which is where a later install replaces the bytes.
+    even though its link resolves into the checkout. Pin drift, CLI-file drift
+    (``kaola-acp.py``, ``kaola-tmux.sh``), and quota catalog drift
+    (``kaola-quota.py``) are reported in ``reported_drift`` and do not set
+    ``stale``. ``installed`` is accepted for callers that already scanned and
+    is unused: the comparison is the seat's own recorded paths, which is where
+    a later install replaces the bytes.
     """
     del platform, repo, installed  # the seat's own paths are the comparison
     build = facts.get("runner_build")
@@ -2946,6 +2947,10 @@ def seat_freshness(platform: str, repo: str, facts: dict[str, Any],
         paths, lambda name: name in ("kaola-acp.py", "kaola-tmux.sh"))
     if cli_changed:
         reported.append("cli-drift")
+    quota_changed = _changed_recorded_files(
+        paths, lambda name: name == "kaola-quota.py")
+    if quota_changed:
+        reported.append("quota-drift")
     # The start-side fact, not the resolved holder path. ~/.local/bin links
     # resolve into the checkout and still have a baseline.
     exempt = facts.get("baseline_exempt")

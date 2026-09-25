@@ -58,8 +58,9 @@ Before `send` or `steer`, read `status`. `stale: true` means a restart-required
 file this seat loaded now differs on disk: `kaola-acp-holder.py`,
 `kaola-zcode-acp.py`, `scripts/adapters/`, or the platform manifest
 (`stale_reasons`, `restart_files`). That is the same set as the release-note
-operator test. `reported_drift` may list `pin-drift` or `cli-drift`
-(`kaola-acp.py`, `kaola-tmux.sh`); those do not block. `baseline_exempt` is
+operator test. `reported_drift` may list `pin-drift`, `cli-drift`
+(`kaola-acp.py`, `kaola-tmux.sh`), or `quota-drift` (`kaola-quota.py`);
+those do not block. `baseline_exempt` is
 true only for a direct checkout start; a `~/.local/bin` start is not exempt.
 Do not dispatch a `stale: true` seat.
 Pass `--confirm-stale` on that one command only when the operator confirmed it.

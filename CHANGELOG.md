@@ -6,6 +6,11 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **`kaola-quota.py`-only drift is reported without marking seats stale (Issue #166).**
+  `status` and `list` report `quota-drift` when a recorded quota digest changes;
+  legacy records without a quota digest remain silent, and the documented
+  skill-difference staleness contract is unchanged. **Seats: restart not required.**
+- **Rename the pin-drift contract test to match its non-stale assertion (Issue #167).**
 - **Running seats record their build and accepted revision; status and list flag drift; a skewed seat is not dispatched; drain-restart replaces the process at idle (Issue #162).**
   The holder writes `runner_build`, `accepted_revision`, and `script_paths`
   into its record and state at startup, and loads `kaola-quota.py` then so a
