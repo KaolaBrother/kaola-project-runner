@@ -6,6 +6,28 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **The #65 Host-contract suite drops a dispatched seat's inherited `KAOLA_*` bindings before it starts its fixture session (Issue #176).**
+  `test-issue-65-host-contract.py` failed intermittently in this environment
+  with `no-session` on `send`: run as a focused loop from a dispatched seat,
+  its `start` inherited the seat's `KAOLA_ACP_HEARTBEAT_HOST` +
+  `KAOLA_ACP_DISPATCHER` and was refused `heartbeat-host-conflict` before
+  anything was spawned, identically on the unmodified base `2e18946`. A typed
+  refusal reports `result: "refused"` with no `error`, so the suite's own
+  check passed the refused start and the failure surfaced only later at
+  `send` as `no-session` - the anchor behavior under test never got its
+  start. The suite now drops the inherited `KAOLA_*` namespace and sets the
+  one fixture it needs (the rule `validate.sh` applies to every suite, and
+  the `test-issue-98-dsh-acp.py` pattern), and its `cli()` fails a typed
+  refusal at the command that was refused. Not a boot race and not resolved
+  by #174's ordering fix: a pre-spawn refusal never reaches the boot. No
+  script changed. Evidence: 12/12 green focused runs at rest and 12/12 while
+  a full `validate.sh` ran concurrently (0/12 before the fix), and the full
+  `validate.sh` green at rest and under that load
+  (/tmp/kpr-i176-loop-rest.log, /tmp/kpr-i176-loop-fixed-rest.log,
+  /tmp/kpr-i176-loop-fixed-load.log, /tmp/kpr-i176-validate.log).
+  **Seats: restart not required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  is empty: only the contract test changed.
 - **A stale seat still transports: the seat-stale send/steer gate and `--confirm-stale` are removed (Issue #178).**
   `stale`, `stale_reasons`, `restart_files`, and `reported_drift` stay pure
   `status`/`list` facts. The #162 refusal blocked previously working

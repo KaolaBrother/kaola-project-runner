@@ -209,12 +209,22 @@ class CursorAnchorBehaviour(unittest.TestCase):
                 "--repo", str(self.repo), "--session", self.session,
                 "--command", " ".join([sys.executable, str(MOCK), "--scenario", "normal"]),
                 *args]
-        env = dict(os.environ)
+        # Issue #176: a focused loop runs this suite from a dispatched seat,
+        # whose inherited KAOLA_* bindings (KAOLA_ACP_HEARTBEAT_HOST +
+        # KAOLA_ACP_DISPATCHER) refuse the start `heartbeat-host-conflict`
+        # before anything is spawned. Drop the inherited namespace and set the
+        # one fixture this suite needs, the same rule validate.sh applies.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         result = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=timeout)
         receipt = json.loads(result.stdout)
         if check and "error" in receipt:
             self.fail(f"{command} failed: {receipt['error']}")
+        # Issue #176: a typed refusal reports `result: "refused"` with no
+        # `error`, so without this check a refused start masqueraded as
+        # success and failed later at `send` with `no-session`.
+        if check and receipt.get("result") == "refused":
+            self.fail(f"{command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     @staticmethod
