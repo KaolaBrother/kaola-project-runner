@@ -6,6 +6,19 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **`command_start` no longer repeats the host-entry and host-exists checks `pre_spawn_refusal` already made (Issue #169).**
+  Since #164 `command_start` calls `pre_spawn_refusal` first on the same args
+  in the same process, so the repeated Issue #122 (host-entry-unsupported)
+  and Issue #132 (host-exists) guards that followed it could never fire. Each
+  guard and its rationale now live once, in `pre_spawn_refusal`; `command_start`
+  keeps a one-line note naming what already returned. Dead-code removal: no
+  behavior change, and the existing #122/#132 contract coverage
+  (`tests/contract/test-issue-119-host-entry.py`,
+  `tests/contract/test-issue-74-kaola-delegator.py`) stays green.
+  **Seats: restart not required.** Only the dead code in `kaola-acp.py` and its
+  rendered copies changed; the operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  is empty.
 - **Drift enumerations name every `reported_drift` value (Issue #168).**
   The seat-stale refusal, the worker status paragraph, and the ZCode Host
   dispatch reference now name pin-drift, cli-drift, quota-drift,

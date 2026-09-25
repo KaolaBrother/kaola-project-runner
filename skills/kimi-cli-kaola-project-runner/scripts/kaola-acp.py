@@ -3293,21 +3293,8 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     refused = pre_spawn_refusal(args, repo)
     if refused is not None:
         return refused
-    # Issue #122: a Host-named start on a platform with no measured Host
-    # Skill entry fails closed before anything exists,
-    # the bridge included.
-    if not host_capable(args.platform) and host_session(args.platform, args.session):
-        return heartbeat_host_refusal(args, repo, {
-            "source": "none", "dispatcher": None,
-            "refusal": host_entry_unsupported(args.platform, "Host")})
-    # Issue #132: at most one live Host per canonical root. Every start path -
-    # a Delegator's Host start or resume, and a Host dispatch that names a
-    # Host - reaches this one guard before anything exists.
-    if host_session(args.platform, args.session):
-        hosts = verified_hosts(args, repo)
-        if hosts:
-            return host_exists_refusal(args, repo, hosts)
-    # Bridge-file and ZCode-runtime refusals already returned from pre_spawn_refusal.
+    # The host-entry (#122), host-exists (#132), bridge-file, and ZCode-runtime
+    # refusals already returned from pre_spawn_refusal.
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args))
     # Issue #162: every platform's worker start, not only ZCode and Host-named
