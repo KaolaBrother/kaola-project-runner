@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2 — 2026-09-25 (kimi-cli dual root, Delegator owner-preserving refresh, api runtime table)
 
 - **`install-local.sh` refreshes an owned `kaola-delegator` leftover under a Host root that must not install it (Issue #160).**
   A `--runtime zcode` (or any non-Codex/generic Host runtime) install never introduces
@@ -39,6 +39,14 @@
   install and the referrers ledger covers both; `test-issue-123-shared-refs.py` T-a1/T-a2
   assert the dual-root refer semantics and T-b1 asserts the kimi-specific root is a #105
   scan root.
+
+- **`docs/api.md` install-local runtime table reflects the kimi-cli dual root (Issue #161).**
+  The `--runtime` destination list now maps `kimi-cli` to both `$HOME/.agents/skills` (shared
+  with `dsh`) and `${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills`, each with its own receipt set,
+  and the reference-counting note states that a pre-ledger receipt in the Kimi-specific root
+  counts as referenced by `kimi-cli` alone, so a kimi-cli `--uninstall` withdraws its
+  reference from both roots (the shared root keeps its Skills for `dsh`). Documentation only;
+  installer behavior is the #159 change above.
 
 ## 0.6.1 — 2026-09-24 (codex pin refresh, Skill prompt trim, dsh refusal wording)
 
