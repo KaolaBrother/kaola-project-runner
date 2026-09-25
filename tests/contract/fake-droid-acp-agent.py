@@ -95,11 +95,20 @@ def session_update(session_id: str, update: dict[str, Any]) -> None:
     notify("session/update", {"sessionId": session_id, "update": update})
 
 
-def option_current(options: list[dict[str, Any]], option_id: str, value: Any) -> list[dict[str, Any]]:
-    return [
-        {**option, "currentValue": value} if option.get("id") == option_id else option
-        for option in options
-    ]
+def option_current(options: list[dict[str, Any]], current: dict[str, str]) -> list[dict[str, Any]]:
+    """The full option list as the live 0.225.1 agent echoes it: every option
+    carries the session's *current* value, not just the one just changed.
+
+    Issue #183: patching only the changed option against the frozen
+    ``CONFIG_OPTIONS`` constant re-emitted every other option's stale
+    initial value, so a later ``autonomy_level`` set reverted the echoed
+    ``model`` to ``gpt-5.6-sol``. The live agent keeps the previously set
+    model (probe-2: one ``model=auto`` set, then ``autonomy_level`` sets
+    whose echoes all still read ``auto``), so the mock must merge from the
+    session's live state instead.
+    """
+    return [{**option, "currentValue": current.get(str(option.get("id")), option.get("currentValue"))}
+            for option in options]
 
 
 class FakeDroidAgent:
@@ -220,11 +229,15 @@ class FakeDroidAgent:
             )
             return
         self.current[option_id] = value
-        # Probe P2: an accepted change echoes a config_option_update.
+        # Probe P2: an accepted change echoes a config_option_update. The echo
+        # carries the whole list at its *current* values (Issue #183), so the
+        # echo is the session's authoritative model read-back.
+        echo = option_current(CONFIG_OPTIONS, self.current)
+        log_event({"event": "config_option_update", "sessionId": params.get("sessionId"),
+                   "configId": option_id, "value": value, "configOptions": echo})
         session_update(
             params.get("sessionId", ""),
-            {"sessionUpdate": "config_option_update",
-             "configOptions": option_current(CONFIG_OPTIONS, option_id, value)},
+            {"sessionUpdate": "config_option_update", "configOptions": echo},
         )
         respond(request_id, {})
 
@@ -239,6 +252,16 @@ class FakeDroidAgent:
         session_update(
             session_id,
             {"sessionUpdate": "current_mode_update", "currentModeId": self.current["autonomy_level"]},
+        )
+        # Probe-2: a turn re-attests the session's current options, so the
+        # model a set selected is still observable after prompts. Issue #183
+        # locks persistence through these post-prompt echoes.
+        echo = option_current(CONFIG_OPTIONS, self.current)
+        log_event({"event": "config_option_update", "sessionId": session_id,
+                   "configId": None, "value": None, "configOptions": echo})
+        session_update(
+            session_id,
+            {"sessionUpdate": "config_option_update", "configOptions": echo},
         )
         session_update(
             session_id,

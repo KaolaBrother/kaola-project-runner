@@ -129,6 +129,23 @@ class DroidAcpSessionFixture(unittest.TestCase):
             events.append((str(event.get("configId")), str(event.get("value"))))
         return events
 
+    def echoed_model_values(self) -> list[str]:
+        """Every model ``currentValue`` the agent itself echoed.
+
+        Issue #183: ACP 0.225.1 answers a set with an empty ``{}`` and never
+        refreshes the ``session/new`` ``models`` snapshot, so the async
+        ``config_option_update`` echo is the only read-back that shows what
+        the session's model actually is.
+        """
+        values = []
+        for event in self.read_fake_log():
+            if event.get("event") != "config_option_update":
+                continue
+            for option in event.get("configOptions") or []:
+                if option.get("id") == "model":
+                    values.append(option.get("currentValue"))
+        return values
+
 
 class DroidAcpStartContractTests(DroidAcpSessionFixture):
     def test_default_start_applies_auto_model_and_autonomy_level(self) -> None:
@@ -159,14 +176,48 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.assertEqual(selection.get("tier"), "default")
         self.assertEqual(selection.get("resolved_model"), "auto")
         self.assertFalse(selection.get("resolved_effort"))
-        # Issue #183: the selection is observable through the async
-        # config_option_update echo (the only read-back ACP 0.225.1 gives for
-        # a set; the set result is an empty {} and the session/new models
-        # snapshot is never refreshed).
+        # Issue #183 (worker path): the session's model, read back from the
+        # agent's OWN echo (the only read-back ACP 0.225.1 gives for a set;
+        # the set result is an empty {} and the session/new models snapshot
+        # is never refreshed), is the catalog Auto Model id "auto" - every
+        # echo, including the one that follows the autonomy_level set.
         self.assertIn(("model", "auto"), self.config_events())
+        self.assertEqual(self.echoed_model_values(), ["auto", "auto"])
+        self.assertEqual((receipt.get("effective_selection") or {}).get("effective_model"), "auto")
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("support"), "none")
         self.assertFalse(fast.get("applied"))
+
+    def test_host_named_start_also_applies_auto_model(self) -> None:
+        """Issue #183: a droid seat named as a Host takes the same preset path.
+
+        The only session-name condition in the apply loop is the ZCode-only
+        Host model pin, which changes nothing for droid, so a Host-class name
+        must select the catalog Auto Model exactly like a worker name does.
+        """
+        self.session = "droid-KPR-orchestrator-x"
+        receipt = self.start()
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertIn(("model", "auto"), self.config_events())
+        self.assertEqual(self.echoed_model_values(), ["auto", "auto"])
+        self.assertEqual((receipt.get("effective_selection") or {}).get("effective_model"), "auto")
+
+    def test_auto_model_persists_across_prompts(self) -> None:
+        """Issue #183: the Auto Model selection stays selected across turns.
+
+        Probe-2 live evidence: one ``set_config_option model=auto`` followed by
+        three prompts produced an ``auto`` model echo every time with zero
+        reverts. ACP 0.225.1 cannot prove which model *served* a turn, so the
+        observable claim under test is that the selection never reverts.
+        """
+        receipt = self.start()
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        for turn in range(3):
+            send = self.cli("send", "--text", f"turn {turn}")
+            self.assertEqual(send.get("outcome"), "turn_completed")
+            self.assertEqual(send.get("stop_reason"), "end_turn")
+        # Two echoes at start (model set, then autonomy_level set) + one per turn.
+        self.assertEqual(self.echoed_model_values(), ["auto"] * 5)
 
     def test_start_receipt_carries_droid_transport_facts(self) -> None:
         receipt = self.start()

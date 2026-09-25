@@ -22,15 +22,26 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   It also records the protocol limitation: ACP 0.225.1 shows which model is
   *selected* but carries no per-turn attribution, so it cannot prove which
   model *served* a turn; the probe measured the selection holding across
-  three prompts with no revert. No production code changed. The existing
-  droid default-start contract test additionally asserts that the applied
-  `model=auto` is observable in the `config_option_update` echo - the only
-  read-back ACP 0.225.1 gives for a set, since the set result is an empty
-  `{}` and the `session/new` `models` snapshot is never refreshed.
+  three prompts with no revert. The target is the catalog's Auto Model entry
+  (`modelId` `auto`, display name "Auto Model"); pinning any specific model
+  (`gpt-5.6-sol`, `claude-*`, or otherwise) and the CLI default are both
+  rejected as fallbacks. No production code changed. The droid contract suite
+  now reads the selection back from the agent's own
+  `config_option_update` echo - the only read-back ACP 0.225.1 gives for a
+  set, since the set result is an empty `{}` and the `session/new` `models`
+  snapshot is never refreshed - and asserts the echoed `model` `currentValue`
+  is exactly `auto` on the worker path, on a droid seat named as a Host, and
+  after three prompts (the persistence probe-2 measured live: one set, three
+  prompts, zero reverts). Fixing those assertions exposed a mock-fidelity
+  bug: `tests/contract/fake-droid-acp-agent.py`'s `option_current` patched
+  only the changed option against the frozen `CONFIG_OPTIONS` constant, so a
+  later `autonomy_level` set re-emitted the stale `gpt-5.6-sol` and masked
+  the model. The mock now merges the session's live state, matching live
+  0.225.1, where a later unrelated set keeps the previously selected model.
   **Seats: restart not required.** The operator test
   `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
   is empty for this change: it touches only `docs/api.md`, `CHANGELOG.md`,
-  and the droid contract test. Contract coverage:
+  and the droid contract suite. Contract coverage:
   `tests/contract/test-droid-acp-contract.py`.
 
 - **The `reported_drift` vocabulary is one code constant, `install-root-mismatch` and `quota-drift` are gone, and `kaola-quota.py` is restart-required (Issue #179).**
