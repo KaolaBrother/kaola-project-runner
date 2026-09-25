@@ -8,7 +8,7 @@ description: "Use when Grok Bot should delegate a project run through Kaola-Dele
 Kaola-Delegator is delivered from the Git repository `KaolaBrother/kaola-project-runner`. This Skill holds no policy, transport,
 path, or credential: everything is loaded from a verified checkout on the execution target you
 bind.
-Accepted revision: none yet. This is the unpinned content-stage render; do not save it to any account. The pin commit that follows names the content commit.
+Accepted revision: `bba3733cf09a0b58b3b5c6ee90d089515a3eb645` (release v0.6.2).
 
 1. **Bind the execution target first**: Local Computer when the project, CLI, and tmux sessions
    live on that machine, otherwise the cloud Agent Computer. Nothing on one target is reachable
