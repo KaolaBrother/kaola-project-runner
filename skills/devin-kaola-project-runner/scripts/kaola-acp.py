@@ -387,6 +387,28 @@ def bridge_facts(args: argparse.Namespace, with_version: bool = False) -> dict[s
     return facts
 
 
+def bridge_runtime_error(args: argparse.Namespace) -> dict[str, str] | None:
+    """Why the bridge file or the ZCode runtime is not usable, or None.
+
+    The one presence decision for preflight and for the pre-spawn refusals
+    ``start`` and ``drain-restart`` share. It reads ``agent_command_facts``
+    already produced by ``resolve_agent_command`` and ``zcode_runtime_error``.
+    It does not spawn, write, or search PATH. A command with no Skill-relative
+    token is not a missing bridge.
+    """
+    facts = getattr(args, "agent_command_facts", None) or []
+    if any(not fact["present"] for fact in facts):
+        return {
+            "code": "acp-bridge-missing",
+            "message": "the Skill-relative ACP command did not resolve to a file",
+        }
+    if args.platform == "zcode":
+        missing = zcode_runtime_error()
+        if missing:
+            return {"code": "acp-runtime-missing", "message": missing}
+    return None
+
+
 def binary_version(path: str, env: dict[str, str] | None = None) -> str | None:
     """First line of ``<path> --version``, or ``None`` when it cannot be read."""
     try:
@@ -2097,15 +2119,10 @@ def fast_report(args: argparse.Namespace, policy: dict[str, Any],
 def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args, with_version=True))
-    if any(not fact["present"] for fact in getattr(args, "agent_command_facts", [])):
-        receipt["error"] = {"code": "acp-bridge-missing",
-                            "message": "the Skill-relative ACP command did not resolve to a file"}
+    error = bridge_runtime_error(args)
+    if error is not None:
+        receipt["error"] = error
         return receipt
-    if args.platform == "zcode":
-        missing = zcode_runtime_error()
-        if missing:
-            receipt["error"] = {"code": "acp-runtime-missing", "message": missing}
-            return receipt
     probe_argv = [
         sys.executable, str(HOLDER), "--probe", "--repo", repo,
         "--platform", args.platform, "--command", args.agent_command,
@@ -3136,21 +3153,17 @@ def pre_spawn_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any] | N
         hosts = verified_hosts(args, repo)
         if hosts:
             return host_exists_refusal(args, repo, hosts)
-    if any(not fact["present"] for fact in getattr(args, "agent_command_facts", []) or []):
+    error = bridge_runtime_error(args)
+    if error is not None:
         receipt = base_receipt(args, repo)
-        receipt["error"] = {"code": "acp-bridge-missing",
-                            "message": "the Skill-relative ACP command did not resolve to a file"}
+        # Same fact set and shape as preflight, including ``--version`` only
+        # when that runtime binary is already an absolute executable.
+        # ``bridge_facts`` does not spawn the bridge or the holder.
+        receipt.update(bridge_facts(args, with_version=True))
+        receipt["error"] = error
         receipt["mutation_status"] = "not_started"
         receipt["mutation_performed"] = False
         return receipt
-    if args.platform == "zcode":
-        missing = zcode_runtime_error()
-        if missing:
-            receipt = base_receipt(args, repo)
-            receipt["error"] = {"code": "acp-runtime-missing", "message": missing}
-            receipt["mutation_status"] = "not_started"
-            receipt["mutation_performed"] = False
-            return receipt
     hostish = args.platform == "zcode" or (
         host_capable(args.platform) and host_session(args.platform, args.session))
     alignment = worker_skill_alignment(repo, args.platform)
@@ -3190,21 +3203,9 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         hosts = verified_hosts(args, repo)
         if hosts:
             return host_exists_refusal(args, repo, hosts)
+    # Bridge-file and ZCode-runtime refusals already returned from pre_spawn_refusal.
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args))
-    if any(not fact["present"] for fact in getattr(args, "agent_command_facts", [])):
-        receipt["error"] = {"code": "acp-bridge-missing",
-                            "message": "the Skill-relative ACP command did not resolve to a file"}
-        receipt["mutation_status"] = "not_started"
-        receipt["mutation_performed"] = False
-        return receipt
-    if args.platform == "zcode":
-        missing = zcode_runtime_error()
-        if missing:
-            receipt["error"] = {"code": "acp-runtime-missing", "message": missing}
-            receipt["mutation_status"] = "not_started"
-            receipt["mutation_performed"] = False
-            return receipt
     # Issue #162: every platform's worker start, not only ZCode and Host-named
     # sessions. A direct checkout invocation still has no baseline. A
     # ~/.local/bin start does: the link's target is the accepted checkout.

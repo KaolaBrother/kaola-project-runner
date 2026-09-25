@@ -31,6 +31,15 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   and eager sibling import) and the stop request (`require_idle`). Operator
   test: `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`.
 
+- **Pre-spawn `acp-bridge-missing` and `acp-runtime-missing` refusals carry preflight's bridge facts (Issue #164).**
+  `preflight`, `start`, and `drain-restart` share one bridge-file and ZCode-runtime
+  presence decision. A pre-spawn refusal still leaves `mutation_status` `not_started`
+  and `mutation_performed` false, and a drain-restart refusal still carries `action`
+  and `start_selection`. The receipt's `bridge` / `runtime_binary` facts match
+  preflight, including a runtime `--version` only when that binary is already an
+  absolute executable. This does not change the holder, the ZCode bridge, or the
+  ACP protocol.
+
 ## 0.6.2 — 2026-09-25 (kimi-cli dual root, Delegator owner-preserving refresh, api runtime table)
 
 - **`install-local.sh` refreshes an owned `kaola-delegator` leftover under a Host root that must not install it (Issue #160).**
