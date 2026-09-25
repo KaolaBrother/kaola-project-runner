@@ -611,10 +611,13 @@ class UpgradeSafetyTests(unittest.TestCase):
             "claude-code", session, started["acp_session_id"],
             "--model", "opus", "--effort", "high")[1]
         self.assertEqual(restarted.get("state"), "ready", restarted)
-        # Issue #181: drain-restart no longer re-derives a platform default into
-        # the receipt's start_selection. The effective mode is decided once, at
-        # the start that applies it — so a legacy seat's restart shows the
-        # default in config_application and in the new record, not in the echo.
+        # Issue #181: drain-restart no longer re-derives a platform default; the
+        # effective mode is decided once, at the start that applies it. The
+        # restart reports that value in the receipt's start_selection too, so a
+        # pre-#162 seat is never under-reported as mode: null.
+        self.assertEqual(
+            (restarted.get("start_selection") or {}).get("mode"),
+            "bypassPermissions", restarted)
         applied = (restarted.get("config_application") or {}).get("mode") or {}
         self.assertIs(applied.get("applied"), True, restarted)
         self.assertEqual(applied.get("config_id"), "mode", restarted)
@@ -680,24 +683,28 @@ class UpgradeSafetyTests(unittest.TestCase):
         restarted = self._restart(
             "droid", session, started["acp_session_id"], "--model", "auto")[1]
         self.assertEqual(restarted.get("state"), "ready", restarted)
-        # Issue #181: as above, the effective default mode is asserted where the
-        # restart applies it — droid translates it to its autonomy_level option.
+        # Issue #181: as above, the effective default mode is reported in the
+        # restart's selection and applied by droid as its autonomy_level option.
+        self.assertEqual(
+            (restarted.get("start_selection") or {}).get("mode"), "auto-high", restarted)
         applied = (restarted.get("config_application") or {}).get("mode") or {}
         self.assertIs(applied.get("applied"), True, restarted)
         self.assertEqual(applied.get("config_id"), "autonomy_level", restarted)
         self.assertEqual(applied.get("value"), "auto-high", restarted)
 
-    def _raw_start(self, platform: str, session: str, *args: str) -> dict:
-        """A start whose argv this test composes itself, so it can spell flags
+    def _raw(self, platform: str, command: str, session: str, *args: str,
+             env: dict[str, str] | None = None):
+        """A command whose argv this test composes itself, so it can spell flags
         the way argparse accepts them rather than the way run_cli does."""
-        self.started.append((platform, session))
+        if command in ("start", "drain-restart"):
+            self.started.append((platform, session))
         result = subprocess.run(
-            [PYTHON, str(CLI), platform, "start", "--repo", str(self.repo),
+            [PYTHON, str(CLI), platform, command, "--repo", str(self.repo),
              "--session", session, *args],
-            capture_output=True, text=True, env=self.env(), timeout=90,
+            capture_output=True, text=True, env=env or self.env(), timeout=90,
         )
-        self.assertEqual(result.returncode, 0, result.stderr[-800:])
-        return json.loads((result.stdout or "").strip().splitlines()[-1])
+        lines = (result.stdout or "").strip().splitlines()
+        return result, (json.loads(lines[-1]) if lines else {})
 
     def test_start_records_the_effective_mode_not_the_raw_flag(self) -> None:
         """Issue #181 acceptance 1: one default-fill site, at the start."""
@@ -710,32 +717,47 @@ class UpgradeSafetyTests(unittest.TestCase):
             self.assertEqual(
                 (record.get("start_selection") or {}).get("mode"), expected, record)
 
-    def test_argparse_none_defaults_see_every_explicit_spelling(self) -> None:
-        """Issue #181 acceptance 3: prefix abbreviations and --flag=value count
-        as explicit, so the record never overrides them on a restart.
+    def test_drain_restart_keeps_an_abbreviated_command_and_explicit_mode(self) -> None:
+        """Issue #181 acceptance 3, on the one command where explicitness is read.
 
-        argparse resolves these against the whole option table; the deleted
-        ``sys.argv`` scan only ever matched the literal spellings below.
+        ``--com=AGENT`` is an abbreviation-with-equals spelling of ``--command``.
+        The deleted ``sys.argv`` scan only matched the literal ``--command``, so
+        it took both the command and the explicit mode for absent and
+        re-resolved them: the seat then came up on the manifest command, not the
+        caller's agent. argparse's ``None``-ness sees both, so the restart keeps
+        the caller's agent and applies the explicit mode over the recorded one.
         """
         session = "claude-code-KPR-i181-spelling"
-        # --com is an unambiguous abbreviation of --command; --fa of --fast.
-        # (--mod is ambiguous between --model and --mode, so it is not a usable
-        # abbreviation for this parser.)
-        started = self._raw_start(
-            "claude-code", session, "--com=" + self.agent, "--fa=off", "--tier=default")
+        _result, started = self._raw("claude-code", "start", session, "--command", self.agent)
         self.assertEqual(started.get("state"), "ready", started)
-        self.assertEqual((started.get("fast") or {}).get("requested"), "off", started)
+        result, restarted = self._raw(
+            "claude-code", "drain-restart", session,
+            "--resume", started["acp_session_id"],
+            "--com=" + self.agent, "--mode", "acceptEdits", "--model=opus",
+            env=self.env(MOCK_ACP_RESUME_ANY="1"))
+        self.assertEqual(result.returncode, 0, restarted)
+        self.assertEqual(restarted.get("state"), "ready", restarted)
+        applied = (restarted.get("config_application") or {}).get("mode") or {}
+        self.assertEqual(applied.get("value"), "acceptEdits", restarted)
 
-    def test_explicit_mode_abbreviation_beats_the_recorded_mode(self) -> None:
-        """An abbreviation-typed mode is explicit, so a restart keeps it rather
-        than the mode the seat recorded (Issue #181 acceptance 3)."""
-        session = "claude-code-KPR-i181-modearg"
-        started = self._raw_start(
-            "claude-code", session, "--com=" + self.agent, "--mode", "plan")
+    def test_drain_restart_revives_a_cleanly_stopped_seat(self) -> None:
+        """A stopped seat is restartable, not a ``drain-not-idle`` refusal.
+
+        The ``no-session`` guard lets a record whose holder is dead and whose
+        state is ``stopped`` through on purpose: there is nothing to drain, so
+        the restart is just the ``start`` below. Reading idle state from that
+        dead holder answers ``holder lost`` and would refuse the seat the guard
+        deliberately admitted.
+        """
+        session = "claude-code-KPR-i181-stopped"
+        started = self.run_cli("claude-code", "start", session=session)[1]
         self.assertEqual(started.get("state"), "ready", started)
-        _path, record = self._record("claude-code", session)
-        self.assertEqual(
-            (record.get("start_selection") or {}).get("mode"), "plan", record)
+        self.run_cli("claude-code", "stop", "--force", session=session)
+        self.assertFalse(_pid_alive(started["holder_pid"]))
+        restarted = self.run_cli(
+            "claude-code", "drain-restart", "--resume", started["acp_session_id"],
+            session=session, check=False, env=self.env(MOCK_ACP_RESUME_ANY="1"))[1]
+        self.assertEqual(restarted.get("state"), "ready", restarted)
 
 
 def _pid_alive(pid: int) -> bool:

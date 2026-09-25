@@ -83,20 +83,21 @@ def acp_skip_mode(source: str) -> dict[str, str]:
     raise AssertionError("ACP_SKIP_MODE assignment not found")
 
 
-def acp_start_skip_case(runner: str) -> str:
-    """The tmux entry's platform-mode table, if this build still has one.
+def forwarded_default_modes(runner: str) -> list[str]:
+    """Platforms the tmux entry forwards a default ``--mode`` for.
 
-    Issue #181 removed it: the per-platform default lives once, in
-    ``kaola-acp.py``'s ``ACP_SKIP_MODE``. An empty string therefore means
-    "nothing is forwarded by the shell", which is the no-skip outcome these
-    tests assert for opencode.
+    Issue #181 removed the per-platform table from this layer: the default
+    lives once, in ``kaola-acp.py``'s ``ACP_SKIP_MODE``, and the shell forwards
+    only an explicit ``--permission-mode``. So this is empty for every
+    platform, and opencode is never singled out for a skip mode the way the old
+    ``case`` table did.
     """
-    match = re.search(
-        r'case "\$platform" in(.*?)esac',
-        runner,
-        flags=re.DOTALL,
-    )
-    return match.group(1) if match is not None else ""
+    forwarded = []
+    for platform, mode in re.findall(
+        r'^\s*([\w-]+)\)\s*acp_args\+=\(--mode ([\w-]+)\)', runner, flags=re.MULTILINE
+    ):
+        forwarded.append((platform, mode))
+    return forwarded
 
 
 def skill_quirks_pointer(text: str) -> str | None:
@@ -162,12 +163,16 @@ class Issue24KeepAcpWithoutSkip(unittest.TestCase):
         )
 
     def test_tmux_acp_start_does_not_forward_skip_mode_for_opencode(self) -> None:
-        block = acp_start_skip_case(RUNNER.read_text(encoding="utf-8"))
-        self.assertNotRegex(
-            block,
-            r"\bopencode\)",
-            "default ACP start must not forward a skip --mode for opencode: "
-            f"{block!r}",
+        # Issue #181: the tmux entry forwards no default --mode at all, so
+        # opencode in particular never receives an invented skip mode. The
+        # single remaining default site is asserted not to name opencode by
+        # test_acp_skip_mode_does_not_map_opencode above.
+        forwarded = forwarded_default_modes(RUNNER.read_text(encoding="utf-8"))
+        self.assertEqual(
+            forwarded,
+            [],
+            "the tmux entry must forward no default skip --mode: "
+            f"{forwarded!r}",
         )
 
 

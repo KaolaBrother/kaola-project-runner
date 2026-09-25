@@ -411,12 +411,17 @@ before it stops; a refusal there leaves the seat up (`mutation_performed: false`
 A refusal that still occurs after the exact-stop reports `mutation_performed: true`
 and `drain_stopped`. A seat that is not idle is refused `drain-not-idle`
 immediately and left running - there is no idle polling loop, so retry timing
-belongs to the caller. The restart carries the recorded `start_selection`
+belongs to the caller. That idle read happens only while the holder is alive: a
+seat whose holder is already gone (a cleanly `stop`ped record) has nothing to
+drain, so it goes straight to the start instead of being refused for idleness.
+The restart carries the recorded `start_selection`
 (model, effort, tier, fast, mode) unless the command passes those flags.
 The recorded mode is the *effective* mode the previous start applied
 (Issue #181): the platform default is resolved once, at the start that applies
 it, so nothing here re-derives one. An explicit `--mode` wins over the record,
-and there is no other candidate. It refuses
+and there is no other candidate. The receipt echoes the mode the new start
+actually applied, so a seat that recorded none still reports the default rather
+than `null`. It refuses
 `drain-restart-selection-unknown` before stopping when the seat recorded no
 start selection and the command passed none of `--model/--effort/--tier/--fast/--mode`.
 Adoption is a direct read of the new start's own `dispatcher`; no other seat is

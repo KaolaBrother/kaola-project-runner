@@ -19,10 +19,14 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   prefix abbreviations and the `--flag=value` form: every selection flag,
   including `--fast`, defaults to `None`, so explicitness is `None`-ness and
   argparse's own parsing decides. An absent `--fast` still means off.
-  `drain-restart` gives up its 0.2 s idle poll for one idle read followed by
-  the holder's already-atomic `require_idle` stop - a busy seat gets an
-  immediate `drain-not-idle` refusal and retry timing stays with the Agent -
-  and its post-`start` scan over `command_list` is gone, leaving `adoption` as
+  `drain-restart` gives up its 0.2 s idle poll: a live holder gets one idle
+  read followed by its already-atomic `require_idle` stop, a busy seat gets an
+  immediate `drain-not-idle` refusal, and retry timing stays with the Agent. A
+  seat whose holder is already gone has nothing to drain, so it restarts
+  without an idle read and is never refused for idleness. The restart's
+  receipt reports the mode the new start actually applied, so a pre-#162 seat
+  that recorded no mode is no longer shown as `mode: null`. Its post-`start`
+  scan over `command_list` is gone, leaving `adoption` as
   a direct read of the new start's own `dispatcher`. The locator's no-op
   `--intent` values (`status`, `send`, `stop`, `observe`) are removed; only
   `start`/`resume` were ever read.
