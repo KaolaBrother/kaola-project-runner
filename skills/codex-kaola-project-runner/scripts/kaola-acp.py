@@ -3834,14 +3834,7 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
         refused["mutation_status"] = "not_started"
         refused["start_selection"] = selection
         return refused
-    # Issue #181: one idle read, no polling loop. The holder's ``require_idle``
-    # stop below is already atomic — it refuses a busy seat itself — so this
-    # check only makes the busy refusal explicit before anything is signalled.
-    # Retry timing belongs to the Agent, not to a 0.2 s poll against a timeout.
-    # Only a live holder can answer: a record left by a cleanly-stopped seat is
-    # the case the ``no-session`` guard above deliberately lets through, so it
-    # must not be asked for idle state — that would read "holder lost" and
-    # refuse a restart the stop block below is about to skip anyway.
+    # Issue #181: one idle read, no poll; only a live holder can answer it.
     if pid_alive(record.get("holder_pid")):
         state = op_or_holder_lost(args, repo, directory, "state", {}, 10.0)
         if not _seat_idle(state):
@@ -3919,11 +3912,7 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
     started = command_start(args, repo)
     started["action"] = "drain-restart"
     started["previous_holder_instance_id"] = old_id
-    # Issue #181: report the mode the new start actually applied. A pre-#162
-    # seat records no mode and this argv may have passed none, so ``selection``
-    # alone carries None while the start resolved and applied the platform
-    # default — read that effective value back from the start's own config
-    # application instead of under-reporting the restart's selection.
+    # Issue #181: echo the mode the new start actually applied, not a bare None.
     if selection.get("mode") is None:
         applied_mode = ((started.get("config_application") or {}).get("mode") or {})
         if isinstance(applied_mode.get("value"), str):
