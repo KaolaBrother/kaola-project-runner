@@ -159,6 +159,11 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.assertEqual(selection.get("tier"), "default")
         self.assertEqual(selection.get("resolved_model"), "auto")
         self.assertFalse(selection.get("resolved_effort"))
+        # Issue #183: the selection is observable through the async
+        # config_option_update echo (the only read-back ACP 0.225.1 gives for
+        # a set; the set result is an empty {} and the session/new models
+        # snapshot is never refreshed).
+        self.assertIn(("model", "auto"), self.config_events())
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("support"), "none")
         self.assertFalse(fast.get("applied"))

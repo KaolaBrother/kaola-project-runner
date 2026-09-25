@@ -6,6 +6,33 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **`docs/api.md` names the field that carries the current model selection, and the droid model preset is confirmed applied on every start (Issue #183).**
+  Owner-requested check: droid seats must run the first-class `auto`
+  routing, not the CLI default promo `gpt-5.6-sol`. Direct ACP probes
+  (droid 0.225.1) plus the code settle it: KPR applies
+  `session/set_config_option model=auto` at every droid start, on the worker
+  path and on a droid seat named as a Host alike - the only session-name
+  condition in the apply loop is the ZCode-only Host model pin, which changes
+  nothing for droid. The earlier `gpt-5.6-sol` reading came from
+  `record.json` snapshots taken before the preset: `initial_config_options`
+  and `session_meta.models.currentModelId` are both `session/new` snapshots
+  that a set never refreshes. `docs/api.md` now says so and names the
+  current-selection fields, `session_meta.configOptions[model].currentValue`
+  (`status`/`observe`) and `effective_selection.effective_model` (`start`).
+  It also records the protocol limitation: ACP 0.225.1 shows which model is
+  *selected* but carries no per-turn attribution, so it cannot prove which
+  model *served* a turn; the probe measured the selection holding across
+  three prompts with no revert. No production code changed. The existing
+  droid default-start contract test additionally asserts that the applied
+  `model=auto` is observable in the `config_option_update` echo - the only
+  read-back ACP 0.225.1 gives for a set, since the set result is an empty
+  `{}` and the `session/new` `models` snapshot is never refreshed.
+  **Seats: restart not required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+  is empty for this change: it touches only `docs/api.md`, `CHANGELOG.md`,
+  and the droid contract test. Contract coverage:
+  `tests/contract/test-droid-acp-contract.py`.
+
 - **The `reported_drift` vocabulary is one code constant, `install-root-mismatch` and `quota-drift` are gone, and `kaola-quota.py` is restart-required (Issue #179).**
   `REPORTED_DRIFT_VALUES` in `scripts/kaola-acp.py` is the single place the
   emitted set lives; every `reported_drift` append is a member, and the prose
