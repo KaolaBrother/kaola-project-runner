@@ -64,8 +64,8 @@ operator test. `reported_drift` may list `pin-drift`, `cli-drift`
 `install-root-mismatch` (the seat's install tree moved or was re-rooted);
 those do not block. `baseline_exempt` is
 true only for a direct checkout start; a `~/.local/bin` start is not exempt.
-Do not dispatch a `stale: true` seat.
-Pass `--confirm-stale` on that one command only when the operator confirmed it.
+Do not dispatch a `stale: true` seat. An operator-confirmed exception on that
+one `send`/`steer` is the orchestrator's own call; there is no flag.
 There is still no rebind. `drain-restart --continue` or `--resume ID` checks
 start refusals first, waits for idle, exact-stops, and starts again carrying
 the recorded model/effort/tier/fast. Run it from this Host so the new start

@@ -6,6 +6,19 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **A stale seat still transports: the seat-stale send/steer gate and `--confirm-stale` are removed (Issue #178).**
+  `stale`, `stale_reasons`, `restart_files`, and `reported_drift` stay pure
+  `status`/`list` facts. The #162 refusal blocked previously working
+  automation (the holder loads its modules at startup, so an old holder is
+  internally consistent); the do-not-dispatch-a-stale-seat policy stays in
+  the orchestrator template as an operator-confirmed exception with no flag,
+  and `kaola-tmux.sh` drops `--confirm-stale`. The Delegator handoff command
+  shape delivers to a stale Host seat with no flag or remedy text. Contract
+  coverage: `tests/contract/test-issue-162-upgrade-safety.py` and
+  `tests/contract/test-issue-168-drift-enumeration.py`.
+  **Seats: restart not required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  is empty: only per-call CLI files, templates, and docs changed.
 - **A boot-time agent death is reported as the failed start it is, never as an initialize timeout (Issue #174).**
   `test-issue-98-dsh-acp.py::test_a_confined_boot_write_failure_names_its_cause`
   flaked under load: the receipt came back `acp-initialize-timeout` (once the

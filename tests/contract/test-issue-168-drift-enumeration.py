@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Issue #168: the seat-stale refusal names every reported_drift value.
+"""Issue #168: every reported_drift value is enumerated on one stale seat.
 
-#162, #165, and #166 report five non-blocking drift values. The refusal
-detail must name all five, including what the two path values mean.
+The five non-blocking drift values (#162, #165, #166) all surface together
+through ``seat_freshness``'s ``reported_drift``, beside the ``stale``,
+``stale_reasons``, and ``restart_files`` facts (#178 removed the refusal
+that used to name them in its detail).
 """
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,40 +35,40 @@ def load_module(path: Path, name: str):
     return module
 
 
-class SeatStaleDriftEnumerationTests(unittest.TestCase):
-    def test_seat_stale_refusal_names_all_five_drift_values(self) -> None:
+class DriftEnumerationTests(unittest.TestCase):
+    def test_one_stale_seat_reports_all_five_drift_values(self) -> None:
         acp = load_module(CLI, "acp168")
+        # The locator registration pin, isolated from this machine's own.
+        acp.registration_pin = lambda: "a" * 40
         with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp) / "repo"
-            repo.mkdir()
-            subprocess.run(
-                ["git", "init", "-q", str(repo)], check=True, capture_output=True)
-            acp.read_record = lambda directory: {"present": True}
-            acp.seat_freshness = lambda platform, repo, record: {
-                "stale": True,
-                "stale_reasons": ["restart-required"],
-                "restart_files": ["kaola-acp-holder.py"],
-                "reported_drift": [],
+            # One recorded tree that is not the expected install root: changed
+            # cli/quota/holder digests and one path that no longer resolves. A
+            # SKILL.md beside scripts/ keeps it an install tree, not a checkout.
+            moved = Path(tmp) / "moved-root" / "scripts"
+            moved.mkdir(parents=True)
+
+            def recorded(name: str) -> dict:
+                return {"path": str(moved / name), "sha256": "0" * 64}
+
+            for name in ("kaola-acp.py", "kaola-quota.py", "kaola-acp-holder.py"):
+                (moved / name).write_bytes(b"changed on disk\n")
+            (moved.parent / "SKILL.md").write_text("skill\n", encoding="utf-8")
+            facts = {
                 "runner_build": "a" * 12,
                 "accepted_revision": "b" * 40,
-                "pin": None,
+                "script_paths": {
+                    "kaola-acp.py": recorded("kaola-acp.py"),
+                    "kaola-quota.py": recorded("kaola-quota.py"),
+                    "kaola-acp-holder.py": recorded("kaola-acp-holder.py"),
+                    "kaola-tmux.sh": recorded("gone/kaola-tmux.sh"),
+                },
             }
-            args = argparse.Namespace(
-                platform="codex",
-                session="codex-KPR-i168-drift",
-                command="send",
-                confirm_stale=False,
-            )
-            receipt = acp.refuse_if_stale(args, str(repo), Path(tmp))
-        self.assertIsNotNone(receipt)
-        assert receipt is not None
-        self.assertEqual(receipt.get("reason"), "seat-stale")
-        detail = receipt.get("detail") or ""
-        for value in DRIFT_VALUES:
-            self.assertIn(value, detail, detail)
-        self.assertIn("a recorded script path that no longer exists", detail)
-        self.assertIn("an install tree that moved or was re-rooted", detail)
-        self.assertIn("are reported and do not block", detail)
+            fresh = acp.seat_freshness("codex", str(Path(tmp) / "repo"), facts)
+        self.assertEqual(sorted(fresh["reported_drift"]), sorted(DRIFT_VALUES))
+        self.assertIs(fresh["stale"], True, fresh)
+        self.assertEqual(fresh["stale_reasons"], ["restart-required"])
+        self.assertEqual(fresh["restart_files"], ["kaola-acp-holder.py"])
+        self.assertEqual(fresh["missing_files"], ["kaola-tmux.sh"])
 
 
 if __name__ == "__main__":

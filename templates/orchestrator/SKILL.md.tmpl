@@ -163,9 +163,10 @@ sink, and write ownership.
 2. **Decide and dispatch.** Resolve worker questions within existing
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
-   first. A seat whose `status` says `stale: true` is not a dispatch target
-   unless that one `send`/`steer` passes `--confirm-stale`; replace it with
-   `drain-restart` at idle (see zcode-host-dispatch.md). There is no rebind.
+   first. A seat whose `status` says `stale: true` is not a dispatch target;
+   an operator-confirmed exception on that one `send`/`steer` is the
+   orchestrator's own call; replace it with `drain-restart` at idle
+   (see zcode-host-dispatch.md). There is no rebind.
    Examine authorized remaining work and real parallel opportunities.
    {{IDLE_BEFORE_STOP}}. State the task, working location, write ownership,
    delivery requirements, and the doc-impact call in its prompt; merely seeing a

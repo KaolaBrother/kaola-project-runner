@@ -78,7 +78,6 @@ model_given=false effort_given=false permission_mode_given=false key_name="" tra
 tier="" tier_given=false fast="off" fast_given=false
 acp_wait=true timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
 expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" cancel_timeout=""
-confirm_stale=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;; --session) session="$2"; shift 2 ;; --resume) resume_id="$2"; shift 2 ;;
@@ -93,7 +92,6 @@ while [[ $# -gt 0 ]]; do
     --wait) acp_wait=true; shift ;; --no-wait) acp_wait=false; shift ;; --timeout) timeout="$2"; shift 2 ;;
     --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
     --expected-holder-instance-id) expected_holder_instance_id="$2"; expected_holder_instance_id_given=true; shift 2 ;;
-    --confirm-stale) confirm_stale=true; shift ;;
     --since) capture_since="$2"; shift 2 ;; --full) capture_full=true; shift ;; --inline) capture_inline=true; shift ;;
     -h|--help) usage; exit 0 ;; *) die "unknown argument: $1" ;;
   esac
@@ -101,9 +99,6 @@ done
 
 if [[ ( -n "$steer_mode" || -n "$cancel_timeout" ) && "$command_name" != steer ]]; then
   die "--steer-mode and --cancel-timeout are steer-only"
-fi
-if [[ "$confirm_stale" == true && "$command_name" != send && "$command_name" != steer ]]; then
-  die "--confirm-stale is only valid for send and steer"
 fi
 PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
 
@@ -183,7 +178,6 @@ acp_args=("$PYTHON_BIN" "$ACP_CLI" "$platform" "$command_name" --repo "$repo")
 [[ -n "$request_id" ]] && acp_args+=(--request-id "$request_id")
 [[ -n "$option" ]] && acp_args+=(--option "$option")
 [[ "$expected_holder_instance_id_given" == true ]] && acp_args+=(--expected-holder-instance-id "$expected_holder_instance_id")
-[[ "$confirm_stale" == true ]] && acp_args+=(--confirm-stale)
 [[ "$capture_tools" == true ]] && acp_args+=(--tools)
 [[ -n "$capture_since" ]] && acp_args+=(--since "$capture_since")
 [[ "$capture_full" == true ]] && acp_args+=(--full)

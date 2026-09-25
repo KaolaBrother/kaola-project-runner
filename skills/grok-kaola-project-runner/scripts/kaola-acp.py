@@ -2991,7 +2991,7 @@ def _expected_install_tree(platform: str) -> Path:
 def seat_freshness(platform: str, repo: str, facts: dict[str, Any],
                    installed: tuple[list[tuple[Path, list[Path]]], list[str]] | None = None
                    ) -> dict[str, Any]:
-    """Report build drift. ``stale`` blocks dispatch only for the restart-required set.
+    """Report build drift. ``stale`` is true only for the restart-required set.
 
     ``baseline_exempt`` is the start-side fact: a direct checkout invocation
     reports drift and does not block. A ``~/.local/bin`` start is not exempt,
@@ -3727,50 +3727,6 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     return receipt
 
 
-def refuse_if_stale(args: argparse.Namespace, repo: str, directory: Path) -> dict[str, Any] | None:
-    """Issue #162: do not dispatch into a seat whose running build has drifted.
-
-    ``--confirm-stale`` is the explicit confirmation. Stop, status, and
-    drain-restart are not dispatches and do not call this.
-    """
-    record = read_record(directory)
-    if not record:
-        return None
-    fresh = seat_freshness(args.platform, repo, record)
-    if not fresh["stale"]:
-        return None
-    if getattr(args, "confirm_stale", False):
-        return None
-    receipt = base_receipt(args, repo)
-    receipt.update({
-        "result": "refused",
-        "reason": "seat-stale",
-        "action": args.command,
-        "detail": (
-            f"this seat is stale ({', '.join(fresh['stale_reasons'])}"
-            f"{(': ' + ', '.join(fresh['restart_files'])) if fresh.get('restart_files') else ''}"
-            "): the holder, ZCode bridge, adapter, or platform manifest it loaded "
-            "differs from the bytes at that path now. Pin drift (pin-drift), "
-            "CLI-file drift (cli-drift), quota-catalog drift (quota-drift), "
-            "a recorded script path that no longer exists (recorded-path-missing), "
-            "and an install tree that moved or was re-rooted (install-root-mismatch) "
-            "are reported and do not block. Nothing was dispatched. Drain-restart "
-            "it once it is idle, or pass --confirm-stale to dispatch this once. "
-            "A live holder is never hot-replaced."
-        ),
-        "stale": True,
-        "stale_reasons": fresh["stale_reasons"],
-        "restart_files": fresh.get("restart_files") or [],
-        "reported_drift": fresh.get("reported_drift") or [],
-        "runner_build": fresh["runner_build"],
-        "accepted_revision": fresh["accepted_revision"],
-        "pin": fresh["pin"],
-        "mutation_performed": False,
-        "mutation_status": "not_started",
-    })
-    return receipt
-
-
 def _seat_idle(state: dict[str, Any]) -> bool:
     if state.get("turn_active"):
         return False
@@ -4085,8 +4041,6 @@ def main() -> int:
     parser.add_argument("--request-id")
     parser.add_argument("--option")
     parser.add_argument("--expected-holder-instance-id")
-    # Issue #162: the explicit confirmation that dispatches to a stale seat.
-    parser.add_argument("--confirm-stale", action="store_true")
     parser.add_argument("--key")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--lines", type=int)
@@ -4165,10 +4119,6 @@ def main() -> int:
             text = sys.stdin.read()
         if not text:
             die("send requires --text or --stdin")
-        refused = refuse_if_stale(args, repo, directory)
-        if refused:
-            print(json.dumps(refused, ensure_ascii=False, sort_keys=True))
-            return 1
         receipt = op_or_holder_lost(
             args, repo, directory, "prompt",
             {"text": text, "wait": args.wait, "timeout": timeout,
@@ -4181,10 +4131,6 @@ def main() -> int:
             text = sys.stdin.read()
         if not text:
             die("steer requires --text or --stdin")
-        refused = refuse_if_stale(args, repo, directory)
-        if refused:
-            print(json.dumps(refused, ensure_ascii=False, sort_keys=True))
-            return 1
         # Issue #65: the manifest carries the platform's investigated ACP
         # capability and its entry. `unsupported` and `unknown` are different
         # answers and must not collapse: only a platform investigated to have no

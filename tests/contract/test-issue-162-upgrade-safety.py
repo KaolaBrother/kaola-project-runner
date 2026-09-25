@@ -19,6 +19,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -132,44 +133,88 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertEqual(match[0]["runner_build"], status["runner_build"])
         self.assertIs(match[0]["stale"], False)
 
-    def _installed_cli(self) -> Path:
-        tree = self.root / "installed" / "codex-kaola-project-runner"
-        shutil.copytree(PROJECT / "skills" / "codex-kaola-project-runner", tree)
+    def _installed_cli(self, platform: str = "codex") -> Path:
+        tree = self.root / "installed" / f"{platform}-kaola-project-runner"
+        shutil.copytree(PROJECT / "skills" / f"{platform}-kaola-project-runner", tree)
         return tree / "scripts" / "kaola-acp.py"
 
-    def test_stale_blocks_only_the_restart_required_set(self) -> None:
+    def test_stale_marks_only_the_restart_required_set(self) -> None:
         session = "codex-KPR-i162-stale"
         cli = self._installed_cli()
         self.run_cli("codex", "start", session=session, argv0=cli)
         holder = cli.parent / "kaola-acp-holder.py"
         cli_file = cli.parent / "kaola-acp.py"
         original_holder = holder.read_bytes()
-        # A CLI-file change is reported and does not refuse send or stop.
+        # A CLI-file change is reported and does not mark the seat stale.
         cli_file.write_bytes(cli_file.read_bytes() + b"\n# cli only\n")
         _result, status = self.run_cli("codex", "status", session=session, argv0=cli)
         self.assertIs(status["stale"], False, status)
         self.assertIn("cli-drift", status.get("reported_drift"), status)
-        _result, sent = self.run_cli(
-            "codex", "send", "--no-wait", "--text", "cli drift is not a block",
-            session=session, argv0=cli)
-        self.assertNotEqual(sent.get("reason"), "seat-stale", sent)
-        # The holder file changing is the restart-required block.
+        # The holder file changing is the restart-required stale mark.
         holder.write_bytes(original_holder + b"\n# holder changed\n")
         _result, status = self.run_cli("codex", "status", session=session, argv0=cli)
         self.assertIs(status["stale"], True, status)
         self.assertIn("restart-required", status["stale_reasons"])
         self.assertIn("kaola-acp-holder.py", status.get("restart_files") or [])
-        result, refused = self.run_cli(
-            "codex", "send", "--text", "do not dispatch", session=session,
-            check=False, argv0=cli)
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(refused.get("reason"), "seat-stale")
-        self.assertIs(refused.get("mutation_performed"), False)
         _result, stopped = self.run_cli(
             "codex", "stop", "--force", session=session, argv0=cli)
-        self.assertNotEqual(stopped.get("reason"), "seat-stale", stopped)
         self.assertTrue(stopped.get("stopped") or stopped.get("state") == "stopped"
                         or stopped.get("residual_pids") == [], stopped)
+
+    def test_a_stale_flagged_seat_still_transports_send_and_steer(self) -> None:
+        """Issue #178: the send/steer staleness gate is removed."""
+        session = "codex-KPR-i178-stale"
+        cli = self._installed_cli()
+        slow = (f"{PYTHON} {MOCK} --scenario slow "
+                "--steering injected --turn-ms 9000")
+        self.run_cli("codex", "start", session=session, argv0=cli, agent=slow)
+        holder = cli.parent / "kaola-acp-holder.py"
+        holder.write_bytes(holder.read_bytes() + b"\n# holder changed\n")
+        _result, status = self.run_cli("codex", "status", session=session, argv0=cli)
+        self.assertIs(status["stale"], True, status)
+        _result, sent = self.run_cli(
+            "codex", "send", "--no-wait", "--text", "run the long loop",
+            session=session, argv0=cli)
+        self.assertEqual(sent.get("outcome"), "in_progress", sent)
+        deadline = time.monotonic() + 10
+        state: dict = {}
+        while time.monotonic() < deadline:
+            _result, state = self.run_cli("codex", "observe", session=session, argv0=cli)
+            if state.get("turn_active"):
+                break
+            time.sleep(0.2)
+        self.assertTrue(state.get("turn_active"), "the mock turn never became active")
+        _result, steered = self.run_cli(
+            "codex", "steer", "--text", "STOP the loop and reply STEERED-OK",
+            session=session, argv0=cli)
+        self.assertEqual(steered.get("steer_outcome"), "injected", steered)
+        self.assertIs(steered.get("steer_consumed"), True, steered)
+        _result, still = self.run_cli("codex", "status", session=session, argv0=cli)
+        self.assertIs(still["stale"], True, still)
+        self.assertIn("restart-required", still["stale_reasons"])
+        self.assertIn("kaola-acp-holder.py", still.get("restart_files") or [])
+        self.assertIn("reported_drift", still)
+
+    def test_delegator_handoff_shape_delivers_to_a_stale_host_seat(self) -> None:
+        """Issue #178: the Delegator handoff needs no flag or remedy text."""
+        session = "zcode-KPR-i178-host"
+        cli = self._installed_cli("zcode")
+        live = self.env(KAOLA_ZCODE_ENTRY=str(cli), KAOLA_ZCODE_NODE="/bin/sh")
+        self.run_cli("zcode", "start", session=session, argv0=cli, env=live)
+        holder = cli.parent / "kaola-acp-holder.py"
+        holder.write_bytes(holder.read_bytes() + b"\n# holder changed\n")
+        _result, status = self.run_cli("zcode", "status", session=session, argv0=cli, env=live)
+        self.assertIs(status["stale"], True, status)
+        # The exact handoff.md.tmpl command shape: "$ZCODE" send with
+        # --no-wait --text.
+        result = subprocess.run(
+            [str(cli.parent / "runtime-tmux.sh"), "send", "--repo", str(self.repo),
+             "--session", session, "--no-wait", "--text", "<handoff>"],
+            capture_output=True, text=True,
+            env=self.env(PYTHON_BIN=PYTHON), timeout=60)
+        receipt = json.loads((result.stdout or "").strip().splitlines()[-1])
+        self.assertEqual(result.returncode, 0, receipt)
+        self.assertEqual(receipt.get("outcome"), "in_progress", receipt)
 
     def test_quota_only_drift_is_reported_and_not_stale_in_status_and_list(self) -> None:
         session = "codex-KPR-i166-quota"
@@ -515,7 +560,6 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertIn("A live holder is never hot-replaced", host_doc)
         self.assertIn("drain-restart", host_doc)
         skill = (PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl").read_text(encoding="utf-8")
-        self.assertIn("--confirm-stale", skill)
         self.assertIn("no rebind", skill)
 
     def _record(self, platform: str, session: str) -> tuple[Path, dict]:

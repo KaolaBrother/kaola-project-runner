@@ -397,10 +397,9 @@ executes), `accepted_revision`, `stale`, `stale_reasons`, `restart_files`, and
 `kaola-acp-holder.py`, `kaola-zcode-acp.py`, `scripts/adapters/`, and the platform
 manifest (`platforms/*.yaml` or the installed `scripts/platform.yaml`), when the bytes
 now at the path the seat recorded differ from the digest it captured at startup.
-`send` and `steer` refuse `seat-stale` unless `--confirm-stale` is passed. `stop` and
-`status` are not gated. `reported_drift` may contain `pin-drift`, `cli-drift`
+`reported_drift` may contain `pin-drift`, `cli-drift`
 (`kaola-acp.py`, `kaola-tmux.sh`), `build-unrecorded`, or `checkout-drift`; none of
-those set `stale` or refuse a dispatch. `baseline_exempt` is recorded at start:
+those set `stale`. `baseline_exempt` is recorded at start:
 true only for a direct checkout invocation, which reports drift and does not block.
 A start through `~/.local/bin` records false. That link resolves into the checkout,
 so the resolved holder path is not the exemption. The pin is read from the registration beside `kaola-project-runner-locate`
