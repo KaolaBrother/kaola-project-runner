@@ -6,6 +6,16 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Drift enumerations name every `reported_drift` value (Issue #168).**
+  The seat-stale refusal, the worker status paragraph, and the ZCode Host
+  dispatch reference now name pin-drift, cli-drift, quota-drift,
+  recorded-path-missing (a recorded script path no longer exists), and
+  install-root-mismatch (the seat's install tree moved or was re-rooted).
+  Seat behavior is unchanged. Contract coverage:
+  `tests/contract/test-issue-168-drift-enumeration.py`.
+  **Seats: restart not required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  is empty: this change is refusal prose, reference text, and the rendered copies of those texts.
 - **`kaola-quota.py`-only drift is reported without marking seats stale (Issue #166).**
   `status` and `list` report `quota-drift` when a recorded quota digest changes;
   legacy records without a quota digest remain silent, and the documented

@@ -1,5 +1,5 @@
 {
-  "build": "86fe060e929f",
+  "build": "9d457489fcfc",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "cdf0d6091792d80a0e95e1fa1e07c9442d38bb4661f1d3c550d5cfeb5eb2e912",
@@ -11,7 +11,7 @@
     "references/issue-dispatch.md": "91e791f37d18f39a96609501c5ef1631384cb4beedddd125495d71f0578157a8",
     "references/quota-packages.md": "ebbd338babe0e8f6b099ae4f7ce908da2b1405abf578a94f0fa1461f6488a990",
     "references/workflow-worktree.md": "4f0617bc3dadf9a1852734603fb0b40836165a168cc000a21ef9d413fd8fe783",
-    "references/zcode-host-dispatch.md": "6b7ff599d336cc7507e797e26e65bcd11d93cac354398e226bc7e0286fa5961d",
+    "references/zcode-host-dispatch.md": "20f0e58cb69aa68958d7501cd84e081c1ffd9b6aae63985c2747e0e919d81dda",
     "references/zcode-native-skill-entry.md": "03b9da8e27c8d319c532cc41e3a605fb578d5bbf9ab4d007359cb0ef656242e7"
   },
   "skill": "kaola-project-runner"

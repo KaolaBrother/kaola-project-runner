@@ -59,7 +59,9 @@ file this seat loaded now differs on disk: `kaola-acp-holder.py`,
 `kaola-zcode-acp.py`, `scripts/adapters/`, or the platform manifest
 (`stale_reasons`, `restart_files`). That is the same set as the release-note
 operator test. `reported_drift` may list `pin-drift`, `cli-drift`
-(`kaola-acp.py`, `kaola-tmux.sh`), or `quota-drift` (`kaola-quota.py`);
+(`kaola-acp.py`, `kaola-tmux.sh`), `quota-drift` (`kaola-quota.py`),
+`recorded-path-missing` (a recorded script path no longer exists), or
+`install-root-mismatch` (the seat's install tree moved or was re-rooted);
 those do not block. `baseline_exempt` is
 true only for a direct checkout start; a `~/.local/bin` start is not exempt.
 Do not dispatch a `stale: true` seat.
