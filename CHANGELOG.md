@@ -38,6 +38,12 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   and `start_selection`. The receipt's `bridge` / `runtime_binary` facts match
   preflight, including a runtime `--version` only when that binary is already an
   absolute executable. This does not change the holder, the ZCode bridge, or the
+- **`drain-restart` applies and reports the platform default permission mode when none was recorded or passed (Issue #163).**
+  When mode is neither recorded nor passed, the restart applies and reports the
+  same permission mode a fresh start applies. An explicit mode still wins, and
+  a recorded mode still wins over that default. The
+  `drain-restart-selection-unknown` refusal is unchanged for model, effort,
+  tier, and fast. This does not change the holder, the ZCode bridge, or the
   ACP protocol.
 
 ## 0.6.2 — 2026-09-25 (kimi-cli dual root, Delegator owner-preserving refresh, api runtime table)
