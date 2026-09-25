@@ -1,11 +1,42 @@
 # Changelog
 
 Every release section states whether running seats must restart. The operator
-test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
 ## Unreleased
 
+- **The `reported_drift` vocabulary is one code constant, `install-root-mismatch` and `quota-drift` are gone, and `kaola-quota.py` is restart-required (Issue #179).**
+  `REPORTED_DRIFT_VALUES` in `scripts/kaola-acp.py` is the single place the
+  emitted set lives; every `reported_drift` append is a member, and the prose
+  surfaces (`docs/api.md`, the worker status paragraph, the ZCode Host
+  dispatch reference) now name the field instead of listing values, so no
+  prose list can diverge from the code. `install-root-mismatch` and its
+  `_expected_install_tree` comparison are removed: the tree of whichever CLI
+  copy runs `list` is not this seat's expected root, and a moved or deleted
+  checkout is already `recorded-path-missing` while an in-place reinstall is
+  already the byte comparison. The unused `seat_freshness` `repo` and
+  `installed` parameters and the `recorded_root`/`install_root` receipt keys
+  are gone. `quota-drift` is dropped because `kaola-quota.py` becomes
+  restart-required: the holder pins that catalog at startup (Issue #162), so a
+  running seat only picks up its new bytes by restarting, while the per-call
+  CLI re-imports it every call and would otherwise stamp `view` with the old
+  code and `observe`/`status` with the new. This **reverses #166's
+  quota-only "restart not required"**: a release that changes only
+  `kaola-quota.py` is now `Seats: restart required`, a non-exempt seat reports
+  `stale: true` with `restart_files: ["kaola-quota.py"]`, and an exempt
+  checkout seat reports `checkout-drift`. A contract test asserts every holder
+  `SIBLING_MODULES` entry is restart-required. No `cli-drift`/`quota-drift`
+  merge and no changed-file list on `cli-drift`.
+  **Seats: restart required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+  changed its file set and, more to the point, `kaola-quota.py` is now in the
+  restart-required set, so an operator must restart seats to pick up this
+  change's reporting. No holder, bridge, or adapter bytes changed: a seat that
+  is restarted comes up on identical protocol and can also simply be stopped.
+  Contract coverage: `tests/contract/test-issue-168-drift-enumeration.py`,
+  `tests/contract/test-issue-165-path-drift.py`,
+  `tests/contract/test-issue-162-upgrade-safety.py`.
 - **The #65 Host-contract suite drops a dispatched seat's inherited `KAOLA_*` bindings before it starts its fixture session (Issue #176).**
   `test-issue-65-host-contract.py` failed intermittently in this environment
   with `no-session` on `send`: run as a focused loop from a dispatched seat,
@@ -39,7 +70,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   coverage: `tests/contract/test-issue-162-upgrade-safety.py` and
   `tests/contract/test-issue-168-drift-enumeration.py`.
   **Seats: restart not required.** The operator test
-  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
   is empty: only per-call CLI files, templates, and docs changed.
 - **A boot-time agent death is reported as the failed start it is, never as an initialize timeout (Issue #174).**
   `test-issue-98-dsh-acp.py::test_a_confined_boot_write_failure_names_its_cause`
@@ -64,7 +95,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   contract (`pending_out` membership as "the frame was written") is unchanged.
   **Seats: restart required.** This change is in `scripts/kaola-acp-holder.py`
   and its rendered copies; the operator test
-  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
   is not empty.
 - **`command_start` no longer repeats the host-entry and host-exists checks `pre_spawn_refusal` already made (Issue #169).**
   Since #164 `command_start` calls `pre_spawn_refusal` first on the same args
@@ -77,7 +108,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   `tests/contract/test-issue-74-kaola-delegator.py`) stays green.
   **Seats: restart not required.** Only the dead code in `kaola-acp.py` and its
   rendered copies changed; the operator test
-  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
   is empty.
 - **Drift enumerations name every `reported_drift` value (Issue #168).**
   The seat-stale refusal, the worker status paragraph, and the ZCode Host
@@ -87,7 +118,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   Seat behavior is unchanged. Contract coverage:
   `tests/contract/test-issue-168-drift-enumeration.py`.
   **Seats: restart not required.** The operator test
-  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
   is empty: this change is refusal prose, reference text, and the rendered copies of those texts.
 - **`kaola-quota.py`-only drift is reported without marking seats stale (Issue #166).**
   `status` and `list` report `quota-drift` when a recorded quota digest changes;

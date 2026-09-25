@@ -628,7 +628,7 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
                                        record.get("session") or session),
             "dispatcher": record.get("dispatcher"),
         })
-        fresh = seat_freshness(record.get("platform") or platform, repo, record)
+        fresh = seat_freshness(record)
         rows[-1].update({
             "runner_build": fresh["runner_build"],
             "accepted_revision": fresh["accepted_revision"],
@@ -636,8 +636,6 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             "stale_reasons": fresh["stale_reasons"],
             "reported_drift": fresh["reported_drift"],
             "missing_files": fresh["missing_files"],
-            "recorded_root": fresh["recorded_root"],
-            "install_root": fresh["install_root"],
             "baseline_exempt": fresh["baseline_exempt"],
         })
         attach_binding_fact(rows[-1], record)
@@ -2874,15 +2872,34 @@ def _stored_script_digests(facts: dict[str, Any]) -> dict[str, str]:
     return found
 
 
+# Issue #179: the one place the emitted ``reported_drift`` vocabulary lives.
+# Every value ``seat_freshness`` appends is a member, and the prose surfaces
+# (``docs/api.md``, the reference templates) name the field instead of listing
+# values, so a value cannot be described in two places that drift apart.
+REPORTED_DRIFT_VALUES = (
+    "build-unrecorded",
+    "revision-unrecorded",
+    "pin-drift",
+    "cli-drift",
+    "recorded-path-missing",
+    "checkout-drift",
+)
+
+
 def _restart_required_name(name: str) -> bool:
     """Files the release-note operator test treats as a seat restart.
 
     ``git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py
-    scripts/adapters platforms``. ``kaola-acp.py`` and ``kaola-tmux.sh`` are
-    per-call CLI files. A pin bump is not in the set.
+    scripts/kaola-quota.py scripts/adapters platforms``. The holder pins
+    ``kaola-quota.py`` at startup (Issue #162), so a running seat picks up its
+    new bytes only by restarting: the CLI re-imports it per call, so one live
+    seat would otherwise stamp ``view`` with the old code and ``observe``/
+    ``status`` with the new. ``kaola-acp.py`` and ``kaola-tmux.sh`` are per-call
+    CLI files. A pin bump is not in the set.
     """
     return (
-        name in ("kaola-acp-holder.py", "kaola-zcode-acp.py", "platform.yaml")
+        name in ("kaola-acp-holder.py", "kaola-zcode-acp.py", "kaola-quota.py",
+                 "platform.yaml")
         or name.startswith("adapters/")
         or name.startswith("platforms/")
     )
@@ -2944,75 +2961,22 @@ def _unresolved_recorded_files(stored_paths: dict[str, Any]) -> list[str]:
     return missing
 
 
-def _recorded_tree(facts: dict[str, Any]) -> Path | None:
-    """The tree the seat's recorded runner files live under, or None.
-
-    Taken from the recorded holder path (``<tree>/scripts/kaola-acp-holder.py``),
-    the same layout ``_seat_from_checkout`` and ``invoking_skill_tree`` read.
-    """
-    holder = (facts.get("script_paths") or {}).get("kaola-acp-holder.py")
-    if not isinstance(holder, dict):
-        return None
-    path = holder.get("path")
-    if not isinstance(path, str) or not path:
-        return None
-    return Path(path).parent.parent
-
-
-def _resolved_str(path: Path) -> str:
-    """A path's resolved text for comparison, falling back to the raw text.
-
-    ``Path.resolve`` is non-strict and also resolves a path that no longer
-    exists (the moved/deleted checkout case), so two spellings of the same
-    directory compare equal across a symlinked ``/tmp`` or ``$TMPDIR``.
-    """
-    try:
-        return str(path.resolve())
-    except OSError:
-        return str(path)
-
-
-def _expected_install_tree(platform: str) -> Path:
-    """The install tree this seat's OWN platform is expected to live under.
-
-    Issue #165: each platform has its own installed Skill tree
-    (``skills/<platform>-kaola-project-runner/``), and ``list`` covers every
-    platform from whichever tree hosts the query. Comparing a seat against the
-    querying CLI's tree would falsely flag a seat of another platform, so the
-    expected tree is the seat's own platform tree when this CLI runs from an
-    installed Skill tree, and this checkout (the development path) otherwise.
-    """
-    tree = invoking_skill_tree()
-    if tree is not None:
-        return tree.parent / f"{platform}-kaola-project-runner"
-    return SCRIPT_DIR.parent
-
-
-def seat_freshness(platform: str, repo: str, facts: dict[str, Any],
-                   installed: tuple[list[tuple[Path, list[Path]]], list[str]] | None = None
-                   ) -> dict[str, Any]:
+def seat_freshness(facts: dict[str, Any]) -> dict[str, Any]:
     """Report build drift. ``stale`` is true only for the restart-required set.
 
     ``baseline_exempt`` is the start-side fact: a direct checkout invocation
     reports drift and does not block. A ``~/.local/bin`` start is not exempt,
-    even though its link resolves into the checkout. Pin drift, CLI-file drift
-    (``kaola-acp.py``, ``kaola-tmux.sh``), and quota catalog drift
-    (``kaola-quota.py``) are reported in ``reported_drift`` and do not set
-    ``stale``. ``installed`` is accepted for callers that already scanned and
-    is unused: the comparison is the seat's own recorded paths, which is where
-    a later install replaces the bytes.
+    even though its link resolves into the checkout. The comparison is the
+    seat's own recorded paths, which is where a later install replaces the
+    bytes. Every value appended to ``reported_drift`` is a member of
+    ``REPORTED_DRIFT_VALUES`` (Issue #179); the prose surfaces name the field
+    rather than listing them.
 
-    Issue #165 adds two reported-only conditions. ``recorded-path-missing``
+    Issue #165 adds a reported-only condition. ``recorded-path-missing``
     names a recorded runner path that no longer resolves to a file (the
-    checkout moved or was deleted), with the names in ``missing_files``.
-    ``install-root-mismatch`` names a seat whose recorded runner tree is not
-    the tree this seat's own platform is expected to live under - for example
-    a reinstall under a different root - with ``recorded_root`` and
-    ``install_root``. The comparison is per platform, so listing a
-    claude-code seat from the zcode tree is not a mismatch. Both are evidence:
-    they never set ``stale`` and never gate transport.
+    checkout moved or was deleted), with the names in ``missing_files``. It is
+    evidence: it never sets ``stale`` and never gates transport.
     """
-    del repo, installed  # the seat's own paths are the comparison
     build = facts.get("runner_build")
     known = isinstance(build, str) and len(build) == 12
     revision = facts.get("accepted_revision")
@@ -3028,25 +2992,11 @@ def seat_freshness(platform: str, repo: str, facts: dict[str, Any],
         paths, lambda name: name in ("kaola-acp.py", "kaola-tmux.sh"))
     if cli_changed:
         reported.append("cli-drift")
-    quota_changed = _changed_recorded_files(
-        paths, lambda name: name == "kaola-quota.py")
-    if quota_changed:
-        reported.append("quota-drift")
     # Issue #165: a recorded path that no longer resolves is neither changed nor
     # unchanged, so it is named here instead of passing unreported.
     missing = _unresolved_recorded_files(paths)
     if missing:
         reported.append("recorded-path-missing")
-    # Issue #165: a reinstall under a different root leaves every recorded path
-    # pointing at the old tree. Compare the recorded tree with the tree this
-    # seat's own platform is expected to live under - not the querying CLI's
-    # tree, which would falsely flag every seat of another platform.
-    recorded_root = _recorded_tree(facts)
-    install_root = _expected_install_tree(platform)
-    root_mismatch = recorded_root is not None and (
-        _resolved_str(recorded_root) != _resolved_str(install_root))
-    if root_mismatch:
-        reported.append("install-root-mismatch")
     # The start-side fact, not the resolved holder path. ~/.local/bin links
     # resolve into the checkout and still have a baseline.
     exempt = facts.get("baseline_exempt")
@@ -3060,6 +3010,7 @@ def seat_freshness(platform: str, repo: str, facts: dict[str, Any],
     pin = registration_pin()
     if pin and revision != pin:
         reported.append("pin-drift" if revision else "revision-unrecorded")
+    assert all(value in REPORTED_DRIFT_VALUES for value in reported), reported
     return {
         "runner_build": build if known else None,
         "accepted_revision": revision,
@@ -3067,8 +3018,6 @@ def seat_freshness(platform: str, repo: str, facts: dict[str, Any],
         "stale_reasons": blocking,
         "restart_files": restart_changed,
         "missing_files": missing,
-        "recorded_root": None if recorded_root is None else _resolved_str(recorded_root),
-        "install_root": _resolved_str(install_root),
         "reported_drift": reported,
         "baseline_exempt": exempt,
         "pin": pin,
@@ -4250,7 +4199,7 @@ def main() -> int:
             if key in receipt:
                 merged[key] = receipt[key]
         if merged:
-            receipt.update(seat_freshness(args.platform, repo, merged))
+            receipt.update(seat_freshness(merged))
         # Emission copy only. The holder object and receipt["record"] stay native.
         stamp_quota_emission(receipt, args.platform)
         receipt = bound_state_receipt(receipt)

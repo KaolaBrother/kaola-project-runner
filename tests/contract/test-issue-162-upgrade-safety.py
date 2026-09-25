@@ -216,17 +216,18 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, receipt)
         self.assertEqual(receipt.get("outcome"), "in_progress", receipt)
 
-    def test_quota_only_drift_is_reported_and_not_stale_in_status_and_list(self) -> None:
-        session = "codex-KPR-i166-quota"
+    def test_quota_only_drift_is_restart_required_in_status_and_list(self) -> None:
+        """Issue #179 reverses #166: the holder pins kaola-quota.py at startup."""
+        session = "codex-KPR-i179-quota"
         cli = self._installed_cli()
         self.run_cli("codex", "start", session=session, argv0=cli)
         quota = cli.parent / "kaola-quota.py"
         quota.write_bytes(quota.read_bytes() + b"\n# quota only\n")
 
         _result, status = self.run_cli("codex", "status", session=session, argv0=cli)
-        self.assertIs(status["stale"], False, status)
-        self.assertIn("quota-drift", status.get("reported_drift"), status)
-        self.assertEqual(status.get("stale_reasons"), [], status)
+        self.assertIs(status["stale"], True, status)
+        self.assertEqual(status.get("stale_reasons"), ["restart-required"], status)
+        self.assertEqual(status.get("restart_files"), ["kaola-quota.py"], status)
 
         listed = subprocess.run(
             [PYTHON, str(CLI), "list", "--repo", str(self.repo),
@@ -236,18 +237,21 @@ class UpgradeSafetyTests(unittest.TestCase):
         rows = json.loads(listed.stdout)
         match = [row for row in rows["rows"] if row["session"] == session]
         self.assertEqual(len(match), 1)
-        self.assertIs(match[0]["stale"], False, match[0])
-        self.assertIn("quota-drift", match[0].get("reported_drift"), match[0])
+        self.assertIs(match[0]["stale"], True, match[0])
+        self.assertEqual(match[0].get("stale_reasons"), ["restart-required"], match[0])
 
-    def test_legacy_record_without_quota_digest_is_silent(self) -> None:
+    def test_legacy_record_without_a_quota_entry_is_silent(self) -> None:
+        """A record that never captured kaola-quota.py has no quota drift.
+
+        Issue #179: the quota file is restart-required now, so an unrecorded
+        quota entry is simply absent from restart_files - not a new value.
+        """
         acp = load_module(CLI, "acp166legacy")
         cli = self._installed_cli()
-        quota = cli.parent / "kaola-quota.py"
-        quota.write_bytes(quota.read_bytes() + b"\n# quota changed after legacy record\n")
         holder = cli.parent / "kaola-acp-holder.py"
         holder_digest = __import__("hashlib").sha256(holder.read_bytes()).hexdigest()
 
-        fresh = acp.seat_freshness("codex", str(self.repo), {
+        fresh = acp.seat_freshness({
             "runner_build": holder_digest[:12],
             "accepted_revision": "a" * 40,
             "script_paths": {
@@ -258,7 +262,7 @@ class UpgradeSafetyTests(unittest.TestCase):
             },
         })
         self.assertIs(fresh["stale"], False, fresh)
-        self.assertNotIn("quota-drift", fresh["reported_drift"], fresh)
+        self.assertEqual(fresh["reported_drift"], ["pin-drift"] if fresh["pin"] else [], fresh)
 
     def test_worker_start_and_local_bin_see_build_skew(self) -> None:
         stale = self.home / ".codex" / "skills" / "claude-code-kaola-project-runner" / "scripts"
@@ -301,7 +305,7 @@ class UpgradeSafetyTests(unittest.TestCase):
             }), encoding="utf-8")
             digest = __import__("hashlib").sha256(
                 (PROJECT / "scripts" / "kaola-acp.py").read_bytes()).hexdigest()
-            fresh = acp.seat_freshness("codex", str(self.repo), {
+            fresh = acp.seat_freshness({
                 "runner_build": digest[:12],
                 "accepted_revision": "b" * 40,
                 "script_paths": {
@@ -325,7 +329,7 @@ class UpgradeSafetyTests(unittest.TestCase):
                 "accepted_revision": "c" * 40,
             }), encoding="utf-8")
             os.environ["PATH"] = f"{chosen}:/usr/bin:/bin"
-            via_path = acp.seat_freshness("codex", str(self.repo), {
+            via_path = acp.seat_freshness({
                 "runner_build": digest[:12],
                 "accepted_revision": "b" * 40,
                 "script_paths": {
@@ -337,7 +341,6 @@ class UpgradeSafetyTests(unittest.TestCase):
             })
             self.assertEqual(via_path["pin"], "c" * 40)
             self.assertIs(via_path["stale"], False, via_path)
-            self.assertNotIn("quota-drift", via_path["reported_drift"], via_path)
         finally:
             if previous is None:
                 os.environ.pop("HOME", None)
@@ -349,7 +352,6 @@ class UpgradeSafetyTests(unittest.TestCase):
                 os.environ["PATH"] = previous_path
         self.assertIs(fresh["stale"], False, fresh)
         self.assertIn("pin-drift", fresh["reported_drift"])
-        self.assertNotIn("quota-drift", fresh["reported_drift"], fresh)
         self.assertEqual(fresh["stale_reasons"], [])
 
     def test_baseline_exempt_follows_the_start_not_the_resolved_path(self) -> None:
@@ -384,11 +386,11 @@ class UpgradeSafetyTests(unittest.TestCase):
             },
         }
         copy.write_bytes(original + b"\n# changed\n")
-        blocked = acp.seat_freshness("codex", str(self.repo), facts)
+        blocked = acp.seat_freshness(facts)
         self.assertIs(blocked["stale"], True, blocked)
         self.assertIn("restart-required", blocked["stale_reasons"])
         facts["baseline_exempt"] = True
-        reported = acp.seat_freshness("codex", str(self.repo), facts)
+        reported = acp.seat_freshness(facts)
         self.assertIs(reported["stale"], False, reported)
         self.assertIn("checkout-drift", reported["reported_drift"])
 
@@ -547,7 +549,7 @@ class UpgradeSafetyTests(unittest.TestCase):
         conventions = (PROJECT / "docs" / "conventions.md").read_text(encoding="utf-8")
         self.assertIn(
             "git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py "
-            "scripts/adapters platforms",
+            "scripts/kaola-quota.py scripts/adapters platforms",
             conventions,
         )
         self.assertIn("Seats: restart required", conventions)

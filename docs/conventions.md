@@ -131,10 +131,12 @@ is outside this repository and is not verified here.
 Every `CHANGELOG.md` release section states whether running seats must restart,
 as its own line: `Seats: restart required` or `Seats: restart not required`.
 Seats must restart when the holder, the ZCode bridge, or the ACP protocol
-changed. The operator test is a non-empty diff:
+changed, or when `kaola-quota.py` changed - the holder pins that catalog at
+startup (Issue #162), so a running seat only picks up its new bytes by
+restarting. The operator test is a non-empty diff:
 
 ```bash
-git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms
+git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms
 ```
 
 `OLD` and `NEW` are the previous release tag and the commit being released.

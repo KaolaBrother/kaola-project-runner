@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Issue #165: a removed or moved recorded path, or a reinstall under a
-different root, is reported by name.
+"""Issue #165: a removed or moved recorded path is reported by name.
 
 Follow-up N3 from #162 review round 2. #162 recorded absolute ``script_paths``
 and reported byte drift, but a recorded path that no longer resolves (the
-checkout moved or was deleted) and a seat whose recorded files live under a
-different install root both went unreported. ``status``/``list`` now name
-``recorded-path-missing`` and ``install-root-mismatch``. Both are evidence
-only: they never set ``stale`` and never gate transport.
+checkout moved or was deleted) went unreported. ``status``/``list`` name
+``recorded-path-missing``. It is evidence only: it never sets ``stale`` and
+never gates transport. Issue #179 dropped the ``install-root-mismatch``
+condition this issue also added: a moved checkout is this same fact.
 
 Offline only. Holders are the mock ACP agent under an isolated HOME and record
 root, and each one is force-stopped before the temporary directory is removed.
@@ -113,8 +112,7 @@ class PathDriftTests(unittest.TestCase):
         """A copy of a real platform Skill tree; return its ``scripts/kaola-acp.py``.
 
         ``dirname`` defaults to the conventional install name
-        (``<platform>-kaola-project-runner``) so sibling trees share one parent
-        and the per-platform expected root resolves to a real path.
+        (``<platform>-kaola-project-runner``).
         """
         tree = self.root / "installed" / (dirname or f"{platform}-kaola-project-runner")
         shutil.copytree(PROJECT / "skills" / f"{platform}-kaola-project-runner", tree)
@@ -134,16 +132,13 @@ class PathDriftTests(unittest.TestCase):
         _result, before = self.run_cli("codex", "status", session=session, argv0=cli)
         self.assertIn("kaola-tmux.sh", before.get("script_paths") or {}, before)
         self.assertNotIn("recorded-path-missing", before.get("reported_drift") or [], before)
-        self.assertNotIn("install-root-mismatch", before.get("reported_drift") or [], before)
-        # The checkout moved away: one recorded path no longer resolves. The
-        # root still matches (this same install), so only the missing file is
-        # named - a missing path yields no digest and is neither "changed" nor
+        # The checkout moved away: one recorded path no longer resolves - a
+        # missing path yields no digest and is neither "changed" nor
         # "unchanged" for the byte comparison.
         (cli.parent / "kaola-tmux.sh").unlink()
         _result, status = self.run_cli("codex", "status", session=session, argv0=cli)
         self.assertIn("recorded-path-missing", status.get("reported_drift") or [], status)
         self.assertIn("kaola-tmux.sh", status.get("missing_files") or [], status)
-        self.assertNotIn("install-root-mismatch", status.get("reported_drift") or [], status)
         # It is evidence only: no block, no stale.
         self.assertIs(status.get("stale"), False, status.get("stale_reasons"))
         self.assertEqual(status.get("stale_reasons"), [])
@@ -153,65 +148,17 @@ class PathDriftTests(unittest.TestCase):
         self.assertIn("kaola-tmux.sh", row.get("missing_files") or [], row)
         self.assertIs(row.get("stale"), False, row)
 
-    def test_install_root_mismatch_is_reported_by_status_and_list(self) -> None:
-        """A seat whose own platform tree is genuinely re-rooted is named."""
-        session = "codex-KPR-i165-reroot"
-        # The seat was started from a different root than the one its own
-        # platform is expected to live under now. Every recorded path still
-        # resolves, so only the root difference is named.
-        old_root = self.root / "old" / "codex-kaola-project-runner"
-        shutil.copytree(PROJECT / "skills" / "codex-kaola-project-runner", old_root)
-        old_cli = old_root / "scripts" / "kaola-acp.py"
-        new_cli = self._installed_cli("codex")
-        _result, started = self.run_cli("codex", "start", session=session, argv0=old_cli)
-        self.assertEqual(started.get("state"), "ready", started)
-        _result, status = self.run_cli("codex", "status", session=session, argv0=new_cli)
-        self.assertIn("install-root-mismatch", status.get("reported_drift") or [], status)
-        self.assertNotIn("recorded-path-missing", status.get("reported_drift") or [], status)
-        self.assertNotEqual(status.get("recorded_root"), status.get("install_root"), status)
-        self.assertEqual(status.get("recorded_root"), str(old_root.resolve()))
-        self.assertEqual(status.get("install_root"),
-                         str((self.root / "installed" / "codex-kaola-project-runner").resolve()))
-        self.assertIs(status.get("stale"), False, status.get("stale_reasons"))
+    def test_seat_freshness_names_a_missing_recorded_path_without_blocking(self) -> None:
+        """A recorded path that no longer resolves is named, and never blocks.
 
-        # Issue #165 reviewer note 4: the list row carries both roots too.
-        row = self.row_for(self.run_list(new_cli), session)
-        self.assertIn("install-root-mismatch", row.get("reported_drift") or [], row)
-        self.assertEqual(row.get("recorded_root"), str(old_root.resolve()), row)
-        self.assertEqual(row.get("install_root"), status.get("install_root"), row)
-        self.assertIs(row.get("stale"), False, row)
-
-    def test_another_platforms_seat_is_not_flagged_by_a_sibling_tree(self) -> None:
-        """The documented Host sweeps run ``list`` from ONE platform's tree.
-
-        The expected root is the seat's OWN platform tree, so a claude-code
-        seat listed from the zcode sibling tree is not a false mismatch.
+        Issue #179 removed the install-root-mismatch condition: a moved or
+        deleted recorded path is this same fact, and an in-place reinstall is
+        already the byte comparison.
         """
-        session = "claude-code-KPR-i165-xplat"
-        cc_cli = self._installed_cli("claude-code")
-        zc_cli = self._installed_cli("zcode")
-        _result, started = self.run_cli(
-            "claude-code", "start", session=session, argv0=cc_cli)
-        self.assertEqual(started.get("state"), "ready", started)
-        expected_root = str(
-            (self.root / "installed" / "claude-code-kaola-project-runner").resolve())
-
-        own = self.row_for(self.run_list(cc_cli), session)
-        sibling = self.row_for(self.run_list(zc_cli), session)
-        for row in (own, sibling):
-            self.assertNotIn("install-root-mismatch", row.get("reported_drift") or [], row)
-            self.assertNotIn("recorded-path-missing", row.get("reported_drift") or [], row)
-            self.assertEqual(row.get("recorded_root"), expected_root, row)
-            self.assertEqual(row.get("install_root"), expected_root, row)
-            self.assertIs(row.get("stale"), False, row)
-
-    def test_seat_freshness_names_both_conditions_without_blocking(self) -> None:
-        """The named conditions are exact, and neither sets ``stale``."""
         acp = load_module(CLI, "acp165unit")
         project_scripts = PROJECT / "scripts"
         holder_sha = hashlib.sha256(
             (project_scripts / "kaola-acp-holder.py").read_bytes()).hexdigest()
-        # A recorded tree that is this install, with one recorded path removed.
         missing_facts = {
             "runner_build": holder_sha[:12],
             "script_paths": {
@@ -225,66 +172,10 @@ class PathDriftTests(unittest.TestCase):
                 },
             },
         }
-        missing = acp.seat_freshness("codex", str(self.repo), missing_facts)
+        missing = acp.seat_freshness(missing_facts)
         self.assertIn("recorded-path-missing", missing["reported_drift"])
         self.assertEqual(missing["missing_files"], ["kaola-tmux.sh"])
         self.assertIs(missing["stale"], False)
-
-        # A recorded tree other than this install, with every path present.
-        moved_tree = self.root / "moved-root" / "scripts"
-        moved_tree.mkdir(parents=True)
-        moved = moved_tree / "kaola-acp-holder.py"
-        moved.write_bytes((project_scripts / "kaola-acp-holder.py").read_bytes())
-        reroot_facts = {
-            "runner_build": holder_sha[:12],
-            "script_paths": {
-                "kaola-acp-holder.py": {"path": str(moved), "sha256": holder_sha},
-            },
-        }
-        reroot = acp.seat_freshness("codex", str(self.repo), reroot_facts)
-        self.assertIn("install-root-mismatch", reroot["reported_drift"])
-        self.assertEqual(reroot["missing_files"], [])
-        self.assertEqual(reroot["recorded_root"], str((self.root / "moved-root").resolve()))
-        self.assertIs(reroot["stale"], False)
-
-    def test_expected_root_follows_the_seats_own_platform(self) -> None:
-        """Loaded from an installed tree, the expected root is the platform sibling.
-
-        A claude-code seat recorded under the sibling claude-code tree is not a
-        mismatch even though this zcode CLI runs from its own tree; a genuinely
-        re-rooted claude-code seat still is.
-        """
-        cc_cli = self._installed_cli("claude-code")
-        zc_cli = self._installed_cli("zcode")
-        zc = load_module(zc_cli, "acp165xplat")
-        cc_tree = (self.root / "installed" / "claude-code-kaola-project-runner").resolve()
-        holder_sha = hashlib.sha256(
-            (cc_cli.parent / "kaola-acp-holder.py").read_bytes()).hexdigest()
-        facts = {
-            "runner_build": holder_sha[:12],
-            "script_paths": {
-                "kaola-acp-holder.py": {
-                    "path": str(cc_tree / "scripts" / "kaola-acp-holder.py"),
-                    "sha256": holder_sha,
-                },
-            },
-        }
-        sibling = zc.seat_freshness("claude-code", str(self.repo), facts)
-        self.assertNotIn("install-root-mismatch", sibling["reported_drift"], sibling)
-        self.assertEqual(sibling["recorded_root"], str(cc_tree))
-        self.assertEqual(sibling["install_root"], str(cc_tree))
-
-        elsewhere = self.root / "elsewhere" / "scripts"
-        elsewhere.mkdir(parents=True)
-        moved = elsewhere / "kaola-acp-holder.py"
-        moved.write_bytes((cc_cli.parent / "kaola-acp-holder.py").read_bytes())
-        facts["script_paths"]["kaola-acp-holder.py"] = {
-            "path": str(moved), "sha256": holder_sha,
-        }
-        reroot = zc.seat_freshness("claude-code", str(self.repo), facts)
-        self.assertIn("install-root-mismatch", reroot["reported_drift"], reroot)
-        self.assertEqual(reroot["install_root"], str(cc_tree))
-        self.assertIs(reroot["stale"], False)
 
     def test_locate_module_untouched_by_this_issue(self) -> None:
         """Regression guard: the locator contract is not the surface this issue changes."""
