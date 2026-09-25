@@ -715,6 +715,11 @@ class AgentConnection:
         self.exited = threading.Event()
         self.exit_code: int | None = None
         self.exit_signal: int | None = None
+        # Issue #174: a request frame write that failed. The exit it predicts
+        # may not be observed yet, so a boot failure is classified and its
+        # stderr drained from this fact plus the exit, never from a slot
+        # lookup that races either.
+        self.stdin_write_failed = False
         self.malformed_lines = 0
         self.unknown_updates = 0
         self.handler_errors = 0
@@ -818,6 +823,11 @@ class AgentConnection:
             {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
         )
         if not written:
+            # Issue #174: remember the write failure on the connection. The
+            # popped slot's resolution never reaches a waiter, so a boot that
+            # fails here is classified from this fact, not from the missed
+            # lookup that would otherwise read as a timeout.
+            self.stdin_write_failed = True
             with self.lock:
                 self.pending_out.pop(normalize_id(request_id), None)
             slot["response"] = {"error": {"code": -32000, "message": "write failed"}}
@@ -1699,6 +1709,15 @@ class Holder:
         )
         response = self.agent.wait_response(request_id, 15.0)
         if response is None:
+            if self.agent.stdin_write_failed:
+                # Issue #174: the initialize frame was never written - the
+                # agent was already dying when the send broke on its closed
+                # stdin, and send_request pops the unwritten slot, so its
+                # resolution never reaches this wait. That is a failed
+                # start, not a timeout the agent never had the chance to
+                # miss.
+                return {"error": {"code": "acp-initialize-failed",
+                                  "message": {"code": -32000, "message": "write failed"}}}
             return {"error": {"code": "acp-initialize-timeout", "message": "no initialize response"}}
         if "error" in response:
             return {"error": {"code": "acp-initialize-failed", "message": response["error"]}}
@@ -2038,12 +2057,23 @@ class Holder:
         for key, entry in list(self.pending_permissions.items()):
             self.pending_permissions.pop(key, None)
         self.projection.close_message()
-        if self.state not in ("stopping", "stopped"):
+        # Issue #174: an exit during the boot is not a verdict. While the boot
+        # has not produced one ("starting"), run() is about to publish the real
+        # one, and once it has ("error") that verdict is final: either way,
+        # rewriting it to "agent_exited" here let a start's terminal-state
+        # wait read the intermediate or clobbered state instead of the
+        # failure code. After the boot, an exit still becomes "agent_exited".
+        if self.state not in ("stopping", "stopped", "starting", "error"):
             self.state = "agent_exited"
+        # Issue #174: resolve the still-pending requests in place. Every slot
+        # is popped by its own single waiter, and the reader thread is gone
+        # with the agent, so clearing the dict could only race that waiter's
+        # own lookup - a boot-time exit landing between the send and the wait
+        # made the lookup miss and reported acp-initialize-timeout for a death
+        # the holder had already resolved.
         with self.agent.lock:
-            stranded = list(self.agent.pending_out.values())
-            self.agent.pending_out.clear()
-        for slot in stranded:
+            unanswered = list(self.agent.pending_out.values())
+        for slot in unanswered:
             if slot["response"] is None:
                 slot["response"] = {"error": {"code": "agent-exited",
                                               "message": "agent process exited"}}
@@ -4040,8 +4070,19 @@ class Holder:
         error = dict(error)
         pump = self.agent.stderr_pump
         if pump:
+            # Issue #174: read the stderr ring only after the exit the
+            # receipt reports has been observed. A frame write that broke
+            # on a dying agent's closing stdin lands before waitpid is
+            # observed and before the pump thread is ever scheduled, so the
+            # tail could be read empty under load. A failed request write is
+            # the exit-in-progress fact, so first wait for the observation
+            # under the grace an agent gets to exit after its stdin closes,
+            # then drain the last lines under the same grace (an agent child
+            # can inherit stderr and hold EOF open past the exit).
+            if self.agent.stdin_write_failed and not self.agent.exited.is_set():
+                self.agent.exited.wait(EXIT_GRACE)
             if self.agent.exited.is_set():
-                pump.thread.join(1.0)  # drain an exited agent's last lines
+                pump.thread.join(EXIT_GRACE)  # drain an exited agent's last lines
             tail = pump.tail()
             if tail:
                 error["stderr_tail"] = tail

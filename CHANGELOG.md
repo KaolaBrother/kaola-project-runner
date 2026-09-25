@@ -6,6 +6,31 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **A boot-time agent death is reported as the failed start it is, never as an initialize timeout (Issue #174).**
+  `test-issue-98-dsh-acp.py::test_a_confined_boot_write_failure_names_its_cause`
+  flaked under load: the receipt came back `acp-initialize-timeout` (once the
+  state `agent_exited`) instead of the expected `acp-initialize-failed` naming
+  the confined-boot cause, identically on the unmodified base. The agent's
+  fast boot death raced three sequential observations of it. A request whose
+  frame was never written (the agent already dying at the send) had its slot
+  popped by `send_request`, and `on_agent_exit` cleared `pending_out` while
+  resolving it, so `wait_response`'s slot lookup missed and the death read as
+  a timeout it was not; `on_agent_exit` published or clobbered
+  `state = "agent_exited"` around `run()`'s verdict, which a start's
+  terminal-state wait could read instead of `error` + `fatal_error`; and
+  `start_failure_facts` read the stderr ring before the exit was observed, so
+  the cause-carrying tail could be empty. A failed frame write is now
+  remembered on the connection and classifies the boot as
+  `acp-initialize-failed`; the exit resolves still-pending requests in place
+  (each waiter pops its own slot) and never touches the boot verdict states;
+  and the stderr tail is read only after the exit is observed, under the grace
+  an agent gets to exit after its stdin closes. No retry, harness, or knob was
+  added, the test is unchanged and not skipped, and the mock-agent admission
+  contract (`pending_out` membership as "the frame was written") is unchanged.
+  **Seats: restart required.** This change is in `scripts/kaola-acp-holder.py`
+  and its rendered copies; the operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms`
+  is not empty.
 - **`command_start` no longer repeats the host-entry and host-exists checks `pre_spawn_refusal` already made (Issue #169).**
   Since #164 `command_start` calls `pre_spawn_refusal` first on the same args
   in the same process, so the repeated Issue #122 (host-entry-unsupported)
