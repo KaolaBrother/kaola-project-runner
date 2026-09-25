@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Issue #162: build identity, stale seats, skew on every start, drain-restart.
 
+Issue #163: a drain-restart that proceeds with mode neither recorded nor
+passed applies and reports the platform default a fresh start applies.
+
 Offline only. Holders are the mock ACP agent under an isolated HOME and
 record root, and each one is force-stopped before the temporary directory
 is removed. No platform CLI is launched.
@@ -468,6 +471,112 @@ class UpgradeSafetyTests(unittest.TestCase):
         skill = (PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl").read_text(encoding="utf-8")
         self.assertIn("--confirm-stale", skill)
         self.assertIn("no rebind", skill)
+
+    def _record(self, platform: str, session: str) -> tuple[Path, dict]:
+        matches = sorted(self.records.glob(f"{platform}/{session}/*/record.json"))
+        self.assertEqual(len(matches), 1, matches)
+        record = json.loads(matches[0].read_text(encoding="utf-8"))
+        return matches[0], record
+
+    def _drop_start_selection(self, platform: str, session: str) -> None:
+        """A pre-#162 seat: the live record has no start_selection key."""
+        path, record = self._record(platform, session)
+        self.assertIsInstance(record.get("start_selection"), dict, record)
+        del record["start_selection"]
+        path.write_text(json.dumps(record), encoding="utf-8")
+
+    def _restart(self, platform: str, session: str, resume: str, *args: str):
+        return self.run_cli(
+            platform, "drain-restart", "--resume", resume, *args,
+            session=session, env=self.env(MOCK_ACP_RESUME_ANY="1"),
+        )
+
+    def test_drain_restart_legacy_seat_carries_platform_default_mode(self) -> None:
+        session = "claude-code-KPR-i163-legacy"
+        started = self.run_cli(
+            "claude-code", "start", "--mode", "plan", session=session)[1]
+        self.assertEqual(started.get("state"), "ready", started)
+        self.assertEqual(
+            (started.get("config_application") or {}).get("mode", {}).get("value"),
+            "plan", started)
+        self._drop_start_selection("claude-code", session)
+        restarted = self._restart(
+            "claude-code", session, started["acp_session_id"],
+            "--model", "opus", "--effort", "high")[1]
+        self.assertEqual(restarted.get("state"), "ready", restarted)
+        selection = restarted.get("start_selection") or {}
+        self.assertEqual(selection.get("mode"), "bypassPermissions", restarted)
+        applied = (restarted.get("config_application") or {}).get("mode") or {}
+        self.assertIs(applied.get("applied"), True, restarted)
+        self.assertEqual(applied.get("config_id"), "mode", restarted)
+        self.assertEqual(applied.get("value"), "bypassPermissions", restarted)
+        _path, record = self._record("claude-code", session)
+        self.assertEqual(
+            (record.get("start_selection") or {}).get("mode"), "bypassPermissions", record)
+
+    def test_drain_restart_explicit_mode_wins_over_platform_default(self) -> None:
+        session = "claude-code-KPR-i163-explicit"
+        started = self.run_cli(
+            "claude-code", "start", "--mode", "plan", session=session)[1]
+        self.assertEqual(started.get("state"), "ready", started)
+        self._drop_start_selection("claude-code", session)
+        restarted = self._restart(
+            "claude-code", session, started["acp_session_id"],
+            "--model", "opus", "--mode", "acceptEdits")[1]
+        self.assertEqual(restarted.get("state"), "ready", restarted)
+        self.assertEqual(
+            (restarted.get("start_selection") or {}).get("mode"), "acceptEdits", restarted)
+        applied = (restarted.get("config_application") or {}).get("mode") or {}
+        self.assertEqual(applied.get("value"), "acceptEdits", restarted)
+        self.assertNotEqual(applied.get("value"), "bypassPermissions")
+
+    def test_drain_restart_recorded_mode_wins_over_platform_default(self) -> None:
+        session = "claude-code-KPR-i163-recorded"
+        started = self.run_cli(
+            "claude-code", "start", "--mode", "plan", session=session)[1]
+        self.assertEqual(started.get("state"), "ready", started)
+        _path, record = self._record("claude-code", session)
+        self.assertEqual((record.get("start_selection") or {}).get("mode"), "plan", record)
+        restarted = self._restart(
+            "claude-code", session, started["acp_session_id"],
+            "--model", "opus", "--effort", "high")[1]
+        self.assertEqual(restarted.get("state"), "ready", restarted)
+        self.assertEqual(
+            (restarted.get("start_selection") or {}).get("mode"), "plan", restarted)
+        applied = (restarted.get("config_application") or {}).get("mode") or {}
+        self.assertEqual(applied.get("value"), "plan", restarted)
+        self.assertNotEqual(applied.get("value"), "bypassPermissions")
+
+    def test_drain_restart_legacy_seat_still_refuses_without_model_selection(self) -> None:
+        session = "claude-code-KPR-i163-refuse"
+        started = self.run_cli("claude-code", "start", session=session)[1]
+        self.assertEqual(started.get("state"), "ready", started)
+        pid = started["holder_pid"]
+        self._drop_start_selection("claude-code", session)
+        result, receipt = self.run_cli(
+            "claude-code", "drain-restart", "--resume", started["acp_session_id"],
+            session=session, check=False, env=self.env(MOCK_ACP_RESUME_ANY="1"))
+        self.assertEqual(result.returncode, 1, receipt)
+        self.assertEqual(receipt.get("reason"), "drain-restart-selection-unknown", receipt)
+        self.assertIs(receipt.get("mutation_performed"), False, receipt)
+        self.assertIn("--model/--effort/--tier/--fast", receipt.get("detail") or "")
+        self.assertNotIn("--permission-mode", receipt.get("detail") or "")
+        self.assertTrue(_pid_alive(pid), receipt)
+
+    def test_drain_restart_droid_legacy_seat_uses_its_own_default_mode(self) -> None:
+        session = "droid-KPR-i163-legacy"
+        started = self.run_cli("droid", "start", "--mode", "normal", session=session)[1]
+        self.assertEqual(started.get("state"), "ready", started)
+        self._drop_start_selection("droid", session)
+        restarted = self._restart(
+            "droid", session, started["acp_session_id"], "--model", "auto")[1]
+        self.assertEqual(restarted.get("state"), "ready", restarted)
+        self.assertEqual(
+            (restarted.get("start_selection") or {}).get("mode"), "auto-high", restarted)
+        applied = (restarted.get("config_application") or {}).get("mode") or {}
+        self.assertIs(applied.get("applied"), True, restarted)
+        self.assertEqual(applied.get("config_id"), "autonomy_level", restarted)
+        self.assertEqual(applied.get("value"), "auto-high", restarted)
 
 
 def _pid_alive(pid: int) -> bool:

@@ -192,7 +192,10 @@ if [[ "$command_name" == start || "$command_name" == preflight || "$command_name
   # Selection inputs pass through raw; kaola-acp.py resolves presets,
   # explicit overrides, resume preservation, and Fast itself through the
   # shared model-policy helper. drain-restart carries the same flags; omitted
-  # ones are filled from the seat's recorded start selection.
+  # ones are filled from the seat's recorded start selection. Do not inject
+  # the platform default --mode on drain-restart: an explicit --mode beats a
+  # recorded mode, and kaola-acp.py supplies that default only when neither
+  # is set.
   [[ "$model_given" == true ]] && acp_args+=(--model "$model")
   [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
   [[ "$tier_given" == true ]] && acp_args+=(--tier "$tier")

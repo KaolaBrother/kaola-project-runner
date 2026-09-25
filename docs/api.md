@@ -408,8 +408,13 @@ on `PATH`, else `~/.local/bin`. `drain-restart` runs the start pre-spawn refusal
 before it stops; a refusal there leaves the seat up (`mutation_performed: false`).
 A refusal that still occurs after the exact-stop reports `mutation_performed: true`
 and `drain_stopped`. The restart carries the recorded `start_selection`
-(model, effort, tier, fast, mode) unless the command passes those flags, and
-refuses `drain-restart-selection-unknown` before stopping when it has neither.
+(model, effort, tier, fast, mode) unless the command passes those flags.
+When mode is neither recorded nor passed, drain-restart applies and reports
+the platform default permission mode a fresh start applies (Claude Code
+`bypassPermissions`, and the same per-platform value `start` sets). An
+explicit mode wins, and a recorded mode wins over that default. It refuses
+`drain-restart-selection-unknown` before stopping when the seat recorded no
+model, effort, tier, or fast and the command passed none.
 Roots that ZCode reaches only through ancestor directories, `skills.roots`, or `plugins.dirs` are not
 compared.
 

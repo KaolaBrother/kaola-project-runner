@@ -3706,10 +3706,15 @@ def _selection_explicit() -> dict[str, bool]:
 def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -> dict[str, Any] | None:
     """Fill omitted model/effort/tier/fast/mode from the seat's recorded start.
 
-    Returns None when the record has no selection and the caller passed none,
-    so drain-restart can refuse before it stops the seat. An explicit flag
-    wins over the record. The agent command is re-resolved when the caller
-    did not pass ``--command``, because a tier can change it.
+    Returns None when the record has no selection and the caller passed none
+    of model, effort, tier, fast, or mode, so drain-restart can refuse before
+    it stops the seat. An explicit flag wins over the record. A mode that is
+    neither recorded nor passed becomes the platform default a fresh start
+    applies (``ACP_SKIP_MODE``; the same values ``kaola-tmux.sh`` passes as
+    ``--mode`` on ``start``). Platforms with no such default, including dsh
+    whose default is the launch env, stay unset. The agent command is
+    re-resolved when the caller did not pass ``--command``, because a tier
+    can change it.
     """
     saved = record.get("start_selection")
     saved = saved if isinstance(saved, dict) else None
@@ -3727,6 +3732,13 @@ def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -
             args.fast = saved["fast"]
         if not explicit["mode"] and isinstance(saved.get("mode"), str):
             args.mode = saved["mode"]
+    # A recorded string and an explicit --mode/--permission-mode already won.
+    # Filling only the remaining gap keeps the shell from passing --mode on
+    # every drain-restart, which would look explicit and hide the record.
+    if not explicit["mode"] and not isinstance(getattr(args, "mode", None), str):
+        default_mode = ACP_SKIP_MODE.get(args.platform)
+        if default_mode:
+            args.mode = default_mode
     if not explicit["command"] and not os.environ.get("KAOLA_ACP_COMMAND"):
         args.agent_command = (
             tier_agent_command(args) or args.manifest.get("acp_command") or args.agent_command
@@ -3771,8 +3783,9 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
     without spawning are run first, so a skewed install does not take the seat
     down. If a refusal still happens after the stop, the receipt says the stop
     happened. The recorded model/effort/tier/fast/mode are carried unless this
-    argv names them. Adoption is the new start's dispatcher, and only when
-    that new instance id is present.
+    argv names them. When mode is neither recorded nor passed, the restart
+    applies and reports the platform default a fresh start applies. Adoption
+    is the new start's dispatcher, and only when that new instance id is present.
     """
     if not args.resume and not args.use_continue:
         receipt = base_receipt(args, repo)
