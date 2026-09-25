@@ -3194,15 +3194,12 @@ def host_exists_refusal(args: argparse.Namespace, repo: str,
 
 def pre_spawn_refusal(args: argparse.Namespace,
                       repo: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    """The start refusals decided before any holder is stopped or spawned,
-    plus the facts that decision already computed.
-
-    Returns ``(refusal, facts)``: the refusal receipt, or ``None`` when the
-    start may proceed (``facts`` then carries the worker Skill alignment,
-    the main Skill alignment - ``None`` unless the worker alignment applies
-    - and the heartbeat resolution, so ``command_start`` reuses them instead
-    of rescanning every Skill root). ``drain-restart`` runs this first; a
-    refusal there leaves the live seat up.
+    """The start refusals decided before any holder is stopped or spawned.
+    Returns ``(refusal, facts)``: the refusal is ``None`` when the start may
+    proceed, and ``facts`` then carries the worker Skill alignment, the main
+    alignment (``None`` unless the worker alignment applies), ``hostish``,
+    and the heartbeat resolution for ``command_start`` to reuse.
+    ``drain-restart`` runs this first; a refusal leaves the live seat up.
     """
     if not host_capable(args.platform) and host_session(args.platform, args.session):
         return heartbeat_host_refusal(args, repo, {
@@ -3243,36 +3240,28 @@ def pre_spawn_refusal(args: argparse.Namespace,
     if resolution["refusal"]:
         return heartbeat_host_refusal(args, repo, resolution), {}
     return None, {"alignment": alignment, "main_alignment": main_alignment,
-                  "resolution": resolution}
+                  "hostish": hostish, "resolution": resolution}
 
 
 def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     refused, facts = pre_spawn_refusal(args, repo)
     if refused is not None:
         return refused
-    # Every pre-spawn refusal - host entry (#122), a second Host (#132), the
-    # bridge/runtime files, Skill skew (#105/#106/#121), the ZCode Host model
-    # (#108), the heartbeat binding - already returned; the facts ride along.
+    # Every pre-spawn refusal (#122/#132, bridge/runtime, #105/#106/#121,
+    # #108, heartbeat) already returned; the facts computed there ride along.
     receipt = base_receipt(args, repo)
     receipt.update(bridge_facts(args))
     # Issue #162: every platform's worker start, not only ZCode and Host-named
     # sessions. A direct checkout invocation still has no baseline. A
     # ~/.local/bin start does: the link's target is the accepted checkout.
-    hostish = args.platform == "zcode" or (
-        host_capable(args.platform) and host_session(args.platform, args.session))
     alignment = facts["alignment"]
     main_alignment = facts["main_alignment"]
-    if alignment["applies"]:
+    if alignment["applies"] or facts["hostish"]:
+        # Issue #121: the main Skill ships no scripts, so it is not in #105's
+        # set; an unaligned checkout start has no main-Skill record either.
         receipt["worker_skill_build"] = alignment["build"]
         receipt["worker_skill_roots"] = alignment["roots"]
-        # Issue #121: the main Skill ships no scripts, so it is not in #105's set.
-        receipt["main_skill_build"] = main_alignment["build"]
-    elif hostish:
-        # Checkout invocation, not aligned: no worker baseline means no
-        # main-Skill record either, so both builds stay unknown.
-        receipt["worker_skill_build"] = alignment["build"]
-        receipt["worker_skill_roots"] = alignment["roots"]
-        receipt["main_skill_build"] = None
+        receipt["main_skill_build"] = (main_alignment or {}).get("build")
     resolution = facts["resolution"]
     heartbeat_host = resolution["target"]
     # What this command asked for, and where that request came from. The fact
@@ -3825,9 +3814,8 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
             "mutation_status": "not_started",
         })
         return receipt
-    # Pre-stop decision only: past the stop below, the post-stop start
-    # re-decides on post-stop state, so these facts are not reused.
-    refused, _pre_stop_facts = pre_spawn_refusal(args, repo)
+    # Pre-stop state only; the post-stop start re-decides on fresh state.
+    refused, _ = pre_spawn_refusal(args, repo)
     if refused is not None:
         refused["action"] = "drain-restart"
         refused["mutation_performed"] = False

@@ -4,6 +4,8 @@
 Since #180 the refusal carries those facts without the ``--version``
 probe: its runtime-binary facts match preflight's minus ``version``, only
 ``preflight`` still reports it, and a refusal never waits on the runtime.
+Since #180 the same consolidation is counted in-process: one start scans
+the installed Skill roots once, a drain-restart twice.
 
 Offline only. A live seat, when one is required, is the mock ACP agent under
 an isolated HOME and record root, and each one is force-stopped before the
@@ -12,6 +14,9 @@ temporary directory is removed. No platform CLI is launched.
 
 from __future__ import annotations
 
+import contextlib
+import importlib.util
+import io
 import json
 import os
 import stat
@@ -20,6 +25,7 @@ import sys
 import tempfile
 import time
 import unittest
+import warnings
 from pathlib import Path
 
 
@@ -46,6 +52,15 @@ def _pid_alive(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def load_acp():
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location("kaola_acp_issue164", CLI)
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 class PreSpawnBridgeFactTests(unittest.TestCase):
@@ -220,6 +235,49 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
                          refusal)
         self.assertNotIn("version", refusal["runtime_binary"], refusal)
         self.assertTrue(_pid_alive(pid), "the pre-stop refusal took the seat down")
+
+    def test_worker_skill_alignment_runs_once_per_start(self) -> None:
+        # #180: pre_spawn_refusal is the single start-decision site, so one
+        # start scans the installed Skill roots once; a drain-restart scans
+        # twice - the pre-stop decision plus the post-stop start.
+        session = "claude-code-KPR-i180-count"
+        mod = load_acp()
+        calls: list[str] = []
+        real = mod.worker_skill_alignment
+
+        def counting(repo: str, platform: str = "zcode") -> dict:
+            calls.append(platform)
+            return real(repo, platform)
+
+        mod.worker_skill_alignment = counting
+        # The in-process start leaves its holder Popen to this case's
+        # tearDown stop; its garbage collection would warn.
+        warnings.simplefilter("ignore", ResourceWarning)
+        saved_argv, saved_env = sys.argv, dict(os.environ)
+        os.environ.clear()
+        os.environ.update(self.env(MOCK_ACP_RESUME_ANY="1"))
+        try:
+            sys.argv = [str(CLI), "claude-code", "start", "--repo", str(self.repo),
+                        "--session", session, "--command", self.agent]
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(mod.main(), 0, out.getvalue()[-800:])
+            started = json.loads(out.getvalue().strip().splitlines()[-1])
+            self.started.append(("claude-code", session))
+            self.assertEqual(started["state"], "ready", started)
+            self.assertEqual(len(calls), 1, calls)
+            calls.clear()
+            sys.argv = [str(CLI), "claude-code", "drain-restart", "--repo",
+                        str(self.repo), "--session", session, "--command",
+                        self.agent, "--resume", started["acp_session_id"]]
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(mod.main(), 0, out.getvalue()[-800:])
+            restarted = json.loads(out.getvalue().strip().splitlines()[-1])
+            self.assertEqual(restarted["state"], "ready", restarted)
+            self.assertEqual(len(calls), 2, calls)
+        finally:
+            sys.argv = saved_argv
+            os.environ.clear()
+            os.environ.update(saved_env)
 
     def test_start_missing_zcode_runtime_matches_preflight(self) -> None:
         session = "zcode-KPR-i164-runtime"
