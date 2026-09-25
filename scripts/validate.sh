@@ -150,6 +150,7 @@ python_suites_all=(
   "test-issue-130-pty-retired.py"
   "test-issue-162-upgrade-safety.py"
   "test-issue-164-pre-spawn-bridge-facts.py"
+  "test-issue-165-path-drift.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -213,6 +214,7 @@ python_suites_b=(
   "test-issue-130-pty-retired.py"
   "test-issue-162-upgrade-safety.py"
   "test-issue-164-pre-spawn-bridge-facts.py"
+  "test-issue-165-path-drift.py"
 )
 run_suite_lane() {
   local status=0 rc

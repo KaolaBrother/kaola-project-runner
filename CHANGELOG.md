@@ -11,6 +11,23 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   legacy records without a quota digest remain silent, and the documented
   skill-difference staleness contract is unchanged. **Seats: restart not required.**
 - **Rename the pin-drift contract test to match its non-stale assertion (Issue #167).**
+- **A removed or moved recorded path, or a reinstall under a different root, is reported by name (Issue #165).**
+  #162 recorded absolute `script_paths` and flagged byte drift, but a recorded
+  path that no longer resolves (the checkout moved or was deleted) yields no
+  digest, so it was neither "changed" nor "unchanged" and went unreported;
+  a seat reinstalled under a different root also said nothing. `status` and
+  `list` now name `recorded-path-missing` (with the names in `missing_files`)
+  and `install-root-mismatch` (with `recorded_root` and `install_root`) in the
+  existing `reported_drift` vocabulary. The root comparison is per platform:
+  the expected tree is the seat's OWN `skills/<platform>-kaola-project-runner`
+  sibling when this CLI runs from an installed Skill tree, so the documented
+  Host sweep that runs `list` from one platform's tree does not falsely flag a
+  seat of another platform, and a genuinely re-rooted seat still is. Both
+  conditions are evidence only: they never set `stale` and never gate
+  transport. The holder, ZCode bridge, and protocol are unchanged. Contract
+  coverage: `tests/contract/test-issue-165-path-drift.py`.
+  **Seats: restart not required.** Only `kaola-acp.py` reporting changed; the
+  operator test `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/adapters platforms` is empty.
 - **Running seats record their build and accepted revision; status and list flag drift; a skewed seat is not dispatched; drain-restart replaces the process at idle (Issue #162).**
   The holder writes `runner_build`, `accepted_revision`, and `script_paths`
   into its record and state at startup, and loads `kaola-quota.py` then so a
