@@ -209,7 +209,7 @@ class AcpWatchContractTests(unittest.TestCase):
         self._started.clear()
 
     def env(self) -> dict[str, str]:
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         return env
@@ -258,6 +258,8 @@ class AcpWatchContractTests(unittest.TestCase):
         receipt = self.load_object(result, f"kaola-acp {platform} {command}")
         if check and "error" in receipt:
             self.fail(f"kaola-acp {platform} {command} error {receipt['error']}\n{receipt}")
+        if check and receipt.get("result") == "refused":
+            self.fail(f"kaola-acp {platform} {command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def start(

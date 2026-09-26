@@ -99,7 +99,7 @@ def start_holder(root: Path, name: str) -> dict:
     repo.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     session = f"swpt-{name}-{os.getpid()}"
-    env = dict(os.environ)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
     env["TMPDIR"] = str(root)
     env["KAOLA_ACP_RECORD_ROOT"] = str(root / "records")
     env["MOCK_ACP_LOG"] = str(root / "mock-events.jsonl")

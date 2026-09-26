@@ -86,7 +86,7 @@ class ReaderExceptionBoundary(unittest.TestCase):
             "--command", f"{sys.executable} {MOCK} --scenario handler_raises",
             *args,
         ]
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         result = subprocess.run(
             argv, capture_output=True, text=True, env=env, timeout=timeout
@@ -101,6 +101,8 @@ class ReaderExceptionBoundary(unittest.TestCase):
             )
         if check and "error" in receipt:
             self.fail(f"kaola-acp {command} returned error {receipt['error']}")
+        if check and receipt.get("result") == "refused":
+            self.fail(f"kaola-acp {command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def record_dir(self) -> Path:

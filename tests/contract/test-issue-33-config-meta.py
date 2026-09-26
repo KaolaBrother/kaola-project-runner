@@ -118,7 +118,7 @@ class Issue33ConfigMetaTests(unittest.TestCase):
     # -- helpers -------------------------------------------------------------
 
     def env(self, config: dict | None = None, pages: list[dict] | None = None) -> dict[str, str]:
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         if config is not None:
@@ -158,6 +158,8 @@ class Issue33ConfigMetaTests(unittest.TestCase):
             )
         if check and "error" in receipt:
             self.fail(f"kaola-acp {command} returned error {receipt['error']}\nreceipt={receipt}")
+        if check and receipt.get("result") == "refused":
+            self.fail(f"kaola-acp {command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def start(self, *args: str, caps: str = "", config: dict | None = None,

@@ -6,6 +6,25 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Contract suites no longer inherit the seat's `KAOLA_*` environment (Issue #182).**
+  A focused loop run from a dispatched seat inherits `KAOLA_ACP_HEARTBEAT_HOST` and
+  `KAOLA_ACP_DISPATCHER` naming different holders; every suite that built its command
+  env from `os.environ` copied them into the spawned `kaola-acp.py`, whose `start` was
+  then refused `heartbeat-host-conflict` pre-spawn while the suites' error-only
+  receipt checks passed the typed refusal, so the failure surfaced later as
+  `no-session`. The 14 affected suites now build the command env as
+  `{k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}` and set their
+  own fixtures back (the #176 / `test-issue-98-dsh-acp.py` pattern); ten helpers also
+  fail on `result == "refused"` when `check=True`, so a refusal surfaces at the
+  command that was refused. `test-issue-130-pty-retired.py` is fixed transitively
+  through `test-acp-contract.py`, and `test-zcode-acp-contract.py` measures the
+  runtime fallback with `KAOLA_ZCODE_*` absent. Each touched suite now passes both
+  from a dispatched seat and under `./scripts/validate.sh`, which already dropped the
+  namespace (#115).
+  **Seats: restart not required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+  is empty: only `tests/contract/` files changed.
+
 - **A Codex turn that dies in `threadStatus systemError` is recorded `turn_failed`, and its worker events stay staged (Issue #173).**
   When a Codex backend became unreachable, every Host turn began with an automatic
   compaction that failed: the ACP stream reported `session_info_update`
@@ -34,6 +53,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   so a running seat only picks up the new holder bytes by restarting. Contract
   coverage: `tests/contract/test-issue-173-codex-system-error-turn.py`,
   `tests/contract/test-issue-90-event-confirmation-race.py`.
+
 
 - **One installed-Skill scan per `drain-restart`, and one imported sibling in the holder (Issue #184).**
   `drain-restart` decided the pre-spawn refusals and then called `start`, which decided

@@ -200,7 +200,7 @@ class CodexContinueIntegrationTests(unittest.TestCase):
             self.cli("stop", "--force", check=False, timeout=15)
 
     def env(self, pages: list[dict] | None = None) -> dict[str, str]:
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         if pages is not None:
@@ -236,6 +236,8 @@ class CodexContinueIntegrationTests(unittest.TestCase):
             )
         if check and "error" in receipt:
             self.fail(f"kaola-acp codex {command} returned error {receipt['error']}\nreceipt={receipt}")
+        if check and receipt.get("result") == "refused":
+            self.fail(f"kaola-acp codex {command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def read_mock_log(self) -> list[dict]:

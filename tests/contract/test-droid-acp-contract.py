@@ -69,7 +69,7 @@ class DroidAcpSessionFixture(unittest.TestCase):
             self.cli("stop", "--force", check=False, timeout=15)
 
     def env(self) -> dict[str, str]:
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["DROID_ACP_LOG"] = str(self.mock_log)
         env["DROID_BIN"] = str(self.droid_shim)
@@ -105,6 +105,8 @@ class DroidAcpSessionFixture(unittest.TestCase):
                 f"kaola-acp droid {command} returned error {receipt['error']}\n"
                 f"receipt={json.dumps(receipt, sort_keys=True)}"
             )
+        if check and receipt.get("result") == "refused":
+            self.fail(f"kaola-acp droid {command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def start(self, *args, **kwargs) -> dict:

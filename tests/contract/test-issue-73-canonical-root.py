@@ -120,11 +120,9 @@ class CanonicalRootFixture(unittest.TestCase):
                 bound: str | None, transport: str | None = None,
                 env_extra: dict[str, str] | None = None,
                 timeout: float = 60) -> subprocess.CompletedProcess:
-        env = dict(os.environ)
-        env.pop(CANONICAL_KEY, None)
-        # Issue #104: a suite run from inside a Runner-managed agent inherits
-        # the holder's dispatcher fact; each case here declares its own.
-        env.pop(DISPATCHER_KEY, None)
+        # Issue #104/#182: each case declares its own binding facts, and no
+        # inherited KAOLA_* binding survives into the fixture.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         if bound is not None:
             env[CANONICAL_KEY] = bound
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
@@ -438,7 +436,7 @@ class TestStopInstanceProtection(unittest.TestCase):
 
     def acp(self, command: str, *args: str, check: bool = True,
             timeout: float = 40) -> dict:
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         argv = [sys.executable, str(ACP_CLI), "grok", command,
                 "--repo", str(self.repo), "--session", self.session,
@@ -452,6 +450,8 @@ class TestStopInstanceProtection(unittest.TestCase):
                       f"stdout={result.stdout!r}\nstderr={result.stderr!r}")
         if check and "error" in receipt:
             self.fail(f"{command} returned {receipt['error']}")
+        if check and receipt.get("result") == "refused":
+            self.fail(f"{command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def start(self) -> dict:
@@ -507,7 +507,7 @@ class TestStopInstanceProtection(unittest.TestCase):
     def test_shared_entrypoint_forwards_the_expected_instance_to_stop(self) -> None:
         self.start()
         live = self.live_instance_id()
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["KAOLA_ACP_COMMAND"] = f"{sys.executable} {MOCK} --scenario normal"
         result = subprocess.run(

@@ -202,7 +202,7 @@ class AcpSessionFixture:
     # -- helpers -------------------------------------------------------------
 
     def env(self) -> dict[str, str]:
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         return env
@@ -240,6 +240,8 @@ class AcpSessionFixture:
             )
         if check and "error" in receipt:
             self.fail(f"kaola-acp {command} returned error {receipt['error']}\nreceipt={receipt}")
+        if check and receipt.get("result") == "refused":
+            self.fail(f"kaola-acp {command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def read_mock_log(self) -> list[dict]:
@@ -1473,6 +1475,8 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             )
         if kwargs.get("check", True) and "error" in receipt:
             self.fail(f"kaola-acp {platform} {command} returned error {receipt['error']}\nreceipt={receipt}")
+        if kwargs.get("check", True) and receipt.get("result") == "refused":
+            self.fail(f"kaola-acp {platform} {command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def start(self, platform: str = "grok", *args: str, **kwargs) -> dict:
@@ -1904,7 +1908,7 @@ class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
             self._run("stop", "--force")
 
     def env(self) -> dict[str, str]:
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env.pop(CANONICAL_KEY, None)
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)

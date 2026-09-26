@@ -21,6 +21,7 @@ import threading
 import time
 import unittest
 import uuid
+from unittest import mock
 from pathlib import Path
 
 
@@ -460,13 +461,18 @@ class ZcodeAcpStaticTests(unittest.TestCase):
 
     def test_resolve_runtime_fails_closed(self) -> None:
         module = load_adapter_module()
-        with self.assertRaises(module.RuntimeError_):
-            module.resolve_runtime(None, None)
-        with self.assertRaises(module.RuntimeError_):
-            module.resolve_runtime("zcode.cjs", "/usr/bin/true")
-        missing = "/tmp/kaola-zcode-missing-entry-does-not-exist.cjs"
-        with self.assertRaises(module.RuntimeError_):
-            module.resolve_runtime(missing, sys.executable)
+        # Issue #182: a dispatched seat inherits KAOLA_ZCODE_* bindings, so
+        # the env fallback must be measured with them absent.
+        with mock.patch.dict(os.environ, {k: v for k, v in os.environ.items()
+                                          if k not in ("KAOLA_ZCODE_ENTRY",
+                                                       "KAOLA_ZCODE_NODE")}, clear=True):
+            with self.assertRaises(module.RuntimeError_):
+                module.resolve_runtime(None, None)
+            with self.assertRaises(module.RuntimeError_):
+                module.resolve_runtime("zcode.cjs", "/usr/bin/true")
+            missing = "/tmp/kaola-zcode-missing-entry-does-not-exist.cjs"
+            with self.assertRaises(module.RuntimeError_):
+                module.resolve_runtime(missing, sys.executable)
 
     def test_steer_budget_env_is_fail_safe_and_bounded(self) -> None:
         # Outer-review knob leg: KAOLA_ZCODE_STEER_BUDGET is a test-only

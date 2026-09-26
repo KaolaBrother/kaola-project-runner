@@ -82,7 +82,7 @@ class SteeringContract(unittest.TestCase):
     # -- helpers -------------------------------------------------------------
 
     def env(self) -> dict[str, str]:
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         return env
 
@@ -110,6 +110,8 @@ class SteeringContract(unittest.TestCase):
                       f"stdout={result.stdout!r} stderr={result.stderr!r}")
         if check and "error" in receipt:
             self.fail(f"{command} returned error {receipt['error']}")
+        if check and receipt.get("result") == "refused":
+            self.fail(f"{command} refused: {receipt.get('reason')}: {receipt.get('detail')}")
         return receipt
 
     def start_running_turn(self, platform: str, steering: str, turn_ms: int = 9000,
