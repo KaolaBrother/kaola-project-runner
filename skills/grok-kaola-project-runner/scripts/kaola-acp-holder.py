@@ -1593,6 +1593,10 @@ class Holder:
             "mutation_status": "not_started",
             "stop_reason": None,
             "outcome": None,
+            # Issue #173: the turn's own structured failure, if the agent's
+            # stream carried one (codex-acp `_meta.codex.threadStatus`). Cleared
+            # to None by a later healthy status, so a recovered turn is healthy.
+            "error": None,
             "final_text": "",
             "final_text_truncated": False,
             "thinking_chars": 0,
@@ -1974,6 +1978,22 @@ class Holder:
                     update.get("configOptions"), "config_option_update")
         elif variant not in KNOWN_UPDATES:
             self.agent.unknown_updates += 1
+        # Issue #173: a SEPARATE `if`, deliberately not another `elif` - the
+        # `session_info_update` variant must keep counting as unknown below, or
+        # healthy receipts change. codex-acp 1.13.1 reports a failed turn only
+        # here (`_meta.codex.threadStatus`), never in the prompt response, so
+        # this is the only structured failure signal on the wire. Scoped to the
+        # live turn of THIS session: another session's update is a sub-agent
+        # child thread, and an update outside a turn belongs to no turn at all.
+        # The LAST status in the turn wins, so a turn that recovers (idle) stays
+        # healthy; only an explicit `systemError` marks it.
+        if turn["active"] and params.get("sessionId") in (None, self.acp_session_id):
+            thread_status = ((update.get("_meta") or {}).get("codex") or {}).get("threadStatus")
+            if isinstance(thread_status, dict):
+                turn["error"] = (
+                    {"code": "agent-system-error", "threadStatus": thread_status["type"]}
+                    if thread_status.get("type") == "systemError" else None
+                )
         self.projection.apply(update, self.events.cursor + 1)
         cursor = self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
                                      "update": update})
@@ -1997,7 +2017,17 @@ class Holder:
         else:
             stop = (response.get("result") or {}).get("stopReason")
             turn["stop_reason"] = stop
-            turn["outcome"] = "turn_canceled" if stop == "cancelled" else "turn_completed"
+            # Issue #173: the agent answered `end_turn` even though the stream
+            # carried a systemError (codex-acp maps a failed turn onto end_turn
+            # when the AIR typed-failure capability is absent). `stop_reason`
+            # stays verbatim - the log records what the agent sent (#113) - but
+            # the outcome is the failure this holder actually observed.
+            if stop == "cancelled":
+                turn["outcome"] = "turn_canceled"
+            elif turn.get("error"):
+                turn["outcome"] = "turn_failed"
+            else:
+                turn["outcome"] = "turn_completed"
         turn["mutation_status"] = "completed"
         turn["active"] = False
         self.projection.close_message()

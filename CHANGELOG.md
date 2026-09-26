@@ -6,6 +6,35 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **A Codex turn that dies in `threadStatus systemError` is recorded `turn_failed`, and its worker events stay staged (Issue #173).**
+  When a Codex backend became unreachable, every Host turn began with an automatic
+  compaction that failed: the ACP stream reported `session_info_update`
+  `_meta.codex.threadStatus {type: systemError}` and then an error
+  `agent_message_chunk`, but codex-acp 1.13.1 still answered
+  `{stopReason: "end_turn"}`. The holder recorded `turn_ended
+  outcome=turn_completed stop_reason=end_turn`, `_worker_event_turn_end`
+  confirmed the events the notification turn had delivered, and the Host sat idle
+  with finished workers and no `status`/`observe` field showing the failure. The
+  holder now reads the one structured failure signal the adapter puts on the wire:
+  during an active turn of this session, a `_meta.codex.threadStatus` of
+  `systemError` marks the turn, and the prompt response is recorded `turn_failed`
+  while `stop_reason` stays verbatim (`end_turn`), per the #113 contract. The
+  events the failed turn delivered stay unconfirmed and redeliver at the next
+  healthy boundary, with a new event, or on resume; `status`/`observe` then report
+  `turn_outcome: turn_failed` and `send`/`wait` receipts carry
+  `error.code: agent-system-error` with the `threadStatus`. The last status in the
+  turn wins, so a turn that recovers stays healthy; `willRetry` reconnect attempts
+  do not fail a turn; `fatal_error` is untouched (a `systemError` is per-turn and
+  recoverable, not a sticky start verdict); and no new status field or adapter
+  capability is added. Every non-codex platform and every healthy codex turn
+  (whose final status is `idle`) is receipt-identical to before.
+  **Seats: restart required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+  is not empty: `scripts/kaola-acp-holder.py` changed (the turn-outcome detection),
+  so a running seat only picks up the new holder bytes by restarting. Contract
+  coverage: `tests/contract/test-issue-173-codex-system-error-turn.py`,
+  `tests/contract/test-issue-90-event-confirmation-race.py`.
+
 - **One installed-Skill scan per `drain-restart`, and one imported sibling in the holder (Issue #184).**
   `drain-restart` decided the pre-spawn refusals and then called `start`, which decided
   them again, so a single restart walked the installed Skill roots twice. `command_start`
