@@ -4,7 +4,7 @@
     "bin/claude-code-acp.js": "3fa961c18fa4538b31d2c6f1ae634ac30f155bf0d307a12b62995ecd9ec584a3",
     "package-lock.json": "f7145b99bdf8b2b60f8fbf78be47f15876edc0e6d5bd592581b59a1122394366",
     "package.json": "00ef476eeb3af012c464018718450d8e79d6a6c108746ae6b4023be51c9e9119",
-    "src/agent.ts": "a930fd73915c7b6220f1e9326773f2289922d625b0c9aecdae5666c8601343d7",
+    "src/agent.ts": "6ebed9a85d04bf504aa29cb4923001fece934206055a1e0590babbf5cbc4e7b6",
     "src/claude-runner.ts": "ec70c4c7e84c3cecb0e045dfc274f2ee418c460152ff43549b35fdc6d8b56944",
     "src/config.ts": "18ccfb00af87f9302d53eea9840b0c97f72aba6b648157452c128b384e031654",
     "src/index.ts": "98d0f733537066b74e7cb265a54f35d45644a43941879fe4e5adbb7956baf654",
@@ -16,14 +16,14 @@
   },
   "output": {
     "dist/index.js": {
-      "bytes": 626404,
-      "sha256": "027fab3d8d3587bea3e8754f738cdd9f9f6b60c85ff60fb4614ba2d53c615306"
+      "bytes": 627015,
+      "sha256": "3ad9452af3403a9e820fe3772e5604634457422b472e50bcaa3e3a4863568dc3"
     }
   },
   "toolchain": {
     "@agentclientprotocol/sdk": "0.16.1",
     "esbuild": "0.27.4",
-    "node": "v24.18.0",
+    "node": "v24.21.0",
     "tsup": "8.5.1",
     "typescript": "5.9.3",
     "zod": "4.3.6"

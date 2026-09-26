@@ -6,6 +6,13 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- claude-code seats now publish `native_session_identity` (the native Claude
+  UUID) on a seat's first turn, fresh or resumed (#186). A fresh seat's recorded
+  `acp_session_id` is process-local and can never be resumed: `--resume` uses the
+  newest `native_session_identity.nativeSessionId`, readable with `capture` — a
+  later event supersedes an earlier one, since a resume-failure fallback replaces
+  the conversation.
+
 ## 0.6.3 — 2026-09-26 (seat build tracking and drain-restart, Codex systemError turns, droid model verification)
 
 Seats: restart required

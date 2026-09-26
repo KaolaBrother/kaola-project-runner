@@ -201,6 +201,9 @@ export function createClaudeCodeAgent(
 ): Agent {
   const store = new SessionStore();
   const cancelledSessions = new Set<string>();
+  // Issue #186: the native id this process last announced per ACP session, so
+  // the identity update is emitted exactly once per (session, native id).
+  const announcedNativeIds = new Map<string, string>();
 
   function sessionState(sessionId: string) {
     return {
@@ -232,6 +235,45 @@ export function createClaudeCodeAgent(
       }
       throw err;
     }
+  }
+
+  /**
+   * Kaola fork (Issue #186): bind the native Claude Code conversation id and
+   * report which ACP session now owns it.
+   *
+   * A fresh seat's ACP id is minted by this process (`generateSessionId`) and
+   * dies with it, so nothing the client already holds can be resumed after a
+   * stop. Every place that establishes or changes the native id therefore
+   * publishes the id itself, in the credential-free shape ZCode already uses
+   * (`scripts/kaola-zcode-acp.py`, `native_session_identity`). The holder
+   * records session updates in its event log, so `capture` exposes it and
+   * `--resume` gets a verified id instead of the process-local one.
+   *
+   * De-duplication compares against the id this process last announced, not
+   * the store's previous binding: a resume-bound seat already holds its native
+   * id before its first turn, so comparing with the binding would swallow the
+   * single event that tells a Host which id to resume.
+   */
+  async function bindNativeSession(
+    sessionId: string,
+    nativeSessionId: string
+  ): Promise<void> {
+    // A turn that announced no id must not clear the binding a resume put in
+    // place (the continue path can reach here with an empty session id).
+    if (!nativeSessionId) return;
+    store.setClaudeSessionId(sessionId, nativeSessionId);
+    if (announcedNativeIds.get(sessionId) === nativeSessionId) {
+      return;
+    }
+    announcedNativeIds.set(sessionId, nativeSessionId);
+    await connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "native_session_identity",
+        acpSessionId: sessionId,
+        nativeSessionId,
+      } as any,
+    });
   }
 
   return {
@@ -619,6 +661,10 @@ export function createClaudeCodeAgent(
               launch,
               cwd
             );
+            // Issue #186: a seat resumed by native id already holds that id
+            // before its first turn, so the continue path announces it here -
+            // the only identity event a resume-bound seat ever emits.
+            await bindNativeSession(sessionId, result.sessionId);
           } catch (resumeErr) {
             if (isBinaryError(resumeErr)) throw resumeErr;
             // Kaola fork: a cancelled resume turn is not an expired session.
@@ -638,7 +684,9 @@ export function createClaudeCodeAgent(
               sessionId,
               launch
             );
-            store.setClaudeSessionId(sessionId, result.sessionId);
+            // Issue #186: the fallback conversation has its own native id; the
+            // client must learn it, since the one it held just expired.
+            await bindNativeSession(sessionId, result.sessionId);
           }
         } else {
           const mcpServers = store.getMcpServers(sessionId);
@@ -660,7 +708,9 @@ export function createClaudeCodeAgent(
               launch
             );
           }
-          store.setClaudeSessionId(sessionId, result.sessionId);
+          // Issue #186: a fresh seat's ACP id is process-local, so this first
+          // turn is where the resumable native id reaches the client.
+          await bindNativeSession(sessionId, result.sessionId);
         }
 
         // Wait for all pending permission requests to resolve
@@ -690,11 +740,15 @@ export function createClaudeCodeAgent(
         if (cancelledSessions.has(sessionId)) {
           cancelledSessions.delete(sessionId);
           // Kaola fork: a cancelled first turn still created the native
-          // conversation; keep the id the CLI announced so the next turn resumes it.
+          // conversation, and a cancelled turn on a seat already resumed by id
+          // still owns that id; either way the client must learn it. A cancelled
+          // fallback turn owns the fresh conversation it just announced, so the
+          // announced id wins over the id its resume had failed to reach.
           const announced = (err as { claudeSessionId?: unknown } | null)?.claudeSessionId;
-          if (!claudeSessionId && typeof announced === "string" && announced) {
-            store.setClaudeSessionId(sessionId, announced);
-          }
+          const id = (typeof announced === "string" && announced) || claudeSessionId || "";
+          // Issue #186: that cancelled turn is often the seat's only turn, so
+          // the id must reach the client too.
+          if (id) await bindNativeSession(sessionId, id);
           logger.info(`Prompt cancelled for session ${sessionId}`);
           return { stopReason: "cancelled" };
         }

@@ -16341,6 +16341,7 @@ function launchOptionsFor(store, sessionId) {
 function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
   const store = new SessionStore();
   const cancelledSessions = /* @__PURE__ */ new Set();
+  const announcedNativeIds = /* @__PURE__ */ new Map();
   function sessionState(sessionId) {
     return {
       modes: buildModeState(store.getMode(sessionId) ?? DEFAULT_MODE),
@@ -16368,6 +16369,22 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
       }
       throw err;
     }
+  }
+  async function bindNativeSession(sessionId, nativeSessionId) {
+    if (!nativeSessionId) return;
+    store.setClaudeSessionId(sessionId, nativeSessionId);
+    if (announcedNativeIds.get(sessionId) === nativeSessionId) {
+      return;
+    }
+    announcedNativeIds.set(sessionId, nativeSessionId);
+    await connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "native_session_identity",
+        acpSessionId: sessionId,
+        nativeSessionId
+      }
+    });
   }
   return {
     async initialize(_params) {
@@ -16676,6 +16693,7 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
               launch,
               cwd
             );
+            await bindNativeSession(sessionId, result.sessionId);
           } catch (resumeErr) {
             if (isBinaryError(resumeErr)) throw resumeErr;
             if (cancelledSessions.has(sessionId)) throw resumeErr;
@@ -16690,7 +16708,7 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
               sessionId,
               launch
             );
-            store.setClaudeSessionId(sessionId, result.sessionId);
+            await bindNativeSession(sessionId, result.sessionId);
           }
         } else {
           const mcpServers = store.getMcpServers(sessionId);
@@ -16712,7 +16730,7 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
               launch
             );
           }
-          store.setClaudeSessionId(sessionId, result.sessionId);
+          await bindNativeSession(sessionId, result.sessionId);
         }
         await Promise.all(permissionPromises);
         if (cancelledSessions.has(sessionId)) {
@@ -16734,9 +16752,8 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
         if (cancelledSessions.has(sessionId)) {
           cancelledSessions.delete(sessionId);
           const announced = err?.claudeSessionId;
-          if (!claudeSessionId && typeof announced === "string" && announced) {
-            store.setClaudeSessionId(sessionId, announced);
-          }
+          const id = typeof announced === "string" && announced || claudeSessionId || "";
+          if (id) await bindNativeSession(sessionId, id);
           logger.info(`Prompt cancelled for session ${sessionId}`);
           return { stopReason: "cancelled" };
         }

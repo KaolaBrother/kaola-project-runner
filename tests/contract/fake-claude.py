@@ -17,9 +17,12 @@ single ``result``, exactly as the real CLI absorbs it.
 (default) answers and exits; ``permission`` first emits a
 ``permission_request`` line; ``hang`` starts a ``sleep`` grandchild and
 blocks until killed; ``fail`` announces its session id and exits 1 like a
-CLI that could not serve the turn; ``silent`` starts the ``sleep`` grandchild
-and blocks without writing a single line, so the bridge never forwards a
-``session/update`` for the turn.
+CLI that could not serve the turn; ``failresume`` does the same only when
+``--resume`` is passed, so the fresh fallback after a failed resume really
+serves its turn; ``resumefailhang`` fails on ``--resume`` and hangs on the
+fresh fallback turn, so that fallback can be cancelled while it runs;
+``silent`` starts the ``sleep`` grandchild and blocks without writing a
+single line, so the bridge never forwards a ``session/update`` for the turn.
 """
 
 import json
@@ -32,7 +35,7 @@ import time
 import uuid
 
 RECORD = os.environ.get("FAKE_CLAUDE_RECORD")
-MODES = ("echo", "permission", "hang", "fail", "silent")
+MODES = ("echo", "permission", "hang", "fail", "failresume", "resumefailhang", "silent")
 
 
 def option(argv, flag):
@@ -122,7 +125,11 @@ def main():
         "mcp_config_exists": bool(mcp_config) and os.path.isfile(mcp_config),
     }
     grandchild = None
-    if mode in ("hang", "silent"):
+    # ``resumefailhang`` only hangs on the fresh fallback leg; on its failing
+    # ``--resume`` leg it must exit at once without a grandchild, or the
+    # inherited stdout pipe stays open and no reader ever sees the exit.
+    hang_like = mode in ("hang", "silent") or (mode == "resumefailhang" and not resume)
+    if hang_like:
         # The real CLI handles SIGTERM and exits with status 143 (128 + 15)
         # instead of dying by signal; a bridge must treat that as a cancel,
         # never as an expired session to resume afresh.
@@ -136,10 +143,10 @@ def main():
         time.sleep(300)
         return 0
     emit({"type": "system", "subtype": "init", "session_id": session_id, "model": "fake-model"})
-    if mode == "fail":
+    if mode == "fail" or (mode in ("failresume", "resumefailhang") and resume):
         sys.stderr.write("fake claude: cannot serve this turn\n")
         return 1
-    if mode == "hang":
+    if mode in ("hang", "resumefailhang"):
         emit({"type": "assistant", "session_id": session_id,
               "message": {"content": [{"type": "text", "text": "hanging"}]}})
         time.sleep(300)

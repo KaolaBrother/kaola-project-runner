@@ -64,10 +64,14 @@ prompt — read that line in the notification and fix the file.
 Where a session's native id comes from differs by platform, and `--resume` is
 only honest with a verified one. ZCode reports its `sess_…` in that session's own
 `native_session_identity` event - readable with `capture` - and only once the
-session has run a turn; a freshly created one carries the bridge `zcode-N` id in
-`session_meta` and no native id at all. Other platforms may publish theirs in
-`session_meta`. No verified id means no `--resume`: start the session without
-history and say so, rather than passing `acp_session_id` or `--continue`.
+session has run a turn; a fresh one carries the bridge `zcode-N` id in
+`session_meta` and no native id at all. Claude Code reports its native UUID in the
+same event from turn one; a fresh seat's `acp_session_id` is process-local and
+unresumable, while a seat resumed by `--resume U` has `acp_session_id` = U.
+The newest `nativeSessionId` wins - a fallback stales the rest - and other
+platforms may publish theirs in `session_meta`. No verified id means no
+`--resume`: start without history and say so, rather than passing
+`acp_session_id` or `--continue`.
 
 A Host `start` refuses `worker-skill-build-skew` (exit 1, nothing created) when
 the installed worker Skills are a different build from the Skill this Host runs:
