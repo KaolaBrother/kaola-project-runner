@@ -2534,6 +2534,57 @@ def explicit_selection_problem(requested_model: str, requested_effort: str,
     return "; ".join(problems) or None
 
 
+# Issue #185: platforms whose selected model is verified from the agent's own
+# current-model echo (`session_meta.configOptions[model].currentValue`). Droid
+# only: its catalog is unreadable and its `models.currentModelId` is frozen.
+ECHO_VERIFIED_PLATFORMS = frozenset({"droid"})
+
+
+def echo_model_verification(
+    platform: str, policy: dict[str, Any], effective: dict[str, Any]
+) -> dict[str, Any] | None:
+    """A ``true``/``false``/``unknown`` model verdict from the agent's own echo.
+
+    ``None`` for a platform whose advertised value is not a reliable authority.
+    Reported evidence only; it never gates a start. ``effective`` must be the
+    raw ``effective_selection`` echo, before the Issue #140 argv override.
+    """
+    if platform not in ECHO_VERIFIED_PLATFORMS:
+        return None
+    actual_id = effective.get("effective_model")
+    actual_parameters: dict[str, Any] = {}
+    if effective.get("effective_effort"):
+        actual_parameters["effort"] = effective["effective_effort"]
+    result: dict[str, Any] = {
+        "actual_runtime_model_id": actual_id,
+        "actual_parameters": actual_parameters,
+        "model_verified": "unknown",
+        "model_mismatch_reason": None,
+    }
+    if not actual_id:
+        result["model_mismatch_reason"] = "actual-model-evidence-unreadable"
+        return result
+    expected_id = policy.get("resolved_runtime_model_id")
+    if not expected_id:
+        # On droid an empty target is only the preserved-resume path.
+        result["model_mismatch_reason"] = "resume-preserved-actual-not-comparable"
+        return result
+    if actual_id != expected_id:
+        result["model_verified"] = False
+        result["model_mismatch_reason"] = f"actual-model-mismatch:{actual_id}"
+        return result
+    for key, expected in (policy.get("resolved_parameters") or {}).items():
+        if key not in actual_parameters:
+            result["model_mismatch_reason"] = f"actual-{key}-evidence-unreadable"
+            return result
+        if actual_parameters[key] != expected:
+            result["model_verified"] = False
+            result["model_mismatch_reason"] = f"actual-{key}-mismatch:{actual_parameters[key]}"
+            return result
+    result["model_verified"] = True
+    return result
+
+
 def stop_started_holder(sock: Path, proc: subprocess.Popen) -> dict[str, Any]:
     """Force-stop the holder this start just spawned and reap it."""
     stop_reply = socket_request(sock, "stop", {"force": True}, 30.0)
@@ -3622,6 +3673,9 @@ def command_start(args: argparse.Namespace, repo: str,
         receipt.setdefault("fast", fast_report(args, policy, "none", False))
         # Issue #119 (H2): what the agent itself now reports, for every start.
         effective = effective_selection(args.manifest, socket_request(sock, "state", {}, 10.0))
+        # Issue #185: droid's verdict reads the agent's raw echo here, before
+        # the Issue #140 block below replaces the display value with the argv.
+        echo_verdict = echo_model_verification(args.platform, policy, effective)
         if (application.get("model") or {}).get("applied_via") == "argv":
             # Issue #140: devin's advertised currentValue stays the stale
             # initial value when the argv set the model; keep it as evidence.
@@ -3629,6 +3683,15 @@ def command_start(args: argparse.Namespace, repo: str,
             effective["effective_model"] = application["model"]["value"]
             effective["effective_model_source"] = "launch-argv"
         receipt["effective_selection"] = effective
+        if echo_verdict is not None:
+            receipt.update(echo_verdict)
+            provenance = policy.setdefault("model_evidence_provenance", {})
+            provenance["actual"] = {
+                "source": "acp-config-echo",
+                "model_id": echo_verdict["actual_runtime_model_id"],
+                "parameters": echo_verdict["actual_parameters"],
+            }
+            receipt["model_evidence_provenance"] = provenance
         explicit_model = acp_model_value if args.model else ""
         explicit_effort = effort_value if args.effort else ""
         problem = (explicit_selection_problem(explicit_model, explicit_effort, effective)

@@ -184,6 +184,18 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.assertIn(("model", "auto"), self.config_events())
         self.assertEqual(self.echoed_model_values(), ["auto", "auto"])
         self.assertEqual((receipt.get("effective_selection") or {}).get("effective_model"), "auto")
+        # Issue #185: the model verdict comes from that echo, not the
+        # unreadable CLI catalog and not the frozen session/new
+        # `models.currentModelId` snapshot.
+        self.assertEqual(receipt.get("actual_runtime_model_id"), "auto")
+        # The echoed session effort is reported as evidence; no effort was
+        # pinned, so nothing is compared and the verdict is still true.
+        self.assertEqual(receipt.get("actual_parameters"), {"effort": "high"})
+        self.assertIs(receipt.get("model_verified"), True)
+        self.assertIsNone(receipt.get("model_mismatch_reason"))
+        actual = (receipt.get("model_evidence_provenance") or {}).get("actual") or {}
+        self.assertEqual(actual.get("source"), "acp-config-echo")
+        self.assertEqual(actual.get("model_id"), "auto")
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("support"), "none")
         self.assertFalse(fast.get("applied"))
@@ -264,6 +276,51 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         events = self.config_events()
         self.assertIn(("model", "gpt-5.6-sol"), events)
         self.assertNotIn("reasoning_effort", [config_id for config_id, _ in events])
+        # Issue #185: the explicit id is what the agent's echo confirms.
+        self.assertEqual(receipt.get("actual_runtime_model_id"), "gpt-5.6-sol")
+        self.assertIs(receipt.get("model_verified"), True)
+
+    def test_a_model_the_agent_rejects_is_reported_false_not_a_gate(self) -> None:
+        """Issue #185: a selection the agent never adopted is a mismatch, not a
+        refusal. Droid's echoed model stays the session's real one; the start
+        remains usable."""
+        receipt = self.start("--model", "unavailable/droid")
+        self.assertIsNone(receipt.get("error"), receipt)
+        self.assertNotEqual(receipt.get("result"), "refused")
+        model = (receipt.get("config_application") or {}).get("model") or {}
+        self.assertFalse(model.get("applied"))
+        self.assertEqual(receipt.get("actual_runtime_model_id"), "gpt-5.6-sol")
+        self.assertIs(receipt.get("model_verified"), False)
+        self.assertEqual(receipt.get("model_mismatch_reason"), "actual-model-mismatch:gpt-5.6-sol")
+        sent = self.cli("send", "--text", "usable")
+        self.assertEqual(sent.get("outcome"), "turn_completed")
+
+    def test_a_launch_argv_model_compares_the_echo_not_the_argv_value(self) -> None:
+        """Issue #185 (B1): the verdict must read the agent's own echo, never
+        the argv value the Runner itself supplied. The argv carries ``--model
+        auto``, so no model option is sent and the agent keeps echoing its real
+        session model ``gpt-5.6-sol``; a self-comparison would falsely verify."""
+        receipt = self.start("--command", f"{self.mock_command()} --model auto")
+        self.assertIsNone(receipt.get("error"), receipt)
+        # The argv already selected the model: no model option was applied.
+        self.assertEqual(
+            [event for event in self.config_events() if event[0] != "autonomy_level"],
+            [],
+        )
+        model = (receipt.get("config_application") or {}).get("model") or {}
+        self.assertEqual(model.get("applied_via"), "argv")
+        # Issue #140 keeps the display value as the argv model and the agent's
+        # real echo as advertised_model; the verdict uses the echo.
+        effective = receipt.get("effective_selection") or {}
+        self.assertEqual(effective.get("effective_model_source"), "launch-argv")
+        self.assertEqual(effective.get("effective_model"), "auto")
+        self.assertEqual(effective.get("advertised_model"), "gpt-5.6-sol")
+        self.assertEqual(receipt.get("actual_runtime_model_id"), "gpt-5.6-sol")
+        self.assertIs(receipt.get("model_verified"), False)
+        self.assertEqual(receipt.get("model_mismatch_reason"),
+                         "actual-model-mismatch:gpt-5.6-sol")
+        sent = self.cli("send", "--text", "usable")
+        self.assertEqual(sent.get("outcome"), "turn_completed")
 
     def test_explicit_effort_is_set_only_when_called(self) -> None:
         self.start("--model", "gpt-5.6-sol", "--effort", "high")
@@ -324,6 +381,10 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
             [("model", "kimi-k3"), ("reasoning_effort", "max"),
              ("autonomy_level", "auto-high")],
         )
+        # Issue #185: the echoed effort is part of the verdict.
+        self.assertEqual(receipt.get("actual_runtime_model_id"), "kimi-k3")
+        self.assertEqual(receipt.get("actual_parameters"), {"effort": "max"})
+        self.assertIs(receipt.get("model_verified"), True)
 
     def test_upgrade_tier_is_auto_like_default(self) -> None:
         """Issue #125: no stronger Droid tier is established, so upgrade
@@ -372,6 +433,12 @@ class DroidAcpResumeTests(DroidAcpSessionFixture):
         self.assertTrue(selection.get("preserved"))
         self.assertEqual(selection.get("source"), "resume-preserved")
         self.assertIsNone(selection.get("resolved_model"))
+        # Issue #185: a preserved resume has no Runner target, so the echoed
+        # model is reported but stays not-comparable/unknown.
+        self.assertEqual(receipt.get("actual_runtime_model_id"), "gpt-5.6-sol")
+        self.assertEqual(receipt.get("model_verified"), "unknown")
+        self.assertEqual(receipt.get("model_mismatch_reason"),
+                         "resume-preserved-actual-not-comparable")
         # No Runner model override on a preserved resume; bypass is still
         # asserted through autonomy_level.
         events = self.config_events()
