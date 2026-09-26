@@ -1,0 +1,4 @@
+{"n":1,"name":"Implement holder systemError turn-failure detection","details":"dispatched: self — landed on workflow/issue-173 in scripts/kaola-acp-holder.py (on_session_update separate if + on_prompt_response + _empty_turn error key)","status":"done"}
+{"n":2,"name":"Add contract test for systemError turn failure plus idle control","details":"dispatched: self — landed as tests/contract/test-issue-173-codex-system-error-turn.py (10 tests; 4 fail on unpatched main); registered in both scripts/validate.sh lanes","status":"done"}
+{"n":3,"name":"Docs and CHANGELOG for the fix","details":"landed: CHANGELOG Unreleased entry with Seats: restart required; docs/api.md intentionally unchanged (no new field or vocabulary to document)","status":"done"}
+{"n":4,"name":"Validation: render-skills --write/--check, validate.sh, contract tests","details":"landed: render --write PASS, --check PASS, validate.sh exit 0, new test 10/10, i90 19/19, i92 17/17","status":"done"}
