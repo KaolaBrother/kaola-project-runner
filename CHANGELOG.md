@@ -6,6 +6,32 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.6.3 — 2026-09-26 (seat build tracking and drain-restart, Codex systemError turns, droid model verification)
+
+Seats: restart required
+
+The operator test
+`git diff v0.6.2 v0.6.3 -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+reports only `scripts/kaola-acp-holder.py`: build identity, the eager quota import,
+and the idle stop (#162), boot-death ordering (#174), Codex `systemError` turns
+(#173), and the single sibling import (#184). The ZCode bridge, `kaola-quota.py`,
+the adapters, the platform manifests, and the Grok Bot bridge content are
+byte-identical to v0.6.2. Run `install-local.sh` for every runtime you use before
+you restart seats: a start from an installed Skill tree or from `~/.local/bin` on
+any platform now refuses `worker-skill-skew` when that platform's installed worker
+Skills differ (#162). A seat started before this release recorded no build
+(`reported_drift` names `build-unrecorded`) and never reports `stale`, so restart it
+deliberately. It also recorded no start selection, so `drain-restart` on it needs
+`--model`, `--effort`, `--tier`, or `--fast`.
+
+Net surface against v0.6.2 (several entries below are refined by later entries in
+this same release): `drain-restart` is a new command; `stale`, `stale_reasons`,
+`restart_files`, `missing_files`, and `reported_drift` are `status`/`list` facts
+only and never refuse `send` or `steer`; there is no `--confirm-stale` flag; the
+emitted `reported_drift` values are `REPORTED_DRIFT_VALUES` in
+`scripts/kaola-acp.py` (`install-root-mismatch` and `quota-drift` never shipped in
+a release); and `kaola-locate.py --intent` accepts only `start` and `resume`.
+
 - **Contract suites no longer inherit the seat's `KAOLA_*` environment (Issue #182).**
   A focused loop run from a dispatched seat inherits `KAOLA_ACP_HEARTBEAT_HOST` and
   `KAOLA_ACP_DISPATCHER` naming different holders; every suite that built its command
@@ -348,6 +374,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   and `start_selection`. The receipt's `bridge` / `runtime_binary` facts match
   preflight, including a runtime `--version` only when that binary is already an
   absolute executable. This does not change the holder, the ZCode bridge, or the
+  ACP protocol.
+
 - **`drain-restart` applies and reports the platform default permission mode when none was recorded or passed (Issue #163).**
   When mode is neither recorded nor passed, the restart applies and reports the
   same permission mode a fresh start applies. An explicit mode still wins, and
