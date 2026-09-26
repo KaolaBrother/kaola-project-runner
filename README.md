@@ -47,8 +47,13 @@ every layer. Each layer finishes its own job and does not repeat the next.
 | Do one issue in this Agent | **Workflow Next** | Claim or resume that issue and advance it | Finalize, archive, and sink — those are Workflow finalize |
 
 **Status.** Kaola-Delegator is included in this repository and the v0.4.0 release; installation
-on any particular machine still requires verification. The current Host adapter uses
-**ZCode ACP**; the delegation and project-control layers are not tied to that backend.
+on any particular machine still requires verification. The delegated Host can be any of the
+ten CLI platforms (Issue #187; historical #74 was ZCode-only): the Delegator uses the chosen
+platform's own Runner, its `host_skill_entry` as the first prompt line, the standard
+`<platform>-<PROJECT>-orchestrator-<purpose>` name, and that platform's native resume id
+(`references/host-platforms.md` in `kaola-delegator`). The Host platform is chosen apart from
+the authorized worker platforms, and one live Host per canonical root holds whatever its
+platform.
 Grok Bot account-side live UAT has not been run. Ten Platform Runners and Project Runner
 remain the communication and control-plane Skills.
 
@@ -57,10 +62,11 @@ orchestrators, and several issues are not a bundle. Start and stop use the bound
 project root and an exact session. Do not add a registry, lock, or second scheduler.
 
 **When the outer Agent changes (A→B).** B recovers the same live Host from the canonical Git
-root plus the standard Runner session (`zcode-<PROJECT>-orchestrator-main`) and existing Runner
+root plus the standard Runner session (`<platform>-<PROJECT>-orchestrator-main`) and existing Runner
 `status` / receipts — not from A's chat memory and not from a Delegator pointer file. A Git
 worktree is not an ACP id. Three facts stay separate on those receipts: Runner `--session`,
-ACP `acp_session_id`, and native `sess_*`. Never synthesize one from another. A live Host is
+ACP `acp_session_id`, and the platform's native resume id (ZCode `sess_*`; Claude Code's
+newest native UUID). Never synthesize one from another. A live Host is
 attached in place; a uniquely recorded nonstandard live name is adopted. Ambiguous location
 does not start a second Host. One live Host per canonical root (Issue #132): a second
 Host-named `start` refuses `host-exists` and names the `existing_host` that holds the root — to
@@ -73,7 +79,7 @@ fails the check is exact-stopped with its recorded `holder_instance_id` and prov
 (`status` reads `stopped` with `residual_pids: []`, or `no-session`) before a new one starts.
 Every Delegator reach-out prompt carries a `sweep=` line: the Host lists this repo's holders
 (`kaola-acp list --repo ROOT --include-dead`), stops only orphans, keeps in-flight seats, and
-reports one `swept:` line. If the Host is confirmed stopped and `sess_*` cannot restore,
+reports one `swept:` line. If the Host is confirmed stopped and its native id cannot restore,
 start a new standard-named Host as a new ACP session only after current authorization is
 complete (goal, remaining work, platforms/members, counts/concurrency, quota, priority,
 delivery/stop boundary); missing key values: ask, do not `start`, do not guess a stale
@@ -83,7 +89,7 @@ fourth question; a unit whose meaning is unclear is ambiguous, so ask. Continue 
 Git / Workflow / Issue records. Changing the outer Agent does not
 stop a live Host or re-claim issues. Grok Bot, after the account bridge, attests each Host
 `status`/`start`/`resume`/`send`/`stop` on that bound target with the existing locator
-`--project` `--worker zcode` `--session` (the exact live name); Codex and generic do not.
+`--project` `--worker <Host platform>` `--session` (the exact live name); Codex and generic do not.
 
 Kaola Project Runner also provides ten self-contained **worker** Agent Skills for **Claude Code,
 Codex CLI, Cursor CLI, Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, Droid CLI, and dsh
@@ -226,7 +232,7 @@ holds exactly one very small generated Skill,
 execution target first (Local Computer, or the cloud Agent Computer), asks that target's
 device-local locator `kaola-project-runner-locate` for the verified `kaola-project-runner`
 checkout (expected origin, accepted pinned revision, clean tree), and loads only
-`ROOT/skills/kaola-delegator`. That Skill starts or resumes one ZCode Host, which
+`ROOT/skills/kaola-delegator`. That Skill starts or resumes one CLI Host of the chosen platform, which
 loads Project Runner internally. The bridge carries no policy, transport, reference, path, runtime copy, or
 credential; a release changes only its accepted-revision line, and an accepted content/pin
 pair is never rebased or squashed. Nothing on one target reaches
@@ -414,7 +420,7 @@ subset, or skip the orchestrator:
 python3 scripts/kaola-locate.py register --target local --bin-dir <dir on PATH> --expect-revision <accepted commit>   # validates origin/revision/clean, links kaola-project-runner-locate, writes the registration receipt beside it
 kaola-project-runner-locate --target local --expect-revision <accepted commit>   # bounded attestation receipt; the locator compares host fingerprint and target with its receipt
 # an --expect-revision older than the registered one is refused (expect-revision-superseded / accepted-revision-superseded); roll back by removing the receipt, then register
-# With --project --worker zcode --session the receipt adds session.acp_holder_alive (the holder record kaola-acp status reads); for an ACP Host, session.present is tmux-only and never aliveness on its own.
+# With --project --worker zcode --session the receipt adds session.acp_holder_alive (the holder record kaola-acp status reads); for an ACP Host, session.present is tmux-only and never aliveness on its own; any other Host platform's liveness is Runner status/list.
 
 # Let Claude Code drive only Codex CLI and OpenCode; still install the orchestrator.
 ./scripts/install-local.sh --runtime claude-code --platform codex,opencode
@@ -431,10 +437,11 @@ kaola-project-runner-locate --target local --expect-revision <accepted commit>  
 
 `--runtime` selects the host's skill directory; `--platform` selects worker CLI Skills only.
 `--no-orchestrator` skips `kaola-project-runner`. That name is not a `--platform` id.
-On Codex and generic destinations, `kaola-delegator` is control-plane: a first
-install still needs `zcode` in this `--platform` (or no `--platform`); an
-already-installed Delegator is included on later reinstall/uninstall even when
-this `--platform` omits `zcode`, so a filtered pass does not leave a stale copy.
+On Codex and generic destinations, `kaola-delegator` is control-plane: it is
+planned with Project Runner whatever `--platform` selects, because any selected
+worker platform can be its one Host (Issue #187; before, a first install needed
+`zcode`). A filtered reinstall updates it and a filtered uninstall removes it
+with Project Runner, so a filtered pass does not leave a stale copy.
 A Host runtime that does not install the Delegator (`--runtime zcode`,
 `claude-code`, and the other Host roots) still plans an **owned** leftover
 `kaola-delegator` under its root so its content is refreshed to the accepted

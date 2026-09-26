@@ -257,28 +257,35 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("# Kaola-Delegator" in skill, "display name is Kaola-Delegator")
     check("Grok Bot" in skill and "Codex" in skill and "generic" in skill, "external entries named")
     check("kaola-project-runner" in skill, "inner Project Runner named")
-    check("zcode-kaola-project-runner" in skill, "Host is started through the ZCode worker")
+    # Issue #187: the Host is started through the selected platform's Runner.
+    check("`<platform>-kaola-project-runner`" in skill, "Host is started through its platform Runner")
+    platforms_doc = (EXTERNAL / "references" / "host-platforms.md").read_text(encoding="utf-8")
+    check("| zcode (`ZCode`) | `zcode-kaola-project-runner` |" in platforms_doc,
+          "the ZCode Runner is one selectable Host row")
     check("KAOLA_ACP_HEARTBEAT_HOST" not in skill, "external Skill does not bind per-worker heartbeat")
     check("copy a mission ledger" in skill_one, "external Skill refuses copying a mission ledger")
     check("Do not dispatch workers" in skill_one, "external Skill refuses worker dispatch")
-    check("not executable" in skill, "missing ZCode Runner is a hard stop")
-    check("`sess_*`" in skill, "Skill names native sess_* resume")
+    check("not executable" in skill, "missing selected Runner is a hard stop")
+    check("attested native id" in skill_one and "`sess_*`" in platforms_doc,
+          "Skill names attested native resume; zcode's is sess_*")
     handoff_doc = (EXTERNAL / "references" / "handoff.md").read_text(encoding="utf-8")
     handoff_one = re.sub(r"\s+", " ", handoff_doc)
     check("Never use `--continue`" in handoff_doc, "handoff forbids --continue guessing")
     check("else `--continue`" not in handoff_doc, "handoff does not recommend --continue as fallback")
-    check("zcode-<PROJECT_CODE>-orchestrator-" in handoff_doc, "standard Host session name")
-    check("acp_session_id" in handoff_doc and "native_session_identity" in handoff_doc,
+    check('HOST="$PLATFORM-<PROJECT_CODE>-orchestrator-main"' in handoff_doc
+          and "`zcode-<PROJECT_CODE>-orchestrator-<purpose>`" in platforms_doc,
+          "standard Host session name")
+    check("acp_session_id" in handoff_doc and "native_session_identity" in platforms_doc,
           "three identities are sourced separately")
     check("delegator-host.json" not in handoff_doc and "delegator-host.json" not in skill,
           "no Delegator continuation pointer file")
     check("prompt-in-progress" in handoff_doc, "busy send is not claimed delivered")
-    check("```text\n/kaola-project-runner\n" in handoff_doc,
-          "handoff text opens with the native Skill entry as its own first line")
+    check("```text\n<host_skill_entry>\n" in handoff_doc,
+          "handoff text opens with the platform's native Skill entry as its own first line")
     check("Load " not in handoff_doc.split("```text", 1)[1].split("```", 1)[0],
           "handoff text no longer tells the Host to Load a SKILL.md path")
-    check("Skill` tool_call" in handoff_doc or "Skill tool_call" in handoff_doc,
-          "first-beat check requires the native Skill tool_call evidence")
+    check("E1 `Skill` tool_call or E2 quote" in handoff_one,
+          "first-beat check requires the platform's E1/E2 startup evidence")
     check("No `AGENTS.md` block or manual `SKILL.md` read" in handoff_one,
           "handoff states the AGENTS.md block is not the carrier")
     check("later updates alike" in handoff_one,
@@ -347,8 +354,8 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
     check("even if its recorded name is not the new form" in skill_one,
           "Skill adopts a live Host with a nonstandard name")
     check("Grok Bot account bridge" in skill_one, "Skill gates locator attestation to the Grok Bot bridge")
-    check("--worker zcode" in handoff_one and "--session \"$HOST\"" in handoff_doc,
-          "Grok Bot Host ops attest with locator --worker zcode and exact session")
+    check("--worker \"$PLATFORM\"" in handoff_one and "--session \"$HOST\"" in handoff_doc,
+          "Grok Bot Host ops attest with locator --worker <Host platform> and exact session")
     check("--project \"$PROJECT\"" in handoff_doc, "Grok Bot Host ops attest with locator --project")
     check("kaola-project-runner-locate" in handoff_doc, "Grok Bot Host ops use the existing locator command")
     check("--expect-revision" not in handoff_doc and "--expect-revision" not in handoff_one,

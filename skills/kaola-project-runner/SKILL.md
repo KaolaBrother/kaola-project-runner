@@ -27,7 +27,7 @@ no extra gate. Direct Project Runner use does not require a ZCode Host.
 **Host** - you are already a named Host session that loaded this Skill through
 the native `/kaola-project-runner` Skill invocation (ZCode) or your platform's
 measured entry, and supervise workers on event-driven beats. Outer Agents
-start or continue a ZCode Host through Kaola-Delegator (`kaola-delegator`).
+start or continue the Host through Kaola-Delegator (`kaola-delegator`).
 Role, authorization and lifecycle boundary come from the
 project's existing Project Plan or already-authorized task plan - never a new
 schema, never this session's claim of having loaded this Skill. Startup, one
@@ -94,7 +94,7 @@ Routine, cron, or sleep loop. Its first prompt names its
 Beat mechanics - binding, non-blocking dispatch, the reading anchor, ending the
 turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
 Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
-which starts one ZCode Host that then loads this Skill. `--platform grok` is the
+which starts one Host of any platform that then loads this Skill. `--platform grok` is the
 Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
 Routine to run this Skill.
 

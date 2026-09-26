@@ -103,7 +103,7 @@ sessions, and vice versa. On every use the bridge:
    revision, and the tree is clean;
 4. accepts the consumer project root as a separate path on the same target;
 5. loads `ROOT/skills/kaola-delegator/SKILL.md` and follows it. That Skill
-   starts or resumes one ZCode Host on the same target. The bridge does not load
+   starts or resumes one CLI Host of the chosen platform on the same target. The bridge does not load
    Project Runner or a worker Skill.
 
 - **Local Computer (Mac):** the Mac already holds the repository. Its `main`
@@ -168,8 +168,8 @@ kaola-project-runner-locate --target local|cloud --expect-revision <accepted> \
 
 The last form is the **fail-closed host-target attestation** run before each
 worker dispatch. Kaola-Delegator on the Grok Bot bound target uses that same
-form before Host `status`/`start`/`resume`/`send`/`stop`, with `--worker zcode`
-and the exact Host session (including an adopted live nonstandard name).
+form before Host `status`/`start`/`resume`/`send`/`stop`, with `--worker` set to
+the Host's platform (#187) and the exact Host session (including an adopted live nonstandard name).
 Codex and generic Delegator entries do not. Its receipt is one JSON line
 (≤ 4 KB, `locator_receipt_bytes`):
 
@@ -279,7 +279,7 @@ the one save, the target binding, the locator, the read-only preflight, and the
 real-use boundary.
 
 Heartbeat, worker dispatch, and acceptance-before-finalize
-belong to Project Runner inside the ZCode Host. The outer Kaola-Delegator Skill
+belong to Project Runner inside the one Host. The outer Kaola-Delegator Skill
 does not copy that engine, does not create a Routine, and does not dispatch
 workers. An older in-flight Grok Bot Project Runner account Skill is not renamed,
 restarted, or cancelled from this repository.

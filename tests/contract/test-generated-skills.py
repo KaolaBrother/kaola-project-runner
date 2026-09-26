@@ -555,8 +555,8 @@ def check_external_package(assertions: Assertions, root: Path) -> None:
     )
     assertions.check(
         "test_external_names_the_inner_runner",
-        "kaola-project-runner" in normalized and "zcode-kaola-project-runner" in normalized,
-        "external Skill must name Project Runner and the ZCode worker used to start the Host",
+        "kaola-project-runner" in normalized and "`<platform>-kaola-project-runner`" in normalized,
+        "external Skill must name Project Runner and the selected platform Runner used to start the Host",
     )
 
 

@@ -71,10 +71,10 @@ usage() {
     '--platform filters worker Skills only. The main Skill kaola-project-runner' \
     '(display name Project Runner) is installed for every destination unless' \
     '--no-orchestrator is passed. Codex and generic destinations also plan' \
-    'kaola-delegator as control-plane unless that flag is passed: a first install' \
-    'requires zcode in this --platform (or no --platform); an already-installed' \
-    'Delegator stays in the plan on later reinstall/uninstall even when this' \
-    '--platform omits zcode, so it is not left stale. A Host runtime that must' \
+    'kaola-delegator as control-plane unless that flag is passed, whatever' \
+    'this --platform selects: any selected worker platform can be its one Host' \
+    '(Issue #187), and a filtered reinstall/uninstall keeps it in the same plan' \
+    'as Project Runner, so it is not left stale. A Host runtime that must' \
     'not install Delegator (zcode, claude-code, ...) still plans an owned' \
     'leftover kaola-delegator under its root so its content is refreshed to the' \
     'accepted build, but never registers the Host runtime as an owner: the' \
@@ -759,19 +759,11 @@ destination_plan() {
   if [[ "$install_orchestrator" == true ]]; then
     plan_skill "$orchestrator_skill_name"
     if [[ "$resolved_runtime" == "codex" || "$resolved_runtime" == "generic" ]]; then
-      zcode_selected=false
-      for item in "${selection[@]}"; do
-        [[ "$item" == zcode ]] && zcode_selected=true
-      done
-      if [[ "$zcode_selected" == true ]]; then
-        plan_skill "$external_skill_name"
-      elif [[ -e "$target_parent/$external_skill_name" || -L "$target_parent/$external_skill_name" ]]; then
-        # Already installed: keep it in this control-plane plan so a filtered
-        # reinstall updates it and a filtered uninstall removes it.
-        plan_skill "$external_skill_name"
-      else
-        printf 'skipping %s: needs the ZCode worker Skill (not in --platform)\n' "$external_skill_name"
-      fi
+      # Issue #187: every worker platform can be the Delegator's one Host, and
+      # the selection is never empty, so the Delegator always has a Host
+      # Runner beside it. It is control-plane: planned with Project Runner on
+      # every install, filtered reinstall, and filtered uninstall.
+      plan_skill "$external_skill_name"
     elif [[ -e "$target_parent/$external_skill_name" || -L "$target_parent/$external_skill_name" ]]; then
       # Issue #160: a Host runtime that must not introduce kaola-delegator
       # (zcode, claude-code, ...) still plans an owned leftover under its own

@@ -96,7 +96,7 @@ the one canonical entry path `ROOT/skills/kaola-delegator`. It binds the executi
 Computer or the cloud Agent Computer; neither reaches the other's files, CLIs, tmux, or
 sessions, and the cloud never installs or updates the Mac), asks that target's locator for the
 verified ROOT, accepts the consumer project root separately on the same target, and loads
-only the Kaola-Delegator Skill from that checkout. That Skill starts one ZCode Host which
+only the Kaola-Delegator Skill from that checkout. That Skill starts one CLI Host of the chosen platform (any of the ten, #187) which
 loads Project Runner internally. `scripts/
 kaola-locate.py` is the locator and the fail-closed host-target attestation (bounded receipt:
 target kind as declared, host fingerprint to compare with the registered one, ROOT identity,

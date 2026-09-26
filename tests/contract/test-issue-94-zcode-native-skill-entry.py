@@ -195,18 +195,22 @@ class Templates(unittest.TestCase):
         self.assertNotIn("\n/kaola-project-runner\n", "\n" + self.skeleton)
 
     def test_delegator_handoff_uses_the_same_entry(self) -> None:
-        self.assertIn("```text\n" + ENTRY + "\nYou are the ZCode Host", self.handoff)
+        # Issue #187: the handoff opens with the selected platform's entry;
+        # the ZCode row of host-platforms.md is still /kaola-project-runner.
+        self.assertIn("```text\n<host_skill_entry>\nYou are the <runtime_name> Host", self.handoff)
         text = flat(self.handoff)
         self.assertIn("turn-opening Host prompt", text)
-        self.assertIn("opens with `/kaola-project-runner` as its own first line", text)
+        self.assertIn("opens with that platform's `host_skill_entry` as its own first line", text)
+        self.assertIn("(zcode: `/kaola-project-runner`;", text)
         self.assertIn("idempotent across re-invocation and after compaction", text)
         # Issue #157 (KD-A3): install roots are Project Runner's discovery
         # precondition; the handoff points there instead of restating them.
         self.assertIn("Install per Project Runner's discovery precondition", text)
-        self.assertIn("a missing `Skill` tool_call means a bad install, never a manual read", text)
         self.assertIn("No `AGENTS.md` block or manual `SKILL.md` read is the "
                       "carrier", text)
-        self.assertIn("`Skill` tool_call for that entry", text)
+        self.assertIn("E1 `Skill` tool_call or E2 quote ([host-platforms.md](host-platforms.md) "
+                      "§Startup proof)", text)
+        self.assertIn("startup_proof=quote one Skill-body-only sentence; no tool read", self.handoff)
         self.assertNotIn("Load <skills>", self.handoff)
 
     def test_delegator_handoff_marks_busy_steer_as_no_reentry(self) -> None:
@@ -301,7 +305,9 @@ class GeneratedSurface(unittest.TestCase):
         self.assertFalse((ORCH / "references" / "zcode-compact-recovery.md").exists())
 
     def test_generated_handoff_block(self) -> None:
-        self.assertIn("```text\n" + ENTRY + "\nYou are the ZCode Host", self.handoff)
+        self.assertIn("```text\n<host_skill_entry>\nYou are the <runtime_name> Host", self.handoff)
+        platforms = (DELEG / "references" / "host-platforms.md").read_text(encoding="utf-8")
+        self.assertIn("| zcode (`ZCode`) | `zcode-kaola-project-runner` | `" + ENTRY + "` |", platforms)
         self.assertNotIn("Load <skills>", self.handoff)
         self.assertNotIn("{{", self.handoff)
 

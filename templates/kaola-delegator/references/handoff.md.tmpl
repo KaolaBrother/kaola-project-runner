@@ -1,20 +1,21 @@
 # One Host handoff
 
-Outer Agents start, continue, or restore the project's one ZCode Host here;
+Outer Agents start, continue, or restore the project's one CLI Host here;
 Project Runner inside it owns workers, heartbeat, and close-out. No new tool,
 queue, registry, scheduler, or Delegator pointer file — Git, Workflow, Issues,
 and Runner records hold the facts.
 
 ```bash
-ZCODE="<skills>/{{ZCODE_WORKER}}/scripts/runtime-tmux.sh"
-PROJECT="/abs/path/to/consumer-project"          # bound canonical Git root
-HOST="zcode-<PROJECT_CODE>-orchestrator-main"    # e.g. zcode-KPR-orchestrator-main
+PLATFORM="<host platform id>"  # host-platforms.md row
+RUNNER="<skills>/$PLATFORM-{{RUNNER_SKILL}}/scripts/runtime-tmux.sh"
+PROJECT="/abs/path/to/consumer-project"  # bound canonical Git root
+HOST="$PLATFORM-<PROJECT_CODE>-orchestrator-main"  # codex-KPR-orchestrator-main
 ```
 
 `<skills>`: the sibling Skill directory, or the bridge's `ROOT/skills`. No
-`$ZCODE`, no Host. `<PROJECT_CODE>`: the project's short code (ask once if
+`$RUNNER`, no Host. `<PROJECT_CODE>`: the project's short code (ask once if
 unrecorded); workers are `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>` (#72),
-the Host is not one (no `i0`).
+the Host is not one (no `i0`). A live Host fixes `$PLATFORM` to its own.
 
 Three identities stay separate — read each from `status`, start receipts,
 or Host events; never synthesize one from another:
@@ -23,24 +24,21 @@ or Host events; never synthesize one from another:
 |---|---|---|
 | Runner `--session` | `$HOST` (or a uniquely recorded live name) | live attach, observe, send, stop |
 | `acp_session_id` | start / `status` receipt | ACP bridge id |
-| native `sess_*` | `native_session_identity.nativeSessionId` | `start --resume` after the holder stopped |
-
-`session_meta` does not hold `sess_*`: there is no
-`native_session_identity` before the first prompt.
+| native resume id | [host-platforms.md](host-platforms.md) (zcode: `sess_*`) | `start --resume` after the holder stopped |
 
 ## Grok Bot co-location (account bridge only)
 
-Loaded from the Grok Bot account bridge. Before Host `status`, `send`, and
-`stop`, attest without `--intent` (those verbs do not launch ZCode). Before
-`start` or `start --resume`, add `--intent start` or `--intent resume`: only
-then a missing or non-file `KAOLA_ZCODE_*` refuses. Every receipt carries
-`zcode_runtime`. Codex and generic hosts skip this.
+Before Host `status`, `send`, and `stop`, attest without `--intent`. Before
+`start` or `start --resume`, add `--intent start` or `--intent resume`: then a
+zcode launch with a missing or non-file `KAOLA_ZCODE_*` refuses. Liveness is
+Runner `status`, not the locator's tmux `session.present`. Codex and generic
+skip this.
 
 ```bash
 kaola-project-runner-locate --target local|cloud \
-  --project "$PROJECT" --worker zcode --session "$HOST"
+  --project "$PROJECT" --worker "$PLATFORM" --session "$HOST"
 kaola-project-runner-locate --target local|cloud \
-  --project "$PROJECT" --worker zcode --session "$HOST" --intent start
+  --project "$PROJECT" --worker "$PLATFORM" --session "$HOST" --intent start
 ```
 
 `$HOST` is the exact session used: the standard name, or a
@@ -53,15 +51,16 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    short code (Grok Bot bridge: attest first). Probe the existing Runner:
 
    ```bash
-   "$ZCODE" status --repo "$PROJECT" --session "$HOST"
-   python3 "${ZCODE%/*}/kaola-acp.py" list --repo "$PROJECT" --include-dead
+   "$RUNNER" status --repo "$PROJECT" --session "$HOST"
+   python3 "${RUNNER%/*}/kaola-acp.py" list --repo "$PROJECT" --include-dead
    ```
 
-   Read existing Runner records/receipts too: if they uniquely name a live
-   Host whose session is not `$HOST`, adopt that locator — never rename or
-   start a second Host; a missing `$HOST` proves nothing. Live Hosts =
-   `list` rows with `host_class` and `identity: verified`.
-   Ambiguous location: report and do not start.
+   `list` spans every platform; Host platform unknown: run it from any
+   installed Runner. If it or existing records
+   uniquely name a live Host whose session is not `$HOST`, adopt that locator
+   and its platform as `$PLATFORM` (Grok Bot: re-attest) — never rename or
+   start a second Host; a missing `$HOST` proves nothing. Live Hosts = `list` rows with `host_class` and `identity:
+   verified`. Ambiguous location: report and do not start.
 2. **Live Host** (exact platform/repo/session still serves, and
    `holder_instance_id` plus `acp_session_id` match the receipts): do not
    `start`. Continue on that holder. If `status` shows a different
@@ -73,14 +72,15 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
 3. **Confirmed stopped** (`stopped` with `residual_pids: []`, or
    `no-session`) and no verified Host row. A `dead` Host row, or one
    `unreachable` twice, is first exact-stopped by its own platform's Runner
-   with its record id and proven gone the same way; report a `mismatch`. If receipts attest `sess_*`, try:
+   with its record id and proven gone the same way; report a `mismatch`. If
+   receipts attest that platform's native id, try:
 
    ```bash
-   "$ZCODE" start --repo "$PROJECT" --session "$HOST" --resume "$NATIVE_SESS"
+   "$RUNNER" start --repo "$PROJECT" --session "$HOST" --resume "$NATIVE_ID"
    ```
 
    Never use `--continue`. After exact
-   `stop`, try attested `--resume` of that `sess_*` first. Native resume
+   `stop`, try attested `--resume` of that id first. Native resume
    is backend-dependent; `session/close` may not spend it.
    On proven failure (`Session not found` or no attested id) a **new**
    `$HOST` is allowed after step 4. That is a new ACP session and a new
@@ -92,9 +92,8 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    is not a new session: do not re-ask the full set.
 5. With step 4 complete and no live Host: start once under `$HOST` at
    `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/`holder_instance_id`
-   from the start receipt, then send the first handoff. The start pins the
-   manifest's Host model/effort (`host_selection`); a `host-model-*` refusal
-   is evidence and escalates.
+   from the start receipt, then send the first handoff. `host-exists`:
+   attach its `existing_host` (step 2). A `host-model-*` refusal escalates.
 
 ## Handoff and updates
 
@@ -109,25 +108,24 @@ yourself to open a Host round.
 `unknown`/`not_consumed` is not a resend. No queue.
 
 ```bash
-"$ZCODE" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
-"$ZCODE" observe --repo "$PROJECT" --session "$HOST"
-"$ZCODE" capture --repo "$PROJECT" --session "$HOST" --lines 200
+"$RUNNER" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
+"$RUNNER" observe --repo "$PROJECT" --session "$HOST"
+"$RUNNER" capture --repo "$PROJECT" --session "$HOST" --lines 200
 ```
 
 Every turn-opening Host prompt — handoff and later updates alike, each with
-the `sweep=` line — opens
-with `/kaola-project-runner` as its own first line: the native Skill entry,
-idempotent across re-invocation and after compaction (non-ZCode: its
-`host_skill_entry`). Install per Project Runner's discovery precondition
-(`zcode-native-skill-entry.md`); a missing `Skill` tool_call means a bad
-install, never a manual read. No `AGENTS.md` block or manual `SKILL.md` read is the carrier.
+the `sweep=` line — opens with that platform's `host_skill_entry` as its own
+first line (zcode: `/kaola-project-runner`; codex: `$kaola-project-runner`):
+the native Skill entry, idempotent across re-invocation and after compaction.
+Install per Project Runner's discovery precondition. No `AGENTS.md` block or
+manual `SKILL.md` read is the carrier.
 
 Handoff text (quota units never merge; `unspecified` is not unlimited):
 
 ```text
-/kaola-project-runner
-You are the ZCode Host for this run.
-platform=zcode session=<HOST> repo=<PROJECT>
+<host_skill_entry>
+You are the <runtime_name> Host for this run.
+platform=<PLATFORM> session=<HOST> repo=<PROJECT>
 goal=<user goal>
 done=<already done>
 remaining=<remaining work>
@@ -138,6 +136,7 @@ quota_token=<as given>
 priority=<as given>
 delivery_stop_boundary=<as given>
 project_context=<canonical root and other given facts>
+startup_proof=quote one Skill-body-only sentence; no tool read
 sweep=every beat: list --repo, verify identity, stop orphans only, keep in-flight, report
 Finish planning, worker dispatch, heartbeat, acceptance, and Workflow
 close-out internally. Missing authorization stays missing:
@@ -150,8 +149,8 @@ Do not trust the Host's self-description. After the first `end_turn`, check the
 Project Plan and current authorization against file-read or work-product
 evidence and the first worker dispatch receipt — including
 `<project>/.kaola/heartbeat-prompt.json` with a usable `body`. The beat's
-`capture` shows a `Skill` tool_call for that entry; none means the install
-is wrong — fix it, never a manual `read`. In that `start`
+`capture` must hold that platform's startup proof, E1 `Skill` tool_call or E2
+quote ([host-platforms.md](host-platforms.md) §Startup proof). In that `start`
 receipt the worker `--session` is an issue-scoped worker name, not `$HOST`;
 platforms, counts, and the stop boundary must match. Mismatch or missing evidence:
 correct on this Host; do not accept completion. No new script, gate, ledger,
@@ -160,16 +159,15 @@ or store.
 ## Afterward
 
 Read delivery with `observe` / `capture`; the outer Agent is not
-automatically awakened by inner Host activity. Escalate only an
-unrecoverable decision. Do not `stop` while workers, acceptance, or
+automatically awakened by inner Host activity. Do not `stop` while workers, acceptance, or
 Workflow close-out remain; then stop the exact holder from the existing
 start/`status` receipt — not inner workers or name-only:
 
 ```bash
-"$ZCODE" stop --repo "$PROJECT" --session "$HOST" \
+"$RUNNER" stop --repo "$PROJECT" --session "$HOST" \
   --expected-holder-instance-id "$HOLDER"
 ```
 
-`$HOLDER` is `holder_instance_id` on that receipt. `holder-instance-mismatch`
+`$HOLDER`: that receipt's `holder_instance_id`. `holder-instance-mismatch`
 means this name now serves a different instance: do not stop it; re-read
 `status`. Prove it gone as in Recover step 3; a PID alone is never liveness.

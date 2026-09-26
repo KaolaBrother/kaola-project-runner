@@ -8,7 +8,7 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Project Snapshot
 
-- Purpose: runtime-neutral Agent Skills CLI communication driver for ten AI CLI platforms via ACP, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner; Codex, generic, and ZCode entries) and the generated external Skill `kaola-delegator` (display name Kaola-Delegator; Grok Bot, generic, and Codex entries). Codex remains a supported consuming runtime. Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/kaola-delegator.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads `kaola-delegator`; that Skill starts one ZCode Host which then loads Project Runner; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not a worker platform, not a Project Runner host, and has no installer destination.
+- Purpose: runtime-neutral Agent Skills CLI communication driver for ten AI CLI platforms via ACP, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner; Codex, generic, and ZCode entries) and the generated external Skill `kaola-delegator` (display name Kaola-Delegator; Grok Bot, generic, and Codex entries). Codex remains a supported consuming runtime. Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/kaola-delegator.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads `kaola-delegator`; that Skill starts one CLI Host of any supported platform which then loads Project Runner; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not a worker platform, not a Project Runner host, and has no installer destination.
 - Stack: Bash (macOS-compatible), Python 3.
 - Architecture: shared worker template renders ten self-contained platform Skills from YAML manifests and shell adapters; a separate orchestrator template renders the control-plane Skill (not an eleventh platform); `templates/kaola-delegator/` renders the external Kaola-Delegator Skill; every worker communicates over ACP only through one ACP holder per session (PTY retired, #130).
 
@@ -52,8 +52,8 @@ layer. Each layer finishes its own job and does not repeat the next. Detail: `RE
 
 - **Kaola-Delegator** (`kaola-delegator`): external delegation (Grok Bot / generic / Codex).
   Hand off goal, progress, authorized platforms/quota/priority, and stop boundary to **one**
-  ZCode ACP Host that must load Project Runner. The outer Agent does not bind workers or run
-  the inner heartbeat. Included in v0.4.0; installation on a consuming machine and Grok Bot
+  CLI ACP Host (any supported platform, #187) that must load Project Runner. The outer Agent
+  does not bind workers or run the inner heartbeat. Included in v0.4.0; installation on a consuming machine and Grok Bot
   account-side live UAT require separate verification.
 - **Project Runner** (`kaola-project-runner`): project control plane (Codex / generic / ZCode).
   Recover authorization, plan, dispatch, heartbeat, accept before finalize, close-out. **One
@@ -67,13 +67,13 @@ Start and stop use the bound canonical project root and an exact session. Do not
 multi-Host registry, lock, second scheduler, or Delegator pointer file. Control-plane limits
 do not change standalone Platform Runner transport. When the outer Agent changes, recover the
 same live Host from the canonical Git root, the standard Runner session name, and existing
-Runner `status` / receipts: `--session`, `acp_session_id`, and native `sess_*` as three
-separate facts. A Git worktree is not an ACP id. A live Host is attached in place. If it is
-confirmed stopped and `sess_*` cannot restore, a new standard-named Host is a new ACP
+Runner `status` / receipts: `--session`, `acp_session_id`, and the platform's native resume
+id (ZCode `sess_*`) as three separate facts. A Git worktree is not an ACP id. A live Host is
+attached in place. If it is confirmed stopped and that native id cannot restore, a new standard-named Host is a new ACP
 session: confirm current authorization before `start`, then continue from existing
 project records. Do not open a blank Host. Grok Bot via the account bridge
 attests Host status/start/resume/send/stop with the existing locator
-`--project --worker zcode --session` (exact live name) and refuses `refused`;
+`--project --worker <Host platform> --session` (exact live name) and refuses `refused`;
 Codex and generic do not.
 
 ## Project-Specific Runner Contract

@@ -21,7 +21,7 @@ Project-level heartbeat, acceptance, Workflow merge preference with conditional 
   host verifier, and updated automatically when a canonical source changes.
 - External Kaola-Delegator Skill: `templates/kaola-delegator/` renders
   `skills/kaola-delegator/` (display name Kaola-Delegator). It is a thin handoff to one
-  ZCode Host and is not a second control-plane engine.
+  CLI Host of any supported platform (#187) and is not a second control-plane engine.
 - Grok Bot host bundle: `hosts/grok-bot/` rendered by the `grok-bot` host adapter (inputs:
   `GROK_BOT_ADAPTER_INPUTS` = `templates/grok-bot/` only) — one thin bridge Skill
   `kaola-delegator.md`, `bridge.json`, and `INSTALL.md`. The bridge carries the accepted

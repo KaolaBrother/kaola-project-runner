@@ -154,6 +154,7 @@ python_suites_all=(
   "test-issue-165-path-drift.py"
   "test-issue-168-drift-enumeration.py"
   "test-issue-186-claude-native-identity.py"
+  "test-issue-187-delegator-any-host.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -221,6 +222,7 @@ python_suites_b=(
   "test-issue-165-path-drift.py"
   "test-issue-168-drift-enumeration.py"
   "test-issue-186-claude-native-identity.py"
+  "test-issue-187-delegator-any-host.py"
 )
 run_suite_lane() {
   local status=0 rc

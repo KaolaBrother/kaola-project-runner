@@ -1,6 +1,6 @@
 ---
 name: kaola-delegator
-description: "Use when an outer Agent (Grok Bot, Codex, or generic) should delegate a project run through Kaola-Delegator to one ZCode Host: extract the task, progress, authorized platforms/quota/priority, and project context, start or resume that Host via the ZCode Runner, and relay user changes without dispatching workers."
+description: "Use when an outer Agent (Grok Bot, Codex, or generic) should delegate a project run through Kaola-Delegator to one CLI Host on any platform: extract the task, progress, Host platform, authorization, quota, priority, start or resume that Host via its platform Runner, and relay user changes without dispatching workers."
 ---
 
 # Kaola-Delegator
@@ -8,42 +8,43 @@ description: "Use when an outer Agent (Grok Bot, Codex, or generic) should deleg
 This Skill is the external delegation Skill for Grok Bot (after the account
 bridge), Codex, and generic hosts — not Project Runner, not a platform worker.
 
-Project Runner (`kaola-project-runner`) is the inner control-plane Skill. A
-ZCode Host loads it and owns planning, worker dispatch, path binding,
+Project Runner (`kaola-project-runner`) is the inner control-plane Skill. One
+CLI Host loads it and owns planning, worker dispatch, path binding,
 heartbeat, acceptance, and Workflow close-out. Do not copy that
 engine. One project has only one Agent running Project Runner.
 
 ## Extract once
 
 From the user and existing Git, Workflow, Issue, and Runner records collect:
-goal; already-done and remaining work; authorized worker platforms/members and
-counts and concurrency; the quota the user actually gave, each figure in its own
-unit; priority; delivery and stop boundary; the explicit project path. On a
-**live** Host, apply only the user's latest change — do not re-ask the full
-set. On a **new** Host, missing, conflicting, or expired key values must be
-confirmed before `start`. A quota unit the user never gave is not a missing key
-value — carry it as unspecified and start; a quota whose unit is unclear is, so
-ask. Do not open a blank Host. Do not invent platforms, fuse quota units, raise
-quota, treat an unspecified quota as unlimited, reuse a stale quota, or expand
-authorization.
+goal; already-done and remaining work; the Host platform; authorized worker
+platforms/members and counts and concurrency; the quota the user actually gave,
+each figure in its own unit; priority; delivery and stop boundary; the explicit
+project path. On a **live** Host, apply only the user's latest change — do not
+re-ask the full set. On a **new** Host, missing, conflicting, or expired key
+values must be confirmed before `start`. A quota unit the user never gave is not
+a missing key value — carry it as unspecified and start; a quota whose unit is
+unclear is, so ask. Do not open a blank Host. Do not invent platforms, fuse
+quota units, raise quota, treat an unspecified quota as unlimited, reuse a stale
+quota, or expand authorization.
 
 ## One Host
 
-If the installed ZCode Runner (`zcode-kaola-project-runner`) is missing, report
-that this Skill is not executable; claim no Host.
+Select any supported Host platform
+([host-platforms.md](references/host-platforms.md)) and use its own Runner
+`<platform>-kaola-project-runner`, entry line, and native resume id. If that Runner
+is missing, report that this Skill is not executable; claim no Host.
 
-One live Host per repo, recovered from the canonical Git root plus the standard
-Host name `zcode-<PROJECT_CODE>-orchestrator-<purpose>` and existing Runner
-`status` / receipts. A Git worktree is not an ACP id. A **live** Host is
-attached in place, never started again, even if its recorded name is not the
-new form; `host-exists` means attach its
+One live Host per repo, whatever its platform, recovered from the canonical Git
+root plus the standard Host name `<platform>-<PROJECT_CODE>-orchestrator-<purpose>`
+and existing Runner `status` / receipts. A Git worktree is not an ACP id. A
+**live** Host is attached in place on its platform, never started again,
+even if its recorded name is not the new form; `host-exists` means attach its
 `existing_host`; never rename and retry. A missing standard name or pointer
 file never justifies a second Host. There is no Delegator continuation file.
 A Host failing its identity check is exact-stopped, proven gone
-(`residual_pids: []`), then replaced. A **stopped** Host is
-resumed (attested native `sess_*`) or replaced only per handoff §Recover: a
-new Host is a new ACP session, with current authorization confirmed before
-`start`.
+(`residual_pids: []`), then replaced. A **stopped** Host is resumed (attested
+native id) or replaced only per handoff §Recover: a new Host is a new ACP
+session, with current authorization confirmed before `start`.
 [Bricked Host](references/host-brick.md). From the Grok Bot account bridge,
 attest every Host `status`/`start`/`send`/`stop` with the locator first
 (handoff); Codex and generic hosts do not. Commands, identities, the

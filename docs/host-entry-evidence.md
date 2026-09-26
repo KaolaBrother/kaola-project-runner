@@ -40,7 +40,7 @@ the quoted sentence exists only in this build.
 | dsh | `/kaola-project-runner` | E2; E2 / E2 | `~/.agents/skills` | harness 0.0.1 |
 | opencode | `/kaola-project-runner` | E1 (`skill` tool); E1+E2 / E2 | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | 2.0.11 |
 | kimi-cli | `/skill:kaola-project-runner ` | E2; E2 / E2 | `~/.agents/skills`, `${KIMI_CODE_HOME:-~/.kimi-code}/skills` | 2.0.2 |
-| codex | `$kaola-project-runner` | E2; E2 / E2 | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.13.1 |
+| codex | `$kaola-project-runner` | E2; E2 / E2 | `~/.codex/skills`, `~/.agents/skills` | codex-acp 1.13.0 (pin 1.13.1: see notes) |
 
 ## Notes
 
@@ -57,6 +57,13 @@ the quoted sentence exists only in this build.
   single-quoted, or omit `--text` and pipe stdin: in double quotes `$kaola` expands. Like every Host, a codex Host's beat
   rewrites `.kaola/heartbeat-prompt.json`; Codex's own timer serves only a
   Codex supervisor that is not a Host.
+- **codex on codex-acp 1.13.1** (Issue #187, reported by the owning Host on
+  2026-09-26, not re-measured in #187) - isolated E2 probes answered
+  `SKILL-NOT-LOADED`; the E2 row above stays the 1.13.0 measurement. The live
+  Codex Host the owner accepted then loaded the Skill by an explicit read of
+  the installed `SKILL.md` and ran a working bind/wake loop: owner acceptance,
+  not E1/E2 entry proof. No unconditional tool_call rule follows from it, and
+  no Codex adapter change was made.
 - **dsh** - E2 plus negative control.
 - **kimi-cli (Issue #159 re-measure, Kimi Code 2.0.2+)** - the entry and both
   rows' lineage start at Issue #119 on Kimi Code 2.0.2 (E2; E2 / E2 for

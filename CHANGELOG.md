@@ -6,6 +6,27 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Kaola-Delegator selects any supported CLI Host, not only ZCode (#187; history
+  #74, #119, #122, #126). The Host platform is chosen apart from the authorized
+  worker platforms; the Delegator then uses that platform's own Runner, its
+  `host_skill_entry` as the first prompt line (codex `$kaola-project-runner`,
+  kimi-cli with its trailing space), the standard
+  `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` name, and its native resume
+  id, from the new rendered `references/host-platforms.md`. One live Host per
+  canonical root, exact stop, and the Grok Bot co-location attestation (now
+  `--worker <Host platform>`) are unchanged; the Grok Bot bridge is
+  byte-identical and account-side live UAT is still unverified. Startup proof is
+  platform-specific (E1 or E2, `docs/host-entry-evidence.md`); isolated codex-acp
+  1.13.1 E2 probes answered `SKILL-NOT-LOADED`, recorded as that narrow fact.
+  `install-local.sh` now installs `kaola-delegator` on Codex and generic
+  destinations whatever `--platform` selects; a first install no longer needs
+  `zcode` in `--platform` (the Host-runtime leftover rule of #160 is unchanged).
+  Installed Skills change: the Delegator, and two main-Skill sentences, which
+  moves the main Skill build id in every worker's `main-skill-build.json`, so a
+  Host start from a stale install refuses `main-skill-build-skew` until
+  `install-local.sh` is rerun. No holder, bridge, quota, adapter, or manifest
+  byte changes.
+
 - claude-code seats now publish `native_session_identity` (the native Claude
   UUID) on a seat's first turn, fresh or resumed (#186). A fresh seat's recorded
   `acp_session_id` is process-local and can never be resumed: `--resume` uses the

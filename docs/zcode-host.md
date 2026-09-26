@@ -603,7 +603,7 @@ claimed there (the interrupt resend's first line is contract-tested; its
 A ZCode Host is the control plane: its model and effort are dispatch
 requirements, not preferences. A `start` whose Runner session name has the
 documented Host shape `zcode-<PROJECT_CODE>-orchestrator-<purpose>`
-(`templates/kaola-delegator/references/handoff.md`) therefore enforces
+(`templates/kaola-delegator/references/host-platforms.md.tmpl`) therefore enforces
 **GLM 5.3 at effort `max`** mechanically, on a fresh start and `--resume`
 alike:
 

@@ -458,37 +458,52 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
     return result
 
 
-def external_values() -> dict[str, str]:
+def host_platform_rows(manifests: list[dict[str, str]]) -> str:
+    """Issue #187: one row per platform, straight from its manifest, so the
+    Delegator selects any Host by that platform's own Runner and entry."""
+    rows = []
+    for manifest in manifests:
+        entry = manifest["host_skill_entry"]
+        entry_cell = f"`{entry}`" if entry else "none (not a Host)"
+        rows.append(
+            f"| {manifest['id']} (`{manifest['runtime_name']}`) | `{manifest['skill_name']}` | {entry_cell} | "
+            f"`{manifest['id']}-<PROJECT_CODE>-orchestrator-<purpose>` |"
+        )
+    return "\n".join(rows)
+
+
+def external_values(manifests: list[dict[str, str]]) -> dict[str, str]:
     return {
         "SKILL_NAME": EXTERNAL_NAME,
         "DISPLAY_NAME": EXTERNAL_DISPLAY,
         "RUNNER_SKILL": ORCHESTRATOR_NAME,
         "RUNNER_DISPLAY": ORCHESTRATOR_DISPLAY,
-        "ZCODE_WORKER": f"{ZCODE_PLATFORM}-{ORCHESTRATOR_NAME}",
         "LOCATOR": LOCATOR_COMMAND,
+        "HOST_PLATFORM_ROWS": host_platform_rows(manifests),
         "DESCRIPTION": json.dumps(
             "Use when an outer Agent (Grok Bot, Codex, or generic) should delegate a "
-            "project run through Kaola-Delegator to one ZCode Host: extract the task, "
-            "progress, authorized platforms/quota/priority, and project context, start "
-            "or resume that Host via the ZCode Runner, and relay user changes without "
-            "dispatching workers."
+            "project run through Kaola-Delegator to one CLI Host on any "
+            "platform: extract the task, progress, Host platform, authorization, "
+            "quota, priority, start or resume that Host via its platform Runner, "
+            "and relay user changes without dispatching workers."
         ),
         "SHORT_DESCRIPTION": (
-            "Delegate a project run to one ZCode Host through the ZCode Runner"
+            "Delegate a project run to one CLI Host through its platform Runner"
         ),
         "DEFAULT_PROMPT": (
-            f"Use ${EXTERNAL_NAME} to extract the authorized task and quota, start or "
-            "resume one ZCode Host, and relay user changes without dispatching workers."
+            f"Use ${EXTERNAL_NAME} to extract the authorized task, Host platform, and "
+            "quota, start or resume one CLI Host, and relay user changes without "
+            "dispatching workers."
         ),
     }
 
 
-def expected_external_files() -> dict[str, bytes]:
+def expected_external_files(manifests: list[dict[str, str]]) -> dict[str, bytes]:
     src = TEMPLATES / EXTERNAL_NAME
     skill_template = src / "SKILL.md.tmpl"
     if not skill_template.is_file():
         raise ValueError(f"missing external Skill template: {skill_template}")
-    values = external_values()
+    values = external_values(manifests)
     result: dict[str, bytes] = {MARKER: (EXTERNAL_NAME + "\n").encode()}
     for source in sorted(src.rglob("*")):
         if not source.is_file():
@@ -1169,7 +1184,7 @@ def main() -> int:
     orch_expected = expected_orchestrator_files(manifests)
     main_build = main_skill_build_record(orch_expected)
     worker_expected = {m["skill_name"]: expected_files(m, main_build) for m in manifests}
-    external_expected = expected_external_files()
+    external_expected = expected_external_files(manifests)
     if args.verify_install:
         # Issue #107: compare an installed root against this render. Budget and
         # pin findings are gates for writing this checkout, not facts about the
