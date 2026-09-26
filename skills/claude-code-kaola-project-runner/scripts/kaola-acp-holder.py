@@ -920,10 +920,10 @@ def quota_module():
     return _QUOTA
 
 
-# Scripts whose bytes this process must pin at startup. ``install-local``
-# replaces the Skill directory with ``os.replace``; a later import would
-# execute the replacement and mix two builds in one holder.
-SIBLING_MODULES = ("kaola-quota.py",)
+# The one sibling this holder imports. ``install-local`` replaces the Skill
+# directory with ``os.replace``; a later import would execute the replacement
+# and mix two builds in one holder, so the bytes are pinned at startup.
+QUOTA_MODULE = "kaola-quota.py"
 RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
     "kaola-zcode-acp.py",
@@ -993,17 +993,15 @@ def _import_sibling(name: str):
 
 
 def load_sibling_modules() -> None:
-    """Import every sibling in ``SIBLING_MODULES`` and snapshot script bytes.
+    """Import the quota sibling and snapshot script bytes.
 
     Issue #162: a running holder must not import a sibling on a later request
     after ``install-local`` has swapped the directory. ``runner_build`` is the
     holder file this process executes, not the per-call CLI.
     """
     global _QUOTA, _RUNNER_IDENTITY
-    for name in SIBLING_MODULES:
-        module = _import_sibling(name)
-        if name == "kaola-quota.py":
-            _QUOTA = module if module is not None else False
+    module = _import_sibling(QUOTA_MODULE)
+    _QUOTA = module if module is not None else False
     paths = capture_script_paths()
     primary = paths.get("kaola-acp-holder.py") or {}
     digest = primary.get("sha256") or ""

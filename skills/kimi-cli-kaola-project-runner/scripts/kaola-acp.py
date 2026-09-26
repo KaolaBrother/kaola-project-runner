@@ -3251,8 +3251,13 @@ def pre_spawn_refusal(args: argparse.Namespace,
                   "hostish": hostish, "resolution": resolution}
 
 
-def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
-    refused, facts = pre_spawn_refusal(args, repo)
+def command_start(args: argparse.Namespace, repo: str,
+                  decided: tuple[dict[str, Any] | None, dict[str, Any]] | None = None
+                  ) -> dict[str, Any]:
+    # A caller that already ran the pre-spawn decision, like drain-restart
+    # before it stops anything, hands its result in so the installed Skill
+    # roots are scanned once, not twice.
+    refused, facts = decided if decided is not None else pre_spawn_refusal(args, repo)
     if refused is not None:
         return refused
     # Every pre-spawn refusal (#122/#132, bridge/runtime, #105/#106/#121,
@@ -3774,13 +3779,16 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
 
     Not a rebind and not a hot replace. Refusals that ``start`` can decide
     without spawning are run first, so a skewed install does not take the seat
-    down. A seat that is not idle is refused immediately with ``drain-not-idle``
-    and left running; the Agent owns retry timing. If a refusal still happens
-    after the stop, the receipt says the stop happened. The recorded
-    model/effort/tier/fast/mode are carried unless this argv names them; the
-    recorded mode is already the effective one the previous start applied, so
-    nothing re-derives a platform default here (Issue #181). Adoption is the new
-    start's own dispatcher, read directly.
+    down. That same decision is handed to the start below, so the installed
+    Skill roots are scanned once. A seat that is not idle is refused
+    immediately with ``drain-not-idle`` and left running; the Agent owns retry
+    timing. If a refusal still happens after the stop, the receipt says the
+    stop happened. The recorded model/effort/tier/fast/mode are carried unless
+    this argv names them; the recorded mode is already the effective one the
+    previous start applied, so nothing re-derives a platform default here
+    (Issue #181). A restart whose selection leaves mode unset reports the
+    effective mode the new start applied, exactly as that start's own receipt
+    does. Adoption is the new start's own dispatcher, read directly.
     """
     if not args.resume and not args.use_continue:
         receipt = base_receipt(args, repo)
@@ -3826,8 +3834,7 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
             "mutation_status": "not_started",
         })
         return receipt
-    # Pre-stop state only; the post-stop start re-decides on fresh state.
-    refused, _ = pre_spawn_refusal(args, repo)
+    refused, decision_facts = pre_spawn_refusal(args, repo)
     if refused is not None:
         refused["action"] = "drain-restart"
         refused["mutation_performed"] = False
@@ -3909,7 +3916,7 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
                 },
             })
             return receipt
-    started = command_start(args, repo)
+    started = command_start(args, repo, (None, decision_facts))
     started["action"] = "drain-restart"
     started["previous_holder_instance_id"] = old_id
     # Issue #181: echo the mode the new start actually applied, not a bare None.

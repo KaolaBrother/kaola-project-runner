@@ -236,10 +236,12 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
         self.assertNotIn("version", refusal["runtime_binary"], refusal)
         self.assertTrue(_pid_alive(pid), "the pre-stop refusal took the seat down")
 
-    def test_worker_skill_alignment_runs_once_per_start(self) -> None:
+    def test_worker_skill_alignment_runs_once_per_command(self) -> None:
         # #180: pre_spawn_refusal is the single start-decision site, so one
-        # start scans the installed Skill roots once; a drain-restart scans
-        # twice - the pre-stop decision plus the post-stop start.
+        # start scans the installed Skill roots once. #184: drain-restart runs
+        # that one decision and hands it to the start below, so it scans once
+        # too - previously the pre-stop decision and the post-stop start each
+        # scanned. This test asserts the consolidation, not the old double scan.
         session = "claude-code-KPR-i180-count"
         mod = load_acp()
         calls: list[str] = []
@@ -273,7 +275,7 @@ class PreSpawnBridgeFactTests(unittest.TestCase):
                 self.assertEqual(mod.main(), 0, out.getvalue()[-800:])
             restarted = json.loads(out.getvalue().strip().splitlines()[-1])
             self.assertEqual(restarted["state"], "ready", restarted)
-            self.assertEqual(len(calls), 2, calls)
+            self.assertEqual(len(calls), 1, calls)
         finally:
             sys.argv = saved_argv
             os.environ.clear()

@@ -20,10 +20,13 @@ import importlib.util
 import json
 import os
 import shutil
+import signal
+import socket
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -510,7 +513,76 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, receipt)
         self.assertEqual(receipt.get("reason"), "drain-not-idle", receipt)
         self.assertIs(receipt.get("mutation_performed"), False)
+        # #184: the refusal names the activity the holder reported, so a busy
+        # seat is distinguishable from a lost holder. This holder is alive with
+        # a turn running and no pending permission, so the hint is "busy".
+        self.assertEqual(receipt.get("activity_hint"), "busy", receipt)
+        self.assertEqual(receipt.get("turn_active"), True, receipt)
+        self.assertEqual(receipt.get("state"), "ready", receipt)
         self.assertTrue(_pid_alive(started["holder_pid"]))
+
+    def test_drain_restart_refuses_while_the_agent_exit_window_is_open(self) -> None:
+        """#184: an exited agent whose state flip has not landed is not idle.
+
+        ``on_agent_exit`` notifies the bound Host *before* setting
+        ``agent_exited`` (up to HEARTBEAT_NOTIFY_TIMEOUT), so a seat can be
+        ``state == "ready"`` with the agent already dead. Main refused this
+        drain-restart; a busy check that only looks at ``state`` would stop and
+        restart the seat instead. The host end of the worker's bound socket is
+        replaced by one that accepts the notification and never answers, which
+        holds that window open for the whole drain-restart.
+        """
+        host = "codex-KPR-i184-host"
+        session = "codex-KPR-i184-window"
+        host_started = self.run_cli("codex", "start", session=host)[1]
+        self.assertEqual(host_started.get("state"), "ready", host_started)
+        dispatcher = {
+            "holder_instance_id": host_started["holder_instance_id"],
+            "platform": "codex", "repo": host_started["repo"], "session": host,
+        }
+        worker = self.run_cli(
+            "codex", "start", session=session,
+            env=self.env(KAOLA_ACP_DISPATCHER=json.dumps(dispatcher), MOCK_ACP_RESUME_ANY="1"))[1]
+        self.assertEqual(worker.get("state"), "ready", worker)
+        socket_path = (worker.get("heartbeat_host") or {}).get("socket")
+        self.assertTrue(socket_path, worker)
+        # The bound host is stopped, so nothing else answers this socket, and a
+        # listener that never replies takes its place.
+        self.run_cli("codex", "stop", "--force", session=host)
+        os.unlink(socket_path) if os.path.exists(socket_path) else None
+        slow_host = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        slow_host.bind(socket_path)
+        slow_host.listen(1)
+        accepted: list[socket.socket] = []
+
+        def accept_and_hold() -> None:
+            try:
+                connection, _ = slow_host.accept()
+                accepted.append(connection)
+            except OSError:
+                pass
+
+        threading.Thread(target=accept_and_hold, daemon=True).start()
+        try:
+            # Kill the agent while the holder is idle. The holder sees the exit
+            # on its own wait thread and blocks in the Host notification before
+            # flipping state, which leaves state == "ready" with a dead agent.
+            os.kill(worker["agent_pid"], signal.SIGKILL)
+            self.assertTrue(self._await_agent_exit_window(session, accepted),
+                            "the agent-exit window never opened")
+            result, receipt = self.run_cli(
+                "codex", "drain-restart", "--resume", worker["acp_session_id"],
+                session=session, check=False)
+            self.assertEqual(result.returncode, 1, receipt)
+            self.assertEqual(receipt.get("reason"), "drain-not-idle", receipt)
+            self.assertIs(receipt.get("mutation_performed"), False, receipt)
+            self.assertEqual(receipt.get("state"), "ready", receipt)
+            self.assertTrue(_pid_alive(worker["holder_pid"]),
+                            "the exit window took the seat down")
+        finally:
+            for connection in accepted:
+                connection.close()
+            slow_host.close()
 
     def test_drain_restart_refuses_skew_before_stopping(self) -> None:
         session = "codex-KPR-i162-skewstop"
@@ -591,6 +663,27 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertIsInstance(record.get("start_selection"), dict, record)
         del record["start_selection"]
         path.write_text(json.dumps(record), encoding="utf-8")
+
+    def _await_agent_exit_window(self, session: str, accepted: list) -> bool:
+        """Wait until the agent is dead but the holder state flip has not landed.
+
+        ``on_agent_exit`` notifies the bound Host before ``agent_exited`` is
+        set, so while that notify is blocked the holder still reports
+        ``state == "ready"`` with a dead agent - the #184 window. The exact
+        shape matters: an idle turn, so the window is reachable only through
+        the agent-exit rule and not through the turn or pending rule.
+        """
+        deadline = time.monotonic() + 20.0
+        while time.monotonic() < deadline:
+            if accepted:
+                state = self.run_cli("codex", "status", session=session, check=False)[1]
+                if (state.get("agent_alive") is False
+                        and state.get("state") == "ready"
+                        and state.get("turn_active") is False
+                        and not (state.get("pending_permissions") or [])):
+                    return True
+            time.sleep(0.05)
+        return False
 
     def _restart(self, platform: str, session: str, resume: str, *args: str):
         return self.run_cli(

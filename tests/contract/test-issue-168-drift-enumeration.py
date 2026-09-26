@@ -146,15 +146,15 @@ class DriftVocabularyTests(unittest.TestCase):
     def test_every_holder_sibling_module_is_restart_required(self) -> None:
         """A holder-loaded sibling cannot drift into the report-only bucket.
 
-        The holder imports ``SIBLING_MODULES`` at startup and never re-imports
-        them, so a running seat only picks up their new bytes by restarting.
+        The holder imports its one sibling (``QUOTA_MODULE``) at startup and
+        never re-imports it, so a running seat only picks up its new bytes by
+        restarting.
         """
         acp = load_module(CLI, "acp179sib")
         holder = load_module(PROJECT / "scripts" / "kaola-acp-holder.py", "holder179")
-        self.assertTrue(holder.SIBLING_MODULES, "no sibling modules to check")
-        for name in holder.SIBLING_MODULES:
-            self.assertTrue(acp._restart_required_name(name),
-                            f"{name} is holder-loaded but not restart-required")
+        self.assertTrue(holder.QUOTA_MODULE, "no sibling module to check")
+        self.assertTrue(acp._restart_required_name(holder.QUOTA_MODULE),
+                        f"{holder.QUOTA_MODULE} is holder-loaded but not restart-required")
 
 
 if __name__ == "__main__":
