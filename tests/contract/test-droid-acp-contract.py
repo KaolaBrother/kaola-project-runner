@@ -295,6 +295,33 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         sent = self.cli("send", "--text", "usable")
         self.assertEqual(sent.get("outcome"), "turn_completed")
 
+    def test_a_launch_argv_model_compares_the_echo_not_the_argv_value(self) -> None:
+        """Issue #185 (B1): the verdict must read the agent's own echo, never
+        the argv value the Runner itself supplied. The argv carries ``--model
+        auto``, so no model option is sent and the agent keeps echoing its real
+        session model ``gpt-5.6-sol``; a self-comparison would falsely verify."""
+        receipt = self.start("--command", f"{self.mock_command()} --model auto")
+        self.assertIsNone(receipt.get("error"), receipt)
+        # The argv already selected the model: no model option was applied.
+        self.assertEqual(
+            [event for event in self.config_events() if event[0] != "autonomy_level"],
+            [],
+        )
+        model = (receipt.get("config_application") or {}).get("model") or {}
+        self.assertEqual(model.get("applied_via"), "argv")
+        # Issue #140 keeps the display value as the argv model and the agent's
+        # real echo as advertised_model; the verdict uses the echo.
+        effective = receipt.get("effective_selection") or {}
+        self.assertEqual(effective.get("effective_model_source"), "launch-argv")
+        self.assertEqual(effective.get("effective_model"), "auto")
+        self.assertEqual(effective.get("advertised_model"), "gpt-5.6-sol")
+        self.assertEqual(receipt.get("actual_runtime_model_id"), "gpt-5.6-sol")
+        self.assertIs(receipt.get("model_verified"), False)
+        self.assertEqual(receipt.get("model_mismatch_reason"),
+                         "actual-model-mismatch:gpt-5.6-sol")
+        sent = self.cli("send", "--text", "usable")
+        self.assertEqual(sent.get("outcome"), "turn_completed")
+
     def test_explicit_effort_is_set_only_when_called(self) -> None:
         self.start("--model", "gpt-5.6-sol", "--effort", "high")
         self.assertEqual(

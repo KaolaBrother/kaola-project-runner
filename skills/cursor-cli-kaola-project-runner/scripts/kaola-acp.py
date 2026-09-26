@@ -2535,16 +2535,8 @@ def explicit_selection_problem(requested_model: str, requested_effort: str,
 
 
 # Issue #185: platforms whose selected model is verified from the agent's own
-# post-set current-model echo. Droid is the first: its only read-only catalog
-# probe is `droid --version`, so no model catalog is ever readable, and
-# `session_meta.models.currentModelId` is a frozen `session/new` snapshot that
-# a later `session/set_config_option` never refreshes. The agent's
-# `config_option_update` echo is refreshed on every accepted set; the holder
-# mirrors it into `session_meta.configOptions[model].currentValue`, which
-# `effective_selection` reads back - that is the live evidence of the
-# session's model. Other platforms stay `unknown`: their advertised value can
-# be launch-argv derived or stale (Issue #140), so it cannot establish a
-# verdict.
+# current-model echo (`session_meta.configOptions[model].currentValue`). Droid
+# only: its catalog is unreadable and its `models.currentModelId` is frozen.
 ECHO_VERIFIED_PLATFORMS = frozenset({"droid"})
 
 
@@ -2554,9 +2546,8 @@ def echo_model_verification(
     """A ``true``/``false``/``unknown`` model verdict from the agent's own echo.
 
     ``None`` for a platform whose advertised value is not a reliable authority.
-    For a supported platform the returned mapping replaces
-    ``actual_runtime_model_id``, ``actual_parameters``, ``model_verified`` and
-    ``model_mismatch_reason``; it is reported evidence and never gates a start.
+    Reported evidence only; it never gates a start. ``effective`` must be the
+    raw ``effective_selection`` echo, before the Issue #140 argv override.
     """
     if platform not in ECHO_VERIFIED_PLATFORMS:
         return None
@@ -2575,14 +2566,8 @@ def echo_model_verification(
         return result
     expected_id = policy.get("resolved_runtime_model_id")
     if not expected_id:
-        # Native default or preserved resume state: the echo is real evidence
-        # but there is no Runner-selected target to compare it against.
-        state = ((policy.get("model_evidence_provenance") or {}).get("resolution") or {}).get("state")
-        result["model_mismatch_reason"] = (
-            "resume-preserved-actual-not-comparable"
-            if state == "resume-preserved"
-            else "native-default-model-not-comparable"
-        )
+        # On droid an empty target is only the preserved-resume path.
+        result["model_mismatch_reason"] = "resume-preserved-actual-not-comparable"
         return result
     if actual_id != expected_id:
         result["model_verified"] = False
@@ -3683,6 +3668,9 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         receipt.setdefault("fast", fast_report(args, policy, "none", False))
         # Issue #119 (H2): what the agent itself now reports, for every start.
         effective = effective_selection(args.manifest, socket_request(sock, "state", {}, 10.0))
+        # Issue #185: droid's verdict reads the agent's raw echo here, before
+        # the Issue #140 block below replaces the display value with the argv.
+        echo_verdict = echo_model_verification(args.platform, policy, effective)
         if (application.get("model") or {}).get("applied_via") == "argv":
             # Issue #140: devin's advertised currentValue stays the stale
             # initial value when the argv set the model; keep it as evidence.
@@ -3690,9 +3678,6 @@ def command_start(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             effective["effective_model"] = application["model"]["value"]
             effective["effective_model_source"] = "launch-argv"
         receipt["effective_selection"] = effective
-        # Issue #185: Droid verifies its selection from this echo, not from the
-        # unreadable CLI catalog or the frozen session/new models snapshot.
-        echo_verdict = echo_model_verification(args.platform, policy, effective)
         if echo_verdict is not None:
             receipt.update(echo_verdict)
             provenance = policy.setdefault("model_evidence_provenance", {})

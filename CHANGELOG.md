@@ -17,7 +17,10 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   `true` when the echoed model equals the resolved selection (the echoed `reasoning_effort` is
   compared only when the Runner pinned an effort), `false` with `actual-model-mismatch:<id>` on a
   mismatch, and `unknown` when unreadable or when a preserved resume has no Runner target -
-  and records `model_evidence_provenance.actual.source` as `acp-config-echo`. The verdict is
+  and records `model_evidence_provenance.actual.source` as `acp-config-echo`. On a launch-argv
+  start (`effective_model_source: "launch-argv"`) the verdict compares the agent's echoed
+  `advertised_model`, never the argv value the Runner supplied, so an argv model the agent never
+  adopted verifies `false`. The verdict is
   reported evidence, never a start gate; every other platform stays `unknown`, since its
   advertised value can be launch-argv derived or stale (Issue #140).
   **Seats: restart not required.** The operator test

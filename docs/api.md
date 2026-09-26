@@ -619,7 +619,10 @@ The agent's actual selection is `effective_selection` on `start`, beside
 model as `--model`, the model option is not re-sent: `config_application.model` is
 `{"applied": true, "applied_via": "argv", "value": ...}` and `effective_selection.effective_model`
 is that id with `effective_model_source: "launch-argv"`, the agent's own (possibly stale) value kept
-as `advertised_model`. `status`/`observe` carry no request provenance; they report the
+as `advertised_model`. On such a launch-argv start Droid's `model_verified` compares that echoed
+`advertised_model`, never the argv value the Runner itself supplied, so a session whose argv model
+the agent never adopted verifies `false` instead of comparing the argv value to itself.
+`status`/`observe` carry no request provenance; they report the
 agent's own `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
