@@ -598,8 +598,21 @@ catalog absence, or unreadable evidence never disables generic communication.
 Model evidence under `model` on the `start`/`preflight` receipt includes `requested_model_source`,
 `requested_model_name`, `requested_tier`, `requested_fast`, `resolved_runtime_model_id`,
 `resolved_parameters`, `resolved_fast`, and structured provenance. `actual_runtime_model_id` and
-`actual_parameters` are always `null` and `model_verified` is always `unknown`
-(`model_mismatch_reason: actual-model-evidence-not-yet-read`): ACP computes no true/false verdict.
+`actual_parameters` are `null` and `model_verified` is `unknown`
+(`model_mismatch_reason: actual-model-evidence-not-yet-read`) on most platforms, because ACP
+computes no true/false verdict from the launch request alone. Droid is the exception (Issue #185):
+its selection is verified from the agent's own live current-model echo. Droid's only read-only
+catalog probe is `droid --version` (no readable model catalog), and
+`session_meta.models.currentModelId` is a frozen `session/new` snapshot a later set never
+refreshes, so neither can verify a selection; the `config_option_update` echo is refreshed on
+every accepted set, the holder mirrors it into `session_meta.configOptions[model].currentValue`,
+and `start` reads that echo back through `effective_selection`. Droid's `model_verified` is
+therefore `true` when the echoed model equals the resolved selection (with the echoed
+`reasoning_effort` compared only when the Runner pinned an effort), `false` with
+`actual-model-mismatch:<id>` when the agent reports another model, and `unknown`
+(`actual-model-evidence-unreadable`, or `resume-preserved-actual-not-comparable` for a preserved
+resume with no Runner target). The verdict is reported evidence, never a start gate, and
+`model_evidence_provenance.actual.source` is `acp-config-echo`.
 The agent's actual selection is `effective_selection` on `start`, beside
 `resolved_runtime_model_id`; its `effort_config_id` names the effort option id it was read from
 (the resolved `acp_effort_config_id` candidate). When the spawn argv already carries the resolved

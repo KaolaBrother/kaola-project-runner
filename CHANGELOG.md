@@ -6,6 +6,25 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Droid's `model_verified` is verified from the agent's own current-model echo (Issue #185).**
+  Droid's `model_verified` was always `unknown`: its only read-only catalog probe is
+  `droid --version` (no readable model catalog), and `session_meta.models.currentModelId` is a
+  frozen `session/new` snapshot a later `session/set_config_option` never refreshes. Neither can
+  verify a selection. The live evidence Droid does give is its own post-set
+  `config_option_update` echo: the holder mirrors it into
+  `session_meta.configOptions[model].currentValue`, and `start` reads it back through
+  `effective_selection`. On Droid only, `start` now derives the verdict from that echo -
+  `true` when the echoed model equals the resolved selection (the echoed `reasoning_effort` is
+  compared only when the Runner pinned an effort), `false` with `actual-model-mismatch:<id>` on a
+  mismatch, and `unknown` when unreadable or when a preserved resume has no Runner target -
+  and records `model_evidence_provenance.actual.source` as `acp-config-echo`. The verdict is
+  reported evidence, never a start gate; every other platform stays `unknown`, since its
+  advertised value can be launch-argv derived or stale (Issue #140).
+  **Seats: restart not required.** The operator test
+  `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+  is empty: only the per-call CLI (`scripts/kaola-acp.py`), its rendered copies, docs, and tests
+  changed. Contract coverage: `tests/contract/test-droid-acp-contract.py`.
+
 - **One default-fill site, explicit flags by argparse `None`, and a slimmed `drain-restart` (Issue #181, following the bba3733..fe480d3 architecture review).**
   `command_start` now records the *effective* permission mode (`--mode`, else
   the platform `ACP_SKIP_MODE` default) in the holder's `start_selection`, so a
