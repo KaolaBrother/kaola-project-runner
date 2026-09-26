@@ -6,33 +6,60 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-- Kaola-Delegator selects any supported CLI Host, not only ZCode (#187; history
-  #74, #119, #122, #126). The Host platform is chosen apart from the authorized
-  worker platforms; the Delegator then uses that platform's own Runner, its
-  `host_skill_entry` as the first prompt line (codex `$kaola-project-runner`,
-  kimi-cli with its trailing space), the standard
-  `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` name, and its native resume
-  id, from the new rendered `references/host-platforms.md`. One live Host per
-  canonical root, exact stop, and the Grok Bot co-location attestation (now
-  `--worker <Host platform>`) are unchanged; the Grok Bot bridge is
-  byte-identical and account-side live UAT is still unverified. Startup proof is
-  platform-specific (E1 or E2, `docs/host-entry-evidence.md`); isolated codex-acp
-  1.13.1 E2 probes answered `SKILL-NOT-LOADED`, recorded as that narrow fact.
-  `install-local.sh` now installs `kaola-delegator` on Codex and generic
-  destinations whatever `--platform` selects; a first install no longer needs
-  `zcode` in `--platform` (the Host-runtime leftover rule of #160 is unchanged).
-  Installed Skills change: the Delegator, and two main-Skill sentences, which
-  moves the main Skill build id in every worker's `main-skill-build.json`, so a
-  Host start from a stale install refuses `main-skill-build-skew` until
-  `install-local.sh` is rerun. No holder, bridge, quota, adapter, or manifest
-  byte changes.
+## 0.6.4 — 2026-09-27 (any supported CLI Host for Kaola-Delegator, resumable Claude Code native id)
 
-- claude-code seats now publish `native_session_identity` (the native Claude
-  UUID) on a seat's first turn, fresh or resumed (#186). A fresh seat's recorded
-  `acp_session_id` is process-local and can never be resumed: `--resume` uses the
-  newest `native_session_identity.nativeSessionId`, readable with `capture` — a
-  later event supersedes an earlier one, since a resume-failure fallback replaces
-  the conversation.
+Seats: restart required
+
+The operator test
+`git diff v0.6.3 v0.6.4 -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+is not empty: it reports exactly one file, `platforms/claude-code.yaml`, whose `acp_quirks`
+gains the #186 sourcing clause (a fresh seat's `acp_session_id` is process-local; `--resume`
+takes `native_session_identity.nativeSessionId`). `scripts/kaola-acp-holder.py`,
+`scripts/kaola-zcode-acp.py`, `scripts/kaola-quota.py`, and `scripts/adapters/` are
+byte-identical to v0.6.3. The note is `Seats: restart required` because the operator test is
+non-empty, and because the vendored Claude Code bridge changed underneath it: a seat started on
+v0.6.3 has the old bridge and platform facts in memory, and a Host started from a stale install
+is refused before it can dispatch. Run `install-local.sh` for every runtime you use, then
+restart seats: the rebuild moves the main Skill build id in every worker's
+`main-skill-build.json` (#187 installed-Skill change), so a Host start from a stale install
+refuses `main-skill-build-skew`, and any other platform's stale worker Skills refuse
+`worker-skill-skew` (#162).
+
+- **Kaola-Delegator selects any supported CLI Host, not only ZCode (Issue #187; history #74, #119, #122, #126).**
+  The Host platform is chosen apart from the authorized worker platforms; the Delegator then uses
+  that platform's own Runner, its `host_skill_entry` as the first prompt line (codex
+  `$kaola-project-runner`, kimi-cli with its trailing space), the standard
+  `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` name, and its native resume id, from the new
+  rendered `references/host-platforms.md` (one row per `platforms/<id>.yaml`). One live Host per
+  canonical root, exact stop, and the Grok Bot co-location attestation (now
+  `--worker <Host platform>`) are unchanged. `install-local.sh` installs `kaola-delegator` on
+  Codex and generic destinations whatever `--platform` selects; a first install no longer needs
+  `zcode` in `--platform` (the Host-runtime leftover rule of #160 is unchanged). Startup proof is
+  platform-specific (E1 or E2, `docs/host-entry-evidence.md`); isolated codex-acp 1.13.1 E2 probes
+  answered `SKILL-NOT-LOADED`, recorded as that narrow fact, and no unconditional tool_call rule
+  follows from it. **Seats: restart required.** Installed Skills change — the Delegator, plus two
+  main-Skill sentences that move the main Skill build id in every worker's
+  `main-skill-build.json` — so reinstall before a Host start or it refuses
+  `main-skill-build-skew`. No holder, bridge, quota, adapter, or platform-manifest byte changed
+  by this issue.
+  **Grok Bot account-side live UAT remains unverified for v0.6.4.** The account bridge content is
+  byte-identical to v0.6.3 and no live Grok Bot delegation (locate → load Kaola-Delegator →
+  any-platform Host start) was executed for this release; only the structural verifier PASS and
+  the `--worker <Host platform>` attestation change are evidenced. This is not a claim that all
+  ten platforms' current live UAT was re-run.
+
+- **claude-code seats now publish `native_session_identity` (the native Claude UUID) on a seat's first turn, fresh or resumed (Issue #186).**
+  A fresh seat's recorded `acp_session_id` is bridge-process-local and can never be resumed after
+  a stop: `--resume` uses the newest `native_session_identity.nativeSessionId`, readable with
+  `capture` — a later event supersedes an earlier one, since a resume-failure fallback replaces
+  the conversation. The vendored bridge emits the update in the ZCode shape on the first turn
+  (fresh, resumed by native id, or cancelled) and on the fallback conversation, de-duplicated per
+  announced id, preferring the announced id on a cancelled fallback turn and never clearing a
+  binding for an empty id; the change is recorded in `vendor/claude-code-acp/UPSTREAM.md` and
+  `dist/` was rebuilt (`kaola-dist.py --check` clean). **Seats: restart required.** The operator
+  test is non-empty (`platforms/claude-code.yaml`), and a running Claude Code seat keeps the old
+  vendored bridge until it restarts. Contract coverage:
+  `tests/contract/test-issue-186-claude-native-identity.py`.
 
 ## 0.6.3 — 2026-09-26 (seat build tracking and drain-restart, Codex systemError turns, droid model verification)
 
