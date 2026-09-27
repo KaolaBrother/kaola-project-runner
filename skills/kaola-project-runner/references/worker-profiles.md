@@ -9,7 +9,7 @@ judges, nothing scores or routes.
 
 | Runtime | `--tier` | Model | Parameters | Profile |
 |---|---|---|---|---|
-| Claude Code | `default` | Opus | effort=high | All-round worker, suited to taking on the more complex work. |
+| Claude Code | `default` | Opus | effort=high | All-round worker for every kind of task, especially strong at complex work; default effort high, preferred for the more complex and harder tasks. |
 | Claude Code | `fable` | Fable | effort=high | Design, goal definition and decomposition, issue creation, and review; only when the user explicitly asks or permits; no heavy execution, not a regular worker. |
 | Claude Code | `sonnet` | Sonnet | effort=max | Low-cost worker for tasks whose goal and boundaries are already clearly defined; default effort max. |
 | Codex CLI | `default` | GPT-6 Sol | effort=high | Good at exploring directions, finding problems, review, and computer use, but prone to over-engineering; set a clear scope and hold it to the minimal necessary solution. |
