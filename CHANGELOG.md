@@ -6,6 +6,28 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.6.7 — 2026-09-28 (OpenCode default preset and sixth pool preset, six worker profiles, skew recovery routes, Devin advertised model)
+
+Seats: restart required
+
+The operator test
+`git diff v0.6.6 v0.6.7 -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+is not empty: it reports `platforms/claude-code.yaml`, `platforms/codex.yaml`, `platforms/devin.yaml`,
+`platforms/dsh.yaml`, `platforms/opencode.yaml`, `platforms/zcode.yaml`, and
+`scripts/adapters/opencode.sh` (#200 pins the OpenCode default model and rewrites the six
+owner-stated worker profile lines; #197 rewrites the Devin `acp_quirks` model-advertising clause).
+`scripts/kaola-acp-holder.py`, `scripts/kaola-zcode-acp.py`, `scripts/kaola-quota.py`, and the other
+nine `scripts/adapters/*.sh` are byte-identical to v0.6.6. The note is `Seats: restart required`
+because the operator test is non-empty: a seat started on v0.6.6 keeps the platform facts it started
+with, and its OpenCode `default` preset pins no model, so starting that preset from the stale tree
+keeps the #200 `provider.no-route` failure. Run `install-local.sh` for every runtime you use, then
+restart seats: the worker profile lines render into `references/worker-profiles.md`, the worker
+platform facts, and the Host, Delegator, and README wording, so every worker's
+`main-skill-build.json` moves, a Host start from a stale install refuses `main-skill-build-skew`,
+and any other platform's stale worker Skills refuse `worker-skill-skew`.
+`templates/grok-bot/accepted-revision.json` is at the content stage for this release's content
+commit; the pin commit that follows names the v0.6.7 tag.
+
 - **OpenCode default preset, sixth autonomous pool preset, six worker profiles (Issue #200).**
   OpenCode `--tier default` now explicitly selects `opencode-go/deepseek-v4.1-flash` (the
   provider-qualified ID already recorded as a real OpenCode 2.0.11 round trip in
@@ -17,9 +39,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   sonnet, Codex luna, ZCode default, Devin default, OpenCode, dsh) replace the previous
   one-line profile facts in the six platform manifests and render into
   `worker-profiles.md`, the Host and Delegator wording, and README without changing any other
-  preset's model, effort, or Fast parameters. `platforms/opencode.yaml` and
-  `scripts/adapters/opencode.sh` changed, so the release operator test is non-empty, and the
-  Grok Bot bridge accepted-revision file is back at content stage pending the v0.6.7 pin.
+  preset's model, effort, or Fast parameters.
 - **Skew refusals name their recovery route (Issue #198).** `main-skill-build-skew` and
   `worker-skill-build-skew` keep their typed `not_started` shape and fields; their `detail` now
   names each affected root's existing installer route from the accepted checkout
