@@ -56,7 +56,7 @@ consuming project's run records, not in this Skill. The count is a hard cap on
 live worker processes, ACP holders included; a finished seat counts until its
 `stop` receipt. Granted open-ended concurrency is its own cap. Do not invent a
 quota system: the cap is that count, enforced from `status`/`stop` receipts.
-The five-preset pool in
+The six-preset pool in
 [worker-profiles.md](references/worker-profiles.md) is default-authorized
 and sits outside that count and cap.
 
@@ -114,7 +114,7 @@ Quota packages (read-only catalog; never changes the count cap): [quota-packages
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | An authorized project task dispatches the [worker-profiles.md](references/worker-profiles.md) five-preset pool - no individual allowlist, count, or priority; every other runtime/preset needs explicit naming. No authorized task: ask, start no worker, register no heartbeat. |
+| Allowed CLIs | An authorized project task dispatches the [worker-profiles.md](references/worker-profiles.md) six-preset pool - no individual allowlist, count, or priority; every other runtime/preset needs explicit naming. No authorized task: ask, start no worker, register no heartbeat. |
 | Count | Named CLI without a count: one; it bounds live processes. Pool presets need no count and sit outside it. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices. |
 | Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets. Use one only when the human or authorization names it; ask if unclear. No automatic model, tier, or transport switch; only a seat the user explicitly authorized may switch its model/preset, within its own runtime. Choosing a worker or preset: [worker-profiles.md](references/worker-profiles.md). |

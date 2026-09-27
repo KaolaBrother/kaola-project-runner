@@ -18,7 +18,7 @@ project runs only one Agent for it.
 From the user and Git/Workflow/Issue/Runner records collect:
 goal; already-done/remaining work; the Host platform; authorized worker
 platforms/members, counts, and concurrency for outside-pool workers and
-stated exclusions - the five-preset pool (worker-profiles.md) is
+stated exclusions - the six-preset pool (worker-profiles.md) is
 default-authorized and needs none; the quota the user actually gave, each
 figure in its own unit; priority; delivery/stop boundary; the project path.
 On a **live** Host, apply only the user's

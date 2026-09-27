@@ -34,8 +34,9 @@ CLI = PROJECT / "scripts" / "kaola-acp.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 
 CONFIG_ENV = "MOCK_ACP_CONFIG"
-# opencode resolves to the CLI-native opening model: no implicit preset or
-# mode-skip set_config_option calls, so fixtures fully control native state.
+# Issue #200: opencode's default tier pins opencode-go/deepseek-v4.1-flash
+# with no effort override, so a plain start applies that model through the
+# model config option; fixtures control native state through the set results.
 PLATFORM = "opencode"
 
 
@@ -224,8 +225,10 @@ class Issue33ConfigMetaTests(unittest.TestCase):
     # -- tests ---------------------------------------------------------------
 
     def test_initial_new_config_is_current_baseline(self) -> None:
-        baseline = options(model="init-model", mode="read-only")
-        self.start(config={"new": baseline})
+        # Issue #200: a plain start applies the pinned default preset, so the
+        # fixture echoes the baseline as the agent's report of that selection.
+        baseline = options(model="opencode-go/deepseek-v4.1-flash", mode="read-only")
+        self.start(config={"new": baseline, "set_result": {"configOptions": baseline}})
         obs = self.cli("observe")
         meta = obs.get("session_meta") or {}
         self.assertEqual(meta.get("configOptions"), emitted(baseline))
@@ -358,7 +361,10 @@ class Issue33ConfigMetaTests(unittest.TestCase):
                            "set_result": {"configOptions": native_x}})
         obs = self.cli("observe")
         meta = obs.get("session_meta") or {}
-        self.assertNotIn("configOptions", meta)
+        # Issue #200: the plain start's pinned-model apply brings the first
+        # native report; session/new's absent options are still never
+        # fabricated into an initial baseline.
+        self.assertEqual(meta.get("configOptions"), emitted(native_x))
         self.assertIsNone(obs.get("initial_config_options"))
         result = self.set_config("model", "wanted-x")
         self.assertIsNone(result.get("error"), f"set failed: {result}")

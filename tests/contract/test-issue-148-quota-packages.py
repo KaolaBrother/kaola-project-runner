@@ -487,7 +487,10 @@ class QuotaEmissionCliTest(unittest.TestCase):
             env = {key: value for key, value in os.environ.items()
                    if not key.startswith("KAOLA_")}
             env["KAOLA_ACP_RECORD_ROOT"] = str(records)
-            env["MOCK_ACP_CONFIG"] = json.dumps({"new": native})
+            # Issue #200: opencode's default tier pins the model, so a plain
+            # start applies it; the agent reports the same native options.
+            env["MOCK_ACP_CONFIG"] = json.dumps(
+                {"new": native, "set_result": {"configOptions": native}})
             session = "i148-emit"
             base = [
                 sys.executable, str(CLI), "opencode",

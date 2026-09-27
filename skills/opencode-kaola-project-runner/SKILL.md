@@ -45,7 +45,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**CLI native opening model**: no Runner model or effort override) only — and `default` applies whenever the user did
+presets — `--tier default` (**DeepSeek V4.1 Flash (OpenCode Go)**: `opencode-go/deepseek-v4.1-flash`, no Runner effort override) only — and `default` applies whenever the user did
 not explicitly choose otherwise. Pass another `--tier` only when the user names that preset; never
 infer one from code size, failures, elapsed time, or your own assessment. An undeclared name is
 refused (`tier-not-declared`), never resolved to `default`.

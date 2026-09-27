@@ -9,8 +9,8 @@ ADAPTER_BIN_ENV="OPENCODE_BIN"
 ADAPTER_RECURRING_EXECUTION="unsupported"
 ADAPTER_QUIT_TEXT="/exit"
 ADAPTER_ANSWER_MODE="unsupported"
-ADAPTER_DEFAULT_MODEL_NAME="CLI native opening model"
-ADAPTER_DEFAULT_MODEL_ID=""
+ADAPTER_DEFAULT_MODEL_NAME="DeepSeek V4.1 Flash (OpenCode Go)"
+ADAPTER_DEFAULT_MODEL_ID="opencode-go/deepseek-v4.1-flash"
 ADAPTER_DEFAULT_MODEL_EFFORT=""
 ADAPTER_NAMED_TIERS=""
 ADAPTER_FAST_MECHANISM="none"
@@ -92,8 +92,8 @@ adapter_build_launch() {
   if [[ -n "$resume_id" ]]; then ADAPTER_LAUNCH_ARGS+=(--session "$resume_id")
   elif [[ "$continue_mode" == true ]]; then ADAPTER_LAUNCH_ARGS+=(--continue)
   fi
-  # Issue #34: presets keep OpenCode's own opening model — no Runner model or
-  # effort override. Issue #112: V2 also rejects top-level --model and --variant
+  # Issue #200: the default preset pins opencode-go/deepseek-v4.1-flash with no
+  # Runner effort override. Issue #112: V2 also rejects top-level --model and --variant
   # ("Unrecognized flag"), so an explicit caller model rides
   # adapter_prepare_model_environment rather than argv; passing either flag here
   # would abort the launch outright.
