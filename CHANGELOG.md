@@ -6,6 +6,16 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Project Runner and Kaola-Delegator scheduling wording trimmed (Issue #189).** A clear task
+  goes directly to a suitable authorized worker; split or parallelize only when the work needs it,
+  and the authorized count is a ceiling, not a target to fill (replaces "dispatch every suitable
+  match" at every heartbeat). Acceptance no longer requires a distinct verifier by default: the
+  Host judges the worker's actual diff and run records against the currently effective global
+  Workflow rules, reuses sufficient same-candidate evidence, and returns only concrete gaps for
+  repair. Kaola-Delegator follows up at the user's agreed cadence. Hard cap,
+  stop-before-start, acceptance-before-finalize, and close-out duties are unchanged; no new
+  mechanism. `templates/grok-bot/accepted-revision.json` returns to the content stage.
+
 ## 0.6.4 — 2026-09-27 (any supported CLI Host for Kaola-Delegator, resumable Claude Code native id)
 
 Seats: restart required
