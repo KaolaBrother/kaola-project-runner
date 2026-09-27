@@ -574,8 +574,9 @@ Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the r
 
 Each preset also carries a one-line, user-defined worker profile (`<tier>_model_profile` in its
 manifest; OpenCode's is unset) — selection guidance, not a measured capability. The Host and
-Kaola-Delegator read the rendered table in
-[worker-profiles.md](skills/kaola-project-runner/references/worker-profiles.md). A seat stays bound
+Kaola-Delegator read the complete table (every runtime and tier, with its parameters and profile),
+rendered from the manifests into
+[worker-profiles.md](skills/kaola-project-runner/references/worker-profiles.md); it is not copied here. A seat stays bound
 to its preset; only the user's explicit grant for a particular seat lets the Host switch that seat's
 model/preset, and only within the same agent runtime.
 

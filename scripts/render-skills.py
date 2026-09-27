@@ -367,7 +367,8 @@ def worker_profile_rows(manifests: list[dict[str, str]]) -> str:
         for tier in ["default", *named_tiers(manifest)]:
             prefix = tier.replace("-", "_")
             rows.append(f"| {manifest['runtime_name']} | `{tier}` | "
-                        f"{manifest[f'{prefix}_model_name']} | {manifest[f'{prefix}_model_profile']} |")
+                        f"{manifest[f'{prefix}_model_name']} | {manifest[f'{prefix}_model_parameters']} | "
+                        f"{manifest[f'{prefix}_model_profile']} |")
     return "\n".join(rows)
 
 
