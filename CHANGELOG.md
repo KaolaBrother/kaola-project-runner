@@ -6,6 +6,14 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Worker profiles and per-seat model switching (Issue #190).** Every preset carries one
+  user-defined line, `<tier>_model_profile` in its manifest (OpenCode unset), rendered into
+  Project Runner's `references/worker-profiles.md`, which the Host, Kaola-Delegator and README
+  read on demand. Guidance, not measured capability: model IDs, effort, Fast, and `start` are
+  unchanged. Seats stay bound; only the user's explicit grant for a particular seat lets the Host
+  select or switch that seat's model/preset within the same agent runtime, never across
+  runtimes, with no new flow. Operator-diff fact: every `platforms/*.yaml` gains only the profile
+  keys.
 - **Project Runner and Kaola-Delegator scheduling wording trimmed (Issue #189).** A clear task
   goes directly to a suitable authorized worker; split or parallelize only when the work needs it,
   and the authorized count is a ceiling, not a target to fill (replaces "dispatch every suitable

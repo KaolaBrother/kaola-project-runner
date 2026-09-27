@@ -572,6 +572,13 @@ Devin applies each preset through its launch `--model` (Devin has no pure Opus 5
 fusion). Droid's `-fast` catalog IDs are explicit `--model` choices, not a separate Fast toggle.
 Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the runtime supports it.
 
+Each preset also carries a one-line, user-defined worker profile (`<tier>_model_profile` in its
+manifest; OpenCode's is unset) — selection guidance, not a measured capability. The Host and
+Kaola-Delegator read the rendered table in
+[worker-profiles.md](skills/kaola-project-runner/references/worker-profiles.md). A seat stays bound
+to its preset; only the user's explicit grant for a particular seat lets the Host switch that seat's
+model/preset, and only within the same agent runtime.
+
 **Permission defaults matter:** the default is per platform, not one guarantee across all ten.
 Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-all option at start
 (`mode`, or `autonomy_level` for Droid). Cursor and Grok carry only a launch flag (`--yolo`,

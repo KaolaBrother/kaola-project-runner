@@ -1,0 +1,26 @@
+# Worker profiles
+
+One user-defined line per runtime preset, rendered from `platforms/<id>.yaml`
+(`<tier>_model_profile`). It is selection guidance from use, not a measured
+capability, price, or benchmark; it never changes a preset's model, effort, or
+Fast and never gates `start`. An empty profile is unset. Read the rows you need
+when choosing a worker, or a preset for a seat authorized to switch; the Host
+judges, nothing scores or routes.
+
+| Runtime | `--tier` | Model | Profile |
+|---|---|---|---|
+{{WORKER_PROFILE_ROWS}}
+
+## Seat binding and model switching
+
+A seat keeps its bound platform and preset; general dispatch authorization is
+not a switch grant. Only a user's explicit grant for a particular seat lets the
+Host select or switch that seat's model/preset, within the scope the user
+allowed and the same agent runtime, without asking again for each switch under
+that grant. Never switch across runtimes. The same seat switches only when
+idle, through the existing `drain-restart --resume ID` (or `--continue`) with an
+explicit `--tier`/`--model`: an exact stop and resume, not a live hot switch (a
+busy seat refuses `drain-not-idle`). A new standard-named seat is a new seat,
+not a switch of this one. No new flow. Fable, Fable Fusion, and Astra keep their explicit-permission and usage
+limits; a grant that already names them needs no repeated permission. Record
+the grant with the other authorization in the consuming project's run records.

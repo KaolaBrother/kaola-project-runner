@@ -115,7 +115,7 @@ Quota packages (read-only catalog; never changes the count cap): [references/quo
 | Allowed CLIs | None until named; all ten platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
 | Count | Named CLI without a count: one; it bounds live processes. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
-| Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets (see its Skill). Use one only when the human or authorization names it; ask only if unclear. No automatic model, tier, or transport switch. |
+| Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets (see its Skill). Use one only when the human or authorization names it; ask only if unclear. No automatic model, tier, or transport switch; only a seat the user explicitly authorized may switch its model/preset, within its own runtime. Choosing a worker or preset: [worker-profiles.md](references/worker-profiles.md). |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
 | Heartbeat | Non-Host: 30 minutes unless specified; zero or "no heartbeat" means one-shot; one host-native carrier, else same-session sleep, never both. Host: event-driven only (see Hosts). |
 | Permissions | Per platform, not one global bypass. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |

@@ -46,9 +46,11 @@ REQUIRED = {
     "continue_syntax", "resume_syntax", "preflight_summary", "launch_summary",
     "recurring_execution", "recurring_summary", "quit_text", "default_model_name",
     "default_model_id", "default_model_parameters", "default_model_effort",
+    # Issue #190: the user-defined one-line worker profile (may be empty).
+    "default_model_profile",
     # Issue #188: only `default` is common. `named_tiers` lists this runtime's
     # own preset words (comma-separated, empty for none); each word W carries
-    # `<w>_model_{name,id,parameters,effort}` with `w` = W with `-` as `_`.
+    # `<w>_model_{name,id,parameters,effort,profile}` with `w` = W with `-` as `_`.
     "named_tiers",
     "fast_support", "fast_summary",
     "acp_command",
@@ -79,7 +81,7 @@ OPTIONAL = {"acp_command_default",
             "acp_session_new_timeout"}
 
 
-TIER_FIELDS = ("name", "id", "parameters", "effort")
+TIER_FIELDS = ("name", "id", "parameters", "effort", "profile")
 
 
 def named_tiers(manifest: dict[str, str]) -> list[str]:
@@ -155,8 +157,12 @@ def parse_manifest(path: Path) -> dict[str, str]:
         # threading.TIMEOUT_MAX, which an unbounded wait would overflow).
         if not 0 < seconds <= 600:
             raise ValueError(f"{path}: acp_session_new_timeout must be seconds in (0, 600]")
+    # A profile is one Markdown table cell (Issue #190).
+    for key in [k for k in result if k.endswith("_model_profile")]:
+        if "|" in result[key]:
+            raise ValueError(f"{path}: {key} must not contain '|'")
     # A named tier resolves to a declared model: name and id are required,
-    # parameters and effort are present (possibly empty).
+    # parameters, effort and profile are present (possibly empty).
     for word in words:
         prefix = word.replace("-", "_")
         for field in TIER_FIELDS:
@@ -353,6 +359,18 @@ def supported_worker_summary(manifests: list[dict[str, str]]) -> str:
 
 
 
+def worker_profile_rows(manifests: list[dict[str, str]]) -> str:
+    """Issue #190: one row per preset, straight from its manifest - the single
+    source of the worker profiles the Host, Delegator and README read."""
+    rows = []
+    for manifest in manifests:
+        for tier in ["default", *named_tiers(manifest)]:
+            prefix = tier.replace("-", "_")
+            rows.append(f"| {manifest['runtime_name']} | `{tier}` | "
+                        f"{manifest[f'{prefix}_model_name']} | {manifest[f'{prefix}_model_profile']} |")
+    return "\n".join(rows)
+
+
 def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
     return {
         "SKILL_NAME": ORCHESTRATOR_NAME,
@@ -375,6 +393,7 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
             "CLI workers, review evidence, and finalize only after acceptance."
         ),
         "SUPPORTED_WORKERS": supported_worker_summary(manifests),
+        "WORKER_PROFILE_ROWS": worker_profile_rows(manifests),
         "IDLE_BEFORE_STOP": (
             "Give each clear task directly to a suitable authorized worker as a new "
             "session; split or parallelize only when the work itself needs it. The count "
