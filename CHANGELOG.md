@@ -6,6 +6,16 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Claude Code `--tier sonnet` and Codex `--tier luna` (Issue #188).** Two lower-cost
+  model-family worker tiers in the existing Issue #111 `alt_*` slot: Sonnet (`sonnet`) and GPT-6
+  Luna (`gpt-6-luna`), each with the preset parameter `effort=max`. `default`, `upgrade`, and Fast
+  are unchanged. Operator-diff fact for the next release assessment: `platforms/claude-code.yaml`,
+  `platforms/codex.yaml`, and their `scripts/adapters/` files change.
+- **Grok Bot bridge back to the content stage.** `templates/grok-bot/accepted-revision.json`
+  returns from `pinned` (v0.6.4, `00d3d21`) to `content`, because a pinned stage refuses any
+  content change; the generated bridge now reads "Accepted revision: none yet" and is not
+  saveable until a later pin commit. No release or pin is made here.
+
 ## 0.6.4 — 2026-09-27 (any supported CLI Host for Kaola-Delegator, resumable Claude Code native id)
 
 Seats: restart required

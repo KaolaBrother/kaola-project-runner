@@ -60,7 +60,7 @@ no answer in time as `acp-session-timeout`. Model-selection fields are
 `upgrade_model_name`/`upgrade_model_id`/`upgrade_model_parameters`/`upgrade_model_effort`,
 `alt_tier_label`/`alt_model_name`/`alt_model_id`/`alt_model_parameters`/`alt_model_effort`, and
 `fast_support`/`fast_summary`. The `alt_*` group is the optional third preset: `alt_tier_label`
-carries the platform's own word for the tier (`alternative`, `fable`) and an empty label means
+carries the platform's own word for the tier (`alternative`, `fable`, `core`, `sonnet`, `luna`) and an empty label means
 the platform declares no third tier, in which case the whole group must be empty and nothing
 about it is rendered. It reaches the generated Skill through the computed `TIER_BLOCK`
 (SKILL.md) and `ALT_TIER_LINE` (references/platform.md) blocks, never an unconditional
@@ -634,6 +634,11 @@ below the default, not an upgrade. Both ids are first-class catalog values, so `
 stays empty. `--tier alternative` stays the typed `tier-not-declared` refusal. Its native ACP mode option is
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
+
+Claude Code's third tier, `--tier sonnet`, is Sonnet (`sonnet`); Codex's, `--tier luna`, is GPT-6
+Luna (`gpt-6-luna`); both carry the preset parameter `effort=max` (Issue #188). They are
+lower-cost model-family worker tiers, not upgrades, applied as ordinary ACP config options; a
+native rejection is a `config_application` limitation, never a substitute.
 
 ## Agent-directed transport results
 

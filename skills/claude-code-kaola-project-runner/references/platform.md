@@ -7,6 +7,7 @@
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
 - Runner default preset (`--tier default`): **Opus High** — `opus` with `effort=high`
 - Runner upgrade preset (`--tier upgrade`): **Fable High** — `fable` with `effort=high`
+- Runner sonnet preset (`--tier sonnet`): **Sonnet** — `sonnet` with `effort=max`
 - Fast support: Fast via process-scoped `--settings '{"fastMode": ...}'` at launch: `--fast on` passes fastMode=true, `--fast off` pins fastMode=false for the session; the native CLI determines model support — effective stays unknown without native evidence and the selected model is never changed
 
 ## Preflight

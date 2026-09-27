@@ -14,7 +14,7 @@ Three separate things are pinned:
   still carries the same preset facts (the retired PTY path used to read them,
   Issue #130), and nothing but this test makes the two agree;
 * the third preset slot, which is optional: it must resolve where declared and
-  be **absent** from the generated output of the seven platforms that declare
+  be **absent** from the generated output of the five platforms that declare
   none, while an undeclared tier is a typed refusal rather than a quiet
   fallback to ``default``;
 * two tolerances that are load-bearing but invisible: ZCode's ``thought`` vs
@@ -218,14 +218,14 @@ class ThirdTierIsOptional(unittest.TestCase):
 
     def test_render_rejects_a_label_without_a_model(self) -> None:
         render = load("render-skills")
-        values = manifest("codex") | {"alt_tier_label": "alternative"}
+        values = manifest("opencode") | {"alt_tier_label": "alternative"}
         self.assertFalse(values["alt_model_id"])
         with self.assertRaises(ValueError):
             self._reparse(render, values)
 
     def test_render_rejects_a_model_without_a_label(self) -> None:
         render = load("render-skills")
-        values = manifest("codex") | {"alt_model_id": "orphan-model"}
+        values = manifest("opencode") | {"alt_model_id": "orphan-model"}
         with self.assertRaises(ValueError):
             self._reparse(render, values)
 
@@ -320,14 +320,14 @@ class TierAgentCommand(unittest.TestCase):
         for extra in ({"acp_command_default": ""},
                       {"acp_command_alt": "codex-acp --model x"}):
             with self.subTest(extra=extra), self.assertRaises(ValueError):
-                ThirdTierIsOptional._reparse(None, render, manifest("codex") | extra)
+                ThirdTierIsOptional._reparse(None, render, manifest("opencode") | extra)
 
 
 class UndeclaredTierIsRefused(unittest.TestCase):
     """The one thing a third tier must never do is quietly become `default`."""
 
     def test_acp_path_refuses_by_name_and_mutates_nothing(self) -> None:
-        code, receipt = run_acp("codex", "--tier", "fable")
+        code, receipt = run_acp("opencode", "--tier", "fable")
         self.assertEqual(code, 1)
         self.assertEqual(receipt["result"], "refused")
         self.assertEqual(receipt["reason"], "tier-not-declared")

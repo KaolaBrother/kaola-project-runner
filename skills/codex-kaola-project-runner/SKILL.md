@@ -50,6 +50,8 @@ not explicitly choose otherwise. Select `upgrade` only when the user explicitly 
 or upgraded model or describes this work as complex; never infer the upgrade from code size,
 failures, elapsed time, or your own complexity assessment.
 
+A third preset, `--tier luna` (**GPT-6 Luna**: `gpt-6-luna`), needs the same explicit user request as `upgrade`.
+
 An explicit user model choice always wins: pass it with `--model ID`, adding `--effort LEVEL` only
 when the user also named an effort. A bare explicit `--model` leaves the runtime's native effort
 alone — never attach a preset's effort to a different model. If the user picks a model ID that
