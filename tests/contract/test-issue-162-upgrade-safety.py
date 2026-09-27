@@ -604,6 +604,39 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertEqual(receipt.get("reason"), "worker-skill-build-skew", receipt)
         self.assertIs(receipt.get("mutation_performed"), False)
         self.assertTrue(_pid_alive(pid), receipt)
+        # Issue #198: the skewed copy's own root and platform, not the Host's.
+        self.assertIn(f"--skills-dir {stale.parent.parent} --platform claude-code "
+                      "--no-orchestrator",
+                      receipt.get("detail", ""))
+
+    def test_partial_drain_stop_directs_inspection_before_another_drain(self) -> None:
+        """Issue #198: the stop was sent but the old holder is not proven gone,
+        so the receipt keeps its mutation facts and points at ``status``."""
+        module = load_module(CLI, "kaola_acp_198")
+        args = module.argparse.Namespace(
+            platform="codex", session="codex-KPR-i198-drain", resume="r", use_continue=False,
+            manifest={}, tier=None)
+        alive = iter([True, True, True])
+        stubs = {
+            "record_dir": lambda *_: self.root,
+            "read_record": lambda *_: {"holder_pid": 4242, "holder_instance_id": "old"},
+            "pid_alive": lambda *_: next(alive, False),
+            "apply_recorded_selection": lambda *_: {},
+            "tier_declared": lambda *_: True,
+            "pre_spawn_refusal": lambda *_: (None, {}),
+            "op_or_holder_lost": lambda *a, **_: (
+                {"state": "ready", "activity_hint": "idle"} if a[3] == "state"
+                else {"stopped": True, "residual_pids": [4243]}),
+            "git_facts": lambda *_: {},
+        }
+        for name, stub in stubs.items():
+            setattr(module, name, stub)
+        receipt = module.command_drain_restart(args, str(self.repo))
+        self.assertEqual((receipt.get("result"), receipt.get("reason")),
+                         ("refused", "drain-stop-failed"), receipt)
+        self.assertIs(receipt.get("mutation_performed"), True)
+        self.assertEqual(receipt.get("mutation_status"), "completed")
+        self.assertIn("inspect `status` and residual_pids", receipt.get("detail", ""))
 
     def test_host_drain_restart_no_longer_scans_for_seats_on_the_old_instance(self) -> None:
         host = "codex-KPR-orchestrator-t162b"

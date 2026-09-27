@@ -1951,6 +1951,9 @@ def test_issue_106_unreadable_discovery_root_is_a_typed_refusal() -> None:
               f"({receipt.get('worker_skill_unreadable_roots')})")
         check(str(blocked) in (receipt.get("detail") or ""),
               f"the refusal detail names the unreadable root ({receipt.get('detail')})")
+        check("Restore read access" in (receipt.get("detail") or "")
+              and "remove it" not in (receipt.get("detail") or ""),
+              f"#198: the recovery restores access, never deletes ({receipt.get('detail')})")
         record_dir = sandbox.record_dir(session)
         check(not record_dir.exists() and not holder_socket(record_dir).exists(),
               "the refused start created no record directory and no holder socket")

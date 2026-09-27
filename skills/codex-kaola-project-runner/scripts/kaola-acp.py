@@ -3125,6 +3125,35 @@ def seat_freshness(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def skill_refresh_route(roots: dict[str, list[str]], unmanaged: list[str],
+                        workers_only: bool) -> str:
+    """Issue #198: the existing installer route for the roots a skew refusal
+    reports, ``root -> --platform`` values. The installer, not this text,
+    decides ownership; a copy under another name has no installer route."""
+    text = ""
+    if roots:
+        scope = " --no-orchestrator" if workers_only else ""
+        commands = "; ".join(f"./scripts/install-local.sh --skills-dir {shlex.quote(root)} "
+                             f"--platform {','.join(platforms)}{scope}"
+                             for root, platforms in roots.items())
+        text += (" From the accepted checkout, refresh each affected root with the "
+                 f"existing installer: {commands}. It replaces only a copy its receipt "
+                 "(<root>/.kaola-install-receipts/<skill>.json) owns, keeps every other "
+                 "referrer, and never replaces a foreign path. A --skills-dir install is "
+                 "the generic referrer"
+                 + ("" if workers_only else " and also plans kaola-delegator there")
+                 + "; where that receipt lists a runtime referrer, that runtime's own "
+                 "--runtime NAME install is the owner route. An obsolete duplicate you own "
+                 "is withdrawn with the same route plus --uninstall, which removes a copy "
+                 "only when no referrer remains; never delete it by hand.")
+    if unmanaged:
+        shown = unmanaged[:SKEW_DETAIL_CAP]
+        more = "" if len(unmanaged) == len(shown) else f" (+{len(unmanaged) - len(shown)} more)"
+        text += (f" {', '.join(shown)}{more}: renamed copy no installer manages; confirm "
+                 "it is yours before moving it out of the Skill root.")
+    return text
+
+
 def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
                             alignment: dict[str, Any]) -> dict[str, Any]:
     """Issue #121: an installed main Skill differs from this Host's build, and
@@ -3135,6 +3164,15 @@ def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
     listed = ", ".join(f"{entry['path']} ({entry['installed']} != {entry['expected']})"
                        for entry in shown)
     more = "" if len(skew) == len(shown) else f" (+{len(skew) - len(shown)} more)"
+    # Issue #198: the recovery names each reported root, never a guessed one.
+    roots: dict[str, list[str]] = {}
+    unmanaged: list[str] = []
+    for entry in skew:
+        path = Path(entry["path"])
+        if path.name == MAIN_SKILL_NAME:
+            roots.setdefault(str(path.parent), [args.platform])
+        else:
+            unmanaged.append(entry["path"])
     receipt = base_receipt(args, repo)
     receipt.pop("git", None)
     receipt.update({
@@ -3142,9 +3180,9 @@ def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
         "reason": "main-skill-build-skew",
         "action": "start",
         "detail": (f"{len(skew)} installed {MAIN_SKILL_NAME} main Skill(s) do not match "
-                   f"this Host build {alignment['build']}: {listed}{more}. Re-run "
-                   "install-local.sh from the accepted checkout for that root, or remove "
-                   "the stale copy, then start again."),
+                   f"this Host build {alignment['build']}: {listed}{more}. Nothing was "
+                   "started." + skill_refresh_route(roots, unmanaged, False)
+                   + " Then start again."),
         "main_skill_build": alignment["build"],
         "main_skill_skew": shown,
         "main_skill_skew_count": len(skew),
@@ -3168,8 +3206,9 @@ def worker_skill_root_refusal(args: argparse.Namespace, repo: str,
         "reason": "worker-skill-root-unreadable",
         "action": "start",
         "detail": (f"cannot verify installed worker Skills: {args.platform} discovery "
-                   f"root(s) not readable: {', '.join(roots)}. Make the root "
-                   "readable or remove it, then start again."),
+                   f"root(s) not readable: {', '.join(roots)}. Nothing was started. "
+                   "Restore read access to that root through its owner (never delete a "
+                   "Skill root to pass this check), then start again."),
         "worker_skill_build": alignment["build"],
         "worker_skill_unreadable_roots": roots,
         "mutation_performed": False,
@@ -3187,6 +3226,18 @@ def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
     listed = ", ".join(f"{entry['path']} ({entry['installed'] or 'missing'} "
                        f"!= {entry['expected']})" for entry in shown)
     more = "" if len(skew) == len(shown) else f" (+{len(skew) - len(shown)} more)"
+    # Issue #198: each reported copy's root and platform, from its own path.
+    roots: dict[str, list[str]] = {}
+    unmanaged: list[str] = []
+    for entry in skew:
+        skill = Path(entry["path"]).parents[1]
+        platform = skill.name.removesuffix(f"-{MAIN_SKILL_NAME}")
+        if skill.name == f"{platform}-{MAIN_SKILL_NAME}" and platform in PLATFORMS:
+            platforms = roots.setdefault(str(skill.parent), [])
+            if platform not in platforms:
+                platforms.append(platform)
+        elif str(skill) not in unmanaged:
+            unmanaged.append(str(skill))
     receipt = base_receipt(args, repo)
     receipt.pop("git", None)
     receipt.update({
@@ -3194,8 +3245,8 @@ def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
         "reason": "worker-skill-build-skew",
         "action": "start",
         "detail": (f"{len(skew)} installed worker Skill script(s) do not match this "
-                   f"Host build {alignment['build']}: {listed}{more}. Re-run "
-                   "install-local.sh from the accepted checkout, then start again."),
+                   f"Host build {alignment['build']}: {listed}{more}. Nothing was started."
+                   + skill_refresh_route(roots, unmanaged, True) + " Then start again."),
         "worker_skill_build": alignment["build"],
         "worker_skill_roots": alignment["roots"],
         "worker_skill_skew": shown,
@@ -4017,7 +4068,10 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
                 "result": "refused",
                 "reason": "drain-stop-failed",
                 "action": "drain-restart",
-                "detail": "the old holder is not fully gone; the new holder was not started",
+                "detail": ("the old holder is not fully gone; the new holder was not "
+                           "started. The exact stop was already sent: inspect `status` and "
+                           "residual_pids and prove the old holder gone before any "
+                           "drain-restart again."),
                 "residual_pids": stop.get("residual_pids") or [],
                 "mutation_performed": True,
                 "mutation_status": "completed",

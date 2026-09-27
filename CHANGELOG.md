@@ -6,6 +6,18 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Skew refusals name their recovery route (Issue #198).** `main-skill-build-skew` and
+  `worker-skill-build-skew` keep their typed `not_started` shape and fields; their `detail` now
+  names each affected root's existing installer route from the accepted checkout
+  (`install-local.sh --skills-dir ROOT --platform PLATFORM`, plus `--no-orchestrator` for worker
+  skew), states its ownership effect (receipt-owned copies only, existing referrers kept, the
+  `generic` referrer added, `kaola-delegator` planned for main skew, a runtime referrer's own
+  `--runtime NAME` install as the owner route), says an owned obsolete duplicate is withdrawn with
+  that route plus `--uninstall` rather than deleted by hand, and names a renamed copy no installer
+  manages for its owner. `worker-skill-root-unreadable` no longer suggests removing the root, and a
+  `drain-stop-failed` after the exact stop was sent says to inspect `status` and `residual_pids`
+  before another `drain-restart`. `host-exists` already directs attaching `existing_host` and is
+  unchanged. Nothing is deleted, retried, or started automatically.
 - **Devin's advertised model is not its running model (Issue #197).** The Devin platform note
   no longer claims the ACP model `currentValue` always stays `swe-2-high`: the option does
   not echo, and need not list, the `--model` a tier launches, so an `opus-fusion` seat can

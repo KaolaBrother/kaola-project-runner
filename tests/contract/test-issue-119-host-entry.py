@@ -399,6 +399,13 @@ def test_non_zcode_host_build_skew_refuses() -> None:
               and refused.get("worker_skill_skew_count") == 1
               and not sandbox.record_dir("droid", host).exists(),
               f"AC9 #105: skewed ~/.factory worker Skill refuses the droid Host ({refused})")
+        detail = str(refused.get("detail", ""))
+        route = (f"./scripts/install-local.sh --skills-dir {stale.parent} "
+                 "--platform claude-code --no-orchestrator")
+        check(refused.get("mutation_status") == "not_started" and route in detail
+              and "Nothing was started" in detail and "never replaces a foreign path" in detail
+              and "kaola-delegator" not in detail,
+              f"#198: the refusal names the skewed copy's own root and platform ({detail})")
         worker = "droid-KPR-i119-worker"
         result, refused = sandbox.invoke("droid", "start", session=worker, cli=cli)
         check(result.returncode == 1 and (refused or {}).get("reason") == "worker-skill-build-skew"
@@ -458,6 +465,27 @@ def test_issue_121_main_skill_build_skew_refuses() -> None:
         check((skew.get(str(backup)) or {}).get("files") == ["references/host-startup.md"],
               "#121: a missing recorded file is skew")
         check("install-local.sh" in detail, "#121: the refusal says how to repair it")
+        # Issue #198: the route names the reported root, with the Host's platform;
+        # the renamed backup has no installer route and is named for its owner.
+        main_entry = next(entry for entry in refused["main_skill_skew"]
+                          if Path(entry["path"]).name == "kaola-project-runner")
+        backup_entry = next(entry for entry in refused["main_skill_skew"]
+                            if Path(entry["path"]).name == "kaola-project-runner.bak")
+        route = (f"./scripts/install-local.sh --skills-dir {Path(main_entry['path']).parent} "
+                 "--platform droid")
+        check(refused.get("mutation_status") == "not_started" and route in detail
+              and f"{route} --no-orchestrator" not in detail
+              and "Nothing was started" in detail and "keeps every other referrer" in detail
+              and "generic referrer and also plans kaola-delegator" in detail
+              and "--runtime NAME install is the owner route" in detail,
+              f"#198: an ownership-aware route for the actual root ({detail})")
+        check(f"--skills-dir {Path(backup_entry['path']).parent}" not in detail
+              and f"{backup_entry['path']}: renamed copy no installer manages" in detail,
+              f"#198: a renamed copy gets no installer route ({detail})")
+        check("plus --uninstall, which removes a copy only when no referrer remains" in detail
+              and "never delete it by hand" in detail
+              and "remove the stale copy" not in detail,
+              f"#198: an owned duplicate is withdrawn, not deleted ({detail})")
         check(skill_md.read_bytes().endswith(b"Older heartbeat wording.\n") and backup.is_dir(),
               "#121: detection only; the user roots are untouched")
 
