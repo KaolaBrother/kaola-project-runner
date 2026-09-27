@@ -41,7 +41,7 @@ every layer. Each layer finishes its own job and does not repeat the next.
 
 | If you want | Use | What it does | What it does not do |
 |---|---|---|---|
-| Hands-off: delegate the whole project | **Kaola-Delegator** (`kaola-delegator`) | Extract goal, progress, authorized platforms/quota/priority, and stop boundary; start or resume **one** delegated Host that must load Project Runner | Dispatch workers, copy a mission ledger, maintain the inner heartbeat, or bind per-worker variables |
+| Hands-off: delegate the whole project | **Kaola-Delegator** (`kaola-delegator`) | Extract goal, progress, authorized platforms/quota/priority, and stop boundary; start or resume **one** delegated Host that must load Project Runner; relay evidence-based pacing feedback at its agreed cadence | Dispatch workers, copy a mission ledger, maintain the inner heartbeat, or bind per-worker variables |
 | Control the orchestration | **Project Runner** (`kaola-project-runner`) | Recover authorization, plan, dispatch, heartbeat, accept before finalize, and own close-out | Run as a second orchestrator on the same project |
 | Coordinate one or a few issues yourself | **Platform Runner** (`<platform>-kaola-project-runner`) | Exact-session start, send, read, and stop | Task planning or completion judgment |
 | Do one issue in this Agent | **Workflow Next** | Claim or resume that issue and advance it | Finalize, archive, and sink — those are Workflow finalize |
@@ -269,6 +269,9 @@ Runner reports runtime and model observations as evidence. A successful send or 
 alone does not establish that the task is complete. Worker Skills do not automatically retry
 prompts, upgrade models, or schedule recurring work. Project-level heartbeat
 and acceptance belong to the main orchestrator Skill when that Skill is in use.
+Acceptance there separates testing (running checks) from QA (judging evidence
+sufficiency and verification proportionality, including redundancy) — see
+`references/qa-evidence.md` in `kaola-project-runner`.
 
 ## Collaborative delivery with Kaola Workflow
 

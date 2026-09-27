@@ -191,6 +191,8 @@ sink, and write ownership.
    deviations, omissions or invalidated evidence back to that worker for repair,
    and do not finalize on incomplete evidence. Do not lower assertions or
    substitute worker prose, idle, green CI or a successful script exit for acceptance.
+   Testing executes checks; QA judges their sufficiency, including evidenced
+   redundancy: [qa-evidence.md](references/qa-evidence.md).
 4. **Finalize and synchronize.** Once accepted and authorized, direct the
    worker to finalize and merge, then verify remote, Issue, archive, doc
    docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).
