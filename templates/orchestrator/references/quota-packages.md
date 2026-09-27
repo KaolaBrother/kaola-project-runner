@@ -8,19 +8,21 @@ Package ids are `<platform>:<token>`. Manifest tokens and `model_package_rule` a
 
 `kaola-acp packages [--platform P] [--installed-only] [--login-shell SHELL]`
 
-Exit 0. Stdout is one `kaola-acp-packages/1` object. Keys are sorted. `installed_only` is false unless the flag is set, and `login_env` is present only then (copied from `kaola-acp-survey/1`). Each package row is `id`, `name`, `windows`, `binds_models`. `windows` is null until a release seeds one. `binds_models` false is a balance listed for a later Usage reader, not a model target.
+Exit 0. Stdout is one `kaola-acp-packages/1` object. Keys are sorted. `installed_only` is false unless the flag is set, and `login_env` is present only then (copied from `kaola-acp-survey/1`). Each package row is `id`, `name`, `windows`, `binds_models`. `windows` is null when no package reset period is established; otherwise the array lists confirmed reset windows (`5h`, `weekly`, `monthly`). An empty array means the package is verified to have no time-based reset. Omission from an array does not establish absence when provider documentation leaves a separate pool's windows unspecified. The field names windows only, not quota amounts or reset timestamps. For display, show the weekly or monthly window when the plan has one; show the 5h window only when it has neither. `binds_models` false is a balance listed for a later Usage reader, not a model target.
 
 One platform:
 
 ```json
-{"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "grok:account", "name": "Account", "windows": null}], "platform": "grok"}], "schema": "kaola-acp-packages/1"}
+{"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "grok:account", "name": "Account", "windows": ["weekly"]}], "platform": "grok"}], "schema": "kaola-acp-packages/1"}
 ```
 
 A platform with several packages:
 
 ```json
-{"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "droid:standard", "name": "Standard", "windows": null}, {"binds_models": true, "id": "droid:core", "name": "Core", "windows": null}, {"binds_models": true, "id": "droid:extra_usage", "name": "Extra usage", "windows": null}], "platform": "droid"}], "schema": "kaola-acp-packages/1"}
+{"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "droid:standard", "name": "Standard", "windows": ["5h", "weekly", "monthly"]}, {"binds_models": true, "id": "droid:core", "name": "Core", "windows": ["weekly", "monthly"]}, {"binds_models": true, "id": "droid:extra_usage", "name": "Extra usage", "windows": []}], "platform": "droid"}], "schema": "kaola-acp-packages/1"}
 ```
+
+Factory's Individual Plans docs give Standard Usage three independent rolling windows (5-hour, 7-day, and 30-day). Droid Core has its own Rate Limits after Standard Usage runs out; the docs do not state Core-specific windows. The catalog therefore includes the verified 5h window for `droid:standard`, retains the owner-confirmed weekly and monthly windows for `droid:core`, and does not infer a Core 5h window ([Factory Individual Plans](https://docs.factory.ai/pricing/individuals)).
 
 Omit `--platform` for every platform in Runner order. The object uses the same row shape.
 

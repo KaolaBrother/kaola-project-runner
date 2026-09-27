@@ -6,6 +6,18 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Droid installs into the shared `~/.agents/skills` (Issue #193).** `--runtime droid`
+  now joins `kimi-cli` and `dsh` in `$HOME/.agents/skills`, a documented Droid user root
+  that Droid reads in the same bucket as `~/.factory/skills`, where same-name Skills are
+  invalid. The same run withdraws only the `droid` reference from the retired
+  `~/.factory/skills`: a copy only droid referred to is removed, a copy another runtime
+  still refers to is kept with a duplicate-name warning, and a droid-only copy with edited
+  bytes or a same-name directory without a receipt refuses the run before any write.
+  Personal Skills are never touched; `--runtime droid --uninstall` withdraws from both
+  roots. A pre-ledger receipt counts droid only in `~/.factory/skills`, where droid wrote
+  it. Every other runtime keeps its current root, and the kimi-cli dual-root contract is
+  unchanged. Existing installs move only when an operator reruns `--runtime droid`.
+
 - **Host QA distinct from testing, evidenced redundancy, and adaptive verification
   cadence (Issue #194).** Testing executes checks; QA judges whether the product and its
   evidence satisfy the task and whether the verification work itself stays proportionate.
