@@ -295,7 +295,8 @@ python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.
 # Issue #119: measured Skill roots of the non-ZCode Host platforms; each
 # install is reversible by --uninstall on the same runtime. kimi-cli is not
 # in this loop: Issue #159 gives it two user roots (next block).
-for pair in "grok-cli:.grok/skills" "droid:.factory/skills" \
+# Issue #193: droid installs into the shared ~/.agents/skills.
+for pair in "grok-cli:.grok/skills" "droid:.agents/skills" \
             "opencode:.config/opencode/skills" "dsh:.agents/skills"; do
   rt="${pair%%:*}"; rel="${pair#*:}"
   output="$(run_installer "$repo" "$home" --runtime "$rt" --platform grok --method link 2>&1)" \
@@ -379,6 +380,135 @@ assert_absent "test_runtime_kimi_cli_default_kimi_uninstall_root" \
   "$home_default/.kimi-code/skills/grok-kaola-project-runner"
 assert_absent "test_runtime_kimi_cli_default_agents_uninstall_root" \
   "$home_default/.agents/skills/grok-kaola-project-runner"
+
+# --- Issue #193: droid prefers the shared root, withdraws from ~/.factory ----
+# Droid reads ~/.factory/skills and ~/.agents/skills as one user bucket where
+# same-name Skills are invalid. --runtime droid installs into the shared root
+# and withdraws only its own reference from the retired root.
+refs_of() {
+  python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1])).get("referrers") or []))' "$1"
+}
+set_refs() {
+  python3 -c 'import json, sys; p = sys.argv[1]; d = json.load(open(p)); d["referrers"] = sys.argv[2].split(","); json.dump(d, open(p, "w"))' "$1" "$2"
+}
+seed_legacy_droid() {
+  # A v0.6.5 --runtime droid copy install: receipts in ~/.factory/skills that
+  # name droid as the referrer (seeded through --skills-dir, then re-owned).
+  local root="$1" home="$2" platforms="$3" name
+  run_installer "$root" "$home" --skills-dir "$home/.factory/skills" --method copy --platform "$platforms" >/dev/null 2>&1 \
+    || fail "test_droid_seed" "legacy seed failed"
+  for name in "$home"/.factory/skills/.kaola-install-receipts/*.json; do
+    [[ "$(basename "$name")" == kaola-delegator.json ]] || set_refs "$name" droid
+  done
+}
+
+repo="$tmp_root/repo-droid"
+make_fixture "$repo"
+
+# fresh: shared root only, no ~/.factory created, no Delegator for droid
+home="$tmp_root/home-droid-fresh"
+output="$(run_installer "$repo" "$home" --runtime droid --platform droid 2>&1)" \
+  || fail "test_droid_fresh_install" "install failed: $output"
+assert_dir "test_droid_fresh_shared" "$home/.agents/skills/droid-kaola-project-runner"
+assert_dir "test_droid_fresh_shared_main" "$home/.agents/skills/kaola-project-runner"
+assert_absent "test_droid_fresh_no_delegator" "$home/.agents/skills/kaola-delegator"
+assert_absent "test_droid_fresh_no_factory" "$home/.factory"
+[[ "$(refs_of "$home/.agents/skills/.kaola-install-receipts/droid-kaola-project-runner.json")" == droid ]] \
+  || fail "test_droid_fresh_referrer" "expected referrers [droid]"
+[[ "$output" != *"retired root"* ]] || fail "test_droid_fresh_quiet" "unexpected retired-root line: $output"
+
+# migration: droid-only legacy copies are withdrawn, a co-owned one and a
+# personal Skill stay, and the generic-owned Delegator leftover is untouched
+home="$tmp_root/home-droid-migrate"
+seed_legacy_droid "$repo" "$home" grok,droid
+factory="$home/.factory/skills"
+set_refs "$factory/.kaola-install-receipts/grok-kaola-project-runner.json" droid,generic
+mkdir -p "$factory/my-personal-skill"
+printf '%s\n' '# personal' >"$factory/my-personal-skill/SKILL.md"
+personal_before="$(cat "$factory/my-personal-skill/SKILL.md")"
+output="$(run_installer "$repo" "$home" --runtime droid --platform grok,droid 2>&1)" \
+  || fail "test_droid_migrate_install" "install failed: $output"
+for name in grok-kaola-project-runner droid-kaola-project-runner kaola-project-runner; do
+  assert_dir "test_droid_migrate_shared_$name" "$home/.agents/skills/$name"
+  [[ "$(refs_of "$home/.agents/skills/.kaola-install-receipts/$name.json")" == droid ]] \
+    || fail "test_droid_migrate_shared_ref_$name" "expected shared referrers [droid]"
+done
+assert_absent "test_droid_migrate_withdrawn_worker" "$factory/droid-kaola-project-runner"
+assert_absent "test_droid_migrate_withdrawn_main" "$factory/kaola-project-runner"
+assert_absent "test_droid_migrate_withdrawn_receipt" "$factory/.kaola-install-receipts/droid-kaola-project-runner.json"
+assert_dir "test_droid_migrate_coowned_kept" "$factory/grok-kaola-project-runner"
+[[ "$(refs_of "$factory/.kaola-install-receipts/grok-kaola-project-runner.json")" == generic ]] \
+  || fail "test_droid_migrate_coowned_ref" "expected retired referrers [generic]"
+[[ "$output" == *"retired root: $factory"* ]] || fail "test_droid_migrate_context" "missing retired-root line: $output"
+[[ "$output" == *"warning: duplicate Skill name grok-kaola-project-runner"* ]] \
+  || fail "test_droid_migrate_duplicate_warning" "missing duplicate warning: $output"
+[[ "$output" != *"duplicate Skill name droid-kaola-project-runner"* ]] \
+  || fail "test_droid_migrate_no_false_warning" "withdrawn copy reported as duplicate: $output"
+[[ "$(cat "$factory/my-personal-skill/SKILL.md")" == "$personal_before" ]] \
+  || fail "test_droid_migrate_personal" "personal Skill changed"
+assert_dir "test_droid_migrate_delegator_leftover" "$factory/kaola-delegator"
+[[ "$(refs_of "$factory/.kaola-install-receipts/kaola-delegator.json")" == generic ]] \
+  || fail "test_droid_migrate_delegator_ref" "retired Delegator leftover referrers changed"
+# reinstall is idempotent in the shared root
+output="$(run_installer "$repo" "$home" --runtime droid --platform grok,droid 2>&1)" \
+  || fail "test_droid_migrate_reinstall" "reinstall failed: $output"
+[[ "$output" == *"already installed: $home/.agents/skills/droid-kaola-project-runner"* ]] \
+  || fail "test_droid_migrate_reinstall" "expected already installed, got: $output"
+
+# shared root referrers: dsh refers to droid's copy; each uninstall withdraws
+# only its own reference and the last referrer removes the Skill
+output="$(run_installer "$repo" "$home" --runtime dsh --platform droid 2>&1)" \
+  || fail "test_droid_dsh_refer" "dsh install failed: $output"
+[[ "$(refs_of "$home/.agents/skills/.kaola-install-receipts/droid-kaola-project-runner.json")" == droid,dsh ]] \
+  || fail "test_droid_dsh_refer" "expected referrers [droid,dsh]"
+output="$(run_installer "$repo" "$home" --runtime droid --platform droid --uninstall 2>&1)" \
+  || fail "test_droid_uninstall_shared" "droid uninstall failed: $output"
+assert_dir "test_droid_uninstall_kept_for_dsh" "$home/.agents/skills/droid-kaola-project-runner"
+[[ "$(refs_of "$home/.agents/skills/.kaola-install-receipts/droid-kaola-project-runner.json")" == dsh ]] \
+  || fail "test_droid_uninstall_kept_for_dsh" "expected referrers [dsh]"
+output="$(run_installer "$repo" "$home" --runtime dsh --platform droid --uninstall 2>&1)" \
+  || fail "test_droid_dsh_last_referrer" "dsh uninstall failed: $output"
+assert_absent "test_droid_dsh_last_referrer" "$home/.agents/skills/droid-kaola-project-runner"
+
+# uninstall on an un-migrated machine withdraws the legacy droid copy
+home="$tmp_root/home-droid-legacy-uninstall"
+seed_legacy_droid "$repo" "$home" droid
+output="$(run_installer "$repo" "$home" --runtime droid --platform droid --uninstall 2>&1)" \
+  || fail "test_droid_legacy_uninstall" "uninstall failed: $output"
+assert_absent "test_droid_legacy_uninstall_worker" "$home/.factory/skills/droid-kaola-project-runner"
+assert_absent "test_droid_legacy_uninstall_main" "$home/.factory/skills/kaola-project-runner"
+
+# an edited legacy copy or a foreign same-name directory refuses before any write
+for case_name in edited foreign; do
+  home="$tmp_root/home-droid-$case_name"
+  seed_legacy_droid "$repo" "$home" droid
+  if [[ "$case_name" == edited ]]; then
+    printf '%s\n' '# user edit' >>"$home/.factory/skills/droid-kaola-project-runner/SKILL.md"
+    expected="refusing to remove modified installed copy"
+  else
+    rm -f "$home/.factory/skills/.kaola-install-receipts/droid-kaola-project-runner.json"
+    expected="refusing to remove foreign directory without ownership receipt"
+  fi
+  before="$(cat "$home/.factory/skills/droid-kaola-project-runner/SKILL.md")"
+  set +e
+  output="$(run_installer "$repo" "$home" --runtime droid --platform droid 2>&1)"
+  rc=$?
+  set -e
+  [[ "$rc" -ne 0 ]] || fail "test_droid_${case_name}_refused" "unexpected success: $output"
+  [[ "$output" == *"$expected"* ]] || fail "test_droid_${case_name}_refused" "expected '$expected', got: $output"
+  assert_absent "test_droid_${case_name}_no_shared_write" "$home/.agents/skills"
+  [[ "$(cat "$home/.factory/skills/droid-kaola-project-runner/SKILL.md")" == "$before" ]] \
+    || fail "test_droid_${case_name}_preserved" "retired copy changed"
+done
+
+# a ~/.factory/skills that resolves to the shared root is not withdrawn from
+home="$tmp_root/home-droid-aliased"
+mkdir -p "$home/.agents/skills" "$home/.factory"
+ln -s "$home/.agents/skills" "$home/.factory/skills"
+output="$(run_installer "$repo" "$home" --runtime droid --platform droid 2>&1)" \
+  || fail "test_droid_aliased_install" "install failed: $output"
+assert_dir "test_droid_aliased_kept" "$home/.agents/skills/droid-kaola-project-runner"
+[[ "$output" != *"retired root"* ]] || fail "test_droid_aliased_quiet" "aliased root treated as retired: $output"
 
 # --- argument validation -----------------------------------------------------
 set +e

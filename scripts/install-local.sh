@@ -38,13 +38,19 @@ usage() {
     '               user-level ~/.zcode/skills and ~/.agents/skills; configured' \
     '               skills.roots/plugins.dirs roots also scan — docs/zcode-host.md)' \
     '  grok-cli     $HOME/.grok/skills (Grok CLI Host)' \
-    '  droid        $HOME/.factory/skills' \
+    '  droid        $HOME/.agents/skills (Issue #193: shared with kimi-cli and dsh;' \
+    '               Droid documents both ~/.factory/skills and ~/.agents/skills' \
+    '               as one user bucket where same-name Skills are invalid, so' \
+    '               --runtime droid also withdraws its reference from the retired' \
+    '               $HOME/.factory/skills root: a KPR copy droid alone owned there' \
+    '               is removed, a co-owned one is kept with a duplicate warning,' \
+    '               an edited or foreign one refuses the run before any write)' \
     '  opencode     $HOME/.config/opencode/skills' \
     '  kimi-cli     $HOME/.agents/skills AND ${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills' \
     '               (Issue #159: Kimi Code scans both user roots; ~/.agents/skills' \
     '               is the cross-tool root shared with dsh, the kimi-specific root' \
     '               follows $KIMI_CODE_HOME)' \
-    '  dsh          $HOME/.agents/skills (shared with kimi-cli)' \
+    '  dsh          $HOME/.agents/skills (shared with kimi-cli and droid)' \
     'Each root above was measured as a Skill root of that CLI (Issue #119,' \
     'host-entry-matrix.md in the Project Runner Skill).' \
     'Grok Bot is a bridge host, not an installer destination: the account holds one' \
@@ -145,9 +151,9 @@ runtime_skills_dir() {
     # dsh share the cross-tool root; Issue #159 adds the Kimi-specific user
     # root (kimi_extra_skills_dir) as a second destination for kimi-cli.
     grok-cli) printf '%s\n' "$HOME/.grok/skills" ;;
-    droid) printf '%s\n' "$HOME/.factory/skills" ;;
     opencode) printf '%s\n' "$HOME/.config/opencode/skills" ;;
-    kimi-cli|dsh) printf '%s\n' "$HOME/.agents/skills" ;;
+    # Issue #193: droid joins the shared root (see retired_skills_dir).
+    kimi-cli|dsh|droid) printf '%s\n' "$HOME/.agents/skills" ;;
     *) return 1 ;;
   esac
 }
@@ -158,6 +164,18 @@ runtime_skills_dir() {
 # runtime installs here; dsh stays single-root.
 kimi_extra_skills_dir() {
   printf '%s\n' "${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills"
+}
+
+# Issue #193: a runtime's former user root that it still reads. Droid scans
+# ~/.factory/skills and ~/.agents/skills as one user bucket and documents
+# same-name Skills there as invalid, so a droid install or uninstall also
+# withdraws the droid reference here (uninstall semantics: the copy is removed
+# only when droid was its last referrer and its bytes match the receipt).
+retired_skills_dir() {
+  case "$1" in
+    droid) printf '%s\n' "$HOME/.factory/skills" ;;
+    *) return 1 ;;
+  esac
 }
 
 append_selection() {
@@ -245,9 +263,18 @@ fi
 
 # Issue #123: this install's reference id, and who a pre-ledger receipt in a
 # root counts as referenced by (every runtime mapped to the same root, e.g.
-# kimi-cli and dsh for $HOME/.agents/skills). Resolved per destination at
+# kimi-cli, dsh and droid for $HOME/.agents/skills). Resolved per destination at
 # planning time below.
 canonical_dir() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"; }
+retired_parent=""
+if [[ -n "$runtime_alias" ]]; then
+  retired_parent="$(retired_skills_dir "$base_runtime" || true)"
+  # A retired root that resolves to the new one (e.g. a symlinked
+  # ~/.factory/skills) is the same directory, not a second copy.
+  if [[ ! -d "$retired_parent" || "$(canonical_dir "$retired_parent")" == "$(canonical_dir "$base_parent")" ]]; then
+    retired_parent=""
+  fi
+fi
 
 if [[ "$mode" == install ]]; then
   if [[ "$bin_links_request" == on || ( -z "$bin_links_request" && "$base_runtime" == codex ) ]]; then
@@ -738,6 +765,9 @@ codex_home="${CODEX_HOME:-$HOME/.codex}"
 
 destination_plan() {
   local prefix="$1" parent="$2" rt="$3" role="$4"
+  # A retired root is only ever withdrawn from, on install and uninstall alike.
+  local mode="$mode"
+  [[ "$role" == retired ]] && mode=uninstall
   target_parent="$parent"
   resolved_runtime="$rt"
   receipts_dir="$target_parent/.kaola-install-receipts"
@@ -758,7 +788,10 @@ destination_plan() {
   done
   if [[ "$install_orchestrator" == true ]]; then
     plan_skill "$orchestrator_skill_name"
-    if [[ "$resolved_runtime" == "codex" || "$resolved_runtime" == "generic" ]]; then
+    if [[ "$role" == retired ]]; then
+      # droid never owns kaola-delegator; nothing to withdraw in a retired root.
+      :
+    elif [[ "$resolved_runtime" == "codex" || "$resolved_runtime" == "generic" ]]; then
       # Issue #187: every worker platform can be the Delegator's one Host, and
       # the selection is never empty, so the Delegator always has a Host
       # Runner beside it. It is control-plane: planned with Project Runner on
@@ -822,6 +855,7 @@ destination_plan() {
   # (any ordinary string) survive plan -> apply untouched; guarded expansions
   # below keep bash 3.2's set -u from erroring on an empty array.
   eval "${prefix}_parent=$(printf '%q' "$parent")"
+  eval "${prefix}_role=$(printf '%q' "$role")"
   eval "${prefix}_rt=$(printf '%q' "$rt")"
   eval "${prefix}_want_user_hook=$(printf '%q' "$want_user_hook")"
   eval "${prefix}_hook_status=$(printf '%q' "$hook_status")"
@@ -832,8 +866,11 @@ destination_plan() {
 
 destination_apply() {
   local prefix="$1"
-  local target_parent="" resolved_runtime="" want_user_hook=false hook_status="" bin_ledger=""
+  local target_parent="" resolved_runtime="" want_user_hook=false hook_status="" bin_ledger="" role=""
   eval "target_parent=\"\${${prefix}_parent}\""
+  eval "role=\"\${${prefix}_role}\""
+  local mode="$mode"
+  [[ "$role" == retired ]] && mode=uninstall
   eval "resolved_runtime=\"\${${prefix}_rt}\""
   eval "want_user_hook=\"\${${prefix}_want_user_hook}\""
   eval "hook_status=\"\${${prefix}_hook_status}\""
@@ -859,6 +896,10 @@ destination_apply() {
     release)
       set_skill_referrers "$name" "$source" "$refs"
       printf 'kept: %s (still referenced by %s)\n' "$target" "$refs"
+      if [[ "$role" == retired && ( -e "${dest_parents[0]}/$name" || -L "${dest_parents[0]}/$name" ) ]]; then
+        printf 'warning: duplicate Skill name %s in %s and %s; the retired copy stays while %s refers to it\n' \
+          "$name" "$target_parent" "${dest_parents[0]}" "$refs" >&2
+      fi
       ;;
     install|update|copy-over-link|repair)
       temp="$target_parent/.${name}.tmp.$$"
@@ -933,7 +974,7 @@ destination_apply() {
       ;;
     absent)
       drop_owned_receipt "$name"
-      printf 'already absent: %s\n' "$target"
+      [[ "$role" == retired ]] || printf 'already absent: %s\n' "$target"
       ;;
   esac
   done
@@ -1001,6 +1042,12 @@ for plan_i in "${!dest_parents[@]}"; do
   destination_plan "$plan_prefix" "${dest_parents[$plan_i]}" "$base_runtime" "$dest_role"
   plan_prefixes+=("$plan_prefix")
 done
+if [[ -n "$retired_parent" ]]; then
+  printf 'retired root: %s (%s now installs to %s; withdrawing the %s reference here)\n' \
+    "$retired_parent" "$base_runtime" "$base_parent" "$base_runtime"
+  destination_plan plan_retired "$retired_parent" "$base_runtime" retired
+  plan_prefixes+=(plan_retired)
+fi
 for plan_prefix in "${plan_prefixes[@]}"; do
   destination_apply "$plan_prefix"
 done

@@ -414,7 +414,7 @@ subset, or skip the orchestrator:
 # skills/kaola-project-runner/references/host-entry-matrix.md; evidence:
 # docs/host-entry-evidence.md).
 ./scripts/install-local.sh --runtime grok-cli   # ~/.grok/skills
-./scripts/install-local.sh --runtime droid      # ~/.factory/skills
+./scripts/install-local.sh --runtime droid      # ~/.agents/skills (Issue #193; withdraws its own copies from ~/.factory/skills)
 ./scripts/install-local.sh --runtime opencode   # ~/.config/opencode/skills
 ./scripts/install-local.sh --runtime kimi-cli   # ~/.agents/skills AND ${KIMI_CODE_HOME:-~/.kimi-code}/skills (both user roots; dsh shares the first)
 
