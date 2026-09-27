@@ -6,6 +6,22 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Host QA distinct from testing, evidenced redundancy, and adaptive verification
+  cadence (Issue #194).** Testing executes checks; QA judges whether the product and its
+  evidence satisfy the task and whether the verification work itself stays proportionate.
+  The Host reuses sufficient recorded evidence by default and assigns a bounded,
+  proportionate check when an in-scope user-facing outcome is undemonstrated, evidenced
+  verification redundancy needs simplifying, or the user explicitly requests
+  exploratory/user-flow/release QA — usually the original owner, not automatically a new
+  seat: one short pointer in main-loop step 3 to the new `references/qa-evidence.md`
+  (who, brief, return, reading a failure, redundancy/adaptive-cadence, compact
+  CLI/UI/docs-only examples). Kaola-Delegator's existing follow-up cadence also compares
+  outcomes, blockers, and repeated testing/QA against prior checks and relays one new
+  pacing note when warranted, marking stall uncertainty; it still does not dispatch
+  workers, copy the ledger, or re-run acceptance. No permanent QA seat,
+  ledger, scoring table, or new scheduler. `templates/grok-bot/accepted-revision.json`
+  returns to the content stage.
+
 ## 0.6.5 — 2026-09-27 (runtime-specific named tiers, worker profiles, identity-proven force stop)
 
 Seats: restart required
