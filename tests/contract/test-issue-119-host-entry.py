@@ -401,9 +401,10 @@ def test_non_zcode_host_build_skew_refuses() -> None:
               f"AC9 #105: skewed ~/.factory worker Skill refuses the droid Host ({refused})")
         detail = str(refused.get("detail", ""))
         route = (f"./scripts/install-local.sh --skills-dir {stale.parent} "
-                 "--platform claude-code")
+                 "--platform claude-code --no-orchestrator")
         check(refused.get("mutation_status") == "not_started" and route in detail
-              and "Nothing was started" in detail and "never replaces a foreign path" in detail,
+              and "Nothing was started" in detail and "never replaces a foreign path" in detail
+              and "kaola-delegator" not in detail,
               f"#198: the refusal names the skewed copy's own root and platform ({detail})")
         worker = "droid-KPR-i119-worker"
         result, refused = sandbox.invoke("droid", "start", session=worker, cli=cli)
@@ -473,12 +474,16 @@ def test_issue_121_main_skill_build_skew_refuses() -> None:
         route = (f"./scripts/install-local.sh --skills-dir {Path(main_entry['path']).parent} "
                  "--platform droid")
         check(refused.get("mutation_status") == "not_started" and route in detail
-              and "Nothing was started" in detail and "keeps every other referrer" in detail,
+              and f"{route} --no-orchestrator" not in detail
+              and "Nothing was started" in detail and "keeps every other referrer" in detail
+              and "generic referrer and also plans kaola-delegator" in detail
+              and "--runtime NAME install is the owner route" in detail,
               f"#198: an ownership-aware route for the actual root ({detail})")
         check(f"--skills-dir {Path(backup_entry['path']).parent}" not in detail
-              and f"{backup_entry['path']} is a renamed copy no installer manages" in detail,
+              and f"{backup_entry['path']}: renamed copy no installer manages" in detail,
               f"#198: a renamed copy gets no installer route ({detail})")
-        check("--uninstall" in detail and "never deleted by hand" in detail
+        check("plus --uninstall, which removes a copy only when no referrer remains" in detail
+              and "never delete it by hand" in detail
               and "remove the stale copy" not in detail,
               f"#198: an owned duplicate is withdrawn, not deleted ({detail})")
         check(skill_md.read_bytes().endswith(b"Older heartbeat wording.\n") and backup.is_dir(),

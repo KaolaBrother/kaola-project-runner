@@ -605,7 +605,8 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertIs(receipt.get("mutation_performed"), False)
         self.assertTrue(_pid_alive(pid), receipt)
         # Issue #198: the skewed copy's own root and platform, not the Host's.
-        self.assertIn(f"--skills-dir {stale.parent.parent} --platform claude-code",
+        self.assertIn(f"--skills-dir {stale.parent.parent} --platform claude-code "
+                      "--no-orchestrator",
                       receipt.get("detail", ""))
 
     def test_partial_drain_stop_directs_inspection_before_another_drain(self) -> None:

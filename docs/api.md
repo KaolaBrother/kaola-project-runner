@@ -449,10 +449,12 @@ recorded digest; extra files are ignored. Any difference is
 `files`, `main_skill_skew_count` the total, and `detail` names the paths, both builds, and the repair
 (Issue #198): for each affected root, `install-local.sh --skills-dir ROOT --platform PLATFORM` from
 the accepted checkout. That installer replaces only a copy its receipt owns and keeps every other
-referrer of a shared root (adding `generic`); an owned obsolete duplicate is withdrawn with its
-`--uninstall`, and a renamed copy no installer manages is named for its owner to move. Nothing is
-deleted or retried for the caller; after the refresh the same `start` may run again. `worker-skill-build-skew` names
-the same per-root route with the platforms of the skewed copies. A passing Host `start` reports
+referrer; a `--skills-dir` install is the `generic` referrer and also plans `kaola-delegator`, so
+where the receipt lists a runtime referrer, that runtime's `--runtime NAME` install is the owner
+route. An owned obsolete duplicate is withdrawn with the same route plus `--uninstall`, and a
+renamed copy no installer manages is named for its owner to move. Nothing is deleted or retried
+for the caller; after the refresh the same `start` may run again. `worker-skill-build-skew` names
+the same per-root route with the skewed copies' platforms and `--no-orchestrator`. A passing Host `start` reports
 `main_skill_build`, which is `null` when there is no record to compare (a checkout invocation or a
 worker Skill built before the record).
 

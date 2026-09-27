@@ -3125,22 +3125,31 @@ def seat_freshness(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def skill_refresh_route(roots: dict[str, list[str]], unmanaged: list[str]) -> str:
+def skill_refresh_route(roots: dict[str, list[str]], unmanaged: list[str],
+                        workers_only: bool) -> str:
     """Issue #198: the existing installer route for the roots a skew refusal
     reports, ``root -> --platform`` values. The installer, not this text,
     decides ownership; a copy under another name has no installer route."""
     text = ""
     if roots:
+        scope = " --no-orchestrator" if workers_only else ""
         commands = "; ".join(f"./scripts/install-local.sh --skills-dir {shlex.quote(root)} "
-                             f"--platform {','.join(platforms)}"
+                             f"--platform {','.join(platforms)}{scope}"
                              for root, platforms in roots.items())
         text += (" From the accepted checkout, refresh each affected root with the "
                  f"existing installer: {commands}. It replaces only a copy its receipt "
                  "(<root>/.kaola-install-receipts/<skill>.json) owns, keeps every other "
-                 "referrer of a shared root (adding generic), and never replaces a "
-                 "foreign path.")
+                 "referrer, and never replaces a foreign path. A --skills-dir install is "
+                 "the generic referrer"
+                 + ("" if workers_only else " and also plans kaola-delegator there")
+                 + "; where that receipt lists a runtime referrer, that runtime's own "
+                 "--runtime NAME install is the owner route. An obsolete duplicate you own "
+                 "is withdrawn with the same route plus --uninstall, which removes a copy "
+                 "only when no referrer remains; never delete it by hand.")
     if unmanaged:
-        text += (f" {', '.join(unmanaged)} is a renamed copy no installer manages: confirm "
+        shown = unmanaged[:SKEW_DETAIL_CAP]
+        more = "" if len(unmanaged) == len(shown) else f" (+{len(unmanaged) - len(shown)} more)"
+        text += (f" {', '.join(shown)}{more}: renamed copy no installer manages; confirm "
                  "it is yours before moving it out of the Skill root.")
     return text
 
@@ -3172,10 +3181,7 @@ def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
         "action": "start",
         "detail": (f"{len(skew)} installed {MAIN_SKILL_NAME} main Skill(s) do not match "
                    f"this Host build {alignment['build']}: {listed}{more}. Nothing was "
-                   "started." + skill_refresh_route(roots, unmanaged)
-                   + (" A copy that is an obsolete duplicate you own is withdrawn with the "
-                      "installer's --uninstall for a referrer its receipt lists, never "
-                      "deleted by hand." if roots else "")
+                   "started." + skill_refresh_route(roots, unmanaged, False)
                    + " Then start again."),
         "main_skill_build": alignment["build"],
         "main_skill_skew": shown,
@@ -3240,7 +3246,7 @@ def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
         "action": "start",
         "detail": (f"{len(skew)} installed worker Skill script(s) do not match this "
                    f"Host build {alignment['build']}: {listed}{more}. Nothing was started."
-                   + skill_refresh_route(roots, unmanaged) + " Then start again."),
+                   + skill_refresh_route(roots, unmanaged, True) + " Then start again."),
         "worker_skill_build": alignment["build"],
         "worker_skill_roots": alignment["roots"],
         "worker_skill_skew": shown,
