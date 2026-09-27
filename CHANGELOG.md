@@ -6,14 +6,34 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.6.5 — 2026-09-27 (runtime-specific named tiers, worker profiles, identity-proven force stop)
+
+Seats: restart required
+
+The operator test
+`git diff v0.6.4 v0.6.5 -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+is not empty: it reports all ten `platforms/*.yaml` and all ten `scripts/adapters/*.sh`
+(#188 replaces the `upgrade`/`alt` tier keys with `named_tiers` and per-tier keys, #190 adds
+`<tier>_model_profile` and sets the Cursor, Droid, and Devin Opus presets to effort `medium`).
+`scripts/kaola-acp-holder.py`, `scripts/kaola-zcode-acp.py`, `scripts/kaola-quota.py`, the
+vendored bridge, and the Grok Bot bridge content are byte-identical to v0.6.4. The note is
+`Seats: restart required` because the operator test is non-empty: a seat started on v0.6.4 holds
+the old platform facts and tier set, and `upgrade`/`alternative` no longer resolve. Run
+`install-local.sh` for every runtime you use, then restart seats: `scripts/kaola-acp.py` and the
+worker and main Skills changed, so every worker's `main-skill-build.json` moves, a Host start from
+a stale install refuses `main-skill-build-skew`, and any other platform's stale worker Skills
+refuse `worker-skill-skew` (#162). `drain-restart` on a seat whose record carries `upgrade` or
+`alternative` refuses `tier-not-declared` before it stops anything; pass an explicit declared
+`--tier` (for example `--tier default`) to name the restart.
+
 - **Worker profiles and per-seat model switching (Issue #190).** Every preset carries one
   user-defined line, `<tier>_model_profile` in its manifest (OpenCode unset), rendered into
   Project Runner's `references/worker-profiles.md`, which the Host, Kaola-Delegator and README
-  read on demand. Guidance, not measured capability: model IDs, effort, Fast, and `start` are
-  unchanged. Seats stay bound; only the user's explicit grant for a particular seat lets the Host
-  select or switch that seat's model/preset within the same agent runtime, never across
-  runtimes, with no new flow. Operator-diff fact: every `platforms/*.yaml` gains the profile
-  keys.
+  read on demand. Guidance, not measured capability: the profile lines themselves change no model
+  ID, effort, Fast, or `start` behavior (the Opus effort change is the next entry). Seats stay
+  bound; only the user's explicit grant for a particular seat lets the Host select or switch that
+  seat's model/preset within the same agent runtime, never across runtimes, with no new flow.
+  Operator-diff fact: every `platforms/*.yaml` gains the profile keys.
 - **Opus presets at effort `medium` (Issue #190, owner correction to #188).** Cursor `opus` is
   `claude-opus-5-5-medium` (mapped to `claude-opus-5-5`, effort via the `effort` option; the
   `-high` id stays mapped for explicit use), Droid `opus` is `reasoning_effort` `medium`, and
@@ -31,9 +51,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   `pgid_identity: "unverified"` with `pgid_identity_unverified` (`code: pgid-identity-unverified`,
   `live_members`, `signalled: false`). The reused-holder-PID branch retires only the record it
   read. Normal stop through a live holder and verified child-group sweeps are unchanged.
-  Operator-diff fact for the next release assessment: only `scripts/kaola-acp.py` and
-  `scripts/kaola-acp-sweep.py` change; the holder, bridge, quota catalog, adapters, and platforms
-  are untouched.
+  This issue changes only `scripts/kaola-acp.py` and `scripts/kaola-acp-sweep.py`; the holder,
+  bridge, quota catalog, adapters, and platforms are untouched by it.
 - **Project Runner and Kaola-Delegator scheduling wording trimmed (Issue #189).** A clear task
   goes directly to a suitable authorized worker; split or parallelize only when the work needs it,
   and the authorized count is a ceiling, not a target to fill (replaces "dispatch every suitable
@@ -46,11 +65,11 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 - **Runtime-specific named tiers; `upgrade` retired (Issue #188).** Only `--tier default` is
   common; each platform lists its own names in `named_tiers` (README table). Claude Code
   `fable`/`sonnet`, Codex `astra`/`luna`, Cursor `opus`, Devin `opus-fusion`/`fable`, Droid new
-  `opus` (`claude-opus-5-5`, high) plus `core`, Kimi `kimi-k2-8` (was `alternative`); dsh, Grok,
-  OpenCode, ZCode are default only. `upgrade` and `alternative` have no alias: they, and a seat
-  record carrying them in `drain-restart`, are `tier-not-declared` refusals. Defaults, model IDs,
-  effort, Fast, and explicit `--model`/`--effort` precedence are unchanged; display names drop the
-  effort suffix, which is shown separately. Operator-diff fact for the next release assessment:
+  `opus` (`claude-opus-5-5`, effort `medium` since #190) plus `core`, Kimi `kimi-k2-8` (was
+  `alternative`); dsh, Grok, OpenCode, ZCode are default only. `upgrade` and `alternative` have no
+  alias: they, and a seat record carrying them in `drain-restart`, are `tier-not-declared`
+  refusals. Defaults, model IDs, effort, Fast, and explicit `--model`/`--effort` precedence are
+  unchanged; display names drop the effort suffix, which is shown separately. Operator-diff fact:
   every `platforms/*.yaml` and `scripts/adapters/*.sh` changes.
 
 ## 0.6.4 — 2026-09-27 (any supported CLI Host for Kaola-Delegator, resumable Claude Code native id)
