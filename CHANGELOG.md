@@ -6,6 +6,15 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Five worker presets are default-authorized under an authorized project task (Issue
+  #195).** The Host may dispatch Claude Code `sonnet`, Codex `luna`, dsh `default`, Devin
+  `default`, and ZCode `default` from the exact list in `references/worker-profiles.md`
+  without per-seat, per-preset, or priority-order approval, and those seats neither consume
+  nor are limited by the general worker concurrency cap. Every other runtime/preset still
+  needs explicit authorization, prior grants stay valid, and actual quota/resource limits
+  still apply; a runtime's `default` tier alone never qualifies. Reports show pool seats as
+  live, exempt from `live N / authorized M` accounting.
+
 - **Droid installs into the shared `~/.agents/skills` (Issue #193).** `--runtime droid`
   now joins `kimi-cli` and `dsh` in `$HOME/.agents/skills`, a documented Droid user root
   that Droid reads in the same bucket as `~/.factory/skills`, where same-name Skills are
