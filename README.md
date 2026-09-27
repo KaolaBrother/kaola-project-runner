@@ -416,7 +416,7 @@ subset, or skip the orchestrator:
 ./scripts/install-local.sh --runtime grok-cli   # ~/.grok/skills
 ./scripts/install-local.sh --runtime droid      # ~/.agents/skills (Issue #193; withdraws its own copies from ~/.factory/skills)
 ./scripts/install-local.sh --runtime opencode   # ~/.config/opencode/skills
-./scripts/install-local.sh --runtime kimi-cli   # ~/.agents/skills AND ${KIMI_CODE_HOME:-~/.kimi-code}/skills (both user roots; dsh shares the first)
+./scripts/install-local.sh --runtime kimi-cli   # ~/.agents/skills AND ${KIMI_CODE_HOME:-~/.kimi-code}/skills (both user roots; dsh and droid share the first)
 
 # Grok Bot: no installer destination. Save hosts/grok-bot/kaola-delegator.md (the bridge) on
 # the account once, then register the device-local locator on each execution target:
@@ -474,7 +474,7 @@ delete a modified copy.
 
 Installed Skills are shared blocks counted by reference, so runtimes install and uninstall
 independently (Issue #123). `kimi-cli` installs into both its user-level roots —
-`~/.agents/skills` (shared with `dsh`) and `${KIMI_CODE_HOME:-~/.kimi-code}/skills`,
+`~/.agents/skills` (shared with `dsh` and `droid`) and `${KIMI_CODE_HOME:-~/.kimi-code}/skills`,
 which moves with `$KIMI_CODE_HOME` (Issue #159) — each with its own receipt set.
 Each Skill
 receipt lists the runtimes that use it. When the same build is already installed, a second

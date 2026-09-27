@@ -153,7 +153,7 @@ workspace `.zcode/skills` and `.agents/skills`, which `--skills-dir` covers — 
 and (Issue #119, each measured as that CLI's Skill root) `grok-cli` → `$HOME/.grok/skills`,
 `opencode` → `$HOME/.config/opencode/skills`, and `dsh` and `droid` (Issue #193) →
 `$HOME/.agents/skills`; `kimi-cli` (Issue #159) → BOTH
-`$HOME/.agents/skills` (the cross-tool root, shared with `dsh`) and
+`$HOME/.agents/skills` (the cross-tool root, shared with `dsh` and `droid`) and
 `${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills` (the Kimi-specific root, which moves with
 `$KIMI_CODE_HOME`), each with its own receipt set; which platforms can run Project Runner as a Host,
 and with which first line, is the `host_skill_entry` table in the main Skill's
