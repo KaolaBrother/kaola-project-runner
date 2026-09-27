@@ -56,11 +56,13 @@ number of seconds in (0, 600] the holder waits for the `session/new` answer in `
 answered after ~18 s). The client start window (20 s) and the probe bound (60 s) grow by the
 amount it exceeds 15 s, keeping the margins they had over the default wait; the holder reports
 no answer in time as `acp-session-timeout`. Model-selection fields are
-`default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`,
+`default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`/`default_model_profile`,
 `named_tiers`, and `fast_support`/`fast_summary` (Issue #188). Only `default` is common;
 `named_tiers` is the comma-separated list of the platform's own tier words (empty for none), and
-each word `W` carries `<w>_model_name`/`<w>_model_id`/`<w>_model_parameters`/`<w>_model_effort`
-with `w` = `W` with `-` as `_` (name and id required). The words are unordered names, not a
+each word `W` carries `<w>_model_name`/`<w>_model_id`/`<w>_model_parameters`/`<w>_model_effort`/`<w>_model_profile`
+with `w` = `W` with `-` as `_` (name and id required; a profile may be empty and has no `|`,
+Issue #190). Profiles are selection guidance rendered only into Project Runner's
+`references/worker-profiles.md`; they never change a preset or gate `start`. The words are unordered names, not a
 ranking. They reach the generated Skill through the computed `PRESETS` (SKILL.md) and
 `PRESET_LINES` (references/platform.md) blocks. They render as `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY`
 template variables; `acp_login_requires_pty` only records whether login needs a native terminal —
@@ -139,7 +141,7 @@ Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `auto-high|auto-low|auto-medium|auto-high|normal` through `acp_mode_config_id: autonomy_level`.
 ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reasoning_effort`, and
 `autonomy_level`. Droid's default preset is Auto (`auto`); `--tier opus` is Opus 5.5 (`claude-opus-5-5`,
-`reasoning_effort=high`) and `--tier core` is Kimi K3 (`kimi-k3`, `reasoning_effort=max`); it has no
+`reasoning_effort=medium`) and `--tier core` is Kimi K3 (`kimi-k3`, `reasoning_effort=max`); it has no
 separate Fast toggle.
 
 `--runtime` selects a verified consuming-runtime destination: `codex` →
@@ -633,7 +635,7 @@ agent's own `session_meta.configOptions[].currentValue`. ACP `start` receipts ad
 `set_config_option` is reported as a limitation and leaves the session usable.
 
 Droid's default is Auto Model (`auto`) with no effort pin; `--tier opus` is Opus 5.5
-(`claude-opus-5-5` at `reasoning_effort=high`) and `--tier core` is Kimi K3 (`kimi-k3` at
+(`claude-opus-5-5` at `reasoning_effort=medium`) and `--tier core` is Kimi K3 (`kimi-k3` at
 `reasoning_effort=max`). These ids are catalog values, so `acp_model_map` stays empty. `--tier alternative` stays the typed `tier-not-declared` refusal. Its native ACP mode option is
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
