@@ -12,8 +12,16 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   read on demand. Guidance, not measured capability: model IDs, effort, Fast, and `start` are
   unchanged. Seats stay bound; only the user's explicit grant for a particular seat lets the Host
   select or switch that seat's model/preset within the same agent runtime, never across
-  runtimes, with no new flow. Operator-diff fact: every `platforms/*.yaml` gains only the profile
+  runtimes, with no new flow. Operator-diff fact: every `platforms/*.yaml` gains the profile
   keys.
+- **Opus presets at effort `medium` (Issue #190, owner correction to #188).** Cursor `opus` is
+  `claude-opus-5-5-medium` (mapped to `claude-opus-5-5`, effort via the `effort` option; the
+  `-high` id stays mapped for explicit use), Droid `opus` is `reasoning_effort` `medium`, and
+  Devin `opus-fusion` is `fusion-claude-opus-5-5-medium-sidekick-swe-2-medium` (SWE-2 sidekick
+  still medium; this id is not yet spawn-measured). Defaults, Claude Code `default` (high), other
+  tiers, Fast, and explicit `--model`/`--effort` precedence are unchanged; an explicit effort is
+  a runtime parameter, not a model or seat switch grant. Operator-diff fact: `platforms/`
+  cursor-cli, droid, devin and `scripts/adapters/` cursor-cli, droid, devin change.
 - **Project Runner and Kaola-Delegator scheduling wording trimmed (Issue #189).** A clear task
   goes directly to a suitable authorized worker; split or parallelize only when the work needs it,
   and the authorized count is a ceiling, not a target to fill (replaces "dispatch every suitable

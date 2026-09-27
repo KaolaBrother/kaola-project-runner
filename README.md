@@ -559,17 +559,17 @@ Presets live in the [platform manifests](platforms/); Fast is off unless request
 |---|---|---|
 | Claude Code | Opus (`opus`), effort `high` | `fable`: Fable (`fable`), effort `high`; `sonnet`: Sonnet (`sonnet`), effort `max` |
 | Codex | GPT-6 Sol (`gpt-6-sol`), effort `high` | `astra`: GPT-6 Astra (`gpt-6-astra`), effort `high`; `luna`: GPT-6 Luna (`gpt-6-luna`), effort `max` |
-| Cursor CLI | Grok 4.7 (`grok-4.7-xhigh`), effort `xhigh` in the ID, Fast off | `opus`: Claude Opus 5.5 (`claude-opus-5-5-high`), effort `high` in the ID |
-| Devin | SWE-2 Max (`swe-2-max`), effort in the ID | `opus-fusion`: Opus Fusion (`fusion-claude-opus-5-5-high-sidekick-swe-2-medium`); `fable`: Fable Fusion (`fusion-claude-fable-5-1-high-sidekick-swe-2-medium`); effort in the ID |
-| Droid | Auto (`auto`), no effort pin | `opus`: Opus 5.5 (`claude-opus-5-5`), `reasoning_effort` `high`; `core`: Kimi K3 (`kimi-k3`), `reasoning_effort` `max` |
+| Cursor CLI | Grok 4.7 (`grok-4.7-xhigh`), effort `xhigh` in the ID, Fast off | `opus`: Claude Opus 5.5 (`claude-opus-5-5-medium`), effort `medium` in the ID |
+| Devin | SWE-2 Max (`swe-2-max`), effort in the ID | `opus-fusion`: Opus Fusion (`fusion-claude-opus-5-5-medium-sidekick-swe-2-medium`); `fable`: Fable Fusion (`fusion-claude-fable-5-1-high-sidekick-swe-2-medium`); effort in the ID |
+| Droid | Auto (`auto`), no effort pin | `opus`: Opus 5.5 (`claude-opus-5-5`), `reasoning_effort` `medium`; `core`: Kimi K3 (`kimi-k3`), `reasoning_effort` `max` |
 | dsh | DeepSeek V4.1 Flash (`opencode-go/deepseek-v4.1-flash`), no effort pin | default only |
 | Grok | Grok 4.7 (`grok-4.7`), effort `xhigh`, Fast off | default only |
 | Kimi CLI | Kimi K3 (`kimi-code/k3`), thinking `max` | `kimi-k2-8`: Kimi K2.8 (`kimi-code/kimi-for-coding`), thinking `max` |
 | OpenCode | CLI native opening model, no Runner override | default only |
 | ZCode | GLM 5.3 (`GLM-5.3`), thought `max` | default only |
 
-Devin applies each preset through its launch `--model` (Devin has no pure Opus 5.5 High, hence the
-fusion). Droid's `-fast` catalog IDs are explicit `--model` choices, not a separate Fast toggle.
+Devin applies each preset through its launch `--model`; both named presets are SWE-2-sidekick
+fusions. Droid's `-fast` catalog IDs are explicit `--model` choices, not a separate Fast toggle.
 Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the runtime supports it.
 
 Each preset also carries a one-line, user-defined worker profile (`<tier>_model_profile` in its

@@ -241,6 +241,7 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         # before checking for accidental adapter/protocol leakage.
         text = text.replace("grok-4.7-xhigh", "cursor-default-model-id")
         text = text.replace("claude-opus-5-5-high", "cursor-opus-model-id")
+        text = text.replace("claude-opus-5-5-medium", "cursor-opus-model-id")
         text = text.replace("claude opus 5.5", "cursor-opus-model")
         text = text.replace("grok 4.7", "cursor-default-model")
         # Cursor's ACP option values are the adapter's own bracketed model
@@ -252,7 +253,7 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         # Devin's declared opus-fusion and fable preset IDs are Fusion combos that
         # literally name the Claude sidecar (Issue #144); the quirks also name
         # the retired pure fable ID. Remove only those exact declared facts.
-        text = text.replace("fusion-claude-opus-5-5-high-sidekick-swe-2-medium", "devin-opus-fusion-model-id")
+        text = text.replace("fusion-claude-opus-5-5-medium-sidekick-swe-2-medium", "devin-opus-fusion-model-id")
         text = text.replace("fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "devin-fable-model-id")
         text = text.replace("claude-fable-5-1-high", "devin-retired-fable-model-id")
     if package_id == "droid-kaola-project-runner":

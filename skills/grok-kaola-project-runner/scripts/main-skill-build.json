@@ -1,5 +1,5 @@
 {
-  "build": "2ed5a725505b",
+  "build": "682980b493e9",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "c27d19237f768896f6571623646d4c17e16ad24cc52d021a061e6a1b038d52d4",
@@ -10,7 +10,7 @@
     "references/host-startup.md": "79617c9174e2325121aa02a04f28c3a39b40f38f91af3f383e284336dbf3e342",
     "references/issue-dispatch.md": "91e791f37d18f39a96609501c5ef1631384cb4beedddd125495d71f0578157a8",
     "references/quota-packages.md": "ebbd338babe0e8f6b099ae4f7ce908da2b1405abf578a94f0fa1461f6488a990",
-    "references/worker-profiles.md": "03949c2e94f913ebfd773415c76cf07cf154ea4053a667038941515678e1503c",
+    "references/worker-profiles.md": "2f6da5e57632fdfb3feb36877b1d7f0d00eb8d71a9d4ee3627d5d167e4831386",
     "references/workflow-worktree.md": "4f0617bc3dadf9a1852734603fb0b40836165a168cc000a21ef9d413fd8fe783",
     "references/zcode-host-dispatch.md": "307a092fb7c7ff54549d5a235eeb5f396484e55182da76dfa9e48eb82cd94ee9",
     "references/zcode-native-skill-entry.md": "03b9da8e27c8d319c532cc41e3a605fb578d5bbf9ab4d007359cb0ef656242e7"

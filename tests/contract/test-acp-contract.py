@@ -1775,13 +1775,13 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             self.config_events(),
             [
                 ("model", "claude-opus-5-5"),
-                ("effort", "high"),
+                ("effort", "medium"),
                 ("fast", "false"),
             ],
         )
         model = (receipt.get("config_application") or {}).get("model") or {}
         self.assertTrue(model.get("applied"))
-        self.assertEqual(model.get("requested_id"), "claude-opus-5-5-high")
+        self.assertEqual(model.get("requested_id"), "claude-opus-5-5-medium")
         # Regression guard against a naive flip to reasoning_effort (#135):
         # Claude Opus 5.5 advertises its effort option as ``effort`` (#143).
         effort = (receipt.get("config_application") or {}).get("effort") or {}
@@ -1789,7 +1789,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(effort.get("config_id"), "effort")
         self.assertIs(effort.get("advertised"), True)
         selection = receipt.get("effective_selection") or {}
-        self.assertEqual(selection.get("effective_effort"), "high")
+        self.assertEqual(selection.get("effective_effort"), "medium")
         self.assertEqual(selection.get("effort_config_id"), "effort")
 
     def test_cursor_explicit_fast_variant_id_decomposes(self) -> None:

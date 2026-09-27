@@ -54,7 +54,7 @@ LIVE_PRESETS = {
         # Issue #125 (correcting #117): default is Auto; the alternative tier
         # stays deleted. Issue #188 adds opus beside the existing core.
         "default": ("Auto Model", "auto", ""),
-        "named": [("opus", "Opus 5.5", "claude-opus-5-5", "high"),
+        "named": [("opus", "Opus 5.5", "claude-opus-5-5", "medium"),
                   ("core", "Kimi K3", "kimi-k3", "max")],
     },
     "dsh": {
@@ -69,8 +69,8 @@ LIVE_PRESETS = {
         "default": ("SWE-2 Max", "swe-2-max", ""),
         # Issue #144: `fable` is the Fable fusion; the pure
         # claude-fable-5-1-high preset is retired.
-        "named": [("opus-fusion", "Opus Fusion (Opus 5.5 High + SWE-2 Medium)",
-                   "fusion-claude-opus-5-5-high-sidekick-swe-2-medium", ""),
+        "named": [("opus-fusion", "Opus Fusion (Opus 5.5 Medium + SWE-2 Medium)",
+                   "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium", ""),
                   ("fable", "Fable Fusion (Fable 5.1 High + SWE-2 Medium)",
                    "fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "")],
     },
@@ -244,7 +244,7 @@ class TierAgentCommand(unittest.TestCase):
 
     DEVIN = {
         "default": "devin acp --model swe-2-max",
-        "opus-fusion": "devin acp --model fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
+        "opus-fusion": "devin acp --model fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
         "fable": "devin acp --model fusion-claude-fable-5-1-high-sidekick-swe-2-medium",
     }
 

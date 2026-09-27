@@ -9,19 +9,19 @@ judges, nothing scores or routes.
 
 | Runtime | `--tier` | Model | Profile |
 |---|---|---|---|
-| Claude Code | `default` | Opus | All-round worker for every kind of task; first choice for the most complex work. |
+| Claude Code | `default` | Opus | All-round worker, suited to taking on the more complex work. |
 | Claude Code | `fable` | Fable | Design, goal definition and decomposition, issue creation, and review; only when the user explicitly asks or permits; no heavy execution, not a regular worker. |
 | Claude Code | `sonnet` | Sonnet | Low-cost worker for tasks whose goal and boundaries are already clearly defined. |
 | Codex CLI | `default` | GPT-6 Sol | Good at exploring directions, finding problems, and review, but prone to over-engineering; set a clear scope and hold it to the minimal necessary solution. |
 | Codex CLI | `astra` | GPT-6 Astra | Design, goal definition and decomposition, issue creation, and review; only when the user explicitly asks or permits; no heavy execution, not a regular worker. |
 | Codex CLI | `luna` | GPT-6 Luna | Low-cost worker for tasks whose goal and boundaries are already clearly defined. |
 | Cursor CLI | `default` | Grok 4.7 | Suits exploratory, long-running autonomous work, but can loop; give clear stage goals and exit conditions. |
-| Cursor CLI | `opus` | Claude Opus 5.5 | All-round worker for every kind of task; first choice for the most complex work. |
+| Cursor CLI | `opus` | Claude Opus 5.5 | All-round worker for every kind of task, especially strong at complex work. |
 | Devin CLI | `default` | SWE-2 Max | Very low-cost, capable main execution worker, but slow. |
-| Devin CLI | `opus-fusion` | Opus Fusion (Opus 5.5 High + SWE-2 Medium) | All-round worker for every kind of task; first choice for the most complex work. |
+| Devin CLI | `opus-fusion` | Opus Fusion (Opus 5.5 Medium + SWE-2 Medium) | All-round worker for every kind of task, especially strong at complex work. |
 | Devin CLI | `fable` | Fable Fusion (Fable 5.1 High + SWE-2 Medium) | Design, goal definition and decomposition, issue creation, and review; only when the user explicitly asks or permits; no heavy execution, not a regular worker. |
 | Droid | `default` | Auto Model | All-round worker, balanced in every respect, suited to many kinds of tasks. |
-| Droid | `opus` | Opus 5.5 | All-round worker for every kind of task; first choice for the most complex work. |
+| Droid | `opus` | Opus 5.5 | All-round worker for every kind of task, especially strong at complex work. |
 | Droid | `core` | Kimi K3 | Strong at visual design and visual inspection, with good UI and design taste. |
 | dsh | `default` | DeepSeek V4.1 Flash (OpenCode Go) | Low-cost, fast implementation worker for tasks with clear goals and boundaries. |
 | Grok CLI | `default` | Grok 4.7 | Suits exploratory, long-running autonomous work, but can loop; give clear stage goals and exit conditions. |
