@@ -60,7 +60,10 @@ class QuotaSchemaTest(unittest.TestCase):
                 ids = [row["id"] for row in catalog.public_packages()]
                 self.assertEqual(ids, [f"{platform}:{package['id']}" for package in catalog.packages])
                 for row in catalog.public_packages():
-                    self.assertIsNone(row["windows"])
+                    windows = row["windows"]
+                    self.assertTrue(windows is None or isinstance(windows, list))
+                    if windows is not None:
+                        self.assertTrue(all(isinstance(window, str) and window for window in windows))
                     self.assertIsInstance(row["binds_models"], bool)
 
     def test_seeded_package_tokens(self) -> None:
@@ -72,7 +75,7 @@ class QuotaSchemaTest(unittest.TestCase):
             "droid": ["standard", "core", "extra_usage"],
             "dsh": ["opencode-go"],
             "grok": ["account"],
-            "kimi-cli": ["managed"],
+            "kimi-cli": ["managed", "managed_monthly"],
             "opencode": ["opencode-go", "zhipuai-coding-plan", "zen"],
             "zcode": ["bigmodel-coding-plan"],
         }
@@ -84,6 +87,54 @@ class QuotaSchemaTest(unittest.TestCase):
             )
         self.assertFalse(self.catalogs["claude-code"].packages[2]["binds_models"])
         self.assertFalse(self.catalogs["devin"].packages[1]["binds_models"])
+
+    def test_issue_192_package_windows_match_verified_period_facts(self) -> None:
+        expected = {
+            "claude-code": {
+                "subscription": ["weekly"],
+                "scoped-weekly": ["weekly"],
+                "extra_usage": None,
+            },
+            "codex": {
+                "primary": ["weekly"],
+                "base_model_inference": ["weekly"],
+            },
+            "cursor-cli": {
+                "cursor-models": ["monthly"],
+                "other-models": ["monthly"],
+            },
+            "devin": {"max": ["weekly"], "overage": None},
+            "droid": {
+                "standard": ["weekly", "monthly"],
+                "core": ["weekly", "monthly"],
+                "extra_usage": [],
+            },
+            "dsh": {"opencode-go": ["weekly", "monthly"]},
+            "grok": {"account": ["weekly"]},
+            "kimi-cli": {
+                "managed": ["weekly", "monthly"],
+                "managed_monthly": ["monthly"],
+            },
+            "opencode": {
+                "opencode-go": ["weekly", "monthly"],
+                "zhipuai-coding-plan": ["5h"],
+                "zen": None,
+            },
+            "zcode": {"bigmodel-coding-plan": ["5h"]},
+        }
+        for platform, packages in expected.items():
+            actual = {
+                package["id"]: package["windows"]
+                for package in self.catalogs[platform].packages
+            }
+            self.assertEqual(actual, packages, platform)
+
+        kimi = self.catalogs["kimi-cli"]
+        self.assertFalse(next(p for p in kimi.packages if p["id"] == "managed_monthly")["binds_models"])
+        self.assertEqual(
+            self.quota.resolve_model(kimi, "kimi-code/k3")["packageId"],
+            "kimi-cli:managed",
+        )
 
     def test_partial_rules_leave_unverified_ids_unmapped(self) -> None:
         cases = [
@@ -330,7 +381,18 @@ class QuotaQueryCliTest(unittest.TestCase):
             [package["id"] for package in droid["packages"]],
             ["droid:standard", "droid:core", "droid:extra_usage"],
         )
-        self.assertIsNone(droid["packages"][0]["windows"])
+        self.assertEqual(droid["packages"][0]["windows"], ["weekly", "monthly"])
+        self.assertEqual(droid["packages"][1]["windows"], ["weekly", "monthly"])
+        self.assertEqual(droid["packages"][2]["windows"], [])
+        kimi = next(row for row in payload["platforms"] if row["platform"] == "kimi-cli")
+        self.assertEqual(
+            [(package["id"], package["windows"], package["binds_models"])
+             for package in kimi["packages"]],
+            [
+                ("kimi-cli:managed", ["weekly", "monthly"], True),
+                ("kimi-cli:managed_monthly", ["monthly"], False),
+            ],
+        )
         self.assertFalse(self.record_root.exists())
         self.assertFalse((self.markers / "login-shell-ran").exists())
         self.assertFalse((self.markers / "codex-ran").exists())

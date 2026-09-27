@@ -7,11 +7,13 @@ Platform manifests store two JSON documents as ordinary JSON strings
 ``quota_packages``
     A JSON array. Each object has ``id`` (``^[a-z][a-z0-9_-]*$``), ``name``
     (non-empty string), optional ``binds_models`` (bool, default true), and
-    optional ``windows`` (null or an array of non-empty strings). No other
-    keys. ``binds_models: false`` is a balance the Usage page can list and
-    that a ``native_field`` rule may name, and that ``single`` / ``explicit``
-    / ``provider_prefix`` must not target. ``windows`` is omitted until a
-    window fact is verified; consumers then see null.
+    optional ``windows`` (null or an array of non-empty strings). Current
+    period values are ``5h``, ``weekly``, and ``monthly``; multiple windows
+    may apply to one package. An empty array means the package is verified to
+    have no time-based reset window. Null means its period is not established.
+    No other keys. ``binds_models: false`` is a balance the Usage page can
+    list and that a ``native_field`` rule may name, and that ``single`` /
+    ``explicit`` / ``provider_prefix`` must not target.
 
 ``model_package_rule``
     One JSON object. ``kind`` is exactly one of:
@@ -293,7 +295,7 @@ class Catalog:
         return f"{self.platform}:{token}"
 
     def public_packages(self) -> list[dict[str, Any]]:
-        """Consumer rows. ``id`` is ``<platform>:<token>``; ``windows`` is null when unseeded."""
+        """Consumer rows. ``id`` is ``<platform>:<token>``; null windows mean unknown."""
         return [
             {
                 "id": self.qualified(package["id"]),
