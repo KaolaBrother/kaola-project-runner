@@ -11,11 +11,26 @@ evidence sufficiency, pacing), and #195 (five-preset default-authorized worker p
 bridge is not saveable in R.
 
 Host codex-KPR-orchestrator-qa-design accepted exact content candidate
-`24b69f6df1296bf29769092c4112376df2c35368`. The release content commit R is main HEAD after
-this merge sink (the pin gate requires P to differ from R by exactly four files, so R must
-follow the archive commit). Tag v0.6.6 at R, pin commit P, push, and GitHub publication are
-mission 3 phase 2, directed by the Host after it inspects R; this issue closes on the sink
-per the merge-sink contract.
+`24b69f6df1296bf29769092c4112376df2c35368`. Mission 3 prepared the release transaction
+before the sink: the R/P plan and the concise GitHub body `logs/github-release-body-v0.6.6.md`
+(verbatim CHANGELOG notes: `logs/release-notes-v0.6.6.md`). The release content commit R is
+the last content commit on main after the archive, because the pin gate requires P to differ
+from R by exactly four files. The issue closed on the sink per the merge-sink contract.
+
+## Archive Correction
+
+The merge sink published R1 `a07e0342478269ddd2f087ed5d0dd669024eab61` with mission 3 left
+`in-flight` and phrased as tag/pin/publish work. Host review found that open mission in a
+finalized run. The archive-only content commit that follows R1 (R2) rewrote mission 3 as the
+release-transaction preparation it actually delivered and marked it `done`. Missions 1 and 2
+are unchanged. R2 is the v0.6.6 tag target and the pin commit's R.
+
+## Release Lifecycle
+
+Tag v0.6.6, pin commit P, push, and GitHub publication belong to the release lifecycle, not to
+this run's missions. Their receipts are the annotated tag v0.6.6, the pin commit P
+(`templates/grok-bot/accepted-revision.json` stage `pinned`, `release: v0.6.6`), GitHub
+Release v0.6.6, and the Host's final release report.
 
 ## Files Changed
 
@@ -35,7 +50,10 @@ per the merge-sink contract.
   `6c20f280…`, codex `1.13.1`, zcode `80aa4e2c…` unchanged since v0.6.5; seven native
   platforms have empty pins; no adapter change.
 - Not executed: live ACP smoke (no holder, bridge, adapter, or protocol change), pinned-stage
-  gates (phase 2), install-local.sh (out of scope).
+  gates (release lifecycle, at P), install-local.sh (out of scope).
+- The `.log` files named above are ignored by the repository's `*.log` rule; they are
+  device-local in this archive folder and not in Git. Only the `.md` and `.sha256` logs are
+  committed.
 
 ## Validation
 
@@ -57,11 +75,8 @@ DOCKED — `.cache/doc-docking.md`.
 
 ## Follow-Up Items
 
-- Mission 3 (in-flight): tag v0.6.6 at R, pin commit P (`stage: pinned`, `commit: R`,
-  `release: v0.6.6`) with `render-skills.py --check --require-pinned` and
-  `kaola-grok-bot-verify.py --require-pinned`, push, publish the GitHub release (not draft,
-  not prerelease) from `logs/github-release-body-v0.6.6.md`.
-- None filed: no run-discovered defect.
+- None: the release transaction is recorded under Release Lifecycle, and no
+  run-discovered product defect was filed.
 
 ## Readiness
 
