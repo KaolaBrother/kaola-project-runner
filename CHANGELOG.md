@@ -6,6 +6,20 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **OpenCode default preset, sixth autonomous pool preset, six worker profiles (Issue #200).**
+  OpenCode `--tier default` now explicitly selects `opencode-go/deepseek-v4.1-flash` (the
+  provider-qualified ID already recorded as a real OpenCode 2.0.11 round trip in
+  `docs/host-entry-evidence.md`) with no Runner effort override; a no-model start previously
+  advertised `opencode/deepseek-v4.1-flash` and failed `provider.no-route`. That OpenCode
+  default pair joins the default-authorized inexpensive pool as its sixth preset, with the same
+  authorization and general-concurrency exemption as the existing five; other OpenCode models
+  still require their own authorization. The six owner-stated worker profiles (Claude Code
+  sonnet, Codex luna, ZCode default, Devin default, OpenCode, dsh) replace the previous
+  one-line profile facts in the six platform manifests and render into
+  `worker-profiles.md`, the Host and Delegator wording, and README without changing any other
+  preset's model, effort, or Fast parameters. `platforms/opencode.yaml` and
+  `scripts/adapters/opencode.sh` changed, so the release operator test is non-empty, and the
+  Grok Bot bridge accepted-revision file is back at content stage pending the v0.6.7 pin.
 - **Skew refusals name their recovery route (Issue #198).** `main-skill-build-skew` and
   `worker-skill-build-skew` keep their typed `not_started` shape and fields; their `detail` now
   names each affected root's existing installer route from the accepted checkout
