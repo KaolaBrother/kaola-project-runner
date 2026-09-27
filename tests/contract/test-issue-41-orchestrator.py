@@ -443,15 +443,22 @@ class Issue41ScenarioMeaning(unittest.TestCase):
         )
         self.assertIsNone(wrong, f"recovery policy authorizes a duplicate start: {wrong!r}")
 
-    def test_each_heartbeat_matches_idle_workers_to_safe_parallel_work(self) -> None:
+    def test_clear_task_goes_to_one_suitable_worker_and_count_is_a_ceiling(self) -> None:
+        # Issue #189: a clear task goes directly to a suitable authorized worker;
+        # the authorized count is a ceiling, not a staffing target to fill.
         text = self.orchestrator_text()
         self.assertIsNotNone(
             clause_present(
                 text,
-                (r"at every heartbeat.{0,80}authorized idle workers.{0,80}safe parallel work",),
+                (r"clear task directly to a suitable authorized worker",),
             ),
-            "every heartbeat must match authorized idle workers to safe executable parallel work",
+            "a clear task must go directly to a suitable authorized worker",
         )
+        self.assertIsNotNone(
+            clause_present(text, (r"the count is a ceiling, not a target to fill",)),
+            "the authorized count must be a ceiling, not a target",
+        )
+        self.assertNotIn("dispatch every suitable match", normalize(text).lower())
         self.assertIsNotNone(
             clause_present(text, (r"never invent work or expand authorization",)),
             "matching idle workers must not invent work or expand authorization",
@@ -465,7 +472,9 @@ class Issue41ScenarioMeaning(unittest.TestCase):
         )
         self.assertNotIn("leave capacity idle", normalize(text).lower())
         heartbeat = (orchestrator_package(PROJECT) / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
-        self.assertIn("每拍核对已授权的空闲线程和可安全并行的工作，派出所有合适匹配", heartbeat)
+        self.assertIn("明确任务直接交给合适的已授权工人", heartbeat)
+        self.assertIn("额度是上限、不是要配满的目标", heartbeat)
+        self.assertNotIn("派出所有合适匹配", heartbeat)
         self.assertIn("达上限先精确 stop 一个再 start", heartbeat)
         self.assertNotIn("无合适工作则保持空闲", heartbeat)
 

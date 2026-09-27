@@ -6,6 +6,15 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Project Runner and Kaola-Delegator scheduling wording trimmed (Issue #189).** A clear task
+  goes directly to a suitable authorized worker; split or parallelize only when the work needs it,
+  and the authorized count is a ceiling, not a target to fill (replaces "dispatch every suitable
+  match" at every heartbeat). Acceptance no longer requires a distinct verifier by default: the
+  Host judges the worker's actual diff and run records against the currently effective global
+  Workflow rules, reuses sufficient same-candidate evidence, and returns only concrete gaps for
+  repair. Kaola-Delegator follows up at the user's agreed cadence. Hard cap,
+  stop-before-start, acceptance-before-finalize, and close-out duties are unchanged; no new
+  mechanism. `templates/grok-bot/accepted-revision.json` returns to the content stage.
 - **Runtime-specific named tiers; `upgrade` retired (Issue #188).** Only `--tier default` is
   common; each platform lists its own names in `named_tiers` (README table). Claude Code
   `fable`/`sonnet`, Codex `astra`/`luna`, Cursor `opus`, Devin `opus-fusion`/`fable`, Droid new
@@ -15,10 +24,6 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   effort, Fast, and explicit `--model`/`--effort` precedence are unchanged; display names drop the
   effort suffix, which is shown separately. Operator-diff fact for the next release assessment:
   every `platforms/*.yaml` and `scripts/adapters/*.sh` changes.
-- **Grok Bot bridge back to the content stage.** `templates/grok-bot/accepted-revision.json`
-  returns from `pinned` (v0.6.4, `00d3d21`) to `content`, because a pinned stage refuses any
-  content change; the generated bridge now reads "Accepted revision: none yet" and is not
-  saveable until a later pin commit. No release or pin is made here.
 
 ## 0.6.4 — 2026-09-27 (any supported CLI Host for Kaola-Delegator, resumable Claude Code native id)
 

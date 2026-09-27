@@ -104,7 +104,7 @@ Quota packages (read-only catalog; never changes the count cap): [references/quo
 | Allowed CLIs | None until named; all ten platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
 | Count | Named CLI without a count: one; it bounds live processes. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
-| Upgrade | Needs a clear worker/task/model-effort choice or an applicable explicit upgrade preset; ask only if unclear. No automatic upgrade or transport switch. |
+| Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets (see its Skill). Use one only when the human or authorization names it; ask only if unclear. No automatic model, tier, or transport switch. |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
 | Heartbeat | Non-Host: {{HEARTBEAT_DEFAULT}}; zero or "no heartbeat" means one-shot; one host-native carrier, else same-session sleep, never both. Host: event-driven only (see Hosts). |
 | Permissions | Per platform, not one global bypass. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
@@ -167,20 +167,19 @@ sink, and write ownership.
    an operator-confirmed exception on that one `send`/`steer` is the
    orchestrator's own call; replace it with `drain-restart` at idle
    (see zcode-host-dispatch.md). There is no rebind.
-   Examine authorized remaining work and real parallel opportunities.
-   {{IDLE_BEFORE_STOP}}. State the task, working location, write ownership,
+   Examine authorized remaining work. {{IDLE_BEFORE_STOP}}.
+   State the task, working location, write ownership,
    delivery requirements, and the doc-impact call in its prompt; merely seeing a
    worktree or ledger is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims.
-3. **Accept the delivery.** {{ACCEPTANCE_BEFORE_FINALIZE}}. Inspect the diff,
-   verification evidence and acceptance requirements. Use a
-   verifier distinct from the implementer where available; if only one
-   is authorized, disclose self-verification and still
-   satisfy project requirements. Match evidence to the candidate and
-   affected behavior. Dispatch missing proof or repairs; do not finalize on
-   incomplete evidence. Do not lower assertions or substitute worker prose,
-   idle, green CI or a successful script exit for acceptance.
+3. **Accept the delivery.** {{ACCEPTANCE_BEFORE_FINALIZE}}. When a worker
+   claims completion, judge yourself whether its actual diff and existing run
+   records satisfy the task under the currently effective global Workflow rules.
+   Reuse sufficient evidence for this same candidate; send only concrete
+   deviations, omissions or invalidated evidence back to that worker for repair,
+   and do not finalize on incomplete evidence. Do not lower assertions or
+   substitute worker prose, idle, green CI or a successful script exit for acceptance.
 4. **Finalize and synchronize.** Once accepted and authorized, direct the
    worker to finalize and merge, then verify remote, Issue, archive, doc
    docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).
