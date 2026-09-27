@@ -105,7 +105,7 @@ class QuotaSchemaTest(unittest.TestCase):
             },
             "devin": {"max": ["weekly"], "overage": None},
             "droid": {
-                "standard": ["weekly", "monthly"],
+                "standard": ["5h", "weekly", "monthly"],
                 "core": ["weekly", "monthly"],
                 "extra_usage": [],
             },
@@ -381,7 +381,7 @@ class QuotaQueryCliTest(unittest.TestCase):
             [package["id"] for package in droid["packages"]],
             ["droid:standard", "droid:core", "droid:extra_usage"],
         )
-        self.assertEqual(droid["packages"][0]["windows"], ["weekly", "monthly"])
+        self.assertEqual(droid["packages"][0]["windows"], ["5h", "weekly", "monthly"])
         self.assertEqual(droid["packages"][1]["windows"], ["weekly", "monthly"])
         self.assertEqual(droid["packages"][2]["windows"], [])
         kimi = next(row for row in payload["platforms"] if row["platform"] == "kimi-cli")
@@ -396,6 +396,23 @@ class QuotaQueryCliTest(unittest.TestCase):
         self.assertFalse(self.record_root.exists())
         self.assertFalse((self.markers / "login-shell-ran").exists())
         self.assertFalse((self.markers / "codex-ran").exists())
+
+    def test_orchestrator_package_examples_match_cli_output(self) -> None:
+        reference = (PROJECT / "templates" / "orchestrator" / "references"
+                     / "quota-packages.md").read_text(encoding="utf-8")
+        self.assertNotIn("windows is null until a release seeds one", reference)
+        self.assertIn("show the weekly or monthly window when the plan has one", reference)
+        self.assertIn("show the 5h window only when it has neither", reference)
+        for label, platform in (
+            ("One platform:", "grok"),
+            ("A platform with several packages:", "droid"),
+        ):
+            with self.subTest(platform=platform):
+                section = reference.split(label, 1)[1]
+                example = section.split("```json", 1)[1].split("```", 1)[0].strip()
+                result = self.run_cli("packages", "--platform", platform)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(example), json.loads(result.stdout))
 
     def test_installed_only_keeps_survey_present_rows(self) -> None:
         result = self.run_cli("packages", "--installed-only", "--login-shell", str(self.login_shell))
