@@ -162,10 +162,10 @@ Issue #193: Droid documents `~/.factory/skills` and `~/.agents/skills` as one us
 which same-name Skills are invalid, so `--runtime droid` (install and `--uninstall`) also
 withdraws the `droid` reference from the retired `$HOME/.factory/skills` under the uninstall
 rules below: a Skill whose last referrer was `droid` is removed there, one another runtime still
-refers to is kept with a duplicate-name warning, and an edited copy or a same-name directory
-without a receipt refuses the run before any write. Other Skills there, including personal
-ones and a `kaola-delegator` leftover, are untouched. A `~/.factory/skills` that resolves to the
-shared root is skipped. Other runtimes keep their runtime-specific roots.
+refers to is kept with a duplicate-name warning, and a droid-only copy with edited bytes or a
+same-name directory without a receipt refuses the run before any write. Other Skills there,
+including personal ones and a `kaola-delegator` leftover, are untouched. A `~/.factory/skills`
+that resolves to the shared root is skipped. Other runtimes keep their runtime-specific roots.
 `--runtime grok-bot` (and `grokbot`) is refused: Grok Bot is a bridge host with no installer
 destination (see [Grok Bot host](grok-bot-host.md)). `--runtime grok` is not a host alias;
 `--platform grok` is the Grok CLI worker.
@@ -192,10 +192,10 @@ and only adds the reference. A copy from another build is updated in place (`upd
 every referrer. `--uninstall`, including a Skill that is already absent, only removes this
 runtime's id: while ids remain, the Skill and receipt stay (`kept: … (still referenced by …)`),
 and when none remain the Skill is removed as before. A receipt without `referrers` predates the
-ledger and counts as referenced by every runtime mapped to that root (`kimi-cli,dsh,droid`
-for `$HOME/.agents/skills`), so a guess never removes it. A pre-ledger receipt in the
-Kimi-specific root instead counts as referenced by `kimi-cli` alone — its only
-installer — so a kimi-cli `--uninstall` withdraws the kimi-cli reference from BOTH roots
+ledger and counts as referenced by every runtime mapped to that root when it was written
+(`kimi-cli,dsh` for `$HOME/.agents/skills`, `droid` for the retired `$HOME/.factory/skills`),
+so a guess never removes it. A pre-ledger receipt in the Kimi-specific root instead counts as
+referenced by `kimi-cli` alone — its only installer — so a kimi-cli `--uninstall` withdraws the kimi-cli reference from BOTH roots
 it owns: the shared root keeps its Skills while `dsh` still refers to them, and the
 Kimi-specific root removes them because no referrer remains.
 

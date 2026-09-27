@@ -501,6 +501,38 @@ for case_name in edited foreign; do
     || fail "test_droid_${case_name}_preserved" "retired copy changed"
 done
 
+# pre-ledger receipts count droid only in ~/.factory/skills, where droid wrote
+# them: a shared-root one is released by kimi-cli and dsh alone, a retired one
+# is withdrawn by droid
+strip_refs() {
+  python3 -c 'import json, sys; p = sys.argv[1]; d = json.load(open(p)); d.pop("referrers", None); json.dump(d, open(p, "w"))' "$1"
+}
+home="$tmp_root/home-droid-preledger"
+run_installer "$repo" "$home" --runtime dsh --platform dsh --no-orchestrator >/dev/null 2>&1 \
+  || fail "test_droid_preledger_seed" "shared seed failed"
+strip_refs "$home/.agents/skills/.kaola-install-receipts/dsh-kaola-project-runner.json"
+seed_legacy_droid "$repo" "$home" droid
+strip_refs "$home/.factory/skills/.kaola-install-receipts/droid-kaola-project-runner.json"
+output="$(run_installer "$repo" "$home" --runtime dsh --platform dsh --no-orchestrator --uninstall 2>&1)" \
+  || fail "test_droid_preledger_shared" "dsh uninstall failed: $output"
+[[ "$output" == *"(still referenced by kimi-cli)"* ]] \
+  || fail "test_droid_preledger_shared" "expected kimi-cli (not droid) as legacy referrer, got: $output"
+output="$(run_installer "$repo" "$home" --runtime kimi-cli --platform dsh --no-orchestrator --uninstall 2>&1)" \
+  || fail "test_droid_preledger_shared_last" "kimi-cli uninstall failed: $output"
+assert_absent "test_droid_preledger_shared_last" "$home/.agents/skills/dsh-kaola-project-runner"
+output="$(run_installer "$repo" "$home" --runtime droid --platform droid 2>&1)" \
+  || fail "test_droid_preledger_retired" "droid install failed: $output"
+assert_absent "test_droid_preledger_retired" "$home/.factory/skills/droid-kaola-project-runner"
+
+# a co-owned receipt whose retired directory is already gone warns no duplicate
+home="$tmp_root/home-droid-gone"
+seed_legacy_droid "$repo" "$home" droid
+set_refs "$home/.factory/skills/.kaola-install-receipts/droid-kaola-project-runner.json" droid,generic
+rm -rf "$home/.factory/skills/droid-kaola-project-runner"
+output="$(run_installer "$repo" "$home" --runtime droid --platform droid 2>&1)" \
+  || fail "test_droid_gone_install" "install failed: $output"
+[[ "$output" != *"warning: duplicate"* ]] || fail "test_droid_gone_no_warning" "false duplicate warning: $output"
+
 # a ~/.factory/skills that resolves to the shared root is not withdrawn from
 home="$tmp_root/home-droid-aliased"
 mkdir -p "$home/.agents/skills" "$home/.factory"

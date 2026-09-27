@@ -43,8 +43,9 @@ usage() {
     '               as one user bucket where same-name Skills are invalid, so' \
     '               --runtime droid also withdraws its reference from the retired' \
     '               $HOME/.factory/skills root: a KPR copy droid alone owned there' \
-    '               is removed, a co-owned one is kept with a duplicate warning,' \
-    '               an edited or foreign one refuses the run before any write)' \
+    '               is removed (an edited one refuses), a co-owned one is kept' \
+    '               with a duplicate warning, and a same-name directory without a' \
+    '               receipt refuses the run before any write)' \
     '  opencode     $HOME/.config/opencode/skills' \
     '  kimi-cli     $HOME/.agents/skills AND ${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills' \
     '               (Issue #159: Kimi Code scans both user roots; ~/.agents/skills' \
@@ -263,7 +264,7 @@ fi
 
 # Issue #123: this install's reference id, and who a pre-ledger receipt in a
 # root counts as referenced by (every runtime mapped to the same root, e.g.
-# kimi-cli, dsh and droid for $HOME/.agents/skills). Resolved per destination at
+# kimi-cli and dsh for $HOME/.agents/skills). Resolved per destination at
 # planning time below.
 canonical_dir() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"; }
 retired_parent=""
@@ -775,7 +776,10 @@ destination_plan() {
   target_key="$(canonical_dir "$target_parent")"
   legacy_referrers=""
   for known_runtime in codex claude-code cursor devin zcode grok-cli droid opencode kimi-cli dsh; do
-    [[ "$(canonical_dir "$(runtime_skills_dir "$known_runtime")")" == "$target_key" ]] \
+    # A pre-ledger receipt was written under the mapping of its time, so a
+    # runtime whose root moved (Issue #193) is legacy only in its retired root.
+    known_root="$(retired_skills_dir "$known_runtime" || runtime_skills_dir "$known_runtime")"
+    [[ "$(canonical_dir "$known_root")" == "$target_key" ]] \
       && legacy_referrers="${legacy_referrers:+$legacy_referrers,}$known_runtime"
   done
   [[ -n "$legacy_referrers" ]] || legacy_referrers="$self_ref"
@@ -896,7 +900,8 @@ destination_apply() {
     release)
       set_skill_referrers "$name" "$source" "$refs"
       printf 'kept: %s (still referenced by %s)\n' "$target" "$refs"
-      if [[ "$role" == retired && ( -e "${dest_parents[0]}/$name" || -L "${dest_parents[0]}/$name" ) ]]; then
+      if [[ "$role" == retired && ( -e "$target" || -L "$target" ) \
+            && ( -e "${dest_parents[0]}/$name" || -L "${dest_parents[0]}/$name" ) ]]; then
         printf 'warning: duplicate Skill name %s in %s and %s; the retired copy stays while %s refers to it\n' \
           "$name" "$target_parent" "${dest_parents[0]}" "$refs" >&2
       fi
