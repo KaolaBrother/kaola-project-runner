@@ -466,15 +466,20 @@ spelling of the same record root, e.g. `/tmp` vs `/private/tmp`, derives another
 ordinary stop over that socket (`answering_socket`), and signals only a silent PID whose argv anchors
 it to the record (`holder_force_killed`); a reused PID
 gets no signal (`pid_reused: true`, `holder_signalled: false`), the dead holder's recorded groups
-are swept exactly as for any dead holder (`force_killed_pids`: the agent's own process group when
-its live leader still has the start time the holder recorded as `agent_started` (epoch seconds,
-so time zones do not matter) at spawn, or has no
-live leader left; a record written before `agent_started` keeps the group trusted as before; plus
+are swept exactly as for any dead holder (`force_killed_pids`: the agent's own process group only
+while its live leader has exactly the start second the holder recorded as `agent_started` (epoch
+seconds, so time zones do not matter) at spawn; plus
 child groups that still match their recorded start time), and the record is retired once nothing of them is left
 (later `status` reads `no-session`; a survivor keeps the record and appears in `residual_pids`). An
 unreadable argv refuses `holder-unreachable`. A force stop of a dead
 holder that leaves nothing of its recorded groups marks the record `stopped`, so `status` reads
-`stopped` with `residual_pids: []`.
+`stopped` with `residual_pids: []`. Issue #191: macOS reuses a pgid once its group empties, so a
+record written before `agent_started`, or an agent group whose leader is gone, proves no identity.
+When such a recorded `agent_pgid` still has live members, either force-stop path signals none of
+them, retires only this seat's `record.json` (never a newer one written in its place), and reports
+`pgid_identity: "unverified"` with `pgid_identity_unverified` (`code: pgid-identity-unverified`,
+`agent_pgid`, `live_members`, `signalled: false`, `retired_record`); `status` then reads
+`no-session`.
 
 ### `steer` — Agent-chosen steering of a running turn (Issue #65)
 
@@ -676,7 +681,8 @@ recorded member is still alive under its recorded start time, or under a start t
 its recorded spawn and within five seconds of it (SIGTERM, grace, SIGKILL), so a reused pid or group id is never
 signalled; the stop receipt lists the signalled groups as `swept_child_pgids` and `residual_pids`
 covers them. A holder-lost `stop --force` applies the same identity checks to `record.json` and
-`children.jsonl`, SIGKILLs the live members of the recorded agent group plus the confirmed child
+`children.jsonl`, SIGKILLs the live members of the recorded agent group (only under a live leader
+with the recorded `agent_started`, Issue #191) plus the confirmed child
 groups at once, and reports those groups as `swept_pgids`; a recorded normal stop reads as
 `stopped` only when none of them is
 alive. Stopping never deletes CLI history, session records, or work artifacts,
