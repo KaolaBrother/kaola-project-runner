@@ -1078,6 +1078,13 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         child.wait()
         return child.pid
 
+    def started_epoch(self, pid: int) -> float:
+        module = self.acp_module()
+        table = module.run_ps(["pid", "pgid", "state", "lstart"], env=module.PS_ENV)
+        started = next(line.split(None, 3)[3].strip() for line in table.stdout.splitlines()
+                       if line.split() and line.split()[0] == str(pid))
+        return time.mktime(time.strptime(started, "%a %b %d %H:%M:%S %Y"))
+
     def acp_module(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location(f"acp132_{self._testMethodName}", CLI)
@@ -1157,7 +1164,8 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         orphan = subprocess.Popen(["sleep", "60"], start_new_session=True)
         try:
             stale = self.write_stale_record(os.getpid(), agent_pid=orphan.pid,
-                                            agent_pgid=orphan.pid)
+                                            agent_pgid=orphan.pid,
+                                            agent_started=self.started_epoch(orphan.pid))
             stop = self.cli("stop", "--force", "--expected-holder-instance-id",
                             stale["holder_instance_id"], check=False)
             self.assertIs(stop.get("pid_reused"), True, stop)
@@ -1171,6 +1179,86 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
             if orphan.poll() is None:
                 orphan.kill()
                 orphan.wait()
+
+    def test_i191_force_stop_never_signals_an_unverified_agent_group(self) -> None:
+        """Issue #191: a stopped record whose holder is gone names an
+        ``agent_pgid`` the OS has since reused. ``stop --force`` signals no
+        member of a group whose identity it cannot prove, clears only this
+        seat's record, and says ``pgid-identity-unverified``; the recorded
+        agent's own group is still swept. Every group here is this test's own
+        ``sleep``, never a foreign process."""
+        owned: list[subprocess.Popen] = []
+        leaderless: list[int] = []
+
+        def spawn(argv: list[str]) -> subprocess.Popen:
+            proc = subprocess.Popen(argv, start_new_session=True)
+            owned.append(proc)
+            return proc
+
+        def force_stop(**extra) -> dict:
+            self.write_stale_record(self.dead_pid(), state="stopped", agent_alive=False, **extra)
+            return self.cli("stop", "--force", check=False)
+
+        try:
+            # A live foreign-looking leader: no recorded start time (a record
+            # from before #132), then a start time that is not its own.
+            reused = spawn(["sleep", "60"])
+            epoch = self.started_epoch(reused.pid)
+            for label, extra in (("legacy", {}), ("other start", {"agent_started": epoch - 3600})):
+                stop = force_stop(agent_pid=reused.pid, agent_pgid=reused.pid, **extra)
+                self.assertEqual(stop.get("pgid_identity"), "unverified", (label, stop))
+                fact = stop.get("pgid_identity_unverified") or {}
+                self.assertEqual(fact.get("code"), "pgid-identity-unverified", (label, stop))
+                self.assertEqual(fact.get("agent_pgid"), reused.pid, (label, stop))
+                self.assertIn(reused.pid, fact.get("live_members") or [], (label, stop))
+                self.assertIs(fact.get("signalled"), False, (label, stop))
+                self.assertNotIn(reused.pid, stop.get("swept_pgids") or [], (label, stop))
+                self.assertEqual(stop.get("force_killed_pids"), [], (label, stop))
+                time.sleep(0.2)
+                self.assertIsNone(reused.poll(), f"{label}: the reused group was signalled")
+                self.assertIsNotNone(stop.get("retired_record"), (label, stop))
+                gone = self.cli("status", check=False)
+                self.assertEqual((gone.get("error") or {}).get("code"), "no-session",
+                                 (label, gone))
+            # A leaderless group: its leader exited and a member remains, so
+            # no leader start time can prove it the recorded agent's group.
+            shell = spawn(["/bin/sh", "-c", "sleep 30 & exit 0"])
+            shell.wait(timeout=10)
+            module = self.acp_module()
+            members = module.live_group_members([shell.pid])
+            leaderless.extend(members)
+            self.assertTrue(members, "the leaderless fixture group keeps a member")
+            stop = force_stop(agent_pid=shell.pid, agent_pgid=shell.pid,
+                              agent_started=time.time() - 5)
+            self.assertEqual((stop.get("pgid_identity_unverified") or {}).get("code"),
+                             "pgid-identity-unverified", stop)
+            self.assertEqual(stop.get("force_killed_pids"), [], stop)
+            time.sleep(0.2)
+            self.assertEqual(module.live_group_members([shell.pid]), members,
+                             "the leaderless group was signalled")
+            # The recorded agent itself, by start time: still stopped.
+            stop = force_stop(agent_pid=reused.pid, agent_pgid=reused.pid, agent_started=epoch)
+            self.assertNotIn("pgid_identity", stop)
+            self.assertIn(reused.pid, stop.get("swept_pgids") or [], stop)
+            self.assertIn(reused.pid, stop.get("force_killed_pids") or [], stop)
+            self.assertEqual(stop.get("residual_pids"), [], stop)
+            reused.wait(timeout=10)
+        finally:
+            # Only this test's own processes: an unreaped child, or a member
+            # it listed that is still in its reaped leader's group. A reaped
+            # group id is never swept.
+            for proc in owned:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait()
+            if leaderless:
+                still = self.acp_module().live_group_members([shell.pid])
+                for pid in leaderless:
+                    if pid in still:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except (ProcessLookupError, PermissionError):
+                            pass
 
     def test_same_name_start_over_a_silent_anchored_holder_is_session_exists(self) -> None:
         """Review F3: a live holder whose socket is gone (initializing or
@@ -1397,15 +1485,73 @@ class Issue132AnchorUnitTests(unittest.TestCase):
                  "import importlib.util,json,sys;"
                  f"s=importlib.util.spec_from_file_location('k',{str(CLI)!r});"
                  "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
-                 f"print(json.dumps({leader.pid} in m.recorded_groups("
-                 f"{{'agent_pid':{leader.pid},'agent_pgid':{leader.pid},'agent_started':{epoch}}})))"],
+                 f"r={{'agent_pid':{leader.pid},'agent_pgid':{leader.pid},'agent_started':{epoch}}};"
+                 f"print(json.dumps([{leader.pid} in m.recorded_groups(r),"
+                 f"{leader.pid} in m.recorded_groups(r, verified_only=True)]))"],
                 capture_output=True, text=True, timeout=30, env={**os.environ, "TZ": other_tz})
-            self.assertEqual(probe.stdout.strip(), "true", (other_tz, probe.stderr[-400:]))
+            # Issue #191: the exact match used before a signal holds there too.
+            self.assertEqual(probe.stdout.strip(), "[true, true]", (other_tz, probe.stderr[-400:]))
             self.assertIn(leader.pid, self.module.recorded_groups(base),
                           "a record from before #132 keeps its trusted group")
+            # Issue #191: a caller that signals trusts only a proven leader.
+            self.assertNotIn(leader.pid, self.module.recorded_groups(base, verified_only=True),
+                             "a record without a start time proves no group identity")
+            self.assertIn(leader.pid, self.module.recorded_groups(
+                dict(base, agent_started=epoch), verified_only=True))
+            for off in (-1, 1):
+                self.assertNotIn(leader.pid, self.module.recorded_groups(
+                    dict(base, agent_started=epoch + off), verified_only=True),
+                    "the recorded start second matches exactly or proves nothing")
         finally:
             leader.kill()
             leader.wait()
+
+    def test_i191_reused_pid_stop_never_signals_an_unverified_agent_group(self) -> None:
+        """Issue #191: the reused-holder-PID branch resolves groups for a
+        signal with ``verified_only`` and reports an unproven agent group."""
+        from unittest.mock import patch
+        args, directory = self.stale_host(os.getpid(), agent_pid=424242, agent_pgid=424242)
+        repo = os.path.realpath(self.root)
+        record = json.loads((directory / "record.json").read_text())
+        with patch.object(self.module, "process_command", return_value="/bin/sleep 60"), \
+             patch.object(self.module, "base_receipt", return_value={}), \
+             patch.object(self.module, "recorded_groups", return_value=[]) as groups, \
+             patch.object(self.module, "live_group_members",
+                          side_effect=lambda pgids: [424243] if 424242 in pgids else []), \
+             patch.object(self.module.os, "kill") as kill:
+            receipt = self.module.force_stop_unreachable(args, repo, directory, record,
+                                                         {"force": True})
+        self.assertIs(groups.call_args.kwargs.get("verified_only"), True)
+        self.assertEqual(receipt["pgid_identity"], "unverified", receipt)
+        fact = receipt["pgid_identity_unverified"]
+        self.assertEqual((fact["code"], fact["live_members"], fact["signalled"]),
+                         ("pgid-identity-unverified", [424243], False))
+        self.assertEqual([call for call in kill.call_args_list if call.args[1] != 0], [],
+                         "nothing is signalled")
+        self.assertIsNotNone(receipt["retired_record"], "only this seat's record is cleared")
+        self.assertFalse((directory / "record.json").exists())
+
+    def test_i191_reused_pid_stop_never_retires_a_newer_record(self) -> None:
+        """Issue #191: the reused-holder-PID branch retires the record it
+        read, never one a newer start wrote in its place."""
+        from unittest.mock import patch
+        args, directory = self.stale_host(os.getpid(), agent_pid=424242, agent_pgid=424242)
+        repo = os.path.realpath(self.root)
+        stale = json.loads((directory / "record.json").read_text())
+        newer = dict(stale, holder_instance_id="d" * 32)
+        (directory / "record.json").write_text(json.dumps(newer, sort_keys=True))
+        with patch.object(self.module, "process_command", return_value="/bin/sleep 60"), \
+             patch.object(self.module, "base_receipt", return_value={}), \
+             patch.object(self.module, "recorded_groups", return_value=[]), \
+             patch.object(self.module, "live_group_members", return_value=[]), \
+             patch.object(self.module.os, "kill") as kill:
+            receipt = self.module.force_stop_unreachable(args, repo, directory, stale,
+                                                         {"force": True})
+        self.assertIs(receipt["pid_reused"], True, receipt)
+        self.assertIsNone(receipt["retired_record"], receipt)
+        self.assertEqual(json.loads((directory / "record.json").read_text()), newer,
+                         "the newer record stays")
+        self.assertEqual([call for call in kill.call_args_list if call.args[1] != 0], [])
 
     def test_l3_argv_socket_answering_as_another_instance_is_never_stopped(self) -> None:
         from unittest.mock import patch

@@ -1567,7 +1567,8 @@ def run_ps(columns: list[str], env: dict[str, str] | None = None) -> subprocess.
                                            stdout=text or "", stderr=str(exc))
 
 
-def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> list[int]:
+def recorded_groups(record: dict[str, Any], directory: Path | None = None,
+                    verified_only: bool = False) -> list[int]:
     """The agent's own process group plus the out-of-group child groups the
     holder noted while the agent was alive (detached CLI children), plus the
     children the agent itself recorded at spawn in ``children.jsonl`` under
@@ -1575,13 +1576,20 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
     pid is still alive in that group with its recorded start time (holder
     note) or a start time at or before the recorded spawn and within
     SPAWN_RECORD_TOLERANCE of it
-    (spawn record), so a reused pid or group id is never touched."""
+    (spawn record), so a reused pid or group id is never touched.
+
+    Issue #191: ``verified_only`` is for callers that signal. The agent group
+    then counts only while its live leader is the recorded agent by start
+    time, exactly: the holder recorded ``agent_started`` from the same
+    second-resolution ``lstart``. A record without ``agent_started`` or a
+    leaderless group proves no identity (macOS reuses a pgid once its group
+    empties)."""
     groups: list[int] = []
     pgid = record.get("agent_pgid")
     agent_started = record.get("agent_started")
     checked = (isinstance(agent_started, (int, float)) and not isinstance(agent_started, bool)
                and agent_started > 0)
-    if isinstance(pgid, int) and pgid > 0 and not checked:
+    if isinstance(pgid, int) and pgid > 0 and not checked and not verified_only:
         # A record written before Issue #132 names no agent start time: its
         # group is trusted as before.
         groups.append(pgid)
@@ -1615,7 +1623,8 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
         # the id cannot have been reused while members still hold the group.
         leader = by_pid.get(pgid)
         if leader is None:
-            groups.append(pgid)
+            if not verified_only:
+                groups.append(pgid)
         elif leader[0] == pgid:
             try:
                 leader_started = time.mktime(time.strptime(leader[1], "%a %b %d %H:%M:%S %Y"))
@@ -1623,7 +1632,8 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None) -> li
                 leader_started = None
             # Both sides are epochs in their own process's time zone, so a
             # caller under another TZ than the holder still matches.
-            if leader_started is not None and abs(leader_started - agent_started) <= 1.0:
+            slack = 0.0 if verified_only else 1.0
+            if leader_started is not None and abs(leader_started - agent_started) <= slack:
                 groups.append(pgid)
     for child, members in children.items():
         if not str(child).isdigit() or int(child) in groups:
@@ -1659,10 +1669,40 @@ def live_group_members(groups: list[int]) -> list[int]:
     return found
 
 
+def unverified_agent_group(record: dict[str, Any], groups: list[int]) -> dict[str, Any] | None:
+    """Issue #191: the recorded agent pgid when it still has live members but
+    is not among the identity-verified ``groups``: never signalled."""
+    pgid = record.get("agent_pgid")
+    if not isinstance(pgid, int) or isinstance(pgid, bool) or pgid <= 0 or pgid in groups:
+        return None
+    members = live_group_members([pgid])
+    if not members:
+        return None
+    return {"code": "pgid-identity-unverified", "agent_pgid": pgid,
+            "agent_started": record.get("agent_started"), "live_members": members,
+            "signalled": False,
+            "message": "the recorded agent pgid has live members whose identity as this "
+                       "session's agent group cannot be proven (no live leader with the "
+                       "recorded start time): not signalled; the seat record is cleared"}
+
+
+def retire_record(directory: Path, record: dict[str, Any], reason: str) -> Path | None:
+    """Move ``record.json`` aside when it still is ``record``."""
+    if read_record(directory) != record:
+        return None
+    retired = directory / f"record.{reason}-{int(time.time())}.json"
+    try:
+        (directory / "record.json").replace(retired)
+    except OSError:
+        return None
+    return retired
+
+
 def force_kill_from_record(args: argparse.Namespace, repo: str,
                            record: dict[str, Any]) -> dict[str, Any]:
     """stop --force path when the holder is already gone."""
-    groups = recorded_groups(record, spawn_record_dir(args, repo))
+    groups = recorded_groups(record, spawn_record_dir(args, repo), verified_only=True)
+    unverified = unverified_agent_group(record, groups)
     receipt = base_receipt(args, repo)
     killed: list[int] = []
     for pid in live_group_members(groups):
@@ -1695,6 +1735,15 @@ def force_kill_from_record(args: argparse.Namespace, repo: str,
     # its recorded groups is left, say so in the record so a later `status`
     # proves the session gone (`stopped`, `residual_pids: []`).
     directory = spawn_record_dir(args, repo)
+    if unverified is not None:
+        # Issue #191: a group this record cannot prove its own is someone
+        # else's to stop. Only this seat's record is cleared.
+        retired = retire_record(directory, record, "pgid-unverified") \
+            if directory is not None and not leftover else None
+        receipt["pgid_identity"] = "unverified"
+        receipt["pgid_identity_unverified"] = unverified
+        receipt["retired_record"] = str(retired) if retired else None
+        return receipt
     if directory is not None and not leftover and record.get("state") != "stopped":
         path = directory / "record.json"
         if read_record(directory) == record:
@@ -1740,7 +1789,8 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
         # PID gets no signal. The holder's identity-checked groups are swept as
         # for any dead holder, and the record is retired only once nothing of
         # them is left, so a survivor stays visible to the next sweep.
-        groups = recorded_groups(record, directory)
+        groups = recorded_groups(record, directory, verified_only=True)
+        unverified = unverified_agent_group(record, groups)
         killed: list[int] = []
         for pid in live_group_members(groups):
             if pid == holder_pid:
@@ -1754,17 +1804,14 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
         if groups:
             time.sleep(0.1)
             leftover = [pid for pid in live_group_members(groups) if pid != holder_pid]
-        retired = None
-        if not leftover:
-            retired = directory / f"record.pid-reused-{int(time.time())}.json"
-            try:
-                (directory / "record.json").replace(retired)
-            except OSError:
-                retired = None
+        retired = retire_record(directory, record, "pid-reused") if not leftover else None
         try:
             sock_path(args, repo).unlink()
         except OSError:
             pass
+        if unverified is not None:
+            receipt["pgid_identity"] = "unverified"
+            receipt["pgid_identity_unverified"] = unverified
         receipt.update({
             "stopped": not leftover,
             "pid_reused": True,

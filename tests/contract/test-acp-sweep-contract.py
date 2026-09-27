@@ -179,7 +179,10 @@ class AcpSweepContractTests(unittest.TestCase):
         self.assertEqual(receipt["results"][0]["via"], "socket")
         self.assertFalse(receipt["results"][0]["force_killed"])
         self.assertEqual(receipt["residual_pids"], [])
-        self.assertIn(own["agent_pid"], receipt["swept_groups"])
+        # Issue #191: the holder's own stop already ended its agent; a group
+        # left leaderless proves no identity, so the residue pass signals it
+        # only through a live leader and reports nothing unverified here.
+        self.assertEqual(receipt["pgid_identity_unverified"], [])
         self.assertTrue(wait_gone(own["holder_pid"]), "own holder survived the sweep")
         self.assertTrue(wait_gone(own["agent_pid"]), "own mock agent survived the sweep")
 
