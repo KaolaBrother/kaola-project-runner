@@ -178,20 +178,19 @@ sink, and write ownership.
    an operator-confirmed exception on that one `send`/`steer` is the
    orchestrator's own call; replace it with `drain-restart` at idle
    (see zcode-host-dispatch.md). There is no rebind.
-   Examine authorized remaining work and real parallel opportunities.
-   At every heartbeat, match authorized idle workers to safe parallel work and dispatch every suitable match as a new session; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start). State the task, working location, write ownership,
+   Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session; split or parallelize only when the work itself needs it. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
+   State the task, working location, write ownership,
    delivery requirements, and the doc-impact call in its prompt; merely seeing a
    worktree or ledger is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims.
-3. **Accept the delivery.** Mission-frontier done triggers review, not automatic finalize. Inspect the diff,
-   verification evidence and acceptance requirements. Use a
-   verifier distinct from the implementer where available; if only one
-   is authorized, disclose self-verification and still
-   satisfy project requirements. Match evidence to the candidate and
-   affected behavior. Dispatch missing proof or repairs; do not finalize on
-   incomplete evidence. Do not lower assertions or substitute worker prose,
-   idle, green CI or a successful script exit for acceptance.
+3. **Accept the delivery.** Mission-frontier done triggers review, not automatic finalize. When a worker
+   claims completion, judge yourself whether its actual diff and existing run
+   records satisfy the task under the currently effective global Workflow rules.
+   Reuse sufficient evidence for this same candidate; send only concrete
+   deviations, omissions or invalidated evidence back to that worker for repair,
+   and do not finalize on incomplete evidence. Do not lower assertions or
+   substitute worker prose, idle, green CI or a successful script exit for acceptance.
 4. **Finalize and synchronize.** Once accepted and authorized, direct the
    worker to finalize and merge, then verify remote, Issue, archive, doc
    docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).

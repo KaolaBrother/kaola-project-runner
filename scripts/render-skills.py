@@ -411,10 +411,10 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         ),
         "SUPPORTED_WORKERS": supported_worker_summary(manifests),
         "IDLE_BEFORE_STOP": (
-            "At every heartbeat, match authorized idle workers to safe parallel work and "
-            "dispatch every suitable match as a new session; never invent work or expand "
-            "authorization. At the hard cap, stop one seat before starting any new one "
-            "(stop-before-start)"
+            "Give each clear task directly to a suitable authorized worker as a new "
+            "session; split or parallelize only when the work itself needs it. The count "
+            "is a ceiling, not a target to fill; never invent work or expand authorization. "
+            "At the hard cap, stop one seat before starting any new one (stop-before-start)"
         ),
         "ACCEPTANCE_BEFORE_FINALIZE": (
             "Mission-frontier done triggers review, not automatic finalize"

@@ -57,13 +57,14 @@ receipt (`--expected-holder-instance-id`); a different holder is not that Host.
 
 ## After the handoff
 
-Relay later user changes to that same Host using idle `send`; when busy,
-`steer` or hold the update yourself until idle - the Runner has no queue. A
-`--no-wait` admission or a Host `end_turn` is not project delivery. After the first Host beat, check
+Relay user changes to the same Host: idle `send`; when busy, `steer` or hold
+until idle - the Runner has no queue. A `--no-wait` admission or a Host
+`end_turn` is not project delivery. After the first Host beat, check
 file-read or work-product evidence and the first dispatch receipt against the
 plan and authorization; do not trust the Host's self-description. Mismatch:
-correct on this Host; do not accept completion. Read results with `observe` /
-`capture`; escalate only unrecoverable human decisions. Do not dispatch workers,
+correct on this Host; do not accept completion. Then follow up at the user's
+agreed cadence with `observe` / `capture`; escalate only unrecoverable human
+decisions. Do not dispatch workers,
 copy a mission ledger, maintain a heartbeat, create a Routine, operate on inner
 sessions, or `stop` the Host before close-out. Changing the outer Agent does not
 stop the Host.
