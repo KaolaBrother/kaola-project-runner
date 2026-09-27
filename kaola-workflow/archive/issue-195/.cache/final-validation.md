@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/validate.sh rc=0 434 checks at 30c3c623 (policy-prose-only wording deltas since, each affected lane re-run); at f0561176: ./scripts/render-skills.py --write && ./scripts/render-skills.py --check && python3 tests/contract/test-issue-{148,118,68,41,65,74,86,111,187}-*.py && python3 tests/contract/test-issue-49-grok-bot-host.py && python3 tests/contract/test-generated-skills.py && bash tests/contract/test-installer-{runtimes,migration}.sh (all rc=0); 98942335 adds CHANGELOG Unreleased entry only (docs dock)
+validated_candidate_hash: 1a65398dbe08b6d3d66c23737373226d601b166432a30d4dab55a4c2306c1a66
