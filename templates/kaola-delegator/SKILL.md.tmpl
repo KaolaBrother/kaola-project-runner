@@ -17,11 +17,12 @@ project runs only one Agent for it.
 
 From the user and existing Git/Workflow/Issue/Runner records collect:
 goal; already-done/remaining work; the Host platform; authorized worker
-platforms/members, counts, and concurrency; the quota the user actually gave,
-each figure in its own unit; priority; delivery/stop boundary; the project path. The Host's five-preset inexpensive pool (its worker-profiles.md)
-is default-authorized; collect no seats, counts, or priority for it - carry
-stated exclusions. On a **live** Host, apply only the user's
-latest change — do not re-ask the full set. On a **new** Host, missing,
+platforms/members, counts, and concurrency for outside-pool workers and
+stated exclusions - the five-preset pool (its worker-profiles.md) is
+default-authorized and needs none; the quota the user actually gave, each
+figure in its own unit; priority; delivery/stop boundary; the project path.
+On a **live** Host, apply only the user's
+latest change. On a **new** Host, missing,
 conflicting, or expired key values must be confirmed before `start`. A quota
 unit the user never gave is not a missing key value — carry it as unspecified
 and start; a quota whose unit is unclear is, so ask. Do not open a blank Host.
@@ -32,23 +33,25 @@ quota as unlimited, reuse a stale quota, or expand authorization.
 
 Select any supported Host platform
 ([host-platforms.md](references/host-platforms.md)) and use its own Runner
-`<platform>-{{RUNNER_SKILL}}`. If that Runner
+`<platform>-{{RUNNER_SKILL}}`, entry line, native resume id. If that Runner
 is missing, report not executable; claim no Host.
 
 One live Host per repo, whatever its platform, recovered from the canonical Git
 root, the standard Host name `<platform>-<PROJECT_CODE>-orchestrator-<purpose>`
 and existing Runner `status`/receipts. A Git worktree is not an ACP id. A
-**live** Host is attached in place on its platform, never started again,
+**live** Host is attached in place, never started again,
 even if its recorded name is not the new form; `host-exists` means attach its
-`existing_host`; never rename and retry. A missing standard name or pointer
-file never justifies a second Host. There is no Delegator continuation file.
+`existing_host`; never rename and retry. Do not rename, restart, or cancel
+an in-flight Host. A missing standard name never justifies a second Host.
+There is no Delegator continuation file.
 A Host failing its identity check is exact-stopped, proven gone
 (`residual_pids: []`), then replaced. A **stopped** Host is resumed (attested
-native id) or replaced per handoff §Recover.
+native id) or replaced per handoff §Recover: a new Host is a new ACP
+session; authorization confirmed before `start`.
 [Bricked Host](references/host-brick.md). From the Grok Bot account bridge,
-attest every Host `status`/`start`/`send`/`stop` with the locator
+attest every Host op with the locator
 (handoff); Codex and generic do not. Commands, identities, the
-prompt's `sweep=` line: [handoff.md](references/handoff.md).
+`sweep=` line: [handoff.md](references/handoff.md).
 
 Pass no per-worker `--repo`, scheduling, or heartbeat instructions.
 Exact Host `stop` and live attach use `holder_instance_id` from its
@@ -61,11 +64,10 @@ until idle - the Runner has no queue. A `--no-wait` admission or a Host
 `end_turn` is not project delivery. After the first Host beat, check
 file-read/work-product evidence and the first dispatch receipt against the
 plan and authorization; do not trust the Host's self-description. Mismatch:
-correct on this Host; do not accept completion. Then follow up at the user's
+correct on this Host; do not accept completion. Then follow up at the
 agreed cadence with `observe`/`capture`; compare outcomes, blockers, and
 repeated testing/QA against prior checks; relay one new pacing note when
-warranted, marking stall uncertainty; escalate only unrecoverable human
-decisions. Do not dispatch workers,
+warranted; escalate only unrecoverable human decisions. Do not dispatch workers,
 copy a mission ledger, maintain a heartbeat, create a Routine, touch inner
 sessions, or `stop` the Host before close-out. Changing the outer Agent does not
 stop the Host.

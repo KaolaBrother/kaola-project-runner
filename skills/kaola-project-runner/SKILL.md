@@ -56,13 +56,13 @@ consuming project's run records, not in this Skill. The count is a hard cap on
 live worker processes, ACP holders included; a finished seat counts until its
 `stop` receipt. Granted open-ended concurrency is its own cap. Do not invent a
 quota system: the cap is that count, enforced from `status`/`stop` receipts.
-The [worker-profiles.md](references/worker-profiles.md) five-preset pool is
-default-authorized - no seat grant or priority - and sits outside that count
-and cap; every other runtime/preset still needs explicit authorization.
+The five-preset pool in
+[worker-profiles.md](references/worker-profiles.md) is default-authorized
+and sits outside that count and cap.
 
 Follow human instructions, project contracts, and evidenced shared-resource
-constraints. A serial build, GPU, port, or cache constraint must not block
-unrelated parallel work. Do not invent global serialization or an extra
+constraints. No serial build, GPU, port, or cache constraint blocks
+unrelated parallel work; invent no global serialization or extra
 resource-management subsystem.
 
 ### Supported workers
@@ -93,10 +93,10 @@ stop never reaches the Host, and the Host's stop sweeps only recorded inner
 sessions. A Host (any platform with a `host_skill_entry`) is event-driven: no
 Routine, cron, or sleep loop. Its first prompt names its
 `platform`/`session`/`repo`; `KAOLA_ACP_DISPATCHER` carries them to its shell.
-Beat mechanics - binding, non-blocking dispatch, the reading anchor, ending the
+Beat mechanics - binding, non-blocking dispatch, ending the
 turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
 Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
-which starts one Host of any platform that then loads this Skill. `--platform grok` is the
+which starts one Host of any platform that loads this Skill. `--platform grok` is the
 Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
 Routine to run this Skill.
 
@@ -105,17 +105,17 @@ Routine to run this Skill.
 This Skill loads on its own. Load one selected worker Skill only at dispatch, a
 reference only when the current step needs it, and never read script source or
 whole files into context: receipts, hashes, counts and bounded excerpts are the
-evidence. Ordinary `observe`, `status` and `capture --lines` receipts are bounded,
-keeping the newest part and naming what a `truncated` block
-dropped; `capture --full` is the only unbounded request.
+evidence. Ordinary `observe`, `status` and `capture --lines` receipts stay bounded
+(`truncated` names dropped fields); `capture --full` is the only unbounded
+request.
 Quota packages (read-only catalog; never changes the count cap): [quota-packages.md](references/quota-packages.md).
 
 ### Defaults
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | None until named beyond that pool; all ten platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
-| Count | Named CLI without a count: one; it bounds live processes. |
+| Allowed CLIs | An authorized project task dispatches the [worker-profiles.md](references/worker-profiles.md) five-preset pool - no individual allowlist, count, or priority; every other runtime/preset stays None until explicitly named. With no authorized task: ask, start no worker, register no heartbeat. |
+| Count | Named CLI without a count: one; it bounds live processes. Pool presets need no count and sit outside it. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices. |
 | Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets. Use one only when the human or authorization names it; ask if unclear. No automatic model, tier, or transport switch; only a seat the user explicitly authorized may switch its model/preset, within its own runtime. Choosing a worker or preset: [worker-profiles.md](references/worker-profiles.md). |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
@@ -124,9 +124,9 @@ Quota packages (read-only catalog; never changes the count cap): [quota-packages
 | Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
 
-Bind the consuming project's canonical project root with
-`export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<abs root>`, then omit `--repo`: the
-Runner fills it and refuses a drifted root before anything starts. Ask each worker to invoke its installed
+Bind the consuming project's canonical project root once at setup with
+`export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<abs root>`, then omit `--repo`; the
+Runner fills it and refuses a drifted root at start. Ask each worker to invoke its installed
 workflow-next. Without that binding, linked-worktree starts and existing-run
 recovery are Agent decisions, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
@@ -251,7 +251,7 @@ under a new standard name, never a prompt chained into a finished seat;
 
 Call the matching platform Runner Skill by its installed directory. Use Runner
 default start (including measured bypass). Do not pass a permission-mode
-override unless the human wrote one. One dispatch prompt per ready session. Resume as under
+override unless the human wrote one. One dispatch prompt per ready session. Resume per
 "Ending a run".
 
 The worker is not the orchestrator. Its prompt should name the authorized
@@ -272,8 +272,8 @@ negatives: [references/issue-dispatch.md](references/issue-dispatch.md).
 
 ## Report
 
-Use the user's report format. Otherwise one compact current-work table plus
-outstanding close-out items is sufficient. Include task/progress, meaningful
+Use the user's report format; otherwise one compact current-work table plus
+outstanding close-out items. Include task/progress, meaningful
 model mismatches, blockers, and next action. Per platform, report `live N /
 authorized M` and the seats stopped this beat; N > M with no stop that beat
 violates the cap. Do not keep stale stopped
