@@ -400,7 +400,17 @@ def test_holder_lost_stop_force_sweeps_recorded_inner() -> None:
             except ValueError:
                 pass
         if isinstance(outer_agent_pgid, int) and outer_agent_pgid > 0:
-            check(outer_agent_pgid in swept, f"orphaned outer adapter group swept too ({swept})")
+            # Issue #191: a live adapter leader is swept by its recorded start
+            # time; one that already exited on stdin EOF left no group to sweep.
+            members = [line.split()[0] for line in subprocess.run(
+                ["ps", "-axo", "pid=,pgid=,state="], capture_output=True, text=True,
+            ).stdout.splitlines() if len(line.split()) == 3
+                and line.split()[1] == str(outer_agent_pgid)
+                and not line.split()[2].upper().startswith("Z")]
+            check(outer_agent_pgid in swept or not members,
+                  f"orphaned outer adapter group swept too ({swept}, live {members})")
+            check(stopped.get("pgid_identity_unverified") is None,
+                  f"the recorded adapter group is never unverified ({stopped})")
         residuals = stopped.get("residual_pids")
         if residuals is not None:
             check(residuals == [], f"holder-lost sweep leaves no residual pids ({residuals})")

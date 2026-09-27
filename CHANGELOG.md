@@ -6,6 +6,18 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **`stop --force` never sweeps a reused agent process group (Issue #191).** Before signalling a
+  dead or unreachable holder's recorded `agent_pgid`, force stop (and the validate sweep) now
+  requires the group's live leader to be the recorded agent, matched exactly on its recorded
+  `agent_started` second. A record without `agent_started` (from before #132) or a group whose
+  leader is gone proves nothing, because macOS reuses a pgid once its group empties: its live
+  members are not signalled, only this seat's `record.json` is retired, and the receipt reports
+  `pgid_identity: "unverified"` with `pgid_identity_unverified` (`code: pgid-identity-unverified`,
+  `live_members`, `signalled: false`). The reused-holder-PID branch retires only the record it
+  read. Normal stop through a live holder and verified child-group sweeps are unchanged.
+  Operator-diff fact for the next release assessment: only `scripts/kaola-acp.py` and
+  `scripts/kaola-acp-sweep.py` change; the holder, bridge, quota catalog, adapters, and platforms
+  are untouched.
 - **Project Runner and Kaola-Delegator scheduling wording trimmed (Issue #189).** A clear task
   goes directly to a suitable authorized worker; split or parallelize only when the work needs it,
   and the authorized count is a ceiling, not a target to fill (replaces "dispatch every suitable

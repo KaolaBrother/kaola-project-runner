@@ -130,7 +130,18 @@ def recorded_agent_groups(entry: dict[str, Any]) -> list[int]:
     if not record_dir:
         return []
     directory = Path(record_dir)
-    return KAOLA_ACP.recorded_groups(KAOLA_ACP.read_record(directory) or {}, directory)
+    # Issue #191: signalled, so only groups whose identity is proven.
+    return KAOLA_ACP.recorded_groups(KAOLA_ACP.read_record(directory) or {}, directory,
+                                     verified_only=True)
+
+
+def unverified_agent_group(entry: dict[str, Any], groups: list[int]) -> dict[str, Any] | None:
+    """Issue #191: an agent pgid with live members whose identity no leader
+    proves; reported, never signalled."""
+    record_dir = entry.get("record_dir")
+    if not record_dir:
+        return None
+    return KAOLA_ACP.unverified_agent_group(KAOLA_ACP.read_record(Path(record_dir)) or {}, groups)
 
 
 def kill_group_members(groups: list[int]) -> list[int]:
@@ -189,6 +200,7 @@ def sweep(root: Path) -> dict[str, Any]:
     # verification and escalation ``stop --force`` receipts carry — so a
     # wedged or socketless stop cannot leave an agent group member behind.
     groups = sorted({group for entry in holders for group in recorded_agent_groups(entry)})
+    unverified = [fact for entry in holders if (fact := unverified_agent_group(entry, groups))]
     final_killed = kill_group_members(groups)
     leftover: list[int] = []
     if groups:
@@ -207,6 +219,7 @@ def sweep(root: Path) -> dict[str, Any]:
         "results": results,
         "swept_groups": groups,
         "killed_group_members": final_killed,
+        "pgid_identity_unverified": unverified,
         "residual_pids": sorted(residual),
     }
 
