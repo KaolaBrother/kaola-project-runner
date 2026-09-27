@@ -49,8 +49,8 @@ usage() {
     '  opencode     $HOME/.config/opencode/skills' \
     '  kimi-cli     $HOME/.agents/skills AND ${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills' \
     '               (Issue #159: Kimi Code scans both user roots; ~/.agents/skills' \
-    '               is the cross-tool root shared with dsh, the kimi-specific root' \
-    '               follows $KIMI_CODE_HOME)' \
+    '               is the cross-tool root shared with dsh and droid, the' \
+    '               kimi-specific root follows $KIMI_CODE_HOME)' \
     '  dsh          $HOME/.agents/skills (shared with kimi-cli and droid)' \
     'Each root above was measured as a Skill root of that CLI (Issue #119,' \
     'host-entry-matrix.md in the Project Runner Skill).' \
@@ -99,7 +99,7 @@ usage() {
     'one shared copy and keeps every referrer. --uninstall withdraws only this' \
     'runtime'"'"'s reference and removes a Skill only when no referrer is left (kept).' \
     'Issue #159: --runtime kimi-cli installs into BOTH user roots, each with its' \
-    'own receipt set: $HOME/.agents/skills (shared with dsh) and' \
+    'own receipt set: $HOME/.agents/skills (shared with dsh and droid) and' \
     '${KIMI_CODE_HOME:-$HOME/.kimi-code}/skills. A kimi-cli --uninstall withdraws' \
     'the kimi-cli reference from every root it owns: the shared root keeps its' \
     'Skills while dsh still refers to them, and the kimi-specific root removes' \
