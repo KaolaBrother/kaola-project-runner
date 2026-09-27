@@ -285,7 +285,7 @@ def test_start_send_cancel_stop_through_generated_skill() -> None:
     sandbox = Sandbox("turns")
     try:
         session = sandbox.session()
-        receipt = sandbox.cli(SKILL_CLI, "start", "--tier", "upgrade", "--mode", "bypassPermissions", session=session)
+        receipt = sandbox.cli(SKILL_CLI, "start", "--tier", "fable", "--mode", "bypassPermissions", session=session)
         check(receipt.get("error") is None and receipt["state"] == "ready", f"start reaches ready ({receipt.get('error')})")
         check(receipt["bridge"]["layout"] == "skill", "start resolved the bridge inside the generated Skill")
         applied = receipt["config_application"]
@@ -513,7 +513,7 @@ def test_continue_and_resume_land_in_the_same_native_session() -> None:
         sandbox.cli(SKILL_CLI, "stop", session=cont)
 
         res = sandbox.session()
-        receipt = sandbox.cli(SKILL_CLI, "start", "--resume", native, "--tier", "upgrade", session=res)
+        receipt = sandbox.cli(SKILL_CLI, "start", "--resume", native, "--tier", "fable", session=res)
         check(receipt.get("error") is None and receipt["acp_session_id"] == native, "start --resume binds the named native session")
         sandbox.cli(SKILL_CLI, "send", "--text", "three", session=res)
         argv = sandbox.records()[2]["argv"]

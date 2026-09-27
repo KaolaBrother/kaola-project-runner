@@ -46,15 +46,10 @@ REQUIRED = {
     "continue_syntax", "resume_syntax", "preflight_summary", "launch_summary",
     "recurring_execution", "recurring_summary", "quit_text", "default_model_name",
     "default_model_id", "default_model_parameters", "default_model_effort",
-    "upgrade_model_name", "upgrade_model_id", "upgrade_model_parameters",
-    "upgrade_model_effort",
-    # Issue #111: the optional third preset slot. Its CLI token is the
-    # platform's own word (`alternative`, `fable`), so the label travels in the
-    # manifest instead of being hardcoded. All five keys are present in every
-    # manifest because parse_manifest rejects both missing and extra keys; an
-    # empty `alt_tier_label` means this platform declares no third tier.
-    "alt_tier_label", "alt_model_name", "alt_model_id", "alt_model_parameters",
-    "alt_model_effort",
+    # Issue #188: only `default` is common. `named_tiers` lists this runtime's
+    # own preset words (comma-separated, empty for none); each word W carries
+    # `<w>_model_{name,id,parameters,effort}` with `w` = W with `-` as `_`.
+    "named_tiers",
     "fast_support", "fast_summary",
     "acp_command",
     "acp_client_capabilities", "acp_quirks", "acp_verified_versions", "acp_env_allowlist",
@@ -75,18 +70,26 @@ REQUIRED = {
 }
 
 # Issue #140: optional per-tier ACP spawn commands (``acp_command_default``,
-# ``acp_command_upgrade``, ``acp_command_alt``) for a preset the agent's ACP
-# model option does not offer; absent keys keep the base ``acp_command``.
-OPTIONAL = {"acp_command_default", "acp_command_upgrade", "acp_command_alt",
+# ``acp_command_<w>`` for a named tier) for a preset the agent's ACP model
+# option does not offer; absent keys keep the base ``acp_command``.
+OPTIONAL = {"acp_command_default",
             # Issue #146: seconds the holder waits for the `session/new`
             # response; absent keeps the shared 15 s. A measured per-platform
             # latency fact, never a gate.
             "acp_session_new_timeout"}
 
 
-ALT_TIER_KEYS = (
-    "alt_model_name", "alt_model_id", "alt_model_parameters", "alt_model_effort",
-)
+TIER_FIELDS = ("name", "id", "parameters", "effort")
+
+
+def named_tiers(manifest: dict[str, str]) -> list[str]:
+    """Issue #188: this runtime's own preset words, in manifest order."""
+    return [word.strip() for word in manifest["named_tiers"].split(",") if word.strip()]
+
+
+def tier_keys(word: str) -> set[str]:
+    prefix = word.replace("-", "_")
+    return {f"{prefix}_model_{field}" for field in TIER_FIELDS} | {f"acp_command_{prefix}"}
 
 
 def parse_manifest(path: Path) -> dict[str, str]:
@@ -112,7 +115,14 @@ def parse_manifest(path: Path) -> dict[str, str]:
             raise ValueError(f"{path}:{number}: values must be strings")
         result[key] = parsed
     missing = REQUIRED - result.keys()
-    extra = result.keys() - REQUIRED - OPTIONAL
+    words = named_tiers(result) if "named_tiers" in result else []
+    for word in words:
+        if not re.fullmatch(r"[a-z][a-z0-9-]*", word) or word == "default":
+            raise ValueError(f"{path}: invalid named tier {word!r}")
+    if len(set(words)) != len(words):
+        raise ValueError(f"{path}: duplicate named tier")
+    declared = set().union(*(tier_keys(word) for word in words)) if words else set()
+    extra = result.keys() - REQUIRED - OPTIONAL - declared
     if missing or extra:
         raise ValueError(f"{path}: missing={sorted(missing)} extra={sorted(extra)}")
     if path.stem != result["id"]:
@@ -132,7 +142,8 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: empty steering_summary")
     if not result["acp_command"]:
         raise ValueError(f"{path}: empty acp_command")
-    for key in OPTIONAL & result.keys():
+    commands = {key for key in declared if key.startswith("acp_command_")}
+    for key in (OPTIONAL | commands) & result.keys():
         if not result[key]:
             raise ValueError(f"{path}: empty {key}")
     if "acp_session_new_timeout" in result:
@@ -144,23 +155,14 @@ def parse_manifest(path: Path) -> dict[str, str]:
         # threading.TIMEOUT_MAX, which an unbounded wait would overflow).
         if not 0 < seconds <= 600:
             raise ValueError(f"{path}: acp_session_new_timeout must be seconds in (0, 600]")
-    if "acp_command_alt" in result and not result["alt_tier_label"]:
-        raise ValueError(f"{path}: acp_command_alt needs alt_tier_label")
-    # Issue #111: the third preset slot is all-or-nothing. A label without a
-    # model would advertise a tier that resolves to nothing, and a model
-    # without a label would be unreachable from `--tier`.
-    alt_label = result["alt_tier_label"]
-    alt_declared = [key for key in ALT_TIER_KEYS if result[key]]
-    if alt_label:
-        if not re.fullmatch(r"[a-z][a-z0-9-]*", alt_label):
-            raise ValueError(f"{path}: invalid alt_tier_label {alt_label!r}")
-        if alt_label in {"default", "upgrade"}:
-            raise ValueError(f"{path}: alt_tier_label must not shadow {alt_label}")
-        for key in ("alt_model_name", "alt_model_id"):
-            if not result[key]:
-                raise ValueError(f"{path}: alt_tier_label needs {key}")
-    elif alt_declared:
-        raise ValueError(f"{path}: {sorted(alt_declared)} need alt_tier_label")
+    # A named tier resolves to a declared model: name and id are required,
+    # parameters and effort are present (possibly empty).
+    for word in words:
+        prefix = word.replace("-", "_")
+        for field in TIER_FIELDS:
+            key = f"{prefix}_model_{field}"
+            if key not in result or (field in ("name", "id") and not result[key]):
+                raise ValueError(f"{path}: named tier {word} needs {key}")
     try:
         quota_api().validate_manifest(result)
     except ValueError as exc:
@@ -254,38 +256,6 @@ def steering_block(manifest: dict[str, str]) -> str:
     return template.format(runtime=manifest["runtime_name"]).rstrip()
 
 
-def tier_block(manifest: dict[str, str]) -> str:
-    """Issue #111: the third preset renders only where the platform declares
-    one. The engine has no conditional syntax, so an absent tier is the empty
-    string computed here rather than a token the template could leave behind.
-    SKILL.md is the expensive surface (cursor-cli ships 152 B under
-    `worker_skill_bytes`), so it gets one sentence and references/platform.md
-    carries the full preset line."""
-    label = manifest["alt_tier_label"]
-    if not label:
-        return ""
-    return (
-        f"A third preset, `--tier {label}` (**{manifest['alt_model_name']}**: "
-        f"`{manifest['alt_model_id']}`), needs the same explicit user request "
-        f"as `upgrade`.\n\n"
-    )
-
-
-def alt_tier_line(manifest: dict[str, str]) -> str:
-    """The references/platform.md bullet for the third preset, or nothing.
-
-    The trailing newline belongs to the block: the template holds the token at
-    the start of the following line, so an undeclared tier leaves no blank."""
-    label = manifest["alt_tier_label"]
-    if not label:
-        return ""
-    return (
-        f"- Runner {label} preset (`--tier {label}`): "
-        f"**{manifest['alt_model_name']}** — `{manifest['alt_model_id']}` "
-        f"with `{manifest['alt_model_parameters']}`\n"
-    )
-
-
 def continue_fact(manifest: dict[str, str]) -> str:
     """Issue #157 (W-A2): `--continue` is the holder's latest `session/list`
     entry; `continue_syntax` is a PTY-era field with no runtime consumer, kept
@@ -303,40 +273,37 @@ def config_ids(manifest: dict[str, str]) -> str:
     return "/".join(f"`{value}`" for value in declared) or "none declared"
 
 
-def tiers_equal(manifest: dict[str, str]) -> bool:
-    return all(manifest[f"default_model_{key}"] == manifest[f"upgrade_model_{key}"]
-               for key in ("name", "id", "parameters"))
-
-
 def preset(manifest: dict[str, str], tier: str) -> str:
     """One SKILL.md preset as **name**: `id`, parameters; an undeclared id is omitted (T14)."""
-    model_id = manifest[f"{tier}_model_id"]
+    prefix = tier.replace("-", "_")
+    model_id = manifest[f"{prefix}_model_id"]
     shown = f"`{model_id}`, " if model_id else ""
-    return f"**{manifest[f'{tier}_model_name']}**: {shown}{manifest[f'{tier}_model_parameters']}"
+    return f"**{manifest[f'{prefix}_model_name']}**: {shown}{manifest[f'{prefix}_model_parameters']}"
 
 
 def presets(manifest: dict[str, str]) -> str:
-    """Issue #157 (T15): identical default/upgrade presets render once."""
-    default = f"`--tier default` ({preset(manifest, 'default')})"
-    if tiers_equal(manifest):
-        return f"{default}; `--tier upgrade` equals default here"
-    return f"{default} and `--tier upgrade` ({preset(manifest, 'upgrade')})"
+    """Issue #188: `default` plus this runtime's own named presets, if any."""
+    items = [f"`--tier {tier}` ({preset(manifest, tier)})"
+             for tier in ["default", *named_tiers(manifest)]]
+    if len(items) == 1:
+        return f"{items[0]} only"
+    return ", ".join(items[:-1]) + f"{',' if len(items) > 2 else ''} and {items[-1]}"
 
 
 def preset_line(manifest: dict[str, str], tier: str) -> str:
     """One references/platform.md preset bullet; an undeclared model id is omitted (T14)."""
-    model_id = manifest[f"{tier}_model_id"]
-    parameters = f"`{manifest[f'{tier}_model_parameters']}`"
+    prefix = tier.replace("-", "_")
+    model_id = manifest[f"{prefix}_model_id"]
+    parameters = f"`{manifest[f'{prefix}_model_parameters']}`"
     detail = f"`{model_id}` with {parameters}" if model_id else parameters
     return (f"- Runner {tier} preset (`--tier {tier}`): "
-            f"**{manifest[f'{tier}_model_name']}** — {detail}")
+            f"**{manifest[f'{prefix}_model_name']}** — {detail}")
 
 
 def preset_lines(manifest: dict[str, str]) -> str:
-    """The references/platform.md default and upgrade bullets (T14, T15)."""
-    upgrade = ("- Runner upgrade preset (`--tier upgrade`): equals default here"
-               if tiers_equal(manifest) else preset_line(manifest, "upgrade"))
-    return preset_line(manifest, "default") + "\n" + upgrade
+    """The references/platform.md preset bullets: default, then each named tier."""
+    return "\n".join(preset_line(manifest, tier)
+                     for tier in ["default", *named_tiers(manifest)])
 
 
 def variables(manifest: dict[str, str]) -> dict[str, str]:
@@ -349,8 +316,6 @@ def variables(manifest: dict[str, str]) -> dict[str, str]:
     values["STEER_ENTRY"] = (f" (entry `{manifest['acp_steer_method']}`)"
                              if manifest["acp_steer_method"] else "")
     values["STEERING_BLOCK"] = steering_block(manifest)
-    values["TIER_BLOCK"] = tier_block(manifest)
-    values["ALT_TIER_LINE"] = alt_tier_line(manifest)
     return values
 
 

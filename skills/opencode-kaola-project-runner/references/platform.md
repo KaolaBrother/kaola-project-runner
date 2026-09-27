@@ -6,7 +6,6 @@
 - Standalone session prefix: `opencode-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
 - Runner default preset (`--tier default`): **CLI native opening model** — `no Runner model or effort override`
-- Runner upgrade preset (`--tier upgrade`): equals default here
 - Fast support: no native Fast toggle; speed-named catalog models such as zhipuai-coding-plan/glm-5.3-flash are explicit model choices, not a Fast switch
 
 ## Preflight

@@ -1811,18 +1811,17 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
     return receipt
 
 
-def tier_prefix(manifest: dict[str, str], tier: str) -> str:
-    """The manifest key prefix a `--tier` value selects.
+def declared_tiers(manifest: dict[str, str]) -> list[str]:
+    """Issue #188: `default` plus this runtime's own named preset words."""
+    words = [word.strip() for word in (manifest.get("named_tiers") or "").split(",")]
+    return ["default"] + [word for word in words if word]
 
-    Issue #111: `default` and `upgrade` are universal; the optional third slot
-    answers to the platform's own word, carried by `alt_tier_label`.
-    """
-    if tier == "upgrade":
-        return "upgrade"
-    label = (manifest.get("alt_tier_label") or "").strip()
-    if label and tier == label:
-        return "alt"
-    return "default"
+
+def tier_prefix(manifest: dict[str, str], tier: str) -> str:
+    """The manifest key prefix a declared `--tier` value selects (`-` as `_`).
+
+    Callers refuse an undeclared tier first (``tier_declared``)."""
+    return tier.replace("-", "_") if tier in declared_tiers(manifest) else "default"
 
 
 def tier_agent_command(args: argparse.Namespace) -> str:
@@ -1859,17 +1858,14 @@ def argv_model(command: str) -> str:
 
 def tier_declared(manifest: dict[str, str], tier: str | None) -> bool:
     """Whether this platform declares the requested tier at all."""
-    if not tier:
-        return True
-    label = (manifest.get("alt_tier_label") or "").strip()
-    return tier in {"default", "upgrade"} or (bool(label) and tier == label)
+    return not tier or tier in declared_tiers(manifest)
 
 
 def tier_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     """Issue #111 typed refusal, in the Issue #105 shape: a tier this platform
     does not declare is named and rejected, never resolved to `default`."""
-    label = (args.manifest.get("alt_tier_label") or "").strip()
-    available = f"default, upgrade, or {label}" if label else "default or upgrade"
+    tiers = declared_tiers(args.manifest)
+    available = ", ".join(tiers[:-1]) + f", or {tiers[-1]}" if len(tiers) > 1 else "default only"
     receipt = base_receipt(args, repo)
     receipt.pop("git", None)
     receipt.update({
@@ -1881,7 +1877,7 @@ def tier_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             f"this platform's presets are {available}."
         ),
         "requested_tier": args.tier,
-        "available_tiers": ["default", "upgrade"] + ([label] if label else []),
+        "available_tiers": tiers,
         "mutation_performed": False,
         "mutation_status": "not_started",
     })
@@ -1923,7 +1919,7 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         effort = ""
     else:
         prefix = tier_prefix(manifest, tier)
-        source = f"runner-{tier if prefix == 'alt' else prefix}"
+        source = f"runner-{tier}"
         requested = manifest.get(f"{prefix}_model_name") or ""
         candidate = manifest.get(f"{prefix}_model_id") or ""
         effort = args.effort or manifest.get(f"{prefix}_model_effort") or ""
@@ -3897,6 +3893,12 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
             "mutation_status": "not_started",
         })
         return receipt
+    # Issue #188: a recorded tier this manifest no longer declares (a retired
+    # `upgrade`) is refused before the stop, never resolved to `default`.
+    if not tier_declared(args.manifest, args.tier):
+        refused = tier_refusal(args, repo)
+        refused["start_selection"] = selection
+        return refused
     refused, decision_facts = pre_spawn_refusal(args, repo)
     if refused is not None:
         refused["action"] = "drain-restart"
@@ -4055,9 +4057,9 @@ def main() -> int:
     parser.add_argument("--inline", action="store_true")
     parser.add_argument("--model")
     parser.add_argument("--effort")
-    # Issue #111: validated against the manifest after it loads, so an
-    # undeclared third tier answers a typed refusal instead of argparse exit 2.
-    parser.add_argument("--tier")
+    # Issue #111/#188: validated against the manifest's declared presets after
+    # it loads, so an undeclared name answers a typed refusal, not exit 2.
+    parser.add_argument("--tier", metavar="default|PLATFORM_TIER")
     # Issue #181: None means "not passed", so explicit detection is None-ness.
     # Every consumer that relied on the old "off" default treats None as off.
     parser.add_argument("--fast", choices=("on", "off"))

@@ -239,20 +239,20 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         # Cursor's user-selected Runner presets are intentionally Cursor Grok /
         # Claude Opus models. Remove only those exact declared model facts
         # before checking for accidental adapter/protocol leakage.
-        text = text.replace("grok 4.7 extra high", "cursor-default-model")
         text = text.replace("grok-4.7-xhigh", "cursor-default-model-id")
-        text = text.replace("claude opus 5.5 high", "cursor-upgrade-model")
-        text = text.replace("claude-opus-5-5-high", "cursor-upgrade-model-id")
+        text = text.replace("claude-opus-5-5-high", "cursor-opus-model-id")
+        text = text.replace("claude opus 5.5", "cursor-opus-model")
+        text = text.replace("grok 4.7", "cursor-default-model")
         # Cursor's ACP option values are the adapter's own bracketed model
         # descriptors; they are declared manifest facts, not Grok adapter
         # leakage. Remove only the exact advertised value strings.
         text = text.replace("grok-4.7[effort=high,fast=true]", "cursor-acp-model-value")
         text = text.replace("claude-fable-5-1[thinking=true,context=300k,effort=high]", "cursor-acp-model-value")
     if package_id == "devin-kaola-project-runner":
-        # Devin's declared upgrade and fable preset IDs are Fusion combos that
+        # Devin's declared opus-fusion and fable preset IDs are Fusion combos that
         # literally name the Claude sidecar (Issue #144); the quirks also name
         # the retired pure fable ID. Remove only those exact declared facts.
-        text = text.replace("fusion-claude-opus-5-5-high-sidekick-swe-2-medium", "devin-upgrade-model-id")
+        text = text.replace("fusion-claude-opus-5-5-high-sidekick-swe-2-medium", "devin-opus-fusion-model-id")
         text = text.replace("fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "devin-fable-model-id")
         text = text.replace("claude-fable-5-1-high", "devin-retired-fable-model-id")
     if package_id == "droid-kaola-project-runner":
@@ -260,8 +260,11 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         # models, and its Runner core preset selects kimi-k3 (Issue #125). That is a
         # Factory catalog fact, not Kimi CLI adapter leakage -- remove only the
         # exact declared preset strings, so a real kimi-cli fact would still fail.
-        text = text.replace("kimi k3 max", "droid-core-model")
+        # Issue #188: the opus preset's claude-opus-5-5 is likewise a Factory
+        # catalog id, not Claude Code adapter leakage.
+        text = text.replace("kimi k3", "droid-core-model")
         text = text.replace("kimi-k3", "droid-core-model-id")
+        text = text.replace("claude-opus-5-5", "droid-opus-model-id")
     if package_id == "dsh-kaola-project-runner":
         # Issue #111: dsh's model catalog is grouped by provider route, and one
         # of its routes is literally named `opencode-go`. The default preset

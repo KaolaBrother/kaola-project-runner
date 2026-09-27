@@ -35,10 +35,11 @@ chooses to invoke it.
 ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 holder 上的投影，不得成为第二条 agent stdio 客户端，也不得把原始 `session/update` 塞进 Skill 热路径。permit lock（#25）、`list`/`view`（#26）与本机 `follow`（#27）已实现。登录是 Runner 之外的人类原生终端动作；PTY 已退役（#130），没有原生 TUI 接管路径。
 
 Main-model choice is a per-run transport fact. A current-request `--model` wins; otherwise
-`--tier default|upgrade` selects the manifest's declared preset (`default` when unset), resolved
-against the current catalog; a platform may declare one further preset under its own word
-(`alt_tier_label`, e.g. `--tier alternative`, `--tier fable`, `--tier sonnet`, `--tier luna`), and a tier the platform does not
-declare is refused by name rather than resolved to `default`. `--effort` applies only to the model selected in the same request, and
+`--tier NAME` selects the manifest's declared preset (`default` when unset), resolved against the
+current catalog. Only `default` is common; other names are the platform's own words listed in
+`named_tiers` (e.g. `--tier sonnet`, `--tier opus-fusion`, `--tier kimi-k2-8`) with no universal
+ranking, and a tier the platform does not declare (including the retired `upgrade`) is refused by
+name rather than resolved to `default`. `--effort` applies only to the model selected in the same request, and
 `--fast on` is an explicit per-run opt-in applied through an ACP config option (the Claude
 bridge turns its `fast` option into a per-turn `--settings '{"fastMode": ...}'`) —
 reported `unsupported` where none exists; where a mechanism exists the native CLI determines

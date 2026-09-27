@@ -45,12 +45,10 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**SWE-2 Max**: `swe-2-max`, effort=max (encoded in model ID)) and `--tier upgrade` (**Fusion High (Opus 5.5 High + SWE-2 Medium)**: `fusion-claude-opus-5-5-high-sidekick-swe-2-medium`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
-not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
-or upgraded model or describes this work as complex; never infer the upgrade from code size,
-failures, elapsed time, or your own complexity assessment.
-
-A third preset, `--tier fable` (**Fusion High (Fable 5.1 High + SWE-2 Medium)**: `fusion-claude-fable-5-1-high-sidekick-swe-2-medium`), needs the same explicit user request as `upgrade`.
+presets — `--tier default` (**SWE-2 Max**: `swe-2-max`, effort=max (encoded in model ID)), `--tier opus-fusion` (**Opus Fusion (Opus 5.5 High + SWE-2 Medium)**: `fusion-claude-opus-5-5-high-sidekick-swe-2-medium`, effort=high (encoded in model ID)), and `--tier fable` (**Fable Fusion (Fable 5.1 High + SWE-2 Medium)**: `fusion-claude-fable-5-1-high-sidekick-swe-2-medium`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
+not explicitly choose otherwise. Pass another `--tier` only when the user names that preset; never
+infer one from code size, failures, elapsed time, or your own assessment. An undeclared name is
+refused (`tier-not-declared`), never resolved to `default`.
 
 An explicit user model choice always wins: pass it with `--model ID`, adding `--effort LEVEL` only
 when the user also named an effort. A bare explicit `--model` leaves the runtime's native effort

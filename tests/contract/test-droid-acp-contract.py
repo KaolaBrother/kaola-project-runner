@@ -263,7 +263,7 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
 
     def test_core_preset_effort_is_applied_exactly_once(self) -> None:
         """The core preset carries effort max: exactly that value, once.
-        The default and upgrade presets carry none (Issue #125)."""
+        The default preset carries none (Issue #125)."""
         self.start("--tier", "core")
         self.assertEqual(
             [value for config_id, value in self.config_events()
@@ -388,18 +388,14 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.assertEqual(receipt.get("actual_parameters"), {"effort": "max"})
         self.assertIs(receipt.get("model_verified"), True)
 
-    def test_upgrade_tier_is_auto_like_default(self) -> None:
-        """Issue #125: no stronger Droid tier is established, so upgrade
-        resolves to the Auto default and never to kimi-k3."""
-        receipt = self.start("--tier", "upgrade")
-        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
-        selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("source"), "runner-upgrade")
-        self.assertEqual(selection.get("resolved_model"), "auto")
-        self.assertEqual(
-            self.config_events(),
-            [("model", "auto"), ("autonomy_level", "auto-high")],
-        )
+    def test_retired_upgrade_tier_is_refused(self) -> None:
+        """Issue #188 retired `upgrade` (Issue #125 made it equal Auto): it is
+        refused by name and never resolves to the Auto default."""
+        receipt = self.start("--tier", "upgrade", check=False)
+        self.assertEqual(receipt.get("result"), "refused")
+        self.assertEqual(receipt.get("reason"), "tier-not-declared")
+        self.assertFalse(receipt.get("mutation_performed"))
+        self.assertEqual(self.config_events(), [])
 
     def test_deleted_alternative_tier_is_refused(self) -> None:
         """Issue #117 deleted the alternative tier. The fake catalog still
@@ -408,7 +404,7 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         receipt = self.start("--tier", "alternative", check=False)
         self.assertEqual(receipt.get("result"), "refused")
         self.assertEqual(receipt.get("reason"), "tier-not-declared")
-        self.assertEqual(receipt.get("available_tiers"), ["default", "upgrade", "core"])
+        self.assertEqual(receipt.get("available_tiers"), ["default", "opus", "core"])
         self.assertFalse(receipt.get("mutation_performed"))
         self.assertEqual(self.config_events(), [])
 
@@ -417,7 +413,7 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         receipt = self.start("--tier", "fable", check=False)
         self.assertEqual(receipt.get("result"), "refused")
         self.assertEqual(receipt.get("reason"), "tier-not-declared")
-        self.assertEqual(receipt.get("available_tiers"), ["default", "upgrade", "core"])
+        self.assertEqual(receipt.get("available_tiers"), ["default", "opus", "core"])
         self.assertFalse(receipt.get("mutation_performed"))
         self.assertEqual(self.config_events(), [])
 

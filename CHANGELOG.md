@@ -6,11 +6,15 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-- **Claude Code `--tier sonnet` and Codex `--tier luna` (Issue #188).** Two lower-cost
-  model-family worker tiers in the existing Issue #111 `alt_*` slot: Sonnet (`sonnet`) and GPT-6
-  Luna (`gpt-6-luna`), each with the preset parameter `effort=max`. `default`, `upgrade`, and Fast
-  are unchanged. Operator-diff fact for the next release assessment: `platforms/claude-code.yaml`,
-  `platforms/codex.yaml`, and their `scripts/adapters/` files change.
+- **Runtime-specific named tiers; `upgrade` retired (Issue #188).** Only `--tier default` is
+  common; each platform lists its own names in `named_tiers` (README table). Claude Code
+  `fable`/`sonnet`, Codex `astra`/`luna`, Cursor `opus`, Devin `opus-fusion`/`fable`, Droid new
+  `opus` (`claude-opus-5-5`, high) plus `core`, Kimi `kimi-k2-8` (was `alternative`); dsh, Grok,
+  OpenCode, ZCode are default only. `upgrade` and `alternative` have no alias: they, and a seat
+  record carrying them in `drain-restart`, are `tier-not-declared` refusals. Defaults, model IDs,
+  effort, Fast, and explicit `--model`/`--effort` precedence are unchanged; display names drop the
+  effort suffix, which is shown separately. Operator-diff fact for the next release assessment:
+  every `platforms/*.yaml` and `scripts/adapters/*.sh` changes.
 - **Grok Bot bridge back to the content stage.** `templates/grok-bot/accepted-revision.json`
   returns from `pinned` (v0.6.4, `00d3d21`) to `content`, because a pinned stage refuses any
   content change; the generated bridge now reads "Accepted revision: none yet" and is not

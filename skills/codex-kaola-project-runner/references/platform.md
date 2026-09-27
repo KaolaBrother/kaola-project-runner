@@ -5,8 +5,8 @@
 - Binary override: `CODEX_BIN`
 - Standalone session prefix: `codex-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
-- Runner default preset (`--tier default`): **GPT-6 Sol High** — `gpt-6-sol` with `effort=high`
-- Runner upgrade preset (`--tier upgrade`): **GPT-6 Astra High** — `gpt-6-astra` with `effort=high`
+- Runner default preset (`--tier default`): **GPT-6 Sol** — `gpt-6-sol` with `effort=high`
+- Runner astra preset (`--tier astra`): **GPT-6 Astra** — `gpt-6-astra` with `effort=high`
 - Runner luna preset (`--tier luna`): **GPT-6 Luna** — `gpt-6-luna` with `effort=max`
 - Fast support: Codex fast mode via ACP `fast-mode` configId (off/on); explicit off is applied, not assumed
 

@@ -45,26 +45,24 @@ receipt. `acp_model_map` is an optional `picker-id=acp-option-value;...`
 list mapping resolved catalog model IDs onto the ACP model value the agent advertises for the same
 model; an effort encoded in the picker ID suffix travels through the effort option and Fast
 through `acp_fast_values`-converted values, so semantics are never substituted — an unmapped ID
-is sent literally and a rejection is reported as a limitation. `acp_command_default`,
-`acp_command_upgrade`, and `acp_command_alt` are optional per-tier spawn commands (Issue #140; only
+is sent literally and a rejection is reported as a limitation. `acp_command_default`
+and `acp_command_<w>` (for a named tier) are optional per-tier spawn commands (Issue #140; only
 Devin declares them, as `devin acp --model <preset id>`): when the tier preset selects the model,
 `kaola-acp.py` spawns that command instead of `acp_command`, while `--command`,
 `KAOLA_ACP_COMMAND`, an explicit `--model`, or a preserved resume keep the base; an empty value, or
-`acp_command_alt` without `alt_tier_label`, is rejected. `acp_session_new_timeout` is an optional
+`acp_command_<w>` for an undeclared tier, is rejected. `acp_session_new_timeout` is an optional
 number of seconds in (0, 600] the holder waits for the `session/new` answer in `start` and the
 `preflight` probe (Issue #146; absent keeps 15 s; only Codex declares it, `60`, because live Codex
 answered after ~18 s). The client start window (20 s) and the probe bound (60 s) grow by the
 amount it exceeds 15 s, keeping the margins they had over the default wait; the holder reports
 no answer in time as `acp-session-timeout`. Model-selection fields are
 `default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`,
-`upgrade_model_name`/`upgrade_model_id`/`upgrade_model_parameters`/`upgrade_model_effort`,
-`alt_tier_label`/`alt_model_name`/`alt_model_id`/`alt_model_parameters`/`alt_model_effort`, and
-`fast_support`/`fast_summary`. The `alt_*` group is the optional third preset: `alt_tier_label`
-carries the platform's own word for the tier (`alternative`, `fable`, `core`, `sonnet`, `luna`) and an empty label means
-the platform declares no third tier, in which case the whole group must be empty and nothing
-about it is rendered. It reaches the generated Skill through the computed `TIER_BLOCK`
-(SKILL.md) and `ALT_TIER_LINE` (references/platform.md) blocks, never an unconditional
-template sentence. They render as `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY`
+`named_tiers`, and `fast_support`/`fast_summary` (Issue #188). Only `default` is common;
+`named_tiers` is the comma-separated list of the platform's own tier words (empty for none), and
+each word `W` carries `<w>_model_name`/`<w>_model_id`/`<w>_model_parameters`/`<w>_model_effort`
+with `w` = `W` with `-` as `_` (name and id required). The words are unordered names, not a
+ranking. They reach the generated Skill through the computed `PRESETS` (SKILL.md) and
+`PRESET_LINES` (references/platform.md) blocks. They render as `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY`
 template variables; `acp_login_requires_pty` only records whether login needs a native terminal —
 login is a human act outside the Runner. `login_summary` and `permission_summary` (Issue #157)
 are required prose keys rendered into the worker SKILL.md: the platform's own login fact, and the
@@ -140,8 +138,9 @@ Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `--permission-mode` values are `bypassPermissions|low|medium|high|manual`; ACP maps them to
 `auto-high|auto-low|auto-medium|auto-high|normal` through `acp_mode_config_id: autonomy_level`.
 ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reasoning_effort`, and
-`autonomy_level`. Droid's default and upgrade presets are Auto (`auto`); its third tier `--tier core` is Kimi K3 Max
-(`kimi-k3`, `reasoning_effort=max`), and it has no separate Fast toggle.
+`autonomy_level`. Droid's default preset is Auto (`auto`); `--tier opus` is Opus 5.5 (`claude-opus-5-5`,
+`reasoning_effort=high`) and `--tier core` is Kimi K3 (`kimi-k3`, `reasoning_effort=max`); it has no
+separate Fast toggle.
 
 `--runtime` selects a verified consuming-runtime destination: `codex` →
 `${CODEX_HOME:-$HOME/.codex}/skills`, `claude-code` → `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`,
@@ -281,7 +280,7 @@ The file keeps its historical name; it drives ACP only and starts no tmux sessio
 ```text
 scripts/kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] \
-  [--tier default|upgrade|PLATFORM_TIER] [--model ID --effort low|medium|high|xhigh|max] [--fast on|off]
+  [--tier default|PLATFORM_TIER] [--model ID --effort low|medium|high|xhigh|max] [--fast on|off]
 scripts/kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N]
@@ -577,9 +576,10 @@ project materialization evidence, and an adapter-specific summary. Missing Workf
 configuration health, or materialization does not block the CLI communication channel.
 
 Preflight also resolves the declared Runner default without starting a session. `start` gives an
-explicit user model/effort precedence; otherwise `--tier default|upgrade` selects the manifest preset
-(`default` when `--tier` is omitted). A platform may declare one further preset under its own word
-(`alt_tier_label`); requesting a tier the platform does not declare is the typed refusal
+explicit user model/effort precedence; otherwise `--tier NAME` selects the manifest preset
+(`default` when `--tier` is omitted; other names are the platform's own `named_tiers`, see the
+README table). Requesting a tier the platform does not declare, including the retired `upgrade`
+or a seat record's `upgrade` carried by `drain-restart` (refused before the stop), is the typed refusal
 `{"result": "refused", "reason": "tier-not-declared"}` at exit 1, naming `available_tiers`,
 never a silent fallback to `default`. A bare `--model` wins over the tier preset and does not inherit
 its effort; `--effort` only applies to the model selected in the same request. Model IDs that already
@@ -627,18 +627,16 @@ agent's own `session_meta.configOptions[].currentValue`. ACP `start` receipts ad
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
 
-Droid's default is Auto Model (`auto`) with no effort pin, and `--tier upgrade` is the same Auto
-preset because no stronger Droid tier is established. Its third tier, `--tier core`
-(`alt_tier_label: core`), is Kimi K3 Max (`kimi-k3` at `reasoning_effort=max`) — a separate tier
-below the default, not an upgrade. Both ids are first-class catalog values, so `acp_model_map`
-stays empty. `--tier alternative` stays the typed `tier-not-declared` refusal. Its native ACP mode option is
+Droid's default is Auto Model (`auto`) with no effort pin; `--tier opus` is Opus 5.5
+(`claude-opus-5-5` at `reasoning_effort=high`) and `--tier core` is Kimi K3 (`kimi-k3` at
+`reasoning_effort=max`). These ids are catalog values, so `acp_model_map` stays empty. `--tier alternative` stays the typed `tier-not-declared` refusal. Its native ACP mode option is
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
 
-Claude Code's third tier, `--tier sonnet`, is Sonnet (`sonnet`); Codex's, `--tier luna`, is GPT-6
-Luna (`gpt-6-luna`); both carry the preset parameter `effort=max` (Issue #188). They are
-lower-cost model-family worker tiers, not upgrades, applied as ordinary ACP config options; a
-native rejection is a `config_application` limitation, never a substitute.
+Claude Code's `--tier sonnet` is Sonnet (`sonnet`) and Codex's `--tier luna` is GPT-6 Luna
+(`gpt-6-luna`), both with the parameter `effort=max` (Issue #188): lower-cost worker choices, not
+upgrades, applied as ordinary ACP config options; a native rejection is a `config_application`
+limitation, never a substitute.
 
 ## Agent-directed transport results
 

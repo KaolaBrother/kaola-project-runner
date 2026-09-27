@@ -547,19 +547,30 @@ platform that acknowledges nothing, and `unknown` when it is undecided. See
 Installed Skills use their own `scripts/runtime-tmux.sh` with the same operations and no platform
 argument. Invoke it by absolute path; `--repo` identifies the project being worked on.
 
-Model selection uses `--tier default|upgrade` or an explicit `--model ID` with optional
-`--effort LEVEL`. Presets live in the [platform manifests](platforms/); Fast is off unless requested.
-Some platforms declare one further preset under their own word — `--tier alternative` on Kimi CLI,
-`--tier fable` on Devin, `--tier core` on Droid, `--tier sonnet` on Claude Code (`sonnet`, `effort=max`),
-`--tier luna` on Codex (`gpt-6-luna`, `effort=max`) — and asking a platform for a tier it does not
-declare is a typed refusal, not a quiet fallback to `default`.
+Model selection uses `--tier NAME` or an explicit `--model ID` with optional `--effort LEVEL`
+(an explicit model or effort wins over the preset). Only `default` is common to every platform and
+applies when `--tier` is omitted. Every other name is that platform's own model or purpose word, with
+no universal ranking, alias, or "upgrade" between them; effort is a separate parameter, so the `max`
+on Sonnet or Luna does not make either an upgrade. A name the platform does not declare (including
+the retired `upgrade`) is a typed `tier-not-declared` refusal, never a quiet fallback to `default`.
+Presets live in the [platform manifests](platforms/); Fast is off unless requested.
+
+| Platform | `default` | Other `--tier` names |
+|---|---|---|
+| Claude Code | Opus (`opus`), effort `high` | `fable`: Fable (`fable`), effort `high`; `sonnet`: Sonnet (`sonnet`), effort `max` |
+| Codex | GPT-6 Sol (`gpt-6-sol`), effort `high` | `astra`: GPT-6 Astra (`gpt-6-astra`), effort `high`; `luna`: GPT-6 Luna (`gpt-6-luna`), effort `max` |
+| Cursor CLI | Grok 4.7 (`grok-4.7-xhigh`), effort `xhigh` in the ID, Fast off | `opus`: Claude Opus 5.5 (`claude-opus-5-5-high`), effort `high` in the ID |
+| Devin | SWE-2 Max (`swe-2-max`), effort in the ID | `opus-fusion`: `fusion-claude-opus-5-5-high-sidekick-swe-2-medium`; `fable`: `fusion-claude-fable-5-1-high-sidekick-swe-2-medium` (effort in the ID) |
+| Droid | Auto (`auto`), no effort pin | `opus`: Opus 5.5 (`claude-opus-5-5`), `reasoning_effort` `high`; `core`: Kimi K3 (`kimi-k3`), `reasoning_effort` `max` |
+| dsh | DeepSeek V4.1 Flash (`opencode-go/deepseek-v4.1-flash`), no effort pin | default only |
+| Grok | Grok 4.7 (`grok-4.7`), effort `xhigh`, Fast off | default only |
+| Kimi CLI | Kimi K3 (`kimi-code/k3`), thinking `max` | `kimi-k2-8`: Kimi K2.8 (`kimi-code/kimi-for-coding`), thinking `max` |
+| OpenCode | CLI native opening model, no Runner override | default only |
+| ZCode | GLM 5.3 (`GLM-5.3`), thought `max` | default only |
+
+Devin applies each preset through its launch `--model` (Devin has no pure Opus 5.5 High, hence the
+fusion). Droid's `-fast` catalog IDs are explicit `--model` choices, not a separate Fast toggle.
 Resume with `start --resume NATIVE_SESSION_ID` or `start --continue` where the runtime supports it.
-Droid's default and upgrade are both Auto Model (`auto`, no effort pin); Kimi K3 Max (`kimi-k3` at
-`reasoning_effort=max`) is its third tier, `--tier core`, not an upgrade. Its `-fast` catalog IDs are explicit
-`--model` choices, not a separate Fast toggle.
-Devin's default is SWE-2 Max (`swe-2-max`); `--tier upgrade` is the Opus 5.5 High fusion
-(`fusion-claude-opus-5-5-high-sidekick-swe-2-medium`, as Devin has no pure Opus 5.5 High) and
-`--tier fable` is the Fable 5.1 High fusion (`fusion-claude-fable-5-1-high-sidekick-swe-2-medium`).
 
 **Permission defaults matter:** the default is per platform, not one guarantee across all ten.
 Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an advertised ACP skip-all option at start

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Issue #111: the live-verified model presets, and the optional third tier.
+"""Issue #111: the live-verified model presets; Issue #188: per-runtime named tiers.
 
 Every id asserted here was read from the live ACP catalog on 2026-09-21
 (``initialize`` -> ``session/new`` -> ``configOptions``, read-only), and the
@@ -13,10 +13,11 @@ Three separate things are pinned:
   feeds the ACP path through ``kaola-acp.py`` and ``scripts/adapters/*.sh``
   still carries the same preset facts (the retired PTY path used to read them,
   Issue #130), and nothing but this test makes the two agree;
-* the third preset slot, which is optional: it must resolve where declared and
-  be **absent** from the generated output of the five platforms that declare
-  none, while an undeclared tier is a typed refusal rather than a quiet
-  fallback to ``default``;
+* the named presets (Issue #188: only ``default`` is common; every other word
+  is the runtime's own, listed in ``named_tiers``): each resolves where
+  declared and is **absent** from the generated output of platforms that
+  declare none, while an undeclared tier is a typed refusal rather than a
+  quiet fallback to ``default``;
 * two tolerances that are load-bearing but invisible: ZCode's ``thought`` vs
   live ``thoughtLevel`` config id, and the equality of ``platforms/zcode.yaml``
   with the Issue #108 Host constants -- the issue requires one source of truth,
@@ -41,32 +42,37 @@ SCRIPTS = PROJECT / "scripts"
 PLATFORMS = PROJECT / "platforms"
 SKILLS = PROJECT / "skills"
 
-# The live catalog read recorded in Issue #111. `effort` is the Runner preset
+# The live catalog read recorded in Issue #111, with the Issue #188 tier words
+# and display names (effort is shown separately). `effort` is the Runner preset
 # effort, which is empty where no effort was verified for that exact model.
 LIVE_PRESETS = {
     "kimi-cli": {
-        "default": ("Kimi K3 Max", "kimi-code/k3", "max"),
-        "alt": ("alternative", "Kimi K2.8", "kimi-code/kimi-for-coding", "max"),
+        "default": ("Kimi K3", "kimi-code/k3", "max"),
+        "named": [("kimi-k2-8", "Kimi K2.8", "kimi-code/kimi-for-coding", "max")],
     },
     "droid": {
-        # Issue #125 (correcting #117): default is Auto; core (Kimi K3 Max) is
-        # the third tier, not the upgrade, and the alternative tier stays deleted.
+        # Issue #125 (correcting #117): default is Auto; the alternative tier
+        # stays deleted. Issue #188 adds opus beside the existing core.
         "default": ("Auto Model", "auto", ""),
-        "alt": ("core", "Kimi K3 Max", "kimi-k3", "max"),
+        "named": [("opus", "Opus 5.5", "claude-opus-5-5", "high"),
+                  ("core", "Kimi K3", "kimi-k3", "max")],
     },
     "dsh": {
         "default": ("DeepSeek V4.1 Flash (OpenCode Go)", "opencode-go/deepseek-v4.1-flash", ""),
-        "alt": None,
+        "named": [],
     },
     "zcode": {
-        "default": ("GLM 5.3 Max", "GLM-5.3", "max"),
-        "alt": None,
+        "default": ("GLM 5.3", "GLM-5.3", "max"),
+        "named": [],
     },
     "devin": {
         "default": ("SWE-2 Max", "swe-2-max", ""),
-        # Issue #144: `fable` is now the Fable fusion; the pure
+        # Issue #144: `fable` is the Fable fusion; the pure
         # claude-fable-5-1-high preset is retired.
-        "alt": ("fable", "Fusion High (Fable 5.1 High + SWE-2 Medium)", "fusion-claude-fable-5-1-high-sidekick-swe-2-medium", ""),
+        "named": [("opus-fusion", "Opus Fusion (Opus 5.5 High + SWE-2 Medium)",
+                   "fusion-claude-opus-5-5-high-sidekick-swe-2-medium", ""),
+                  ("fable", "Fable Fusion (Fable 5.1 High + SWE-2 Medium)",
+                   "fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "")],
     },
 }
 
@@ -81,10 +87,18 @@ def load(name: str) -> Any:
     return module
 
 
+def named(values: dict[str, str]) -> list[str]:
+    return [word for word in values["named_tiers"].split(",") if word]
+
+
+def key(word: str) -> str:
+    return word.replace("-", "_")
+
+
 def manifest(platform: str) -> dict[str, str]:
     values: dict[str, str] = {}
     for line in (PLATFORMS / f"{platform}.yaml").read_text(encoding="utf-8").splitlines():
-        match = re.match(r'^([a-z_]+):\s*(".*")\s*$', line)
+        match = re.match(r'^([a-z0-9_]+):\s*(".*")\s*$', line)
         if match:
             values[match.group(1)] = json.loads(match.group(2))
     return values
@@ -93,7 +107,7 @@ def manifest(platform: str) -> dict[str, str]:
 def adapter(platform: str) -> dict[str, str]:
     values: dict[str, str] = {}
     text = (SCRIPTS / "adapters" / f"{platform}.sh").read_text(encoding="utf-8")
-    for match in re.finditer(r'^(ADAPTER_[A-Z_]+)="(.*)"$', text, re.M):
+    for match in re.finditer(r'^(ADAPTER_[A-Z0-9_]+)="(.*)"$', text, re.M):
         values[match.group(1)] = match.group(2)
     return values
 
@@ -123,37 +137,19 @@ class LiveVerifiedPresets(unittest.TestCase):
                 self.assertEqual(values["default_model_id"], model_id)
                 self.assertEqual(values["default_model_effort"], effort)
 
-    def test_manifest_pins_the_measured_third_tier(self) -> None:
+    def test_manifest_pins_the_measured_named_tiers(self) -> None:
         for platform, presets in LIVE_PRESETS.items():
             with self.subTest(platform=platform):
                 values = manifest(platform)
-                if presets["alt"] is None:
-                    self.assertEqual(values["alt_tier_label"], "")
-                    continue
-                label, name, model_id, effort = presets["alt"]
-                self.assertEqual(values["alt_tier_label"], label)
-                self.assertEqual(values["alt_model_name"], name)
-                self.assertEqual(values["alt_model_id"], model_id)
-                self.assertEqual(values["alt_model_effort"], effort)
+                self.assertEqual(named(values), [word for word, *_ in presets["named"]])
+                for word, name, model_id, effort in presets["named"]:
+                    self.assertEqual(values[f"{key(word)}_model_name"], name)
+                    self.assertEqual(values[f"{key(word)}_model_id"], model_id)
+                    self.assertEqual(values[f"{key(word)}_model_effort"], effort)
 
     def test_droid_needs_no_model_map_for_its_first_class_id(self) -> None:
         """`auto` and `kimi-k3` are real Droid catalog ids, so nothing is hardcoded."""
         self.assertEqual(manifest("droid")["acp_model_map"], "")
-
-    def test_droid_core_is_the_third_tier_and_upgrade_stays_auto(self) -> None:
-        """Issue #125: core is `alt_*` (below default), never `upgrade_*`; with
-        no stronger Droid tier established, upgrade equals the Auto default."""
-        values = manifest("droid")
-        self.assertEqual(
-            (values["alt_tier_label"], values["alt_model_name"],
-             values["alt_model_id"], values["alt_model_effort"]),
-            ("core", "Kimi K3 Max", "kimi-k3", "max"))
-        self.assertEqual(
-            (values["upgrade_model_name"], values["upgrade_model_id"],
-             values["upgrade_model_effort"]),
-            (values["default_model_name"], values["default_model_id"],
-             values["default_model_effort"]))
-        self.assertEqual(values["upgrade_model_id"], "auto")
 
     def test_dsh_default_is_already_carried_by_the_model_map(self) -> None:
         """The ACP wire value is the JSON pair, and the map was already right."""
@@ -165,14 +161,14 @@ class LiveVerifiedPresets(unittest.TestCase):
         )
 
     def test_droid_launch_summary_names_auto_default_and_no_alternative(self) -> None:
-        """Issue #125: the summary states Auto default/upgrade and K3 Max core."""
+        """Issue #125/#188: the summary states the Auto default, opus, and K3 core."""
         summary = manifest("droid")["launch_summary"]
         # Issue #130 dropped the PTY launch clause that spelled "default Auto
         # Model"; the ACP clause states the same default.
         self.assertIn("The default preset is the first-class catalog id auto", summary)
         self.assertNotIn("--skip-permissions-unsafe", summary)
         self.assertIn("--tier core is the first-class catalog id kimi-k3", summary)
-        self.assertNotIn("--tier upgrade preset is the first-class catalog id kimi-k3", summary)
+        self.assertNotIn("--tier upgrade", summary)
         for leftover in ("kimi-k2.7", "K2.7", "K2.8", "alternative"):
             self.assertNotIn(leftover, summary)
 
@@ -194,38 +190,28 @@ class ManifestAndAdapterAgree(unittest.TestCase):
     def test_every_platform_declares_the_same_presets_on_both_paths(self) -> None:
         for platform in ALL_PLATFORMS:
             values, flags = manifest(platform), adapter(platform)
-            for tier in ("default", "upgrade"):
+            self.assertEqual(flags["ADAPTER_NAMED_TIERS"], values["named_tiers"])
+            for tier in ("default", *named(values)):
                 with self.subTest(platform=platform, tier=tier):
-                    self.assertEqual(flags[f"ADAPTER_{tier.upper()}_MODEL_NAME"],
-                                     values[f"{tier}_model_name"])
-                    self.assertEqual(flags[f"ADAPTER_{tier.upper()}_MODEL_ID"],
-                                     values[f"{tier}_model_id"])
-                    self.assertEqual(flags[f"ADAPTER_{tier.upper()}_MODEL_EFFORT"],
-                                     values[f"{tier}_model_effort"])
-            with self.subTest(platform=platform, tier="alt"):
-                self.assertEqual(flags.get("ADAPTER_ALT_TIER_LABEL", ""),
-                                 values["alt_tier_label"])
-                self.assertEqual(flags.get("ADAPTER_ALT_MODEL_NAME", ""),
-                                 values["alt_model_name"])
-                self.assertEqual(flags.get("ADAPTER_ALT_MODEL_ID", ""),
-                                 values["alt_model_id"])
-                self.assertEqual(flags.get("ADAPTER_ALT_MODEL_EFFORT", ""),
-                                 values["alt_model_effort"])
+                    for field in ("NAME", "ID", "EFFORT"):
+                        self.assertEqual(flags[f"ADAPTER_{key(tier).upper()}_MODEL_{field}"],
+                                         values[f"{key(tier)}_model_{field.lower()}"])
+            self.assertFalse([flag for flag in flags
+                              if flag.startswith(("ADAPTER_UPGRADE_", "ADAPTER_ALT_"))])
 
 
-class ThirdTierIsOptional(unittest.TestCase):
-    """A platform that declares no third tier shows no trace of one."""
+class NamedTiersAreOptional(unittest.TestCase):
+    """A platform that declares no named tier shows no trace of one."""
 
-    def test_render_rejects_a_label_without_a_model(self) -> None:
+    def test_render_rejects_a_word_without_a_model(self) -> None:
         render = load("render-skills")
-        values = manifest("opencode") | {"alt_tier_label": "alternative"}
-        self.assertFalse(values["alt_model_id"])
+        values = manifest("opencode") | {"named_tiers": "alternative"}
         with self.assertRaises(ValueError):
             self._reparse(render, values)
 
-    def test_render_rejects_a_model_without_a_label(self) -> None:
+    def test_render_rejects_a_model_without_a_word(self) -> None:
         render = load("render-skills")
-        values = manifest("opencode") | {"alt_model_id": "orphan-model"}
+        values = manifest("opencode") | {"orphan_model_id": "orphan-model"}
         with self.assertRaises(ValueError):
             self._reparse(render, values)
 
@@ -238,32 +224,18 @@ class ThirdTierIsOptional(unittest.TestCase):
                             encoding="utf-8")
             render.parse_manifest(path)
 
-    def test_computed_blocks_are_empty_without_a_third_tier(self) -> None:
-        render = load("render-skills")
+    def test_generated_skills_list_exactly_the_declared_tiers(self) -> None:
         for platform in ALL_PLATFORMS:
             values = manifest(platform)
-            with self.subTest(platform=platform):
-                if values["alt_tier_label"]:
-                    self.assertIn(values["alt_model_id"], render.tier_block(values))
-                    self.assertIn(values["alt_model_id"], render.alt_tier_line(values))
-                else:
-                    self.assertEqual(render.tier_block(values), "")
-                    self.assertEqual(render.alt_tier_line(values), "")
-
-    def test_generated_skills_mention_the_tier_only_where_it_exists(self) -> None:
-        for platform in ALL_PLATFORMS:
-            label = manifest(platform)["alt_tier_label"]
             skill = SKILLS / f"{platform}-kaola-project-runner"
             body = (skill / "SKILL.md").read_text(encoding="utf-8")
             reference = (skill / "references" / "platform.md").read_text(encoding="utf-8")
             with self.subTest(platform=platform):
-                if label:
-                    self.assertIn(f"--tier {label}", body)
-                    self.assertIn(f"Runner {label} preset", reference)
-                else:
-                    self.assertNotIn("A third preset", body)
-                    self.assertNotIn("Runner alternative preset", reference)
-                    self.assertNotIn("Runner fable preset", reference)
+                declared = ["default", *named(values)]
+                self.assertEqual(re.findall(r"Runner (\S+) preset", reference), declared)
+                for tier in declared:
+                    self.assertIn(f"`--tier {tier}`", body)
+                self.assertNotIn("--tier upgrade", body + reference)
 
 
 class TierAgentCommand(unittest.TestCase):
@@ -272,7 +244,7 @@ class TierAgentCommand(unittest.TestCase):
 
     DEVIN = {
         "default": "devin acp --model swe-2-max",
-        "upgrade": "devin acp --model fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
+        "opus-fusion": "devin acp --model fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
         "fable": "devin acp --model fusion-claude-fable-5-1-high-sidekick-swe-2-medium",
     }
 
@@ -298,11 +270,11 @@ class TierAgentCommand(unittest.TestCase):
 
     def test_explicit_model_and_preserved_resume_keep_the_base_command(self) -> None:
         self.assertEqual(self.acp.tier_agent_command(
-            self.args("devin", tier="upgrade", model="swe-1-6")), "")
+            self.args("devin", tier="opus-fusion", model="swe-1-6")), "")
         self.assertEqual(self.acp.tier_agent_command(
             self.args("devin", resume="sess-1")), "")
         self.assertEqual(self.acp.tier_agent_command(
-            self.args("devin", use_continue=True, tier="upgrade")), self.DEVIN["upgrade"])
+            self.args("devin", use_continue=True, tier="opus-fusion")), self.DEVIN["opus-fusion"])
 
     def test_other_platforms_are_unchanged(self) -> None:
         for platform in ALL_PLATFORMS:
@@ -312,27 +284,28 @@ class TierAgentCommand(unittest.TestCase):
             with self.subTest(platform=platform):
                 self.assertFalse([k for k in values if k.startswith("acp_command_")])
                 self.assertEqual(self.acp.argv_model(values["acp_command"]), "")
-                for tier in ("default", "upgrade", values.get("alt_tier_label") or "default"):
+                for tier in ("default", *named(values)):
                     self.assertEqual(self.acp.tier_agent_command(self.args(platform, tier=tier)), "")
 
     def test_render_rejects_empty_or_unlabelled_tier_commands(self) -> None:
         render = load("render-skills")
         for extra in ({"acp_command_default": ""},
-                      {"acp_command_alt": "codex-acp --model x"}):
+                      {"acp_command_fable": "codex-acp --model x"}):
             with self.subTest(extra=extra), self.assertRaises(ValueError):
-                ThirdTierIsOptional._reparse(None, render, manifest("opencode") | extra)
+                NamedTiersAreOptional._reparse(None, render, manifest("opencode") | extra)
 
 
 class UndeclaredTierIsRefused(unittest.TestCase):
     """The one thing a third tier must never do is quietly become `default`."""
 
     def test_acp_path_refuses_by_name_and_mutates_nothing(self) -> None:
-        code, receipt = run_acp("opencode", "--tier", "fable")
+        # Issue #188: the retired `upgrade` word is as undeclared as any other.
+        code, receipt = run_acp("opencode", "--tier", "upgrade")
         self.assertEqual(code, 1)
         self.assertEqual(receipt["result"], "refused")
         self.assertEqual(receipt["reason"], "tier-not-declared")
-        self.assertEqual(receipt["requested_tier"], "fable")
-        self.assertEqual(receipt["available_tiers"], ["default", "upgrade"])
+        self.assertEqual(receipt["requested_tier"], "upgrade")
+        self.assertEqual(receipt["available_tiers"], ["default"])
         self.assertFalse(receipt["mutation_performed"])
         self.assertEqual(receipt["mutation_status"], "not_started")
 
@@ -341,16 +314,16 @@ class UndeclaredTierIsRefused(unittest.TestCase):
         code, receipt = run_acp("devin", "--tier", "core")
         self.assertEqual(code, 1)
         self.assertEqual(receipt["reason"], "tier-not-declared")
-        self.assertEqual(receipt["available_tiers"], ["default", "upgrade", "fable"])
+        self.assertEqual(receipt["available_tiers"], ["default", "opus-fusion", "fable"])
 
     def test_devin_fable_tier_selects_the_fable_fusion(self) -> None:
         """Issue #144: `fable` stays declared, now as the Fable fusion; the
         retired pure claude-fable-5-1-high is no tier's model."""
         acp = load("kaola-acp")
         values = manifest("devin")
-        self.assertEqual(acp.tier_prefix(values, "fable"), "alt")
-        self.assertEqual(values["alt_model_id"], "fusion-claude-fable-5-1-high-sidekick-swe-2-medium")
-        for prefix in ("default", "upgrade", "alt"):
+        self.assertEqual(acp.tier_prefix(values, "fable"), "fable")
+        self.assertEqual(values["fable_model_id"], "fusion-claude-fable-5-1-high-sidekick-swe-2-medium")
+        for prefix in ("default", "opus_fusion", "fable"):
             self.assertNotEqual(values[f"{prefix}_model_id"], "claude-fable-5-1-high")
 
     def test_droid_refuses_its_deleted_alternative_tier(self) -> None:
@@ -358,7 +331,7 @@ class UndeclaredTierIsRefused(unittest.TestCase):
         code, receipt = run_acp("droid", "--tier", "alternative")
         self.assertEqual(code, 1)
         self.assertEqual(receipt["reason"], "tier-not-declared")
-        self.assertEqual(receipt["available_tiers"], ["default", "upgrade", "core"])
+        self.assertEqual(receipt["available_tiers"], ["default", "opus", "core"])
         self.assertFalse(receipt["mutation_performed"])
 
 
@@ -379,10 +352,8 @@ class BothTransportsResolveTheSamePreset(unittest.TestCase):
             values = manifest(platform)
             with self.subTest(platform=platform):
                 self.assertEqual(acp.tier_prefix(values, "default"), "default")
-                self.assertEqual(acp.tier_prefix(values, "upgrade"), "upgrade")
-                label = values["alt_tier_label"]
-                if label:
-                    self.assertEqual(acp.tier_prefix(values, label), "alt")
+                for word in named(values):
+                    self.assertEqual(acp.tier_prefix(values, word), key(word))
 
     def test_acp_resolves_the_measured_id_for_every_pinned_tier(self) -> None:
         acp = load("kaola-acp")
@@ -391,14 +362,11 @@ class BothTransportsResolveTheSamePreset(unittest.TestCase):
             with self.subTest(platform=platform, tier="default"):
                 prefix = acp.tier_prefix(values, "default")
                 self.assertEqual(values[f"{prefix}_model_id"], presets["default"][1])
-            if presets["alt"] is None:
-                continue
-            label, _, model_id, effort = presets["alt"]
-            with self.subTest(platform=platform, tier=label):
-                prefix = acp.tier_prefix(values, label)
-                self.assertEqual(prefix, "alt")
-                self.assertEqual(values[f"{prefix}_model_id"], model_id)
-                self.assertEqual(values[f"{prefix}_model_effort"], effort)
+            for word, _, model_id, effort in presets["named"]:
+                with self.subTest(platform=platform, tier=word):
+                    prefix = acp.tier_prefix(values, word)
+                    self.assertEqual(values[f"{prefix}_model_id"], model_id)
+                    self.assertEqual(values[f"{prefix}_model_effort"], effort)
 
 
 class ZcodeHasOneSourceOfTruth(unittest.TestCase):
@@ -415,8 +383,6 @@ class ZcodeHasOneSourceOfTruth(unittest.TestCase):
         values = manifest("zcode")
         self.assertEqual(values["default_model_id"], acp.ZCODE_HOST_MODEL_ID)
         self.assertEqual(values["default_model_effort"], acp.ZCODE_HOST_EFFORT)
-        self.assertEqual(values["upgrade_model_id"], acp.ZCODE_HOST_MODEL_ID)
-        self.assertEqual(values["upgrade_model_effort"], acp.ZCODE_HOST_EFFORT)
 
     def test_the_default_satisfies_the_host_matcher(self) -> None:
         """Including the provider-qualified live spelling, and not the Flash."""

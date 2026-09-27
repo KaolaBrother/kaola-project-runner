@@ -1544,15 +1544,15 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(fast.get("effective"), "off")
         self.assertEqual(fast.get("applied_via"), "acp-config")
 
-    def test_codex_upgrade_tier_selects_astra(self) -> None:
-        receipt = self.start("codex", "--tier", "upgrade")
+    def test_codex_astra_tier_selects_astra(self) -> None:
+        receipt = self.start("codex", "--tier", "astra")
         self.assertEqual(
             [event for event in self.config_events() if event[0] == "model"],
             [("model", "gpt-6-astra")],
         )
         selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("source"), "runner-upgrade")
-        self.assertEqual(selection.get("tier"), "upgrade")
+        self.assertEqual(selection.get("source"), "runner-astra")
+        self.assertEqual(selection.get("tier"), "astra")
 
     def test_codex_bare_explicit_model_gets_no_invented_effort(self) -> None:
         receipt = self.start("codex", "--model", "gpt-6-astra")
@@ -1767,9 +1767,9 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         send = self.cli("send", "--text", "verify exact semantics", platform="cursor-cli")
         self.assertEqual(send.get("outcome"), "turn_completed")
 
-    def test_cursor_upgrade_tier_maps_opus_base_id(self) -> None:
+    def test_cursor_opus_tier_maps_opus_base_id(self) -> None:
         receipt = self.start(
-            "cursor-cli", "--tier", "upgrade", caps="cursor-params,strict-config",
+            "cursor-cli", "--tier", "opus", caps="cursor-params,strict-config",
         )
         self.assertEqual(
             self.config_events(),

@@ -424,10 +424,10 @@ class ModelPolicyOnAcp(_ACP.AcpSessionFixture, unittest.TestCase):
 
     def test_c_resume_with_a_tier_applies_the_tier(self) -> None:
         pages = [{"sessions": [{"sessionId": "saved-codex-1", "cwd": str(self.repo)}]}]
-        receipt = self.guarded_start("--resume", "saved-codex-1", "--tier", "upgrade",
+        receipt = self.guarded_start("--resume", "saved-codex-1", "--tier", "astra",
                                      caps="resume",
                                      extra_env={"MOCK_ACP_LIST_PAGES": json.dumps(pages)})
-        self.assertEqual(receipt["model_selection"]["source"], "runner-upgrade")
+        self.assertEqual(receipt["model_selection"]["source"], "runner-astra")
         self.assertFalse(receipt["model_selection"]["preserved"])
         self.assertIn(("model", "gpt-6-astra"), self.config_events())
 

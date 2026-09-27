@@ -45,10 +45,10 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**Grok 4.7 Extra High**: `grok-4.7-xhigh`, effort=xhigh (encoded in model ID), fast=false) and `--tier upgrade` (**Claude Opus 5.5 High**: `claude-opus-5-5-high`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
-not explicitly choose otherwise. Select `upgrade` only when the user explicitly asks for a stronger
-or upgraded model or describes this work as complex; never infer the upgrade from code size,
-failures, elapsed time, or your own complexity assessment.
+presets — `--tier default` (**Grok 4.7**: `grok-4.7-xhigh`, effort=xhigh (encoded in model ID), fast=false) and `--tier opus` (**Claude Opus 5.5**: `claude-opus-5-5-high`, effort=high (encoded in model ID)) — and `default` applies whenever the user did
+not explicitly choose otherwise. Pass another `--tier` only when the user names that preset; never
+infer one from code size, failures, elapsed time, or your own assessment. An undeclared name is
+refused (`tier-not-declared`), never resolved to `default`.
 
 An explicit user model choice always wins: pass it with `--model ID`, adding `--effort LEVEL` only
 when the user also named an effort. A bare explicit `--model` leaves the runtime's native effort
