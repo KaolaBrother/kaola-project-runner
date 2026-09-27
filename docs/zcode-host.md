@@ -550,7 +550,10 @@ Issue #121): any `kaola-project-runner` Skill in those roots with a different
 recorded file is refused as
 `{"result": "refused", "reason": "main-skill-build-skew"}` with exit 1 and
 nothing created (`main_skill_skew` names the path and both builds). The start
-only detects it; reinstall that root or remove the stale copy.
+only detects it; its `detail` names each affected root's existing installer
+route (`install-local.sh --skills-dir ROOT --platform PLATFORM`, which replaces
+only a receipt-owned copy and keeps a shared root's other referrers). Run it
+from the accepted checkout, then start again (Issue #198).
 
 At most one live Host serves a canonical root (Issue #132). A Host-named start
 is refused as `{"result": "refused", "reason": "host-exists"}` with exit 1 and
