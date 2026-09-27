@@ -6,6 +6,17 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Devin's advertised model is not its running model (Issue #197).** The Devin platform note
+  no longer claims the ACP model `currentValue` always stays `swe-2-high`: the option does
+  not echo, and need not list, the `--model` a tier launches, so an `opus-fusion` seat can
+  advertise the `-high` fusion id while Devin's native session store records the `-medium`
+  preset it launched. Start receipts already separate the request, the argv application
+  (`config_application.model.applied_via: "argv"`), and the ACP echo
+  (`effective_selection.advertised_model`). The actual model stays `unknown`
+  (`actual_runtime_model_id: null`) because the Runner reads no native store. A regression now
+  locks both tiers to that outcome, and receipts and behavior are unchanged. `platforms/devin.yaml`
+  changed, so the release operator test is non-empty.
+
 ## 0.6.6 — 2026-09-27 (quota reset windows, Droid shared Skill root, Host QA and pacing, five-preset worker pool)
 
 Seats: restart required
