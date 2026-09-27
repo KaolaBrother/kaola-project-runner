@@ -52,11 +52,13 @@ workers, claims or assignments already established. Ask only for missing or
 conflicting information.
 
 Record the human's CLI, model/effort, count, and capability restrictions in the
-consuming project's run records, not in this Skill. A named CLI without a count
-defaults to one. The count is a hard cap on live worker processes, ACP holders
-included; a finished seat counts until its `stop` receipt. Granted open-ended
-concurrency is its own cap. Do not invent a quota system: the cap is that
-count, enforced from `status`/`stop` receipts.
+consuming project's run records, not in this Skill. The count is a hard cap on
+live worker processes, ACP holders included; a finished seat counts until its
+`stop` receipt. Granted open-ended concurrency is its own cap. Do not invent a
+quota system: the cap is that count, enforced from `status`/`stop` receipts.
+The [worker-profiles.md](references/worker-profiles.md) five-preset pool is
+default-authorized - no seat grant or priority - and sits outside that count
+and cap; every other runtime/preset still needs explicit authorization.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. A serial build, GPU, port, or cache constraint must not block
@@ -95,26 +97,25 @@ whole files into context: receipts, hashes, counts and bounded excerpts are the
 evidence. Ordinary `observe`, `status` and `capture --lines` receipts are bounded,
 keeping the newest part and naming what a `truncated` block
 dropped; `capture --full` is the only unbounded request.
-Quota packages (read-only catalog; never changes the count cap): [references/quota-packages.md](references/quota-packages.md).
+Quota packages (read-only catalog; never changes the count cap): [quota-packages.md](references/quota-packages.md).
 
 ### Defaults
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | None until named; all ten platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
+| Allowed CLIs | None until named beyond that pool; all ten platforms, Codex included, are eligible. Fresh invocation with no allowlist: ask, start no worker, register no heartbeat. |
 | Count | Named CLI without a count: one; it bounds live processes. |
-| Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices as the Runner defines. |
-| Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets (see its Skill). Use one only when the human or authorization names it; ask only if unclear. No automatic model, tier, or transport switch; only a seat the user explicitly authorized may switch its model/preset, within its own runtime. Choosing a worker or preset: [worker-profiles.md](references/worker-profiles.md). |
+| Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices. |
+| Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets. Use one only when the human or authorization names it; ask if unclear. No automatic model, tier, or transport switch; only a seat the user explicitly authorized may switch its model/preset, within its own runtime. Choosing a worker or preset: [worker-profiles.md](references/worker-profiles.md). |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
 | Heartbeat | Non-Host: {{HEARTBEAT_DEFAULT}}; zero or "no heartbeat" means one-shot; one host-native carrier, else same-session sleep, never both. Host: event-driven only (see Hosts). |
 | Permissions | Per platform, not one global bypass. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
 | Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
 
-Bind the consuming project's canonical project root once at setup with
+Bind the consuming project's canonical project root with
 `export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<abs root>`, then omit `--repo`: the
-Runner fills it and refuses a drifted root before anything starts, so no
-dispatch re-proves the path. Ask each worker to invoke its installed
+Runner fills it and refuses a drifted root before anything starts. Ask each worker to invoke its installed
 workflow-next. Without that binding, linked-worktree starts and existing-run
 recovery are Agent decisions, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).

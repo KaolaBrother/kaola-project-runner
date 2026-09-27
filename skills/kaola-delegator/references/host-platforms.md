@@ -37,7 +37,9 @@ Host (`host-entry-unsupported`).
 
 Per-preset worker profiles and the seat-switch rule live in
 `skills/kaola-project-runner/references/worker-profiles.md` in the Project Runner
-checkout; read them on demand to advise the user. A seat stays bound to its
+checkout; read them on demand to advise the user. The same file's five-preset
+inexpensive pool is default-authorized for dispatch - the Delegator does not
+enumerate or gate it and relays only explicit exclusions. A seat stays bound to its
 preset; general authorization is not a switch grant. Relay a user's explicit
 grant for a particular seat to switch model/preset within its own runtime
 verbatim in the handoff's `project_context=` (or a later update); never

@@ -28,7 +28,35 @@ judges, nothing scores or routes.
 | Kimi CLI | `default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Kimi CLI | `kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
 | OpenCode | `default` | CLI native opening model | no Runner model or effort override |  |
-| ZCode | `default` | GLM 5.3 | thought=max | All-round worker for every kind of routine work, but not good at visual tasks. |
+| ZCode | `default` | GLM 5.3 | thought=max | Very low-cost, all-round worker for every kind of routine work, but not good at visual tasks. |
+
+## Default-authorized inexpensive presets
+
+Owner operating policy, not a live price comparison. For an authorized
+project task these five runtime/preset pairs need no per-seat or per-preset
+approval and no user-supplied priority order:
+
+| Runtime | `--tier` | Preset |
+|---|---|---|
+| Claude Code | `sonnet` | Sonnet, effort max |
+| Codex CLI | `luna` | GPT-6 Luna, effort max |
+| dsh | `default` | DeepSeek V4.1 Flash |
+| Devin CLI | `default` | SWE-2 Max |
+| ZCode | `default` | GLM 5.3, thought max |
+
+Their live seats neither count toward nor are limited by the general worker
+concurrency cap; no substitute cap, per-runtime seat allocation, or approval
+gate applies to this pool. Membership is this exact list - being a runtime's
+`default` tier does not make a preset eligible. Actual account/token/service
+and resource limits still apply - an unspecified quota is not unlimited.
+Choose by task fit, the profile rows above, available tools, idle capacity,
+and known usage; spread suitable work across runtimes without forcing equal
+counts, and never create work or extra sessions, interrupt useful work, or
+wait for a less suitable worker just to engage or equalize the pool. Any
+explicit owner restriction wins. Every runtime/preset outside this pool still
+needs explicit user authorization; grants already given stay valid. Each seat
+keeps its exact binding and lifecycle - this pool is dispatch authorization,
+not a switch grant, and it does not extend Host model selection.
 
 ## Seat binding and model switching
 

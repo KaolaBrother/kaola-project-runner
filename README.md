@@ -82,7 +82,8 @@ Every Delegator reach-out prompt carries a `sweep=` line: the Host lists this re
 reports one `swept:` line. If the Host is confirmed stopped and its native id cannot restore,
 start a new standard-named Host as a new ACP session only after current authorization is
 complete (goal, remaining work, platforms/members, counts/concurrency, quota, priority,
-delivery/stop boundary); missing key values: ask, do not `start`, do not guess a stale
+delivery/stop boundary; the five-preset default-authorized pool needs no per-seat
+entries); missing key values: ask, do not `start`, do not guess a stale
 quota. Quota travels in the units the user actually gave: a unit the user never gave is
 carried as unspecified and does not block the start, not as unlimited and not as a
 fourth question; a unit whose meaning is unclear is ambiguous, so ask. Continue from
@@ -209,7 +210,10 @@ is not opened merely for handoff when that sink is suitable. If PRs exist, advan
 ones first on contested capacity while other authorized work continues in parallel across
 permitted CLIs. The authorized count is a hard cap on live worker processes, ACP holders
 included: stop-before-start at the cap, stop each seat once its delivery is accepted, and give a
-new task a new session; idle is not keep-alive. Ending a run defaults to finishing in-hand issues and a clean workspace. A stated
+new task a new session; idle is not keep-alive. The five-preset default-authorized inexpensive
+pool in [worker-profiles.md](skills/kaola-project-runner/references/worker-profiles.md) needs no
+per-seat grant or priority order, and its seats neither consume nor are limited by that cap;
+every other preset requires explicit authorization. Ending a run defaults to finishing in-hand issues and a clean workspace. A stated
 stop boundary blocks new tasks and new issues without dropping in-hand work. Only an explicit
 "stop here, continue later" pauses that cleanup and preserves recovery. It does not add a
 platform manifest, transport adapter, scheduler, or backlog mirror. Heartbeat and completion
@@ -579,7 +583,9 @@ Each preset also carries a one-line, user-defined worker profile (`<tier>_model_
 manifest; OpenCode's is unset) — selection guidance, not a measured capability. The Host and
 Kaola-Delegator read the complete table (every runtime and tier, with its parameters and profile),
 rendered from the manifests into
-[worker-profiles.md](skills/kaola-project-runner/references/worker-profiles.md); it is not copied here. A seat stays bound
+[worker-profiles.md](skills/kaola-project-runner/references/worker-profiles.md); it is not copied here. That file's
+five-preset inexpensive pool is the one default-authorized set — exempt from the general worker
+concurrency count — while every other preset needs explicit user authorization. A seat stays bound
 to its preset; only the user's explicit grant for a particular seat lets the Host switch that seat's
 model/preset, and only within the same agent runtime.
 
