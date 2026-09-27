@@ -1,0 +1,8 @@
+Seats: restart required — `scripts/kaola-quota.py` and all ten `platforms/*.yaml` changed since v0.6.5; the holder, ZCode bridge, and adapters are byte-identical.
+
+- **Quota reset windows (#192).** `kaola-acp packages` now lists each package's confirmed `windows` (`5h`, `weekly`, `monthly`; `[]` = no time-based reset; `null` only where unknown), and Kimi's monthly-only plan is a separate `kimi-cli:managed_monthly` package.
+- **Droid uses the shared Skill root (#193).** `--runtime droid` installs into `~/.agents/skills` (shared with kimi-cli and dsh) and withdraws only its own copies from `~/.factory/skills`, refusing before any write on edited or unreceipted same-name copies.
+- **Host QA, evidence sufficiency, and pacing (#194).** Project Runner separates testing from QA, reuses sufficient recorded evidence, and assigns only proportionate checks (`references/qa-evidence.md`); Kaola-Delegator relays one evidence-based pacing note at its agreed cadence.
+- **Five-preset default-authorized worker pool (#195).** Under an authorized project task the Host may dispatch Claude Code `sonnet`, Codex `luna`, dsh `default`, Devin `default`, and ZCode `default` without per-seat approval and outside the general concurrency cap; every other preset still needs explicit authorization.
+
+**Upgrade:** run `./scripts/install-local.sh` for every runtime you use (Droid users rerun `--runtime droid`), then restart seats; stale installs refuse `main-skill-build-skew` / `worker-skill-skew`. The Grok Bot bridge is pinned to the v0.6.6 content commit by the pin commit that follows the tag; save the bridge from that pin commit. Full notes: `CHANGELOG.md` § 0.6.6.
