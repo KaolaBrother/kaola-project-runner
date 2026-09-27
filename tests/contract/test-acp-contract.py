@@ -1804,37 +1804,58 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(fast.get("effective"), "unknown")
         self.assertEqual(fast.get("applied_via"), "model-id")
 
-    def test_argv_carried_model_skips_the_redundant_option_apply(self) -> None:
-        # Issue #140: devin 3000.11.1 rejects its presets on the ACP model
-        # option (-32602) but honours `devin acp --model <id>`. When the spawn
-        # argv already carries the resolved model, the option apply is skipped
-        # and the receipt names the argv, keeping the stale advertised value.
-        command = self.mock_command(caps="strict-config") + " --model swe-2-max"
+    def start_devin_argv_tier(self, tier: str, model: str, advertised: str) -> dict:
+        command = self.mock_command(caps="strict-config") + f" --model {model}"
         env = self.env()
-        # devin keeps advertising the stale initial value after the argv set it.
+        # The advertised option does not echo, and here does not list, the argv model.
         stale = [{"id": "model", "name": "Model", "category": "model", "type": "select",
-                  "currentValue": "swe-2-high",
-                  "options": [{"value": "swe-2-high", "name": "SWE-2"}]}]
+                  "currentValue": advertised,
+                  "options": [{"value": advertised, "name": advertised}]}]
         env["MOCK_ACP_CONFIG"] = json.dumps(
             {"new": stale, "set_result": {"configOptions": stale}})
         result = subprocess.run(
             [sys.executable, str(CLI), "devin", "start", "--repo", str(self.repo),
              "--session", self.session, "--command", command,
-             "--tier", "default", "--mode", "agent"],
+             "--tier", tier, "--mode", "agent"],
             capture_output=True, text=True, env=env, timeout=30,
         )
         self._started = True
         self._started_platform = "devin"
-        receipt = json.loads(result.stdout)
-        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
-        self.assertEqual(receipt.get("resolved_runtime_model_id"), "swe-2-max")
-        self.assertNotIn("model", [config_id for config_id, _ in self.config_events()])
-        self.assertEqual((receipt.get("config_application") or {}).get("model"),
-                         {"applied": True, "applied_via": "argv", "value": "swe-2-max"})
-        selection = receipt.get("effective_selection") or {}
-        self.assertEqual(selection.get("effective_model"), "swe-2-max")
-        self.assertEqual(selection.get("effective_model_source"), "launch-argv")
-        self.assertEqual(selection.get("advertised_model"), "swe-2-high")
+        return json.loads(result.stdout)
+
+    def test_argv_carried_model_skips_the_redundant_option_apply(self) -> None:
+        # Issue #140: devin 3000.11.1 rejects its presets on the ACP model
+        # option (-32602) but honours `devin acp --model <id>`. When the spawn
+        # argv already carries the resolved model, the option apply is skipped
+        # and the receipt names the argv, keeping the stale advertised value.
+        # Issue #197: the advertised value is not actual-model evidence (a
+        # default seat advertised swe-2-high while Devin's native session
+        # recorded swe-2-max), so the verdict stays unknown for every tier.
+        for tier, model, advertised in (
+            ("default", "swe-2-max", "swe-2-high"),
+            ("opus-fusion", "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
+             "fusion-claude-opus-5-5-high-sidekick-swe-2-medium"),
+        ):
+            with self.subTest(tier=tier):
+                receipt = self.start_devin_argv_tier(tier, model, advertised)
+                try:
+                    self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+                    self.assertEqual(receipt.get("requested_tier"), tier)
+                    self.assertEqual(receipt.get("resolved_runtime_model_id"), model)
+                    self.assertNotIn("model", [config_id for config_id, _ in self.config_events()])
+                    self.assertEqual((receipt.get("config_application") or {}).get("model"),
+                                     {"applied": True, "applied_via": "argv", "value": model})
+                    selection = receipt.get("effective_selection") or {}
+                    self.assertEqual(selection.get("effective_model"), model)
+                    self.assertEqual(selection.get("effective_model_source"), "launch-argv")
+                    self.assertEqual(selection.get("advertised_model"), advertised)
+                    self.assertIsNone(receipt.get("actual_runtime_model_id"))
+                    self.assertEqual(receipt.get("model_verified"), "unknown")
+                    self.assertEqual(receipt.get("model_mismatch_reason"),
+                                     "actual-model-evidence-not-yet-read")
+                finally:
+                    self.cli("stop", "--force", platform="devin",
+                             check=False, timeout=15)
 
     def test_model_not_in_argv_still_goes_through_the_option(self) -> None:
         # Issue #140: without an argv --model the apply path is unchanged.
