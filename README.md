@@ -369,7 +369,8 @@ This combination gives you:
 
 All ten worker Skills include this optional Workflow guidance. Starting a worker Skill alone does
 not install Workflow, claim an issue, send `workflow-next`, or create a heartbeat. The main
-orchestrator Skill may register a host heartbeat after an authorized CLI allowlist exists. Runtime
+orchestrator Skill may register a host heartbeat after worker authorization exists - an authorized
+CLI allowlist or the authorized task's five-preset pool. Runtime
 coverage is also independent: Workflow's support for a runtime does not imply a Runner adapter
 exists for it.
 

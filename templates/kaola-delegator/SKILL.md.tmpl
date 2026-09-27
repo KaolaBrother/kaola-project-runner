@@ -15,10 +15,10 @@ project runs only one Agent for it.
 
 ## Extract once
 
-From the user and existing Git/Workflow/Issue/Runner records collect:
+From the user and Git/Workflow/Issue/Runner records collect:
 goal; already-done/remaining work; the Host platform; authorized worker
 platforms/members, counts, and concurrency for outside-pool workers and
-stated exclusions - the five-preset pool (its worker-profiles.md) is
+stated exclusions - the five-preset pool (worker-profiles.md) is
 default-authorized and needs none; the quota the user actually gave, each
 figure in its own unit; priority; delivery/stop boundary; the project path.
 On a **live** Host, apply only the user's
@@ -38,7 +38,7 @@ is missing, report not executable; claim no Host.
 
 One live Host per repo, whatever its platform, recovered from the canonical Git
 root, the standard Host name `<platform>-<PROJECT_CODE>-orchestrator-<purpose>`
-and existing Runner `status`/receipts. A Git worktree is not an ACP id. A
+and Runner `status`/receipts. A Git worktree is not an ACP id. A
 **live** Host is attached in place, never started again,
 even if its recorded name is not the new form; `host-exists` means attach its
 `existing_host`; never rename and retry. Do not rename, restart, or cancel
@@ -67,7 +67,7 @@ plan and authorization; do not trust the Host's self-description. Mismatch:
 correct on this Host; do not accept completion. Then follow up at the
 agreed cadence with `observe`/`capture`; compare outcomes, blockers, and
 repeated testing/QA against prior checks; relay one new pacing note when
-warranted; escalate only unrecoverable human decisions. Do not dispatch workers,
+warranted, marking stall uncertainty; escalate only unrecoverable human decisions. Do not dispatch workers,
 copy a mission ledger, maintain a heartbeat, create a Routine, touch inner
 sessions, or `stop` the Host before close-out. Changing the outer Agent does not
 stop the Host.

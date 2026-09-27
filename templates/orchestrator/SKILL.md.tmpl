@@ -103,7 +103,7 @@ Quota packages (read-only catalog; never changes the count cap): [quota-packages
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | An authorized project task dispatches the [worker-profiles.md](references/worker-profiles.md) five-preset pool - no individual allowlist, count, or priority; every other runtime/preset stays None until explicitly named. With no authorized task: ask, start no worker, register no heartbeat. |
+| Allowed CLIs | An authorized project task dispatches the [worker-profiles.md](references/worker-profiles.md) five-preset pool - no individual allowlist, count, or priority; every other runtime/preset needs explicit naming. No authorized task: ask, start no worker, register no heartbeat. |
 | Count | Named CLI without a count: one; it bounds live processes. Pool presets need no count and sit outside it. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices. |
 | Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets. Use one only when the human or authorization names it; ask if unclear. No automatic model, tier, or transport switch; only a seat the user explicitly authorized may switch its model/preset, within its own runtime. Choosing a worker or preset: [worker-profiles.md](references/worker-profiles.md). |
@@ -120,7 +120,7 @@ workflow-next. Without that binding, linked-worktree starts and existing-run
 recovery are Agent decisions, not transport gates. See
 [references/workflow-worktree.md](references/workflow-worktree.md).
 
-Model mismatches are reported evidence, not automatic start gates. Bypass is not broader authorization. With no verified ACP skip-all,
+Model mismatches are evidence, not automatic start gates. Bypass is not broader authorization. With no verified ACP skip-all,
 permission may still arise: `permit` settles it; never add a gate.
 
 ## Heartbeat
@@ -129,7 +129,7 @@ The heartbeat is the working prompt itself: a Host (any platform with a
 `host_skill_entry`) runs it on each worker event; Codex's own timer serves only
 a non-Host Codex supervisor; host-native carriers. Render it from the skeleton in
 [references/heartbeat-skeleton.md](references/heartbeat-skeleton.md),
-authorization, and project instructions. It is the effective-now snapshot, not a
+authorization and project instructions. It is the effective-now snapshot, not a
 log: update the **same** heartbeat, replacing superseded quota, priority and
 plans, and keeping in-flight locators and unfinished duties. A confirmed change
 applies in that beat; a lowered quota alone cancels nothing. A report-only
@@ -137,7 +137,7 @@ request disables execution actions.
 
 On a Host session worker events are the only heartbeat trigger (see
 Hosts). After close-out, cancel the native heartbeat or stop scheduling the next
-sleep. No allowlist, no heartbeat. Temporarily having no ready task is not
+sleep. No worker authorization, no heartbeat. Temporarily having no ready task is not
 project completion. Do not hard-code other hosts' scheduler APIs.
 
 ## Delivery
@@ -186,7 +186,7 @@ sink, and write ownership.
 4. **Finalize and synchronize.** Once accepted and authorized, direct the
    worker to finalize and merge, then verify remote, Issue, archive, doc
    docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).
-   Prefer one run at a time; judge safe concurrency. After the baseline moves, direct other affected owners to save
+   Prefer one run at a time; judge safe concurrency. After the baseline moves, direct affected owners to save
    work and rebase/update at a safe boundary. Review conflicts and revalidate
    affected changes; do not switch HEAD during a measurement or silently reuse
    invalidated evidence. History rewriting needs applicable authorization.
@@ -239,7 +239,7 @@ under a new standard name, never a prompt chained into a finished seat;
 ## Dispatch notes
 
 Call the matching platform Runner Skill by its installed directory. Use Runner
-default start (including measured bypass). Do not pass a permission-mode
+default start. Do not pass a permission-mode
 override unless the human wrote one. One dispatch prompt per ready session. Resume per
 "Ending a run".
 
@@ -263,10 +263,9 @@ negatives: [references/issue-dispatch.md](references/issue-dispatch.md).
 
 Use the user's report format; otherwise one compact current-work table plus
 outstanding close-out items. Include task/progress, meaningful
-model mismatches, blockers, and next action. Per platform, report `live N /
+model mismatches, blockers, and next action. For non-pool seats, per platform report `live N /
 authorized M` and the seats stopped this beat; N > M with no stop that beat
-violates the cap. Do not keep stale stopped
-rows in every report. Keep duties traceable in
+violates the cap. Pool seats report live seats marked exempt. Drop stale stopped rows from reports. Keep duties traceable in
 existing records; reuse existing Runner `stop`/`start`, and invent no session
 state machine, quota engine, or acceptance, finalize, rebase or close-out
 dashboard or ledger.
