@@ -2041,6 +2041,165 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             self.assertIn(value, {"grok-4.7", "claude-opus-5-5"})
 
 
+class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
+    """Issue #203: the start's selection/application evidence lives in the
+    holder record, survives its whole-record rewrites, and is read back by
+    status/observe. A resume inherits it only from the same native session."""
+
+    cli = Issue34ModelSelectionAcpTests.cli
+    start = Issue34ModelSelectionAcpTests.start
+    config_events = Issue34ModelSelectionAcpTests.config_events
+    RESUME_ENV = {"MOCK_ACP_RESUME_ANY": "1"}
+
+    def setUp(self) -> None:
+        AcpSessionFixture.setUp(self)
+        self.clear_mock_log()
+
+    def env(self) -> dict[str, str]:
+        env = AcpSessionFixture.env(self)
+        # Deterministic catalog: the probe fails instead of reading a real CLI.
+        env["CODEX_BIN"] = str(self.root / "no-such-codex")
+        return env
+
+    def clear_mock_log(self) -> None:
+        if self.mock_log.is_file():
+            self.mock_log.write_text("", encoding="utf-8")
+
+    def record_file(self, platform: str = "codex") -> Path:
+        found = list((self.record_root / platform / self.session).glob("*/record.json"))
+        self.assertEqual(len(found), 1, found)
+        return found[0]
+
+    def stop(self, platform: str = "codex") -> None:
+        self.cli("stop", platform=platform, check=False, timeout=15)
+        self._started = False
+
+    def codex_start(self, *args: str, **kwargs) -> dict:
+        kwargs.setdefault("caps", "resume")
+        return self.start("codex", *args, **kwargs)
+
+    def test_fresh_start_evidence_survives_holder_rewrites(self) -> None:
+        receipt = self.codex_start("--tier", "astra")
+        self.assertTrue(receipt.get("start_evidence_recorded"), receipt)
+        self.assertNotIn("inherited_start_evidence", receipt)
+        # A completed turn rewrites the whole record several times.
+        sent = self.cli("send", "--text", "hello", platform="codex")
+        self.assertEqual(sent.get("outcome"), "turn_completed", sent)
+        for command in ("status", "observe"):
+            evidence = self.cli(command, platform="codex").get("start_evidence") or {}
+            for key in ("model_selection", "config_application", "effective_selection",
+                        "fast", "model_verified", "model_mismatch_reason",
+                        "actual_runtime_model_id"):
+                self.assertEqual(evidence.get(key), receipt.get(key), (command, key))
+            self.assertEqual(evidence["model_selection"]["source"], "runner-astra")
+            self.assertEqual(evidence["acp_session_id"], receipt["acp_session_id"])
+            self.assertIs(evidence["resumed"], False)
+            self.assertNotIn("inherited", evidence)
+            self.assertNotIn("catalog_probe", evidence.get("model_evidence_provenance") or {})
+        saved = json.loads(self.record_file().read_text(encoding="utf-8"))
+        self.assertEqual(saved["start_evidence"]["model_selection"], receipt["model_selection"])
+        self.assertEqual(saved["start_selection"]["tier"], "astra")
+        self.stop()
+        after = self.cli("status", platform="codex", check=False)
+        self.assertEqual((after.get("start_evidence") or {}).get("config_application"),
+                         receipt["config_application"], "a stopped record keeps its evidence")
+
+    def test_devin_launch_argv_stays_separate_from_the_advertised_value(self) -> None:
+        receipt = Issue34ModelSelectionAcpTests.start_devin_argv_tier(
+            self, "default", "swe-2-max", "swe-2-high")
+        self.assertIsNone(receipt.get("error"), receipt)
+        evidence = self.cli("status", platform="devin").get("start_evidence") or {}
+        self.assertEqual(evidence.get("effective_selection", {}).get("effective_model"), "swe-2-max")
+        self.assertEqual(evidence["effective_selection"].get("effective_model_source"), "launch-argv")
+        self.assertEqual(evidence["effective_selection"].get("advertised_model"), "swe-2-high")
+        self.assertEqual(evidence["config_application"]["model"],
+                         {"applied": True, "applied_via": "argv", "value": "swe-2-max"})
+        # Application evidence only: no verified actual model is claimed.
+        self.assertEqual(evidence.get("model_verified"), "unknown")
+        self.assertIsNone(evidence.get("actual_runtime_model_id"))
+
+    def test_resume_without_overrides_inherits_only_matching_evidence(self) -> None:
+        first = self.codex_start("--tier", "astra")
+        native = first["acp_session_id"]
+        self.stop()
+        self.clear_mock_log()
+        resumed = self.codex_start("--resume", native, extra_env=self.RESUME_ENV)
+        self.assertIsNone(resumed.get("error"), resumed)
+        # No model/effort option is sent to fill display fields.
+        sent_ids = [config_id for config_id, _ in self.config_events()]
+        self.assertNotIn("model", sent_ids)
+        self.assertNotIn("reasoning_effort", sent_ids)
+        status = self.cli("status", platform="codex")
+        self.assertEqual(status["start_selection"]["tier"], None, "an omitted tier stays null")
+        self.assertEqual(status["start_selection"]["model"], None)
+        evidence = status["start_evidence"]
+        self.assertTrue(evidence["model_selection"]["preserved"])
+        self.assertEqual(evidence["model_selection"]["source"], "resume-preserved")
+        self.assertIs(evidence["resumed"], True)
+        inherited = evidence["inherited"]
+        self.assertEqual(inherited, resumed["inherited_start_evidence"])
+        self.assertEqual(inherited["source"], "prior-holder-record")
+        self.assertEqual(inherited["holder_instance_id"], first["holder_instance_id"])
+        self.assertEqual(inherited["acp_session_id"], native)
+        self.assertEqual(inherited["model_selection"], first["model_selection"])
+        self.assertEqual(inherited["config_application"], first["config_application"])
+        # A second preserved resume carries the applied evidence forward, flat.
+        self.stop()
+        again = self.codex_start("--resume", native, extra_env=self.RESUME_ENV)
+        self.assertEqual(again["inherited_start_evidence"], inherited)
+        self.assertNotIn("inherited", again["inherited_start_evidence"])
+
+    def test_another_native_session_under_the_same_name_inherits_nothing(self) -> None:
+        self.codex_start("--tier", "astra")
+        self.stop()
+        other = self.codex_start("--resume", "native-started-elsewhere",
+                                 extra_env=self.RESUME_ENV)
+        self.assertIsNone(other.get("error"), other)
+        self.assertNotIn("inherited_start_evidence", other)
+        evidence = self.cli("observe", platform="codex")["start_evidence"]
+        self.assertNotIn("inherited", evidence)
+        self.assertTrue(evidence["model_selection"]["preserved"])
+        self.assertIsNone(evidence["model_selection"]["resolved_model"])
+        self.assertEqual(evidence["model_verified"], "unknown")
+
+    def test_explicit_resume_override_is_current_and_history_stays_separate(self) -> None:
+        first = self.codex_start("--tier", "astra")
+        native = first["acp_session_id"]
+        self.stop()
+        self.clear_mock_log()
+        resumed = self.codex_start("--resume", native, "--model", "gpt-6-sol",
+                                   extra_env=self.RESUME_ENV)
+        self.assertIn(("model", "gpt-6-sol"), self.config_events())
+        evidence = self.cli("status", platform="codex")["start_evidence"]
+        self.assertEqual(evidence["model_selection"]["source"], "user")
+        self.assertEqual(evidence["model_selection"]["resolved_model"], "gpt-6-sol")
+        self.assertEqual(evidence["config_application"], resumed["config_application"])
+        self.assertEqual(evidence["inherited"]["model_selection"]["source"], "runner-astra")
+
+    def test_rejected_option_and_old_record_stay_readable_not_refusals(self) -> None:
+        receipt = self.codex_start("--model", "unavailable/codex", caps="resume,strict-config")
+        self.assertIsNone(receipt.get("error"), receipt)
+        evidence = self.cli("status", platform="codex")["start_evidence"]
+        self.assertFalse(evidence["config_application"]["model"]["applied"])
+        self.assertEqual(evidence["config_application"]["model"]["error"]["code"],
+                         "config-option-failed")
+        sent = self.cli("send", "--text", "usable", platform="codex")
+        self.assertEqual(sent.get("outcome"), "turn_completed", sent)
+        self.stop()
+        path = self.record_file()
+        old = json.loads(path.read_text(encoding="utf-8"))
+        native = old["acp_session_id"]
+        old.pop("start_evidence")
+        path.write_text(json.dumps(old), encoding="utf-8")
+        status = self.cli("status", platform="codex", check=False)
+        self.assertNotIn("start_evidence", status)
+        self.assertEqual(status["record"]["session"], self.session)
+        # A resume over the pre-#203 record starts normally and inherits nothing.
+        resumed = self.codex_start("--resume", native, extra_env=self.RESUME_ENV)
+        self.assertIsNone(resumed.get("error"), resumed)
+        self.assertNotIn("inherited_start_evidence", resumed)
+
+
 class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
     """Issue #22: default kimi ACP start (no --mode) must set mode=yolo."""
 

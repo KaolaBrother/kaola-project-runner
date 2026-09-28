@@ -48,6 +48,8 @@ TERM_GRACE = 3.0
 # Issue #146: the shared session/new wait; a manifest `acp_session_new_timeout`
 # overrides it per platform (codex measured past 15 s on live starts).
 SESSION_NEW_TIMEOUT = 15.0
+# Issue #203: ceiling for the start selection/application evidence a record keeps.
+START_EVIDENCE_BYTES = 16384
 SENSITIVE_KEYS = ("_API_KEY", "TOKEN", "Authorization")
 
 
@@ -1575,6 +1577,11 @@ class Holder:
         except ValueError:
             parsed_selection = None
         self.start_selection = parsed_selection if isinstance(parsed_selection, dict) else None
+        # Issue #203: the start's own selection/application evidence, handed in
+        # once by `start` after it applied the config options. Held here so every
+        # whole-record rewrite and every state reply carries it; None until then
+        # and for a holder whose start never recorded it.
+        self.start_evidence: dict[str, Any] | None = None
         # True only for a direct checkout invocation, which start does not
         # compare to installed Skills. A ~/.local/bin start resolves to the
         # same files and is not exempt; the parent passes the fact because
@@ -1628,6 +1635,7 @@ class Holder:
             "accepted_revision": self.runner_identity["accepted_revision"],
             "script_paths": self.runner_identity["script_paths"],
             "start_selection": self.start_selection,
+            "start_evidence": self.start_evidence,
             "baseline_exempt": self.baseline_exempt,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
@@ -2126,6 +2134,7 @@ class Holder:
             "accepted_revision": self.runner_identity["accepted_revision"],
             "script_paths": self.runner_identity["script_paths"],
             "start_selection": self.start_selection,
+            "start_evidence": self.start_evidence,
             "baseline_exempt": self.baseline_exempt,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
             "agent_pgid": self.agent.proc.pid if self.agent.proc else None,
@@ -3963,6 +3972,23 @@ class Holder:
                 break
         return evidence
 
+    def op_record_start_evidence(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Keep the start receipt's selection/application evidence (Issue #203).
+
+        Stored as given and written with the record, so later whole-record
+        rewrites keep it. Bounded; nothing is sent to the agent.
+        """
+        evidence = params.get("evidence")
+        if not isinstance(evidence, dict):
+            return {"error": {"code": "invalid-start-evidence"}}
+        size = len(json.dumps(evidence, sort_keys=True).encode("utf-8"))
+        if size > START_EVIDENCE_BYTES:
+            return {"error": {"code": "start-evidence-too-large", "bytes": size,
+                              "limit": START_EVIDENCE_BYTES}}
+        self.start_evidence = evidence
+        self.write_record()
+        return {"recorded": True}
+
     # -- socket server ------------------------------------------------------------
 
     def handle_request(self, message: dict[str, Any]) -> dict[str, Any]:
@@ -3990,6 +4016,8 @@ class Holder:
             return self.op_worker_event(params)
         if op == "set_config_option":
             return self.op_set_config_option(params)
+        if op == "record_start_evidence":
+            return self.op_record_start_evidence(params)
         if op == "stop":
             return self.op_stop(params)
         return {"error": {"code": "unknown-op", "message": f"unsupported op {op}"}}
