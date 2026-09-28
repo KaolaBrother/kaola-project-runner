@@ -5,8 +5,8 @@
 - Binary override: `KIMI_BIN`
 - Standalone session prefix: `kimi-cli-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
-- Runner default preset (`--tier default`): **Kimi K3** — `kimi-code/k3` with `thinking=max`
-- Runner kimi-k2-8 preset (`--tier kimi-k2-8`): **Kimi K2.8** — `kimi-code/kimi-for-coding` with `thinking=max`
+- Runner default preset `kimi-cli/default` (`--tier default`): **Kimi K3** — `kimi-code/k3` with `thinking=max`
+- Runner kimi-k2-8 preset `kimi-cli/kimi-k2-8` (`--tier kimi-k2-8`): **Kimi K2.8** — `kimi-code/kimi-for-coding` with `thinking=max`
 - Fast support: no native Fast toggle; speed-named catalog models such as kimi-code/kimi-for-coding-highspeed are explicit model choices, not a Fast switch
 
 ## Preflight

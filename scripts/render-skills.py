@@ -293,6 +293,13 @@ def config_ids(manifest: dict[str, str]) -> str:
     return "/".join(f"`{value}`" for value in declared) or "none declared"
 
 
+def preset_id(manifest: dict[str, str], tier: str) -> str:
+    """Issue #218: the canonical row ID `<platform id>/<tier>` for one preset,
+    built only from the manifest's own id and tier word - never a second
+    registry. Grants, snapshots and relays name a seat by this ID."""
+    return f"{manifest['id']}/{tier}"
+
+
 def preset(manifest: dict[str, str], tier: str) -> str:
     """One SKILL.md preset as **name**: `id`, parameters; an undeclared id is omitted (T14)."""
     prefix = tier.replace("-", "_")
@@ -316,7 +323,7 @@ def preset_line(manifest: dict[str, str], tier: str) -> str:
     model_id = manifest[f"{prefix}_model_id"]
     parameters = f"`{manifest[f'{prefix}_model_parameters']}`"
     detail = f"`{model_id}` with {parameters}" if model_id else parameters
-    return (f"- Runner {tier} preset (`--tier {tier}`): "
+    return (f"- Runner {tier} preset `{preset_id(manifest, tier)}` (`--tier {tier}`): "
             f"**{manifest[f'{prefix}_model_name']}** — {detail}")
 
 
@@ -390,28 +397,33 @@ def profile_rows(manifests: list[dict[str, str]], only: str = "",
                     continue
                 lead = f"| {klass} " if with_class else ""
                 rows.append(f"{lead}| {manifest['runtime_name']} | `{tier}` | "
+                            f"`{preset_id(manifest, tier)}` | "
                             f"{manifest[f'{prefix}_model_name']} | {manifest[f'{prefix}_model_parameters']} | "
                             f"{manifest[f'{prefix}_model_profile']} |")
     return "\n".join(rows)
 
 
 def worker_pool_members(manifests: list[dict[str, str]]) -> str:
-    """Compact exact Worker membership without injecting every profile row."""
+    """Compact exact Worker membership without injecting every profile row.
+
+    Issue #218: members are named by their exact preset IDs so the pool line,
+    the catalog and an authorization row compare without display-name guesses."""
     members = []
     for manifest in manifests:
         for tier in ["default", *named_tiers(manifest)]:
             prefix = tier.replace("-", "_")
             if manifest[f"{prefix}_model_class"] == "Worker":
-                members.append(f"{manifest['runtime_name']} `{tier}`")
+                members.append(f"`{preset_id(manifest, tier)}`")
     return ", ".join(members)
 
 
 def readme_presets_region(manifests: list[dict[str, str]]) -> str:
     """Issue #206: the README preset catalog - the same manifest-rendered rows
-    as the generated profile-catalog reference, between managed markers."""
+    as the generated profile-catalog reference, between managed markers.
+    Issue #218: each row carries its stable `<platform>/<tier>` Preset ID."""
     header = (
-        "| Class | Runtime | `--tier` | Model | Effort / parameters | Profile |\n"
-        "|---|---|---|---|---|---|"
+        "| Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |\n"
+        "|---|---|---|---|---|---|---|"
     )
     return "\n".join([README_PRESETS_START, header,
                       profile_rows(manifests), README_PRESETS_END])

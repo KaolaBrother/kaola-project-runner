@@ -129,8 +129,8 @@ platform=<PLATFORM> session=<HOST> repo=<PROJECT>
 goal=<user goal>
 done=<already done>
 remaining=<remaining work>
-authorized_platforms=<id:count, ...>
-target_local_presets=<bound-target survey runtimes + installed Runner tiers; unknown separate>
+authorized_platforms=<preset_id:count, ...>
+target_local_presets=<bound-target survey runtimes + installed Runner tiers>
 quota_concurrency=<as given>
 quota_account=<as given>
 quota_token=<as given>

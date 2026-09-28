@@ -5,7 +5,7 @@
 - Binary override: `GROK_BIN`
 - Standalone session prefix: `grok-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
-- Runner default preset (`--tier default`): **Grok 4.7** — `grok-4.7` with `effort=xhigh, fast=false`
+- Runner default preset `grok/default` (`--tier default`): **Grok 4.7** — `grok-4.7` with `effort=xhigh, fast=false`
 - Fast support: no native Fast mechanism; explicit --fast on is reported unsupported
 
 ## Preflight

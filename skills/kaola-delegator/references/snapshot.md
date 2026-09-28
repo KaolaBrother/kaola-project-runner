@@ -7,8 +7,13 @@ locator); only it writes that file, and only the Host writes
 history:
 
 - `project`; `host` (platform, exact `--session`, `holder_instance_id`,
-  attested native id); `authorization` a safe handoff needs; `watch` (open
-  progress/decisions, source pointers); `stop`.
+  attested native id); `authorization` a safe handoff needs — each granted,
+  paused, or revoked seat named by its exact catalog preset id
+  (`<platform>/<tier>`, e.g. `cursor-cli/default` vs `grok/default`), with
+  count, Class grant lifetime, cap, quota units, seat identity and switch
+  authorization kept as separate facts, and an optional
+  `special_requirements` only when the owner actually supplied one (absent
+  means none); `watch` (open progress/decisions, source pointers); `stop`.
 - `cadence`: `timezone`, `start_local`, `end_local`, `interval_minutes`
   (e.g. `Asia/Shanghai`, `08:00`, `22:00`, `120`).
 - `timer_owner`: current outer `platform` and its `native_timer_id`.

@@ -5,8 +5,8 @@
 - Binary override: `CURSOR_AGENT_BIN`
 - Standalone session prefix: `cursor-cli-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
-- Runner default preset (`--tier default`): **Grok 4.7** — `grok-4.7-xhigh` with `effort=xhigh (encoded in model ID), fast=false`
-- Runner opus preset (`--tier opus`): **Claude Opus 5.5** — `claude-opus-5-5-medium` with `effort=medium (encoded in model ID)`
+- Runner default preset `cursor-cli/default` (`--tier default`): **Grok 4.7** — `grok-4.7-xhigh` with `effort=xhigh (encoded in model ID), fast=false`
+- Runner opus preset `cursor-cli/opus` (`--tier opus`): **Claude Opus 5.5** — `claude-opus-5-5-medium` with `effort=medium (encoded in model ID)`
 - Fast support: Fast via the ACP parameterized `fast` option (true/false strings), which applies to any model; a `-fast` catalog id (e.g. grok-4.7-xhigh-fast) decomposes onto that option; an unsupported variant is reported rather than invented
 
 ## Preflight

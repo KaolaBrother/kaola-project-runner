@@ -1,18 +1,18 @@
 {
-  "build": "ed3d06b61ebf",
+  "build": "5a0780477b1e",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "e55a236de83e481c4dc68371e6cfdceb2fee8a7373efaf55fc189663e02c527c",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
     "references/doc-maintenance.md": "aaa43b70d4cbca6f0edcd399ed9de2ee0ea8bcc9c9d7c6ebe6de353796b86f83",
-    "references/heartbeat-skeleton.md": "d2ef85ce8e79f2df655716063528785e50720fab9afa4d36b609bc340aadd3fc",
+    "references/heartbeat-skeleton.md": "2c64bf79bb3fa3d156ebab502ee6fb3f1d109b5ae5c0a58d987caf137f9f50b6",
     "references/host-entry-matrix.md": "162a620c4b932a59b44e773d152873e401ccabcf3bee71c1e0ec37a3f384bf23",
     "references/host-startup.md": "4fe4f49ff842b4516f31f613aaf4154696b9849fa23259eff20ed78aab5904d0",
     "references/issue-dispatch.md": "51a6f337daf56ca815fb6340b18c7078fcda5925ebaa83139ec5ebf419c1a9d1",
-    "references/profile-catalog.md": "a15a741273936d82d65ac9bb8aefc2e4d0b1db4504ae16010bb6de3440ca254e",
+    "references/profile-catalog.md": "c87118d72290e1c5ceb2fe1012b6f7c6446dae8a1d23e5b03013674ee63ee12c",
     "references/qa-evidence.md": "64b8d6be69edc0bdd55b6c15343cfcf7539c822a943795ba4503aa1d9743ceb7",
     "references/quota-packages.md": "a337a3ccb0b9dccd01b7d5fd9f16800f9194ed674f09f11bdb5b22f9bf213a71",
-    "references/worker-profiles.md": "7b00cd4acf73313866cf62e413426efd97a73f8b7b231a473b5e500739c4f285",
+    "references/worker-profiles.md": "582997f66ca067d5c494519ab85653022b0f857789c1ce05d66aee5bd9cf99cf",
     "references/workflow-worktree.md": "8a85aefd6747f42c29943f7d70f911aa900b2e56e43083247628fc6837d200b0",
     "references/zcode-host-dispatch.md": "98ee3a82b9ad45bb7a5672fa759ad34d2101efefd03a6ff0943d44f623dea232",
     "references/zcode-native-skill-entry.md": "03b9da8e27c8d319c532cc41e3a605fb578d5bbf9ab4d007359cb0ef656242e7"

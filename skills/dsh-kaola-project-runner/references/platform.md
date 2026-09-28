@@ -5,7 +5,7 @@
 - Binary override: `DSH_BIN`
 - Standalone session prefix: `dsh-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: `unsupported`
-- Runner default preset (`--tier default`): **DeepSeek V4.1 Flash (OpenCode Go)** — `opencode-go/deepseek-v4.1-flash` with `no Runner effort override`
+- Runner default preset `dsh/default` (`--tier default`): **DeepSeek V4.1 Flash (OpenCode Go)** — `opencode-go/deepseek-v4.1-flash` with `no Runner effort override`
 - Fast support: no native Fast toggle and no Fast config option on the ACP surface; the catalog's flash-named routes are explicit model choices, not a Fast switch
 
 ## Preflight

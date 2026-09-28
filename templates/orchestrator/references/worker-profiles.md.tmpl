@@ -58,6 +58,20 @@ update, or recovery facts when an install, uninstall, or launch path changes;
 do not poll, cache a second registry, or rescan each beat. A verified active
 session keeps its ownership when availability changes.
 
+## Preset IDs in authorization
+
+A granted, paused, or revoked seat is named by its exact catalog Preset ID
+`<platform>/<tier>`; a platform word alone names no seat. Count, Class grant
+lifetime, cap, quota units, seat identity and switch authorization stay
+separate facts; a Worker exclusion names its exact ID. An authorization item
+carries `special_requirements` only when the owner actually supplied a
+deviation (`{"effort":"high"}`, `{"task_scope":"visual QA"}`); omit by
+default — tier defaults, profile text, or Host judgment are
+not owner requirements. Effort changes only effort; task scope only narrows
+coverage; an unappliable requirement is reported, never silently fallen back
+or inferred to a nearby ID. The ID is notation: `start` still takes the
+declared `--tier` with its requested/applied receipt — no new flag or gate.
+
 ## Choosing
 
 Decide in this order: **current authorization → local availability → class
@@ -84,7 +98,7 @@ a model-switch grant and does not extend Host model selection.
 ## Computer interaction
 
 The owner designates exactly two presets for tasks that operate a computer:
-Codex `default` (GPT-6 Sol, effort=high; Elite) and Codex `luna` (GPT-6
+`codex/default` (GPT-6 Sol, effort=high; Elite) and `codex/luna` (GPT-6
 Luna, effort=max; Worker). Prefer Sol only when its local row is discovered,
 available for the task, and covered by the user's explicit preset/seat grant.
 If no eligible Sol is available, use locally available Luna under the Worker

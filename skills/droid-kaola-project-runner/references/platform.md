@@ -5,9 +5,9 @@
 - Binary override: `DROID_BIN`
 - Standalone session prefix: `droid-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
-- Runner default preset (`--tier default`): **Auto Model** — `auto` with `no Runner effort override`
-- Runner opus preset (`--tier opus`): **Opus 5.5** — `claude-opus-5-5` with `reasoning_effort=medium`
-- Runner core preset (`--tier core`): **Kimi K3** — `kimi-k3` with `reasoning_effort=max`
+- Runner default preset `droid/default` (`--tier default`): **Auto Model** — `auto` with `no Runner effort override`
+- Runner opus preset `droid/opus` (`--tier opus`): **Opus 5.5** — `claude-opus-5-5` with `reasoning_effort=medium`
+- Runner core preset `droid/core` (`--tier core`): **Kimi K3** — `kimi-k3` with `reasoning_effort=max`
 - Fast support: no separate Fast toggle; `-fast` catalog ids are explicit `--model` choices
 
 ## Preflight

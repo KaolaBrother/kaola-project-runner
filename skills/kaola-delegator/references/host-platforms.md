@@ -54,7 +54,9 @@ separately with the actual missing fact. Installed Elite/Expert options may be
 shown for grants, but visibility is not authorization. Worker pool membership
 is default authorization, not installation proof. Host context intersects
 local rows with current authorization and loads only exact applicable catalog
-rows. Relay grants and exclusions, never profile tables.
+rows. Relay grants and exclusions by exact catalog preset id
+(`<platform>/<tier>`; absent `special_requirements` means none), never profile
+tables.
 
 Refresh through existing intake/update/recovery facts after relevant
 install, uninstall, or explicit-path changes. Do not poll or rescan each beat,

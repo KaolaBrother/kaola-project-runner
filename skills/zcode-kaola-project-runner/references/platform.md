@@ -5,7 +5,7 @@
 - Binary override: `ZCODE_BIN`
 - Standalone session prefix: `zcode-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
-- Runner default preset (`--tier default`): **GLM 5.3** — `GLM-5.3` with `thought=max`
+- Runner default preset `zcode/default` (`--tier default`): **GLM 5.3** — `GLM-5.3` with `thought=max`
 - Fast support: no native Fast toggle; thought level is a separate config option (low/high/max)
 
 ## Preflight

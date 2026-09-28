@@ -110,7 +110,8 @@ class GeneratedDelegator(unittest.TestCase):
         self.assertIn("being the Host authorizes no worker seat", flat(self.platforms))
         block = handoff_block()
         self.assertIn("platform=<PLATFORM>", block)
-        self.assertIn("authorized_platforms=<id:count, ...>", block)
+        # Issue #218: authorization entries name seats by exact preset id.
+        self.assertIn("authorized_platforms=<preset_id:count, ...>", block)
 
     def test_native_resume_id_is_platform_specific(self) -> None:
         text = flat(self.platforms)

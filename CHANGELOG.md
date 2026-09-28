@@ -6,6 +6,29 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Use canonical `<runtime>/<tier>` preset IDs in seat authorization surfaces (Issue #218).**
+  Guidance and notation only. The generated catalog rows — the README preset catalog, the
+  installed `profile-catalog.md`, the Worker-pool membership line, and each platform Runner's
+  `references/platform.md` preset bullets — now carry each preset's stable ID
+  `<platform id>/<tier>` (the exact 20: Elite 11, Worker 6, Expert 3) derived from the same
+  `platforms/<id>.yaml` rows that render the model name, native launch ID, parameters, Class
+  and profile; there is no second registry, and a declaration change regenerates the rows. A
+  downstream authorization row (Delegator `delegator-heartbeat.json` snapshot spec, Host
+  heartbeat `authorization` body per the #217 skeleton, authorization-change relays, and the
+  handoff example's `authorized_platforms=<preset_id:count, ...>`) names a granted, paused, or
+  revoked seat by that exact ID — so `cursor-cli/default` vs `grok/default` and
+  `claude-code/default` vs `claude-code/sonnet` never blur — while count, Class grant
+  lifetime, cap, quota units, seat identity and switch authorization stay separate facts, the
+  six Worker presets remain one default-authorized pool entry (exclusions name exact IDs), and
+  an optional `special_requirements` appears only when the owner actually supplied a deviation
+  (`{"effort":"high"}`, `{"task_scope":"visual QA"}`); absent means none, an effort requirement
+  changes only effort, a task scope only narrows coverage, and an unappliable requirement is
+  reported rather than silently matched to a nearby ID. The catalog teaches that the ID names
+  a configured preset, not proof of the actually-running model (Droid Auto and Devin ACP
+  display drift), and at `start` the declared `--tier` with its requested/applied receipt
+  still governs: the ID is state notation, not a new CLI flag, transport gate, capability
+  inference, or authorization change. New focused suite
+  `tests/contract/test-issue-218-preset-ids.py`. Seats: restart not required.
 - **Keep Host and Delegator heartbeats as compact current-state JSON (Issue #217).** Fixed
   method stays in the installed Skills; each recurring prompt's mutable state is one JSON object.
   The Host `<repo>/.kaola/heartbeat-prompt.json` `body` now holds only that object — `project`
