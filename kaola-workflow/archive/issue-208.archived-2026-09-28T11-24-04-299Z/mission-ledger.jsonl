@@ -1,0 +1,1 @@
+{"n":1,"name":"Fix README seat-lifecycle contradiction and verify rendered surfaces","details":"dispatched: self — output landed as commit 52bf5abf on branch workflow/issue-208 in worktree .kw/worktrees/issue-208 (README.md +2/-1; render --write/--check PASS; validate.sh 49 suites PASS; existing seat-cap README pin unchanged, no test update needed)","status":"done"}
