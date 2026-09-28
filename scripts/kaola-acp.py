@@ -996,7 +996,7 @@ def bound_capture_receipt(receipt: dict[str, Any], limit: int = CAPTURE_RECEIPT_
 # turn outcome, cursors, pids, fingerprints) always stay whole; the large structures below
 # are summarised, in this order, until the line fits.
 STATE_BOUNDED_FIELDS = ("record", "initial_config_options", "session_meta", "capabilities",
-                        "agent_info", "pending_permissions")
+                        "agent_info", "start_evidence", "pending_permissions")
 STATE_BOUNDED_HINT = ("ordinary observe/status receipts are bounded: summarised structures are "
                       "named with their byte size and sha256; pending_permissions keeps its newest entries")
 
@@ -2628,6 +2628,80 @@ def echo_model_verification(
     return result
 
 
+# Issue #203: the start receipt facts the holder keeps as `start_evidence`, by
+# their existing names. `model_evidence_provenance` drops only its bulky
+# `catalog_probe` output.
+START_EVIDENCE_KEYS = (
+    "model_selection", "config_application", "effective_selection", "fast",
+    "host_selection", "model_verified", "model_mismatch_reason",
+    "actual_runtime_model_id", "actual_parameters",
+)
+
+
+def start_evidence_facts(source: dict[str, Any]) -> dict[str, Any]:
+    facts = {key: source[key] for key in START_EVIDENCE_KEYS if key in source}
+    provenance = source.get("model_evidence_provenance")
+    if isinstance(provenance, dict):
+        facts["model_evidence_provenance"] = {
+            key: value for key, value in provenance.items() if key != "catalog_probe"}
+    return facts
+
+
+def inherited_start_evidence(prior: Any, args: argparse.Namespace, repo: str,
+                             acp_session_id: Any) -> dict[str, Any] | None:
+    """Evidence an earlier start recorded for this same native session.
+
+    Only a resume/continue whose adopted ``acp_session_id`` equals the one the
+    prior record, for this platform/session/repo, both ran and recorded its
+    evidence under. A Runner name alone never matches. Historical, never a
+    fresh observation: a preserved resume carries the older applied evidence
+    forward rather than nesting it.
+    """
+    if not (args.resume or args.use_continue) or not acp_session_id:
+        return None
+    if not isinstance(prior, dict) or prior.get("acp_session_id") != acp_session_id:
+        return None
+    if (prior.get("platform"), prior.get("repo"), prior.get("session")) != (
+            args.platform, repo, args.session):
+        return None
+    saved = prior.get("start_evidence")
+    if not isinstance(saved, dict) or saved.get("acp_session_id") != acp_session_id:
+        return None
+    older = saved.get("inherited")
+    if (saved.get("model_selection") or {}).get("preserved") and isinstance(older, dict):
+        return older
+    inherited = start_evidence_facts(saved)
+    inherited.update({
+        "source": "prior-holder-record",
+        "holder_instance_id": prior.get("holder_instance_id"),
+        "acp_session_id": acp_session_id,
+        "recorded_at": saved.get("recorded_at"),
+    })
+    return inherited
+
+
+def record_start_evidence(sock: Path, receipt: dict[str, Any], args: argparse.Namespace,
+                          repo: str, prior: Any) -> None:
+    """Hand this start's selection/application evidence to its holder (Issue #203).
+
+    Evidence only: a holder that cannot keep it is reported, never a refusal.
+    """
+    evidence = start_evidence_facts(receipt)
+    evidence.update({
+        "acp_session_id": receipt.get("acp_session_id"),
+        "resumed": bool(args.resume or args.use_continue),
+        "recorded_at": round(time.time(), 3),
+    })
+    inherited = inherited_start_evidence(prior, args, repo, receipt.get("acp_session_id"))
+    if inherited is not None:
+        evidence["inherited"] = inherited
+        receipt["inherited_start_evidence"] = inherited
+    reply = socket_request(sock, "record_start_evidence", {"evidence": evidence}, 10.0)
+    receipt["start_evidence_recorded"] = reply.get("recorded") is True
+    if reply.get("error"):
+        receipt["start_evidence_error"] = reply["error"]
+
+
 def stop_started_holder(sock: Path, proc: subprocess.Popen) -> dict[str, Any]:
     """Force-stop the holder this start just spawned and reap it."""
     stop_reply = socket_request(sock, "stop", {"force": True}, 30.0)
@@ -3435,6 +3509,9 @@ def command_start(args: argparse.Namespace, repo: str,
     mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
     directory = record_dir(args, repo)
     record = read_record(directory)
+    # Issue #203: read before the new holder replaces it; the only source of
+    # evidence a resume of the same native session may inherit.
+    prior_record = record
     if record:
         holder_pid = record.get("holder_pid")
         if pid_alive(holder_pid):
@@ -3834,6 +3911,7 @@ def command_start(args: argparse.Namespace, repo: str,
                     "mutation_status": "not_started",
                 })
                 return receipt
+        record_start_evidence(sock, receipt, args, repo, prior_record)
     return receipt
 
 
@@ -4351,6 +4429,10 @@ def main() -> int:
         record = read_record(directory)
         if record:
             receipt.setdefault("record", record)
+            # Issue #203: a stopped or lost holder still has its saved start
+            # evidence; an old record without it stays without it.
+            if "start_evidence" not in receipt and "start_evidence" in record:
+                receipt["start_evidence"] = record["start_evidence"]
         # Only a session that exists has a binding to report; ``no-session``
         # stays silent rather than answering "unknown" about nothing.
         if record is not None or "heartbeat_host" in receipt:
