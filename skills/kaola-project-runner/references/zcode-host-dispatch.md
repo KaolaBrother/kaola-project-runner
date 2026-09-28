@@ -7,12 +7,12 @@ Host beat: [host-startup.md](host-startup.md). Outer start: Kaola-Delegator
 
 Runner session (what `--session` takes, chosen at `start`), ACP session id
 (`acp_session_id` in receipts) and native session id (`sess_…`, for `--resume`)
-are different things. A `sess_…` value is never a Runner session name. Never
-guess a session name. `holder_pid` is a fourth fact that proves nothing without
+are different things. A `sess_…` value is never a Runner session name, and
+never guess one. `holder_pid` is a fourth fact that proves nothing without
 `holder_instance_id`.
 
-Each installed Skill's `scripts/runtime-tmux.sh` is platform-pinned, so the
-commands below take **no** platform argument.
+Each Skill's `scripts/runtime-tmux.sh` is platform-pinned, so commands below
+take **no** platform argument.
 
 ## One Host beat
 
@@ -21,14 +21,14 @@ commands below take **no** platform argument.
 ```bash
 W="/abs/path/to/codex-kaola-project-runner/scripts/runtime-tmux.sh"
 WORK_REPO="/abs/path/to/project"      # the worker's repo
-"$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser
+"$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser --tier luna
 ```
 
 Run `start` from your own session: it binds the worker to you and refuses
 (`result: refused`, `reason: heartbeat-host-…`, exit 1) instead of starting
 unbound. The binding derives from `KAOLA_ACP_DISPATCHER`; an explicit
-`KAOLA_ACP_HEARTBEAT_HOST` that differs refuses `heartbeat-host-conflict`. A PTY request is refused on every command
-(`transport-pty-retired`): the Runner is ACP-only. Worker names
+`KAOLA_ACP_HEARTBEAT_HOST` that differs refuses `heartbeat-host-conflict`. PTY
+is refused (`transport-pty-retired`): ACP-only. Worker names
 are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
 Count before every `start`: live owned sessions, ACP holders included -
@@ -47,11 +47,17 @@ session (main Skill §Ending a run).
 "dispatcher": {"holder_instance_id":"…","platform":"zcode","repo":"…","session":"zcode-KT-orchestrator-main"}
 ```
 
-`heartbeat_host` is the running holder's own binding; `heartbeat_host_requested`
-is only the request; `observe` reports the binding any time.
+`heartbeat_host` is the running holder's binding; `heartbeat_host_requested`
+is only the request; `observe` reports it any time.
 
 - `"error": {"code": "session-exists"}` — you reused a live holder, which keeps
   its binding.
+
+Before the first send, match `model_selection`/`config_application`/
+`effective_selection` against the selected preset, not the command's default;
+aliases read through this platform's evidence, and `applied: true` isn't
+proof. Outside grant: exact-stop an unused seat and start the intended
+`--tier`; a working seat uses drain-restart below, correcting explicitly.
 
 ### A stale seat is not a dispatch target
 
@@ -59,12 +65,12 @@ Before `send` or `steer`, read `status`. `stale: true` means a restart-required
 file this seat loaded now differs on disk: `kaola-acp-holder.py`,
 `kaola-zcode-acp.py`, `kaola-quota.py`, `scripts/adapters/`, or the platform
 manifest (`stale_reasons`, `restart_files`). That is the same set as the
-release-note operator test. `reported_drift` lists the report-only drift codes;
-see that field, which does not block. `baseline_exempt` is
-true only for a direct checkout start; a `~/.local/bin` start is not exempt.
+release-note operator test. `reported_drift` lists report-only drift codes,
+non-blocking. `baseline_exempt` is
+true only for a direct checkout start, not a `~/.local/bin` start.
 Do not dispatch a `stale: true` seat. An operator-confirmed exception on that
-one `send`/`steer` is the orchestrator's own call; there is no flag.
-There is still no rebind. `drain-restart --continue` or `--resume ID` checks
+one `send`/`steer` is the orchestrator's own call; there is no flag or
+rebind. `drain-restart --continue` or `--resume ID` checks
 start refusals first, refuses `drain-not-idle` at once if the seat is busy
 (leaving it up - you own the retry), otherwise exact-stops the idle seat and
 starts again carrying the recorded model/effort/tier/fast. Run it from this
@@ -80,7 +86,7 @@ Host so the new start adopts your instance. Nothing scans other seats: the
 `--no-wait` returns once the prompt is admitted: `"outcome": "in_progress"`,
 `"mutation_status": "in_progress"` — **accepted and running — not finished, and
 not correct**. An `error` (`prompt-in-progress`, `agent-not-running`) dispatched
-nothing; a `prompt_timeout` or missing receipt leaves consumption unknown —
+nothing; a `prompt_timeout`/missing receipt leaves consumption unknown —
 establish it with `observe` before re-sending.
 
 **Keep two values**: `prompt_fingerprint`, the turn you dispatched, and
@@ -94,7 +100,7 @@ report as main Skill §Report says, then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
 `sleep`, poll in a loop, or hold this turn open with a blocking `wait` — an
-active Host turn is exactly what keeps events undelivered. Do not `stop` or
+active Host turn keeps events undelivered. Do not `stop` or
 `cancel` yourself or an in-flight worker to manufacture a wake-up.
 
 ### When an event wakes you
@@ -119,10 +125,10 @@ turn ended, so `capture --since <event_cursor>` sees only carrier and title
 updates. Read from an earlier anchor:
 
 ```bash
-# the dispatch receipt's cursor, from before the reply existed
+# dispatch receipt's cursor, before the reply existed
 "$W" observe --repo "$WORK_REPO" --session codex-KT-i274-parser
 "$W" capture --repo "$WORK_REPO" --session codex-KT-i274-parser --since "$DISPATCH_EVENT_CURSOR"
-# no anchor (resumed/adopted Host): never --since <event_cursor>
+# no anchor (resumed Host): never --since <event_cursor>
 "$W" capture --repo "$WORK_REPO" --session codex-KT-i274-parser --lines 200
 ```
 
@@ -135,8 +141,8 @@ step 5). Update the heartbeat prompt, and end the turn.
 
 `kind` is `idle` when the worker's turn ended (`reason`
 `outcome=<turn_completed|turn_failed> stop_reason=<…>`) and `terminated` when
-its process exited (`exit_code=N` or `exit_signal=N`); a finished turn is a full trigger, and you never kill a
-worker to be notified. `permission_required` is a bound worker's agent raising
+its process exited (`exit_code=N`/`exit_signal=N`); a finished turn is a
+full trigger — never kill a worker to be notified. `permission_required` is a bound worker's agent raising
 `session/request_permission` mid-turn — a wake, not an idle; the ordinary
 `idle` still arrives at turn end. The event carries only `request_id`:
 decide it from the worker's live `pending_permissions` — inside existing
@@ -145,8 +151,8 @@ authorization or escalated to the user.
 ## Workers and the notification carrier
 
 The worker Agent owns its delivery; it never fabricates events and never writes
-to your stdin — its holder sends the event over your holder's admin socket.
-Never ask a worker to notify you or duplicate the carrier.
+to your stdin — its holder sends the event over your holder's admin socket;
+never ask it to notify you or duplicate the carrier.
 
 Delivery rules you can rely on:
 
@@ -161,5 +167,4 @@ Delivery rules you can rely on:
 - Dispatch failure or unknown acceptance means you are **not** reliably
   event-driven: recover it this beat, or report the exception.
 
-Steering (`steer`, where supported) is a separate tool and does not alter this
-wake path.
+Steering (where supported) is separate and doesn't alter this wake path.
