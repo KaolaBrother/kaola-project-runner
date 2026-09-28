@@ -6,6 +6,23 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Recover confirmed quota exhaustion by Host and worker class, never by login (Issue #207).**
+  Delegator and Host guidance now acts only on confirmed exhaustion — explicit runtime/provider
+  error or usage evidence — while a generic 429, authentication error, timeout, transient failure,
+  or reset-window metadata alone stays reported evidence, and a runtime shown to share the
+  exhausted pool is not fresh quota. An exhausted non-ZCode Host is replaced by one ZCode Host
+  through the existing exact-stop/new-Host handoff carrying grants, issues, valid evidence, worker
+  ownership and pending close-out; an already-ZCode Host, or a fallback that cannot operate, goes
+  to the user. An Expert task is preserved and escalated; an Elite seat is reclaimed, loses its
+  grant for this run, and hands its task to another already-authorized Elite; a Worker task moves
+  to another suitable Worker preset without cycling an exhausted shared pool; no suitable
+  replacement means asking the user. Delegator and Host never attempt, retry, or delegate login,
+  credential refresh, or account switching. Details live in the existing Delegator
+  `references/host-brick.md` and Project Runner `references/quota-packages.md`, with pointers from
+  both entry Skills and `worker-profiles.md`. Prompt/reference change only: no registry, watcher,
+  retry loop, classifier, quota engine, or probe; transport, CLI, permission, and model surfaces
+  are unchanged and the `platforms/` operator-test paths are untouched (`Seats: restart not
+  required` for this change).
 - **Expert, Worker and Elite preset classes; README reorganized around usage (Issue #206).**
   Every runtime/preset now carries one owner-defined operating class in its platform manifest
   (`<tier>_model_class`, validated at render): **Expert** (Claude Code `fable`, Codex `astra`,

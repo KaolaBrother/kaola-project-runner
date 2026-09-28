@@ -47,3 +47,19 @@ Unmapped (no verified rule for this static query; droid `billingPool` is read fr
 ## Emission stamps
 
 `observe` and `status` stamp model leaves on the receipt copy: the model `configOptions` entry (including one nested group), `session_meta.models.availableModels`, `session_meta.availableModels`, and `initial_config_options`. `view` adds `models` with `availableModels` and `options`; `options` contains only the model config option. A mapped leaf sets `quotaPool` to the qualified id and omits `quotaPoolStatus`. An unmapped leaf sets `quotaPool` to null and `quotaPoolStatus` to `unmapped`. Mode and effort options are left untouched. The holder's stored `session_meta` and `record.json` stay the native ACP payload.
+
+## Confirmed exhaustion
+
+Recover only on confirmed exhaustion: an explicit runtime/provider error or usage fact in existing receipts, captures or events that the relevant quota is exhausted. A generic 429, authentication error, timeout, transient failure, or catalog/reset-window metadata alone is not: keep the unknown, report it, and handle it under the ordinary failure rules. No probe, retry loop of the failed task, quota detector or new record; the task's existing receipts and the heartbeat snapshot keep the evidence and any known pool/reset facts. A different preset or runtime is not fresh quota when existing evidence (the error, `quotaPool`, `model-package`) puts it in the exhausted pool; an unmapped pool proves neither.
+
+Never log in: no attempt, retry or delegation of login, logout/login cycling, credential refresh or replacement, or account switching, and no change to credentials, billing routes or purchased quota. Evidence of authentication rather than quota is reported for the user to handle.
+
+By the exhausted seat's class ([worker-profiles.md](worker-profiles.md)):
+
+| Class | Action |
+|---|---|
+| Expert | Preserve the task, its output and native resume id; ask the user how to proceed. No substitute Expert, reuse of an old grant, or downgrade to an execution seat. Unrelated authorized work continues. |
+| Elite | Preserve its output and locator, exact-stop the seat, and remove its grant row/availability from this run's heartbeat snapshot; hand the task to another suitable already-authorized Elite seat, not one shown to share the exhausted pool, within existing counts/caps. Never restart the revoked seat under its old grant or switch its model to bypass this; only the user reauthorizes it. |
+| Worker | Preserve the task; another suitable Worker preset takes it under the pool permission (cap exemption kept, real quota/resource limits applied). Never cycle seats of a confirmed exhausted shared pool. |
+
+No suitable authorized same-class replacement: report the blocked task with its evidence and ask the user; never cross classes, create grants or discard work. The replacement continues the same issue run from its worktree, ledger and receipts under single-writer ownership: no duplicate claim, automatic redo or loss of valid output. Revocation touches only that seat in this run, never a preset, credential, global configuration or other-project grant. The Host's own confirmed exhaustion is the Delegator's to recover (`kaola-delegator` `references/host-brick.md`): report it with the evidence and do not replace yourself.

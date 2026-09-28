@@ -90,9 +90,8 @@ platform's default transport is ACP:
 This Skill is host-neutral. Any `install-local.sh --runtime`, or
 `--skills-dir`, installs it with the workers as sibling Skill directories; Host
 admission per platform is [host-entry-matrix.md](references/host-entry-matrix.md).
-Each inner worker, ZCode or not, is its own session and process group: an inner
-stop never reaches the Host, and the Host's stop sweeps only recorded inner
-sessions. A Host (any platform with a `host_skill_entry`) is event-driven: no
+Each inner worker is its own session and process group: an inner stop never
+reaches the Host, and the Host's stop sweeps only recorded inner sessions. A Host (any platform with a `host_skill_entry`) is event-driven: no
 Routine, cron, or sleep loop. Its first prompt names its
 `platform`/`session`/`repo`; `KAOLA_ACP_DISPATCHER` carries them to its shell.
 Beat mechanics - binding, non-blocking dispatch, ending the
@@ -110,7 +109,7 @@ whole files into context: receipts, hashes, counts and bounded excerpts are the
 evidence. Ordinary `observe`, `status` and `capture --lines` receipts stay bounded
 (`truncated` names dropped fields); `capture --full` is the only unbounded
 request.
-Quota packages (read-only catalog; never changes the count cap): [quota-packages.md](references/quota-packages.md).
+Quota packages (read-only catalog; never changes the count cap) and confirmed-exhaustion recovery by class, never login: [quota-packages.md](references/quota-packages.md).
 
 ### Defaults
 
@@ -225,11 +224,10 @@ sink, and write ownership.
 ## Ending a run
 
 When ending a project run, the default is to finish every in-hand authorized
-task and every in-hand issue of this run (already claimed / in flight), then
+task and every in-hand issue of this run (claimed or in flight), then
 merge their worktrees and branches, leave no leftover branch tails, and leave
-the workspace clean, matching Kaola Workflow close-out; that default
-is not an extra engine. Do not park unfinished branches as the normal end of a
-project run.
+the workspace clean, matching Kaola Workflow close-out. Do not park unfinished
+branches as the normal end of a project run.
 
 A human stop boundary such as "run until 5pm", "run until done", or
 "run until CONDITION" means: after that line, do not accept or dispatch new

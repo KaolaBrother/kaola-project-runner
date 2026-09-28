@@ -18,6 +18,8 @@ benchmark claims, and they change no Host model selection.
 Expert review informs the Host; it never replaces Host acceptance or
 lifecycle ownership. No Expert use follows from a listed profile, a general
 grant, or an earlier approved task.
+A seat's confirmed quota exhaustion is recovered by its class, never by
+login: [quota-packages.md](quota-packages.md#confirmed-exhaustion).
 
 ## Choosing
 

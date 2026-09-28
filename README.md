@@ -428,6 +428,22 @@ Ending a run defaults to finishing in-hand issues and a clean workspace. A state
 stop boundary blocks new tasks and new issues without dropping in-hand work; only an
 explicit "stop here, continue later" pauses that cleanup and preserves recovery.
 
+### Quota exhaustion
+
+Recovery acts only on confirmed exhaustion — an explicit runtime/provider error or usage
+fact that the relevant quota is exhausted. A generic 429, authentication error, timeout,
+transient failure, or reset-window metadata alone is reported, not acted on, and another
+runtime is not fresh quota when evidence shows it shares the exhausted pool. By class:
+an exhausted **Host** is replaced by Kaola-Delegator with one ZCode Host through the
+existing exact-stop/new-Host handoff (if the Host is already ZCode, or that fallback
+cannot operate, the Delegator asks you); an **Expert** task waits for your direction; an
+exhausted **Elite** seat is reclaimed and loses its grant for this run — its task goes to
+another already-authorized Elite, and only you reauthorize it; a **Worker** task moves to
+another suitable Worker preset without cycling seats of an exhausted shared pool. With no
+suitable authorized replacement, the task is reported and you are asked. Neither the
+Delegator nor the Host ever attempts, retries, or delegates login, re-login, credential
+refresh, or account switching; authentication is left to you.
+
 ### Authorization before a new Host
 
 If a live delegated Host is confirmed stopped and its native resume id cannot restore

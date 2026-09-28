@@ -43,7 +43,7 @@ never restart or cancel in-flight work.
 standard name never justifies a second Host. A Host failing its identity check
 is exact-stopped, proven gone (`residual_pids: []`), then replaced. A stopped
 Host resumes with an attested native id or follows handoff §Recover; authorize
-before a new `start`. There is no Delegator continuation file. [Bricked Host](references/host-brick.md).
+before a new `start`. There is no Delegator continuation file. [Bricked or quota-exhausted Host](references/host-brick.md); never log in.
 From the Grok Bot account bridge, attest every Host op with the locator; Codex
 and generic do not. Commands, identities and the `sweep=` line:
 [handoff.md](references/handoff.md).
@@ -65,4 +65,4 @@ escalate only unrecoverable human decisions. Do not dispatch workers, copy a
 mission ledger, maintain a heartbeat, create a Routine, touch inner sessions,
 or `stop` the Host before close-out. Changing the outer Agent does not stop it.
 
-KPR update: see [host-platforms.md §KPR updates](references/host-platforms.md#kpr-updates); an announcement proves neither an updated install nor loaded guidance and authorizes no install/restart.
+KPR update: [host-platforms.md](references/host-platforms.md#kpr-updates); an announcement proves no updated install or loaded guidance, authorizes no install/restart.
