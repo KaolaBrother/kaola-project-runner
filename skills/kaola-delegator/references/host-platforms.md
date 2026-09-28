@@ -124,7 +124,6 @@ completion. On zcode a missing tool_call means the install is wrong: fix it,
 never substitute a manual read. Elsewhere a missing quote may also be the
 runtime; escalate to the owner rather than guess.
 
-codex: its E2 row was measured on codex-acp 1.13.0; isolated 1.13.1 E2
-probes answered `SKILL-NOT-LOADED`. A codex Host accepted by the owner on an
-explicit installed-Skill read plus a working bind/wake loop is that owner
-acceptance, not E1/E2.
+codex: a Host the owner accepted on an explicit installed-Skill read plus a
+working bind/wake loop is that owner acceptance, not E1/E2 (codex-acp probe
+history: the evidence doc above).

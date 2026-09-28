@@ -80,7 +80,11 @@ class MainSkill(unittest.TestCase):
 
     def test_only_legal_idle_is_awaiting_acceptance_then_stop_same_beat(self) -> None:
         self.assertIn("The only legal idle seat is one whose delivery is awaiting acceptance", self.text)
-        self.assertRegex(self.text, r"Once acceptance finishes or the seat is abandoned, exact-stop it in that same beat")
+        # Issue #208: an accepted seat keeps the finalize/cleanup duties it
+        # owns, and is exact-stopped once they finish or are handed off.
+        self.assertIn("an accepted seat keeps only the finalize/cleanup duties it owns", self.text)
+        self.assertRegex(self.text, r"Once it owns none \(done or explicitly handed off\) or the seat is "
+                                    r"abandoned, exact-stop it in that same beat")
         self.assertIn("a rejected delivery's repair is the same assignment", self.text)
 
     def test_new_task_is_new_session_resume_is_same_assignment_only(self) -> None:
@@ -105,19 +109,14 @@ class HeartbeatSkeleton(unittest.TestCase):
     def setUp(self) -> None:
         self.text = flat(REFS / "heartbeat-skeleton.md")
 
-    def test_rule_present_in_chinese(self) -> None:
-        for phrase in (
-            "并发数即存活进程（含 ACP holder）的硬上限",
-            "达上限先精确 stop 一个再 start（stop-before-start）",
-            "唯一合法的闲置是交付已到、待验收",
-            "验收完成或放弃该席位的同一拍即精确 stop",
-            "每项新任务开新会话",
-            "新任务或换任务一律以新名 start 新会话",
-            "--resume/--continue 仅限同一任务恢复",
-            "「存活 N / 授权 M」及本拍已停会话",
-        ):
-            with self.subTest(phrase=phrase):
-                self.assertIn(phrase, self.text)
+    def test_rule_is_deferred_to_the_main_skill(self) -> None:
+        # Issue #208: the carrier loads the main Skill every beat, so the
+        # skeleton keeps live seat facts and defers the cap/stop rules there.
+        self.assertIn("不复述 Skill 规则", self.text)
+        self.assertIn("已停席不列 live", self.text)
+        for restated in ("达上限先精确 stop 一个再 start", "验收完成或放弃该席位的同一拍即精确 stop"):
+            with self.subTest(restated=restated):
+                self.assertNotIn(restated, self.text)
 
     def test_superseded_sentences_are_gone(self) -> None:
         for sentence in SUPERSEDED + ("之后有新授权工作才 start/--resume/--continue",):
@@ -135,8 +134,9 @@ class ZCodeHostDispatch(unittest.TestCase):
         self.assertIn("At the hard cap: stop-before-start (main Skill step 2)", self.text)
 
     def test_stop_in_same_beat_after_acceptance(self) -> None:
-        # Issue #157 (§1.2): same-beat exact-stop is stated in main Skill step 5.
-        self.assertIn("once accepted, exact-`stop` that seat this beat (main Skill step 5)", self.text)
+        # Issue #157 (§1.2) / #208: the seat lifecycle is stated once, in main Skill step 5.
+        self.assertIn("keep or exact-`stop` the seat per main Skill step 5", self.text)
+        self.assertNotIn("once accepted, exact-`stop` that seat this beat", self.text)
         self.assertNotIn("Then accept, fix, or dispatch more", self.text)
 
     def test_finish_the_beat_reports_live_over_authorized(self) -> None:

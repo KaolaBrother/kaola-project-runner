@@ -1,7 +1,6 @@
 # Issue-scoped dispatch names and one issue per run
 
-Control-plane scheduling policy for issue-backed ACP worker dispatch. It is not a transport
-gate, a second validator, or a new lifecycle record.
+Control-plane scheduling policy for issue-backed ACP worker dispatch, not a transport gate.
 
 ## The name
 
@@ -59,24 +58,25 @@ run's `workflow-state.md` `issue_number`. The folder is gitignored and exists on
 checkout, never in a child worktree. Schema (keys, statuses, sole writer): the global Workflow
 contract. The Runner never writes.
 
-The Host reads it read-only. Absent file → no live Workflow run has recorded missions for this
-issue (`unknown`). Present → progress = `done` lines / total lines; per-mission status by `n`.
+The Host reads it read-only. Absent file → progress `unknown`. Present → progress = `done`
+lines / total lines; per-mission status by `n`.
 Read only the `{n,status}` projection and open `details` only to decide one mission:
 
 ```bash
 python3 -c 'import json,sys;r=[json.loads(l) for l in open(sys.argv[1]) if l.strip()];print(sum(x["status"]=="done" for x in r),"/",len(r),[ (x["n"],x["status"]) for x in r if x["status"] in ("failed","blocked")])' "$ROOT/kaola-workflow/.ledger/issue-$N.jsonl"
 ```
 
-`todo` / `in-flight`: wait; never send a second worker to the same mission. `done`: counts
+`todo` / `in-flight`: never send a second worker to the same mission. `done`: counts
 toward progress. `failed`: one dispatch has one result; the run's orchestrator decides any new
 mission, the Host may redispatch a worker and never edits the line. `blocked`: escalate
 authorization or `HUMAN_DECISION_REQUIRED`, or supply the missing authorization so the worker
-returns to `in-flight`. On Workflow archive the file moves to
-`kaola-workflow/archive/<project>/mission-ledger.jsonl`; a vanished file means archive done.
-Every line terminal (`done`/`failed`) with the forge issue OPEN: finalize/archive is in
-progress, keep waiting. Every line terminal with the issue CLOSED, or the run already under
-`archive/`: the archive was forgotten - report it stuck and name its owner, neither `unknown`
-nor done. Session facts stay in Runner receipts and run facts in `workflow-state.md`.
+returns to `in-flight`.
+
+Mission completion is not lifecycle completion. A missing file, or every line terminal, alone
+proves neither archive, finalize in progress, nor a reason to wait: judge finalize, archive
+(which moves the file to `kaola-workflow/archive/<project>/mission-ledger.jsonl`) and cleanup
+from Workflow and forge records and the responsible owner, and send records that disagree to
+that owner. Session facts stay in Runner receipts and run facts in `workflow-state.md`.
 
 ## What the name does not decide
 

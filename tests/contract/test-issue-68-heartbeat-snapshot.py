@@ -55,7 +55,8 @@ class HeartbeatGuidanceObligation(unittest.TestCase):
         )
 
     def test_each_beat_subtracts_while_keeping_live_work(self) -> None:
-        step = self.skeleton.split("7. ", 1)[1].split("\nPR ", 1)[0]
+        # Issue #208: the write-back step is the skeleton's `写回：` block.
+        step = self.skeleton.split("写回：", 1)[1]
         drop, keep = step.split("保留：", 1)
         for token in ("已被替代的额度", "已作废的计划", "重复叙述", "无后续影响的已完成事项", "暂态故障"):
             self.assertIn(token, drop, f"per-beat drop list is missing {token!r}")
@@ -68,15 +69,24 @@ class HeartbeatGuidanceObligation(unittest.TestCase):
         self.assertRegex(self.skill, r"keeping in-flight locators and unfinished duties")
 
     def test_a_confirmed_change_takes_effect_in_the_same_beat(self) -> None:
-        self.assertRegex(self.skeleton, r"立即替换旧值，并在本拍就按新约束重新安排可执行工作")
-        self.assertRegex(self.skeleton, r"不再按已被替代的额度派工")
+        # Issue #208: the stable rule lives once in the main Skill the carrier
+        # loads every beat; the skeleton no longer restates it.
         self.assertRegex(self.skill, r"A confirmed change\s+applies in that beat")
+        self.assertIn("不复述 Skill 规则", self.skeleton)
 
     def test_exhaustion_neither_switches_platform_nor_cancels_in_flight(self) -> None:
-        self.assertRegex(self.skeleton, r"平台故障或实测额度耗尽只是证据，本身不扩大换平台的授权")
-        self.assertRegex(self.skeleton, r"额度下调也不等于取消或丢弃在飞任务")
-        self.assertRegex(self.skeleton, r"保留其定位与剩余收尾职责")
         self.assertRegex(self.skill, r"a lowered quota alone\s+cancels nothing")
+        self.assertRegex(self.skill, r"No automatic model, tier, or transport switch")
+        self.assertRegex(self.skill, r"keeping in-flight locators and unfinished duties")
+
+    def test_skill_update_reconciles_the_heartbeat_once(self) -> None:
+        # Issue #205 reconciliation, moved from the skeleton by Issue #208.
+        self.assertRegex(
+            self.skill,
+            r"When an updated Skill loads, reconcile the\s+heartbeat once with current rules, "
+            r"latest valid instructions and fresh seat\s+facts, keeping user limits and the frontier",
+        )
+        self.assertNotIn("新版 Skill 加载后", self.skeleton)
 
     def test_quota_units_are_not_fused_into_one_number(self) -> None:
         self.assertRegex(self.skeleton, r"保留用户表达的单位与含义")

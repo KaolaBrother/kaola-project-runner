@@ -1,8 +1,7 @@
 # Startup: ordinary worker flow, and the Host's own startup receipt
 
 Read this for ordinary worker supervision, or when this session **is** the
-Host doing its own startup. Outer recover/start/send/stop lives only in
-Kaola-Delegator (`kaola-delegator`). Commands here are the installed form.
+Host doing its own startup. Commands here are the installed form.
 
 ```bash
 SKILLS="<skills root>"   # the root your own runtime installed to, e.g. $HOME/.zcode/skills
@@ -50,8 +49,9 @@ interrupt` resends verbatim, not a Host recovery entry. Detail:
 
 The prompt that woke you already loaded the main Skill through its first-line
 entry (`/kaola-project-runner` on ZCode) — startup, resume and post-compaction rounds
-alike; never `read` a `SKILL.md` path by hand. Read the plan and the project's
-recovery records, and answer
+alike. On ZCode never `read` a `SKILL.md` path by hand; elsewhere a runtime's
+own reread instruction (the Codex compact hook) stays valid. Read the plan and
+the project's recovery records, and answer
 with a short startup receipt: role, authorization per class (worker-profiles.md;
 counts, implement or supervise-only), lifecycle target and stop boundary, where
 those facts came from, and every unresolved conflict. Then,
@@ -135,11 +135,10 @@ non-empty `residual_pids` is reported, never silent.
 |---|---|
 | Project Plan / authorized task plan | roles, authorization, lifecycle and stop boundary |
 | Workflow mission ledger `kaola-workflow/.ledger/issue-<N>.jsonl` | engineering progress per run; Workflow writes, the Runner only reads |
-| `.kaola/heartbeat-prompt.json` `body` | current identity, binding, run paths, next step |
+| `.kaola/heartbeat-prompt.json` `body` | current identity, authorization, locators, frontier, open duties |
 | Runner receipts and holder events | what actually happened |
 
-Keep them separate: no second plan is generated, no project history is rewritten,
-and the heartbeat body is not a copy of the ledger. A `done`/`todo`
+Keep them separate: the heartbeat body is not a copy of the ledger. A `done`/`todo`
 contradiction goes back to the record's owner; the Runner never rules work
 complete. Report which main-Skill payload was loaded when a candidate checkout
 and an installed release both exist.

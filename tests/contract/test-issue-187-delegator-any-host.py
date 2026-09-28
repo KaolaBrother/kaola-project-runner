@@ -150,8 +150,13 @@ class GeneratedDelegator(unittest.TestCase):
         self.assertIn("On zcode a missing tool_call means the install is wrong", text)
         self.assertNotIn("zcode, devin, opencode", text)
         self.assertNotIn("On an E1 row", text)
-        self.assertIn("isolated 1.13.1 E2 probes answered `SKILL-NOT-LOADED`", text)
-        self.assertIn("that owner acceptance, not E1/E2", text)
+        # Issue #208: the codex-acp probe history lives in the evidence doc.
+        self.assertIn("explicit installed-Skill read plus a working bind/wake loop is that owner "
+                      "acceptance, not E1/E2", text)
+        self.assertNotIn("isolated 1.13.1 E2 probes", text)
+        evidence = flat((PROJECT / "docs" / "host-entry-evidence.md").read_text(encoding="utf-8"))
+        self.assertIn("codex on codex-acp 1.13.1", evidence)
+        self.assertIn("`SKILL-NOT-LOADED`", evidence)
         # No unconditional tool_call rule for every Host.
         self.assertNotIn("a missing `Skill` tool_call means a bad install", flat(self.handoff))
         self.assertIn("E1 `Skill` tool_call or E2 quote", flat(self.handoff))

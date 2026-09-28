@@ -84,14 +84,13 @@ class RenderedSurfacesStateTheRule(unittest.TestCase):
 
     def test_heartbeat_skeleton_carries_the_project_code_slot_and_both_rules(self) -> None:
         self.assertIn("本项目短码与仓库身份：", self.skeleton)
-        self.assertIn("`--session <platform>-<本项目短码>-i<ISSUE>-<用途>`", self.skeleton)
-        self.assertIn("droid-KT-i274-parser", self.skeleton)
-        self.assertIn("在 start 回执里核对该名字", self.skeleton)
-        self.assertIn("一个 Workflow run 只认领一个真实 Issue", self.skeleton)
-        self.assertIn("不用 bundle/多 Issue 模式", self.skeleton)
+        # Issue #208: the naming and one-issue rules live once in the main
+        # Skill (asserted above), which the carrier loads every beat.
+        self.assertIn("不复述 Skill 规则", self.skeleton)
+        self.assertNotIn("一个 Workflow run 只认领一个真实 Issue", self.skeleton)
         # The project code must survive the per-beat subtraction of Issue #68.
         keep = self.skeleton.split("保留：", 1)[1]
-        self.assertIn("本项目短码与派工命名/单 Issue 约束", keep)
+        self.assertIn("本项目短码与仓库身份", keep)
 
     def test_reference_states_the_grammar_negatives_and_non_goals(self) -> None:
         self.assertIn("<platform>-<PROJECT>-i<ISSUE>-<unique-purpose>", self.dispatch)

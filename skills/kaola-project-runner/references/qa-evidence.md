@@ -82,8 +82,8 @@ past its required boundary.
 
 An incomplete or unclear QA record goes back to its owner as the same
 assignment, with the concrete gap named. A concrete product defect goes to the
-implementing owner. Exact-stop the seat once its delivery is accepted or
-abandoned; enough evidence is enough.
+implementing owner. Release each seat per main Skill step 5; enough evidence
+is enough.
 
 ## Examples
 

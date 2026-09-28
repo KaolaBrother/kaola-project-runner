@@ -82,31 +82,23 @@ class LedgerProjection(unittest.TestCase):
 
 
 class TerminalLedger(unittest.TestCase):
-    """Owner revision (issuecomment-5770305093): an all-terminal ledger that is still
-    present is read together with the forge issue state the Host already gates on."""
+    """Issue #208 supersedes the owner revision (issuecomment-5770305093): a
+    missing ledger or all-terminal lines alone establish no lifecycle state; the
+    projection stays a progress count and lifecycle is judged from Workflow and
+    forge records and the responsible owner."""
 
-    RULES = {
-        "OPEN": "Every line terminal (`done`/`failed`) with the forge issue OPEN: finalize/archive is in progress, keep waiting.",
-        "CLOSED": "Every line terminal with the issue CLOSED, or the run already under `archive/`: the archive was forgotten - report it stuck and name its owner, neither `unknown` nor done.",
-    }
+    RULE = (
+        "Mission completion is not lifecycle completion. A missing file, or every line terminal, alone "
+        "proves neither archive, finalize in progress, nor a reason to wait"
+    )
 
-    @staticmethod
-    def verdict(projection: str, forge_state: str) -> str:
-        """Apply the rendered rule to the one-liner's output; 'live' when not all terminal."""
-        match = re.fullmatch(r"(\d+) / (\d+) (\[.*\])", projection)
-        assert match, projection
-        done, total = int(match.group(1)), int(match.group(2))
-        flagged = re.findall(r"\((\d+), '(failed|blocked)'\)", match.group(3))
-        failed = sum(1 for _, status in flagged if status == "failed")
-        if total == 0 or done + failed != total:
-            return "live"
-        return "in-progress" if forge_state == "OPEN" else "stuck"
-
-    def test_all_terminal_ledger_is_in_progress_when_open_and_stuck_when_closed(self) -> None:
+    def test_all_terminal_ledger_is_a_count_not_a_lifecycle_verdict(self) -> None:
         text = re.sub(r"\s+", " ", DISPATCH.read_text(encoding="utf-8"))
-        for rule in self.RULES.values():
-            self.assertIn(rule, text)
-        self.assertIn("a vanished file means archive done", text)
+        self.assertIn(self.RULE, text)
+        self.assertIn("from Workflow and forge records and the responsible owner", text)
+        for retired in ("a vanished file means archive done", "finalize/archive is in progress, keep waiting",
+                        "the archive was forgotten"):
+            self.assertNotIn(retired, text)
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "kaola-workflow" / ".ledger"
             ledger.mkdir(parents=True)
@@ -126,17 +118,13 @@ class TerminalLedger(unittest.TestCase):
             live = run_projection(Path(tmp), 7)
         self.assertEqual(terminal.returncode, 0, terminal.stderr)
         self.assertEqual(terminal.stdout.strip(), "2 / 3 [(2, 'failed')]")
-        self.assertEqual(self.verdict(terminal.stdout.strip(), "OPEN"), "in-progress")
-        self.assertEqual(self.verdict(terminal.stdout.strip(), "CLOSED"), "stuck")
-        self.assertEqual(self.verdict(live.stdout.strip(), "CLOSED"), "live")
+        self.assertEqual(live.stdout.strip(), "1 / 3 [(2, 'failed')]")
 
 
 class AbsentLedger(unittest.TestCase):
     def test_absent_ledger_is_unknown_with_no_fallback(self) -> None:
         text = re.sub(r"\s+", " ", DISPATCH.read_text(encoding="utf-8"))
-        self.assertIn(
-            "Absent file → no live Workflow run has recorded missions for this issue (`unknown`).", text
-        )
+        self.assertIn("Absent file → progress `unknown`.", text)
         # Issue #157 (PR-R4): the consumer-display fallback list moved to docs.
         display = re.sub(r"\s+", " ", (PROJECT / "docs" / "issue-dispatch-display.md").read_text(encoding="utf-8"))
         self.assertIn("an absent ledger, or two active runs for one issue each fall back to unknown", display)

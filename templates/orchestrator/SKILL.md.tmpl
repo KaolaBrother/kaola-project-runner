@@ -64,8 +64,7 @@ authorized [profile rows](references/profile-catalog.md) in context.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. No serial build, GPU, port, or cache constraint blocks
-unrelated parallel work; invent no global serialization or extra
-resource-management subsystem.
+unrelated parallel work; invent no global serialization.
 
 ### Supported workers
 
@@ -136,10 +135,12 @@ authorization and project instructions. It is the effective-now snapshot, not a
 log: update the **same** heartbeat, replacing superseded quota, priority and
 plans, and keeping in-flight locators and unfinished duties. A confirmed change
 applies in that beat; a lowered quota alone cancels nothing. A report-only
-request disables execution actions.
+request disables execution actions. When an updated Skill loads, reconcile the
+heartbeat once with current rules, latest valid instructions and fresh seat
+facts, keeping user limits and the frontier.
 
 After close-out, cancel the native heartbeat or stop scheduling the next
-sleep. No worker authorization, no heartbeat. Temporarily having no ready task is not
+sleep. Temporarily having no ready task is not
 project completion. Do not hard-code other hosts' scheduler APIs.
 
 ## Delivery
@@ -161,8 +162,7 @@ sink, and write ownership.
    acceptance or effects are known or uncertain; investigate the existing action
    first. Steering a running turn is an Agent
    choice, never a Runner policy: pick the mode yourself, read the receipt, and
-   never call a not-consumed or `unknown` steer delivered. No automatic
-   fallback/resend, raw terminal injection, or model-picker mutation.
+   never call a not-consumed or `unknown` steer delivered.
 2. **Decide and dispatch.** Resolve worker questions within existing
    authorization; escalate only major structural, value, or extra-authority
    decisions. `HUMAN_DECISION_REQUIRED` is considered by the orchestrator
@@ -185,18 +185,20 @@ sink, and write ownership.
    substitute worker prose, idle, green CI or a successful script exit for acceptance.
    Testing executes checks; QA judges their sufficiency, including evidenced
    redundancy: [qa-evidence.md](references/qa-evidence.md).
-4. **Finalize and synchronize.** Once accepted and authorized, direct the
-   worker to finalize and merge, then verify remote, Issue, archive, doc
-   docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).
+4. **Finalize and synchronize.** Acceptance authorizes that candidate's
+   pending finalize: direct its owning worker to finalize and merge, then verify
+   remote, Issue, archive, doc docking, and cleanup results
+   ([doc-maintenance](references/doc-maintenance.md)).
    Prefer one run at a time; judge safe concurrency. After the baseline moves, direct affected owners to save
    work and rebase/update at a safe boundary. Review conflicts and revalidate changes; do not switch HEAD
    mid-measurement or reuse invalidated evidence. History rewriting needs applicable authorization.
-   When records are inconsistent, investigate and direct a scoped repair; do
-   not fabricate claim identities or introduce a parallel lifecycle system.
+   When records are inconsistent, investigate and direct a scoped repair;
+   never fabricate claim identities.
 5. **Release and report.** The only legal idle seat is one whose delivery is
-   awaiting acceptance. Once acceptance finishes or the seat is abandoned,
-   exact-stop it in that same beat; a rejected delivery's repair is the same
-   assignment. The stop action is the exact owned session
+   awaiting acceptance; a rejected delivery's repair is the same assignment,
+   and an accepted seat keeps only the finalize/cleanup duties it owns. Once
+   it owns none (done or explicitly handed off) or the seat is abandoned,
+   exact-stop it in that same beat. The stop action is the exact owned session
    `stop` via the matching platform Skill, which ends its ACP holder. Idle is not
    keep-alive or completion. A Host that
    ended its turn while workers are in flight, or with delivery, acceptance or
@@ -204,9 +206,7 @@ sink, and write ownership.
    next beat is a worker event. Cancel the heartbeat once no unfinished
    delivery/sync/cleanup remains; preserve existing recovery information and give
    the rest a named owner. Direct cleanup of completed, unreferenced
-   worktrees/branches; protect in-flight work and evidence.
-   Continue the same heartbeat
-   while authorized work or close-out remains. Session stop, acceptance, merge, closure and cleanup are different facts, not
+   worktrees/branches; protect in-flight work and evidence. Session stop, acceptance, merge, closure and cleanup are different facts, not
    interchangeable completion labels.
 
 ## Ending a run
@@ -265,6 +265,5 @@ outstanding close-out items. Include task/progress, meaningful
 model mismatches, blockers, and next action. For non-pool seats, per platform report `live N /
 authorized M` and the seats stopped this beat; N > M with no stop that beat
 violates the cap. Pool seats report live seats marked exempt. Drop stale stopped rows from reports. Keep duties traceable in
-existing records; reuse existing Runner `stop`/`start`, and invent no session
-state machine, quota engine, or acceptance, finalize, rebase or close-out
-dashboard or ledger.
+existing records and reuse existing Runner `stop`/`start`: no session state
+machine, quota engine, or close-out dashboard or ledger.

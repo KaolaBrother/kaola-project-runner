@@ -1493,19 +1493,19 @@ def test_the_host_contract_requires_fresh_verification() -> None:
     reads, and prove a stale approval is refused rather than honoured."""
     dispatch = (ROOT / "skills" / "kaola-project-runner" / "references"
                 / "zcode-host-dispatch.md").read_text(encoding="utf-8")
-    check("The event carries only `request_id`:" in dispatch
-          and "decide it from the worker's live `pending_permissions`" in dispatch,
+    check("The event carries only `request_id`" in dispatch
+          and "decide it from the worker's live `pending_permissions`" in " ".join(dispatch.split()),
           "the Host dispatch reference makes the event a locator, decided from live state")
 
-    skeleton = (ROOT / "skills" / "kaola-project-runner" / "references"
-                / "heartbeat-skeleton.md").read_text(encoding="utf-8")
+    # Issue #208: the heartbeat skeleton no longer restates beat mechanics;
+    # the Host dispatch reference states the permission wake once.
+    flat_dispatch = " ".join(dispatch.split())
     for fragment, label in (
-            ("读当前 pending_permissions", "re-read the worker's CURRENT pending_permissions"),
-            ("已消失的请求幂等忽略", "idempotently ignore a request that has vanished"),
-            ("事件本身不批准任何操作", "the event itself approves nothing"),
-            ("只是定位符", "the arriving event is only a locator"),
-            ("是回合内唤醒、不是 idle", "the wake is mid-turn, not idle")):
-        check(fragment in skeleton, f"the heartbeat prompt states: {label}")
+            ("live `pending_permissions`", "re-read the worker's CURRENT pending_permissions"),
+            ("ignore a vanished request", "idempotently ignore a request that has vanished"),
+            ("a locator that approves nothing", "the event is only a locator and approves nothing"),
+            ("a wake, not an idle", "the wake is mid-turn, not idle")):
+        check(fragment in flat_dispatch, f"the Host dispatch reference states: {label}")
 
     # Behaviour, not just wording: a stale request cannot be approved.
     sandbox = Sandbox("freshness")

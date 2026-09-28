@@ -1,7 +1,7 @@
 # Canonical root and Workflow worktrees
 
 Decision defaults for ordinary Workflow-backed project work, plus the one
-mechanical binding an Orchestrator sets at setup. Not a second lifecycle engine.
+mechanical binding an Orchestrator sets at setup.
 
 ## Facts
 

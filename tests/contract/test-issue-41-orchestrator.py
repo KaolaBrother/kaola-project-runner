@@ -472,10 +472,10 @@ class Issue41ScenarioMeaning(unittest.TestCase):
         )
         self.assertNotIn("leave capacity idle", normalize(text).lower())
         heartbeat = (orchestrator_package(PROJECT) / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
-        self.assertIn("明确任务直接交给合适的已授权工人", heartbeat)
-        self.assertIn("额度是上限、不是要配满的目标", heartbeat)
+        # Issue #208: the dispatch rule lives once in the main Skill (asserted
+        # above); the skeleton defers to it instead of restating it.
+        self.assertIn("不复述 Skill 规则", heartbeat)
         self.assertNotIn("派出所有合适匹配", heartbeat)
-        self.assertIn("达上限先精确 stop 一个再 start", heartbeat)
         self.assertNotIn("无合适工作则保持空闲", heartbeat)
 
     def test_completion_prose_without_evidence_causes_verification_not_finalize(self) -> None:
@@ -925,9 +925,9 @@ class Issue47DeliveryPathMeaning(unittest.TestCase):
             ),
             "actionable PR priority, permitted-CLI parallel work, blocked-PR ownership",
         )
-        # Issue #157 (PR-R3): the skeleton points at SKILL §Delivery instead of
-        # restating the merge path and PR priority.
-        self.assertIn("交付路径与开放 PR 优先级见主 Skill §Delivery", heartbeat)
+        # Issue #157 (PR-R3) / #208: the skeleton defers to the main Skill
+        # instead of restating the merge path and PR priority.
+        self.assertIn("不复述 Skill 规则", heartbeat)
         self.assertNotIn("有开放 PR 时争用容量优先推进可执行项", heartbeat)
         for label, raw in worker_idle_stop_policy_surfaces():
             body = normalize(raw)

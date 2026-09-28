@@ -35,8 +35,7 @@ Count before every `start`: live owned sessions, ACP holders included -
 identity-verified (`list --repo` rows with `identity: verified`, the holder
 answering with its recorded `holder_instance_id`); a PID alone is not a seat.
 Worker-class pool seats (worker-profiles.md) are outside the count. At
-the hard cap: stop-before-start (main Skill step 2). A different task is a new
-session (main Skill §Ending a run).
+the hard cap: stop-before-start (main Skill step 2).
 
 ### Read the binding in force, new worker or reused
 
@@ -136,16 +135,17 @@ Confirm you read the turn you dispatched: `observe`'s
 `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
 and `turn_outcome`/`stop_reason` must show it finished. No assistant text
 means the window was wrong — widen it. Then accept or send the repair (the
-same assignment); once accepted, exact-`stop` that seat this beat (main Skill
-step 5). Update the heartbeat prompt, and end the turn.
+same assignment), and keep or exact-`stop` the seat per main Skill step 5.
+Update the heartbeat prompt, and end the turn.
 
 `kind` is `idle` when the worker's turn ended (`reason`
 `outcome=<turn_completed|turn_failed> stop_reason=<…>`) and `terminated` when
 its process exited (`exit_code=N`/`exit_signal=N`); a finished turn is a
 full trigger — never kill a worker to be notified. `permission_required` is a bound worker's agent raising
 `session/request_permission` mid-turn — a wake, not an idle; the ordinary
-`idle` still arrives at turn end. The event carries only `request_id`:
-decide it from the worker's live `pending_permissions` — inside existing
+`idle` still arrives at turn end. The event carries only `request_id`, a
+locator that approves nothing: decide it from the worker's live
+`pending_permissions` (ignore a vanished request) — inside existing
 authorization or escalated to the user.
 
 ## Workers and the notification carrier

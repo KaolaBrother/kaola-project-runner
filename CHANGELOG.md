@@ -6,6 +6,20 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Consolidate repeated prompt guidance and retire conflicting lifecycle instructions (Issue #208).**
+  The heartbeat skeleton now carries only project identity/authorization, task and worker locators,
+  the frontier, open decisions/close-out and recovery pointers; the naming, one-issue, dispatch,
+  acceptance, stop and report rules it used to restate live once in the main Skill the carrier
+  loads every beat (the #205 one-time reconciliation after a Skill update moved there too). The
+  seat lifecycle is stated once in main Skill step 5: acceptance authorizes the candidate's pending
+  finalize, an accepted seat keeps only the finalize/cleanup duties it owns and is exact-stopped
+  once it owns none or the seat is abandoned; the Host dispatch and QA references point there. The
+  issue-dispatch reference no longer infers archive, finalize or waiting from a missing ledger or
+  all-terminal missions. The Host startup ban on hand-reading `SKILL.md` is ZCode-scoped, so the
+  Codex compact hook's installed-Skill reread stays valid; probe history moved to
+  `docs/host-entry-evidence.md`; documentation maintenance points to the Workflow finalize
+  contract for docking/archive/cleanup. Prompt/reference change only; the operator-test paths are
+  untouched (`Seats: restart not required`).
 - **Refine Cursor CLI’s profile and remove repeated per-profile cost wording (Issue #211).** Its Grok 4.7 `default` profile describes investigating unfamiliar problems, exploring solution paths, and autonomously carrying them through implementation for long-running, adaptive work. The DSH, Devin, and OpenCode `default` profiles no longer repeat cost wording already supplied by their Classes. Profile wording only; the operator-test surface is untouched (`Seats: restart not required`).
 
 - **Recover confirmed quota exhaustion by Host and worker class, never by login (Issue #207).**
