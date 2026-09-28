@@ -21,6 +21,34 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   and now link to the installed/generated Skills, `docs/`, and this changelog. Profile wording,
   pool membership, authorization, and grant semantics are unchanged; profiles stay verbatim
   from the manifests.
+- **Make Host worker selection explicit and verify existing start receipts before dispatch (Issue
+  #204).** A fresh Host-managed worker start now expresses the selected authorized configuration
+  explicitly — `--tier <selected-preset>`, including `--tier default` when default is the actual
+  choice — and lets the manifest resolve that preset's model/effort; an explicit authorized
+  model/effort override keeps its own existing precedence instead. Before the first send, the Host
+  reads that start's own receipt and reconciles `model_selection`/`config_application`/
+  `effective_selection` against the originally authorized selection, not the command's own resolved
+  default, interpreting aliases and stale echoes through existing platform evidence. A seat
+  demonstrably outside the intended grant gets no project work: an unused seat is exact-stopped and
+  restarted with the intended configuration, and a working seat keeps its existing safe stop/resume
+  or `drain-restart` route, with the correction carrying the intended preset explicitly. Resume
+  semantics are unchanged: a legitimate same-assignment resume still preserves its saved authorized
+  model/effort. The shared Platform Runner wording now also clarifies that an existing grant —
+  including the default-authorized pool — authorizes preset selection without a fresh user naming.
+  Prompt/reference correction only: no new receipt format, authorization registry, CLI flag,
+  transport classifier, model probe, or dispatch service.
+
+- **Launch model evidence stays readable in `status`/`observe` (Issue #203).** `start` now hands
+  its selection/application evidence (`model_selection`, `config_application`,
+  `effective_selection` with launch-argv versus advertised values, `fast`, and the existing
+  known/unknown verification facts) to the holder, which keeps it as `start_evidence` in the
+  session record across its whole-record rewrites and returns it from `status`/`observe`. A resume
+  of the same native session (matched by `acp_session_id`, never by Runner name) keeps the prior
+  evidence as `start_evidence.inherited`; anything else stays unknown. Native resume selection,
+  raw `start_selection`, drain-restart, and refusals are unchanged. Changes
+  `scripts/kaola-acp-holder.py` (new `record_start_evidence` op): Seats: restart required for a
+  running seat to keep this evidence; an older holder just reports `start_evidence_recorded: false`.
+
 - **Relay the pool-vs-limited-seat capability policy in Host and Delegator guidance (Issue #202).**
   The Host worker-profiles reference and the Kaola-Delegator host-platforms guidance both now state
   the owner's operating heuristic: the six-preset autonomous pool is cheaper and generally weaker

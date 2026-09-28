@@ -22,7 +22,7 @@ yourself.
 
 **Ordinary worker supervision** - you dispatch and accept from your own session
 with the loop below; that worker carries no Host obligation, no event binding and
-no extra gate. Direct Project Runner use does not require a ZCode Host.
+no extra gate.
 
 **Host** - you are already a named Host session that loaded this Skill through
 the native `/kaola-project-runner` Skill invocation (ZCode) or your platform's
@@ -178,7 +178,7 @@ sink, and write ownership.
    first. A seat whose `status` says `stale: true` is not a dispatch target;
    an operator-confirmed exception on that one `send`/`steer` is the
    orchestrator's own call; replace it with `drain-restart` at idle
-   (see zcode-host-dispatch.md). There is no rebind.
+   (see zcode-host-dispatch.md).
    Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session; split or parallelize only when the work itself needs it. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
    State the task, working location, write ownership,
    delivery requirements, and the doc-impact call in its prompt; merely seeing a
@@ -249,9 +249,10 @@ under a new standard name, never a prompt chained into a finished seat;
 
 ## Dispatch notes
 
-Call the matching platform Runner Skill by its installed directory. Use Runner
-default start. Do not pass a permission-mode
-override unless the human wrote one. One dispatch prompt per ready session. Resume per
+Call the matching platform Runner Skill by its installed directory. Pass the
+selected authorized `--tier`, default included; read its receipt before the
+first send (zcode-host-dispatch.md). Do not pass a permission-mode override
+unless the human wrote one. One dispatch prompt per ready session. Resume per
 "Ending a run".
 
 The worker is not the orchestrator. Its prompt should name the authorized
