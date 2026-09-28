@@ -10,7 +10,7 @@ start behavior. The class attaches to the preset, not the whole runtime.
 | Class | Responsibility | Authorization and lifecycle |
 |---|---|---|
 | **Expert** | Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Explicit user permission for each task/use. The Host judges its completion and reclaims (exact-stops) the seat. A completed task authorizes no reuse; another use needs fresh permission. Continuing turns or recovery of the same approved task need no repeated approval. |
-| **Worker** | Cheaper and generally weaker; simpler, well-defined work supporting parallel throughput. | The exact six-preset pool listed below is default-authorized for an authorized project task. |
+| **Worker** | Cheaper and generally weaker; simpler, well-defined work supporting parallel throughput. | The exact six-preset pool below is default-authorized for authorized project tasks. |
 | **Elite** | Main execution workforce: primary implementation and demanding execution. | Existing explicit runtime/preset/count grants, applicable caps and seat-switch rules. A valid grant stays valid within its scope; no per-task permission. |
 
 Expert review informs the Host; it never replaces Host acceptance or
@@ -28,8 +28,8 @@ target:
 
 - The existing `kaola-acp.py survey` reports the runtime `present` in its
   effective launch context, including its resolved explicit path or login
-  environment. Use the survey on the bound target; outer-machine PATH and a
-  loaded Project Runner Skill do not establish runtime installation.
+  environment. Outer-machine PATH or a loaded Skill does not prove
+  installation on the target.
 - The corresponding installed platform Runner is discovered on that target
   and its own `scripts/platform.yaml` declares the preset. A tier is the
   Runner's preset mapping, not a downloaded model. A missing native provider
@@ -52,11 +52,13 @@ authorization: discovered Worker pool members without owner restrictions,
 granted Elite rows with their limits, and an Expert row only for its currently
 permitted task. Read the exact applicable rows from
 [profile-catalog.md](profile-catalog.md) after establishing availability and
-authorization; never load the full catalog just to discard rows. Keep those
-rows in the existing heartbeat snapshot. Reconcile through existing intake,
-update, or recovery facts when an install, uninstall, or launch path changes;
-do not poll, cache a second registry, or rescan each beat. A verified active
-session keeps its ownership when availability changes.
+authorization; never load the full catalog just to discard rows. The heartbeat
+`authorization` carries these rows directly (exact ID, Class, catalog profile
+text) plus the three Class definitions once; a pointer never replaces them
+([heartbeat-skeleton.md](heartbeat-skeleton.md)). Rebuild at intake or
+recovery; update only on an actual grant, profile, install, or launch-path
+change; do not poll, cache a second registry, or rescan each beat. A verified
+active session keeps its ownership when availability changes.
 
 ## Preset IDs in authorization
 
@@ -87,12 +89,12 @@ interrupt useful work.
 The Worker pool is exactly: `claude-code/sonnet`, `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`. For an authorized project
 task, these six presets need no per-seat, count, or priority approval. Their
 live seats neither count toward nor are limited by the general worker
-concurrency cap. This is dispatch authorization; local availability still
-requires the runtime and installed Runner facts above. A runtime's `default`
+concurrency cap. Local availability still needs the facts above. A runtime's
+`default`
 is not automatically a pool member. Real account, service, and resource limits
 and explicit owner restrictions still apply; an unspecified quota is not
-unlimited. Spread suitable work without forcing equal counts or waiting on a
-less suitable Worker. Existing grants stay valid within scope; the pool is not
+unlimited. Default authorization is permission, not a preference over
+suitable authorized Elite; never wait on a less suitable Worker. Existing grants stay valid within scope; the pool is not
 a model-switch grant and does not extend Host model selection.
 
 ## Computer interaction
@@ -111,7 +113,6 @@ screenshot-review profiles or class membership; visual analysis and actually
 operating a computer are separate tasks. Model authorization and permission to
 use computer tools are separate existing facts. Profile wording grants no tool
 or switch permission, and already granted tooling needs no repeated approval.
-This selection policy needs no benchmark or live computer-use probe.
 
 ## Seat binding and model switching
 
@@ -123,7 +124,6 @@ that grant. Never switch across runtimes. The same seat switches only when
 idle, through the existing `drain-restart --resume ID` (or `--continue`) with an
 explicit `--tier`/`--model`: an exact stop and resume, not a live hot switch (a
 busy seat refuses `drain-not-idle`). A new standard-named seat is a new seat,
-not a switch of this one. No new flow. A switch grant never authorizes an
-Expert use: an Expert preset runs only under its per-task permission above.
-Record grants with the other authorization in the consuming project's run
-records.
+not a switch of this one. A switch grant never authorizes an Expert use: an
+Expert preset runs only under its per-task permission above. Record grants with
+the other authorization in the consuming project's run records.

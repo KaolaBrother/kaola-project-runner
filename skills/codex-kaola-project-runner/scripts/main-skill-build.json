@@ -1,18 +1,18 @@
 {
-  "build": "2ff012d881ed",
+  "build": "935e213903c3",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "e55a236de83e481c4dc68371e6cfdceb2fee8a7373efaf55fc189663e02c527c",
+    "SKILL.md": "20d8df7d577d0f6cce46d90dc6e5477d22ad3cc97106fef38b8a0b22a95e04ed",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
     "references/doc-maintenance.md": "aaa43b70d4cbca6f0edcd399ed9de2ee0ea8bcc9c9d7c6ebe6de353796b86f83",
-    "references/heartbeat-skeleton.md": "2c64bf79bb3fa3d156ebab502ee6fb3f1d109b5ae5c0a58d987caf137f9f50b6",
+    "references/heartbeat-skeleton.md": "856f17e538e099bba1fdb1f548f6304ac94fbd36250e5d27106504c81b6f758a",
     "references/host-entry-matrix.md": "162a620c4b932a59b44e773d152873e401ccabcf3bee71c1e0ec37a3f384bf23",
     "references/host-startup.md": "4fe4f49ff842b4516f31f613aaf4154696b9849fa23259eff20ed78aab5904d0",
     "references/issue-dispatch.md": "51a6f337daf56ca815fb6340b18c7078fcda5925ebaa83139ec5ebf419c1a9d1",
     "references/profile-catalog.md": "4f743efb37f22aee5ed85d35ce0d5784f3f43732b5720e1dc4358ed90ee443ee",
     "references/qa-evidence.md": "64b8d6be69edc0bdd55b6c15343cfcf7539c822a943795ba4503aa1d9743ceb7",
     "references/quota-packages.md": "1c4e61a670d1d7a8fd06ca9ce18049c1492f3ff1d76cb94fa3777a0ffa3c886d",
-    "references/worker-profiles.md": "582997f66ca067d5c494519ab85653022b0f857789c1ce05d66aee5bd9cf99cf",
+    "references/worker-profiles.md": "3cd6a7256d9a73a1e53fb6aced6668f8f082db5922cc288a4759259e96dc7aea",
     "references/workflow-worktree.md": "8a85aefd6747f42c29943f7d70f911aa900b2e56e43083247628fc6837d200b0",
     "references/zcode-host-dispatch.md": "98ee3a82b9ad45bb7a5672fa759ad34d2101efefd03a6ff0943d44f623dea232",
     "references/zcode-native-skill-entry.md": "03b9da8e27c8d319c532cc41e3a605fb578d5bbf9ab4d007359cb0ef656242e7"

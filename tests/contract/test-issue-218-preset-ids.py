@@ -214,9 +214,29 @@ class AuthorizationNotationTest(unittest.TestCase):
         self.assertIn("精确 preset id", skeleton)
         self.assertIn("<platform>/<tier>", skeleton)
         self.assertIn("claude-code/default", skeleton)
-        # The example grant is a real catalog row (cursor-cli/opus is Elite).
-        self.assertIn('"elite":"cursor-cli/opus 1 席"', skeleton)
         self.assertNotIn("claude-code opus", skeleton)
+
+    def test_heartbeat_example_rows_and_class_definitions(self) -> None:
+        """#223: authorization carries ID/Class/profile rows and the three
+        shared Class definitions exactly once, never a pointer instead."""
+        skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
+        self.assertNotIn("或其指针", skeleton)
+        example = re.search(r"例：(\{.*\})", skeleton)
+        self.assertIsNotNone(example)
+        auth = json.loads(example.group(1))["authorization"]
+        self.assertEqual(sorted(auth["classes"]), ["Elite", "Expert", "Worker"])
+        for definition in auth["classes"].values():
+            self.assertEqual(skeleton.count(definition), 1, definition)
+        catalog = {}
+        for line in (ORCHESTRATOR / "references" / "profile-catalog.md").read_text(encoding="utf-8").splitlines():
+            match = ROW.match(line)
+            if match:
+                catalog[match["preset"]] = (match["class"], match["profile"])
+        classes = set()
+        for row in auth["rows"]:
+            self.assertEqual((row["class"], row["profile"]), catalog[row["id"]], row["id"])
+            classes.add(row["class"])
+        self.assertEqual(classes, {"Elite", "Worker"})
 
     def test_catalog_teaches_configured_not_running_caveat(self) -> None:
         catalog = flat((ORCHESTRATOR / "references" / "profile-catalog.md")

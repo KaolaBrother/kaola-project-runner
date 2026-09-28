@@ -26,8 +26,10 @@ history:
 
 The existing native timer is the only scheduler; its prompt stays static:
 Skill entry and project locator. Each inquiry: read the file, verify `host` by
-fresh Runner `status`, audit the Host `body`, send one concrete correction,
-replace stale facts. Missing or unreadable: report, then recover from owner,
+fresh Runner `status`, audit the Host `body` (its `authorization` holds the
+three Class definitions and an ID/Class/profile row per authorized preset),
+send one concrete correction to that Host, replace stale facts. Never write
+the Host JSON, copy its rows here, or select workers. Missing or unreadable: report, then recover from owner,
 Runner and forge records before any `start`; never blank authorization.
 
 ## Day boundary

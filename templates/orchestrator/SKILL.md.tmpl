@@ -57,14 +57,15 @@ live worker processes, ACP holders included; a finished seat counts until its
 `stop` receipt. Granted open-ended concurrency is its own cap. Do not invent a
 quota system: the cap is that count, enforced from `status`/`stop` receipts.
 Preset classes ([worker-profiles.md](references/worker-profiles.md)): six
-Worker presets are default-authorized outside that cap; Elite needs an explicit
-grant; Expert is complex thinking only, with fresh user permission per task.
-Choose by authorization, class, profile/task fit, capacity; keep only
-authorized [profile rows](references/profile-catalog.md) in context.
+Worker presets are default-authorized outside that cap (permission, not
+preference); Elite needs an explicit grant; Expert is complex thinking only,
+with fresh user permission per task. Choose by authorization, class,
+profile/task fit, capacity; the heartbeat holds authorized
+[profile rows](references/profile-catalog.md) and Class definitions.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. No serial build, GPU, port, or cache constraint blocks
-unrelated parallel work; invent no global serialization.
+unrelated parallel work.
 
 ### Supported workers
 
@@ -239,8 +240,7 @@ under a new standard name, never a prompt chained into a finished seat;
 Call the matching platform Runner Skill by its installed directory. Pass the
 selected authorized `--tier`, default included; read its receipt before the
 first send (zcode-host-dispatch.md). Do not pass a permission-mode override
-unless the human wrote one. One dispatch prompt per ready session. Resume per
-"Ending a run".
+unless the human wrote one. One dispatch prompt per ready session.
 
 The worker is not the orchestrator. Its prompt should name the authorized
 scope, whether Workflow is on, its child worktree and write ownership, that it
