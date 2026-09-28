@@ -113,7 +113,7 @@ class HostDispatchContract(unittest.TestCase):
         self.assertIn('"heartbeat_host"', self.ref)
         # Issue #70 superseded "a missing key means unbound": the key is always
         # present, so the reference must teach the fact and its unknown case.
-        self.assertIn("`heartbeat_host` is the running holder's own binding", self.ref)
+        self.assertIn("`heartbeat_host` is the running holder's binding", self.ref)
         self.assertIn("heartbeat_host_known", self.ref)
 
     def test_reference_reads_the_dispatch_receipt_honestly(self) -> None:
@@ -148,7 +148,7 @@ class HostDispatchContract(unittest.TestCase):
     def test_reference_keeps_turn_end_and_exit_as_equal_triggers(self) -> None:
         self.assertRegex(self.ref, r"`kind` is `idle` when the worker's turn ended \(`reason`\s+"
                                    r"`outcome=<turn_completed\|turn_failed> stop_reason=<…>`\) and `terminated` when\s+"
-                                   r"its process exited \(`exit_code=N` or `exit_signal=N`\)")
+                                   r"its process exited \(`exit_code=N`/`exit_signal=N`\)")
         self.assertIn("never kill a worker to be notified", self.ref)
 
     # -- the wording must still describe the real implementation -------------

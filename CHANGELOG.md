@@ -6,6 +6,18 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Correct three contract-suite expectations left stale by #204's wording trim (Issue #209).**
+  `test-issue-65-host-contract.py`'s `test_reference_starts_the_worker_from_the_host_with_a_runnable_example`
+  now expects "the running holder's binding" (4af3686b dropped "own" from that sentence in
+  `zcode-host-dispatch.md.tmpl`) and `test_reference_keeps_turn_end_and_exit_as_equal_triggers`'s
+  regex now expects `` `exit_code=N`/`exit_signal=N` `` (4af3686b changed the separator from
+  " or " to "/" in the same reference). `test-issue-162-upgrade-safety.py`'s
+  `test_release_note_rule_and_no_rebind_wording` now pins "replace it with `drain-restart` at
+  idle" in `templates/orchestrator/SKILL.md.tmpl` — 4af3686b deleted that file's only "no rebind"
+  sentence outright rather than rewording it, and no other line in that file says "rebind", so the
+  assertion now pins the equivalent current wording instead of text the source no longer carries.
+  Test-side only: no template, reference, or budget byte count changed. `Seats: restart not
+  required`.
 - **Coordinate Host finalize safeguards with the Kaola-Workflow foreign-residue fix (Issue #212).**
   The Project Runner `workflow-worktree` reference gains a "Foreign files and finalize safeguards"
   section for the open upstream finalize defect (Kaola-Workflow #1110, unresolved pending a

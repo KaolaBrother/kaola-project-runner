@@ -682,7 +682,7 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertIn("A live holder is never hot-replaced", host_doc)
         self.assertIn("drain-restart", host_doc)
         skill = (PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl").read_text(encoding="utf-8")
-        self.assertIn("no rebind", skill)
+        self.assertIn("replace it with `drain-restart` at idle", skill)
 
     def _record(self, platform: str, session: str) -> tuple[Path, dict]:
         matches = sorted(self.records.glob(f"{platform}/{session}/*/record.json"))
