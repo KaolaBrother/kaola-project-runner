@@ -6,6 +6,18 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Relay the pool-vs-limited-seat capability policy in Host and Delegator guidance (Issue #202).**
+  The Host worker-profiles reference and the Kaola-Delegator host-platforms guidance both now state
+  the owner's operating heuristic: the six-preset autonomous pool is cheaper and generally weaker
+  than the individually authorized limited seats outside it, so the pool exists for useful uncapped
+  parallel throughput; for a complex or critical task, prefer a stronger authorized limited seat
+  when available, then pick the specific worker by profile/task fit. This is a heuristic, not a
+  benchmark or a claim that every limited seat wins every task, and it does not mean a pool member
+  can only do narrow work — the pool's GLM and SWE-2 presets already carry substantial and
+  full-cycle tasks. The Delegator relays this policy; it does not itself judge task fit or dispatch.
+  No change to pool membership, the concurrency-cap exemption, model/effort, seat-binding, or
+  permissions.
+
 ## 0.6.7 — 2026-09-28 (OpenCode default preset and sixth pool preset, six worker profiles, skew recovery routes, Devin advertised model)
 
 Seats: restart required
