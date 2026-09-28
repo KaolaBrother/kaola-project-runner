@@ -389,7 +389,8 @@ Workers run only under authorization, and what you authorize depends on the
 - **Elite presets** need your explicit grant naming the runtime/preset and count.
   Grants you already gave stay valid within their scope. The authorized count is a
   hard cap on live worker processes, ACP holders included: stop-before-start at the
-  cap, stop each seat once its delivery is accepted, and give a new task a new
+  cap, and an accepted seat keeps only the finalize/cleanup duties it owns until it
+  owns none or is abandoned, when it is exact-stopped; give a new task a new
   session; idle is not keep-alive.
 - **Expert presets** need your explicit permission for each task or use. When that
   task is complete the Host reclaims (exact-stops) the seat; the completed permission
