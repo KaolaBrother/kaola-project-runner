@@ -16,7 +16,7 @@ You keep authorization, dispatch, acceptance and close-out in your own session.
 Nothing below in this file applies: no event binding, no heartbeat file, no Host.
 
 ```bash
-"$WORKER" start   --repo "$PROJECT" --session codex-KT-i274-parser
+"$WORKER" start   --repo "$PROJECT" --session codex-KT-i274-parser --tier luna
 "$WORKER" send    --repo "$PROJECT" --session codex-KT-i274-parser --text '<the task>'
 "$WORKER" observe --repo "$PROJECT" --session codex-KT-i274-parser
 "$WORKER" capture --repo "$PROJECT" --session codex-KT-i274-parser --lines 200
@@ -29,7 +29,7 @@ unchanged across all five operations.
 Check each receipt: a `start` without a ready session started nothing, a `send`
 `error` dispatched nothing, and a `prompt_timeout` or missing receipt leaves
 consumption **unknown** — `observe` establishes the fact before anything is
-re-sent. Blocking `send` is a normal, supported way to wait here.
+re-sent. Blocking `send` is normal and supported here.
 
 ## B. Outer Agent: starting a Host
 
