@@ -130,6 +130,7 @@ goal=<user goal>
 done=<already done>
 remaining=<remaining work>
 authorized_platforms=<id:count, ...>
+target_local_presets=<bound-target survey runtimes + installed Runner tiers; unknown separate>
 quota_concurrency=<as given>
 quota_account=<as given>
 quota_token=<as given>
@@ -146,15 +147,13 @@ do not expand it.
 ## After the first Host beat
 
 Do not trust the Host's self-description. After the first `end_turn`, check the
-Project Plan and current authorization against file-read or work-product
-evidence and the first worker dispatch receipt — including
-`<project>/.kaola/heartbeat-prompt.json` with a usable `body`. The beat's
-`capture` must hold that platform's startup proof, E1 `Skill` tool_call or E2
-quote ([host-platforms.md](host-platforms.md) §Startup proof). In that `start`
-receipt the worker `--session` is an issue-scoped worker name, not `$HOST`;
-platforms, counts, and the stop boundary must match. Mismatch or missing evidence:
-correct on this Host; do not accept completion. No new script, gate, ledger,
-or store.
+Project Plan and current authorization against work-product evidence and the
+first worker dispatch receipt, including `<project>/.kaola/heartbeat-prompt.json`
+with a usable `body`. The beat's `capture` must hold startup proof, E1 `Skill`
+tool_call or E2 quote ([host-platforms.md](host-platforms.md) §Startup proof).
+Start receipt: worker `--session` is an issue-scoped worker name, not `$HOST`;
+match platform/count/stop boundary. Correct gaps; do not accept completion.
+No new script, gate, ledger, or store.
 
 ## Afterward
 

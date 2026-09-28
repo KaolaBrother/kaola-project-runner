@@ -16,10 +16,11 @@ project runs only one Agent for it.
 ## Extract once
 
 From the user and Git/Workflow/Issue/Runner records collect:
-goal; already-done/remaining work; the Host platform; authorized worker
-platforms by class - Elite presets, counts, concurrency; any Expert task the
-user approved; stated exclusions; Worker presets need none (host-platforms.md); the quota the user actually gave, each
-figure in its own unit; priority; delivery/stop boundary; the project path.
+goal; progress; the Host platform; authorized worker platforms by class;
+Elite grants/counts; permitted Expert task; bound-target local choices
+separate from authorization (host-platforms.md); Worker pool rules;
+exclusions; the quota the user actually gave, each figure in its own unit;
+priority; delivery/stop boundary; project path.
 On a **live** Host, apply only the user's
 latest change. On a **new** Host, missing,
 conflicting, or expired key values must be confirmed before `start`. A quota

@@ -315,7 +315,7 @@ explicit `--model` choices, not a separate Fast toggle.
 | Elite | Kimi CLI | `default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Elite | Kimi CLI | `kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
 | Worker | Claude Code | `sonnet` | Sonnet | effort=max | Disciplined implementation worker; give it a detailed plan and constraints, and it excels at executing within them. |
-| Worker | Codex CLI | `luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with good reasoning for its class; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
+| Worker | Codex CLI | `luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with good reasoning for its class and computer-use capability; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
 | Worker | Devin CLI | `default` | SWE-2 Max | effort=max (encoded in model ID) | Capable full-cycle engineering worker. |
 | Worker | dsh | `default` | DeepSeek V4.1 Flash (OpenCode Go) | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
 | Worker | OpenCode | `default` | DeepSeek V4.1 Flash (OpenCode Go) | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
@@ -325,8 +325,14 @@ explicit `--model` choices, not a separate Fast toggle.
 | Expert | Devin CLI | `fable` | Fable Fusion (Fable 5.1 High + SWE-2 Medium) | effort=high (encoded in model ID) | Design, goal definition and decomposition, issue creation, and review; only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
 <!-- KW-README-PRESETS-END -->
 
-This complete catalog is for discovery. An agent Host keeps only the rows you have
-authorized in its working context — see [choosing a worker](#choosing-a-worker).
+This is the full supported-runtime catalog, not a machine-local choice list.
+Local choices require a runtime discovered in the bound execution target's
+effective launch context and a matching installed platform Runner that declares
+the tier. Show each discovered row with its Class, profile, and current
+authorization. A Host keeps only locally available rows allowed by current
+authorization in its working context; it reads the applicable rows without
+loading the full table. The README stays the full catalog on every machine.
+See [choosing a worker](#choosing-a-worker).
 
 ### Platform notes
 
@@ -404,13 +410,16 @@ equal distribution across runtimes, or invented work to fill capacity. Worker
 profiles keep their individual strengths — the GLM and SWE-2 presets carry
 substantial, full-cycle tasks.
 
-The Host keeps in its working context only short class meanings and the rows
-currently available to it: the six Worker rows (minus your restrictions), the Elite
-rows you granted with their limits, and an Expert row only while its approved task is
-active. It reads those rows from the catalog without loading the whole table, and a
-later grant or revocation updates only the affected rows. Kaola-Delegator relays your
-grants, not the catalog. No separate profile registry or permission service exists.
-
+The Host keeps short class meanings and only rows that are both local and
+currently authorized: discovered Worker pool members (minus your restrictions),
+granted Elite rows with their limits, and an Expert row only while its permitted
+task is active. A local row requires a runtime discovered in the bound target's
+effective launch context and a matching installed platform Runner that declares
+the preset. Unknown discovery stays separate. The Host reads exact applicable
+rows without loading the whole table; later installation or authorization
+changes update only affected rows. Kaola-Delegator relays grants and bound-target
+runtime/preset facts, not the catalog. No separate profile registry or
+permission service exists.
 ### Seat binding and switching
 
 A seat keeps its bound platform and preset; general dispatch authorization is not a

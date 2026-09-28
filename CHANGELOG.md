@@ -6,6 +6,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Expose installed local choices and add Codex Luna computer-use guidance (Issue #214).** The full supported-runtime catalog stays in the README; Delegator and Host choices require bound-target runtime discovery plus a matching installed Runner preset, then current authorization. Host profile context loads only applicable rows. Computer interaction prefers explicitly authorized, locally available Codex default, then eligible Worker-pool luna; visual review remains separate. Luna's owner-provided profile now names computer-use capability. Profile and prompt guidance only (Seats: restart not required).
+
 - **Correct three contract-suite expectations left stale by #204's wording trim (Issue #209).**
   `test-issue-65-host-contract.py`'s `test_reference_starts_the_worker_from_the_host_with_a_runnable_example`
   now expects "the running holder's binding" (4af3686b dropped "own" from that sentence in

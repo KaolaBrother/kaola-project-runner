@@ -395,6 +395,17 @@ def profile_rows(manifests: list[dict[str, str]], only: str = "",
     return "\n".join(rows)
 
 
+def worker_pool_members(manifests: list[dict[str, str]]) -> str:
+    """Compact exact Worker membership without injecting every profile row."""
+    members = []
+    for manifest in manifests:
+        for tier in ["default", *named_tiers(manifest)]:
+            prefix = tier.replace("-", "_")
+            if manifest[f"{prefix}_model_class"] == "Worker":
+                members.append(f"{manifest['runtime_name']} `{tier}`")
+    return ", ".join(members)
+
+
 def readme_presets_region(manifests: list[dict[str, str]]) -> str:
     """Issue #206: the README preset catalog - the same manifest-rendered rows
     as the generated profile-catalog reference, between managed markers."""
@@ -454,7 +465,7 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         ),
         "SUPPORTED_WORKERS": supported_worker_summary(manifests),
         "PROFILE_CATALOG_ROWS": profile_rows(manifests),
-        "WORKER_POOL_ROWS": profile_rows(manifests, only="Worker", with_class=False),
+        "WORKER_POOL_MEMBERS": worker_pool_members(manifests),
         "IDLE_BEFORE_STOP": (
             "Give each clear task directly to a suitable authorized worker as a new "
             "session; split or parallelize only when the work itself needs it. The count "

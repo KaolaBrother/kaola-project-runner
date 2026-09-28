@@ -1,18 +1,16 @@
 # Worker profiles
 
 Owner-defined operating classes and one-line profiles per runtime/preset,
-rendered from `platforms/<id>.yaml`. A profile is selection guidance from use,
-not a measured capability, price, or benchmark; it never changes a preset's
-model, effort, or Fast and never gates `start`. The class attaches to the
-runtime/preset, not the whole runtime. Classes are operating roles, not
-benchmark claims, and they change no Host model selection.
+rendered from `platforms/<id>.yaml`. A profile is owner selection guidance,
+not a benchmark; it changes no model, effort, Fast setting, tool permission, or
+start behavior. The class attaches to the preset, not the whole runtime.
 
 ## Classes
 
 | Class | Responsibility | Authorization and lifecycle |
 |---|---|---|
 | **Expert** | Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Explicit user permission for each task/use. The Host judges its completion and reclaims (exact-stops) the seat. A completed task authorizes no reuse; another use needs fresh permission. Continuing turns or recovery of the same approved task need no repeated approval. |
-| **Worker** | Cheaper and generally weaker; simpler, well-defined work supporting parallel throughput. | The default-authorized pool below. |
+| **Worker** | Cheaper and generally weaker; simpler, well-defined work supporting parallel throughput. | The exact six-preset pool listed below is default-authorized for an authorized project task. |
 | **Elite** | Main execution workforce: primary implementation and demanding execution. | Existing explicit runtime/preset/count grants, applicable caps and seat-switch rules. A valid grant stays valid within its scope; no per-task permission. |
 
 Expert review informs the Host; it never replaces Host acceptance or
@@ -21,54 +19,83 @@ grant, or an earlier approved task.
 A seat's confirmed quota exhaustion is recovered by its class, never by
 login: [quota-packages.md](quota-packages.md#confirmed-exhaustion).
 
+## Local availability and authorized rows
+
+A locally selectable runtime/preset needs both facts on the bound execution
+target:
+
+- The existing `kaola-acp.py survey` reports the runtime `present` in its
+  effective launch context, including its resolved explicit path or login
+  environment. Use the survey on the bound target; outer-machine PATH and a
+  loaded Project Runner Skill do not establish runtime installation.
+- The corresponding installed platform Runner is discovered on that target
+  and its own `scripts/platform.yaml` declares the preset. A tier is the
+  Runner's preset mapping, not a downloaded model. A missing native provider
+  model-catalog entry does not invalidate a declared preset.
+
+Discovery shows a declared launch mapping, not account quota, model execution,
+or tool access. Do not authenticate, relogin, enumerate entitlements, or
+benchmark to create a local list. At start, use the existing receipt to check
+requested/applied configuration; report a known mismatch and never silently
+downgrade or substitute another Worker.
+
+Show users only rows with both facts, with Class, profile, and current
+authorization stated separately. Omit missing runtimes, Runner Skills, and
+presets. Keep unresolved discovery `unknown` and report the actual missing
+fact separately when relevant. Installed Elite and Expert rows may be shown
+for a user to grant; visibility never grants authorization.
+
+Host working context is the intersection of local rows and current
+authorization: discovered Worker pool members without owner restrictions,
+granted Elite rows with their limits, and an Expert row only for its currently
+permitted task. Read the exact applicable rows from
+[profile-catalog.md](profile-catalog.md) after establishing availability and
+authorization; never load the full catalog just to discard rows. Keep those
+rows in the existing heartbeat snapshot. Reconcile through existing intake,
+update, or recovery facts when an install, uninstall, or launch path changes;
+do not poll, cache a second registry, or rescan each beat. A verified active
+session keeps its ownership when availability changes.
+
 ## Choosing
 
-Decide in this order: **current authorization → class responsibility →
-individual profile/task fit → available capacity and real resource limits.**
-Expert contributes complex thinking only when specifically permitted; Elite
-performs primary and demanding execution; Worker handles simpler bounded work.
-Among eligible profiles the Host picks for efficient, precise assignments.
-Listed capability never bypasses missing Expert or Elite authorization; when
-it is genuinely needed, ask through the existing authorization route. Run
-useful independent work in parallel and preserve real dependencies and write
-ownership. No numerical ranking, complexity classifier, routing engine, fixed
-QA seat, forced equal runtime distribution, or invented work to fill capacity.
+Decide in this order: **current authorization → local availability → class
+responsibility → profile/task fit → capacity and known resource limits.**
+Expert contributes complex thinking only for its permitted task; Elite performs
+primary and demanding execution; Worker handles simpler bounded work. Listed
+capability never bypasses missing Expert or Elite authorization; ask through
+the existing authorization route when needed. Keep real dependencies and write
+ownership. Do not rank models, invent a complexity classifier or routing
+engine, force equal runtime distribution, create work to fill capacity, or
+interrupt useful work.
 
-## Authorized rows only
-
-Host context holds these class meanings plus only the rows available now: the
-Worker rows below minus explicit owner restrictions; each granted Elite row
-with its limits; an Expert row only for its currently approved task/use. Keep
-them in the existing heartbeat snapshot. Fetch a granted row by exact match,
-never by reading the full [profile-catalog.md](profile-catalog.md):
-`grep -F '| Codex CLI | `default` |' references/profile-catalog.md`. A later
-grant or change adds or updates only the affected rows and removes superseded
-availability (a finished or reclaimed Expert task, a revoked grant); do not
-reinject whole tables each beat. No second profile or seat registry,
-permission service, or mandatory state file.
-
-## Worker class: the default-authorized pool
-
-| Runtime | `--tier` | Model | Effort / parameters | Profile |
-|---|---|---|---|---|
-{{WORKER_POOL_ROWS}}
-
-Owner operating policy, not a live price comparison. For an authorized project
-task these six presets need no per-seat, count, or priority approval. Their
+The Worker pool is exactly: {{WORKER_POOL_MEMBERS}}. For an authorized project
+task, these six presets need no per-seat, count, or priority approval. Their
 live seats neither count toward nor are limited by the general worker
-concurrency cap; no substitute cap, per-runtime seat allocation, or approval
-gate applies. Membership is this exact list - being a runtime's `default` tier
-does not make a preset eligible. Actual account/token/service and resource
-limits and any explicit owner restriction still apply; an unspecified quota is
-not unlimited. Spread suitable work across runtimes without forcing equal
-counts; never create work or extra sessions, interrupt useful work, or wait
-for a less suitable worker just to engage or equalize the pool. Individual
-profiles keep their strengths (the GLM and SWE-2 presets carry substantial,
-full-cycle tasks), while primary and demanding execution goes to an
-authorized Elite seat when one is available. Every preset outside this pool
-needs its class's authorization; grants already given stay valid within their
-scope. The pool is dispatch authorization, not a switch grant, and it does not
-extend Host model selection.
+concurrency cap. This is dispatch authorization; local availability still
+requires the runtime and installed Runner facts above. A runtime's `default`
+is not automatically a pool member. Real account, service, and resource limits
+and explicit owner restrictions still apply; an unspecified quota is not
+unlimited. Spread suitable work without forcing equal counts or waiting on a
+less suitable Worker. Existing grants stay valid within scope; the pool is not
+a model-switch grant and does not extend Host model selection.
+
+## Computer interaction
+
+The owner designates exactly two presets for tasks that operate a computer:
+Codex `default` (GPT-6 Sol, effort=high; Elite) and Codex `luna` (GPT-6
+Luna, effort=max; Worker). Prefer Sol only when its local row is discovered,
+available for the task, and covered by the user's explicit preset/seat grant.
+If no eligible Sol is available, use locally available Luna under the Worker
+pool rules, with no extra seat approval for an authorized project task. If
+neither qualifies, report the concrete availability or authorization gap;
+never silently switch tiers or substitute another preset.
+
+Do not infer computer-operation capability from visual-design or
+screenshot-review profiles or class membership; visual analysis and actually
+operating a computer are separate tasks. Model authorization and permission to
+use computer tools are separate existing facts. Profile wording grants no tool
+or switch permission, and already granted tooling needs no repeated approval.
+This selection policy needs no benchmark or live computer-use probe.
 
 ## Seat binding and model switching
 

@@ -1,11 +1,14 @@
 # Host platforms
 
-Every shipped platform can be the project's one Host (#119, #122, #126). Take
-the row of the Host platform the user chose; a live Host keeps its own
-platform. The Host platform is its own fact, apart from `authorized_platforms`:
-being the Host authorizes no worker seat, and a worker authorization chooses no
-Host. Rows are rendered from `platforms/<id>.yaml`; an empty entry cannot be a
-Host (`host-entry-unsupported`).
+Every shipped platform is a supported Host candidate (#119, #122, #126). This
+table is a support reference, not proof of local availability. For a new Host,
+offer only a runtime discovered as present by the existing survey on the bound
+execution target and a matching installed platform Runner with a valid Host
+entry. Do not replace selected remote-target facts with the outer computer's
+PATH; keep unresolved survey facts unknown. A live Host keeps its own platform.
+Host platform is its own fact, apart from `authorized_platforms`; being the Host
+authorizes no worker seat, and a worker grant chooses no Host. Rows come from
+platforms/<id>.yaml; an empty entry is host-entry-unsupported.
 
 | Platform (`<runtime_name>`) | Runner Skill (`$RUNNER` dir) | `host_skill_entry` (first line) | Host name |
 |---|---|---|---|
@@ -33,62 +36,51 @@ Host (`host-entry-unsupported`).
   CLI (the `KAOLA_ZCODE_*` gate is zcode-only). Liveness is Runner
   `status`/`list`.
 
-## Worker classes
+## Worker classes and local choices
 
-Read on demand to advise the user: classes, profiles and the seat-switch rule
-in `skills/kaola-project-runner/references/worker-profiles.md` of the Project
-Runner checkout; all rows in `profile-catalog.md` beside it. Each
-runtime/preset (not runtime) has one owner-defined operating class, a role
-and not a benchmark:
+Read the installed worker-profiles.md for class meanings, exact pool membership,
+local-availability and computer-use rules. profile-catalog.md is the full
+supported catalog.
 
-- **Expert**: complex thinking only (difficult analysis, design, objective
-  decomposition, review judgments); no concrete implementation. Each task/use
-  needs explicit user permission; a completed task authorizes no reuse; the
-  same approved task continues across turns and recovery without re-approval.
-  Its review never replaces Host acceptance.
-- **Worker**: cheaper and generally weaker; simpler, well-defined work for
-  parallel throughput. The six-preset pool is default-authorized (no per-seat,
-  count or priority approval; outside the general cap); real account/service
-  limits and owner restrictions apply. Relay only exclusions.
-- **Elite**: all other presets; the main execution workforce, under explicit
-  runtime/preset/count grants that stay valid within their scope.
+For local choices, require both a present runtime from the existing survey on
+the bound execution target and its discovered installed platform Runner's
+scripts/platform.yaml declaring the tier. Use those target facts, never the
+outer computer's PATH. A tier is a Runner mapping; a native provider model
+catalog is not an installation gate.
 
-Relay grants, never tables: Elite in `authorized_platforms=` (a non-default
-preset as `<id>/<tier>`), an approved Expert task by preset and task in
-`project_context=`; the Host derives its scoped rows. A seat stays bound to its
-preset. Relay a user's explicit grant for one seat to switch model/preset
-within its runtime verbatim in `project_context=` (or a later update); never
-invent or widen one. The Host chooses by authorization, class, profile/task
-fit, then capacity; the Delegator does not judge task fit.
+Show users only rows with both facts and include Class, profile, and current
+authorization. Omit missing runtime/Runner/preset rows; report unknown
+separately with the actual missing fact. Installed Elite/Expert options may be
+shown for grants, but visibility is not authorization. Worker pool membership
+is default authorization, not installation proof. Host context intersects
+local rows with current authorization and loads only exact applicable catalog
+rows. Relay grants and exclusions, never profile tables.
+
+Refresh through existing intake/update/recovery facts after relevant
+install, uninstall, or explicit-path changes. Do not poll or rescan each beat,
+interrupt a verified active session, or recreate a seat. If no row qualifies,
+report the missing fact; do not install a runtime or silently substitute one.
 
 ## KPR updates
 
-A release notice neither proves that the installed Skill changed or loaded nor
-authorizes installation or restart; follow existing installation and recovery
-guidance. Once updated guidance is loaded, reconcile this Delegator's active
-handoff or already-authorized inquiry against current rules, latest valid user
-instructions, and fresh records, replacing superseded wording. Read the current
-`worker-profiles.md` in the bound Project Runner checkout for exact pool
-membership and concurrency treatment. Preserve Elite grants, counts,
-limits and exclusions; each seat's bound runtime/model/preset restrictions and
-same-seat switch grants; and current live/stopped identities from Runner status
-and start receipts (keep session, ACP, holder and native resume ids distinct).
-Remove stopped seats from the live roster while preserving in-flight work and
-its locator. A Skill update grants no seats, model switches or other-project
-permissions. Keep the current task frontier and valid user restrictions.
+A release notice proves neither installation nor loaded guidance and authorizes
+no install or restart. On update, reconcile once against current rules, latest
+valid user instructions, and fresh records. Preserve grants, counts, limits,
+exclusions, seat bindings, switch grants, live identities, the task frontier,
+and in-flight locators; remove stopped seats using Runner status/receipts and
+keep session, ACP, holder, and native resume ids distinct. An update grants no
+seats, switches, or other-project permissions. Apply current local-availability
+and authorized-row rules from worker-profiles.md; a loaded main Skill alone
+does not prove worker runtime installation.
 
-Then use the existing idle `send` / busy `steer` route in
-[handoff.md](handoff.md#handoff-and-updates) to ask the same Host to reconcile
-its working prompt with current rules, latest valid user instructions and
-fresh session facts, replacing superseded wording under its existing heartbeat
-snapshot rule. The Delegator changes only its own active instructions or
-authorized inquiry; the Host owns its heartbeat and inner worker facts. Do not
-repeat intake, claims or dispatch, discard in-flight work, start a duplicate
-Host or restart automatically. Use existing restart-required evidence and safe
-lifecycle only when applicable. Create no heartbeat, change no cadence,
-duplicate no ledger, alter no conversation or archive, and do not affect
-another project. Reconcile once when updated guidance is loaded, without a
-repeated rule dump or per-poll check.
+Use the existing idle send / busy steer route in
+[handoff.md](handoff.md#handoff-and-updates) to update the same Host's
+heartbeat snapshot. The Delegator changes only its own active instructions or
+authorized inquiry; the Host owns its heartbeat and worker facts. Do not repeat
+intake, claims, or dispatch; discard in-flight work; start a duplicate Host; or
+restart automatically. Use existing safe lifecycle guidance when applicable.
+Create no heartbeat or ledger, change no cadence, alter no conversation or
+archive, and do not affect another project. Reconcile once, not per poll.
 
 ## Native resume id
 

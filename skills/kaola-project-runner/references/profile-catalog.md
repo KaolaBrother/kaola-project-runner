@@ -1,10 +1,13 @@
 # Profile catalog
 
-Every declared runtime/preset with its owner-defined class, rendered from
-`platforms/<id>.yaml` (`<tier>_model_class`, `<tier>_model_profile`) for
-discovery and lookup. A listed row grants nothing. A Host does not read this
-file whole: it fetches only the exact rows it is authorized for
-([worker-profiles.md](worker-profiles.md) §Authorized rows only).
+Every supported runtime/preset with its owner-defined class and profile,
+rendered from `platforms/<id>.yaml` (`<tier>_model_class`,
+`<tier>_model_profile`). This is the full supported catalog, not a machine-local
+choice list, and a listed row grants nothing. A local row needs the runtime to be
+discovered on the bound execution target and its installed platform Runner to
+declare the tier. The Host then fetches only exact locally available rows allowed
+by current authorization
+([worker-profiles.md](worker-profiles.md) §Local availability and authorized rows).
 
 | Class | Runtime | `--tier` | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|
@@ -20,7 +23,7 @@ file whole: it fetches only the exact rows it is authorized for
 | Elite | Kimi CLI | `default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Elite | Kimi CLI | `kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
 | Worker | Claude Code | `sonnet` | Sonnet | effort=max | Disciplined implementation worker; give it a detailed plan and constraints, and it excels at executing within them. |
-| Worker | Codex CLI | `luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with good reasoning for its class; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
+| Worker | Codex CLI | `luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with good reasoning for its class and computer-use capability; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
 | Worker | Devin CLI | `default` | SWE-2 Max | effort=max (encoded in model ID) | Capable full-cycle engineering worker. |
 | Worker | dsh | `default` | DeepSeek V4.1 Flash (OpenCode Go) | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
 | Worker | OpenCode | `default` | DeepSeek V4.1 Flash (OpenCode Go) | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
