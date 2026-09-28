@@ -11,7 +11,8 @@ heartbeat 就是交到你手里的这篇工作提示词：Host（任一有 host_
 
 仓库与已授权目标：{repo, goal；启动时一次 export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<canonical 项目根>，之后派工省略 --repo 由 Runner 补全并拒绝漂移的根；旧会话按原始 --repo 与 --expected-holder-instance-id 收尾}
 本项目短码与仓库身份：{一个稳定的 ASCII 短码，例如 KaolaTerminal 用 KT，与 canonical repository 一起写在本篇；属项目策略，不每次派工另猜}
-CLI、模型、并发、额度及能力限制：{每项取最新一次明确授权的值，保留用户表达的单位与含义；并发数、账户额度、token 预算分别记，不合成一个数；并发数即存活进程（含 ACP holder）的硬上限；五个低价默认授权预设池（worker-profiles.md）不计入、不受其限，其余 runtime/preset 仍需明确授权；缺失才询问}
+CLI、模型、并发、额度及能力限制：{按最新授权保留用户表达的单位与含义；并发数、账户额度、token 预算分别记，不合成一个数；并发硬限计含 ACP holder 的存活进程；池成员看当前 worker-profiles.md，池席豁免通用并发上限，池外遵明确授权/限额；保留模型/preset限制与切换授权，缺项才问}
+新版 Skill 加载后，按最新有效用户指令和新鲜会话事实重写快照：替换旧池成员/并发、池外授权/限额、模型/preset与live/stopped身份；保留用户限制、任务 frontier 与在飞定位，停席不列live。仅改既有heartbeat，Host管工人事实；不建heartbeat/ledger、不改cadence/历史对话/档案或其他项目；仅加载时处理一次，不逐poll重复。
 Workflow、自执行、心跳间隔：{用户选择或默认值}
 现场入口：{已有会话定位、Workflow记录、Issue/PR；不是新的backlog镜像}
 项目约束与停止条件：{项目规则、用户要求、尚未完成的交付义务}

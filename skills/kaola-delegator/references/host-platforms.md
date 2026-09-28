@@ -55,6 +55,35 @@ member can only do narrow work - the pool's GLM and SWE-2 presets already
 carry substantial and full-cycle tasks. The Delegator relays this policy; it
 does not itself judge task fit.
 
+## KPR updates
+
+A release notice neither proves that the installed Skill changed or loaded nor
+authorizes installation or restart; follow existing installation and recovery
+guidance. Once updated guidance is loaded, reconcile this Delegator's active
+handoff or already-authorized inquiry against current rules, latest valid user
+instructions, and fresh records, replacing superseded wording. Read the current
+`worker-profiles.md` in the bound Project Runner checkout for exact pool
+membership and concurrency treatment. Preserve outside-pool grants, counts,
+limits and exclusions; each seat's bound runtime/model/preset restrictions and
+same-seat switch grants; and current live/stopped identities from Runner status
+and start receipts (keep session, ACP, holder and native resume ids distinct).
+Remove stopped seats from the live roster while preserving in-flight work and
+its locator. A Skill update grants no seats, model switches or other-project
+permissions. Keep the current task frontier and valid user restrictions.
+
+Then use the existing idle `send` / busy `steer` route in
+[handoff.md](handoff.md#handoff-and-updates) to ask the same Host to reconcile
+its working prompt with current rules, latest valid user instructions and
+fresh session facts, replacing superseded wording under its existing heartbeat
+snapshot rule. The Delegator changes only its own active instructions or
+authorized inquiry; the Host owns its heartbeat and inner worker facts. Do not
+repeat intake, claims or dispatch, discard in-flight work, start a duplicate
+Host or restart automatically. Use existing restart-required evidence and safe
+lifecycle only when applicable. Create no heartbeat, change no cadence,
+duplicate no ledger, alter no conversation or archive, and do not affect
+another project. Reconcile once when updated guidance is loaded, without a
+repeated rule dump or per-poll check.
+
 ## Native resume id
 
 Only an id a receipt or event attests; never synthesize one, never

@@ -36,22 +36,18 @@ Select any supported Host platform
 `<platform>-kaola-project-runner`, entry line, native resume id. If that Runner
 is missing, report not executable; claim no Host.
 
-One live Host per repo, whatever its platform, recovered from the canonical Git
-root, the standard Host name `<platform>-<PROJECT_CODE>-orchestrator-<purpose>`
-and Runner `status`/receipts. A Git worktree is not an ACP id. A
-**live** Host is attached in place, never started again,
-even if its recorded name is not the new form; `host-exists` means attach its
-`existing_host`; never rename and retry. Do not rename, restart, or cancel
-an in-flight Host. A missing standard name never justifies a second Host.
-There is no Delegator continuation file.
-A Host failing its identity check is exact-stopped, proven gone
-(`residual_pids: []`), then replaced. A **stopped** Host is resumed (attested
-native id) or replaced per handoff §Recover: a new Host is a new ACP
-session; authorization confirmed before `start`.
-[Bricked Host](references/host-brick.md). From the Grok Bot account bridge,
-attest every Host op with the locator
-(handoff); Codex and generic do not. Commands, identities, the
-`sweep=` line: [handoff.md](references/handoff.md).
+One live Host per repo, whatever its platform. Recover from the canonical root,
+standard Host name, and Runner `status`/receipts. A Git worktree is not an ACP
+id. Attach a live Host in place even if its recorded name is not the new form;
+never restart or cancel in-flight work.
+`host-exists` means attach its `existing_host`; never rename and retry. A missing
+standard name never justifies a second Host. A Host failing its identity check
+is exact-stopped, proven gone (`residual_pids: []`), then replaced. A stopped
+Host resumes with an attested native id or follows handoff §Recover; authorize
+before a new `start`. There is no Delegator continuation file. [Bricked Host](references/host-brick.md).
+From the Grok Bot account bridge, attest every Host op with the locator; Codex
+and generic do not. Commands, identities and the `sweep=` line:
+[handoff.md](references/handoff.md).
 
 Pass no per-worker `--repo`, scheduling, or heartbeat instructions.
 Exact Host `stop` and live attach use `holder_instance_id` from its
@@ -59,15 +55,15 @@ receipt (`--expected-holder-instance-id`); a different holder is not that Host.
 
 ## After the handoff
 
-Relay user changes to the same Host: idle `send`; when busy, `steer` or hold
-until idle - the Runner has no queue. A `--no-wait` admission or a Host
-`end_turn` is not project delivery. After the first Host beat, check
-file-read/work-product evidence and the first dispatch receipt against the
-plan and authorization; do not trust the Host's self-description. Mismatch:
-correct on this Host; do not accept completion. Then follow up at the
-agreed cadence with `observe`/`capture`; compare outcomes, blockers, and
-repeated testing/QA against prior checks; relay one new pacing note when
-warranted, marking stall uncertainty; escalate only unrecoverable human decisions. Do not dispatch workers,
-copy a mission ledger, maintain a heartbeat, create a Routine, touch inner
-sessions, or `stop` the Host before close-out. Changing the outer Agent does not
-stop the Host.
+Relay user changes to the same Host: idle `send`; busy `steer` or wait for idle
+(no queue). `--no-wait` admission and Host `end_turn` are not delivery. After
+the first Host beat, verify file/work-product evidence and the first dispatch
+receipt against plan and authorization; do not trust the Host's self-description.
+Correct mismatches on this Host; do not accept completion. At the agreed cadence,
+`observe`/`capture` outcomes and blockers, compare repeated testing/QA with prior
+checks, relay one pacing note when warranted (mark stall uncertainty), and
+escalate only unrecoverable human decisions. Do not dispatch workers, copy a
+mission ledger, maintain a heartbeat, create a Routine, touch inner sessions,
+or `stop` the Host before close-out. Changing the outer Agent does not stop it.
+
+KPR update: see [host-platforms.md §KPR updates](references/host-platforms.md#kpr-updates); an announcement proves neither an updated install nor loaded guidance and authorizes no install/restart.
