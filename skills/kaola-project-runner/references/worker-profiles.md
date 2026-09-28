@@ -16,8 +16,10 @@ start behavior. The class attaches to the preset, not the whole runtime.
 Expert review informs the Host; it never replaces Host acceptance or
 lifecycle ownership. No Expert use follows from a listed profile, a general
 grant, or an earlier approved task.
-A seat's confirmed quota exhaustion is recovered by its class, never by
-login: [quota-packages.md](quota-packages.md#confirmed-exhaustion).
+A seat's confirmed limit failure is recovered by its class, never by
+login: [quota-packages.md](quota-packages.md#confirmed-exhaustion). An
+authentication or account-access failure instead pauses that seat and goes to
+the user ([Account unavailable](quota-packages.md#account-unavailable)).
 
 ## Local availability and authorized rows
 
