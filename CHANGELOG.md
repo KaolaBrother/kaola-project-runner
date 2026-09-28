@@ -6,6 +6,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Clarify the exploratory implementation fit for Cursor CLI and Grok CLI (Issue #211).** Their Grok 4.7 `default` profiles now describe investigating unfamiliar problems, exploring solution paths, and carrying them through implementation for long-running, adaptive work. Profile wording only; the operator-test surface is untouched (`Seats: restart not required`).
+
 - **Recover confirmed quota exhaustion by Host and worker class, never by login (Issue #207).**
   Delegator and Host guidance now acts only on confirmed exhaustion — explicit runtime/provider
   error or usage evidence — while a generic 429, authentication error, timeout, transient failure,
