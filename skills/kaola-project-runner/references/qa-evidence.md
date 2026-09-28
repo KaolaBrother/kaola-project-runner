@@ -1,19 +1,46 @@
-# QA evidence: testing vs QA, bounded execution, redundancy
+# QA evidence: Host-owned adaptive coverage
 
 Testing executes defined checks and produces results. QA judges whether the
-product and its evidence satisfy the task, and whether the verification work
-itself stays necessary and proportionate. QA is not a second test-running
-phase and never repeats the same suite under a QA label.
+product, its documentation and their evidence satisfy the work, and whether
+the verification itself stays necessary and proportionate. QA is not a second
+test-running phase and never repeats the same suite under a QA label.
 
-## When to assign bounded QA
+## Ownership
 
-Reuse sufficient evidence for the current candidate first. Assign a bounded
-check when a user-facing outcome within the authorized task scope (behavior,
-output, rendering, doc accuracy) is undemonstrated by recorded evidence, when
-evidenced verification redundancy needs simplifying, or when the user
-explicitly requests exploratory, user-flow, or release QA — at any point in
-scope, not only after a finished, frozen delivery. A worker merely finishing
-is not itself a trigger; small or low-impact changes normally end at reuse.
+The Host is the one quality owner: it decides what evidence is needed, who
+supplies it, whether it suffices, and when project-level QA and documentation
+accuracy are checked, from actual change scope, risk, integration state,
+progress and the user's delivery boundary. No fixed interval, issue count,
+mandatory separate reviewer or extra QA seat.
+
+A worker supplies its actual outcome, relevant checks and results, and the
+documentation changes its task affects. Task acceptance (main Skill step 3)
+honestly judges that assignment, not project-level QA: an aggregate check not
+yet run stays pending, never PASS because an issue closed. Keep it, with its
+delivery point, among the heartbeat's unfinished duties — no QA ledger,
+timer, table, score or scheduler.
+
+Kaola-Workflow owns claims, run recovery, workspace/commit ownership, truthful
+lifecycle/evidence records, delivery, merge, closure, archive and cleanup; its
+receipts are evidence. A successful finalize or documentation docking is a
+lifecycle fact, never QA PASS; quality judgment is never delegated to it.
+Where the installed finalize still requires validation or docking artifacts,
+the worker produces them honestly — never bypass a required mechanic or
+fabricate a receipt; report a concrete transition constraint.
+
+## When to check
+
+Reuse valid evidence first; a change invalidates only the evidence it
+affects. Finishing a worker or issue does not itself trigger a QA round, full
+suite or comprehensive doc review; related issues may share one bounded
+integration QA/doc pass before their delivery boundary. Check earlier, still
+bounded, for a concrete uncertainty, high-risk or important affected behavior,
+an undemonstrated in-scope user-facing outcome (behavior, output, rendering,
+doc accuracy), evidenced redundancy, or an explicit user request
+(exploratory, user-flow, release QA). Small changes normally end at reuse.
+Project- and user-required checks stay binding at their boundary: reduce
+redundant optional coverage or frequency, never silently waive a binding
+check or claim validation nobody performed.
 
 ## Who
 
@@ -69,19 +96,15 @@ the **uncertainty** (what was and was not tried). Failing on the baseline too
 does not by itself prove an environment cause. The Host decides whether it
 blocks, needs a narrower repro, is an open observation, or is out of scope.
 
-## Redundancy and adaptive cadence
+## Redundancy
 
-At a meaningful delivery/integration point, and when progress is slow, weigh
-existing results and execution/timing records for overlapping checks without
-distinct coverage, repeatedly regenerated still-valid evidence, unrelated
-full-suite reruns, and duplicate review stages. When evidenced, give the
-appropriate worker a bounded task: reuse existing commands/results, name which
-distinct acceptance coverage a proposed cut removes and why no coverage is
-lost, and keep required contracts, meaningful regression coverage, and
-unresolved failures intact — speed is not a waiver. This is ordinary quality
-judgment at delivery points, not a scheduled audit, a numeric threshold, or a
-new dashboard; a binding required check is never silently waived or postponed
-past its required boundary.
+At a delivery/integration point, or when progress is slow, weigh existing
+results and timing records for overlapping checks without distinct coverage,
+regenerated still-valid evidence, unrelated full-suite reruns, and duplicate
+review stages. When evidenced, give the appropriate worker a bounded task:
+reuse existing commands/results, name which distinct acceptance coverage a
+cut removes and why none is lost, and keep required contracts, meaningful
+regression coverage and unresolved failures — speed is not a waiver.
 
 ## Repair and stopping
 
@@ -93,20 +116,22 @@ is enough.
 ## Examples
 
 - **CLI.** Issue: `export --format json` exits 0 with valid JSON; an invalid
-  format exits 2 with a one-line error. Unit tests cover the parser only.
-  Bounded check: run the three commands on the built binary, capture
-  stdout/exit codes, pipe JSON through a validator, diff `--help` against the
-  README usage block. One finding (README shows a stale flag) routes to the
-  implementer; re-check only the README diff after the fix — no
-  repository-wide doc sweep.
-- **UI / user flow.** Issue: the settings page saves the timezone and the
-  dashboard shows it. Component tests are green; nothing shows the dashboard.
-  Bounded check on a seat with the project's browser tooling already
-  authorized: save a value, reload, start a fresh session, confirm the
-  dashboard reflects it; screenshot attached; a narrow-width spacing
-  observation is recorded with "layout judgment, no spec" and not treated as
-  a required-scope failure.
-- **Docs-only.** Issue: document `--dry-run`. No runtime behavior changed.
-  Read the diff and any recorded `--help` output for this candidate; if none
-  exists and self-execute is off, assign the owner to run and record it — no
-  separate QA seat, no new test framework.
+  format exits 2. Unit tests cover the parser only. Bounded check: run the
+  commands on the built binary, capture stdout/exit codes, validate the JSON,
+  diff `--help` against the README usage block. A stale README flag routes to
+  the implementer; re-check only that diff — no repository-wide doc sweep.
+- **UI.** Settings saves the timezone; nothing shows the dashboard. On a seat
+  with browser tooling already authorized: save, reload, fresh session,
+  confirm the dashboard, attach a screenshot; a spacing note is recorded as
+  "layout judgment, no spec", not a failure.
+- **Docs-only.** Document `--dry-run`: read the diff and any recorded `--help`
+  output; if none and self-execute is off, the owner runs and records it.
+- **Two related issues.** One adds `--quiet`, the next documents it. Each
+  worker runs its focused checks and edits affected docs; the Host accepts each
+  assignment and keeps "shared CLI/README check, before the release cut" in
+  unfinished duties — the first closure is not its PASS. After both merge, one
+  bounded check runs the flag and diffs `--help` against the README.
+- **High-risk gap.** Stop handling was rewritten, dependent work is queued,
+  and no record stopped a live seat. Before that dispatch the Host asks for one
+  bounded exact-stop check, not a full-suite rerun; required validation still
+  runs at its boundary.

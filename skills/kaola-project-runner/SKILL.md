@@ -11,7 +11,7 @@ identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, mission ledger,
 child worktree, finalize, archive, and sink.
 
-You own scheduling and acceptance decisions. Helpers may research, inspect,
+You own scheduling, acceptance and QA decisions. Helpers may research, inspect,
 test, review, or execute assigned work, never continuous topic selection,
 scaling, cross-worker scheduling, or final completion judgment. Without explicit
 permission to self-execute, read evidence and direct workers: do not implement,
@@ -188,18 +188,18 @@ sink, and write ownership.
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims.
 3. **Accept the delivery.** Mission-frontier done triggers review, not automatic finalize. When a worker
-   claims completion, judge yourself whether its actual diff and existing run
-   records satisfy the task under the currently effective global Workflow rules.
-   Reuse sufficient evidence for this same candidate; send only concrete
-   deviations, omissions or invalidated evidence back to that worker for repair,
-   and do not finalize on incomplete evidence. Do not lower assertions or
-   substitute worker prose, idle, green CI or a successful script exit for acceptance.
-   Testing executes checks; QA judges their sufficiency, including evidenced
-   redundancy: [qa-evidence.md](references/qa-evidence.md).
+   claims completion, judge its actual diff, checks, docs and run records
+   against that assignment under the effective global Workflow rules. Reuse
+   sufficient evidence for this candidate; return only concrete deviations,
+   omissions or invalidated evidence to that worker, and never finalize on
+   incomplete evidence or lowered assertions. Worker prose, idle, green CI or
+   a successful script exit is not acceptance, and acceptance is not project
+   QA: you pick when aggregate QA/doc checks run; unrun ones stay pending
+   duties ([qa-evidence.md](references/qa-evidence.md)).
 4. **Finalize and synchronize.** Acceptance authorizes that candidate's
    pending finalize: direct its owning worker to finalize and merge, then verify
-   remote, Issue, archive, doc docking, and cleanup results
-   ([doc-maintenance](references/doc-maintenance.md)).
+   remote, Issue, archive, doc docking, and cleanup results: lifecycle facts,
+   not QA PASS ([doc-maintenance](references/doc-maintenance.md)).
    Prefer one run at a time; judge safe concurrency. After the baseline moves, direct affected owners to save
    work and rebase/update at a safe boundary. Review conflicts and revalidate changes; do not switch HEAD
    mid-measurement or reuse invalidated evidence. History rewriting needs applicable authorization.
@@ -272,7 +272,7 @@ negatives: [references/issue-dispatch.md](references/issue-dispatch.md).
 ## Report
 
 Use the user's report format; otherwise one compact current-work table plus
-outstanding close-out items. Include task/progress, meaningful
+outstanding close-out and pending QA items. Include task/progress, meaningful
 model mismatches, blockers, and next action. For non-pool seats, per platform report `live N /
 authorized M` and the seats stopped this beat; N > M with no stop that beat
 violates the cap. Pool seats report live seats marked exempt. Drop stale stopped rows from reports. Keep duties traceable in

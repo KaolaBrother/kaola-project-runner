@@ -6,6 +6,26 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Let the Host own adaptive QA and documentation coverage across issue deliveries (Issue #213).**
+  Paired with Kaola-Workflow #1111. The Project Runner Host is the one quality owner: it decides
+  what evidence is needed, who supplies it, whether it suffices, and when project-level QA and
+  documentation accuracy are checked, from actual change scope, risk, integration state, and the
+  user's delivery boundary — no fixed interval, issue count, mandatory separate reviewer, or extra
+  QA seat. Workers supply their actual outcome, relevant checks, and affected documentation
+  changes; task acceptance judges that assignment and is not a claim that project QA is complete.
+  An aggregate check not yet run stays pending among the heartbeat's existing unfinished duties
+  (never PASS because an issue closed), related issues may share one bounded integration QA/doc
+  pass, and a concrete uncertainty, high-risk gap, or explicit request justifies an earlier bounded
+  check. Valid evidence for unaffected behavior is reused, changed behavior invalidates only
+  affected evidence, and binding project/user checks stay binding while redundant optional
+  coverage may be reduced. Kaola-Workflow keeps claims, recovery, delivery, merge, closure,
+  archive, and cleanup; a successful finalize or documentation docking is a lifecycle fact, not QA
+  PASS, and where the installed finalize still requires its validation/docking artifacts they are
+  produced honestly, never bypassed or fabricated. Updated the main Skill intro and steps 3–4, the
+  `qa-evidence` and `doc-maintenance` references, the heartbeat skeleton's pending-duty slot, and
+  the README; the Kaola-Delegator's periodic pace feedback is unchanged. No new QA ledger, schema,
+  timer, or gate. Guidance only: transport, CLI, and model surfaces are unchanged and the
+  operator-test paths are untouched (`Seats: restart not required`).
 - **Expose installed local choices and add Codex Luna computer-use guidance (Issue #214).** The full supported-runtime catalog stays in the README; Delegator and Host choices require bound-target runtime discovery plus a matching installed Runner preset, then current authorization. Host profile context loads only applicable rows. Computer interaction prefers explicitly authorized, locally available Codex default, then eligible Worker-pool luna; visual review remains separate. Luna's owner-provided profile now names computer-use capability. Profile and prompt guidance only (Seats: restart not required).
 
 - **Correct three contract-suite expectations left stale by #204's wording trim (Issue #209).**

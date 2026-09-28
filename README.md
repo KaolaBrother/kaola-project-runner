@@ -487,7 +487,16 @@ not automatically retry prompts, upgrade models, or schedule recurring work.
 Project-level heartbeat and acceptance belong to the main orchestrator Skill when
 that Skill is in use; acceptance there separates testing (running checks) from QA
 (judging evidence sufficiency and verification proportionality — see
-`references/qa-evidence.md` in the installed `kaola-project-runner`).
+`references/qa-evidence.md` in the installed `kaola-project-runner`). That Host is
+the one owner of adaptive QA and documentation-accuracy coverage: it decides what
+evidence is needed and when project-level checks run from actual change scope,
+risk, integration state, and your delivery boundary — no fixed interval, issue
+count, or extra QA seat. Accepting one issue's delivery is not a claim that
+project QA is complete; aggregate checks not yet run stay pending in the Host's
+existing records until their delivery point, and related issues may share one
+bounded integration check. Kaola-Workflow owns claims, run recovery, delivery,
+merge, closure, archive, and cleanup; a successful finalize or documentation
+docking is a lifecycle fact, not a QA PASS. Required project checks stay required.
 
 **Permission defaults matter:** the default is per platform, not one guarantee
 across all ten. Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an
