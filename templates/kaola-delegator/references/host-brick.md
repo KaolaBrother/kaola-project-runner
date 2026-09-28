@@ -1,4 +1,4 @@
-# Bricked or quota-exhausted Host
+# Bricked, limit-failed or account-unavailable Host
 
 A Host can brick: every shell call fails before the shell runs (for example
 `spawn /bin/bash ENOENT` after its remembered working directory was moved or

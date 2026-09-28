@@ -440,18 +440,34 @@ explicit "stop here, continue later" pauses that cleanup and preserves recovery.
 ### Quota exhaustion
 
 Recovery acts only on confirmed exhaustion — an explicit runtime/provider error or usage
-fact that the relevant quota is exhausted. A generic 429, authentication error, timeout,
-transient failure, or reset-window metadata alone is reported, not acted on, and another
-runtime is not fresh quota when evidence shows it shares the exhausted pool. By class:
+fact that the relevant quota is exhausted. A generic 429, timeout, transient failure, or
+reset-window metadata alone is reported, not acted on, and another runtime is not fresh
+quota when evidence shows it shares the exhausted pool. By class:
 an exhausted **Host** is replaced by Kaola-Delegator with one ZCode Host through the
 existing exact-stop/new-Host handoff (if the Host is already ZCode, or that fallback
 cannot operate, the Delegator asks you); an **Expert** task waits for your direction; an
 exhausted **Elite** seat is reclaimed and loses its grant for this run — its task goes to
 another already-authorized Elite, and only you reauthorize it; a **Worker** task moves to
 another suitable Worker preset without cycling seats of an exhausted shared pool. With no
-suitable authorized replacement, the task is reported and you are asked. Neither the
-Delegator nor the Host ever attempts, retries, or delegates login, re-login, credential
-refresh, or account switching; authentication is left to you.
+suitable authorized replacement, the task is reported and you are asked.
+
+### Login or account access failure
+
+An explicit `login expired`, `authentication required`, revoked or invalid credentials,
+`account disabled`, or equivalent refusal pauses only the affected seat: its task,
+locator, valid output, and exact identity are preserved, it gets no new work, it is
+exact-stopped once the failed turn settles and marked temporarily paused in the run's
+snapshot — a pause, not a grant revocation — and the runtime's exact message and the
+seat go to you for account repair or direction, with unrelated work continuing. For the
+Host itself the Delegator preserves the frontier and in-flight worker ownership and makes
+no automatic Host switch. Neither the Delegator nor the Host ever attempts, retries, or
+delegates login, re-login, credential refresh, or account switching for any cause, and
+never asks you to paste secrets into chat; a paused seat resumes only after you confirm
+access is restored and direct continuation.
+
+A session that is still connecting, and a bare 429, timeout, or network error with no
+explicit limiting reason, is neither: the cause stays unknown and is observed rather than
+labeled quota or authentication.
 
 ### Authorization before a new Host
 

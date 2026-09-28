@@ -1,8 +1,8 @@
 {
-  "build": "9fc80d71b236",
+  "build": "c58d2cc2ccba",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "c84ebfb1f6fd9e233b2a18fbe465361b4a316104cacbb6cb3acd3b0bcdd21dfb",
+    "SKILL.md": "a388d483b79870489b5c121f9f07bae2769f4fa97b2407fbd55005e0bb600709",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
     "references/doc-maintenance.md": "aaa43b70d4cbca6f0edcd399ed9de2ee0ea8bcc9c9d7c6ebe6de353796b86f83",
     "references/heartbeat-skeleton.md": "d55a73c526531347f77cc5178041c5554b458ed815082536ee9a645fcfcd307f",
