@@ -6,7 +6,8 @@ heartbeat 就是交到你手里的这篇工作提示词：Host（任一有 host_
 
 仓库与已授权目标：{repo, goal；启动时一次 export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<canonical 项目根>，之后派工省略 --repo 由 Runner 补全并拒绝漂移的根；旧会话按原始 --repo 与 --expected-holder-instance-id 收尾}
 本项目短码与仓库身份：{一个稳定的 ASCII 短码，例如 KaolaTerminal 用 KT，与 canonical repository 一起写在本篇；属项目策略，不每次派工另猜}
-CLI、模型、并发、额度及能力限制：{每项取最新一次明确授权的值，保留用户表达的单位与含义；并发数、账户额度、token 预算分别记，不合成一个数；并发数即存活进程（含 ACP holder）的硬上限；五个低价默认授权预设池（worker-profiles.md）不计入、不受其限，其余 runtime/preset 仍需明确授权；缺失才询问}
+CLI、模型、并发、额度及能力限制：{按最新授权保留用户表达的单位与含义；并发数、账户额度、token 预算分别记，不合成一个数；并发数即存活进程（含 ACP holder）的硬上限；Worker池席豁免通用并发上限，Elite遵明确授予/限额，Expert仅限获批任务；只记已授权档案行（精确取行不读全表，变更改该行）；保留模型/preset限制与切换授权，缺项才问}
+新版 Skill 加载后，按最新有效用户指令和新鲜会话事实重写快照：替换旧池成员/并发、Elite 授予/限额、模型/preset与live/stopped身份；保留用户限制、任务 frontier 与在飞定位，停席不列live。仅改既有heartbeat，Host管工人事实；不建heartbeat/ledger、不改cadence/历史对话/档案或其他项目；仅加载时处理一次，不逐poll重复。
 Workflow、自执行、心跳间隔：{用户选择或默认值}
 现场入口：{已有会话定位、Workflow记录、Issue/PR；不是新的backlog镜像}
 项目约束与停止条件：{项目规则、用户要求、尚未完成的交付义务}
@@ -27,7 +28,7 @@ Workflow、自执行、心跳间隔：{用户选择或默认值}
    删除：已被替代的额度、优先级和平台/模型选择，已作废的计划，重复叙述，无后续影响的已完成事项，暂态故障和调配历史。
    保留：稳定的骨架规则，本项目短码与派工命名/单 Issue 约束，当前有效的项目约束，在飞任务的定位（会话、worktree、Issue/PR），未完成的交付、验收、同步和清理义务及其责任人，尚待决定事项，恢复所需的最小指针。
    写回后全篇不得同时存在两个互相矛盾的额度或优先级，也不能只追加一句「新规则优先」就留着旧值；从本篇移除不等于删除证据，更不改写已完成 Mission 的 result。
-   载体按本宿主现有机制：Host 更新项目根 `.kaola/heartbeat-prompt.json`（JSON 对象，整篇工作提示词放在名为 `body` 的非空字符串字段里；字段名写错或为空时，载体投递的是一条明确的缺失报告，而不是你的提示词）；非 Host 的 Codex 更新其定时系统已有的提示词载体。不新建 schema、额度账本、调度器或清理脚本。投递时载体自带首行 Skill 入口（`host_skill_entry`；ZCode 为 `/kaola-project-runner`），本篇只写 `body` 正文：不重复入口行，也不复制 Skill 正文。
+   载体按本宿主现有机制：Host 更新项目根 `.kaola/heartbeat-prompt.json`（JSON 对象，整篇工作提示词放在名为 `body` 的非空字符串字段；字段名错或为空则投递缺失报告而非你的提示词）；非 Host 的 Codex 更新其定时系统已有的提示词载体。不新建 schema、额度账本、调度器或清理脚本。投递时载体自带首行 Skill 入口（`host_skill_entry`；ZCode 为 `/kaola-project-runner`），本篇只写 `body` 正文：不重复入口行，也不复制 Skill 正文。
 
 首次缺工人授权：只问缺失项，不启动worker或心跳。已有运行先恢复授权，不能当作空白intake。
 到点/到条件（run until 5pm/done/CONDITION）之后不接新任务、不认领新 issue；默认真收口手头已认领/在飞 issue，合并 worktree/分支、不留分支尾巴。到点不是丢掉手头工作。只有人明确说「这里停、稍后再续」才跳过该清理并保留可恢复未完成分支。
