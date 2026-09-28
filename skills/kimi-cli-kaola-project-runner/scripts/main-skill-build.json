@@ -1,5 +1,5 @@
 {
-  "build": "8036690eb36d",
+  "build": "5ab2edf3cef4",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "f07353984338051dee78419b42f7ca27f4fe16373a6f24308f00e50c1e9fd53a",
@@ -9,10 +9,10 @@
     "references/host-entry-matrix.md": "1b02e979e2af755f16e6cddc6de7e0718e0a89a577f34ac510d19eb0aba626ac",
     "references/host-startup.md": "eb7e8f63b9311860fae95790d4e6dc0499d09b797dab8a364da26e4114f4db0a",
     "references/issue-dispatch.md": "91e791f37d18f39a96609501c5ef1631384cb4beedddd125495d71f0578157a8",
-    "references/profile-catalog.md": "0cfeec98f12b39e6c613627cc17503568828169d3f2e1c92e997367544cf4cb9",
+    "references/profile-catalog.md": "5e57b1273d305b1d4eefb6ad4c202dc1f4a33544a58ffb9492fb904dbbe96959",
     "references/qa-evidence.md": "2c39d2989b5cac0ad3a7d3334f8a46f610bf194d1c9b6a1bfcc4b2743e86917a",
     "references/quota-packages.md": "4666b1df451fc1aa6acc11bd3452298f9bdaa76fe2b8707a25798464a9632df3",
-    "references/worker-profiles.md": "bb92672a5d54978d7cf4a8ef4202936bd029c9012a2a36f1ba509089a1b53650",
+    "references/worker-profiles.md": "54ebb1a09538097c507e135a2a7930f762c7414d3f816d18c1a207c35a0f9a47",
     "references/workflow-worktree.md": "db2c61c9e81b6ff86f5156cf44f861b8ed0197c5e9efb62ac37527d0d13eef0f",
     "references/zcode-host-dispatch.md": "326534d210803866c4439bc23cac42f7b835e6cd57ff93a1c6096080aabeeeb6",
     "references/zcode-native-skill-entry.md": "03b9da8e27c8d319c532cc41e3a605fb578d5bbf9ab4d007359cb0ef656242e7"
