@@ -41,8 +41,8 @@ line: [host-startup.md](references/host-startup.md) ·
 For consumer-project work, the Project Runner checkout, templates, generated
 files, and installed Skill payload are read-only. Store project-specific
 authorization, heartbeat, and run facts in the consuming project. Do not edit
-this repository, its templates, generated files, or an installed Skill payload
-unless a human explicitly assigned Project Runner development.
+any of the above unless a human explicitly assigned Project Runner
+development.
 
 ## Authorization
 
@@ -88,7 +88,9 @@ turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-disp
 Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
 which starts one Host of any platform that loads this Skill. `--platform grok` is the
 Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
-Routine to run this Skill.
+Routine to run this Skill. Keep the Host shell cwd at the canonical root: never
+`cd` into a worktree finalize/sink may remove; use absolute paths, `git -C`, or
+`(cd ... && ...)`.
 
 ### Progressive disclosure
 
@@ -187,12 +189,10 @@ sink, and write ownership.
    worker to finalize and merge, then verify remote, Issue, archive, doc
    docking, and cleanup results; see [doc-maintenance](references/doc-maintenance.md).
    Prefer one run at a time; judge safe concurrency. After the baseline moves, direct affected owners to save
-   work and rebase/update at a safe boundary. Review conflicts and revalidate
-   affected changes; do not switch HEAD during a measurement or silently reuse
-   invalidated evidence. History rewriting needs applicable authorization.
-   When existing records are inconsistent, investigate and direct a scoped
-   repair using existing tools; do not fabricate claim identities or introduce
-   a parallel lifecycle system.
+   work and rebase/update at a safe boundary. Review conflicts and revalidate changes; do not switch HEAD
+   mid-measurement or reuse invalidated evidence. History rewriting needs applicable authorization.
+   When records are inconsistent, investigate and direct a scoped repair; do
+   not fabricate claim identities or introduce a parallel lifecycle system.
 5. **Release and report.** The only legal idle seat is one whose delivery is
    awaiting acceptance. Once acceptance finishes or the seat is abandoned,
    exact-stop it in that same beat; a rejected delivery's repair is the same
@@ -203,12 +203,11 @@ sink, and write ownership.
    close-out open, is not an idle worker: keep it and send it no "continue"; its
    next beat is a worker event. Cancel the heartbeat once no unfinished
    delivery/sync/cleanup remains; preserve existing recovery information and give
-   the rest a named owner. Direct cleanup of completed,
-   unreferenced worktrees and branches; protect in-flight work and evidence.
+   the rest a named owner. Direct cleanup of completed, unreferenced
+   worktrees/branches; protect in-flight work and evidence.
    Continue the same heartbeat
-   while authorized work or close-out remains. Session stop, candidate
-   acceptance, merge, Issue closure and workspace cleanup are different facts,
-   not interchangeable completion labels.
+   while authorized work or close-out remains. Session stop, acceptance, merge, closure and cleanup are different facts, not
+   interchangeable completion labels.
 
 ## Ending a run
 

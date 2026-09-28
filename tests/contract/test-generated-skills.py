@@ -493,7 +493,7 @@ def check_orchestrator_package(assertions: Assertions, root: Path) -> None:
             for marker in (
                 "For consumer-project work, the Project Runner checkout, templates, generated files, and installed Skill payload are read-only.",
                 "Store project-specific authorization, heartbeat, and run facts in the consuming project.",
-                "Do not edit this repository, its templates, generated files, or an installed Skill payload unless a human explicitly assigned Project Runner development.",
+                "Do not edit any of the above unless a human explicitly assigned Project Runner development.",
             )
         ),
         "main Skill must tell consumer-project agents the checkout/templates/generated/installed payload are read-only and to store facts in the consuming project",
