@@ -644,10 +644,32 @@ is that id with `effective_model_source: "launch-argv"`, the agent's own (possib
 as `advertised_model`. On such a launch-argv start Droid's `model_verified` compares that echoed
 `advertised_model`, never the argv value the Runner itself supplied, so a session whose argv model
 the agent never adopted verifies `false` instead of comparing the argv value to itself.
-`status`/`observe` carry no request provenance; they report the
-agent's own `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
+`status`/`observe` report the
+agent's own current `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
+
+Launch evidence (Issue #203). After applying the selection, `start` hands its own evidence to the
+holder, which keeps it as `start_evidence` in `record.json` and every `status`/`observe` reply (from
+the record when the holder is stopped or lost), across every whole-record rewrite. It is the start
+receipt's `model_selection`, `config_application`, `effective_selection` (including
+`effective_model_source: "launch-argv"` beside the separate `advertised_model`), `fast`,
+`host_selection`, `model_verified`, `model_mismatch_reason`, `actual_runtime_model_id`,
+`actual_parameters`, and `model_evidence_provenance` without its `catalog_probe`, each present only
+when the start receipt had it, plus `acp_session_id`, `resumed`, and `recorded_at`. It is evidence
+from that start or resume, not a fresh observation: the current selection is
+`session_meta.configOptions`, an applied option or launch argument is application evidence, and
+only an existing verified fact (`model_verified: true`) is verified. `start_selection` stays the
+caller's raw flags, so an omitted `--tier` is `null`. A resume or `--continue` whose adopted
+`acp_session_id` equals the one the previous record for the same platform/session/repo ran and
+recorded its evidence under keeps that evidence as `start_evidence.inherited` (`source:
+"prior-holder-record"`, `holder_instance_id`, `acp_session_id`, `recorded_at`), also echoed as the
+start receipt's `inherited_start_evidence`; a preserved resume carries the older applied evidence
+forward flat. Any other native session, a Runner name alone, or a record without evidence inherits
+nothing, and the model stays unknown or native-preserved. Resume sends no extra model/effort option
+to fill these fields. The start receipt reports `start_evidence_recorded` (and
+`start_evidence_error` when a holder could not keep it, for example a pre-#203 holder or evidence
+over 16 KiB); neither is a refusal. Old records without `start_evidence` stay readable.
 
 Droid's default is Auto Model (`auto`) with no effort pin; `--tier opus` is Opus 5.5
 (`claude-opus-5-5` at `reasoning_effort=medium`) and `--tier core` is Kimi K3 (`kimi-k3` at

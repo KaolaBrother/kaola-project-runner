@@ -6,6 +6,17 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Launch model evidence stays readable in `status`/`observe` (Issue #203).** `start` now hands
+  its selection/application evidence (`model_selection`, `config_application`,
+  `effective_selection` with launch-argv versus advertised values, `fast`, and the existing
+  known/unknown verification facts) to the holder, which keeps it as `start_evidence` in the
+  session record across its whole-record rewrites and returns it from `status`/`observe`. A resume
+  of the same native session (matched by `acp_session_id`, never by Runner name) keeps the prior
+  evidence as `start_evidence.inherited`; anything else stays unknown. Native resume selection,
+  raw `start_selection`, drain-restart, and refusals are unchanged. Changes
+  `scripts/kaola-acp-holder.py` (new `record_start_evidence` op): Seats: restart required for a
+  running seat to keep this evidence; an older holder just reports `start_evidence_recorded: false`.
+
 - **Relay the pool-vs-limited-seat capability policy in Host and Delegator guidance (Issue #202).**
   The Host worker-profiles reference and the Kaola-Delegator host-platforms guidance both now state
   the owner's operating heuristic: the six-preset autonomous pool is cheaper and generally weaker
