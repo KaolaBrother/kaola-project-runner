@@ -6,6 +6,21 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Reorganize README around user and agent usage with a generated preset catalog (Issue #206).**
+  README now follows actual usage order — choose an entry (Kaola-Delegator / Project Runner /
+  Platform Runner, with Kaola Workflow integration briefly), install and begin, select workers,
+  authorization (the six default-authorized pool presets and outside-pool grants with the
+  seat/model-switch boundaries), what users specify versus what agents own, daily use, and a
+  short agent navigation section — with a contents list, short sections, and a preset catalog
+  listing all ten runtimes and all twenty declared presets with model, parameters, and the full
+  one-sentence profile. The catalog rows are no longer hand-maintained:
+  `scripts/render-skills.py --write` renders them into a managed README region from the same
+  `platforms/*.yaml` rows as the generated worker-profiles reference, and `--check` fails on
+  drift. Implementation internals (holder identity/recovery procedures, ACP/adapter/provider
+  internals, historical verification dates, issue-by-issue narration) moved off the front page
+  and now link to the installed/generated Skills, `docs/`, and this changelog. Profile wording,
+  pool membership, authorization, and grant semantics are unchanged; profiles stay verbatim
+  from the manifests.
 - **Relay the pool-vs-limited-seat capability policy in Host and Delegator guidance (Issue #202).**
   The Host worker-profiles reference and the Kaola-Delegator host-platforms guidance both now state
   the owner's operating heuristic: the six-preset autonomous pool is cheaper and generally weaker

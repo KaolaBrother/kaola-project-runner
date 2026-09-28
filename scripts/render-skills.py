@@ -23,7 +23,13 @@ TEMPLATES = ROOT / "templates"
 SKILLS = ROOT / "skills"
 HOSTS = ROOT / "hosts"
 VENDOR = ROOT / "vendor"
+README = ROOT / "README.md"
 MARKER = ".generated-by-kaola-project-runner"
+# Issue #206: the README preset catalog is a generated region between these two
+# markers, rendered from the same manifest rows as the worker-profiles
+# reference, so the front page never becomes a second hand-maintained catalog.
+README_PRESETS_START = "<!-- KW-README-PRESETS-START -->"
+README_PRESETS_END = "<!-- KW-README-PRESETS-END -->"
 # The one vendored ACP bridge (Issue #50): shipped only inside this platform's worker Skill.
 VENDORED_BRIDGE_PLATFORM = "claude-code"
 VENDORED_BRIDGE = "claude-code-acp"
@@ -370,6 +376,42 @@ def worker_profile_rows(manifests: list[dict[str, str]]) -> str:
                         f"{manifest[f'{prefix}_model_name']} | {manifest[f'{prefix}_model_parameters']} | "
                         f"{manifest[f'{prefix}_model_profile']} |")
     return "\n".join(rows)
+
+
+def readme_presets_region(manifests: list[dict[str, str]]) -> str:
+    """Issue #206: the README preset catalog - the same manifest-rendered rows
+    as the generated worker-profiles reference, between managed markers."""
+    header = (
+        "| Runtime | `--tier` | Model | Parameters | Profile |\n"
+        "|---|---|---|---|---|"
+    )
+    return "\n".join([README_PRESETS_START, header,
+                      worker_profile_rows(manifests), README_PRESETS_END])
+
+
+def sync_readme_presets(manifests: list[dict[str, str]], write: bool) -> list[str]:
+    """Issue #206: --write refreshes the README preset region, --check verifies
+    it; the region must exist exactly once so the catalog cannot silently go
+    stale or duplicated."""
+    text = README.read_text(encoding="utf-8")
+    if text.count(README_PRESETS_START) != 1 or text.count(README_PRESETS_END) != 1:
+        return [f"README.md: expected exactly one preset-catalog region between "
+                f"{README_PRESETS_START} and {README_PRESETS_END}"]
+    region = readme_presets_region(manifests)
+    updated = re.sub(
+        re.escape(README_PRESETS_START) + r".*?" + re.escape(README_PRESETS_END),
+        lambda _: region,
+        text,
+        count=1,
+        flags=re.DOTALL,
+    )
+    if write:
+        if updated != text:
+            README.write_text(updated, encoding="utf-8")
+        return []
+    if updated != text:
+        return ["README.md: preset catalog is stale; run scripts/render-skills.py --write"]
+    return []
 
 
 def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
@@ -1217,6 +1259,10 @@ def main() -> int:
         write_bundle(HOSTS, host_target, host_expected, "host")
     else:
         findings.extend(check_one(host_target, host_expected))
+
+    # Issue #206: the README preset catalog is generated from the same manifest
+    # rows as the worker-profiles reference (skills/ hosts are unaffected).
+    findings.extend(sync_readme_presets(manifests, args.write))
 
     if findings:
         for finding in findings:
