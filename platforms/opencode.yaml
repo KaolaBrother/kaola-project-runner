@@ -15,7 +15,7 @@ launch_summary: "ACP runs opencode acp. ACP has no skip-all, so ACP start sets n
 recurring_execution: "unsupported"
 recurring_summary: "Use the caller-selected one-shot, Codex heartbeat, or live-verified runtime-native carrier described in [scheduling.md](scheduling.md)."
 quit_text: "/exit"
-default_model_name: "DeepSeek V4.1 Flash (OpenCode Go)"
+default_model_name: "DeepSeek V4.1 Flash"
 default_model_id: "opencode-go/deepseek-v4.1-flash"
 default_model_parameters: "no Runner effort override"
 default_model_effort: ""

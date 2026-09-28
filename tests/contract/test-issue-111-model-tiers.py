@@ -58,7 +58,7 @@ LIVE_PRESETS = {
                   ("core", "Kimi K3", "kimi-k3", "max")],
     },
     "dsh": {
-        "default": ("DeepSeek V4.1 Flash (OpenCode Go)", "opencode-go/deepseek-v4.1-flash", ""),
+        "default": ("DeepSeek V4.1 Flash", "opencode-go/deepseek-v4.1-flash", ""),
         "named": [],
     },
     "zcode": {
@@ -173,7 +173,7 @@ class LiveVerifiedPresets(unittest.TestCase):
             self.assertNotIn(leftover, summary)
 
     def test_dsh_records_the_runner_side_display_name(self) -> None:
-        """"DeepSeek V4.1 Flash (OpenCode Go)" is ours; the catalog's is bare."""
+        """"DeepSeek V4.1 Flash" is ours; the catalog's is bare."""
         summary = manifest("dsh")["launch_summary"]
         self.assertIn("Runner-side display name", summary)
         self.assertIn("deepseek-v4.1-flash", summary)

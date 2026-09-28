@@ -2,7 +2,7 @@
 
 Read-only catalog for a consumer agent (Issue #148). These commands start no agent, session, holder or record and spend no quota; login environment is not required. Only `--installed-only` runs the Issue #147 survey login shell, keeping platforms whose survey status is `present`.
 
-Package ids are `<platform>:<token>`. Manifest tokens and `model_package_rule` are validated at render. Rule kinds: `single`; `explicit` (exact model id); `provider_prefix` (segment before a slash or backslash, or the first element of a JSON-array id; a `gaps` entry forces unmapped); `native_field` (a row field such as `billingPool` or `limitIds`). A static query has no row: `native_field` uses a declared `absent` (codex `absent` is `primary`), otherwise unmapped; a present unknown value does not fall back to `absent`. Nothing guesses a package for an id the rule does not name.
+Package ids are `<platform>:<token>`. Manifest tokens and `model_package_rule` are validated at render. Rule kinds: `single`; `explicit` (exact model id); `provider_prefix` (segment before a slash or backslash, or the first element of a JSON-array id; a bare id maps only via `models`; a `gaps` entry forces unmapped); `native_field` (a row field such as `billingPool` or `limitIds`). A static query has no row: `native_field` uses a `models` entry, else `absent` (codex: `primary`), else unmapped; a live row's present value wins and an unknown one stays unmapped. Nothing guesses a package for an id the rule does not name.
 
 ## packages
 
@@ -38,10 +38,10 @@ Mapped:
 {"model": "grok-4.7", "packageId": "grok:account", "platform": "grok", "schema": "kaola-acp-model-package/1", "status": "mapped"}
 ```
 
-Unmapped (no verified rule for this static query; droid `billingPool` is read from a live row, not from the model id):
+Unmapped (no verified rule for this id; droid's declared presets map statically, others need a live `billingPool` row):
 
 ```json
-{"model": "claude-opus-5-5", "packageId": null, "platform": "droid", "schema": "kaola-acp-model-package/1", "status": "unmapped"}
+{"model": "brand-new-model", "packageId": null, "platform": "droid", "schema": "kaola-acp-model-package/1", "status": "unmapped"}
 ```
 
 ## Emission stamps

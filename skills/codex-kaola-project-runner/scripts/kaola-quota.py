@@ -28,14 +28,15 @@ Platform manifests store two JSON documents as ordinary JSON strings
       segments that stay unmapped even though the package catalog may name
       that lane. The segment is the first element of a JSON-array model id,
       else the head before ``\\``, else the head before ``/``. A bare id
-      with no segment is unmapped.
+      with no segment uses an optional exact ``models`` map, otherwise unmapped.
     * ``native_field`` — ``{"kind","field","values","absent"?}``. ``values``
       maps an upstream field spelling to a package token. A missing, null,
       or empty field uses ``absent`` when that key names a package, and is
       unmapped when ``absent`` is omitted. A present value that is not in
       ``values``, or a list whose members do not all name the same package,
       is unmapped. With no row (the static query), the field is not exposed,
-      so ``absent`` applies.
+      so ``absent`` applies. An optional exact ``models`` map takes precedence
+      over ``absent`` only when the native field is missing, null, or empty.
 
 A match returns the consumer id ``<platform>:<token>``. A miss is
 ``packageId: null`` and ``status: "unmapped"``. Nothing substitutes another
@@ -160,7 +161,7 @@ def parse_rule(raw: str, packages: list[dict[str, Any]]) -> dict[str, Any]:
             normalized[model_id] = _binding_token(by_id, token, f"explicit.map[{model_id!r}]")
         return {"kind": kind, "map": normalized}
     if kind == "provider_prefix":
-        _exact_keys(document, {"kind", "providers", "gaps"})
+        _exact_keys(document, {"kind", "providers", "gaps", "models"})
         providers = document.get("providers")
         gaps = document.get("gaps", [])
         if not isinstance(providers, dict) or not providers:
@@ -183,8 +184,9 @@ def parse_rule(raw: str, packages: list[dict[str, Any]]) -> dict[str, Any]:
             normalized_providers[segment] = _binding_token(
                 by_id, token, f"provider_prefix.providers[{segment!r}]"
             )
-        return {"kind": kind, "providers": normalized_providers, "gaps": gap_set}
-    _exact_keys(document, {"kind", "field", "values", "absent"})
+        return {"kind": kind, "providers": normalized_providers, "gaps": gap_set,
+                "models": _model_bindings(document, packages)}
+    _exact_keys(document, {"kind", "field", "values", "absent", "models"})
     field = document.get("field")
     if not isinstance(field, str) or FIELD_NAME.fullmatch(field) is None:
         raise QuotaError("native_field.field must be an identifier")
@@ -198,16 +200,29 @@ def parse_rule(raw: str, packages: list[dict[str, Any]]) -> dict[str, Any]:
         normalized_values[spelling] = _known_token(
             by_id, token, f"native_field.values[{spelling!r}]"
         )
-    rule: dict[str, Any] = {"kind": kind, "field": field, "values": normalized_values}
+    rule: dict[str, Any] = {"kind": kind, "field": field, "values": normalized_values,
+                            "models": _model_bindings(document, packages)}
     if "absent" in document and document.get("absent") is not None:
         rule["absent"] = _binding_token(by_id, document.get("absent"), "native_field.absent")
     return rule
 
 
+def _model_bindings(document: dict[str, Any], packages: list[dict[str, Any]]) -> dict[str, str]:
+    # A present null ``models`` is the same as omitting it, matching ``absent``.
+    # The explicit-map reparse validates keys and binds each value to a real
+    # model-binding package, so a static entry can never name a balance.
+    if document.get("models") is None:
+        return {}
+    models = document["models"]
+    if not isinstance(models, dict) or not models:
+        raise QuotaError("model_package_rule.models must be a non-empty object")
+    return parse_rule(json.dumps({"kind": "explicit", "map": models}), packages)["map"]
+
+
 def _exact_keys(document: dict[str, Any], allowed: set[str]) -> None:
     # ``gaps`` and ``absent`` are optional. A present null ``absent`` is the
     # same as omitting it. ``gaps`` may be omitted.
-    optional = {"gaps", "absent"}
+    optional = {"gaps", "absent", "models"}
     unknown = set(document) - allowed
     if unknown:
         raise QuotaError(f"model_package_rule has unknown keys {sorted(unknown)}")
@@ -356,9 +371,13 @@ def _resolve_token(catalog: Catalog, model_id: str, row: dict[str, Any] | None) 
         return rule["map"].get(model_id)
     if kind == "provider_prefix":
         segment = provider_segment(model_id)
-        if segment is None or segment in rule["gaps"]:
+        if segment is None:
+            return rule.get("models", {}).get(model_id)
+        if segment in rule["gaps"]:
             return None
         return rule["providers"].get(segment)
+    if row is None or row.get(rule["field"]) in (None, "", []):
+        return rule.get("models", {}).get(model_id, rule.get("absent"))
     return _native_token(catalog, row)
 
 

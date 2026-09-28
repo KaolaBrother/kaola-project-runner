@@ -87,6 +87,12 @@ class QuotaSchemaTest(unittest.TestCase):
             )
         self.assertFalse(self.catalogs["claude-code"].packages[2]["binds_models"])
         self.assertFalse(self.catalogs["devin"].packages[1]["binds_models"])
+        # Issue #222: the display name changes; the id does not.
+        self.assertEqual(
+            [(package["id"], package["name"])
+             for package in self.catalogs["zcode"].public_packages()],
+            [("zcode:bigmodel-coding-plan", "GLM Coding Plan")],
+        )
 
     def test_issue_192_package_windows_match_verified_period_facts(self) -> None:
         expected = {
@@ -146,13 +152,18 @@ class QuotaSchemaTest(unittest.TestCase):
             ("claude-code", "claude-fable-5", None),
             ("cursor-cli", "auto", "cursor-cli:cursor-models"),
             ("cursor-cli", "default", "cursor-cli:cursor-models"),
-            ("cursor-cli", "grok-4.7", "cursor-cli:other-models"),
-            ("cursor-cli", "grok-4.7-xhigh", "cursor-cli:other-models"),
-            ("cursor-cli", "grok-4.7-xhigh-fast", "cursor-cli:other-models"),
+            ("cursor-cli", "grok-4.7", "cursor-cli:cursor-models"),
+            ("cursor-cli", "grok-4.7-xhigh", "cursor-cli:cursor-models"),
+            ("cursor-cli", "grok-4.7-xhigh-fast", "cursor-cli:cursor-models"),
             ("cursor-cli", "claude-opus-5-5", "cursor-cli:other-models"),
             ("cursor-cli", "claude-opus-5-5-high", "cursor-cli:other-models"),
             ("cursor-cli", "brand-new-model", None),
-            ("droid", "claude-opus-5-5", None),
+            # Issue #222: the owner-confirmed droid presets are static preset
+            # knowledge; the static query has no live billingPool row.
+            ("droid", "auto", "droid:standard"),
+            ("droid", "claude-opus-5-5", "droid:standard"),
+            ("droid", "kimi-k3", "droid:core"),
+            ("droid", "brand-new-model", None),
             ("dsh", "opencode-go/deepseek-v4.1-flash", "dsh:opencode-go"),
             ("dsh", '["opencode-go","deepseek-v4.1-flash"]', "dsh:opencode-go"),
             ("dsh", '["deepseek-official","deepseek-v4-pro"]', None),
@@ -166,7 +177,9 @@ class QuotaSchemaTest(unittest.TestCase):
             ("opencode", "brand-new-model", None),
             ("zcode", r"builtin:bigmodel-coding-plan\GLM-5.3", "zcode:bigmodel-coding-plan"),
             ("zcode", r"account:bigmodel-individual-coding-plan\GLM-5.3", "zcode:bigmodel-coding-plan"),
-            ("zcode", "GLM-5.3", None),
+            # Issue #222: the bare configured default is static preset knowledge
+            # and keeps the provider-qualified routes untouched.
+            ("zcode", "GLM-5.3", "zcode:bigmodel-coding-plan"),
             ("zcode", r"builtin:zai-coding-plan\GLM-5.3", None),
         ]
         for platform, model_id, package_id in cases:
@@ -197,8 +210,12 @@ class QuotaSchemaTest(unittest.TestCase):
             droid, "claude-opus-5-5", {"billingPool": "nope"},
         )
         self.assertEqual(unknown, {"packageId": None, "status": "unmapped"})
+        # Issue #222: a live row whose native field is missing falls back to the
+        # static preset map, and an unknown id with the same row stays unmapped.
         missing = self.quota.resolve_model(droid, "claude-opus-5-5", {})
-        self.assertEqual(missing["status"], "unmapped")
+        self.assertEqual(missing["packageId"], "droid:standard")
+        stranger = self.quota.resolve_model(droid, "brand-new-model", {})
+        self.assertEqual(stranger, {"packageId": None, "status": "unmapped"})
         codex = self.catalogs["codex"]
         second = self.quota.resolve_model(codex, "gpt-6-sol", {"limitIds": ["base_model_inference"]})
         self.assertEqual(second["packageId"], "codex:base_model_inference")
@@ -437,13 +454,13 @@ class QuotaQueryCliTest(unittest.TestCase):
             "status": "mapped",
         })
         unmapped = self.run_cli(
-            "model-package", "--platform", "droid", "--model", "claude-opus-5-5",
+            "model-package", "--platform", "droid", "--model", "brand-new-model",
         )
         self.assertEqual(unmapped.returncode, 0, unmapped.stderr)
         self.assertEqual(json.loads(unmapped.stdout), {
             "schema": "kaola-acp-model-package/1",
             "platform": "droid",
-            "model": "claude-opus-5-5",
+            "model": "brand-new-model",
             "packageId": None,
             "status": "unmapped",
         })
