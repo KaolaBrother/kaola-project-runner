@@ -45,6 +45,16 @@ grant for a particular seat to switch model/preset within its own runtime
 verbatim in the handoff's `project_context=` (or a later update); never
 invent or widen one.
 
+The pool is cheaper and generally weaker than the individually authorized
+limited seats outside it, so it exists for useful uncapped parallel
+throughput; for a complex or critical task the Host prefers a stronger
+authorized limited seat when available, then picks the specific worker by
+profile/task fit. This is the owner's operating heuristic, not a benchmark or
+a claim that every limited seat wins every task, and it does not mean a pool
+member can only do narrow work - the pool's GLM and SWE-2 presets already
+carry substantial and full-cycle tasks. The Delegator relays this policy; it
+does not itself judge task fit.
+
 ## Native resume id
 
 Only an id a receipt or event attests; never synthesize one, never

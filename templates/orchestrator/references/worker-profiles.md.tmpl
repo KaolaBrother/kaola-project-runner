@@ -40,6 +40,16 @@ needs explicit user authorization; grants already given stay valid. Each seat
 keeps its exact binding and lifecycle - this pool is dispatch authorization,
 not a switch grant, and it does not extend Host model selection.
 
+These six presets are cheaper and generally weaker than the individually
+authorized limited seats outside this pool, so the pool exists for useful
+uncapped parallel throughput. For a complex or critical task, prefer a
+stronger authorized limited seat when one is available, then pick the
+specific worker from the profile rows above by task fit. This is the owner's
+operating heuristic, not a benchmark, and not a claim that every limited seat
+beats every pool preset at every task - it does not mean a pool member can
+only do narrow work; the pool's GLM and SWE-2 presets already carry
+substantial and full-cycle tasks.
+
 ## Seat binding and model switching
 
 A seat keeps its bound platform and preset; general dispatch authorization is
