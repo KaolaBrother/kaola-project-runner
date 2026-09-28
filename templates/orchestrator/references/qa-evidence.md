@@ -24,8 +24,9 @@ owner's stated preference is an authorized Opus preset or GPT-6 Sol first,
 then Kimi — selection guidance, not a measured ranking; "Opus" names only the
 already-defined runtime/preset/effort, never a new grant. Grok means Grok CLI
 default and Cursor CLI default, not Cursor's Opus preset. GPT-6 Sol's profile
-also covers computer use. See [worker-profiles.md](worker-profiles.md); this
-adds no new row or score.
+also covers computer use. An Expert review needs its own per-task permission
+and informs, never replaces, Host acceptance. See
+[worker-profiles.md](worker-profiles.md); this adds no new row or score.
 
 ## Tools and authority
 

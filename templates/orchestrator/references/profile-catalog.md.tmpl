@@ -1,0 +1,11 @@
+# Profile catalog
+
+Every declared runtime/preset with its owner-defined class, rendered from
+`platforms/<id>.yaml` (`<tier>_model_class`, `<tier>_model_profile`) for
+discovery and lookup. A listed row grants nothing. A Host does not read this
+file whole: it fetches only the exact rows it is authorized for
+([worker-profiles.md](worker-profiles.md) §Authorized rows only).
+
+| Class | Runtime | `--tier` | Model | Effort / parameters | Profile |
+|---|---|---|---|---|---|
+{{PROFILE_CATALOG_ROWS}}

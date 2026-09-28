@@ -33,27 +33,33 @@ Host (`host-entry-unsupported`).
   CLI (the `KAOLA_ZCODE_*` gate is zcode-only). Liveness is Runner
   `status`/`list`.
 
-## Worker profiles
+## Worker classes
 
-Per-preset worker profiles and the seat-switch rule live in
-`skills/kaola-project-runner/references/worker-profiles.md` in the Project Runner
-checkout; read them on demand to advise the user. The same file's six-preset
-inexpensive pool is default-authorized for dispatch - the Delegator does not
-enumerate or gate it and relays only explicit exclusions. A seat stays bound to its
-preset; general authorization is not a switch grant. Relay a user's explicit
-grant for a particular seat to switch model/preset within its own runtime
-verbatim in the handoff's `project_context=` (or a later update); never
-invent or widen one.
+Read on demand to advise the user: classes, profiles and the seat-switch rule
+in `skills/kaola-project-runner/references/worker-profiles.md` of the Project
+Runner checkout; all rows in `profile-catalog.md` beside it. Each
+runtime/preset (not runtime) has one owner-defined operating class, a role
+and not a benchmark:
 
-The pool is cheaper and generally weaker than the individually authorized
-limited seats outside it, so it exists for useful uncapped parallel
-throughput; for a complex or critical task the Host prefers a stronger
-authorized limited seat when available, then picks the specific worker by
-profile/task fit. This is the owner's operating heuristic, not a benchmark or
-a claim that every limited seat wins every task, and it does not mean a pool
-member can only do narrow work - the pool's GLM and SWE-2 presets already
-carry substantial and full-cycle tasks. The Delegator relays this policy; it
-does not itself judge task fit.
+- **Expert**: complex thinking only (difficult analysis, design, objective
+  decomposition, review judgments); no concrete implementation. Each task/use
+  needs explicit user permission; a completed task authorizes no reuse; the
+  same approved task continues across turns and recovery without re-approval.
+  Its review never replaces Host acceptance.
+- **Worker**: cheaper and generally weaker; simpler, well-defined work for
+  parallel throughput. The six-preset pool is default-authorized (no per-seat,
+  count or priority approval; outside the general cap); real account/service
+  limits and owner restrictions apply. Relay only exclusions.
+- **Elite**: all other presets; the main execution workforce, under explicit
+  runtime/preset/count grants that stay valid within their scope.
+
+Relay grants, never tables: Elite in `authorized_platforms=` (a non-default
+preset as `<id>/<tier>`), an approved Expert task by preset and task in
+`project_context=`; the Host derives its scoped rows. A seat stays bound to its
+preset. Relay a user's explicit grant for one seat to switch model/preset
+within its runtime verbatim in `project_context=` (or a later update); never
+invent or widen one. The Host chooses by authorization, class, profile/task
+fit, then capacity; the Delegator does not judge task fit.
 
 ## Native resume id
 

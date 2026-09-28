@@ -46,7 +46,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Auto Model**: `auto`, no Runner effort override), `--tier opus` (**Opus 5.5**: `claude-opus-5-5`, reasoning_effort=medium), and `--tier core` (**Kimi K3**: `kimi-k3`, reasoning_effort=max) — and `default` applies whenever nothing more specific was chosen. Pass
-another `--tier` when the human or an existing authorization — a default-authorized pool included —
+another `--tier` when the human or an existing authorization — the default-authorized Worker pool included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.
 

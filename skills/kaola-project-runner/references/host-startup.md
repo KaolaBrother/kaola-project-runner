@@ -52,14 +52,13 @@ The prompt that woke you already loaded the main Skill through its first-line
 entry (`/kaola-project-runner` on ZCode) — startup, resume and post-compaction rounds
 alike; never `read` a `SKILL.md` path by hand. Read the plan and the project's
 recovery records, and answer
-with a short startup receipt: role, authorization (platforms, count, implement or
-supervise-only), lifecycle target and stop boundary, where those facts came from,
-and every unresolved conflict. Then,
+with a short startup receipt: role, authorization per class (worker-profiles.md;
+counts, implement or supervise-only), lifecycle target and stop boundary, where
+those facts came from, and every unresolved conflict. Then,
 **before the first dispatch**, write the working heartbeat prompt to
 `<project>/.kaola/heartbeat-prompt.json` as JSON with a non-empty string field
 named exactly `body` (see `references/heartbeat-skeleton.md`). Any other field
-name leaves the delivered notification carrying a reported defect instead of your
-prompt — read that line in the notification and fix the file.
+name delivers a reported defect instead of your prompt; fix the file.
 
 Where a session's native id comes from differs by platform, and `--resume` is
 only honest with a verified one. ZCode reports its `sess_…` in that session's own

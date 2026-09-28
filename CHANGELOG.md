@@ -6,21 +6,32 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-- **Reorganize README around user and agent usage with a generated preset catalog (Issue #206).**
-  README now follows actual usage order — choose an entry (Kaola-Delegator / Project Runner /
-  Platform Runner, with Kaola Workflow integration briefly), install and begin, select workers,
-  authorization (the six default-authorized pool presets and outside-pool grants with the
-  seat/model-switch boundaries), what users specify versus what agents own, daily use, and a
-  short agent navigation section — with a contents list, short sections, and a preset catalog
-  listing all ten runtimes and all twenty declared presets with model, parameters, and the full
-  one-sentence profile. The catalog rows are no longer hand-maintained:
-  `scripts/render-skills.py --write` renders them into a managed README region from the same
-  `platforms/*.yaml` rows as the generated worker-profiles reference, and `--check` fails on
-  drift. Implementation internals (holder identity/recovery procedures, ACP/adapter/provider
-  internals, historical verification dates, issue-by-issue narration) moved off the front page
-  and now link to the installed/generated Skills, `docs/`, and this changelog. Profile wording,
-  pool membership, authorization, and grant semantics are unchanged; profiles stay verbatim
-  from the manifests.
+- **Expert, Worker and Elite preset classes; README reorganized around usage (Issue #206).**
+  Every runtime/preset now carries one owner-defined operating class in its platform manifest
+  (`<tier>_model_class`, validated at render): **Expert** (Claude Code `fable`, Codex `astra`,
+  Devin `fable`) does complex thinking only — analysis, design, objective decomposition, review
+  judgments, no concrete implementation — and needs explicit user permission for each task, with
+  the Host reclaiming the seat at completion and no reuse from a completed task; **Worker** (the
+  existing six default-authorized pool presets) is cheaper and generally weaker, for simpler
+  bounded work, with the pool's cap exemption unchanged; **Elite** (the other eleven presets) is
+  the main execution workforce under existing explicit grants. The Host's worker guidance now
+  chooses by current authorization → class responsibility → profile/task fit → capacity, and a
+  Host keeps only its authorized profile rows in context: the Worker rows plus granted Elite rows
+  and an active approved Expert task, fetched by exact row from a new generated
+  `references/profile-catalog.md` rather than the whole table, updating only changed rows later.
+  Kaola-Delegator extracts and relays grants per class instead of catalog tables. The old
+  Expert-grant reuse allowance and the "no heavy execution" wording are replaced. Three approved
+  profile corrections: Grok CLI and Cursor CLI `default` drop "but prone to looping", Devin
+  `default` drops "but somewhat slow", and Codex `luna` now says "good reasoning for its class".
+  README now follows actual usage order — choose an entry, install and begin, select workers
+  (runtimes, classes, and a class-grouped catalog of all ten runtimes and twenty presets with
+  model, effort/parameters, and the full profile), authorization by class, what users specify
+  versus what agents own, daily use, and a short agent section — and the catalog is a generated
+  region that `scripts/render-skills.py --check` keeps in sync with the manifests. Implementation
+  internals and history moved off the front page to the Skills, `docs/`, and this changelog. No
+  model, effort, Fast, transport, or Host model-selection change; the `platforms/` diff is
+  class and profile text only, but it is non-empty, so the release operator test for the next
+  release reads `Seats: restart required`.
 - **Make Host worker selection explicit and verify existing start receipts before dispatch (Issue
   #204).** A fresh Host-managed worker start now expresses the selected authorized configuration
   explicitly — `--tier <selected-preset>`, including `--tier default` when default is the actual

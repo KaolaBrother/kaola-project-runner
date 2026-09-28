@@ -34,7 +34,7 @@ are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 Count before every `start`: live owned sessions, ACP holders included -
 identity-verified (`list --repo` rows with `identity: verified`, the holder
 answering with its recorded `holder_instance_id`); a PID alone is not a seat.
-Default-authorized pool seats (worker-profiles.md) are outside the count. At
+Worker-class pool seats (worker-profiles.md) are outside the count. At
 the hard cap: stop-before-start (main Skill step 2). A different task is a new
 session (main Skill §Ending a run).
 

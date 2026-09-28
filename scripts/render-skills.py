@@ -26,7 +26,7 @@ VENDOR = ROOT / "vendor"
 README = ROOT / "README.md"
 MARKER = ".generated-by-kaola-project-runner"
 # Issue #206: the README preset catalog is a generated region between these two
-# markers, rendered from the same manifest rows as the worker-profiles
+# markers, rendered from the same manifest rows as the profile-catalog
 # reference, so the front page never becomes a second hand-maintained catalog.
 README_PRESETS_START = "<!-- KW-README-PRESETS-START -->"
 README_PRESETS_END = "<!-- KW-README-PRESETS-END -->"
@@ -54,9 +54,12 @@ REQUIRED = {
     "default_model_id", "default_model_parameters", "default_model_effort",
     # Issue #190: the user-defined one-line worker profile (may be empty).
     "default_model_profile",
+    # Issue #206: the owner-defined operating class of this preset (Expert,
+    # Worker or Elite); it attaches to the runtime/preset, never the runtime.
+    "default_model_class",
     # Issue #188: only `default` is common. `named_tiers` lists this runtime's
     # own preset words (comma-separated, empty for none); each word W carries
-    # `<w>_model_{name,id,parameters,effort,profile}` with `w` = W with `-` as `_`.
+    # `<w>_model_{name,id,parameters,effort,profile,class}` with `w` = W with `-` as `_`.
     "named_tiers",
     "fast_support", "fast_summary",
     "acp_command",
@@ -87,7 +90,9 @@ OPTIONAL = {"acp_command_default",
             "acp_session_new_timeout"}
 
 
-TIER_FIELDS = ("name", "id", "parameters", "effort", "profile")
+TIER_FIELDS = ("name", "id", "parameters", "effort", "profile", "class")
+# Issue #206: display order of the owner-defined classes in rendered catalogs.
+CLASSES = ("Elite", "Worker", "Expert")
 
 
 def named_tiers(manifest: dict[str, str]) -> list[str]:
@@ -167,6 +172,9 @@ def parse_manifest(path: Path) -> dict[str, str]:
     for key in [k for k in result if k.endswith("_model_profile")]:
         if "|" in result[key]:
             raise ValueError(f"{path}: {key} must not contain '|'")
+    for key in [k for k in result if k.endswith("_model_class")]:
+        if result[key] not in CLASSES:
+            raise ValueError(f"{path}: {key} must be one of {', '.join(CLASSES)}")
     # A named tier resolves to a declared model: name and id are required,
     # parameters, effort and profile are present (possibly empty).
     for word in words:
@@ -365,28 +373,37 @@ def supported_worker_summary(manifests: list[dict[str, str]]) -> str:
 
 
 
-def worker_profile_rows(manifests: list[dict[str, str]]) -> str:
-    """Issue #190: one row per preset, straight from its manifest - the single
-    source of the worker profiles the Host, Delegator and README read."""
+def profile_rows(manifests: list[dict[str, str]], only: str = "",
+                 with_class: bool = True) -> str:
+    """Issue #190/#206: one row per preset, straight from its manifest - the
+    single source of the worker profiles the Host, Delegator and README read.
+    Rows are grouped by class (Elite, Worker, Expert), then manifest order;
+    `only` keeps one class."""
     rows = []
-    for manifest in manifests:
-        for tier in ["default", *named_tiers(manifest)]:
-            prefix = tier.replace("-", "_")
-            rows.append(f"| {manifest['runtime_name']} | `{tier}` | "
-                        f"{manifest[f'{prefix}_model_name']} | {manifest[f'{prefix}_model_parameters']} | "
-                        f"{manifest[f'{prefix}_model_profile']} |")
+    for klass in CLASSES:
+        if only and klass != only:
+            continue
+        for manifest in manifests:
+            for tier in ["default", *named_tiers(manifest)]:
+                prefix = tier.replace("-", "_")
+                if manifest[f"{prefix}_model_class"] != klass:
+                    continue
+                lead = f"| {klass} " if with_class else ""
+                rows.append(f"{lead}| {manifest['runtime_name']} | `{tier}` | "
+                            f"{manifest[f'{prefix}_model_name']} | {manifest[f'{prefix}_model_parameters']} | "
+                            f"{manifest[f'{prefix}_model_profile']} |")
     return "\n".join(rows)
 
 
 def readme_presets_region(manifests: list[dict[str, str]]) -> str:
     """Issue #206: the README preset catalog - the same manifest-rendered rows
-    as the generated worker-profiles reference, between managed markers."""
+    as the generated profile-catalog reference, between managed markers."""
     header = (
-        "| Runtime | `--tier` | Model | Parameters | Profile |\n"
-        "|---|---|---|---|---|"
+        "| Class | Runtime | `--tier` | Model | Effort / parameters | Profile |\n"
+        "|---|---|---|---|---|---|"
     )
     return "\n".join([README_PRESETS_START, header,
-                      worker_profile_rows(manifests), README_PRESETS_END])
+                      profile_rows(manifests), README_PRESETS_END])
 
 
 def sync_readme_presets(manifests: list[dict[str, str]], write: bool) -> list[str]:
@@ -436,7 +453,8 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
             "CLI workers, review evidence, and finalize only after acceptance."
         ),
         "SUPPORTED_WORKERS": supported_worker_summary(manifests),
-        "WORKER_PROFILE_ROWS": worker_profile_rows(manifests),
+        "PROFILE_CATALOG_ROWS": profile_rows(manifests),
+        "WORKER_POOL_ROWS": profile_rows(manifests, only="Worker", with_class=False),
         "IDLE_BEFORE_STOP": (
             "Give each clear task directly to a suitable authorized worker as a new "
             "session; split or parallelize only when the work itself needs it. The count "
@@ -1261,7 +1279,7 @@ def main() -> int:
         findings.extend(check_one(host_target, host_expected))
 
     # Issue #206: the README preset catalog is generated from the same manifest
-    # rows as the worker-profiles reference (skills/ hosts are unaffected).
+    # rows as the profile-catalog reference (skills/ hosts are unaffected).
     findings.extend(sync_readme_presets(manifests, args.write))
 
     if findings:

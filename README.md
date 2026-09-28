@@ -30,8 +30,8 @@ a recoverable path from issue to verified delivery.
 1. [Choose an entry](#choose-an-entry) — Delegator / Project Runner / Platform Runner / Workflow Next
 2. [Kaola Workflow integration](#kaola-workflow-integration) — normal path, orchestrator binding, evidence-backed exception
 3. [Install and begin](#install-and-begin)
-4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [preset catalog](#preset-catalog) (all 10 runtimes, 20 presets), [platform notes](#platform-notes)
-5. [Authorization](#authorization) — [default-authorized pool](#the-default-authorized-pool), [outside-pool presets and seat switching](#outside-pool-presets-and-seat-switching), [authorization before a new Host](#authorization-before-a-new-host)
+4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 10 runtimes, 20 presets), [platform notes](#platform-notes)
+5. [Authorization](#authorization) — [authorization by class](#authorization-by-class), [choosing a worker](#choosing-a-worker), [seat binding and switching](#seat-binding-and-switching), [authorization before a new Host](#authorization-before-a-new-host)
 6. [What you specify and what agents own](#what-you-specify-and-what-agents-own)
 7. [Daily use](#daily-use) — session commands, steering, watching ACP sessions
 8. [For agents](#for-agents)
@@ -273,47 +273,60 @@ refusal, never a quiet fallback to `default`. Presets live in the
 `start --resume NATIVE_SESSION_ID` or `start --continue` where the runtime supports
 it.
 
+### Worker classes
+
+Every runtime/preset belongs to one of three owner-defined operating classes. The
+class attaches to the **preset**, not the whole runtime: Claude Code, for example, has
+an Elite `default`, a Worker `sonnet`, and an Expert `fable`. Classes are operating
+roles, not benchmark claims, and they do not change which model a Host itself runs.
+
+| Class | Presets | Role | Authorization |
+|---|---|---|---|
+| **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit permission for **each** task or use. The Host judges completion and exact-stops the seat; another use needs fresh permission, while the same approved task continues across turns and recovery without asking again. |
+| **Worker** | 6 | Cheaper and generally weaker; simpler, well-defined work that adds parallel throughput. | Default-authorized: no per-seat, count, or priority approval, and outside the general worker cap. Real account/token/service limits and your explicit restrictions still apply. |
+| **Elite** | 11 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
+
+An Expert review informs the Host; it never replaces the Host's acceptance or its
+ownership of the seat lifecycle.
+
 ### Preset catalog
 
 Every row below is rendered directly from the [platform manifests](platforms/) — the
 same rows as the generated
-[worker-profiles.md](skills/kaola-project-runner/references/worker-profiles.md) the
-Host and Kaola-Delegator read, so this catalog and that reference cannot drift apart.
-Each profile line is user-defined selection guidance, not a measured capability; it
-never changes the preset's model, effort, or Fast and never gates `start`. Devin
-applies each preset through its launch `--model`; both named Devin presets are
-SWE-2-sidekick fusions. Droid's `-fast` catalog IDs are explicit `--model` choices,
-not a separate Fast toggle.
+[profile-catalog.md](skills/kaola-project-runner/references/profile-catalog.md)
+reference — grouped by class. Each profile line is user-defined selection guidance,
+not a measured capability; it never changes the preset's model, effort, or Fast and
+never gates `start`. Devin applies each preset through its launch `--model`; both
+named Devin presets are SWE-2-sidekick fusions. Droid's `-fast` catalog IDs are
+explicit `--model` choices, not a separate Fast toggle.
 
 <!-- KW-README-PRESETS-START -->
-| Runtime | `--tier` | Model | Parameters | Profile |
-|---|---|---|---|---|
-| Claude Code | `default` | Opus | effort=high | All-round worker for every kind of task, especially strong at complex work, and preferred for the more complex and harder tasks. |
-| Claude Code | `fable` | Fable | effort=high | Design, goal definition and decomposition, issue creation, and review; only when the user explicitly asks or permits; no heavy execution, not a regular worker. |
-| Claude Code | `sonnet` | Sonnet | effort=max | Disciplined implementation worker; give it a detailed plan and constraints, and it excels at executing within them. |
-| Codex CLI | `default` | GPT-6 Sol | effort=high | Good at exploring directions, finding problems, review, and computer use, but prone to over-engineering; set a clear scope and hold it to the minimal necessary solution. |
-| Codex CLI | `astra` | GPT-6 Astra | effort=high | Design, goal definition and decomposition, issue creation, and review; only when the user explicitly asks or permits; no heavy execution, not a regular worker. |
-| Codex CLI | `luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with strong reasoning for its class; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
-| Cursor CLI | `default` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Suits exploratory, long-running autonomous work, but prone to looping; give clear stage goals and exit conditions. |
-| Cursor CLI | `opus` | Claude Opus 5.5 | effort=medium (encoded in model ID) | All-round worker for every kind of task, especially strong at complex work. |
-| Devin CLI | `default` | SWE-2 Max | effort=max (encoded in model ID) | Very low-cost, capable full-cycle engineering worker, but somewhat slow. |
-| Devin CLI | `opus-fusion` | Opus Fusion (Opus 5.5 Medium + SWE-2 Medium) | effort=medium (encoded in model ID) | All-round worker for every kind of task, especially strong at complex work. |
-| Devin CLI | `fable` | Fable Fusion (Fable 5.1 High + SWE-2 Medium) | effort=high (encoded in model ID) | Design, goal definition and decomposition, issue creation, and review; only when the user explicitly asks or permits; no heavy execution, not a regular worker. |
-| Droid | `default` | Auto Model | no Runner effort override | All-round worker, balanced in every respect, suited to many kinds of tasks. |
-| Droid | `opus` | Opus 5.5 | reasoning_effort=medium | All-round worker for every kind of task, especially strong at complex work. |
-| Droid | `core` | Kimi K3 | reasoning_effort=max | Strong at visual design and visual inspection, with good UI and design taste. |
-| dsh | `default` | DeepSeek V4.1 Flash (OpenCode Go) | no Runner effort override | Low-cost, fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
-| Grok CLI | `default` | Grok 4.7 | effort=xhigh, fast=false | Suits exploratory, long-running autonomous work, but prone to looping; give clear stage goals and exit conditions. |
-| Kimi CLI | `default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
-| Kimi CLI | `kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
-| OpenCode | `default` | DeepSeek V4.1 Flash (OpenCode Go) | no Runner effort override | Low-cost, fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
-| ZCode | `default` | GLM 5.3 | thought=max | Autonomous engineering worker inclined to investigate, make decisions, iterate through failures, and carry substantial tasks toward completion with less hand-holding. |
+| Class | Runtime | `--tier` | Model | Effort / parameters | Profile |
+|---|---|---|---|---|---|
+| Elite | Claude Code | `default` | Opus | effort=high | All-round worker for every kind of task, especially strong at complex work, and preferred for the more complex and harder tasks. |
+| Elite | Codex CLI | `default` | GPT-6 Sol | effort=high | Good at exploring directions, finding problems, review, and computer use, but prone to over-engineering; set a clear scope and hold it to the minimal necessary solution. |
+| Elite | Cursor CLI | `default` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
+| Elite | Cursor CLI | `opus` | Claude Opus 5.5 | effort=medium (encoded in model ID) | All-round worker for every kind of task, especially strong at complex work. |
+| Elite | Devin CLI | `opus-fusion` | Opus Fusion (Opus 5.5 Medium + SWE-2 Medium) | effort=medium (encoded in model ID) | All-round worker for every kind of task, especially strong at complex work. |
+| Elite | Droid | `default` | Auto Model | no Runner effort override | All-round worker, balanced in every respect, suited to many kinds of tasks. |
+| Elite | Droid | `opus` | Opus 5.5 | reasoning_effort=medium | All-round worker for every kind of task, especially strong at complex work. |
+| Elite | Droid | `core` | Kimi K3 | reasoning_effort=max | Strong at visual design and visual inspection, with good UI and design taste. |
+| Elite | Grok CLI | `default` | Grok 4.7 | effort=xhigh, fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
+| Elite | Kimi CLI | `default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
+| Elite | Kimi CLI | `kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
+| Worker | Claude Code | `sonnet` | Sonnet | effort=max | Disciplined implementation worker; give it a detailed plan and constraints, and it excels at executing within them. |
+| Worker | Codex CLI | `luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with good reasoning for its class; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
+| Worker | Devin CLI | `default` | SWE-2 Max | effort=max (encoded in model ID) | Very low-cost, capable full-cycle engineering worker. |
+| Worker | dsh | `default` | DeepSeek V4.1 Flash (OpenCode Go) | no Runner effort override | Low-cost, fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
+| Worker | OpenCode | `default` | DeepSeek V4.1 Flash (OpenCode Go) | no Runner effort override | Low-cost, fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
+| Worker | ZCode | `default` | GLM 5.3 | thought=max | Autonomous engineering worker inclined to investigate, make decisions, iterate through failures, and carry substantial tasks toward completion with less hand-holding. |
+| Expert | Claude Code | `fable` | Fable | effort=high | Design, goal definition and decomposition, issue creation, and review; only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
+| Expert | Codex CLI | `astra` | GPT-6 Astra | effort=high | Design, goal definition and decomposition, issue creation, and review; only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
+| Expert | Devin CLI | `fable` | Fable Fusion (Fable 5.1 High + SWE-2 Medium) | effort=high (encoded in model ID) | Design, goal definition and decomposition, issue creation, and review; only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
 <!-- KW-README-PRESETS-END -->
 
-The [worker-profiles reference](skills/kaola-project-runner/references/worker-profiles.md)
-is the canonical rendered catalog for agents; it also defines the six default-authorized
-pool presets and the seat-binding policy summarized under
-[Authorization](#authorization) below.
+This complete catalog is for discovery. An agent Host keeps only the rows you have
+authorized in its working context — see [choosing a worker](#choosing-a-worker).
 
 ### Platform notes
 
@@ -355,60 +368,61 @@ and `references/acp.md`.
 
 ## Authorization
 
-Workers run only under explicit authorization. The one exception is the six-preset
-pool below; everything else needs a grant.
+Workers run only under authorization, and what you authorize depends on the
+[class](#worker-classes) of the preset.
 
-### The default-authorized pool
+### Authorization by class
 
-Owner operating policy, not a live price comparison. For an authorized project task
-these six runtime/preset pairs need no per-seat or per-preset approval and no
-user-supplied priority order:
+- **Worker presets** — the six Worker rows of the catalog — need nothing more than an
+  authorized project task: no per-seat or per-preset approval and no priority order.
+  Their live seats neither count toward nor are limited by the general worker
+  concurrency cap. Membership is exactly those six rows; being a runtime's `default`
+  preset does not make a preset a Worker. Actual account/token/service and resource
+  limits still apply (an unspecified quota is not unlimited), and any explicit owner
+  restriction wins.
+- **Elite presets** need your explicit grant naming the runtime/preset and count.
+  Grants you already gave stay valid within their scope. The authorized count is a
+  hard cap on live worker processes, ACP holders included: stop-before-start at the
+  cap, stop each seat once its delivery is accepted, and give a new task a new
+  session; idle is not keep-alive.
+- **Expert presets** need your explicit permission for each task or use. When that
+  task is complete the Host reclaims (exact-stops) the seat; the completed permission
+  does not carry over to another task. Continuing or recovering the same approved
+  task does not ask again.
 
-| Runtime | `--tier` | Preset |
-|---|---|---|
-| Claude Code | `sonnet` | Sonnet, effort max |
-| Codex CLI | `luna` | GPT-6 Luna, effort max |
-| dsh | `default` | DeepSeek V4.1 Flash |
-| Devin CLI | `default` | SWE-2 Max |
-| OpenCode | `default` | DeepSeek V4.1 Flash |
-| ZCode | `default` | GLM 5.3, thought max |
+### Choosing a worker
 
-Their live seats neither count toward nor are limited by the general worker
-concurrency cap; no substitute cap, per-runtime seat allocation, or approval gate
-applies to this pool. Membership is this exact list — being a runtime's `default`
-tier does not make a preset eligible. Actual account/token/service and resource
-limits still apply; an unspecified quota is not unlimited. Choose by task fit, the
-profile rows above, available tools, idle capacity, and known usage; spread suitable
-work across runtimes without forcing equal counts, and never create work or extra
-sessions, interrupt useful work, or wait for a less suitable worker just to engage or
-equalize the pool. Any explicit owner restriction wins.
+The Host decides in this order: **current authorization → class responsibility →
+individual profile/task fit → available capacity and real resource limits.** Experts
+contribute complex thinking only when you permitted that task; Elite presets carry
+primary and demanding execution; Worker presets take simpler, bounded work. A
+listed capability never bypasses a missing Expert or Elite authorization — the Host
+asks for it through the normal route when it genuinely needs it. Independent work
+runs in parallel while real dependencies and write ownership are preserved. There is
+no numerical ranking, complexity classifier, routing engine, fixed QA seat, forced
+equal distribution across runtimes, or invented work to fill capacity. Worker
+profiles keep their individual strengths — the GLM and SWE-2 presets carry
+substantial, full-cycle tasks.
 
-These six presets are cheaper and generally weaker than the individually authorized
-limited seats outside this pool, so the pool exists for useful uncapped parallel
-throughput. For a complex or critical task, prefer a stronger authorized limited seat
-when one is available, then pick the specific worker from the profile rows by task
-fit. This is the owner's operating heuristic, not a benchmark, and not a claim that
-every limited seat beats every pool preset at every task — the pool's GLM and SWE-2
-presets already carry substantial and full-cycle tasks.
+The Host keeps in its working context only short class meanings and the rows
+currently available to it: the six Worker rows (minus your restrictions), the Elite
+rows you granted with their limits, and an Expert row only while its approved task is
+active. It reads those rows from the catalog without loading the whole table, and a
+later grant or revocation updates only the affected rows. Kaola-Delegator relays your
+grants, not the catalog. No separate profile registry or permission service exists.
 
-### Outside-pool presets and seat switching
-
-Every runtime/preset outside this pool still needs explicit user authorization;
-grants already given stay valid. The authorized count is a hard cap on live worker
-processes, ACP holders included: stop-before-start at the cap, stop each seat once its
-delivery is accepted, and give a new task a new session; idle is not keep-alive.
+### Seat binding and switching
 
 A seat keeps its bound platform and preset; general dispatch authorization is not a
-switch grant. Only a user's explicit grant for a particular seat lets the Host select
-or switch that seat's model/preset, within the scope the user allowed and the same
-agent runtime, without asking again for each switch under that grant. Never switch
-across runtimes. The same seat switches only when idle, through the existing
+switch grant. Only your explicit grant for a particular seat lets the Host select or
+switch that seat's model/preset, within the scope you allowed and the same agent
+runtime, without asking again for each switch under that grant. Never switch across
+runtimes. The same seat switches only when idle, through the existing
 `drain-restart --resume ID` (or `--continue`) with an explicit `--tier`/`--model`: an
 exact stop and resume, not a live hot switch (a busy seat refuses `drain-not-idle`).
-A new standard-named seat is a new seat, not a switch of this one; no new flow.
-Fable, Fable Fusion, and Astra keep their explicit-permission and usage limits; a
-grant that already names them needs no repeated permission. Record the grant with the
-other authorization in the consuming project's run records.
+A new standard-named seat is a new seat, not a switch of this one; no new flow. A
+switch grant never authorizes an Expert use. Grants are recorded with the other
+authorization in the consuming project's run records.
 
 Ending a run defaults to finishing in-hand issues and a clean workspace. A stated
 stop boundary blocks new tasks and new issues without dropping in-hand work; only an
@@ -419,8 +433,8 @@ explicit "stop here, continue later" pauses that cleanup and preserves recovery.
 If a live delegated Host is confirmed stopped and its native resume id cannot restore
 it, start a new standard-named Host as a new ACP session only after current
 authorization is complete (goal, remaining work, platforms/members,
-counts/concurrency, quota, priority, delivery/stop boundary; the six-preset
-default-authorized pool needs no per-seat entries). Missing key values: ask,
+counts/concurrency, quota, priority, delivery/stop boundary; the six Worker
+presets need no per-seat entries). Missing key values: ask,
 do not `start`, do not guess a stale quota. Quota travels in the units the user
 actually gave: a unit the user never gave is carried as unspecified and does not
 block the start, not as unlimited and not as a fourth question; a unit whose meaning
@@ -439,7 +453,7 @@ and [kaola-project-runner](skills/kaola-project-runner/SKILL.md) Skills and the
 |---|---|
 | The goal, the project, and the stop boundary | Choosing prompts, keys, and native tools; interpreting replies |
 | Authorized platforms, worker count/concurrency, quota, priority | Exact-session transport: start, send, read, stop |
-| Per-seat model/preset grants for anything outside the default pool | Evidence-first review, acceptance before finalize, close-out |
+| Elite grants, per-task permission for any Expert use, and per-seat switch grants | Evidence-first review, acceptance before finalize, close-out |
 | When to finalize, archive, or stop | Semantic completion judgments; never auto-retry, model upgrades, or scheduling |
 
 Runner reports runtime and model observations as evidence. A successful send or a

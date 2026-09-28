@@ -370,8 +370,9 @@ worker agent terminated / worker turn ended (one idle episode)
   count is a hard cap on live worker processes, ACP holders included: the Host
   counts before every `start` and stops one seat first at the cap
   (stop-before-start), and exact-stops a seat in the beat its delivery is
-  accepted. The worker-profiles.md six-preset inexpensive pool is
-  default-authorized and outside that cap. The generated main Skill carries
+  accepted. The six Worker-class presets in worker-profiles.md are
+  default-authorized and outside that cap; Elite presets need explicit grants
+  and Expert presets fresh per-task permission. The generated main Skill carries
   these rules, and
   `skills/kaola-project-runner/references/zcode-host-dispatch.md` carries the
   runnable role-by-role procedure (outer Agent, Host, worker/carrier).

@@ -46,7 +46,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Grok 4.7**: `grok-4.7-xhigh`, effort=xhigh (encoded in model ID), fast=false) and `--tier opus` (**Claude Opus 5.5**: `claude-opus-5-5-medium`, effort=medium (encoded in model ID)) — and `default` applies whenever nothing more specific was chosen. Pass
-another `--tier` when the human or an existing authorization — a default-authorized pool included —
+another `--tier` when the human or an existing authorization — the default-authorized Worker pool included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.
 

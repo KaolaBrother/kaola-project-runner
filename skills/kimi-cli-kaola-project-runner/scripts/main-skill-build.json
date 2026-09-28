@@ -1,19 +1,20 @@
 {
-  "build": "e9b90da8a2eb",
+  "build": "039250b2d400",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "42a15a4b23caa18a1fb2cc7256e9b286e214f51c674746c45225da5717c732c0",
+    "SKILL.md": "b3cbef8f219699ffa96a4cc237063d9b9dedee0ccbc15c9fe6d6cb11859a46c5",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
     "references/doc-maintenance.md": "3405f4eee2235f87e94653098f190284403bf1bbf5011844d8911e278ff7a267",
     "references/heartbeat-skeleton.md": "9f1a28a8f6ec42db88ee33f4893a412dbea1fd119c09561539acddd5e6fe4cd7",
     "references/host-entry-matrix.md": "1b02e979e2af755f16e6cddc6de7e0718e0a89a577f34ac510d19eb0aba626ac",
-    "references/host-startup.md": "b56078ab1cf8751f9870c9a335c84b1074148234cf0f809632575148eb2984b7",
+    "references/host-startup.md": "eb7e8f63b9311860fae95790d4e6dc0499d09b797dab8a364da26e4114f4db0a",
     "references/issue-dispatch.md": "91e791f37d18f39a96609501c5ef1631384cb4beedddd125495d71f0578157a8",
-    "references/qa-evidence.md": "d747b5fbd6eeb43901c6ad1d26cc7332a3f249aded077349122bac839c2cd412",
+    "references/profile-catalog.md": "bb23ff89bc7cea300d348312c2d11d4afedf34dfd65dd318d704175186acd7a3",
+    "references/qa-evidence.md": "2c39d2989b5cac0ad3a7d3334f8a46f610bf194d1c9b6a1bfcc4b2743e86917a",
     "references/quota-packages.md": "548b0ad18d73c329f6fe205d0a5476a668f2f128340bf811034f57c42f90dbf8",
-    "references/worker-profiles.md": "aa876f3987432ec306016c18f5b56d8dd85af9aab50c0694eba98a7648019721",
+    "references/worker-profiles.md": "f6fef8ca6cca6eb8137b2cf09ce3e0810ad30edbfd59ed61a958a522ffc0a4c0",
     "references/workflow-worktree.md": "4f0617bc3dadf9a1852734603fb0b40836165a168cc000a21ef9d413fd8fe783",
-    "references/zcode-host-dispatch.md": "20e2b3dc13161a105fac70a78e7dce349f6e331ba2cbe9552557f98110fef9a5",
+    "references/zcode-host-dispatch.md": "326534d210803866c4439bc23cac42f7b835e6cd57ff93a1c6096080aabeeeb6",
     "references/zcode-native-skill-entry.md": "03b9da8e27c8d319c532cc41e3a605fb578d5bbf9ab4d007359cb0ef656242e7"
   },
   "skill": "kaola-project-runner"
