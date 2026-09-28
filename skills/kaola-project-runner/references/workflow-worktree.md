@@ -77,6 +77,49 @@ at the project root throughout - never `cd` directly into `.kw/worktrees/` or
 `kaola-workflow/issue-N/`. Subagents follow the same rule. A bricked Host
 reports `brick`, asks to be replaced, and stops acting.
 
+## Foreign files and finalize safeguards
+
+Kaola-Workflow finalize mirrors untracked residue from the main checkout into
+the finalize worktree. An upstream defect (tracked as Kaola-Workflow #1110,
+unresolved pending a verified fixed-version adoption) can copy a foreign file
+into that mirror and then exempt it as machinery-owned, so files belonging to
+another session have reached delivered trees (#192, #194, #206; the #206 copy
+was a dangling local commit caught before push). Treat finalize residue as
+untrusted and keep the duties below.
+
+1. **Convey the constraint.** When a known foreign or protected file or an
+   upstream finalize limitation affects the current run, pass that concrete
+   constraint to the worker responsible for finalization through existing
+   task/run records (dispatch prompt, run duties). This Skill adds no global
+   ownership table, scan schedule, classifier, or filter.
+2. **The finalizing worker preserves what it does not own.** It reads the
+   run's existing Workflow preview/finalization receipts, preserves unrelated
+   files, and reports ownership ambiguity or a blocked sink honestly:
+   copying a file mechanically does not establish that it belongs to the
+   task. Never delete, stage, or adopt unrelated files merely to make the
+   checkout clean.
+3. **The Host reuses those receipts for acceptance/closeout.** Existing
+   receipts plus the candidate diff are the evidence: confirm known protected
+   paths did not enter the delivered candidate or archive and that any
+   temporary protection was restored. Concrete mismatches return to the
+   responsible worker - no second acceptance engine, no unconditional
+   duplicate test run.
+4. **Run-scoped exclude workaround.** In the presently affected run, keep the
+   existing narrow `.git/info/exclude` protection for its already-identified
+   protected research files: the finalization owner preserves the original
+   exclude bytes, applies the scoped protection before mirroring or sink, and
+   restores it on completion or interruption, never overwriting a concurrent
+   legitimate edit when restoring. If restoration is unsafe, report the exact
+   remaining duty through the existing run record. This is a temporary,
+   project-specific compatibility measure carried in that run's records,
+   never a global prompt naming any file.
+
+Retire the workaround by conditions, not by issue closure: keep it only while
+the affected Kaola-Workflow version is actually used; remove it after an
+authorized fixed-version adoption plus the bounded consumer evidence that the
+known foreign file stays excluded and unchanged. The general handoff and
+receipt duties above are durable and stay.
+
 ## Recovery and migration
 
 Preserve existing work by default; after inspecting Git plus Workflow records the

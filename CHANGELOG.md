@@ -6,6 +6,24 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Coordinate Host finalize safeguards with the Kaola-Workflow foreign-residue fix (Issue #212).**
+  The Project Runner `workflow-worktree` reference gains a "Foreign files and finalize safeguards"
+  section for the open upstream finalize defect (Kaola-Workflow #1110, unresolved pending a
+  verified fixed-version adoption) that can mirror a foreign untracked file from the main checkout
+  into a delivered finalize tree, as recurred in #192, #194, and #206. When a known foreign or
+  protected file or an upstream finalize limitation affects the current run, the Host conveys that
+  concrete constraint to the finalizing worker through existing task/run records; the finalizing
+  worker reads the existing Workflow preview/finalization receipts, preserves unrelated files, and
+  reports ownership ambiguity or a blocked sink honestly instead of deleting, staging, or adopting
+  them; the Host reuses those receipts and the candidate diff to confirm known protected paths
+  stayed out of the delivered candidate/archive and any temporary protection was restored, with
+  concrete mismatches returned to the responsible worker. The affected run keeps its narrow
+  `.git/info/exclude` protection as a temporary, project-specific measure with byte-exact
+  restoration on completion or interruption and coordinated shared edits; it retires only after an
+  authorized fixed-version adoption plus bounded consumer evidence, never merely because an issue
+  closed. No ownership table, scan schedule, classifier, filter, second acceptance engine, or
+  duplicate test run. Guidance only: transport, CLI, and model surfaces are unchanged and the
+  operator-test paths are untouched (`Seats: restart not required`).
 - **Consolidate repeated prompt guidance and retire conflicting lifecycle instructions (Issue #208).**
   The heartbeat skeleton now carries only project identity/authorization, task and worker locators,
   the frontier, open decisions/close-out and recovery pointers; the naming, one-issue, dispatch,
