@@ -739,12 +739,46 @@ def installed_skill_skew(skill: str, target: Path,
     return skew
 
 
-def verify_install(root: Path, bundles: dict[str, dict[str, bytes]]) -> int:
+def receipt_owned_names(root: Path) -> set[str]:
+    """Skill names an install receipt claims under ``root`` (Issue #215).
+
+    ``.kaola-install-receipts/<name>.json`` is written per installed Skill; a
+    receipted name this checkout no longer generates is an owned obsolete
+    copy the verifier must inventory instead of ignoring. Files that do not
+    parse as install receipts claim nothing."""
+    receipts_dir = root / ".kaola-install-receipts"
+    names: set[str] = set()
+    if not receipts_dir.is_dir():
+        return names
+    try:
+        paths = sorted(receipts_dir.glob("*.json"))
+    except OSError:
+        return names
+    for path in paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and data.get("receipt") == "kaola-project-runner-install/1":
+            names.add(path.stem)
+    return names
+
+
+def verify_install(root: Path, bundles: dict[str, dict[str, bytes]],
+                   expect: list[str] | None = None) -> int:
     """Verify an installed Skills root against this render (Issue #107).
 
-    Every expected Skill that is present is compared byte-for-byte; an absent
-    Skill is skipped, so a partial install verifies without a false finding.
-    Prints one JSON receipt and exits 1 on any skew. Read-only."""
+    Every expected Skill that is present is compared byte-for-byte. Issue #215
+    separates present-file alignment from expected-set completeness: an absent
+    expected Skill is ``missing``, a receipt-owned name this checkout no longer
+    generates is ``obsolete_owned``, and a name that exists but is neither
+    generated nor receipted is ``unmanaged`` (foreign, never a finding). With
+    ``--expect`` only the named set is verified (a deliberate partial install
+    is an honest scoped result), while ``root_complete`` still reports the
+    whole catalog; without it the expected set is every worker Skill plus the
+    main Skill -- and ``kaola-delegator`` only where it has a footprint, since
+    a Host root legitimately never received one. Prints one JSON receipt;
+    exits 1 on skew or incompleteness. Read-only."""
     if not root.is_dir():
         receipt = {
             "receipt": VERIFY_RECEIPT,
@@ -760,31 +794,109 @@ def verify_install(root: Path, bundles: dict[str, dict[str, bytes]]) -> int:
         print(json.dumps(receipt, sort_keys=True))
         print(f"render-skills: skills root does not exist: {root}", file=sys.stderr)
         return 1
-    present = sorted(name for name in bundles if (root / name).is_dir())
-    if not present:
+
+    catalog = sorted(bundles)
+    owned = receipt_owned_names(root)
+    obsolete_owned = sorted(
+        name for name in owned - set(catalog)
+        if (root / name).is_dir() or (root / name).is_symlink() or (root / name).exists())
+    stale_receipts = sorted(owned - set(catalog) - set(obsolete_owned))
+    try:
+        entries = list(root.iterdir())
+    except OSError:
+        entries = []
+    unmanaged = sorted(
+        path.name for path in entries
+        if not path.name.startswith(".")
+        and path.name not in bundles
+        and path.name not in owned)
+
+    if expect is None:
+        expected = [name for name in catalog if name != EXTERNAL_NAME]
+        if (root / EXTERNAL_NAME).exists() or EXTERNAL_NAME in owned:
+            expected.append(EXTERNAL_NAME)
+        scope = "complete"
+    else:
+        expected = sorted(set(expect))
+        scope = "filtered"
+    catalog_present = sorted(name for name in catalog if (root / name).is_dir())
+    present = sorted(name for name in expected if (root / name).is_dir())
+    missing = sorted(set(expected) - set(present))
+    # A scoped query whose set is entirely absent while other generated Skills
+    # live here is incompleteness, not emptiness: "root-empty" stays the verdict
+    # for a root with nothing generated at all.
+    if not catalog_present or (scope == "complete" and not present):
         receipt = {
             "receipt": VERIFY_RECEIPT,
             "result": "refused",
             "reason": "skill-install-root-empty",
             "skills_root": str(root),
-            "detail": "no generated Skill is installed at this root",
+            "scope": scope,
+            "detail": ("none of the expected Skills is installed at this root"
+                       if scope == "filtered" else
+                       "no generated Skill is installed at this root"),
+            "expected": expected,
+            "missing": missing,
             "skills": [],
+            "obsolete_owned": obsolete_owned,
+            "stale_receipts": stale_receipts,
+            "unmanaged": unmanaged,
             "skew": [],
             "skew_count": 0,
             "mutation_performed": False,
         }
         print(json.dumps(receipt, sort_keys=True))
-        print(f"render-skills: no generated Skill found under {root}", file=sys.stderr)
+        print(f"render-skills: {receipt['detail']} ({root})", file=sys.stderr)
         return 1
+
     skew: list[dict[str, Any]] = []
     for name in present:
         skew.extend(installed_skill_skew(name, root / name, bundles[name]))
+
+    # The catalog outside the verified set is reported, never checked out of
+    # scope: absent / aligned / skewed, so a filtered verify can still name the
+    # stale siblings a complete-root refresh would need to cover.
+    unselected: dict[str, str] = {}
+    complete_missing: list[str] = []
+    complete_skewed: list[str] = []
+    if scope == "filtered":
+        for name in catalog:
+            if name in expected:
+                continue
+            target = root / name
+            if not target.is_dir():
+                unselected[name] = "absent"
+            elif installed_skill_skew(name, target, bundles[name]):
+                unselected[name] = "skewed"
+            else:
+                unselected[name] = "aligned"
+        complete_missing = sorted(name for name, state in unselected.items()
+                                  if state == "absent")
+        complete_skewed = sorted(name for name, state in unselected.items()
+                                 if state == "skewed")
+    root_complete = (not missing and not complete_missing and not skew
+                     and not complete_skewed and not obsolete_owned)
+
+    result = "aligned"
+    reason: str | None = None
+    if skew:
+        result, reason = "refused", "skill-install-skew"
+    elif missing or obsolete_owned:
+        result, reason = "incomplete", "skill-install-incomplete"
     receipt = {
         "receipt": VERIFY_RECEIPT,
-        "result": "refused" if skew else "aligned",
-        "reason": "skill-install-skew" if skew else None,
+        "result": result,
+        "reason": reason,
         "skills_root": str(root),
+        "scope": scope,
+        "expected": expected,
         "skills": present,
+        "missing": missing,
+        "obsolete_owned": obsolete_owned,
+        "stale_receipts": stale_receipts,
+        "unmanaged": unmanaged,
+        "unselected": unselected,
+        "root_complete": root_complete,
         "skew": skew[:VERIFY_SKEW_CAP],
         "skew_count": len(skew),
         "mutation_performed": False,
@@ -800,6 +912,28 @@ def verify_install(root: Path, bundles: dict[str, dict[str, bytes]]) -> int:
             file=sys.stderr,
         )
         return 1
+    if missing or obsolete_owned:
+        gaps = []
+        if missing:
+            gaps.append(f"missing expected Skills: {', '.join(missing)}")
+        if obsolete_owned:
+            gaps.append(f"obsolete owned copies: {', '.join(obsolete_owned)}")
+        print(
+            f"render-skills: {root} is not a complete aligned install ({'; '.join(gaps)}); "
+            "the present Skills verified are aligned, but the expected set is not",
+            file=sys.stderr,
+        )
+        return 1
+    if scope == "filtered":
+        summary = ", ".join(
+            f"{state}={sum(1 for state2 in unselected.values() if state2 == state)}"
+            for state in ("aligned", "skewed", "absent"))
+        print(
+            f"render-skills: verified the selected set only "
+            f"({', '.join(expected)}); unselected catalog Skills: {summary}"
+            + ("" if root_complete else "; this root is NOT a complete install"),
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -1203,8 +1337,16 @@ def main() -> int:
     mode.add_argument(
         "--verify-install", metavar="DIR",
         help="compare the generated Skills installed under DIR against a fresh render "
-             "(prose included) and print one JSON receipt; exit 1 on any skew. "
-             "The mechanical replacement for the manual step-3 diff (Issue #107)",
+             "(prose included) and print one JSON receipt; exit 1 on any skew or "
+             "incompleteness. The mechanical replacement for the manual step-3 diff "
+             "(Issue #107; expected-set completeness is Issue #215)",
+    )
+    parser.add_argument(
+        "--expect", metavar="NAMES",
+        help="with --verify-install: comma-separated Skill names (or worker platform "
+             "ids) the install was asked to deliver; only that set is verified, the "
+             "rest of the catalog is reported as unselected, and the receipt is a "
+             "scoped result -- never a complete-root verdict (Issue #215)",
     )
     parser.add_argument(
         "--require-pinned", action="store_true",
@@ -1212,6 +1354,8 @@ def main() -> int:
              "and the pin is verified (the gate for the pin commit)",
     )
     args = parser.parse_args()
+    if args.expect is not None and not args.verify_install:
+        parser.error("--expect only has meaning with --verify-install")
 
     manifests = [parse_manifest(path) for path in sorted(PLATFORMS.glob("*.yaml"))]
     expected_ids = [
@@ -1247,7 +1391,26 @@ def main() -> int:
         # installed tree, so verification does not wait on them.
         bundles = {**worker_expected, ORCHESTRATOR_NAME: orch_expected,
                    EXTERNAL_NAME: external_expected}
-        return verify_install(Path(args.verify_install), bundles)
+        expect: list[str] | None = None
+        if args.expect is not None:
+            # Skill names or worker platform ids name the requested set
+            # (Issue #215); an unknown token refuses, so a typo is never read
+            # as "verified nothing".
+            by_platform = {m["id"]: m["skill_name"] for m in manifests}
+            expect = []
+            for token in args.expect.split(","):
+                token = token.strip()
+                name = token if token in bundles else by_platform.get(token)
+                if name is None:
+                    parser.error(
+                        f"--expect: unknown Skill name or platform id: {token!r} "
+                        f"(catalog: {', '.join(sorted(bundles))}; platforms: "
+                        f"{', '.join(sorted(by_platform))})")
+                if name not in expect:
+                    expect.append(name)
+            if not expect:
+                parser.error("--expect names an empty set; nothing would be verified")
+        return verify_install(Path(args.verify_install), bundles, expect)
     host_expected = expected_grok_bot_host_files()
     for name, expected in worker_expected.items():
         findings.extend(budget_findings(name, expected, "worker_skill_bytes", limits))

@@ -244,6 +244,12 @@ def make_checkout(path: Path, older: bool = False) -> Path:
     for name in ("install-local.sh", "kaola-acp.py", "kaola-acp-holder.py", "kaola-locate.py",
                  "kaola-codex-compact-hook.py"):
         shutil.copy2(ROOT / "scripts" / name, path / "scripts" / name)
+    # Issue #215: an install must first pass the checkout's own render/check
+    # path; this fixture carries no templates, so a stub stands in for a
+    # coherent render.
+    stub = path / "scripts" / "render-skills.py"
+    stub.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n", encoding="utf-8")
+    stub.chmod(0o755)
     shutil.copytree(ROOT / "templates" / "codex-host", path / "templates" / "codex-host")
     shutil.copytree(ROOT / "skills", path / "skills",
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))

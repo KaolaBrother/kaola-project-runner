@@ -497,11 +497,19 @@ worker opens unbound and exits 0. Every pin bump therefore ends with:
 3. Verify alignment mechanically from the accepted checkout. `--verify-install`
    compares every generated Skill present under the destination against a fresh
    render of this checkout — every byte, `SKILL.md` prose and `references/`
-   included — and prints one JSON receipt (`result: aligned|refused`,
-   `reason: skill-install-skew`, a per-file `skew` list naming each `stale` /
-   `missing` / `unexpected` path with both 12-hex digests), exiting 1 on any
-   skew. It is read-only and skips a Skill that is not installed, so a partial
-   install verifies cleanly:
+   included — and prints one JSON receipt (`result: aligned|incomplete|refused`,
+   `reason: skill-install-skew|skill-install-incomplete`, a per-file `skew`
+   list naming each `stale` / `missing` / `unexpected` path with both 12-hex
+   digests), exiting 1 on skew or incompleteness. Since Issue #215 the check
+   separates present-file alignment from expected-set completeness: the default
+   expected set is the whole generated catalog, so an absent worker Skill is a
+   `missing` entry and the root reports `incomplete`, never aligned;
+   receipt-owned names this checkout no longer generates are `obsolete_owned`,
+   and foreign directories are `unmanaged`, reported but never findings. An
+   intentionally scoped set verifies with `--expect NAMES` under
+   `scope: filtered` (Skill names or worker platform ids), which the receipt
+   reports honestly — `root_complete` stays false and the output says it is not
+   a complete install. It is read-only:
 
    ```bash
    A=/abs/path/to/accepted-checkout
@@ -552,10 +560,17 @@ recorded file is refused as
 `{"result": "refused", "reason": "main-skill-build-skew"}` with exit 1 and
 nothing created (`main_skill_skew` names the path and both builds). The start
 only detects it; its `detail` names each affected root's existing installer
-route (`install-local.sh --skills-dir ROOT --platform PLATFORM`, which replaces
-only a receipt-owned copy, keeps its other referrers, and adds the `generic`
-one; a runtime referrer's own `--runtime NAME` install is the owner route). Run
-it from the accepted checkout, then start again (Issue #198).
+route — the owning runtime's `install-local.sh --runtime NAME [--platform ID]`
+where the root is a runtime destination or a receipt names one, the generic
+`--skills-dir ROOT` route only where nothing owns it — plus the matching
+`--verify-install` command, preferring a complete-root refresh when siblings
+are stale (Issue #215). The installer replaces only a receipt-owned copy, keeps
+its other referrers, and a `--skills-dir` install adds the `generic` referrer
+and plans `kaola-delegator`. The refusal is pre-mutation
+(`mutation_status=not_started`): run the route from the accepted checkout,
+verify, then run the same start again; a Host that cannot install sends the
+exact route to the Delegator or operator and keeps its task and seat
+(Issue #198).
 
 At most one live Host serves a canonical root (Issue #132). A Host-named start
 is refused as `{"result": "refused", "reason": "host-exists"}` with exit 1 and

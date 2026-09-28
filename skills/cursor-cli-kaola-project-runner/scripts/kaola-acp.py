@@ -3199,27 +3199,144 @@ def seat_freshness(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Issue #215: the installer's runtime-name -> Skill-root map (mirrors
+# install-local.sh runtime_skills_dir, honoring the same env overrides), so a
+# skew refusal can name the OWNING runtime's own refresh route for a reported
+# root instead of a generic --skills-dir path. Retired roots (droid's
+# ~/.factory/skills) are deliberately absent -- they have no owner route.
+INSTALLER_RUNTIME_ROOTS: dict[str, tuple[str | None, str]] = {
+    "codex": ("CODEX_HOME", ".codex"),
+    "claude-code": ("CLAUDE_CONFIG_DIR", ".claude"),
+    "cursor": (None, ".cursor"),
+    "devin": ("DEVIN_CONFIG_DIR", ".config/devin"),
+    "zcode": (None, ".zcode"),
+    "grok-cli": (None, ".grok"),
+    "opencode": (None, ".config/opencode"),
+    "kimi-cli": (None, ".agents"),
+    "dsh": (None, ".agents"),
+    "droid": (None, ".agents"),
+}
+INSTALLER_RUNTIME_EXTRA_ROOTS = {"kimi-cli": ("KIMI_CODE_HOME", ".kimi-code")}
+
+
+def installer_runtime_roots() -> dict[str, list[str]]:
+    """Runtime name -> its install destination roots under the current env."""
+    home = str(Path.home())
+    roots: dict[str, list[str]] = {}
+    for runtime, (envvar, base) in INSTALLER_RUNTIME_ROOTS.items():
+        override = os.environ.get(envvar) if envvar else None
+        directory = override or os.path.join(home, base)
+        roots[runtime] = [os.path.join(directory, "skills")]
+    envvar, base = INSTALLER_RUNTIME_EXTRA_ROOTS["kimi-cli"]
+    override = os.environ.get(envvar) if envvar else None
+    directory = override or os.path.join(home, base)
+    roots["kimi-cli"].append(os.path.join(directory, "skills"))
+    return roots
+
+
+def root_recorded_referrers(root: Path) -> list[str]:
+    """Every referrer the root's install receipts record (Issue #215)."""
+    found: set[str] = set()
+    receipts = root / ".kaola-install-receipts"
+    try:
+        paths = sorted(receipts.glob("*.json"))
+    except OSError:
+        return []
+    for path in paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("receipt") != "kaola-project-runner-install/1":
+            continue
+        refs = data.get("referrers")
+        if isinstance(refs, list):
+            found.update(str(ref) for ref in refs)
+    return sorted(found)
+
+
+def owning_runtime(root: Path) -> str | None:
+    """The runtime whose own install destination ``root`` is, or None.
+
+    A recorded referrer that maps to this root wins (the ledger's own word on
+    who owns the copies). With no such evidence a single candidate runtime is
+    its own destination's owner; a shared root (``~/.agents/skills`` is droid,
+    dsh and kimi-cli) prefers a single-destination runtime so the emitted route
+    does not silently refresh kimi-cli's second root too."""
+    real = os.path.realpath(root)
+    candidates = [runtime for runtime, dirs in installer_runtime_roots().items()
+                  if any(os.path.realpath(directory) == real for directory in dirs)]
+    if not candidates:
+        return None
+    referrers = root_recorded_referrers(root)
+    for runtime in sorted(candidates):
+        if runtime in referrers:
+            return runtime
+    single = [runtime for runtime in sorted(candidates)
+              if runtime != "kimi-cli" or len(candidates) == 1]
+    return single[0] if single else sorted(candidates)[0]
+
+
 def skill_refresh_route(roots: dict[str, list[str]], unmanaged: list[str],
                         workers_only: bool) -> str:
-    """Issue #198: the existing installer route for the roots a skew refusal
-    reports, ``root -> --platform`` values. The installer, not this text,
-    decides ownership; a copy under another name has no installer route."""
+    """Issue #198, extended by #215: the existing installer route for each
+    root a skew refusal reports, ``root -> --platform`` values, plus the
+    matching ``--verify-install`` check. The emitted command is the root's
+    OWNER route: ``--runtime NAME`` when the root is that runtime's own Skill
+    directory (a recorded referrer wins the choice), ``--skills-dir`` only for
+    a root no runtime owns -- the generic referrer, never claimed as the owner.
+    A root whose other Skills also differ gets the complete-root refresh, not
+    repeated single-platform installs. The installer, not this text, decides
+    ownership; a copy under another name has no installer route."""
     text = ""
     if roots:
         scope = " --no-orchestrator" if workers_only else ""
-        commands = "; ".join(f"./scripts/install-local.sh --skills-dir {shlex.quote(root)} "
-                             f"--platform {','.join(platforms)}{scope}"
-                             for root, platforms in roots.items())
+        commands = []
+        verifies = []
+        ownership = []
+        for root, platforms in roots.items():
+            owner = owning_runtime(Path(root))
+            complete = len(platforms) > 1
+            platform_arg = "" if complete else f" --platform {','.join(platforms)}"
+            if owner:
+                commands.append(f"./scripts/install-local.sh --runtime {owner}"
+                                f"{platform_arg}{scope}")
+                ownership.append(f"{root} is the {owner} runtime's own Skill root")
+            else:
+                commands.append(f"./scripts/install-local.sh --skills-dir "
+                                f"{shlex.quote(root)}{platform_arg}{scope}")
+                ownership.append(f"{root} has no recorded runtime owner "
+                                 f"(referrers: {', '.join(root_recorded_referrers(Path(root))) or 'none'})")
+            if complete:
+                verifies.append(
+                    f"./scripts/render-skills.py --verify-install {shlex.quote(root)}")
+            else:
+                expect = list(platforms) + ([] if workers_only
+                                            else [MAIN_SKILL_NAME])
+                verifies.append(
+                    f"./scripts/render-skills.py --verify-install {shlex.quote(root)}"
+                    f" --expect {','.join(expect)}")
         text += (" From the accepted checkout, refresh each affected root with the "
-                 f"existing installer: {commands}. It replaces only a copy its receipt "
+                 f"existing installer ({'; '.join(ownership)}): {'; '.join(commands)}. "
+                 f"Then verify the affected installed set: {'; '.join(verifies)}. "
+                 "The installer replaces only a copy its receipt "
                  "(<root>/.kaola-install-receipts/<skill>.json) owns, keeps every other "
                  "referrer, and never replaces a foreign path. A --skills-dir install is "
                  "the generic referrer"
                  + ("" if workers_only else " and also plans kaola-delegator there")
-                 + "; where that receipt lists a runtime referrer, that runtime's own "
-                 "--runtime NAME install is the owner route. An obsolete duplicate you own "
-                 "is withdrawn with the same route plus --uninstall, which removes a copy "
-                 "only when no referrer remains; never delete it by hand.")
+                 + "; where a receipt lists a runtime referrer or the root is a "
+                 "runtime's own Skills directory, that runtime's own --runtime NAME "
+                 "install is the owner route -- the generic --skills-dir route is never "
+                 "presented as the runtime owner. A root with other stale Skills gets "
+                 "the complete-root refresh above (no --platform), not repeated "
+                 "single-platform installs. An obsolete duplicate you own is withdrawn "
+                 "with the same route plus --uninstall, which removes a copy only when "
+                 "no referrer remains; never delete it by hand. If this Host cannot run "
+                 "the authorized install itself, it reports this exact route to the "
+                 "Delegator or operator and keeps its task and seat -- it never just "
+                 "asks for a refresh.")
     if unmanaged:
         shown = unmanaged[:SKEW_DETAIL_CAP]
         more = "" if len(unmanaged) == len(shown) else f" (+{len(unmanaged) - len(shown)} more)"
@@ -3256,7 +3373,8 @@ def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
         "detail": (f"{len(skew)} installed {MAIN_SKILL_NAME} main Skill(s) do not match "
                    f"this Host build {alignment['build']}: {listed}{more}. Nothing was "
                    "started." + skill_refresh_route(roots, unmanaged, False)
-                   + " Then start again."),
+                   + " The refusal is pre-mutation (mutation_status=not_started), so "
+                   "after the refresh verifies, run the same start again."),
         "main_skill_build": alignment["build"],
         "main_skill_skew": shown,
         "main_skill_skew_count": len(skew),
@@ -3320,7 +3438,9 @@ def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
         "action": "start",
         "detail": (f"{len(skew)} installed worker Skill script(s) do not match this "
                    f"Host build {alignment['build']}: {listed}{more}. Nothing was started."
-                   + skill_refresh_route(roots, unmanaged, True) + " Then start again."),
+                   + skill_refresh_route(roots, unmanaged, True)
+                   + " The refusal is pre-mutation (mutation_status=not_started), so "
+                   "after the refresh verifies, run the same start again."),
         "worker_skill_build": alignment["build"],
         "worker_skill_roots": alignment["roots"],
         "worker_skill_skew": shown,

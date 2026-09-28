@@ -74,11 +74,13 @@ platforms may publish theirs in `session_meta`. No verified id means no
 
 A Host `start` refuses `worker-skill-build-skew` (exit 1, nothing created) when
 the installed worker Skills are a different build from the Skill this Host runs:
-their `start` would be the copy without automatic binding. Nothing is recoverable
-from inside the Host — report it with the `worker_skill_skew` paths and ask for
-the install to be refreshed from the accepted checkout. `main-skill-build-skew`
-is the same for an older copy of this Skill in a root the Host reads
-(`main_skill_skew` paths): that copy may be the one loaded instead of this build.
+their `start` would be the copy without automatic binding. `main-skill-build-skew`
+is the same for an older copy of this Skill the Host reads
+(`main_skill_skew` paths): it may load instead. Its `detail` carries the
+owner-aware refresh route and verify command (stale siblings: a complete-root
+refresh); retry is safe — `mutation_status=not_started`. A Host that cannot
+install sends that route to the Delegator or operator and keeps its task and
+seat; it never deletes a foreign path.
 `host-exists` (Issue #132, same shape) refuses a Host-named `start` while another
 Host-named holder of this canonical root may be live (only a dead or reused PID
 frees it) — any

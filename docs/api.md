@@ -132,7 +132,18 @@ Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `d
 Omit `--platform` for all ten workers. `--platform` never selects the main Skill;
 `kaola-project-runner` is not a platform ID. The orchestrator is installed for every `--runtime`
 and `--skills-dir` destination unless `--no-orchestrator` is passed. Every selected destination is
-preflighted before mutation; foreign paths are never replaced.
+preflighted before mutation; foreign paths are never replaced. Before any write an install also
+runs this checkout's own `scripts/render-skills.py --check` and refuses with the
+`./scripts/render-skills.py --write` remedy when the generated Skills do not match their
+templates (Issue #215); an uninstall reads no payload bytes and is not gated. After the writes
+the installer verifies every requested Skill at every requested destination (link targets for
+`--method link`, tree digests for `--method copy`) and exits nonzero when one did not land — a
+write failure is never reported complete. A `--platform` or `--no-orchestrator` request is
+reported `scope: filtered` with the unselected siblings' states and `NOT a complete-root
+install`; only an unfiltered request reports `scope: complete`. Names this checkout no longer
+generates but a receipt still owns are obsolete copies: the installer retires one only when no
+other referrer remains and the copy's bytes still match the receipt, and preserves — with a
+named owner-safe next action — a modified, co-owned, foreign, or unreceipted path.
 
 Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `droid exec --output-format acp`; no bridge or translator is used. Droid defaults to Auto Model
@@ -213,7 +224,12 @@ checkout's `legacy` entry. It unlinks a link only when no referrer remains and t
 checkout's own or the one recorded. The locator link is also kept while the Grok Bot
 registration receipt `.kaola-project-runner-locate.json` exists beside it; the installer never
 writes that receipt. A kept link is reported as `kept: … (…)`, and uninstall no longer exits
-nonzero for a link another checkout made.
+nonzero for a link another checkout made. Helper links are shared blocks, reported separately
+from Skill alignment (Issue #215): after the Skills verify, each link's actual target, its
+build digest, and its recorded referrers print as `helper: …`; a usable link still pointing at
+another checkout's older build is kept and reported `helper not upgraded: …` with the owner-safe
+transition (withdraw the other referrers first, or `kaola-locate.py register` for the locator),
+never silently retargeted, deleted, or claimed upgraded.
 
 The Codex runtime destination (`--runtime codex`, or no destination flag) also installs one
 Runner-owned user-level `SessionStart(compact)` recovery entry — id
@@ -447,13 +463,21 @@ recorded digest; extra files are ignored. Any difference is
 `{"result":"refused","reason":"main-skill-build-skew"}`, exit 1, nothing created and no root changed;
 `main_skill_skew` lists each stale copy's `path`, `installed` and `expected` build and differing
 `files`, `main_skill_skew_count` the total, and `detail` names the paths, both builds, and the repair
-(Issue #198): for each affected root, `install-local.sh --skills-dir ROOT --platform PLATFORM` from
-the accepted checkout. That installer replaces only a copy its receipt owns and keeps every other
-referrer; a `--skills-dir` install is the `generic` referrer and also plans `kaola-delegator`, so
-where the receipt lists a runtime referrer, that runtime's `--runtime NAME` install is the owner
-route. An owned obsolete duplicate is withdrawn with the same route plus `--uninstall`, and a
-renamed copy no installer manages is named for its owner to move. Nothing is deleted or retried
-for the caller; after the refresh the same `start` may run again. `worker-skill-build-skew` names
+(Issue #198, owner-aware in Issue #215): for each affected root, the owning runtime's
+`install-local.sh --runtime NAME [--platform PLATFORM]` from the accepted checkout — a root is
+owned when it is that runtime's own install destination or its receipts record that runtime as a
+referrer — and the generic `--skills-dir ROOT` route only where nothing owns the root, with the
+matching `render-skills.py --verify-install` command for the affected set. That installer
+replaces only a copy its receipt owns and keeps every other referrer; a `--skills-dir` install is
+the `generic` referrer and also plans `kaola-delegator`, so where the receipt lists a runtime
+referrer, that runtime's `--runtime NAME` install is the owner route and the generic route is
+never presented as the owner. A root whose other Skills are also stale takes the complete-root
+refresh (no `--platform`), not repeated single-platform installs. An owned obsolete duplicate is
+withdrawn with the same route plus `--uninstall`, and a renamed copy no installer manages is named
+for its owner to move. Nothing is deleted or retried for the caller; the refusal is pre-mutation
+(`mutation_status=not_started`), so after the refresh verifies the same `start` may run again. A
+Host that cannot run the authorized install itself relays this exact route to the Delegator or
+operator and keeps its task and seat. `worker-skill-build-skew` names
 the same per-root route with the skewed copies' platforms and `--no-orchestrator`. A passing Host `start` reports
 `main_skill_build`, which is `null` when there is no record to compare (a checkout invocation or a
 worker Skill built before the record).

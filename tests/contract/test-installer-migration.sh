@@ -41,6 +41,12 @@ make_fixture() {
   cp "$project_root/scripts/kaola-locate.py" "$root/scripts/kaola-locate.py"
   # Issue #97: the Codex destination installs the user-level compact hook.
   cp "$project_root/scripts/kaola-codex-compact-hook.py" "$root/scripts/kaola-codex-compact-hook.py"
+  # Issue #215: an install must first prove the checkout's generated Skills
+  # match its templates through its own render/check path; the fixture has no
+  # templates, so a stub stands in for a coherent render. A case that needs a
+  # refusal overwrites this stub with one that fails.
+  printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' >"$root/scripts/render-skills.py"
+  chmod +x "$root/scripts/render-skills.py"
   mkdir -p "$root/templates/codex-host"
   cp "$project_root/templates/codex-host/compact-recovery.md" \
     "$project_root/templates/codex-host/compact-recovery-user.md" "$root/templates/codex-host/"

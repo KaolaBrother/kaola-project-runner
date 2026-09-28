@@ -6,6 +6,32 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Verify scoped installs, clean owned stale Skills, and recover build-skew refusals (Issue #215).**
+  `render-skills.py --verify-install` now separates present-file alignment from expected-set
+  completeness: a root holding only `kaola-project-runner` reports `incomplete` with the absent
+  worker Skills in `missing` instead of claiming alignment, receipt-owned names this checkout no
+  longer generates surface as `obsolete_owned`, foreign paths are reported as `unmanaged` and
+  never counted as findings, and `--expect NAMES` verifies a deliberately scoped set under
+  `scope: filtered` without presenting the root as complete. `install-local.sh` refuses before
+  any write when the checkout's own `render-skills.py --check` fails (run
+  `./scripts/render-skills.py --write` first), verifies every requested payload after writing and
+  exits nonzero if one did not land, and reports a filtered request as `scope: filtered` with the
+  unselected siblings' states — never as a complete-root upgrade. Obsolete receipt-owned copies
+  are retired only when no other referrer remains and the bytes still match the receipt;
+  modified, co-owned, foreign, and unreceipted paths are preserved and named with an owner-safe
+  next action. With `--bin-links`, helper links report their actual target, build digest, and
+  referrers separately from Skill alignment; a usable link to another accepted checkout is kept
+  and reported `helper not upgraded` with its owner-safe transition route rather than being
+  silently retargeted. The `worker-skill-build-skew` and `main-skill-build-skew` refusal routes
+  are now owner-aware — the owning runtime's `--runtime NAME` route where the root is a runtime
+  destination or a receipt records one, the generic `--skills-dir` route only where nothing owns
+  the root — and carry the matching `--verify-install` command, prefer a complete-root refresh
+  when siblings are stale, name the Delegator/operator handoff for a Host that cannot install,
+  and gate retry on `mutation_status=not_started`. The operator-test paths
+  (`scripts/kaola-acp-holder.py`, `scripts/kaola-zcode-acp.py`, `scripts/kaola-quota.py`,
+  `scripts/adapters`, `platforms`) are untouched (`Seats: restart not required`); installed worker
+  Skills carry the updated `kaola-acp.py`, so existing installs show the usual build-skew refresh
+  route rather than requiring a seat restart.
 - **Let the Host own adaptive QA and documentation coverage across issue deliveries (Issue #213).**
   Paired with Kaola-Workflow #1111. The Project Runner Host is the one quality owner: it decides
   what evidence is needed, who supplies it, whether it suffices, and when project-level QA and

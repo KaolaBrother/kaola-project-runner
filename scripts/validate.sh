@@ -155,6 +155,7 @@ python_suites_all=(
   "test-issue-168-drift-enumeration.py"
   "test-issue-186-claude-native-identity.py"
   "test-issue-187-delegator-any-host.py"
+  "test-issue-215-install-truthfulness.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -180,6 +181,7 @@ python_suites_a=(
   "test-issue-118-seat-cap.py"
   "test-issue-146-session-new-wait.py"
   "test-lifecycle-contract.py"
+  "test-issue-215-install-truthfulness.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"

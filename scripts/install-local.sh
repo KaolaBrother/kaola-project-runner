@@ -292,6 +292,14 @@ fi
 if [[ ${#selection[@]} -eq 0 ]]; then
   selection=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid dsh)
 fi
+# Issue #215: the full generated catalog (all ten workers plus the
+# control-plane Skills) for expected-set and obsolete-copy logic; the selected
+# payload is $selection, and the catalog never shrinks with --platform.
+all_platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid dsh)
+catalog_names="$orchestrator_skill_name $external_skill_name"
+for known_platform in "${all_platforms[@]}"; do
+  catalog_names="$catalog_names $(skill_name_for "$known_platform")"
+done
 
 deduped=()
 for item in "${selection[@]}"; do
@@ -302,6 +310,35 @@ for item in "${selection[@]}"; do
   [[ "$duplicate" == true ]] || deduped+=("$item")
 done
 selection=("${deduped[@]}")
+
+# Issue #215: "scope" is what the operator asked for, not what the root
+# contains. A --platform or --no-orchestrator request is a filtered install --
+# verified against its selected payloads and reported as such, never as a
+# complete-root upgrade. A write or post-write verification failure is never
+# reported complete.
+if [[ "$platform_given" == true || "$install_orchestrator" == false ]]; then
+  install_scope=filtered
+else
+  install_scope=complete
+fi
+install_verify_failed=false
+
+# Issue #215: before any install mutation, prove this checkout is coherent --
+# its generated Skills must match its templates through the checkout's own
+# render/check path. A stale or hand-edited skills/ tree must stop here with
+# the existing render remedy, not propagate skew into installed roots. An
+# uninstall reads no payload bytes, so it is not gated.
+if [[ "$mode" == install ]]; then
+  render_tool="$repo_root/scripts/render-skills.py"
+  if [[ ! -f "$render_tool" ]]; then
+    printf 'refusing to install: %s is missing, so this checkout cannot prove its generated Skills match their templates; run the installer from a complete accepted checkout\n' "$render_tool" >&2
+    exit 1
+  fi
+  if ! render_report="$("$installer_python" "$render_tool" --check 2>&1)"; then
+    printf 'refusing to install: the generated Skills in this checkout do not match their templates:\n%s\nrun ./scripts/render-skills.py --write in this checkout first, then re-run this install\n' "$render_report" >&2
+    exit 1
+  fi
+fi
 
 canonical_existing_target() {
   local target="$1" raw
@@ -338,6 +375,16 @@ for path in sorted(entries, key=lambda p: os.path.relpath(p, root)):
             content = hashlib.sha256(handle.read()).hexdigest()
         digest.update(b"F" + rel.encode() + b"=" + content.encode() + b"\n")
 print(digest.hexdigest())' "$1"
+}
+
+file_digest() {
+  # 12-hex sha256 of the resolved file's bytes (a helper link's actual build);
+  # empty when the path cannot be read.
+  "$installer_python" -c 'import hashlib, sys
+try:
+    print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()[:12])
+except OSError:
+    print("unreadable")' "$1"
 }
 
 receipt_digest() {
@@ -704,6 +751,9 @@ plan_skill() {
         actions+=("install|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name")")")
       fi
     fi
+    # Issue #215: every planned payload is part of the requested set the
+    # post-apply verification proves landed.
+    payload_names+=("$name")
   else
     # Uninstall only withdraws this runtime's reference; the Skill and its
     # receipt are removed only when no other referrer remains.
@@ -784,7 +834,7 @@ destination_plan() {
   done
   [[ -n "$legacy_referrers" ]] || legacy_referrers="$self_ref"
 
-  local -a actions=() bin_actions=()
+  local -a actions=() bin_actions=() payload_names=()
   local bin_ledger="" want_user_hook=false hook_status=""
 
   for platform in "${selection[@]}"; do
@@ -813,6 +863,39 @@ destination_plan() {
       # (no_external default).
       plan_skill "$external_skill_name" "" 1
     fi
+  fi
+
+  # Issue #215: obsolete copies are receipt-owned names this checkout no
+  # longer generates. One is retired only under uninstall semantics -- the
+  # receipt is exact-owned, no other referrer remains, and a copy's bytes
+  # still match its receipt. Anything else is preserved and named for its
+  # owner, never deleted to silence a check. A name with no receipt is
+  # foreign and is never in this list.
+  if [[ -d "$receipts_dir" ]]; then
+    for receipt_file in "$receipts_dir"/*.json; do
+      [[ -f "$receipt_file" ]] || continue
+      ob_name="${receipt_file##*/}"
+      ob_name="${ob_name%.json}"
+      case " $catalog_names " in
+        *" $ob_name "*) continue ;;
+      esac
+      ob_target="$target_parent/$ob_name"
+      ob_refs="$(skill_refs "$ob_name")"
+      ob_remaining="$(drop_ref "$ob_refs" "$self_ref")"
+      if [[ ! -e "$ob_target" && ! -L "$ob_target" ]]; then
+        actions+=("drop-receipt|$ob_name|-|$ob_target|")
+      elif [[ -n "$ob_remaining" ]]; then
+        actions+=("release-obsolete|$ob_name|-|$ob_target|$ob_remaining")
+      elif [[ -L "$ob_target" || ! -d "$ob_target" ]]; then
+        actions+=("keep-obsolete|$ob_name|-|$ob_target|not an owned copy; inspect it and remove it by hand only if it is yours")
+      elif [[ -z "$(receipt_digest "$receipt_file" "$ob_name")" ]]; then
+        actions+=("keep-obsolete|$ob_name|-|$ob_target|no exact-owned copy receipt to compare bytes against; inspect it and remove it by hand only if it is yours")
+      elif [[ "$(tree_digest "$ob_target")" != "$(receipt_digest "$receipt_file" "$ob_name")" ]]; then
+        actions+=("keep-obsolete|$ob_name|-|$ob_target|bytes differ from its install receipt (preserved); review the edit, then restore the recorded bytes or remove it by hand")
+      else
+        actions+=("retire-obsolete|$ob_name|-|$ob_target|")
+      fi
+    done
   fi
 
   if [[ "$role" == primary && "$want_bin_links" == true ]]; then
@@ -866,6 +949,7 @@ destination_plan() {
   eval "${prefix}_bin_ledger=$(printf '%q' "$bin_ledger")"
   eval "${prefix}_actions=(\${actions[@]+\"\${actions[@]}\"})"
   eval "${prefix}_bin_actions=(\${bin_actions[@]+\"\${bin_actions[@]}\"})"
+  eval "${prefix}_payload=(\${payload_names[@]+\"\${payload_names[@]}\"})"
 }
 
 destination_apply() {
@@ -881,8 +965,10 @@ destination_apply() {
   eval "bin_ledger=\"\${${prefix}_bin_ledger}\""
   eval "local -a actions=(\${${prefix}_actions[@]+\"\${${prefix}_actions[@]}\"})"
   eval "local -a bin_actions=(\${${prefix}_bin_actions[@]+\"\${${prefix}_bin_actions[@]}\"})"
+  eval "local -a payload_names=(\${${prefix}_payload[@]+\"\${${prefix}_payload[@]}\"})"
   receipts_dir="$target_parent/.kaola-install-receipts"
   self_ref="$resolved_runtime"
+  obsolete_kept=""
 
   [[ "$mode" == install ]] && mkdir -p "$target_parent"
   [[ "$mode" == install && ${#bin_actions[@]} -gt 0 ]] && mkdir -p "$bin_dir"
@@ -981,6 +1067,30 @@ destination_apply() {
       drop_owned_receipt "$name"
       [[ "$role" == retired ]] || printf 'already absent: %s\n' "$target"
       ;;
+    # Issue #215: an obsolete copy (a receipt-owned name this checkout no
+    # longer generates) is retired only when nothing else refers to it and its
+    # bytes still match the receipt; otherwise it is preserved and named.
+    retire-obsolete)
+      rm -rf "$target"
+      drop_owned_receipt "$name"
+      printf 'retired obsolete owned copy: %s\n' "$target"
+      ;;
+    release-obsolete)
+      if [[ "$refs" != "$(skill_refs "$name")" ]] \
+          && refs_tool owned "$receipts_dir/$name.json" "$name"; then
+        refs_tool set-referrers "$receipts_dir/$name.json" "$name" "$refs"
+      fi
+      printf 'kept obsolete copy: %s (still referenced by %s)\n' "$target" "$refs"
+      obsolete_kept="${obsolete_kept:+$obsolete_kept,}$name"
+      ;;
+    keep-obsolete)
+      printf 'kept obsolete copy: %s (%s)\n' "$target" "$refs"
+      obsolete_kept="${obsolete_kept:+$obsolete_kept,}$name"
+      ;;
+    drop-receipt)
+      drop_owned_receipt "$name"
+      printf 'dropped stale receipt: %s\n' "$receipts_dir/$name.json"
+      ;;
   esac
   done
   [[ "$mode" == uninstall ]] && rmdir "$receipts_dir" 2>/dev/null || true
@@ -1037,6 +1147,136 @@ os.replace(sys.argv[1], sys.argv[2])' "$temp" "$target"
   esac
   done
   [[ -z "$bin_ledger" ]] || refs_tool bin-write "$bin_dir" "$bin_ledger"
+
+  # Issue #215: helper links are reported separately from Skill alignment --
+  # each link's actual target, the build that target carries, and every
+  # recorded referrer. A usable link to another checkout is kept and reported
+  # as NOT upgraded with its owner-safe transition route; it is never silently
+  # retargeted, deleted, or claimed upgraded.
+  if [[ "$mode" == install && "$role" == primary && "$want_bin_links" == true ]]; then
+    helper_rows="$("$installer_python" -c 'import json, sys
+try:
+    data = json.loads(sys.argv[1])
+except ValueError:
+    data = {}
+for name in sorted(data.get("links") or {}):
+    entry = data["links"][name] or {}
+    labels = ", ".join("%s@%s" % (r.get("runtime"), r.get("checkout"))
+                       for r in (entry.get("referrers") or []))
+    print("%s|%s|%s" % (name, entry.get("target") or "", labels or "unrecorded"))' "$bin_ledger")"
+    for spec in "${bin_specs[@]}"; do
+      helper_name="${spec%%|*}"
+      helper_source="${spec#*|}"
+      helper_link="$bin_dir/$helper_name"
+      helper_row="$(printf '%s\n' "$helper_rows" | sed -n "s/^${helper_name}|//p")"
+      helper_owners="${helper_row#*|}"
+      if [[ -L "$helper_link" ]]; then
+        actual="$(readlink "$helper_link")"
+      elif [[ -e "$helper_link" ]]; then
+        actual="not-a-symlink"
+      else
+        actual="absent"
+      fi
+      build="$(file_digest "$helper_link")"
+      ours_build="$(file_digest "$helper_source")"
+      if [[ -L "$helper_link" && "$helper_link" -ef "$helper_source" ]]; then
+        printf 'helper: %s -> %s (build %s; referrers: %s)\n' \
+          "$helper_link" "$actual" "$build" "$helper_owners"
+      elif [[ "$build" == "$ours_build" && "$build" != unreadable ]]; then
+        printf 'helper: %s -> %s (build %s, identical bytes on another checkout; referrers: %s; link kept, not retargeted)\n' \
+          "$helper_link" "$actual" "$build" "$helper_owners"
+      else
+        if [[ "$helper_name" == "kaola-project-runner-locate" ]]; then
+          helper_route="transition it with scripts/kaola-locate.py register --target local|cloud --expect-revision <accepted rev> on the execution target, or withdraw its other referrers first"
+        else
+          helper_route="withdraw its other referrers first (each owner's install-local.sh --uninstall --bin-links), then re-run this install"
+        fi
+        printf 'helper not upgraded: %s -> %s (build %s; this checkout carries %s; referrers: %s). The existing usable link stays; %s.\n' \
+          "$helper_link" "$actual" "$build" "$ours_build" "$helper_owners" "$helper_route"
+      fi
+    done
+  fi
+
+  # Issue #215: after the writes, verify the REQUESTED payload set for this
+  # destination actually matches this checkout's generated Skills. A filtered
+  # request (--platform / --no-orchestrator) is reported as filtered -- never
+  # as a complete-root upgrade -- with the unselected siblings' states; a
+  # payload that did not land fails the run.
+  if [[ "$mode" == install && "$role" != retired && ${#payload_names[@]} -gt 0 ]]; then
+    verified_count=0
+    failed_names=""
+    for name in "${payload_names[@]}"; do
+      target="$target_parent/$name"
+      source="$repo_root/skills/$name"
+      if [[ "$method" == link ]]; then
+        if [[ -L "$target" && "$target" -ef "$source" ]]; then
+          verified_count=$((verified_count + 1))
+        else
+          failed_names="${failed_names:+$failed_names,}$name"
+        fi
+      else
+        if [[ -d "$target" && ! -L "$target" \
+              && "$(tree_digest "$target")" == "$(tree_digest "$source")" ]]; then
+          verified_count=$((verified_count + 1))
+        else
+          failed_names="${failed_names:+$failed_names,}$name"
+        fi
+      fi
+    done
+    if [[ -n "$failed_names" ]]; then
+      printf 'verify: %s: FAILED -- requested Skill(s) did not land as rendered: %s (a write failure is never a completed install)\n' \
+        "$target_parent" "$failed_names" >&2
+      install_verify_failed=true
+    else
+      selected_list="$(IFS=,; printf '%s' "${payload_names[*]}")"
+      if [[ "$install_scope" == filtered ]]; then
+        unselected_list=""
+        for known in $catalog_names; do
+          member=false
+          for sel in "${payload_names[@]}"; do
+            [[ "$sel" == "$known" ]] && member=true
+          done
+          [[ "$member" == true ]] && continue
+          entry="$target_parent/$known"
+          if [[ -L "$entry" ]]; then
+            [[ "$entry" -ef "$repo_root/skills/$known" ]] && state=aligned || state=foreign
+          elif [[ -d "$entry" ]]; then
+            if [[ "$(tree_digest "$entry")" == "$(tree_digest "$repo_root/skills/$known")" ]]; then
+              state=aligned
+            else
+              state=stale
+            fi
+          elif [[ -e "$entry" ]]; then
+            state=foreign
+          else
+            state=absent
+          fi
+          unselected_list="${unselected_list:+$unselected_list,}$known=$state"
+        done
+        printf 'verify: %s: %d/%d requested Skills match this checkout (scope: filtered; selected: %s; NOT a complete-root install; unselected: %s)\n' \
+          "$target_parent" "$verified_count" "${#payload_names[@]}" "$selected_list" "$unselected_list"
+      else
+        printf 'verify: %s: %d/%d requested Skills match this checkout (scope: complete)\n' \
+          "$target_parent" "$verified_count" "${#payload_names[@]}"
+      fi
+      [[ -z "${obsolete_kept:-}" ]] || printf 'verify: %s: unresolved obsolete copies kept for their owners: %s\n' \
+        "$target_parent" "$obsolete_kept"
+    fi
+    # Foreign paths are named, never claimed: anything here that is neither a
+    # generated Skill nor receipt-owned is not this installer's to touch.
+    foreign_names=""
+    for entry in "$target_parent"/*; do
+      [[ -e "$entry" || -L "$entry" ]] || continue
+      entry_name="${entry##*/}"
+      case " $catalog_names " in
+        *" $entry_name "*) continue ;;
+      esac
+      [[ -f "$receipts_dir/$entry_name.json" ]] && continue
+      foreign_names="${foreign_names:+$foreign_names,}$entry_name"
+    done
+    [[ -z "$foreign_names" ]] || printf 'note: %s: foreign path(s) preserved untouched (no install receipt owns them): %s\n' \
+      "$target_parent" "$foreign_names"
+  fi
 }
 
 # Issue #159: plan every destination read-only first, then apply in order.
@@ -1056,3 +1296,7 @@ fi
 for plan_prefix in "${plan_prefixes[@]}"; do
   destination_apply "$plan_prefix"
 done
+if [[ "$install_verify_failed" == true ]]; then
+  printf 'install-local: requested payloads did not verify at every destination; this run is NOT complete\n' >&2
+  exit 1
+fi
