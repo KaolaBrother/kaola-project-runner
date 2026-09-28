@@ -6,6 +6,19 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.6.8 — 2026-09-28 (Host and Delegator state, authorization, QA, and installation)
+
+Seats: restart required
+
+The operator diff from v0.6.7 includes holder and platform changes. Running
+seats keep the bytes they started with; restart them after installing this
+release. The Grok Bot bridge is pinned in the release's follow-up pin commit.
+
+- **Release validation (Issue #221).** The permission-default contract now checks
+  detailed dsh sandbox and permission-wake facts in the architecture and API
+  documentation where Issue #220 moved them, while retaining the README's
+  pre-dispatch default checks. This changes test expectations only.
+
 - **README user-path cleanup (Issue #220).** Documentation only. The front page now
   follows purpose → entry → install/use → worker selection → user/Agent
   responsibilities → further docs: the ACP/tmux probe note near installation, the dsh

@@ -57,6 +57,7 @@ DSH_ACP_REF = PROJECT / "skills" / "dsh-kaola-project-runner" / "references" / "
 OPENCODE_SKILL = PROJECT / "skills" / "opencode-kaola-project-runner" / "SKILL.md"
 TMUX = PROJECT / "scripts" / "kaola-tmux.sh"
 API_DOC = PROJECT / "docs" / "api.md"
+ARCH_DOC = PROJECT / "docs" / "architecture.md"
 
 # The exact sentence the release review rejected.
 RETIRED_SENTENCE = "Existing Runner default bypass start"
@@ -261,9 +262,11 @@ class ReadmeCarriesThePerPlatformSplit(unittest.TestCase):
     def test_readme_routes_through_the_existing_flow_only(self) -> None:
         """The existing permission_required -> permit path, and nothing new."""
         text = flowed(README.read_text(encoding="utf-8"))
-        self.assertIn("`permission_required` carrier event", text)
+        self.assertIn("`permission_required` event", text)
         self.assertIn("settled with `permit`", text)
-        self.assertIn("Neither forcing PTY nor adding a gate", text)
+        details = flowed(API_DOC.read_text(encoding="utf-8"))
+        self.assertIn("in-memory, no second ledger, no new scheduler", details)
+        self.assertIn("`permit` on the request id is the one settlement", details)
 
 
 class PlatformFactsStayTheSingleSource(unittest.TestCase):
@@ -590,14 +593,15 @@ class DshSkipAllIsTheLaunchVariable(unittest.TestCase):
     ``--mode`` wins.
 
     The roster check above is satisfied by the word "dsh" appearing anywhere in
-    README, so these assertions pin the claim itself on every surface that carries it.
+    README. Detailed transport facts live in the manifest, generated reference,
+    and architecture notes; the README carries only the pre-dispatch default.
     """
 
-    #: The distinguishing claim, in the three places a reader meets it.
+    #: The distinguishing claim, in the three places that carry transport detail.
     SURFACES = (
         ("platforms/dsh.yaml", DSH_MANIFEST),
         ("generated dsh references/acp.md", DSH_ACP_REF),
-        ("README.md", README),
+        ("docs/architecture.md", ARCH_DOC),
     )
 
     def test_every_surface_states_that_no_permission_request_is_sent(self) -> None:
@@ -607,7 +611,7 @@ class DshSkipAllIsTheLaunchVariable(unittest.TestCase):
                 self.assertRegex(
                     text,
                     r"(?:never sends? (?:a )?(?:`?session/request_permission`?|permission request)"
-                    r"|sends no `?session/request_permission`? at all)",
+                    r"|sends no (?:`?session/request_permission`? at all|permission request))",
                     f"{label} must state that dsh never sends a permission request",
                 )
 
@@ -624,17 +628,18 @@ class DshSkipAllIsTheLaunchVariable(unittest.TestCase):
                 )
 
     def test_the_outside_workspace_claim_is_corrected(self) -> None:
-        """The #98 probe wrote to /tmp; the corrected text says so and says what the
-        sandbox denies, so a caller knows when to set the variable."""
-        text = flowed(README.read_text(encoding="utf-8"))
-        self.assertNotIn("including a measured", text)
-        self.assertIn("inside that writable set", text)
-        self.assertIn("A caller that wants the sandbox", text)
+        """The brief states the default; architecture explains sandbox inheritance."""
+        brief = flowed(README.read_text(encoding="utf-8"))
+        detail = flowed(ARCH_DOC.read_text(encoding="utf-8"))
+        self.assertNotIn("no approval gate to skip", brief)
+        self.assertIn("full access by default", brief)
+        self.assertIn("inherits the sandbox", detail)
+        self.assertIn("nested dsh worker cannot boot under it", detail)
 
     def test_the_operator_brief_carries_it_before_first_dispatch(self) -> None:
         """It is useless 370 lines away from the dsh subsection an operator reads."""
         text = README.read_text(encoding="utf-8")
-        start = text.index("dsh is driven through its shipped automation-only ACP profile")
+        start = text.index("**dsh** runs its shipped automation-only ACP profile")
         brief = flowed(text[start:start + 1600])
         self.assertIn(
             "`DSH_PERMISSION_MODE`",
