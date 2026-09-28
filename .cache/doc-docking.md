@@ -1,4 +1,4 @@
-# Documentation Docking — Issue #173
+# Documentation Docking — Issue #212
 
 Status: DOCKED
 
@@ -6,17 +6,16 @@ Checked against `AGENTS.md`'s documentation checklist for changed public behavio
 
 | Surface | Decision | Reason |
 |---|---|---|
-| `CHANGELOG.md` | **Updated** | Unreleased entry added for the holder behavior change, stating `Seats: restart required` — the operator test `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms` is non-empty because `scripts/kaola-acp-holder.py` changed. |
-| `docs/api.md` | No change | The fix introduces no new receipt field, schema, error code namespace, or vocabulary. `turn_failed` is a pre-existing `turn_ended` outcome; the receipt `error` object and `status`/`observe`'s `turn_outcome` already existed. `docs/api.md` documents no turn-outcome field, so there is no wording there that this change makes wrong. |
-| `docs/zcode-host.md` | No change | Describes ZCode host heartbeat/outcome flow; no ZCode behavior changed (the guard is codex-`threadStatus`-gated and inert elsewhere). |
-| `docs/conventions.md` | No change | The seat-restart convention is satisfied by the CHANGELOG entry; the convention text itself did not change. |
-| `AGENTS.md` | No change | No command, installation step, validation policy, or constraint changed. |
-| `README.md` | No change | No setup, usage, or entry-tier behavior changed. |
-| `docs/architecture*.md` | No change | The holder's role is unchanged; this reads one additional existing ACP field within the same turn lifecycle. |
+| `CHANGELOG.md` | **Updated** | Unreleased entry for Issue #212 added: guidance-only finalize safeguards, `Seats: restart not required` — the operator test `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms` is empty for this change. |
+| `docs/architecture.md` | No change | Its pointer to `skills/kaola-project-runner/references/workflow-worktree.md` (worktree identity, `.kw/worktrees` not a security boundary) remains accurate; the new section is additive and changes none of the described facts. |
+| `docs/conventions.md` | No change | The seat-restart and release conventions are satisfied by the CHANGELOG entry; no convention text changed and no release occurred. |
+| `AGENTS.md` | No change | No command, installation step, validation policy, or project constraint changed; generated-surface handling already covers the rendered copy and manifests via `render-skills.py --write`/`--check`, which this run followed. |
+| `README.md` | No change | No setup, usage, or entry-tier behavior changed; the four-tier entry descriptions are unaffected by an added orchestrator reference section. |
+| `docs/api.md` | No change | No transport, receipt, adapter, or CLI surface changed; all changed files are prompt/reference guidance and generated hash manifests. |
 
-Public behavior documented: the CHANGELOG entry names the observable outcome change
-(`turn_completed` → `turn_failed`), the receipt `error.code` (`agent-system-error`), the
-unchanged verbatim `stop_reason` (#113), the events-stay-staged/redelivery behavior, and the
-no-change boundary for non-codex platforms and healthy codex turns.
-
-No invented fields, signatures, or schema were transcribed.
+Public behavior documented: the CHANGELOG entry names the four duties, the
+affected run's scoped `.git/info/exclude` mitigation with byte-exact
+restoration, the retire-by-conditions boundary, and the explicit non-goals
+(no ownership table/scan/classifier/filter, no second acceptance engine, no
+duplicate test run), plus the honest statement that Kaola-Workflow #1110
+remains unresolved.
