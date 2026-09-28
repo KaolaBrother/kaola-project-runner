@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: (cd tests/contract && python3 test-acp-contract.py && python3 test-issue-111-model-tiers.py && python3 test-progressive-disclosure.py && python3 test-generated-skills.py && python3 test-issue-123-shared-refs.py && python3 test-issue-41-orchestrator.py && python3 test-issue-85-zcode-resume-advertised-model.py && python3 test-issue-64-receipt-bound.py) && ./scripts/render-skills.py --check && python3 scripts/validate-skill.py skills/kaola-project-runner && python3 scripts/validate-skill.py skills/codex-kaola-project-runner && python3 scripts/validate-skill.py skills/claude-code-kaola-project-runner
+validated_candidate_hash: 35d84d4395763ee9dda1d86f39a6fa19822e265fefd5e4be574ded9ee89ed112
