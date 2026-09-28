@@ -2,7 +2,7 @@
 
 Outer Agents start, continue, or restore the project's one CLI Host here;
 Project Runner inside it owns workers, heartbeat, and close-out. No new tool,
-queue, registry, scheduler, or Delegator pointer file — Git, Workflow, Issues,
+queue, registry, scheduler, or Delegator file but its snapshot — Git, Workflow, Issues,
 and Runner records hold the facts.
 
 ```bash

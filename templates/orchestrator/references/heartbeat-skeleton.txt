@@ -1,21 +1,18 @@
 PROJECT_RUNNER_HEARTBEAT_V2
-你是本项目的主编排者。每拍按已加载主 Skill 的授权、职责、执行循环、汇报与停止规则做一次完整处理；本篇只写本项目现在有效的事实与指针，不复述 Skill 规则。平台 Runner 只负责运输，工人执行仓库工作。
+上一行是本心跳契约名（投递信封按它要求一次完整处理），不写进 body。你是本项目的主编排者。每拍按已加载主 Skill 的授权、职责、执行循环、汇报与停止规则做一次完整处理；固定方法只在 Skill 与本参考里，body 只写本项目现在有效的状态，不复述 Skill 规则。平台 Runner 只负责运输，工人执行仓库工作。
 
-heartbeat 就是交到你手里的这篇工作提示词：Host（任一有 host_skill_entry 的平台）由 Worker 事件触发投递；非 Host 的 Codex 监督者由其定时系统触发投递。载体沿用本宿主现有机制，不要求各平台同路径同 schema，不给 Host 加定时器。Grok Bot 不加载本 Skill。
-本篇是「当前有效指令快照」，不是变更日志：只写现在仍然生效的约束，历史留在 Workflow、Issue 和既有运行记录里，需要时用指针引用。
+heartbeat 就是投递给你的工作提示词：载体自带的 Skill 入口与事件信封，加上 body 里的一个 JSON 状态对象。Host（任一有 host_skill_entry 的平台）由 Worker 事件触发投递；非 Host 的 Codex 监督者由其定时系统触发投递。载体沿用本宿主现有机制，不要求各平台同路径同 schema，不给 Host 加定时器。Grok Bot 不加载本 Skill。
+body 是「当前有效状态快照」，不是变更日志：恰好一个紧凑 JSON 对象，没有标题行、说明文字、Skill 正文、完整 mission ledger、测试清单或历史；某节为空就省略。历史留在 Workflow、Issue 和既有运行记录里。字段：
+- project：repo（canonical 根；启动时一次 export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<根>，之后派工省略 --repo），code（本项目短码与仓库身份：稳定 ASCII 短码，例如 KaolaTerminal 用 KT，属项目策略，不每次派工另猜），goal（已授权目标），stop（交付/停止边界），可选 rules（仍约束本项目的用户要求与非默认选择）。
+- authorization：当前有效的授予、排除与额度。按最新授权保留用户表达的单位与含义；并发数、账户额度、token 预算分别记，不合成一个数；含 Elite 授予、获批 Expert 任务、Worker 池排除项、暂停或撤销的席位、模型/preset 限制与切换授权，只记相关已授权档案行或其指针。每项只有一个当前值。
+- active：数组，每个在飞或可立即行动的 Issue/任务一项，同一 Issue 的多名工人各一项：ref，session（精确会话名、平台/preset、holder；已停席不列 live），candidate（需要时的 worktree、分支、提交或 PR），next，evidence（证据指针）。
+- pending：数组，未了结的 Host 义务（集成 QA、文档核对、验收、finalize、同步、清理或人工决定）：duty，scope，owner，evidence（指针或具体缺口），boundary（交付点）。没有在飞工人时照样保留；Issue 关闭不把未运行的 QA 变成 PASS。
+- recovery：只写非标准恢复指针，如旧会话的原始 --repo 与 --expected-holder-instance-id、非标准会话名；标准的 Runner status/回执、Workflow 记录与 Issue/PR 不必列。
 
-仓库与已授权目标：{repo, goal；启动时一次 export KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<canonical 项目根>，之后派工省略 --repo；旧会话按原始 --repo 与 --expected-holder-instance-id 收尾}
-本项目短码与仓库身份：{一个稳定的 ASCII 短码，例如 KaolaTerminal 用 KT，与 canonical repository 一起写在本篇；属项目策略，不每次派工另猜}
-CLI、模型、并发、额度及能力限制：{按最新授权保留用户表达的单位与含义；并发数、账户额度、token 预算分别记，不合成一个数；Elite 授予/限额、获批 Expert 任务、Worker 池排除项；只记已授权档案行（精确取行不读全表，变更改该行）；保留模型/preset限制与切换授权，缺项才问}
-Workflow、自执行、心跳间隔：{用户选择或默认值}
-项目约束与停止条件：{项目规则、用户要求、交付/停止边界}
-在飞任务与工人定位：{Issue/任务、会话名、平台/preset、worktree、PR；live 席位与已停待收尾分开，已停席不列 live}
-当前 frontier：{已授权、尚未完成的下一步工作}
-待决事项与收尾：{尚待决定事项；未完成的验收、finalize、同步、清理义务及其责任人；尚未运行的集成 QA/文档核对及其交付点（Issue 关闭不等于其 PASS）}
-恢复指针：{Runner status/回执、Workflow 记录、Issue/PR；不是新的 backlog 镜像}
+例：{"project":{"repo":"/abs/kaolaterminal","code":"KT","goal":"关闭已授权的开放 Issue","stop":"backlog 清空并收尾"},"authorization":{"pool":"默认 Worker 池","elite":"claude-code opus/high 1 席","limits":"并发 4；token 预算未给"},"active":[{"ref":"#12","session":"codex-KT-i12-fix","next":"idle 后验收","evidence":".kw/worktrees/issue-12"}],"pending":[{"duty":"集成 QA","scope":"#12+#13 CLI/README","owner":"Host","evidence":"未运行","boundary":"发布前"}]}
 
-写回：投递完成后重写本篇，供下一次心跳投递；写回前先做减法。
-   删除：已被替代的额度、优先级和平台/模型选择，已作废的计划，重复叙述，无后续影响的已完成事项，暂态故障和调配历史。
-   保留：本项目短码与仓库身份，当前有效的项目约束，在飞任务的定位（会话、worktree、Issue/PR），未完成的交付、验收、同步、清理义务与待办 QA/文档核对及其责任人，尚待决定事项，恢复所需的最小指针。
-   写回后全篇不得同时存在两个互相矛盾的额度或优先级，也不能只追加一句「新规则优先」就留着旧值；从本篇移除不等于删除证据，更不改写已完成 Mission 的 result。
-   载体按本宿主现有机制：Host 更新项目根 `.kaola/heartbeat-prompt.json`（JSON 对象，整篇工作提示词放在名为 `body` 的非空字符串字段；字段名错或为空则投递缺失报告而非你的提示词）；非 Host 的 Codex 更新其定时系统已有的提示词载体。不新建 schema、额度账本、调度器或清理脚本。投递时载体自带首行 Skill 入口（`host_skill_entry`；ZCode 为 `/kaola-project-runner`），本篇只写 `body` 正文：不重复入口行，也不复制 Skill 正文。
+写回：每个自然拍（有意义的 Worker 事件或责任人变化）后，用新鲜的 Forge/Workflow/Runner 事实与当前授权核对，再用新对象整体替换 body，不追加；写回前先做减法。用户或 Delegator 的变更以单独消息到达，确认后写进对应字段；Delegator 自己的 `.kaola/delegator-heartbeat.json` 不归你写。Delegator 的当日收工（pause_new_claims_keep_inflight）只暂停新 Issue 认领：回复确认并记入 authorization，此后到重新开放前不认领新 Issue；在飞任务与工人照常，不是停止 Host 或完成任务。
+   删除：已被替代的额度、优先级和平台/模型选择，已作废的计划，重复叙述，无后续影响的已完成事项（已关闭 Issue 离开 active），暂态故障和调配历史。
+   保留：本项目短码与仓库身份，当前有效的项目约束，在飞任务的定位（会话、worktree、Issue/PR），未完成的交付、验收、同步、清理义务与待办 QA/文档核对及其责任人（跨 Issue 的 QA 留在 pending，直到 Host 据证据作出判定），尚待决定事项，恢复所需的最小指针。
+   写回后 body 不得同时存在两个互相矛盾的额度或优先级，也不能只追加一句「新规则优先」就留着旧值；从本篇移除不等于删除证据，更不改写已完成 Mission 的 result。
+   载体按本宿主现有机制：Host 更新项目根 `.kaola/heartbeat-prompt.json`（JSON 对象，状态对象序列化后放在名为 `body` 的非空字符串字段；字段名错或为空则投递缺失报告而非你的状态）；非 Host 的 Codex 更新其定时系统已有的提示词载体（Skill 入口加同样的 JSON 对象）。不新建 schema、额度账本、调度器或清理脚本。投递时载体自带首行 Skill 入口（`host_skill_entry`；ZCode 为 `/kaola-project-runner`）与事件信封，本篇只写 `body` 正文：不重复入口行，也不复制 Skill 正文。

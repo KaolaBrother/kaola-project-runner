@@ -6,6 +6,49 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Keep Host and Delegator heartbeats as compact current-state JSON (Issue #217).** Fixed
+  method stays in the installed Skills; each recurring prompt's mutable state is one JSON object.
+  The Host `<repo>/.kaola/heartbeat-prompt.json` `body` now holds only that object — `project`
+  (repo, short code, goal, stop boundary), `authorization` (effective grants, exclusions, quotas
+  in their original units, one current value each), `active` (each in-flight or actionable
+  issue/task with exact session, candidate, next action, evidence pointer), `pending` (unsettled
+  QA, documentation, acceptance, finalize, cleanup or decision duties with scope, owner, evidence
+  or gap, delivery boundary), and only nonstandard `recovery` pointers — with no header line,
+  prose, Skill text, mission-ledger copy, test list or history. The field meanings live in
+  `references/heartbeat-skeleton.md`; the existing carrier still supplies the native Skill entry,
+  worker-event metadata and envelope unchanged. On each natural beat the Host reconciles the
+  object with fresh forge, Workflow and Runner facts and replaces it whole: a closed issue leaves
+  `active`, a changed grant replaces the old value, and unresolved cross-issue QA stays one
+  `pending` entry until an evidence-backed Host verdict. Independent QA scopes may run in
+  parallel on suitable authorized seats under one Host verdict; an integrated-candidate check
+  waits for that candidate. The Delegator's state is one JSON object in the one newly authorized
+  file `<repo>/.kaola/delegator-heartbeat.json` on the bound execution target, the same path for
+  every outer runtime (Grok Bot reaches it through its existing locator): `project`, exact `host`
+  locator verified by fresh Runner `status`, `authorization` a safe handoff needs, `watch`, `stop`
+  (Kaola-Delegator `references/snapshot.md`, moved out of `host-platforms.md`). Its existing
+  scheduled prompt stays static — Skill entry and project locator — and the existing native timer
+  stays the only scheduler. The same object carries one fixed, platform-neutral schedule:
+  `cadence` (timezone, start/end local time, interval), `timer_owner` (outer platform and native
+  timer id), `day_start` (`reconcile_then_open_intake`: refresh Host identity, authorization,
+  backlog and in-flight work before new claims open) and `day_end`
+  (`pause_new_claims_keep_inflight`: at the final beat, e.g. 22:00 Asia/Shanghai, the Host stops
+  new issue claims only while in-flight work and workers keep running; `confirmed` needs both the
+  Host's acknowledgment and claim records showing no new claim after the cutoff, never send
+  admission alone), each with a `state` and evidence pointers rather than history. An optional
+  `final_stop` appears only when the owner sets a terminal boundary for the Delegator itself; the
+  daily pause is never a Host stop or completion. Any outer platform rebuilds its own native timer
+  from `cadence`, retiring the previous `timer_owner` timer before the replacement takes over and
+  reporting an uncontrollable old timer instead of polling twice. The Host acknowledges a daily
+  pause, records it in `authorization`, and opens no new claim until intake reopens. Each
+  inquiry reads the file, audits the Host `body`, relays one concrete correction and replaces
+  stale facts; a missing or unreadable file is reported and rebuilt from owner, Runner and forge
+  records before any `start`, never read as blank authorization. Each file has one writer: the
+  Delegator never writes the Host carrier (its old "maintain a heartbeat" prohibition now names
+  the Host heartbeat) and the Host never writes the Delegator file; owner changes reach the Host
+  as separate messages. Host startup no longer ends the `body` with the sweep line; the reply
+  still does. No other new file, ledger, parser, scheduler, validator or transport; budgets
+  unchanged. Guidance and templates only; the operator-test paths are untouched
+  (`Seats: restart not required`).
 - **Verify scoped installs, clean owned stale Skills, and recover build-skew refusals (Issue #215).**
   `render-skills.py --verify-install` now separates present-file alignment from expected-set
   completeness: a root holding only `kaola-project-runner` reports `incomplete` with the absent

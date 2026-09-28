@@ -127,7 +127,7 @@ Stop = that platform Runner's `stop --expected-holder-instance-id <the row's
 id>`, `--force` only for `dead` or when that fails; gone = `status` reads `stopped` with `residual_pids: []`, or
 `no-session`. `pid_reused: true` never signalled that reused PID;
 `holder-instance-mismatch` means re-list, never a bare kill. Only orphans stop;
-in-flight work is never guessed dead. End the reply and the heartbeat `body` with
+in-flight work is never guessed dead. End the reply with
 `swept: stopped=[session:id] kept=[] adopt_candidates=[] unowned=[] residual_pids=[]`;
 non-empty `residual_pids` is reported, never silent.
 

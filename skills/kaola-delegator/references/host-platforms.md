@@ -75,11 +75,9 @@ does not prove worker runtime installation.
 
 Use the existing idle send / busy steer route in
 [handoff.md](handoff.md#handoff-and-updates) to update the same Host's
-heartbeat snapshot. The Delegator changes only its own active instructions or
-authorized inquiry; the Host owns its heartbeat and worker facts. Do not repeat
-intake, claims, or dispatch; discard in-flight work; start a duplicate Host; or
-restart automatically. Use existing safe lifecycle guidance when applicable.
-Create no heartbeat or ledger, change no cadence, alter no conversation or
+heartbeat snapshot. Do not repeat intake, claims, or dispatch; discard
+in-flight work; start a duplicate Host; or restart automatically. Use existing safe lifecycle guidance when applicable.
+Create no ledger, change no cadence, alter no conversation or
 archive, and do not affect another project. Reconcile once, not per poll.
 
 ## Native resume id

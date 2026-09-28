@@ -287,7 +287,8 @@ worker agent terminated / worker turn ended (one idle episode)
   the current **full** heartbeat prompt body read at delivery time from
   `<repo>/.kaola/heartbeat-prompt.json` — the single file the ZCode Host agent
   owns; after each worker terminated/idle notification it settles the next step
-  and rewrites the file as the next beat's snapshot, keeping only the
+  and rewrites the file as the next beat's snapshot (a `body` holding one
+  current JSON state object, Issue #217), keeping only the
   constraints still in force per the drop/keep subtraction rule in the main
   Skill's `references/heartbeat-skeleton.md` (Issue #68), so the next heartbeat
   pass carries that refreshed state (fingerprint and byte count are

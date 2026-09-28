@@ -349,8 +349,25 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "generated adapter copy has no overlay-less setModel fallback")
     check("setModel after overlay-less create" not in adapter,
           "adapter does not swallow overlay-less setModel errors")
-    check("There is no Delegator continuation file" in skill_one,
-          "Skill forbids a dedicated continuation file")
+    # Issue #217: the one authorized Delegator file is its own snapshot; Host
+    # identity still comes from fresh Runner status, never that file.
+    snapshot_one = re.sub(r"\s+", " ", (EXTERNAL / "references" / "snapshot.md").read_text(encoding="utf-8"))
+    check("There is no Delegator continuation file" not in skill_one
+          and "(references/snapshot.md)" in skill_one
+          and "`<repo>/.kaola/delegator-heartbeat.json` on the bound target" in snapshot_one
+          and "verify `host` by fresh Runner `status`" in snapshot_one
+          and "only the Host writes `heartbeat-prompt.json`" in snapshot_one,
+          "Skill links the one Delegator snapshot; identity stays with Runner status")
+    # The daily close pauses new claims only and needs Host ack plus claim evidence.
+    check(all(term in snapshot_one for term in (
+              "`cadence`", "`timer_owner`", "`reconcile_then_open_intake`",
+              "`pause_new_claims_keep_inflight`", "`host_ack`", "`claim_check`",
+              "in-flight work and workers keep running",
+              "send admission alone is not confirmation",
+              "retire the previous timer before the new one takes over",
+              "The existing native timer is the only scheduler"))
+          and "`final_stop`: present only when the owner" in snapshot_one,
+          "Delegator snapshot carries cadence, day boundary and timer handoff")
     check("even if its recorded name is not the new form" in skill_one,
           "Skill adopts a live Host with a nonstandard name")
     check("Grok Bot account bridge" in skill_one, "Skill gates locator attestation to the Grok Bot bridge")

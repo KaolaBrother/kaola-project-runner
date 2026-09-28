@@ -94,7 +94,7 @@ establish it with `observe` before re-sending.
 ### Finish the beat, then end your turn
 
 Do the rest of this beat, update the heartbeat prompt at
-`<project>/.kaola/heartbeat-prompt.json` (`body`: project facts, pace, plans),
+`<project>/.kaola/heartbeat-prompt.json` (`body`: the current JSON state),
 report as main Skill §Report says, then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not

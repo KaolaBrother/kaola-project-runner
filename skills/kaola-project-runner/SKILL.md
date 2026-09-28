@@ -140,10 +140,10 @@ permission may still arise: `permit` settles it; never add a gate.
 
 The heartbeat is the working prompt itself: a Host (any platform with a
 `host_skill_entry`) runs it on each worker event; Codex's own timer serves only
-a non-Host Codex supervisor; host-native carriers. Render it from the skeleton in
-[references/heartbeat-skeleton.md](references/heartbeat-skeleton.md),
+a non-Host Codex supervisor; host-native carriers. Its `body` is one JSON object per
+[references/heartbeat-skeleton.md](references/heartbeat-skeleton.md), from
 authorization and project instructions. It is the effective-now snapshot, not a
-log: update the **same** heartbeat, replacing superseded quota, priority and
+log: rewrite it from fresh facts, replacing superseded quota, priority and
 plans, and keeping in-flight locators and unfinished duties. A confirmed change
 applies in that beat; a lowered quota alone cancels nothing. A report-only
 request disables execution actions. When an updated Skill loads, reconcile the
@@ -151,7 +151,7 @@ heartbeat once with current rules, latest valid instructions and fresh seat
 facts, keeping user limits and the frontier.
 
 After close-out, cancel the native heartbeat or stop scheduling the next
-sleep. Temporarily having no ready task is not
+sleep. Having no ready task now is not
 project completion. Do not hard-code other hosts' scheduler APIs.
 
 ## Delivery

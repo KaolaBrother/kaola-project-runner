@@ -6,7 +6,7 @@ description: {{DESCRIPTION}}
 # {{DISPLAY_NAME}}
 
 This Skill is the external delegation Skill for Grok Bot (post-bridge),
-Codex, and generic hosts — not Project Runner or a platform worker.
+Codex, and generic hosts, not Project Runner or a platform worker.
 
 {{RUNNER_DISPLAY}} (`{{RUNNER_SKILL}}`) is the inner control-plane Skill. One
 CLI Host loads it and owns planning, worker dispatch, path binding,
@@ -21,8 +21,8 @@ Elite grants/counts; permitted Expert task; bound-target local choices
 separate from authorization (host-platforms.md); Worker pool rules;
 exclusions; the quota the user actually gave, each figure in its own unit;
 priority; delivery/stop boundary; project path.
-On a **live** Host, apply only the user's
-latest change. On a **new** Host, missing,
+On a live Host, apply only the user's
+latest change. On a new Host, missing,
 conflicting, or expired key values must be confirmed before `start`. A quota
 unit the user never gave is not a missing key value — carry it as unspecified
 and start; a quota whose unit is unclear is, so ask. Do not open a blank Host.
@@ -44,7 +44,7 @@ never restart or cancel in-flight work.
 standard name never justifies a second Host. A Host failing its identity check
 is exact-stopped, proven gone (`residual_pids: []`), then replaced. A stopped
 Host resumes with an attested native id or follows handoff §Recover; authorize
-before a new `start`. There is no Delegator continuation file. [Bricked or quota-exhausted Host](references/host-brick.md); never log in.
+before a new `start`. [Bricked or quota-exhausted Host](references/host-brick.md); never log in.
 From the Grok Bot account bridge, attest every Host op with the locator; Codex
 and generic do not. Commands, identities and the `sweep=` line:
 [handoff.md](references/handoff.md).
@@ -59,11 +59,11 @@ Relay user changes to the same Host: idle `send`; busy `steer` or wait for idle
 (no queue). `--no-wait` admission and Host `end_turn` are not delivery. After
 the first Host beat, verify file/work-product evidence and the first dispatch
 receipt against plan and authorization; do not trust the Host's self-description.
-Correct mismatches on this Host; do not accept completion. At the agreed cadence,
-`observe`/`capture` outcomes and blockers, compare repeated testing/QA with prior
-checks, relay one pacing note when warranted (mark stall uncertainty), and
+Correct mismatches on this Host; do not accept completion. At the agreed cadence, read your
+[snapshot and day boundary](references/snapshot.md), `observe`/`capture` outcomes and blockers, compare repeated testing/QA with prior
+checks, relay one pacing note if warranted (mark stall uncertainty), and
 escalate only unrecoverable human decisions. Do not dispatch workers, copy a
-mission ledger, maintain a heartbeat, create a Routine, touch inner sessions,
+mission ledger, write the Host heartbeat, create a Routine, touch inner sessions,
 or `stop` the Host before close-out. Changing the outer Agent does not stop it.
 
-KPR update: [host-platforms.md](references/host-platforms.md#kpr-updates); an announcement proves no updated install or loaded guidance, authorizes no install/restart.
+KPR update: [host-platforms.md](references/host-platforms.md#kpr-updates); a notice proves no updated install or loaded guidance, authorizes no install/restart.

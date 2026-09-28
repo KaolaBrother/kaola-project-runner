@@ -17,8 +17,8 @@ A worker supplies its actual outcome, relevant checks and results, and the
 documentation changes its task affects. Task acceptance (main Skill step 3)
 honestly judges that assignment, not project-level QA: an aggregate check not
 yet run stays pending, never PASS because an issue closed. Keep it, with its
-delivery point, among the heartbeat's unfinished duties — no QA ledger,
-timer, table, score or scheduler.
+delivery point, as one heartbeat `pending` entry until evidence and your
+verdict settle it — no QA ledger, timer, table, score or scheduler.
 
 Kaola-Workflow owns claims, run recovery, workspace/commit ownership, truthful
 lifecycle/evidence records, delivery, merge, closure, archive and cleanup; its
@@ -46,7 +46,9 @@ check or claim validation nobody performed.
 
 Host judgment from existing profile rows, not a router: the original owner
 when the check is a command or step it can run and record; a separate
-authorized seat when independence or profile fit helps. For visual analysis or
+authorized seat when independence or profile fit helps. Independent checks may
+run in parallel on suitable authorized seats with distinct scopes and one Host
+verdict; an integrated-candidate check waits for that candidate. For visual analysis or
 screenshot review, the owner's preference remains an authorized Opus preset
 or GPT-6 Sol first, then Kimi — selection guidance, not a measured ranking or
 new grant. "Opus" names only the already-defined runtime/preset/effort. Grok
