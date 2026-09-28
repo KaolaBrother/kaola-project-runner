@@ -6,6 +6,19 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **README user-path cleanup (Issue #220).** Documentation only. The front page now
+  follows purpose → entry → install/use → worker selection → user/Agent
+  responsibilities → further docs: the ACP/tmux probe note near installation, the dsh
+  sandbox/probe narrative, per-platform bridge/translator launch internals, and the
+  steering receipt vocabulary moved out of the README — the dsh sandbox-inheritance
+  constraint into `docs/architecture.md` and the permission-wake semantics into
+  `docs/api.md`, while the rest was already documented in the per-platform references
+  and command reference, which the README now links briefly. User decisions kept:
+  actionable install/start commands, concise platform caveats needed before dispatch
+  (dsh full-access default and API-key precondition, Droid full bypass, ZCode entry
+  variables), the complete ten-runtime/twenty-preset catalog, authorization
+  statements, and safety-relevant choices. No behavior, Skill prompt, grant,
+  installer, release, or test-framework change. Seats: restart not required.
 - **Use canonical `<runtime>/<tier>` preset IDs in seat authorization surfaces (Issue #218).**
   Guidance and notation only. The generated catalog rows — the README preset catalog, the
   installed `profile-catalog.md`, the Worker-pool membership line, and each platform Runner's

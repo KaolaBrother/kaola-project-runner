@@ -87,7 +87,10 @@ byte inventories, including the orchestrator package and `hosts/grok-bot/`.
 The ten-worker inventory includes Claude Code, Codex, Cursor CLI, Devin, Droid, dsh, Grok CLI,
 Kimi CLI, OpenCode, and ZCode, all ACP only. Droid uses the native ACP agent
 `droid exec --output-format acp`; dsh uses its shipped automation-only ACP profile
-`dsh --profile acp`.
+`dsh --profile acp`. dsh's ACP composition sends no permission request: its mode is
+the launch variable `DSH_PERMISSION_MODE` (the Runner starts `danger-full-access`).
+Under dsh's own default `workspace-write`, a Runner start launched from that shell
+inherits the sandbox, so a nested dsh worker cannot boot under it.
 
 Grok Bot is a **bridge host** for Kaola-Delegator, not a Project Runner host.
 Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for

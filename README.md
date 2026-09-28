@@ -150,8 +150,7 @@ Workflow's support for a runtime does not imply a Runner adapter exists for it.
 Requirements: Bash, Python 3, Git, and the selected target CLI with working
 authentication. ACP wrappers may also require Node.js/npx; exact commands are in the
 [platform manifests](platforms/). Runner does not install the target CLIs or provide
-model access. The ACP transport does not use tmux; only the locator's
-`session.present` probe reads a tmux server when one is installed.
+model access.
 
 ```bash
 git clone https://github.com/KaolaBrother/kaola-project-runner.git
@@ -342,41 +341,26 @@ See [choosing a worker](#choosing-a-worker).
 
 ### Platform notes
 
-dsh is driven through its shipped automation-only ACP profile, `dsh --profile acp`.
-It needs no login (`authMethods` is empty), resumes with `session/resume` rather than
-`session/load`, and has no `--continue`; dsh ships no terminal UI, and the profile
-must already exist under `$DSH_HOME` (creating one writes there, which the Runner
-never does).
+Concise caveats to know before the first dispatch. Per-platform launch commands,
+environment, quirks, and verification status are in each
+[platform manifest](platforms/) and each worker Skill's `references/platform.md`
+and `references/acp.md`; transport and bridge internals are in the
+[architecture notes](docs/architecture.md).
 
-Three facts an operator should know before the first dispatch. **dsh runs with full
-access by default.** Its ACP composition never sends a permission request; its
-permission mode is the launch variable `DSH_PERMISSION_MODE`, and the Runner starts
-dsh with `danger-full-access` (no Seatbelt sandbox, approval `never`). A caller that
-wants the sandbox sets `DSH_PERMISSION_MODE` or passes `--mode` (`read-only`,
-`workspace-write`, `danger-full-access`); either wins. Under dsh's own default
-`workspace-write`, shell writes outside the workspace, `/tmp` and `$TMPDIR` are
-denied, and a Runner start run from that shell inherits the sandbox, so a nested dsh
-worker cannot boot; the historical outside-workspace probe wrote to `/tmp`, which is
-inside that writable set. **A ready session can still be unable to answer.** The
-shipped profile pins the `deepseek-official` route and ignores the user's own
-default-model setting, so `start` reports `ready` and the first prompt fails with
-`no API key for provider route "deepseek-official"` — supply `DEEPSEEK_API_KEY` or
-pass `--model` to select a credentialed route.
-
-The other platforms with launch facts worth knowing:
-
-- **Droid** is driven through its native ACP agent command,
-  `droid exec --output-format acp`, with Auto Model and full-bypass defaults.
-- **Claude Code** is driven through a vendored, pinned ACP bridge shipped inside its
-  worker Skill; it runs the exact `claude` binary as one `claude -p` subprocess per
-  turn under your claude.ai subscription and native Settings.
-- **ZCode** is driven through the Runner-owned translator shipped inside its worker
-  Skill; it needs an explicit absolute `KAOLA_ZCODE_ENTRY` plus `KAOLA_ZCODE_NODE`
-  (never PATH, never npm), and login happens in the ZCode desktop App.
-
-Per-platform launch commands, environment, quirks, and verification status are in
-each [platform manifest](platforms/) and each worker Skill's `references/platform.md`
-and `references/acp.md`.
+- **dsh** runs its shipped automation-only ACP profile (`dsh --profile acp`); it
+  needs no login and has no terminal UI, and the profile must already exist under
+  `$DSH_HOME`. It starts with **full access by default** (`danger-full-access`, no
+  sandbox, approval `never`) — set the launch variable `DSH_PERMISSION_MODE` or pass
+  `--mode` (`read-only`, `workspace-write`, `danger-full-access`) for anything else.
+  The shipped profile also pins the `deepseek-official` route, so a session can
+  report `ready` and still fail its first prompt without an API key: supply
+  `DEEPSEEK_API_KEY` or pass `--model` to select a credentialed route.
+- **Droid** defaults to Auto Model and **full bypass**; its `--permission-mode`
+  values map to ACP autonomy levels ([command reference](docs/api.md)).
+- **Claude Code** runs through a pinned ACP bridge shipped inside its worker Skill,
+  under your claude.ai subscription and native Settings.
+- **ZCode** needs an explicit absolute `KAOLA_ZCODE_ENTRY` plus `KAOLA_ZCODE_NODE`,
+  and login happens in the ZCode desktop App.
 
 ## Authorization
 
@@ -524,22 +508,16 @@ docking is a lifecycle fact, not a QA PASS. Required project checks stay require
 **Permission defaults matter:** the default is per platform, not one guarantee
 across all ten. Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an
 advertised ACP skip-all option at start (`mode`, or `autonomy_level` for Droid).
-Cursor and Grok carry only a launch
-flag (`--yolo`, `--always-approve`) and advertise no ACP option; OpenCode's default
-ACP path has none at all. On a platform with no verified ACP skip-all, a permission
-request may still arise: it surfaces through the existing `permission_required`
-carrier event and is settled with `permit`; the worker holds an undelivered wake
-and re-offers the same event until its Host takes it. The wake is only a locator —
-the Host re-reads the worker's live `pending_permissions` and approves nothing from
-the event itself. Neither forcing PTY nor adding a gate is the answer. Use
-`--permission-mode` where
+Cursor and Grok carry only a launch flag (`--yolo`, `--always-approve`) and
+advertise no ACP option; OpenCode's default ACP path has none at all. On a platform
+with no verified ACP skip-all, a permission request may still arise: it surfaces as
+a `permission_required` event and is settled with `permit` (delivery and wake
+semantics in the [command reference](docs/api.md)). Use `--permission-mode` where
 supported and check the native semantics — Codex ACP's `read-only` mode is upstream
 on-request approval with a workspace-write sandbox and can write workspace files; it
-is not an OS sandbox. Droid defaults to full bypass (ACP applies `model=auto`,
-`autonomy_level=auto-high`); its `--permission-mode` values
-`bypassPermissions|low|medium|high|manual` map to
-`auto-high|auto-low|auto-medium|auto-high|normal`. dsh's launch-variable default is
-in [platform notes](#platform-notes). Authentication and workspace trust remain
+is not an OS sandbox. Droid defaults to full bypass; its `--permission-mode` values
+map to ACP autonomy levels. dsh's launch-variable default is in
+[platform notes](#platform-notes). Authentication and workspace trust remain
 native CLI concerns; per-platform facts are in each worker Skill's
 `references/acp.md` and the [command reference](docs/api.md).
 
@@ -592,13 +570,11 @@ is pinned here, because that answer changes as surfaces are investigated:
 
 The composite cancels the running turn, confirms it actually stopped, and then sends
 the text once as the next turn on the same ACP session, so the conversation keeps its
-context. That is interrupted-then-continued, never injection: the receipt says
-`interrupted_and_resent` with `side_effects_possible`, because the interrupted turn's
-finished work is not undone. A platform with no native entry refuses a bare `steer`
-with `steer-mode-required` rather than interrupting on its own, and if a cancel is
-not confirmed nothing is sent at all. The receipt never overstates consumption —
-`injected` only when the agent acknowledges it, `written` when the text was merely
-flushed, and `unknown` when it is undecided. See [docs/api.md](docs/api.md).
+context — interrupted-then-continued, never injection. A platform with no native
+entry refuses a bare `steer` with `steer-mode-required` rather than interrupting on
+its own, and if a cancel is not confirmed nothing is sent at all. Receipts state
+consumption exactly and never overstate it; the full outcome vocabulary is in the
+[command reference](docs/api.md).
 
 ### Watching ACP sessions
 
@@ -633,12 +609,10 @@ the task, interprets the output, and decides what to do next.
   observations never authorize or block an Agent-selected transport; ordinary live
   change is evidence, not staleness. Refuse only objective transport impossibility or
   ambiguous/foreign target identity.
-- **Host coverage** recorded end-to-end includes Codex and Devin; other host/target
-  combinations are unverified until run there — see
-  [validation and evidence](#development).
-- The ten worker Skills include optional Workflow guidance; Progressive disclosure
-  byte budgets are a locked invariant on every host
-  ([conventions](docs/conventions.md#progressive-disclosure)).
+- **Host coverage**: not every host/target combination has end-to-end coverage
+  (recorded: Codex and Devin); treat others as unverified until run there — see
+  [development](#development).
+- The ten worker Skills include optional Workflow guidance.
 
 ## Further documentation
 
