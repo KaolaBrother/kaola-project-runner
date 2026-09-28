@@ -68,13 +68,14 @@ issue's run follow [issue-dispatch.md](issue-dispatch.md).
 
 ## Host shell cwd
 
-A Host shell may keep its working directory between calls, so a directory that
-finalize or sink moves or removes bricks every later call (for example
-`spawn /bin/bash ENOENT`). Never `cd` into `.kw/worktrees/` or
-`kaola-workflow/issue-N/`; use absolute paths, `git -C`, or a subshell
-`( cd ... && ... )`, and return to the project root before finalize or sink.
-Subagents follow the same rule. A bricked Host reports `brick`, asks to be
-replaced, and stops acting.
+A Host shell may keep its working directory between calls, so entering a
+worktree or issue directory and relying on returning before finalize is not
+safe: finalize or sink can move or remove it first and brick every later call
+(for example `spawn /bin/bash ENOENT`). The primary procedure is absolute
+paths, `git -C`, or a subshell `( cd ... && ... )`, keeping the persistent cwd
+at the project root throughout - never `cd` directly into `.kw/worktrees/` or
+`kaola-workflow/issue-N/`. Subagents follow the same rule. A bricked Host
+reports `brick`, asks to be replaced, and stops acting.
 
 ## Recovery and migration
 

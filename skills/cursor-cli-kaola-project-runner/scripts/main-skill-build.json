@@ -1,8 +1,8 @@
 {
-  "build": "152c8f6ddddd",
+  "build": "182c6721566b",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "b5f2465612c29c512fd9684bb9afa7c51d2b71db34ac2b2ffcacd43098734e69",
+    "SKILL.md": "f07353984338051dee78419b42f7ca27f4fe16373a6f24308f00e50c1e9fd53a",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
     "references/doc-maintenance.md": "3405f4eee2235f87e94653098f190284403bf1bbf5011844d8911e278ff7a267",
     "references/heartbeat-skeleton.md": "722ef9f48123f272a6d772f91cd11557edd95526f3e34a49493d237e632537f8",
@@ -13,7 +13,7 @@
     "references/qa-evidence.md": "2c39d2989b5cac0ad3a7d3334f8a46f610bf194d1c9b6a1bfcc4b2743e86917a",
     "references/quota-packages.md": "4666b1df451fc1aa6acc11bd3452298f9bdaa76fe2b8707a25798464a9632df3",
     "references/worker-profiles.md": "bb92672a5d54978d7cf4a8ef4202936bd029c9012a2a36f1ba509089a1b53650",
-    "references/workflow-worktree.md": "4f0617bc3dadf9a1852734603fb0b40836165a168cc000a21ef9d413fd8fe783",
+    "references/workflow-worktree.md": "db2c61c9e81b6ff86f5156cf44f861b8ed0197c5e9efb62ac37527d0d13eef0f",
     "references/zcode-host-dispatch.md": "326534d210803866c4439bc23cac42f7b835e6cd57ff93a1c6096080aabeeeb6",
     "references/zcode-native-skill-entry.md": "03b9da8e27c8d319c532cc41e3a605fb578d5bbf9ab4d007359cb0ef656242e7"
   },
