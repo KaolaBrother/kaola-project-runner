@@ -36,13 +36,20 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   especially UI and 3D visual implementation." Fable is unchanged. This split
   does not add a seat and does not retarget a live resume. A resume or continue
   that does not name a tier, model, or effort keeps the native selection.
+  `droid/opus` and `cursor-cli/opus` stay Elite at medium, with the profile
+  "All-round execution worker, especially strong at complex execution work and
+  UI and 3D visual implementation." `devin/opus-fusion` stays Elite at medium,
+  with the profile "All-round execution worker, especially strong at complex
+  execution work." Devin Fable is unchanged. These three profile edits add no
+  seat.
 
 Seats: restart required
 
 The operator diff from v0.6.9 to this candidate
 (`git diff v0.6.9..HEAD -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
 is non-empty. Changed paths are `platforms/claude-code.yaml`,
-`platforms/codex.yaml`, and `scripts/adapters/claude-code.sh`.
+`platforms/codex.yaml`, `platforms/cursor-cli.yaml`, `platforms/devin.yaml`,
+`platforms/droid.yaml`, and `scripts/adapters/claude-code.sh`.
 `scripts/kaola-acp-holder.py`, `scripts/kaola-zcode-acp.py`, and
 `scripts/kaola-quota.py` are unchanged. Running seats keep the bytes they
 started with and must restart after installing this change.

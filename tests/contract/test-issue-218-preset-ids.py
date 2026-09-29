@@ -166,15 +166,23 @@ class PresetCatalogTest(unittest.TestCase):
             "All-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation.")
         self.assertEqual(rows["claude-code/fable"]["class"], "Expert")
         self.assertEqual(rows["claude-code/fable"]["parameters"].strip(), "effort=high")
+        self.assertEqual(rows["cursor-cli/opus"]["class"], "Elite")
+        self.assertEqual(rows["cursor-cli/opus"]["parameters"].strip(), "effort=medium (encoded in model ID)")
         self.assertEqual(
             rows["cursor-cli/opus"]["profile"].strip(),
-            "All-round worker for every kind of task, especially strong at complex work.")
+            "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
+        self.assertEqual(rows["droid/opus"]["class"], "Elite")
+        self.assertEqual(rows["droid/opus"]["parameters"].strip(), "reasoning_effort=medium")
         self.assertEqual(
             rows["droid/opus"]["profile"].strip(),
-            "All-round worker for every kind of task, especially strong at complex work.")
+            "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
+        self.assertEqual(rows["devin/opus-fusion"]["class"], "Elite")
+        self.assertEqual(rows["devin/opus-fusion"]["parameters"].strip(), "effort=medium (encoded in model ID)")
         self.assertEqual(
             rows["devin/opus-fusion"]["profile"].strip(),
-            "All-round worker for every kind of task, especially strong at complex work; not strong at UI or other visual design.")
+            "All-round execution worker, especially strong at complex execution work.")
+        self.assertNotIn("UI", rows["devin/opus-fusion"]["profile"])
+        self.assertNotIn("3D", rows["devin/opus-fusion"]["profile"])
         self.assertNotEqual(default["model"], sonnet["model"])
 
     def test_worker_pool_line_names_exact_ids(self) -> None:
