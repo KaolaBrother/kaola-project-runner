@@ -145,6 +145,84 @@ generates but a receipt still owns are obsolete copies: the installer retires on
 other referrer remains and the copy's bytes still match the receipt, and preserves — with a
 named owner-safe next action — a modified, co-owned, foreign, or unreceipted path.
 
+### ACP layer preparation during install
+
+Use the same runtime result and platform selection that chose the worker Skills. `--runtime`
+selects the host Skill destination; `--platform` selects worker CLI Skills (all ten when omitted).
+Do not scan runtimes a second time or prepare ACP for an unselected runtime. Run the normal KPR
+install and verify its `verify:` result first. Then, for each detected runtime included in that
+installation, identify and prepare its ACP layer and add its readiness to the same installation
+result.
+
+Read `acp_command`, `acp_verified_versions`, and `acp_wrapper_pin` in the selected platform's
+manifest, along with its linked platform facts. Verify the component actually loaded by that
+command, including separately versioned adapters and harnesses; a CLI version or ACP
+`agentInfo` string alone may identify a different layer. Keep a layer whose installed component
+versions are covered by current verified evidence. If an independent layer is missing or older,
+install or update only that component through its documented mechanism at the recorded supported
+version. A KPR-owned bridge or adapter is refreshed by the normal Skill install. Do not select an
+unverified upstream latest. A version newer than the record remains unverified until evidence
+covers that version.
+
+| Platform | Actual ACP layer and update boundary |
+|---|---|
+| `claude-code` | The vendored `claude-code-acp` Node bridge ships in the KPR Skill; reinstall that Skill to refresh the bridge, and check the Claude CLI version separately. |
+| `codex` | The manifest's pinned `npx` command runs `@agentclientprotocol/codex-acp` with its paired `@openai/codex` package. Use that exact pair; Node.js and npm/npx are prerequisites. |
+| `cursor-cli` | `cursor-agent --yolo acp` is native to Cursor CLI; there is no separate adapter to update. |
+| `devin` | `devin acp` is native to Devin CLI; there is no separate adapter to update. |
+| `droid` | `droid exec --output-format acp` is native to Droid CLI; there is no separate adapter to update. |
+| `dsh` | `dsh --profile acp`; inspect the loaded `dsh-acp-app` and `dsh-acp` packages as described below. |
+| `grok` | `grok agent --always-approve stdio` is native to Grok CLI; there is no separate adapter to update. |
+| `kimi-cli` | `kimi acp` is native to Kimi CLI; there is no separate adapter to update. |
+| `opencode` | `opencode acp` is native to OpenCode CLI; there is no separate adapter to update. |
+| `zcode` | The KPR Skill's `kaola-zcode-acp.py` adapter connects to the app's bundled ZCode app-server. Reinstall the Skill to refresh the adapter; update the ZCode app to update its app-server. |
+
+For a native CLI or bundled app whose ACP version is below the verified version, use an explicit
+upgrade authorization already in force for this installation if it covers that named whole-CLI
+or app update. If it does not, report the observed and required versions and the concrete native
+update action, print `HUMAN_DECISION_REQUIRED`, and wait for authorization; do not broaden an
+ACP-only install silently. Do not request approval again when existing authorization covers the
+update. Never invent a standalone adapter update for an inseparable ACP layer.
+
+Run a bounded ACP communication check only when the layer changed or lacks reusable protocol
+evidence. Use the existing per-platform lifecycle, one disposable session and at most one harmless
+request with the existing model/provider selection and a short `--timeout`; capture the reply and
+exact-stop that session using the [Runner entrypoint](#runner-entrypoint-kaola-tmuxsh). Reuse
+passing evidence for an unchanged layer. A protocol check proves communication for the observed
+layer, not compatibility with an unverified version.
+
+Configure only ACP communication. Preserve account, provider, model, and live-session settings;
+do not log in or provision a provider or model. Report any absent prerequisite with a concrete
+recovery action: install Node.js/npm before using the Codex adapter; install a missing named CLI
+through its supported mechanism and rerun the same KPR selection; or set `KAOLA_ZCODE_ENTRY` and
+`KAOLA_ZCODE_NODE` to the installed ZCode paths ([ZCode host](zcode-host.md)). Do not claim
+`ready` until the actual layer is supported and its evidence remains valid. Beside the installer's
+`verify:` line, report each selected runtime as `ready` with component versions/evidence, or give
+its exact missing prerequisite, unverified version, or authorized next action.
+
+#### DSH loaded ACP harness
+
+The DSH ACP agent reports `deepseek-harness-acp/0.0.1` in `agentInfo` on multiple launcher
+versions; that label does not identify the loaded harness build. The harness packages are
+`@deepseek-ai/dsh-acp-app` and `@deepseek-ai/dsh-acp`, resolved from the selected launcher's
+installation. Check those packages and the launcher for the actual `DSH_BIN` (or `dsh` on `PATH`):
+
+```bash
+node -e 'const p=require("path"),f=require("fs");let d=p.dirname(process.argv[1]);for(const n of ["dsh","dsh-acp-app","dsh-acp"]){let m;for(let c=d;!m;c=p.dirname(c)){const x=p.join(c,"node_modules/@deepseek-ai",n,"package.json");if(f.existsSync(x))m=x;else if(c===p.dirname(c))break}if(!m){console.log(n,"not found");break}console.log(n,JSON.parse(f.readFileSync(m)).version,m);d=p.dirname(m)}' \
+  "$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$(command -v "${DSH_BIN:-dsh}")")"
+```
+
+Under the route condition recorded in the DSH manifest, the verified package pair is
+`0.1.7-rc.2` (ACP protocol 1). Its launcher pins both harness packages to the same exact version,
+so there is no standalone harness upgrade. Keep a matching installation. If the selected DSH
+install is elsewhere, set `DSH_BIN` to that binary. If either harness package is missing or too
+old, the recovery is to install/update the whole `@deepseek-ai/dsh` package, for example
+`npm install -g @deepseek-ai/dsh@0.1.7-rc.2` with the npm prefix that installed it; apply the
+authorization rule above before that whole-CLI action. For changed or unverified DSH layers, the
+existing bounded check is `preflight`, `start` (the receipt's `transport.agent_info` confirms the
+ACP handshake, not the package version), `status`, and exact `stop`; it needs no model turn. Report
+any model, provider, or credential failure separately without changing those settings.
+
 Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `droid exec --output-format acp`; no bridge or translator is used. Droid defaults to Auto Model
 (`model=auto`) and full bypass (`autonomy_level=auto-high`). The supported
