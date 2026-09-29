@@ -1,0 +1,1 @@
+{"n":1,"name":"Correct step 5/end-of-run transition for continuing authorized backlog","details":"outcome landed: workflow/issue-229 commit 5e5556e7; render-skills.py --write and --check PASS (budgets OK, main Skill 17405 B); git diff --check PASS; awaiting Host and Delegator review before finalize","status":"done"}
