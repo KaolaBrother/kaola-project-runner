@@ -6,6 +6,28 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.6.10 — 2026-09-29 (Claude profile redesign, dsh ACP harness check)
+
+Seats: restart required
+
+The operator diff from v0.6.9 to this release
+(`git diff v0.6.9..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is non-empty. Changed paths are `platforms/claude-code.yaml`,
+`platforms/codex.yaml`, `platforms/cursor-cli.yaml`, `platforms/devin.yaml`,
+`platforms/droid.yaml`, `platforms/dsh.yaml`, and
+`scripts/adapters/claude-code.sh`.
+`scripts/kaola-acp-holder.py`, `scripts/kaola-zcode-acp.py`, and
+`scripts/kaola-quota.py` are unchanged. Running seats keep the bytes they
+started with and must restart after installing this release. Codex
+`acp_command`, `acp_wrapper_pin`, and `acp_verified_versions` move to CLI
+0.158.0 and `@agentclientprotocol/codex-acp` 2.0.0 (Issue #226). dsh keeps
+`acp_command` `dsh --profile acp` and an empty `acp_wrapper_pin`;
+`acp_verified_versions` records CLI 0.1.7-rc.2 under the operator-declared
+opencode-go route (Issue #227). The other eight worker platforms keep their
+v0.6.9 `acp_command`, `acp_wrapper_pin`, and `acp_verified_versions` and are
+intentionally not re-pinned. The Grok Bot bridge is pinned in the release's
+follow-up pin commit.
+
 - **Claude Code Sonnet and Opus task profiles (Issue #228).** Preset ids stay
   `claude-code/sonnet` and `claude-code/default` (`sonnet` and `opus` remain the
   native model aliases). `claude-code/sonnet` is Elite at effort `high`, with the
@@ -49,18 +71,6 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   harness is 0.1.7-rc.2. The launcher pins the harness to its own version, so
   an older harness needs a whole-dsh upgrade that the user decides. Only the
   dsh `acp_quirks` wording changed; there is no code or protocol change.
-
-Seats: restart required
-
-The operator diff from v0.6.9 to this candidate
-(`git diff v0.6.9..HEAD -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
-is non-empty. Changed paths are `platforms/claude-code.yaml`,
-`platforms/codex.yaml`, `platforms/cursor-cli.yaml`, `platforms/devin.yaml`,
-`platforms/droid.yaml`, `platforms/dsh.yaml`, and
-`scripts/adapters/claude-code.sh`.
-`scripts/kaola-acp-holder.py`, `scripts/kaola-zcode-acp.py`, and
-`scripts/kaola-quota.py` are unchanged. Running seats keep the bytes they
-started with and must restart after installing this change.
 
 ## 0.6.9 — 2026-09-29 (quota mappings, heartbeat authorization rows, permission wording)
 
