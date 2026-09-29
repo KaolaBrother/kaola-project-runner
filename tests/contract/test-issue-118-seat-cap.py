@@ -88,9 +88,12 @@ class MainSkill(unittest.TestCase):
         self.assertIn("a rejected delivery's repair is the same assignment", self.text)
 
     def test_new_task_is_new_session_resume_is_same_assignment_only(self) -> None:
-        self.assertRegex(self.text, r"different task, gets a new session")
-        self.assertIn("never a prompt chained into a finished seat", self.text)
-        self.assertIn("recover the same assignment only", self.text)
+        self.assertIn(
+            "New authorized work or another task gets a fresh `start` under a new standard name, "
+            "never a finished seat",
+            self.text,
+        )
+        self.assertIn("`--resume`/`--continue` recover the same assignment only", self.text)
 
     def test_report_carries_live_over_authorized(self) -> None:
         self.assertIn("report `live N / authorized M` and the seats stopped this beat", self.text)

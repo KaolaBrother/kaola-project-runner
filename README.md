@@ -249,6 +249,59 @@ Check ACP communication with the dsh Skill's `preflight`, `start` (receipt
 Report a model, provider, or credential failure separately. Do not fix it by
 changing providers, models, or credentials, and do not log in.
 
+### ACP readiness for selected runtimes
+
+Use the runtime result already used to choose worker Skills. `--runtime` selects the
+Skill destination; `--platform` selects worker Skills (all ten by default). Do not
+scan again: prepare ACP only for runtimes already detected and included in this
+installation. Install and verify their KPR Skills through the normal flow first, then
+add ACP readiness for those same platform IDs to the same installation result beside
+the installer's `verify:` line.
+
+For each selected runtime, read `acp_command` and `acp_verified_versions` in its
+[`platforms/` manifest](platforms/). The command identifies the actual adapter or
+harness; the version record names the component versions with verified ACP evidence.
+Compare every component that is actually loaded, not just the CLI version or an
+ACP `agentInfo` label. Keep a matching compatible layer and reuse its valid protocol
+evidence. If an independently upgradable layer is missing or older, install or update
+only that layer through the mechanism named by its manifest or platform guide, using
+the recorded supported version rather than an upstream `latest` tag. Refresh a
+KPR-owned bridge or adapter through the normal Skill install. A layer newer than its
+verified record is unverified; do not silently adopt it as supported.
+
+| Platform | ACP layer and update boundary |
+|---|---|
+| `claude-code` | The `claude-code-acp` Node bridge is vendored in the KPR Skill and refreshed by that Skill install; check its bridge revision and the separate Claude CLI version. |
+| `codex` | The `@agentclientprotocol/codex-acp` adapter runs with its paired `@openai/codex` package through the manifest's pinned `npx` command. Use that exact pair; Node.js and npm/npx are prerequisites. |
+| `cursor-cli` | `cursor-agent --yolo acp` is provided by Cursor CLI; there is no separate adapter to upgrade. |
+| `devin` | `devin acp` is provided by Devin CLI; there is no separate adapter to upgrade. |
+| `droid` | `droid exec --output-format acp` is provided by Droid CLI; there is no separate adapter to upgrade. |
+| `dsh` | `dsh --profile acp`; identify and compare the actually loaded harness using the [DSH ACP launch facts](skills/dsh-kaola-project-runner/references/platform.md#launch) maintained in issue #231. |
+| `grok` | `grok agent --always-approve stdio` is provided by Grok CLI; there is no separate adapter to upgrade. |
+| `kimi-cli` | `kimi acp` is provided by Kimi CLI; there is no separate adapter to upgrade. |
+| `opencode` | `opencode acp` is provided by OpenCode CLI; there is no separate adapter to upgrade. |
+| `zcode` | The KPR Skill's `kaola-zcode-acp.py` adapter connects to the app's bundled ZCode app-server. Refresh the KPR adapter with the Skill install; the app-server version follows the ZCode app. |
+
+If a native CLI or bundled app owns ACP and is older than the verified version,
+report the observed version and the concrete action to update that named CLI or app
+through its normal updater; print `HUMAN_DECISION_REQUIRED` and wait before running
+that upgrade. Do not invent a separate adapter update. For a changed or otherwise
+unverified layer, use only the existing bounded ACP communication check: start one
+disposable session, send one harmless request with the existing model/provider
+selection and a short `--timeout`, capture the reply, and exact-stop that session
+using the [existing Runner lifecycle commands](docs/api.md#runner-entrypoint-kaola-tmuxsh).
+A passing protocol check proves communication for the observed layer; it does not
+replace version evidence.
+
+Configure only what ACP communication requires. Preserve the user's existing
+account, provider, model, and live-session settings; do not log in or provision a
+provider or model. If a prerequisite is missing, report it with a concrete recovery
+action—for example, install Node.js/npm before using the Codex adapter, install the
+named CLI through its normal mechanism when absent, or set the required ZCode entry
+and Node paths named in its manifest. Report `ready` only when the actual layer is
+supported and its existing evidence remains valid; otherwise report the exact
+missing prerequisite or user action beside that runtime in the installation result.
+
 Use the host's Skill discovery mechanism, or have the agent read the installed
 `SKILL.md` directly. In Codex, a Skill can be invoked as
 `$claude-code-kaola-project-runner`, for example.
