@@ -505,6 +505,73 @@ class Issue120DshPermissionModeThroughTheRunner(unittest.TestCase):
         self.assertFalse((self.root / "records").exists())
 
 
+class Issue227LaunchUsesDshBin(unittest.TestCase):
+    """Preflight reports ``$DSH_BIN --version``; start must launch that same
+    binary, not the first ``dsh`` on PATH. --command and KAOLA_ACP_COMMAND keep
+    winning, and an unset DSH_BIN keeps the PATH lookup."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="kaola-i227b-")
+        self.root = Path(os.path.realpath(self._tmp.name))
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        self.seen = self.root / "seen.txt"
+        self.path_dir = self.root / "path"
+        self.path_dir.mkdir()
+        self.path_dsh = self.fake(self.path_dir / "dsh", "path")
+        self.env_dsh = self.fake(self.root / "pinned" / "dsh", "dsh-bin")
+        self.session = f"dsh-i227b-{self._testMethodName[-16:].lower()}-{os.getpid()}"
+
+    def fake(self, path: Path, label: str) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f"#!{sys.executable}\n"
+            "import runpy, sys\n"
+            "if sys.argv[1:] == ['--version']: print('0.0.0-fake'); sys.exit(0)\n"
+            f"open({str(self.seen)!r}, 'w').write({label!r} + ' ' + ' '.join(sys.argv))\n"
+            f"sys.argv = [{str(MOCK)!r}]; runpy.run_path({str(MOCK)!r}, run_name='__main__')\n",
+            encoding="utf-8")
+        path.chmod(0o755)
+        return path
+
+    def start(self, *args: str, **env: str) -> dict:
+        base = {k: v for k, v in os.environ.items()
+                if not k.startswith("KAOLA_") and k != "DSH_BIN"}
+        base.update(KAOLA_ACP_RECORD_ROOT=str(self.root / "records"),
+                    PATH=f"{self.path_dir}{os.pathsep}{os.environ.get('PATH', '')}", **env)
+
+        def cli(command: str, *extra: str) -> subprocess.CompletedProcess:
+            return subprocess.run([sys.executable, str(CLI), "dsh", command, "--repo",
+                                   str(self.repo), "--session", self.session, *extra],
+                                  capture_output=True, text=True, env=base, timeout=60)
+        self.addCleanup(cli, "stop", "--force")
+        return json.loads(cli("start", *args).stdout)
+
+    def test_dsh_bin_is_the_launched_binary(self) -> None:
+        receipt = self.start(DSH_BIN=str(self.env_dsh))
+        self.assertEqual(receipt.get("state"), "ready", receipt)
+        self.assertEqual(self.seen.read_text(), f"dsh-bin {self.env_dsh} --profile acp")
+
+    def test_without_dsh_bin_path_still_resolves(self) -> None:
+        receipt = self.start()
+        self.assertEqual(receipt.get("state"), "ready", receipt)
+        self.assertEqual(self.seen.read_text(), f"path {self.path_dsh} --profile acp")
+
+    def test_acp_command_env_still_wins(self) -> None:
+        receipt = self.start(DSH_BIN=str(self.env_dsh), KAOLA_ACP_COMMAND=f"{self.path_dsh} --profile acp")
+        self.assertEqual(receipt.get("state"), "ready", receipt)
+        self.assertTrue(self.seen.read_text().startswith("path "))
+
+    def test_other_platforms_keep_their_command(self) -> None:
+        acp = load("kaola-acp")
+        args = argparse.Namespace(platform="grok", manifest=acp.load_manifest("grok"))
+        with mock.patch.dict(os.environ, {"GROK_BIN": "/opt/grok"}):
+            self.assertEqual(acp.manifest_launch_command(args, "grok agent stdio"),
+                             "grok agent stdio")
+
+
 @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS-only")
 class Issue120ProcessTableWithoutPs(unittest.TestCase):
     """When ``ps`` cannot exec, both scripts read the same columns from libproc."""

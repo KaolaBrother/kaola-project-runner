@@ -105,6 +105,10 @@ BRIDGE_BINARY_ENV = {
 # Issue #124: platforms whose `initialize` returns no `agentInfo`, so a start
 # records the launched CLI's own `--version` instead (a fact, never a gate).
 CLI_VERSION_PLATFORMS = frozenset({"grok"})
+# Issue #227: platforms whose manifest ACP command starts with ``binary_name``
+# and must launch the same ``binary_env`` binary that preflight reports;
+# otherwise a PATH ``dsh`` ran while preflight named ``$DSH_BIN``'s version.
+LAUNCH_BINARY_ENV_PLATFORMS = frozenset({"dsh"})
 # Issue #112: OpenCode V2 reaches its own server over loopback HTTP, so a
 # forward proxy that does not exclude loopback swallows that hop and every ACP
 # session method answers ClientError while `initialize` still succeeds.
@@ -293,6 +297,20 @@ def resolve_agent_command(command: str) -> tuple[str, list[dict[str, Any]]]:
         facts.append(fact)
     # A command without the token is passed through untouched.
     return (shlex.join(words) if facts else command), facts
+
+
+def manifest_launch_command(args: argparse.Namespace, command: str) -> str:
+    """A manifest ACP command whose first word is ``binary_name``, with that
+    word replaced by a set ``binary_env`` (Issue #227). --command and
+    KAOLA_ACP_COMMAND never reach here; an unset ``binary_env`` keeps PATH."""
+    if args.platform not in LAUNCH_BINARY_ENV_PLATFORMS or not command:
+        return command
+    binary = os.environ.get(args.manifest.get("binary_env") or "")
+    words = shlex.split(command)
+    if not binary or not words or words[0] != args.manifest.get("binary_name"):
+        return command
+    words[0] = binary
+    return shlex.join(words)
 
 
 def runtime_binary(manifest: dict[str, str]) -> str:
@@ -4093,9 +4111,9 @@ def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -
         if not explicit["mode"] and isinstance(saved.get("mode"), str):
             args.mode = saved["mode"]
     if not explicit["command"] and not os.environ.get("KAOLA_ACP_COMMAND"):
-        args.agent_command = (
-            tier_agent_command(args) or args.manifest.get("acp_command") or args.agent_command
-        )
+        args.agent_command = manifest_launch_command(
+            args, tier_agent_command(args) or args.manifest.get("acp_command") or ""
+        ) or args.agent_command
         args.agent_command, args.agent_command_facts = resolve_agent_command(args.agent_command)
     return {
         "source": "caller" if any(explicit.values()) else "record",
@@ -4386,8 +4404,7 @@ def main() -> int:
     args.agent_command = (
         args.agent_command
         or os.environ.get("KAOLA_ACP_COMMAND")
-        or tier_agent_command(args)
-        or args.manifest["acp_command"]
+        or manifest_launch_command(args, tier_agent_command(args) or args.manifest["acp_command"])
     )
     if not args.agent_command:
         die(f"no ACP command for platform {args.platform} (use --command)")

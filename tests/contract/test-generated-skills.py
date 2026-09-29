@@ -273,8 +273,9 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         # from it are declared facts, not OpenCode adapter leakage.
         text = text.replace("opencode-go", "dsh-route-id")
         text = text.replace("opencode go", "dsh-route-name")
-        # Issue #227: the route's upstream session header is a dsh route fact.
+        # Issue #227: the route's session header and key env are dsh route facts.
         text = text.replace("x-opencode-session", "dsh-route-session-header")
+        text = text.replace("opencode_go_api_key", "dsh-route-key-env")
     for other_id, tokens in forbidden.items():
         for token in tokens:
             # A common word such as "cursor" is intentionally not exempted: a
