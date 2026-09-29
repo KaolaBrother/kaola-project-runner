@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: python3 tests/contract/test-issue-218-preset-ids.py
+validated_candidate_hash: 67bbfd13b3635121bc451dc13c3309ad681b8d69a55ecb62531d4ae0c41ff8b5
