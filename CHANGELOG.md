@@ -4,7 +4,36 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.6.11 — 2026-09-29 (Host closeout clarity, scoped pause adoption, DSH doc link)
+
+Seats: restart required
+
+The operator diff from v0.6.10 to this release
+(`git diff v0.6.10..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+changes `platforms/dsh.yaml` (documentation-link correction only; the holder,
+bridge, and quota catalog are unchanged). Running seats keep the bytes they
+started with and must restart after installing this release. The Grok Bot
+bridge is pinned in the release's follow-up pin commit.
+
+- **Host closeout ownership and scoped pause adoption (Issue #235).** An
+  explicit owner instruction may keep simple authorized release/install
+  mechanics Host-owned without a mandatory new issue or worker; the duplicate
+  Self-execute defaults row is removed and the Allowed CLIs row references the
+  Authorization section, which retains "No authorized task: ask; start no
+  worker or heartbeat." A pause is conditional on an explicit owner
+  stop/pause instruction, scoped to the named actions, with unrelated
+  authorized work continuing; ordinary inquiry, guidance, heartbeat or review
+  feedback is not a pause trigger. Owner-confirmed current availability
+  supersedes prior quota exhaustion; a passed reset does not prove every
+  limiting window recovered or restore a revoked Elite grant. A permission
+  event for an owned seat needs no additional full repository sweep, and the
+  Delegator relays explicit owner model/seat choices without inventing
+  allocation or constraints.
+- **DSH installed-package documentation link (Issue #235).** The single
+  `platforms/dsh.yaml` `acp_quirks` cross-reference that rendered as a broken
+  `../../../docs/api.md` link inside the installed dsh Skill now points to the
+  canonical public repository documentation URL; the generated dsh Skill
+  package passes its self-containment link checks again.
 
 ## 0.6.10 — 2026-09-29 (Claude profile redesign, dsh ACP harness check)
 
