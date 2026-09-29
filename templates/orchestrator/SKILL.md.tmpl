@@ -106,8 +106,8 @@ Quota packages (read-only catalog; never changes the count cap), limit-failure b
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | An authorized project task dispatches the Worker pool - no allowlist, count, or priority; Elite and Expert need their class's authorization. No authorized task: ask, start no worker, register no heartbeat. |
-| Count | Named CLI without a count: one; it bounds live processes. Pool presets need no count and sit outside it. |
+| Allowed CLIs | Six Worker-pool presets are default-authorized (permission, no per-seat/count/priority, outside cap); Elite explicit grant; Expert per-task permission; not a preference over suitable authorized Elite. No authorized task: ask, start no worker, register no heartbeat. |
+| Count | Named CLI without a count: one; it bounds live processes. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices. |
 | Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets. Use one only when authorization names it; ask if unclear. No automatic model, tier, or transport switch; only a seat the user explicitly authorized may switch its model/preset, within its own runtime. |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
