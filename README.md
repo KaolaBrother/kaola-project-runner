@@ -159,6 +159,13 @@ cd kaola-project-runner
 ./scripts/install-local.sh
 ```
 
+`./scripts/install-local.sh` verifies Skill payloads. Exit 0 and a `verify:` line do not
+finish installation. On the bound target, finish by following
+[ACP layer preparation during install](docs/api.md#acp-layer-preparation-during-install):
+survey each detected in-scope runtime once, then resolve, prepare, and verify the actual ACP
+components, and report one compact row per runtime in that same result. `--runtime` is the
+Skill destination, not the only CLI to inspect. A locator attestation is not this step.
+
 The default installs all ten worker Skills plus the main orchestrator Skill into
 `${CODEX_HOME:-$HOME/.codex}/skills` as standalone copies. `--runtime` selects the
 host's skill directory, `--platform` selects worker CLI Skills only, and
@@ -212,8 +219,11 @@ kaola-project-runner-locate --target local --expect-revision <accepted commit>
 ```
 
 The locator validates origin, revision, and a clean tree, and writes a bounded
-attestation receipt beside the link. The one-write install, its fail-closed
-properties, and rollback are documented in [Grok Bot host](docs/grok-bot-host.md).
+attestation receipt beside the link. Registering it does not finish installation and does
+not show that the execution target's runtimes are ACP-ready. Finish that bound target with
+the same [ACP layer preparation during install](docs/api.md#acp-layer-preparation-during-install)
+procedure. The one-write install, its fail-closed properties, and rollback are documented in
+[Grok Bot host](docs/grok-bot-host.md).
 
 Installed Skills are shared blocks counted by reference, so runtimes install and
 uninstall independently; `kimi-cli` installs into both of its user roots, each with
@@ -225,10 +235,8 @@ installed by default only for the Codex destination; use `--bin-links` elsewhere
 `--uninstall --bin-links` to remove them. See the
 [installer reference](docs/api.md#installer) for all options.
 
-For each detected runtime included in the install, prepare its ACP layer alongside
-the KPR Skill and report readiness in the same result. Follow the
-[ACP installation guidance](docs/api.md#acp-layer-preparation-during-install) for
-version checks, update boundaries, DSH harness inspection, and recovery actions.
+The examples above are payload installs. Each one is finished only by the ACP procedure
+linked from the default install.
 
 Use the host's Skill discovery mechanism, or have the agent read the installed
 `SKILL.md` directly. In Codex, a Skill can be invoked as

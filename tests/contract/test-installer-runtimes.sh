@@ -1344,6 +1344,76 @@ assert_absent "test_user_hook_malformed_no_skill_write" "$codex_home_bad/skills"
 [[ "$(cat "$codex_home_bad/hooks.json")" == '{"hooks": null}' ]] || fail "test_user_hook_malformed_untouched" "malformed hooks.json was rewritten"
 assert_absent "test_user_hook_malformed_no_assets" "$codex_home_bad/kaola-project-runner"
 
+# Issue #236: a successful install names payload verification and the platform
+# selection the agent continues with. It does not claim ACP readiness. --runtime
+# is the Skill destination, not that selection. --uninstall does not start it.
+repo236="$tmp_root/repo-236"
+make_fixture "$repo236"
+home236="$tmp_root/home-236"
+dest236="$tmp_root/dest-236/skills"
+output="$(run_installer "$repo236" "$home236" --skills-dir "$dest236" --method link 2>&1)" \
+  || fail "test_236_normal_install" "install failed: $output"
+[[ "$output" == *"scope: complete"* ]] || fail "test_236_normal_scope" "expected complete payload scope: $output"
+[[ "$output" == *"install-local: payloads verified; this exit is not runtime/ACP readiness"* ]] \
+  || fail "test_236_normal_payloads" "missing payload/ACP distinction: $output"
+[[ "$output" == *"install-local: runtime/ACP completion is owned by the executing agent"* ]] \
+  || fail "test_236_normal_owner" "missing agent-owned completion: $output"
+[[ "$output" == *"install-local: continue at docs/api.md#acp-layer-preparation-during-install"* ]] \
+  || fail "test_236_normal_guide" "missing canonical guide: $output"
+sel="$(printf '%s\n' "$output" | sed -n 's/^install-local: platform selection: //p')"
+[[ "$sel" == "grok,claude-code,opencode,kimi-cli,cursor-cli,devin,codex,zcode,droid,dsh" ]] \
+  || fail "test_236_normal_selection" "expected every worker platform, got: $sel"
+[[ "$(printf '%s\n' "$output" | grep -c 'install-local: payloads verified')" -eq 1 ]] \
+  || fail "test_236_normal_once" "footer repeated: $output"
+[[ "$output" != *"readiness=ready"* && "$output" != *"ACP ready"* ]] \
+  || fail "test_236_normal_no_false_ready" "footer claimed a check it did not run: $output"
+
+output="$(run_installer "$repo236" "$home236" --runtime claude-code --method link 2>&1)" \
+  || fail "test_236_runtime_destination" "install failed: $output"
+sel="$(printf '%s\n' "$output" | sed -n 's/^install-local: platform selection: //p')"
+[[ "$sel" == "grok,claude-code,opencode,kimi-cli,cursor-cli,devin,codex,zcode,droid,dsh" ]] \
+  || fail "test_236_runtime_not_sole_cli" "--runtime narrowed the platform selection to: $sel"
+
+dest_filtered="$tmp_root/dest-236-filtered/skills"
+output="$(run_installer "$repo236" "$home236" --skills-dir "$dest_filtered" --platform devin --method link 2>&1)" \
+  || fail "test_236_filtered_install" "install failed: $output"
+[[ "$output" == *"scope: filtered"* ]] || fail "test_236_filtered_scope" "expected filtered payload scope: $output"
+sel="$(printf '%s\n' "$output" | sed -n 's/^install-local: platform selection: //p')"
+[[ "$sel" == "devin" ]] || fail "test_236_filtered_selection" "expected devin, got: $sel"
+
+kimi_home="$tmp_root/kimi-236"
+output="$(KIMI_CODE_HOME="$kimi_home" run_installer "$repo236" "$home236" --runtime kimi-cli --platform dsh --method link 2>&1)" \
+  || fail "test_236_two_roots" "install failed: $output"
+[[ "$(printf '%s\n' "$output" | grep -c 'install-local: payloads verified')" -eq 1 ]] \
+  || fail "test_236_two_roots_once" "two Skill roots repeated ACP completion: $output"
+sel="$(printf '%s\n' "$output" | sed -n 's/^install-local: platform selection: //p')"
+[[ "$sel" == "dsh" ]] || fail "test_236_two_roots_selection" "expected dsh, got: $sel"
+
+output="$(run_installer "$repo236" "$home236" --skills-dir "$dest236" --uninstall 2>&1)" \
+  || fail "test_236_uninstall" "uninstall failed: $output"
+[[ "$output" != *"payloads verified"* && "$output" != *"acp-layer-preparation"* && "$output" != *"platform selection:"* ]] \
+  || fail "test_236_uninstall_no_prep" "uninstall started ACP preparation: $output"
+
+help="$(run_installer "$repo236" "$home236" --help 2>&1)" || fail "test_236_help" "help failed: $help"
+[[ "$help" == *"docs/api.md#acp-layer-preparation-during-install"* ]] \
+  || fail "test_236_help_guide" "help omits the canonical guide"
+[[ "$help" == *"verifies Skill payloads only"* && "$help" == *"--uninstall does not start"* ]] \
+  || fail "test_236_help_distinction" "help does not distinguish payloads from ACP completion"
+[[ "$help" == *"--verify-install checks payloads only"* ]] \
+  || fail "test_236_help_verify_install" "help describes verify-install as more than payloads"
+[[ "$help" != *"install-local: payloads verified"* ]] \
+  || fail "test_236_help_not_a_result" "help printed a successful-install footer"
+
+printf '#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n' >"$repo236/scripts/render-skills.py"
+chmod +x "$repo236/scripts/render-skills.py"
+set +e
+output="$(run_installer "$repo236" "$home236" --skills-dir "$tmp_root/dest-236-stale/skills" --method link 2>&1)"
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test_236_stale_render" "stale render unexpectedly succeeded: $output"
+[[ "$output" != *"payloads verified"* && "$output" != *"acp-layer-preparation"* ]] \
+  || fail "test_236_stale_no_footer" "a failed install printed the success footer: $output"
+
 # --- generated payload stays valid under the neutral validator ----------------
 for skill_dir in "$project_root"/skills/*kaola-project-runner "$project_root"/skills/kaola-delegator; do
   python3 "$validator_source" "$skill_dir" >/dev/null \

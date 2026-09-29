@@ -252,7 +252,10 @@ drift, over-budget product, malformed stage, or unverifiable pin. See
    preflight. Expected: `ok` attestation, the Skill file present, and nothing
    started, sent, stopped, cloned, fetched, checked out, or installed; the Bot
    read only the Kaola-Delegator Skill, no script source; the cloud Agent
-   Computer executed nothing and accessed no Mac file. After UAT, remove
+   Computer executed nothing and accessed no Mac file. This preflight is placement
+   only. Finish installation on that bound target by following
+   [ACP layer preparation during install](api.md#acp-layer-preparation-during-install).
+   After UAT, remove
    `$BIN/kaola-project-runner-locate` and its receipt or keep them registered;
    the normal installer-managed link is restored with
    `./scripts/install-local.sh --bin-links` from the normal checkout (it never
@@ -292,7 +295,8 @@ line of the bridge, which is one more account write. Local: the owner moves the
 Mac checkout or worktree to R′ and runs `register` again (the receipt records
 the accepted revision, so a stale registration is refused). Cloud:
 `git -C ROOT fetch origin <commit> && git -C ROOT checkout --detach <commit>`,
-then `register`. Rollback is a new pin commit naming an older R, applied the
+then `register`. Re-registering does not finish that target: finish with the same
+ACP procedure. Uninstall is not that procedure. Rollback is a new pin commit naming an older R, applied the
 same way; the accepted pair itself is never rewritten. Cloud registration passes
 `--target cloud --expect-revision R` exactly like Local Computer. Removal: delete
 the account Skill through the same native write used to save it and remove the

@@ -121,7 +121,12 @@ usage() {
     '--uninstall removes only that entry and those assets. Foreign hook entries are' \
     'never changed. --skills-dir never touches any hooks.json. Codex still asks you' \
     'to review and trust the new entry in /hooks, and hooks load at session start,' \
-    'so recovery is not active in the session that ran the install.'
+    'so recovery is not active in the session that ran the install.' \
+    'A successful install verifies Skill payloads only. It then prints the canonical' \
+    'continuation docs/api.md#acp-layer-preparation-during-install and the platform' \
+    'selection to continue with. That footer is not an ACP check; runtime/ACP completion' \
+    'stays with the executing agent. --uninstall does not start that procedure.' \
+    'render-skills.py --verify-install checks payloads only, not runtimes.'
 }
 
 skill_name_for() {
@@ -1299,4 +1304,14 @@ done
 if [[ "$install_verify_failed" == true ]]; then
   printf 'install-local: requested payloads did not verify at every destination; this run is NOT complete\n' >&2
   exit 1
+fi
+# Payloads and ACP readiness are different facts. This footer names where the
+# executing agent continues; it does not claim a survey, version read, or ACP check.
+if [[ "$mode" == install ]]; then
+  platform_selection="$(IFS=,; printf '%s' "${selection[*]}")"
+  printf '%s\n' \
+    'install-local: payloads verified; this exit is not runtime/ACP readiness' \
+    'install-local: runtime/ACP completion is owned by the executing agent' \
+    'install-local: continue at docs/api.md#acp-layer-preparation-during-install' \
+    "install-local: platform selection: ${platform_selection}"
 fi

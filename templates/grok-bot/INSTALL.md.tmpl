@@ -21,8 +21,7 @@ path, and that P differs from R by exactly those four files with a one-line brid
 the bridge **from P**; check the execution target out **at R**, clean and detached. Never
 rebase, squash, or amend an accepted R/P pair: if `main` moves first, create a fresh R and P
 and repeat review and UAT. A release is a tag at R followed by a new P naming that tag;
-rollback is a new P naming an older R. Pre-release UAT is exactly that: R is the target, P
-names it, nothing is released or tagged.
+rollback is a new P naming an older R.
 
 ## 1. One write on the account (from P only)
 
@@ -81,10 +80,10 @@ read no script source, and that the cloud Agent Computer executed nothing and ac
 file. This establishes placement only, not live use: a real-use smoke on one session is
 separately authorized and is not part of installation. This repository does not claim live
 Grok Bot adoption.
+Placement does not finish installation. On this bound target follow docs/api.md#acp-layer-preparation-during-install.
 After UAT, remove `$BIN/{{LOCATOR}}` and `$BIN/.{{LOCATOR}}.json` or keep them
 registered; the installer-managed link is restored with `./scripts/install-local.sh
---bin-links` from the normal checkout (it refuses to overwrite a link it does not own, so
-remove a UAT link placed in its directory first) and then registered from that checkout.
+--bin-links` from the normal checkout, then registered from that checkout.
 
 ## 4. Cloud Agent Computer (optional, independent)
 
@@ -106,6 +105,7 @@ is refused). Cloud: `git -C ROOT fetch origin <commit> && git -C ROOT checkout -
 naming an older R: on each target remove the receipt, move to R, then `register`. Removal:
 delete the account Skill the same native way it was saved, and the link and its receipt
 (`rm "$BIN/{{LOCATOR}}" "$BIN/.{{LOCATOR}}.json"`, or `./scripts/install-local.sh --uninstall --bin-links` for the installer-managed link).
+Uninstall is not ACP preparation. After `register`, finish that target with docs/api.md#acp-layer-preparation-during-install.
 
 ## Boundaries
 

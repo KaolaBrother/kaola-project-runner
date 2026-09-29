@@ -140,34 +140,90 @@ the installer verifies every requested Skill at every requested destination (lin
 `--method link`, tree digests for `--method copy`) and exits nonzero when one did not land — a
 write failure is never reported complete. A `--platform` or `--no-orchestrator` request is
 reported `scope: filtered` with the unselected siblings' states and `NOT a complete-root
-install`; only an unfiltered request reports `scope: complete`. Names this checkout no longer
+install`; only an unfiltered request reports `scope: complete`. Those `verify:` lines and
+`render-skills.py --verify-install` check Skill payloads only; neither is runtime or ACP
+verification. A successful install then prints a footer: payloads verified, runtime/ACP
+completion still owned by the executing agent, the canonical procedure
+`docs/api.md#acp-layer-preparation-during-install`, and the platform selection to continue
+with. The footer does not claim checks the script did not run. `--uninstall` prints no such
+footer and does not start that procedure. Names this checkout no longer
 generates but a receipt still owns are obsolete copies: the installer retires one only when no
 other referrer remains and the copy's bytes still match the receipt, and preserves — with a
 named owner-safe next action — a modified, co-owned, foreign, or unreceipted path.
 
 ### ACP layer preparation during install
 
-Use the same runtime result and platform selection that chose the worker Skills. `--runtime`
-selects the host Skill destination; `--platform` selects worker CLI Skills (all ten when omitted).
-Do not scan runtimes a second time or prepare ACP for an unselected runtime. Run the normal KPR
-install and verify its `verify:` result first. Then, for each detected runtime included in that
-installation, identify and prepare its ACP layer and add its readiness to the same installation
-result.
+This procedure is how every installation finishes, including a normal local install and a
+Grok Bot bound-target install or update. A successful `install-local.sh` exit, a `verify:`
+line, and `render-skills.py --verify-install` prove Skill payloads only. They are not runtime
+or ACP readiness, and they are not permission to call the installation complete. `--uninstall`
+is not this procedure. A bridge-only placement UAT is placement only.
 
-Read `acp_command`, `acp_verified_versions`, and `acp_wrapper_pin` in the selected platform's
-manifest, along with its linked platform facts. Verify the component actually loaded by that
-command, including separately versioned adapters and harnesses; a CLI version or ACP
-`agentInfo` string alone may identify a different layer. Keep a layer whose installed component
-versions are covered by current verified evidence. If an independent layer is missing or older,
-install or update only that component through its documented mechanism at the recorded supported
-version. A KPR-owned bridge or adapter is refreshed by the normal Skill install. Do not select an
-unverified upstream latest. A version newer than the record remains unverified until evidence
-covers that version.
+Do this once per installation, on the bound execution target, in this order. Copying Skills
+into more than one root does not repeat it.
+
+1. Survey. Reuse `kaola-acp survey` (read-only; it runs no platform binary) together with the
+   explicit install selection. Check each detected in-scope runtime once. `--runtime` selects
+   the consuming Skill destination, not the only worker CLI to inspect. `--platform` narrows
+   worker scope; with no `--platform`, cover every detected supported runtime. Report absent
+   and unknown separately. Installing ten Skill folders does not prove ten CLIs are present.
+   Do not install an absent CLI automatically.
+2. Install or update the selected Skill payloads with `install-local.sh` and accept only its
+   existing payload verification. A nonzero exit stops this procedure.
+3. For each in-scope runtime the survey reports present, resolve the actual launch path and
+   component versions from that platform's current manifest (`acp_command`,
+   `acp_verified_versions`, `acp_wrapper_pin`, and the linked platform facts) and from native
+   package or runtime evidence. Distinguish the CLI, a bundled harness, an independent
+   adapter, a KPR bridge, and version overrides such as `CODEX_PATH`. Read verified versions
+   from the manifest. Do not copy them into a second catalog and do not invent semver
+   compatibility from numeric ordering. A newer version than the verified record stays
+   unverified. Do not silently downgrade. A CLI version or ACP `agentInfo` string can name a
+   different layer than the one that was loaded.
+4. If a component is missing or older than its verified record, carry out preparation that
+   existing authorization already covers, using that component's documented package or app
+   mechanism. An inseparable ACP harness may require the containing CLI update (DSH). An
+   independently pinned pair does not replace an unrelated global CLI (Codex). A KPR-owned
+   bridge or adapter is refreshed by the Skill install in step 2. Do not select an unverified
+   upstream latest. Do not ask again when existing authorization covers the update. A whole-app
+   update that authorization does not cover, or an unsafe change to a shared live session, is
+   a concrete pending action: print `HUMAN_DECISION_REQUIRED` and wait. Do not report success
+   and do not restart shared live sessions. Preserve account, provider, and model settings.
+   Do not log in or relogin. Do not fix the OpenCode Go route as part of this procedure.
+5. Verify the component that is actually loaded. Reuse protocol evidence that still applies
+   to that unchanged layer. If the layer changed or has no such evidence, use the existing
+   bounded ACP path — `preflight`, `start`, `status`, and exact `stop` — on one disposable
+   session if needed, via the [Runner entrypoint](#runner-entrypoint-kaola-tmuxsh). No
+   obligatory model prompt, model-catalog gate, capability test, or recurring scan. A
+   transport handshake does not prove model execution. DSH provider-route limits stay stated
+   separately.
+
+Then report one compact row per in-scope runtime in the same installation result. No new
+state file, schema, or ledger. Each row is one line:
+
+```text
+acp: RUNTIME component=LAUNCH versions=OBSERVED verified=MANIFEST_RECORD action=ACTION readiness=READY_OR_REMAINING
+```
+
+`RUNTIME` is the platform id. `component` is the resolved launch path or command. `versions`
+is what that launch actually loaded. `verified` is the manifest record those versions were
+compared with, or `unverified`. `action` is what this installation did, including `none` and
+`pending`. `readiness` is `ready` only when the required preparation has supporting evidence;
+otherwise it is `not-ready:` plus the exact remaining action. Keep Skill payload success, ACP
+preparation, and any known account or model execution limit in separate clauses. Call the
+installation complete only when every required in-scope preparation has supporting evidence.
+Otherwise report the completed subset and the concrete outstanding work. A guide link, a
+recorded pin, or a proposed upgrade is not that result.
+
+Report an absent runtime as `not-ready: absent` with the concrete recovery (install that named
+CLI through its supported mechanism and rerun this selection). Report `unknown` as
+`not-ready: unknown`, which is not the same row as absent. Prerequisites that block a launch
+stay in the row: Node.js/npm before the Codex adapter, or `KAOLA_ZCODE_ENTRY` and
+`KAOLA_ZCODE_NODE` for ZCode ([ZCode host](zcode-host.md)).
 
 | Platform | Actual ACP layer and update boundary |
 |---|---|
 | `claude-code` | The vendored `claude-code-acp` Node bridge ships in the KPR Skill; reinstall that Skill to refresh the bridge, and check the Claude CLI version separately. |
-| `codex` | The manifest's pinned `npx` command runs `@agentclientprotocol/codex-acp` with its paired `@openai/codex` package. Use that exact pair; Node.js and npm/npx are prerequisites. |
+| `codex` | The manifest's pinned `npx` command is the ACP launch (`@agentclientprotocol/codex-acp` with its paired `@openai/codex`). `CODEX_PATH` and any other effective launch override select the Codex binary that pair uses; `codex` on `PATH` is a different fact and is not that pair. Node.js and npm/npx are prerequisites. |
 | `cursor-cli` | `cursor-agent --yolo acp` is native to Cursor CLI; there is no separate adapter to update. |
 | `devin` | `devin acp` is native to Devin CLI; there is no separate adapter to update. |
 | `droid` | `droid exec --output-format acp` is native to Droid CLI; there is no separate adapter to update. |
@@ -177,33 +233,11 @@ covers that version.
 | `opencode` | `opencode acp` is native to OpenCode CLI; there is no separate adapter to update. |
 | `zcode` | The KPR Skill's `kaola-zcode-acp.py` adapter connects to the app's bundled ZCode app-server. Reinstall the Skill to refresh the adapter; update the ZCode app to update its app-server. |
 
-For a native CLI or bundled app whose ACP version is below the verified version, use an explicit
-upgrade authorization already in force for this installation if it covers that named whole-CLI
-or app update. If it does not, report the observed and required versions and the concrete native
-update action, print `HUMAN_DECISION_REQUIRED`, and wait for authorization; do not broaden an
-ACP-only install silently. Do not request approval again when existing authorization covers the
-update. Never invent a standalone adapter update for an inseparable ACP layer.
-
-Run a bounded ACP communication check only when the layer changed or lacks reusable protocol
-evidence. Use the existing per-platform lifecycle, one disposable session and at most one harmless
-request with the existing model/provider selection and a short `--timeout`; capture the reply and
-exact-stop that session using the [Runner entrypoint](#runner-entrypoint-kaola-tmuxsh). Reuse
-passing evidence for an unchanged layer. A protocol check proves communication for the observed
-layer, not compatibility with an unverified version.
-
-Configure only ACP communication. Preserve account, provider, model, and live-session settings;
-do not log in or provision a provider or model. Report any absent prerequisite with a concrete
-recovery action: install Node.js/npm before using the Codex adapter; install a missing named CLI
-through its supported mechanism and rerun the same KPR selection; or set `KAOLA_ZCODE_ENTRY` and
-`KAOLA_ZCODE_NODE` to the installed ZCode paths ([ZCode host](zcode-host.md)). Do not claim
-`ready` until the actual layer is supported and its evidence remains valid. Beside the installer's
-`verify:` line, report each selected runtime as `ready` with component versions/evidence, or give
-its exact missing prerequisite, unverified version, or authorized next action.
-
 #### DSH loaded ACP harness
 
 The DSH ACP agent reports `deepseek-harness-acp/0.0.1` in `agentInfo` on multiple launcher
-versions; that label does not identify the loaded harness build. The harness packages are
+versions; that label does not identify the loaded harness build and cannot establish an upgrade
+of the loaded packages. The harness packages are
 `@deepseek-ai/dsh-acp-app` and `@deepseek-ai/dsh-acp`, resolved from the selected launcher's
 installation. Check those packages and the launcher for the actual `DSH_BIN` (or `dsh` on `PATH`):
 
