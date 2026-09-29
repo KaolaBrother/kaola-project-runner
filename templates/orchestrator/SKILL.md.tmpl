@@ -204,36 +204,37 @@ sink, and write ownership.
    keep-alive or completion. A Host that
    ended its turn while workers are in flight, or with delivery, acceptance or
    close-out open, is not an idle worker: keep it and send it no "continue"; its
-   next beat is a worker event. Cancel the heartbeat once no unfinished
-   delivery/sync/cleanup remains; preserve existing recovery information and give
-   the rest a named owner. Direct cleanup of completed, unreferenced
+   next beat is a worker event. Before quiescence, reconcile actual owner
+   goal/stop with heartbeat project.goal/stop, active/pending (authorized backlog
+   and aggregate QA/doc duties); completed worker/run/batch doesn't end an
+   open mandate. If open, step 2 selects actionable authorized work/duties
+   within grants/caps; claim issues only while intake open. Keep
+   all-blocked work event-driven. Cancel on completed scope/duties or stop
+   boundary after in-hand close-out. Keep recovery info; assign the rest an
+   owner. Direct cleanup of completed, unreferenced
    worktrees/branches; protect in-flight work and evidence. Session stop, acceptance, merge, closure and cleanup are different facts, not
    interchangeable completion labels.
 
 ## Ending a run
 
-When ending a project run, the default is to finish every in-hand authorized
-task and every in-hand issue of this run (claimed or in flight), then
-merge their worktrees and branches, leave no leftover branch tails, and leave
-the workspace clean, matching Kaola Workflow close-out. Do not park unfinished
-branches as the normal end of a project run.
+When ending a project run, finish every in-hand authorized task and each
+claimed/in-flight issue of this run; merge their worktrees/branches, remove
+branch tails, and clean the workspace per Kaola Workflow close-out. Do not park
+unfinished branches.
 
-A human stop boundary such as "run until 5pm", "run until done", or
-"run until CONDITION" means: after that line, do not accept or dispatch new
-tasks, and do not claim or start new issues. Time-up is not drop-everything:
-that same default applies, and a clock or condition boundary is not the
-skip-cleanup pause below.
+After a human stop boundary ("until 5pm/done/CONDITION"), accept/dispatch no
+tasks and claim/start no issues. Time-up still requires that close-out; it is
+not the scoped pause below.
 
-Only an explicit "stop here and continue later" (stated scope) is a scoped
-pause: it skips that cleanup, may leave recovery-preserving unfinished branches,
-and forces no merge or cleanup beyond its stated scope.
+Only "stop here and continue later" with stated scope pauses cleanup and permits
+recovery-preserving branches; do not merge or clean beyond that scope.
 
-Honor a user stop request within its stated scope; otherwise the heartbeat ends
-on step 5's conditions.
+Honor scoped user stops; otherwise end only after step 5 reconciles the goal,
+stop boundary and pending duties.
 
-New authorized work, or a different task, gets a new session: a fresh `start`
-under a new standard name, never a prompt chained into a finished seat;
-`--resume` (native id known) or `--continue` recover the same assignment only.
+New authorized work or another task gets a fresh `start` under a new standard
+name, never a finished seat; `--resume`/`--continue` recover the same assignment
+only.
 
 ## Dispatch notes
 
