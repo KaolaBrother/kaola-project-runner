@@ -225,77 +225,6 @@ installed by default only for the Codex destination; use `--bin-links` elsewhere
 `--uninstall --bin-links` to remove them. See the
 [installer reference](docs/api.md#installer) for all options.
 
-### dsh default route
-
-When the requested installation includes dsh (no `--platform`, a `--platform` list
-naming `dsh`, or `--runtime dsh`), the installing Agent also sets up the dsh default
-preset `dsh/default` (`opencode-go/deepseek-v4.1-flash`). Installing only other
-runtimes does not authorize changing dsh. Copying the Skills does not make that
-default ready: stock dsh 0.1.7-rc.2 has no `deepseek-v4.1-flash` in its opencode-go
-catalog and sends no `x-opencode-session` header, so its shipped `acp` profile
-cannot run the preset. The exact patch entry, its limits, and the profile import
-behavior are in the dsh worker's
-[platform.md Launch](skills/dsh-kaola-project-runner/references/platform.md#launch);
-the proof is the closed #227 evidence
-(`kaola-workflow/archive/issue-227/dsh-0.1.7-compat-evidence.md`). Steps:
-
-1. Locate the target. The home is `"${DSH_HOME:-$HOME/.dsh}"`, the binary
-   `"${DSH_BIN:-dsh}"` (check `--version`; 0.1.7-rc.2 is the verified release), and
-   the file to edit is `$DSH_HOME/profiles/acp/cordis.patch.yml`.
-2. Create the `acp` profile correctly. If `profiles/acp/` does not exist, dsh
-   creates it on the profile's first boot. If `$DSH_HOME/settings.yaml` still
-   exists, the first 0.1.7 boot of *any* profile renames it `settings.yaml.imported`
-   and imports it into that profile only, so let the `acp` profile boot first: a
-   Runner `start` and exact `stop` (the step 5 commands, no `send`). If another
-   profile already took the import, copy only the sections the `acp` profile still
-   needs from `settings.yaml.imported` into its patch; do not rename the file back.
-3. Merge the route. Back up the patch first
-   (`cp cordis.patch.yml cordis.patch.yml.bak-$(date +%Y%m%d%H%M%S)`). Then add the
-   `llm-pi-ai` entry from platform.md Launch, or merge it into an existing
-   `llm-pi-ai` entry's `config.providers.opencode-go`. Keep every other entry,
-   provider, header, and credential setting. Read `baseURL` from the installed
-   catalog's `openai-completions` entries:
-
-   ```bash
-   BIN="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$(command -v "${DSH_BIN:-dsh}")")"
-   CAT="$(find "$(dirname "$BIN")/../../.." -path '*pi-ai/dist/providers/data/opencode-go.json' | head -1)"
-   python3 -c 'import json,sys;print(*{m.get("baseUrl") or m.get("baseURL") for m in json.load(open(sys.argv[1]))["openai-completions"].values()})' "$CAT"
-   ```
-
-   For the header, keep an existing `x-opencode-session` value, or create one
-   stable value for this home (`uuidgen`). Every session on this route shares it.
-4. Stop and report instead of overwriting when the merge conflicts. Examples: an
-   existing opencode-go entry has a different `api` or `baseURL`, or the profile
-   uses other opencode-go models. The declared `models` list replaces the stock
-   catalog, so those models must be listed too or the user must accept losing them.
-   To recover, restore the backup.
-5. Verify in the same home, with the installed dsh Skill
-   (`SKILL_DIR` = its installed directory):
-
-   ```bash
-   REPO="$(mktemp -d)/repo" && git init -q "$REPO"; SESSION=dsh-kaola-install-verify
-   "$SKILL_DIR/scripts/runtime-tmux.sh" start --repo "$REPO" --session "$SESSION" --tier default
-   "$SKILL_DIR/scripts/runtime-tmux.sh" observe --repo "$REPO" --session "$SESSION"
-   "$SKILL_DIR/scripts/runtime-tmux.sh" send --repo "$REPO" --session "$SESSION" --text 'Reply with exactly: DSH-ROUTE-OK'
-   "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 50
-   "$SKILL_DIR/scripts/runtime-tmux.sh" stop --repo "$REPO" --session "$SESSION"
-   ```
-
-   The dsh default is ready when four things are true. The Skills and the patch
-   route are in place. The start receipt's `config_application.model` is applied,
-   and `observe` shows model `currentValue` `["opencode-go","deepseek-v4.1-flash"]`.
-   The one send returns the reply. The stop is exact, with `residual_pids` `[]`.
-   A current receipt for the same home, binary version, and patch can be cited
-   instead of repeating the run.
-
-Report failures with the next user action; do not claim readiness. `-32602 unknown
-model option` means the route is not in the `acp` patch. `400 MissingSessionID` means
-the header is missing. A missing OpenCode Go credential needs the user to supply it:
-either `OPENCODE_GO_API_KEY` in the environment that launches the Runner, or dsh's
-existing credentials store in that home. The Agent never logs in, and never prints,
-copies, or replaces a credential. It does not switch the preset to another
-model or provider either.
-
 Use the host's Skill discovery mechanism, or have the agent read the installed
 `SKILL.md` directly. In Codex, a Skill can be invoked as
 `$claude-code-kaola-project-runner`, for example.
@@ -419,9 +348,8 @@ and `references/acp.md`; transport and bridge internals are in the
 [architecture notes](docs/architecture.md).
 
 - **dsh** runs its shipped automation-only ACP profile (`dsh --profile acp`); it
-  needs no login and has no terminal UI; dsh creates the profile under `$DSH_HOME`
-  on first boot, and its default route needs the
-  [install setup](#dsh-default-route). It starts with **full access by default** (`danger-full-access`, no
+  needs no login and has no terminal UI, and the profile must already exist under
+  `$DSH_HOME`. It starts with **full access by default** (`danger-full-access`, no
   sandbox, approval `never`) — set the launch variable `DSH_PERMISSION_MODE` or pass
   `--mode` (`read-only`, `workspace-write`, `danger-full-access`) for anything else.
   The shipped profile also pins the `deepseek-official` route, so a session can

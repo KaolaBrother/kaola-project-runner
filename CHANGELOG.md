@@ -20,15 +20,6 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   granted. A resume that does not name a tier, model, or effort keeps the
   native selection.
 
-- **dsh default route setup at install (Issue #231).** README Install and
-  begin gains a "dsh default route" step. When an installation includes dsh,
-  the installing Agent configures the `acp` profile's opencode-go route from
-  platform.md Launch. It merges into existing settings and backs them up first,
-  and it reports conflicts or a missing credential instead of overwriting.
-  The dsh default counts as ready only after a verified start (model applied,
-  `currentValue` on the route), one send, and an exact stop. Only the dsh
-  `launch_summary` wording changed; no code or protocol changed.
-
 Seats: restart required
 
 The operator diff from v0.6.9 to this candidate
