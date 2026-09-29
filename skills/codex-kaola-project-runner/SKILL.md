@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport
 
-ACP is the only transport (Issue #130). The ACP command is `npx --yes --package @openai/codex@0.156.1 --package @agentclientprotocol/codex-acp@1.13.1 codex-acp`; prompts travel over its stdio JSON-RPC, never shell eval. Login is a human act outside the Runner and needs no terminal. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
+ACP is the only transport (Issue #130). The ACP command is `npx --yes --package @openai/codex@0.158.0 --package @agentclientprotocol/codex-acp@2.0.0 codex-acp`; prompts travel over its stdio JSON-RPC, never shell eval. Login is a human act outside the Runner and needs no terminal. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
 
 | `mutation_status` | Safe interpretation |
 |---|---|
@@ -107,7 +107,7 @@ or editor replacement. Settle a pending permission `request_id` with
 `permit [--request-id ID] --option OPTION_ID` (an option the request offers); omitting `--option`
 answers `cancelled`, which denies. Read the resulting output before choosing another action.
 
-Permission default: `start` sets ACP `mode=agent-full-access`; `--permission-mode MODE` sets another advertised `mode` value (`read-only` is on-request approval, not an OS sandbox).
+Permission default: `start` sets ACP `mode=agent-full-access`; `--permission-mode MODE` sets another advertised `mode` value (`read-only` is the upstream read-only sandbox; a write needs client approval).
 
 When the Agent decides the exact session is finished, end only that owned session:
 

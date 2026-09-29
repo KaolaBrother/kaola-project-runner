@@ -1,6 +1,6 @@
 # Codex CLI ACP transport
 
-Command: `npx --yes --package @openai/codex@0.156.1 --package @agentclientprotocol/codex-acp@1.13.1 codex-acp`. Login: see SKILL.md §Transport. Platform quirks: adapter translates ACP stdio to Codex App Server; CODEX_PATH selects the Codex binary, otherwise its bundled @openai/codex pin (the 0.156.1/1.13.1 pins are record-only, with no live run; dated measurements are in CHANGELOG.md); session capabilities advertise empty objects; native ACP mode read-only is upstream 'Ask for approval' (workspace-write + on-request, permits workspace writes) and agent is 'Approve for me' (auto_review) — ACP read-only is upstream on-request approval, not an OS sandbox; the Runner has no path to OS read-only.
+Command: `npx --yes --package @openai/codex@0.158.0 --package @agentclientprotocol/codex-acp@2.0.0 codex-acp`. Login: see SKILL.md §Transport. Platform quirks: adapter translates ACP stdio to Codex App Server; CODEX_PATH selects the Codex binary, otherwise its bundled @openai/codex pin (0.158.0/2.0.0 live-verified 2026-09-29 on an isolated gpt-6-luna/max seat, Issue #226); session capabilities advertise empty objects; native ACP mode read-only is upstream 'Read-only' (readOnly sandbox, on-request; a write needs an explicit client approval), workspace-write is 'Workspace access', agent is 'Auto review' (auto_review), and agent-full-access is 'Full access'. The Runner mode config option is the turn sandbox; session/new modes.currentModeId stays the adapter default agent until session/set_mode.
 
 ## Command surface
 

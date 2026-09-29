@@ -513,9 +513,10 @@ advertise no ACP option; OpenCode's default ACP path has none at all. On a platf
 with no verified ACP skip-all, a permission request may still arise: it surfaces as
 a `permission_required` event and is settled with `permit` (delivery and wake
 semantics in the [command reference](docs/api.md)). Use `--permission-mode` where
-supported and check the native semantics — Codex ACP's `read-only` mode is upstream
-on-request approval with a workspace-write sandbox and can write workspace files; it
-is not an OS sandbox. Droid defaults to full bypass; its `--permission-mode` values
+supported and check the native semantics — Codex ACP's `read-only` mode (codex-acp
+2.0.0) is the upstream read-only sandbox, and a write needs an explicit client
+approval. `workspace-write` is the preset that edits workspace files without a prompt.
+Droid defaults to full bypass; its `--permission-mode` values
 map to ACP autonomy levels. dsh's launch-variable default is in
 [platform notes](#platform-notes). Authentication and workspace trust remain
 native CLI concerns; per-platform facts are in each worker Skill's

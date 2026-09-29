@@ -299,10 +299,10 @@ class CodexContinueIntegrationTests(unittest.TestCase):
         }
         mode = options.get("mode") or {}
         self.assertEqual(mode.get("value"), "read-only")
-        self.assertEqual(mode.get("value_name"), "Ask for approval")
+        self.assertEqual(mode.get("value_name"), "Read-only")
         self.assertEqual(
             mode.get("value_description"),
-            "Always ask to edit external files and use the internet")
+            "Requires approval to edit files and access the internet.")
         self.assertEqual(mode.get("option_name"), "Mode")
 
     # -- paginated continue -----------------------------------------------------
