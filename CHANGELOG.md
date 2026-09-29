@@ -49,7 +49,8 @@ The operator diff from v0.6.9 to this candidate
 (`git diff v0.6.9..HEAD -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
 is non-empty. Changed paths are `platforms/claude-code.yaml`,
 `platforms/codex.yaml`, `platforms/cursor-cli.yaml`, `platforms/devin.yaml`,
-`platforms/droid.yaml`, and `scripts/adapters/claude-code.sh`.
+`platforms/droid.yaml`, `platforms/dsh.yaml`, and
+`scripts/adapters/claude-code.sh`.
 `scripts/kaola-acp-holder.py`, `scripts/kaola-zcode-acp.py`, and
 `scripts/kaola-quota.py` are unchanged. Running seats keep the bytes they
 started with and must restart after installing this change.
