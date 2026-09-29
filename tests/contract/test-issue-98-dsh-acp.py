@@ -220,9 +220,9 @@ class DshManifestMatchesTheMeasuredSurface(unittest.TestCase):
                 self.assertEqual(key, f"{route[0]}/{route[1]}")
 
     def test_verified_versions_name_the_launcher_and_the_agent_separately(self) -> None:
-        """agentInfo is deepseek-harness-acp/0.0.1 while the CLI is 0.1.5-rc.2."""
+        """agentInfo is deepseek-harness-acp/0.0.1 while the CLI is 0.1.7-rc.2 (#227)."""
         versions = self.values["acp_verified_versions"]
-        self.assertIn("cli=0.1.5-rc.2", versions)
+        self.assertIn("cli=0.1.7-rc.2", versions)
         self.assertIn("deepseek-harness-acp/0.0.1", versions)
         self.assertIn("protocol=1", versions)
 
