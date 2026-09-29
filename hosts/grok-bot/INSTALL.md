@@ -1,13 +1,11 @@
 # Grok Bot: one bridge Skill, one device-local locator per execution target
 
-These steps are for the owner and for Grok Bot itself. They are not a Skill. The account
-receives **exactly one** small private Skill, `kaola-delegator` (Kaola-Delegator bridge,
-`hosts/grok-bot/kaola-delegator.md`, 2555 bytes, stage `content`). Every policy,
-worker, reference, and script stays in the repository and is loaded on demand from a verified
-checkout on the bound execution target. Research on Grok Bot 0.51.0 found no supported automated
-way to create an account Skill (`NO_SUPPORTED_PATH`), so the one native skill write below is the
-only account operation; there is no Marketplace, credential, ZIP import, unofficial Sand or RPC
-path, and no state hack.
+This owner/Bot guide is not a Skill. The account receives **exactly one** private Skill,
+`kaola-delegator` (Kaola-Delegator bridge, `hosts/grok-bot/kaola-delegator.md`,
+2555 bytes, stage `content`). Policies, workers, references and scripts load
+on demand from a verified checkout on the bound target. Grok Bot 0.51.0 has no supported
+automated account-Skill creation (`NO_SUPPORTED_PATH`): use the one native write below.
+No Marketplace, credential, ZIP import, unofficial Sand/RPC path or state hack.
 
 ## 0. Two commits: content R, then pin P
 
