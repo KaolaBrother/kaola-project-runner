@@ -568,7 +568,7 @@ def check_external_package(assertions: Assertions, root: Path) -> None:
 
 
 def check_issue_132_one_host(assertions: Assertions, root: Path) -> None:
-    """Issue #132 T10/T11: one Host per repo and the reach-out repo sweep are
+    """Issue #132 T10/T11: one Host per repo and the Delegator-inquiry sweep are
     stated where each reader looks, and no surface introduces a registry,
     lock file, or pointer file, or reads PPID as an orphan test."""
     def text(*parts: str) -> str:
@@ -589,10 +589,11 @@ def check_issue_132_one_host(assertions: Assertions, root: Path) -> None:
         "handoff": (handoff, ("list --repo \"$PROJECT\" --include-dead", "`identity: verified`",
                               "never a second `start`", "(`stopped` with `residual_pids: []`, or `no-session`)",
                               "first exact-stopped by its own platform's Runner",
-                              "`unreachable` twice", "report a `mismatch`", "each with the `sweep=` line",
+                              "`unreachable` twice", "report a `mismatch`", "sweep=Delegator inquiry:",
                               "a PID alone is never liveness")),
-        "main": (main, ("one Host per root (`host-exists`)", "the repo sweep first in every beat")),
-        "host-startup": (startup, ("## Repo sweep: first step of every beat a Delegator opens",
+        "main": (main, ("one Host per root (`host-exists`)", "Delegator-inquiry sweep", "one owned permission event needs no full sweep")),
+        "host-startup": (startup, ("## Repo sweep: first step of each Delegator inquiry",
+                                   "A permission event for an owned seat needs no full sweep",
                                    "`host-exists`", "a PID alone is never liveness",
                                    "`HUMAN_DECISION_REQUIRED`", "Only orphans stop",
                                    "in-flight work is never guessed dead", "`swept: stopped=",
@@ -610,6 +611,16 @@ def check_issue_132_one_host(assertions: Assertions, root: Path) -> None:
     assertions.check("test_issue_132_handoff_text_carries_sweep_line",
                      re.search(r"(?m)^sweep=.*list --repo.*stop orphans only.*keep in-flight", handoff_raw)
                      is not None, "the handoff text block has no sweep= line")
+    snapshot = text("skills", EXTERNAL_ID, "references", "snapshot.md")
+    assertions.check("test_issue_235_single_permission_event_skips_full_sweep",
+                     "A full sweep is one Delegator inquiry" in snapshot
+                     and "one owned permission event needs no additional full sweep" in snapshot,
+                     "a single owned permission event triggers an unnecessary full sweep")
+    heartbeat = text("skills", ORCHESTRATOR_ID, "references", "heartbeat-skeleton.md")
+    scoped_pause = "收到用户明确暂停要求时，立即暂停所指动作并更新现有状态；无关的已授权工作继续。"
+    assertions.check("test_issue_235_heartbeat_pause_is_explicit_and_scoped",
+                     heartbeat.count(scoped_pause) == 1,
+                     "heartbeat must use the single explicit, scoped pause clause")
     # Control-plane surfaces; a worker's platform.md may name a platform's own
     # registry (ZCode's desktop provider registry) as a measured fact.
     surfaces = [*root.glob(f"skills/{ORCHESTRATOR_ID}/**/*.md"),

@@ -98,11 +98,11 @@ The beat itself - starting workers here, non-blocking dispatch, the
 real reply when an event wakes you - is written once in
 [zcode-host-dispatch.md](zcode-host-dispatch.md).
 
-## Repo sweep: first step of every beat a Delegator opens
+## Repo sweep: first step of each Delegator inquiry
 
-A prompt carrying `sweep=` (handoff, update, or steer) runs this before anything
-else, as part of recover-and-observe, not a new beat. You own it; the Delegator
-only asks; `--repo` keeps other repos out.
+`sweep=` marks the Delegator's full reconciliation; run it first. A permission event
+for an owned seat needs no full sweep. You own it; Delegator only asks;
+`--repo` excludes other repos.
 
 ```bash
 python3 "${WORKER%/*}/kaola-acp.py" list --repo "$PROJECT" --include-dead

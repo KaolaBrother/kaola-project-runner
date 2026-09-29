@@ -13,7 +13,9 @@ history:
   count, Class grant lifetime, cap, quota units, seat identity and switch
   authorization kept as separate facts, and an optional
   `special_requirements` only when the owner actually supplied one (absent
-  means none); `watch` (open progress/decisions, source pointers); `stop`.
+  means none); relay owner-explicit model/seat choices unchanged and infer no
+  worker allocation or extra constraint; `watch` (open progress/decisions,
+  source pointers); `stop`.
 - `cadence`: `timezone`, `start_local`, `end_local`, `interval_minutes`
   (e.g. `Asia/Shanghai`, `08:00`, `22:00`, `120`).
 - `timer_owner`: current outer `platform` and its `native_timer_id`.
@@ -25,10 +27,12 @@ history:
   the Delegator itself ends.
 
 The existing native timer is the only scheduler; its prompt stays static:
-Skill entry and project locator. Each inquiry: read the file, verify `host` by
-fresh Runner `status`, audit the Host `body` (its `authorization` holds the
+Skill entry and project locator. A full sweep is one Delegator inquiry; one
+owned permission event needs no additional full sweep. Each inquiry: read the
+file, verify `host` by fresh Runner `status`, audit the Host `body` (its `authorization` holds the
 three Class definitions and an ID/Class/profile row per authorized preset),
-send one concrete correction to that Host, replace stale facts. Never write
+send one correction with current values, replace stale facts. Relay urgent
+owner stops immediately; never wait to consolidate other changes. Never write
 the Host JSON, copy its rows here, or select workers. Missing or unreadable: report, then recover from owner,
 Runner and forge records before any `start`; never blank authorization.
 
@@ -44,6 +48,23 @@ Unconfirmed: keep `pending`, report the specific gap, reconcile next beat.
 The daily pause is never a Host stop or task completion. `final_stop` uses the
 existing close-out and exact-stop rules; confirm the result before disabling
 recurrence.
+
+## Scoped owner pause
+
+Only an explicit owner stop/pause naming affected actions triggers this
+procedure; ordinary inquiry, guidance, heartbeat or review feedback does not.
+Record the exact scope and permitted continuation in existing `stop`/`watch`
+before another affected action; safe state updates, reporting, checkpointing
+and reconciliation remain allowed. Preserve unrelated work. A release pause
+covers installation even when called preparation; unrelated authorized
+diagnosis continues. For an urgent
+stop, use the exact Host: idle `send`, busy
+`steer --steer-mode interrupt` with the stop text. Confirm Host
+acknowledgment, the current heartbeat snapshot and cessation of affected
+actions from `observe`/`capture` receipts. Admission, `injected`, or
+`end_turn` alone is not adoption. If unconfirmed, report and reconcile without
+blind resend. Cancellation is not instant or undo: record completed side
+effects; do not roll them back automatically.
 
 ## Timer handoff
 

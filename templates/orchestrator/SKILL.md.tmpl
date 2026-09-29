@@ -18,6 +18,9 @@ permission to self-execute, read evidence and direct workers: do not implement,
 test, edit project documentation, create worktrees, or mutate the repository
 yourself.
 
+Authorized release/install mechanics may stay Host-owned without an issue or
+worker solely for them; honor owner allocation and project lifecycle.
+
 ## Two entry points
 
 **Ordinary worker supervision** - you dispatch and accept from your own session
@@ -28,11 +31,10 @@ no extra gate.
 the native `/kaola-project-runner` Skill invocation (ZCode) or your platform's
 measured entry, and supervise workers on event-driven beats. Outer Agents
 start or continue the Host through Kaola-Delegator (`kaola-delegator`).
-Role, authorization and lifecycle boundary come from the
-project's existing Project Plan or already-authorized task plan - never a new
-schema, never this session's claim of having loaded this Skill. Startup, one
-Host per root (`host-exists`), the repo sweep first in every beat and the entry
-line: [host-startup.md](references/host-startup.md) ·
+Use existing project plans for role, authorization and lifecycle; this Skill
+creates none. Startup and one Host per root (`host-exists`), plus a
+Delegator-inquiry sweep (one owned permission event needs no full sweep):
+[host-startup.md](references/host-startup.md) ·
 [zcode-native-skill-entry.md](references/zcode-native-skill-entry.md) ·
 [host-entry-matrix.md](references/host-entry-matrix.md).
 
@@ -59,8 +61,9 @@ quota system: the cap is that count, enforced from `status`/`stop` receipts.
 Preset classes ([worker-profiles.md](references/worker-profiles.md)): five
 Worker presets are default-authorized outside that cap (permission, not
 preference); Elite needs an explicit grant; Expert is complex thinking only,
-with fresh user permission per task. Choose by authorization, class,
-profile/task fit, capacity; the heartbeat holds authorized
+with fresh user permission per task. Choose by authorization, availability,
+class responsibility, profile/task fit, resources; prior success is evidence,
+not sole reason. The heartbeat holds authorized
 [profile rows](references/profile-catalog.md) and Class definitions.
 
 Follow human instructions, project contracts, and evidenced shared-resource
@@ -106,14 +109,13 @@ Quota packages (read-only catalog; never changes the count cap), limit-failure b
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | Five Worker presets are default-authorized (permission, no per-seat/count/priority, outside cap); Elite explicit grant; Expert per-task permission; not a preference over suitable authorized Elite. No authorized task: ask, start no worker, register no heartbeat. |
+| Allowed CLIs | See Authorization above. |
 | Count | Named CLI without a count: one; it bounds live processes. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices. |
-| Other tiers | Only `default` is common; other `--tier` names are that platform's own unranked presets. Use one only when authorization names it; ask if unclear. No automatic model, tier, or transport switch; only a seat the user explicitly authorized may switch its model/preset, within its own runtime. |
+| Other tiers | Only default is common; tiers are platform-specific/unranked. No automatic model, tier, or transport switch; only owner-authorized model/preset changes stay within runtime. |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
 | Heartbeat | Non-Host: {{HEARTBEAT_DEFAULT}}; zero or "no heartbeat" means one-shot; one host-native carrier, else same-session sleep, never both. Host: event-driven only (see Hosts). |
 | Permissions | Per platform, not one global bypass. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
-| Self-execute | Off unless the human explicitly allows it. |
 | Cursor | Never use `/model` as a read-only probe. |
 
 Bind the consuming project's canonical project root once at setup with
@@ -176,7 +178,9 @@ sink, and write ownership.
    delivery requirements, and the doc-impact call in its prompt; merely seeing a
    worktree or ledger is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
-   expand the authorized goal or duplicate claims.
+   expand the authorized goal or duplicate claims. Pass still-valid candidate
+   evidence; recheck changed/invalidated facts or actual gaps. Keep required
+   project/release checks.
 3. **Accept the delivery.** {{ACCEPTANCE_BEFORE_FINALIZE}}. When a worker
    claims completion, judge its actual diff, checks, docs and run records
    against that assignment under the effective global Workflow rules. Reuse
@@ -220,17 +224,14 @@ sink, and write ownership.
 When ending a project run, finish every in-hand authorized task and each
 claimed/in-flight issue of this run; merge their worktrees/branches, remove
 branch tails, and clean the workspace per Kaola Workflow close-out. Do not park
-unfinished branches.
+unfinished branches as the normal end.
 
-After a human stop boundary ("until 5pm/done/CONDITION"), accept/dispatch no
-tasks and claim/start no issues. Time-up still requires that close-out; it is
-not the scoped pause below.
+Do not accept or dispatch new tasks after the stop boundary. Do not claim or
+start new issues. After time-up, still finish in-hand and merge/clean.
 
-Only "stop here and continue later" with stated scope pauses cleanup and permits
+The time/condition boundary is not the scoped pause. Only an explicit owner
+"stop here and continue later" with stated scope skips cleanup and permits
 recovery-preserving branches; do not merge or clean beyond that scope.
-
-Honor scoped user stops; otherwise end only after step 5 reconciles the goal,
-stop boundary and pending duties.
 
 New authorized work or another task gets a fresh `start` under a new standard
 name, never a finished seat; `--resume`/`--continue` recover the same assignment

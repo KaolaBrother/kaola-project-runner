@@ -56,11 +56,11 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    ```
 
    `list` spans every platform; Host platform unknown: run it from any
-   installed Runner. If it or existing records
-   uniquely name a live Host whose session is not `$HOST`, adopt that locator
-   and its platform as `$PLATFORM` (Grok Bot: re-attest) — never rename or
-   start a second Host; a missing `$HOST` proves nothing. Live Hosts = `list` rows with `host_class` and `identity:
-   verified`. Ambiguous location: report and do not start.
+   installed Runner. If it or records uniquely name a live Host under another
+   session, adopt its locator and platform (Grok Bot: re-attest); never rename
+   and retry; never a second `start`. Missing `$HOST` proves nothing. A live Host
+   row has `host_class` and `identity: verified`. Ambiguous location: report
+   and do not start.
 2. **Live Host** (exact platform/repo/session still serves, and
    `holder_instance_id` plus `acp_session_id` match the receipts): do not
    `start`. Continue on that holder. If `status` shows a different
@@ -97,15 +97,14 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
 
 ## Handoff and updates
 
-Idle Host: `send`; `--no-wait` is admitted, not delivered or complete; a
-first `end_turn` is only that beat.
+Idle Host: `send`; first `end_turn` is that beat only.
 
-Busy Host (`prompt-in-progress` / turn active): never claim a `--no-wait`
-send consumed — `steer` injects the running turn verbatim (no new `Skill`
-invocation) or wait for idle; `steer --steer-mode interrupt`
-resends verbatim on a new turn — not a Host entry; supply the first line
-yourself to open a Host round.
-`unknown`/`not_consumed` is not a resend. No queue.
+Busy Host (`prompt-in-progress` / turn active): `steer` injects the running
+turn verbatim (no new `Skill` invocation); otherwise wait for idle. `--no-wait`
+is not delivery. Urgent owner stop: immediately interrupt this exact Host via
+`steer --steer-mode interrupt` with stop text; it cancels the running turn and
+resends verbatim on a new turn, not a Host entry — supply the first line.
+`unknown`/`not_consumed`: report/reconcile, never blindly resend. No queue.
 
 ```bash
 "$RUNNER" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
@@ -113,12 +112,12 @@ yourself to open a Host round.
 "$RUNNER" capture --repo "$PROJECT" --session "$HOST" --lines 200
 ```
 
-Every turn-opening Host prompt — handoff and later updates alike, each with
-the `sweep=` line — opens with that platform's `host_skill_entry` as its own
-first line (zcode: `/kaola-project-runner`; codex: `$kaola-project-runner`):
-the native Skill entry, idempotent across re-invocation and after compaction.
-Install per Project Runner's discovery precondition. No `AGENTS.md` block or
-manual `SKILL.md` read is the carrier.
+Every turn-opening Host prompt — handoff and later updates alike — opens with
+that platform's `host_skill_entry` as its own first line (zcode:
+`/kaola-project-runner`; codex: `$kaola-project-runner`):
+idempotent across re-invocation and after compaction. Install per Project
+Runner's discovery precondition. No `AGENTS.md` block or manual `SKILL.md` read
+is the carrier.
 
 Handoff text (quota units never merge; `unspecified` is not unlimited):
 
@@ -131,6 +130,7 @@ done=<already done>
 remaining=<remaining work>
 authorized_platforms=<preset_id:count, ...>
 target_local_presets=<bound-target survey runtimes + installed Runner tiers>
+owner_model_seat_choices=<as given; omit if none>
 quota_concurrency=<as given>
 quota_account=<as given>
 quota_token=<as given>
@@ -138,7 +138,7 @@ priority=<as given>
 delivery_stop_boundary=<as given>
 project_context=<canonical root and other given facts>
 startup_proof=quote one Skill-body-only sentence; no tool read
-sweep=every beat: list --repo, verify identity, stop orphans only, keep in-flight, report
+sweep=Delegator inquiry: list --repo, verify identity, stop orphans only, keep in-flight, report
 Finish planning, worker dispatch, heartbeat, acceptance, and Workflow
 close-out internally. Missing authorization stays missing:
 do not expand it.
