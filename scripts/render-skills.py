@@ -87,10 +87,17 @@ OPTIONAL = {"acp_command_default",
             # Issue #146: seconds the holder waits for the `session/new`
             # response; absent keeps the shared 15 s. A measured per-platform
             # latency fact, never a gate.
-            "acp_session_new_timeout"}
+            "acp_session_new_timeout",
+            # Issue #237: declared component identity/effort for the default
+            # preset. Absent on presets whose `*_model_effort` is already the
+            # consumer-facing preset effort. Never a launch parameter.
+            "default_model_components"}
 
 
 TIER_FIELDS = ("name", "id", "parameters", "effort", "profile", "class")
+# Issue #237: optional per-preset JSON (a string whose content is a JSON
+# array). Not a second registry and not read by the effort apply path.
+COMPONENT_FIELD = "components"
 # Issue #206: display order of the owner-defined classes in rendered catalogs.
 CLASSES = ("Elite", "Worker", "Expert")
 
@@ -102,7 +109,43 @@ def named_tiers(manifest: dict[str, str]) -> list[str]:
 
 def tier_keys(word: str) -> set[str]:
     prefix = word.replace("-", "_")
-    return {f"{prefix}_model_{field}" for field in TIER_FIELDS} | {f"acp_command_{prefix}"}
+    return ({f"{prefix}_model_{field}" for field in TIER_FIELDS}
+            | {f"{prefix}_model_{COMPONENT_FIELD}", f"acp_command_{prefix}"})
+
+
+def validate_model_components(path: Path, key: str, raw: str) -> None:
+    """Issue #237: a declared component list, not prose and not a launch effort.
+
+    One ``main`` and any number of distinct ``sidekick`` roles. Effort stays
+    on each component so a fusion preset is never one scalar for both.
+    """
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path}: {key} must be a JSON array encoded as a string") from exc
+    if not isinstance(parsed, list) or not parsed:
+        raise ValueError(f"{path}: {key} must be a non-empty JSON array")
+    roles: list[str] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise ValueError(f"{path}: {key} entries must be objects")
+        extra = set(item) - {"role", "name", "effort"}
+        if extra:
+            raise ValueError(f"{path}: {key} has unexpected keys {sorted(extra)}")
+        role = item.get("role")
+        name = item.get("name")
+        effort = item.get("effort")
+        if role not in {"main", "sidekick"}:
+            raise ValueError(f"{path}: {key} role must be main or sidekick")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"{path}: {key} name must be a non-empty string")
+        if not isinstance(effort, str) or not effort:
+            raise ValueError(f"{path}: {key} effort must be a non-empty string")
+        roles.append(role)
+    if roles.count("main") != 1:
+        raise ValueError(f"{path}: {key} needs exactly one main component")
+    if len(roles) != len(set(roles)):
+        raise ValueError(f"{path}: {key} repeats a role")
 
 
 def parse_manifest(path: Path) -> dict[str, str]:
@@ -175,6 +218,8 @@ def parse_manifest(path: Path) -> dict[str, str]:
     for key in [k for k in result if k.endswith("_model_class")]:
         if result[key] not in CLASSES:
             raise ValueError(f"{path}: {key} must be one of {', '.join(CLASSES)}")
+    for key in [k for k in result if k.endswith("_model_components")]:
+        validate_model_components(path, key, result[key])
     # A named tier resolves to a declared model: name and id are required,
     # parameters, effort and profile are present (possibly empty).
     for word in words:

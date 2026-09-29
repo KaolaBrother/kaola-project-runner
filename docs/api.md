@@ -57,9 +57,10 @@ answered after ~18 s). The client start window (20 s) and the probe bound (60 s)
 amount it exceeds 15 s, keeping the margins they had over the default wait; the holder reports
 no answer in time as `acp-session-timeout`. Model-selection fields are
 `default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`/`default_model_profile`,
-`named_tiers`, and `fast_support`/`fast_summary` (Issue #188). Only `default` is common;
+optional `default_model_components`, `named_tiers`, and `fast_support`/`fast_summary` (Issue #188, components Issue #237). Only `default` is common;
 `named_tiers` is the comma-separated list of the platform's own tier words (empty for none), and
 each word `W` carries `<w>_model_name`/`<w>_model_id`/`<w>_model_parameters`/`<w>_model_effort`/`<w>_model_profile`
+and may carry `<w>_model_components`
 with `w` = `W` with `-` as `_` (name and id required; a profile may be empty and has no `|`,
 Issue #190). Profiles are selection guidance rendered only into Project Runner's
 `references/worker-profiles.md`; they never change a preset or gate `start`. The words are unordered names, not a
@@ -770,7 +771,8 @@ reported as evidence and never rewrites or blocks the declared exact model liter
 catalog absence, or unreadable evidence never disables generic communication.
 
 Model evidence under `model` on the `start`/`preflight` receipt includes `requested_model_source`,
-`requested_model_name`, `requested_tier`, `requested_fast`, `resolved_runtime_model_id`,
+`requested_model_name`, `requested_tier`, `requested_fast`, `requested_effort`, `model_display`,
+`resolved_runtime_model_id`,
 `resolved_parameters`, `resolved_fast`, and structured provenance. `actual_runtime_model_id` and
 `actual_parameters` are `null` and `model_verified` is `unknown`
 (`model_mismatch_reason: actual-model-evidence-not-yet-read`) on most platforms, because ACP
@@ -801,10 +803,106 @@ agent's own current `session_meta.configOptions[].currentValue`. ACP `start` rec
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
 
+### Consumer model name and effort
+
+Issue #237. A downstream consumer composes its own label from a model identity and separate
+effort facts. It does not parse `*_model_parameters`, a native ID suffix, or a preset label.
+
+The preset catalog is `platforms/<id>.yaml`, copied into the worker Skill as `scripts/platform.yaml`.
+For tier word `W` (`default`, or one `named_tiers` word) the prefix `w` is `W` with `-` written as `_`:
+
+| Fact | Field |
+|---|---|
+| display name | `<w>_model_name` |
+| native transport ID | `<w>_model_id` |
+| preset launch effort | `<w>_model_effort` |
+| declared components | `<w>_model_components` (optional) |
+
+`<w>_model_id` may encode effort and stays the transport identifier. An empty `<w>_model_effort`
+means this preset does not apply a separate effort option. `<w>_model_components`, when present,
+is one JSON array encoded as a JSON string. Each object is `{role, name, effort}` with `role`
+`main` or `sidekick` and exactly one `main`. That `main` object is the primary component.
+`<w>_model_name` is the short product identity, not a join of component efforts. The field is
+not copied into `<w>_model_effort`, spawn argv, or `session/set_config_option`. A fusion preset
+does not publish one scalar as both components' effort.
+
+Display names after the ten-runtime audit (preset IDs, native IDs, profiles, classes, quota
+bindings, and launch efforts unchanged): Claude Code `default` and `opus-xhigh` are both
+`Opus 5.5`, with launch efforts `medium` and `xhigh`. Devin `default` is `SWE-2` (main effort
+`max` on the component). Devin `opus-fusion` is `Opus Fusion` (main `Opus 5.5` at `medium`,
+sidekick `SWE-2` at `medium`). Devin `fable` is `Fable Fusion` (main `Fable 5.1` at `high`,
+sidekick `SWE-2` at `medium`). These identities were already clean and stay as declared:
+`Fable`, `Sonnet`, `GPT-6 Sol`, `GPT-6 Astra`, `GPT-6 Luna`, `Grok 4.7`, `Claude Opus 5.5`,
+`Auto Model`, `DeepSeek V4.1 Flash`, `Kimi K3`, `Kimi K2.8`, `GLM 5.3`. `Flash` is the model
+variant, `Auto Model` is the `auto` catalog identity, and Cursor's `Claude` prefix is the
+declared family name.
+
+On `preflight` and `start`, `model_display` is `{name, preset_id, preset_effort, components}`.
+`requested_effort` is the explicit `--effort` value, or null when the flag was omitted.
+`model_selection.resolved_effort` and `resolved_parameters.effort` are the launch value after
+an explicit effort wins over the preset. `config_application.effort` is the apply receipt:
+`applied: false` plus `error` is a rejection, and `reason: no-resolved-value` means no effort
+write was attempted. `effective_selection.effective_effort` is the agent's advertised value at
+that read, or null. Request and launch argv prove what was requested or applied. They do not
+prove the runtime kept it. `preflight` reports `model_display` and `requested_effort` and does
+not apply them; its `config_application` object is the read-only notice, not an effort result.
+
+A direct `--model`, and a preserved `--resume` or `--continue` with no new tier, model, or
+effort, set `model_display` to `{"name": null, "preset_id": null, "preset_effort": null, "components": null}`.
+The native ID remains `resolved_runtime_model_id`. No suffix is stripped from an unknown native
+ID to invent a name or an effort, and the tier word is not turned into a current effort.
+
+`status` and `observe` keep those start facts on `start_evidence` (`model_display`,
+`requested_effort`, `model_selection.resolved_effort`, `config_application.effort`). That object
+is the start, not a new observation. The current effort is `session_meta.configOptions[].currentValue`
+on the option whose `id` is `start_evidence.effective_selection.effort_config_id`. A missing
+option or a missing `currentValue` is null. `view.model` repeats the split for a live watch:
+`model_display`, `requested_effort`, `resolved_effort`, `applied_effort`, `current_effort`.
+`view.models` remains the quota-stamped available-model list. `view.model.current_effort` is
+only that live option. A preserved resume's `start_evidence.inherited` stays historical.
+
+Preset view, same Claude identity, distinct preset efforts (`model_display` for `--tier default`
+and `--tier opus-xhigh` with no `--model` and no `--effort`):
+
+```json
+{"name": "Opus 5.5", "preset_id": "claude-code/default", "preset_effort": "medium", "components": null}
+{"name": "Opus 5.5", "preset_id": "claude-code/opus-xhigh", "preset_effort": "xhigh", "components": null}
+```
+
+Live receipt, `--effort low` on `claude-code/opus-xhigh`: `model_display.preset_effort` is
+`xhigh`, `requested_effort` is `low`, and `model_selection.resolved_effort` is `low`. When the
+agent accepts the option, `config_application.effort.applied` is true and `value` is `low`.
+When the agent rejects it, `applied` is false and `error` is set, and
+`effective_selection.effective_effort` is not `low`. Do not show the requested value as the
+effective effort.
+
+Unknown effort, Droid `--tier default` with no `--effort`. Show the name and an unknown effort.
+Null `requested_effort` is not an effective effort:
+
+```json
+{"name": "Auto Model", "preset_id": "droid/default", "preset_effort": null, "components": null}
+```
+
+Devin `--tier fable`. Components differ. `fable_model_effort` and `acp_effort_config_id` stay
+empty, so start records `config_application.effort.reason` `no-resolved-value` and does not call
+`set_config_option` for effort. The argv stays
+`devin acp --model fusion-claude-fable-5-1-high-sidekick-swe-2-medium`. The primary component
+is `role` `main`. Do not label `high` as the sidekick effort or as `current_effort`:
+
+```json
+{"name": "Fable Fusion", "preset_id": "devin/fable", "preset_effort": null, "components": [{"role": "main", "name": "Fable 5.1", "effort": "high"}, {"role": "sidekick", "name": "SWE-2", "effort": "medium"}]}
+```
+
+Direct `--model custom-model-max` with no tier: `model_display.name` is null,
+`resolved_runtime_model_id` is `custom-model-max`, and `requested_effort` is null. The `-max`
+suffix is not an effort. A preserved resume uses the same null `model_display`.
+`start_evidence.inherited` is the previous start. `view.model.current_effort` is the live
+option value or null, not the inherited effort.
+
 Launch evidence (Issue #203). After applying the selection, `start` hands its own evidence to the
 holder, which keeps it as `start_evidence` in `record.json` and every `status`/`observe` reply (from
 the record when the holder is stopped or lost), across every whole-record rewrite. It is the start
-receipt's `model_selection`, `config_application`, `effective_selection` (including
+receipt's `model_selection`, `model_display`, `requested_effort`, `config_application`, `effective_selection` (including
 `effective_model_source: "launch-argv"` beside the separate `advertised_model`), `fast`,
 `host_selection`, `model_verified`, `model_mismatch_reason`, `actual_runtime_model_id`,
 `actual_parameters`, and `model_evidence_provenance` without its `catalog_probe`, each present only
@@ -831,7 +929,7 @@ manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass valu
 
 Claude Code's `--tier default` is Opus 5.5 (`opus`) at `effort=medium` (Elite;
 implementation, and the Host fallback when no tier is chosen). `--tier opus-xhigh`
-is Opus Extra High, preset `claude-code/opus-xhigh`, native alias `opus` at
+is the same display name Opus 5.5, preset `claude-code/opus-xhigh`, native alias `opus` at
 `effort=xhigh` (Elite; planning, design, and review; it does not perform
 implementation). The preset ID is not the alias. `--tier sonnet` is Sonnet (`sonnet`)
 at `effort=high` (Elite; an explicit preset and count grant, not a Worker-pool member).

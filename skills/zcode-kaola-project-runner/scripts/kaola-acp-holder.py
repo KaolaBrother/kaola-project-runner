@@ -3672,8 +3672,46 @@ class Holder:
         models = self._quota_models()
         if models is not None:
             payload["models"] = models
+        payload["model"] = self._view_model()
         self._fit_view(payload)
         return payload
+
+    def _view_model(self) -> dict[str, Any]:
+        """This session's display and effort facts for a live view.
+
+        ``models`` stays the quota-stamped available-model catalog. ``current_effort``
+        is the live config option only. Start evidence is not reread as current,
+        and a missing effort option stays null rather than a tier or component guess.
+        """
+        evidence = self.start_evidence if isinstance(self.start_evidence, dict) else {}
+        display = evidence.get("model_display")
+        if not isinstance(display, dict):
+            display = None
+        selection = evidence.get("model_selection")
+        selection = selection if isinstance(selection, dict) else {}
+        application = evidence.get("config_application")
+        application = application if isinstance(application, dict) else {}
+        effective = evidence.get("effective_selection")
+        effective = effective if isinstance(effective, dict) else {}
+        return {
+            "model_display": display,
+            "requested_effort": evidence.get("requested_effort"),
+            "resolved_effort": selection.get("resolved_effort"),
+            "applied_effort": application.get("effort"),
+            "current_effort": self._live_effort(effective.get("effort_config_id")),
+        }
+
+    def _live_effort(self, effort_id: Any) -> Any:
+        if not isinstance(effort_id, str) or not effort_id:
+            return None
+        meta = self.session_meta if isinstance(self.session_meta, dict) else {}
+        options = meta.get("configOptions")
+        if not isinstance(options, list):
+            return None
+        for option in options:
+            if isinstance(option, dict) and option.get("id") == effort_id:
+                return option.get("currentValue")
+        return None
 
     def _quota_models(self) -> dict[str, Any] | None:
         """Stamped model rows for the view payload. ``session_meta`` is not modified."""

@@ -512,6 +512,16 @@ class MockAgent:
         if error is not None:
             respond(request_id, error=error)
             return
+        if "reject-effort" in self.caps and config_id in (
+                "reasoning_effort", "effort", "thought", "thoughtLevel"):
+            respond(
+                request_id,
+                error={
+                    "code": -32602,
+                    "message": f"effort unavailable in this build: {params.get('value')}",
+                },
+            )
+            return
         if "reject-fast" in self.caps and config_id in ("fast-mode", "fast"):
             respond(
                 request_id,

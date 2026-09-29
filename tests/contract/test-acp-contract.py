@@ -1709,6 +1709,40 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual((application.get("effort") or {}).get("reason"), "no-resolved-value")
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("source"), "user")
+        display = receipt.get("model_display") or {}
+        self.assertIsNone(display.get("name"))
+        self.assertIsNone(display.get("preset_id"))
+        self.assertIsNone(display.get("preset_effort"))
+        self.assertIsNone(display.get("components"))
+        self.assertIsNone(receipt.get("requested_effort"))
+        self.assertEqual(receipt.get("resolved_runtime_model_id"), "gpt-6-astra")
+
+    def test_rejected_effort_stays_distinct_from_preset_and_current(self) -> None:
+        """Issue #237: an explicit effort that the agent rejects is not effective."""
+        receipt = self.start("codex", "--effort", "low", caps="reject-effort")
+        display = receipt["model_display"]
+        self.assertEqual(display["name"], "GPT-6 Sol")
+        self.assertEqual(display["preset_id"], "codex/default")
+        self.assertEqual(display["preset_effort"], "high")
+        self.assertIsNone(display["components"])
+        self.assertEqual(receipt["requested_effort"], "low")
+        self.assertEqual(receipt["model_selection"]["resolved_effort"], "low")
+        effort = receipt["config_application"]["effort"]
+        self.assertFalse(effort["applied"])
+        self.assertIn("error", effort)
+        self.assertNotEqual(receipt["effective_selection"].get("effective_effort"), "low")
+        viewed = self.cli("view", platform="codex")
+        model = viewed["model"]
+        self.assertEqual(model["model_display"]["preset_effort"], "high")
+        self.assertEqual(model["requested_effort"], "low")
+        self.assertEqual(model["resolved_effort"], "low")
+        self.assertFalse(model["applied_effort"]["applied"])
+        self.assertNotEqual(model["current_effort"], "low")
+        status = self.cli("status", platform="codex")
+        self.assertEqual(status["start_evidence"]["model_display"]["name"], "GPT-6 Sol")
+        self.assertEqual(status["start_evidence"]["requested_effort"], "low")
+        self.assertNotEqual(
+            status["start_evidence"]["effective_selection"].get("effective_effort"), "low")
 
     def test_codex_explicit_effort_applies_to_explicit_model(self) -> None:
         self.start("codex", "--model", "gpt-6-astra", "--effort", "low")
@@ -1843,8 +1877,23 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
                     self.assertEqual(receipt.get("requested_tier"), tier)
                     self.assertEqual(receipt.get("resolved_runtime_model_id"), model)
                     self.assertNotIn("model", [config_id for config_id, _ in self.config_events()])
+                    self.assertNotIn("effort", [config_id for config_id, _ in self.config_events()])
                     self.assertEqual((receipt.get("config_application") or {}).get("model"),
                                      {"applied": True, "applied_via": "argv", "value": model})
+                    self.assertEqual((receipt.get("config_application") or {}).get("effort"),
+                                     {"applied": False, "reason": "no-resolved-value"})
+                    display = receipt["model_display"]
+                    self.assertEqual(display["preset_id"], f"devin/{tier}")
+                    self.assertIsNone(display["preset_effort"])
+                    self.assertEqual(display["components"][0]["role"], "main")
+                    if tier == "default":
+                        self.assertEqual(display["name"], "SWE-2")
+                        self.assertEqual(display["components"],
+                                         [{"role": "main", "name": "SWE-2", "effort": "max"}])
+                    else:
+                        self.assertEqual(display["name"], "Opus Fusion")
+                        self.assertEqual([item["effort"] for item in display["components"]],
+                                         ["medium", "medium"])
                     selection = receipt.get("effective_selection") or {}
                     self.assertEqual(selection.get("effective_model"), model)
                     self.assertEqual(selection.get("effective_model_source"), "launch-argv")
@@ -1862,6 +1911,9 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         receipt = self.start("devin", "--tier", "default", "--mode", "agent",
                              caps="strict-config")
         self.assertIn(("model", "swe-2-max"), self.config_events())
+        self.assertNotIn("effort", [config_id for config_id, _ in self.config_events()])
+        self.assertEqual((receipt.get("config_application") or {}).get("effort"),
+                         {"applied": False, "reason": "no-resolved-value"})
         model = (receipt.get("config_application") or {}).get("model") or {}
         self.assertNotIn("applied_via", model)
         self.assertNotIn("effective_model_source", receipt.get("effective_selection") or {})
@@ -2135,6 +2187,11 @@ class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
         evidence = status["start_evidence"]
         self.assertTrue(evidence["model_selection"]["preserved"])
         self.assertEqual(evidence["model_selection"]["source"], "resume-preserved")
+        self.assertEqual(evidence["model_display"], {
+            "name": None, "preset_id": None, "preset_effort": None, "components": None,
+        })
+        self.assertIsNone(evidence["requested_effort"])
+        self.assertIsNone(self.cli("view", platform="codex")["model"]["current_effort"])
         self.assertIs(evidence["resumed"], True)
         inherited = evidence["inherited"]
         self.assertEqual(inherited, resumed["inherited_start_evidence"])
@@ -2160,6 +2217,10 @@ class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
         self.assertNotIn("inherited", evidence)
         self.assertTrue(evidence["model_selection"]["preserved"])
         self.assertIsNone(evidence["model_selection"]["resolved_model"])
+        self.assertEqual(evidence["model_display"], {
+            "name": None, "preset_id": None, "preset_effort": None, "components": None,
+        })
+        self.assertIsNone(evidence["requested_effort"])
         self.assertEqual(evidence["model_verified"], "unknown")
 
     def test_explicit_resume_override_is_current_and_history_stays_separate(self) -> None:

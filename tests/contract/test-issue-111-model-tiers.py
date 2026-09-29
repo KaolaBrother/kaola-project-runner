@@ -66,12 +66,13 @@ LIVE_PRESETS = {
         "named": [],
     },
     "devin": {
-        "default": ("SWE-2 Max", "swe-2-max", ""),
+        "default": ("SWE-2", "swe-2-max", ""),
         # Issue #144: `fable` is the Fable fusion; the pure
         # claude-fable-5-1-high preset is retired.
-        "named": [("opus-fusion", "Opus Fusion (Opus 5.5 Medium + SWE-2 Medium)",
+        # Issue #237: display names drop the encoded effort; launch effort stays empty.
+        "named": [("opus-fusion", "Opus Fusion",
                    "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium", ""),
-                  ("fable", "Fable Fusion (Fable 5.1 High + SWE-2 Medium)",
+                  ("fable", "Fable Fusion",
                    "fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "")],
     },
 }

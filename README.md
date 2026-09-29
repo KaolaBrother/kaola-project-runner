@@ -324,12 +324,12 @@ explicit `--model` choices, not a separate Fast toggle.
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
 | Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=medium | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
-| Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus Extra High | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
+| Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus 5.5 | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
 | Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation. |
 | Elite | Codex CLI | `default` | `codex/default` | GPT-6 Sol | effort=high | Good at exploring directions, finding problems, review, and computer use, but prone to over-engineering; set a clear scope and hold it to the minimal necessary solution. |
 | Elite | Cursor CLI | `default` | `cursor-cli/default` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Investigates unfamiliar problems, explores solution paths, and autonomously carries them through implementation; well suited to long-running, adaptive work. |
 | Elite | Cursor CLI | `opus` | `cursor-cli/opus` | Claude Opus 5.5 | effort=medium (encoded in model ID) | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
-| Elite | Devin CLI | `opus-fusion` | `devin/opus-fusion` | Opus Fusion (Opus 5.5 Medium + SWE-2 Medium) | effort=medium (encoded in model ID) | All-round execution worker, especially strong at complex execution work. |
+| Elite | Devin CLI | `opus-fusion` | `devin/opus-fusion` | Opus Fusion | effort=medium (encoded in model ID) | All-round execution worker, especially strong at complex execution work. |
 | Elite | Droid | `default` | `droid/default` | Auto Model | no Runner effort override | All-round worker, balanced in every respect, suited to many kinds of tasks. |
 | Elite | Droid | `opus` | `droid/opus` | Opus 5.5 | reasoning_effort=medium | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Droid | `core` | `droid/core` | Kimi K3 | reasoning_effort=max | Strong at visual design and visual inspection, with good UI and design taste. |
@@ -337,13 +337,13 @@ explicit `--model` choices, not a separate Fast toggle.
 | Elite | Kimi CLI | `default` | `kimi-cli/default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Elite | Kimi CLI | `kimi-k2-8` | `kimi-cli/kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
 | Worker | Codex CLI | `luna` | `codex/luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with good reasoning for its class and computer-use capability; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
-| Worker | Devin CLI | `default` | `devin/default` | SWE-2 Max | effort=max (encoded in model ID) | Capable full-cycle engineering worker. |
+| Worker | Devin CLI | `default` | `devin/default` | SWE-2 | effort=max (encoded in model ID) | Capable full-cycle engineering worker. |
 | Worker | dsh | `default` | `dsh/default` | DeepSeek V4.1 Flash | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
 | Worker | OpenCode | `default` | `opencode/default` | DeepSeek V4.1 Flash | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
 | Worker | ZCode | `default` | `zcode/default` | GLM 5.3 | thought=max | Autonomous engineering worker inclined to investigate, make decisions, iterate through failures, and carry substantial tasks toward completion with less hand-holding. |
 | Expert | Claude Code | `fable` | `claude-code/fable` | Fable | effort=high | Design, goal definition and decomposition, issue creation, and review; only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
 | Expert | Codex CLI | `astra` | `codex/astra` | GPT-6 Astra | effort=high | Design, goal definition and decomposition, issue creation, and review; only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
-| Expert | Devin CLI | `fable` | `devin/fable` | Fable Fusion (Fable 5.1 High + SWE-2 Medium) | effort=high (encoded in model ID) | Non-visual design, goal definition and decomposition, issue creation, and review; not strong at UI or other visual design. Only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
+| Expert | Devin CLI | `fable` | `devin/fable` | Fable Fusion | effort=high (encoded in model ID) | Non-visual design, goal definition and decomposition, issue creation, and review; not strong at UI or other visual design. Only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
 <!-- KW-README-PRESETS-END -->
 
 This is the full supported-runtime catalog, not a machine-local choice list.

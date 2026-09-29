@@ -149,7 +149,9 @@ class PresetCatalogTest(unittest.TestCase):
             default["profile"].strip(),
             "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
         self.assertEqual(extra["class"], "Elite")
-        self.assertEqual(extra["model"].strip(), "Opus Extra High")
+        self.assertEqual(extra["model"].strip(), "Opus 5.5")
+        self.assertEqual(extra["model"].strip(), default["model"].strip())
+        self.assertNotEqual(extra["parameters"].strip(), default["parameters"].strip())
         self.assertEqual(extra["parameters"].strip(), "effort=xhigh")
         self.assertEqual(
             extra["profile"].strip(),

@@ -1959,6 +1959,106 @@ def fast_intent(args: argparse.Namespace) -> str:
     return args.fast or "off"
 
 
+def parse_model_components(raw: str) -> list[dict[str, Any]] | None:
+    """Decode a manifest ``*_model_components`` string.
+
+    Invalid or absent input is ``None``. This does not read native model IDs
+    and does not strip suffixes to guess a name or an effort.
+    """
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, list) or not parsed:
+        return None
+    components: list[dict[str, Any]] = []
+    roles: list[str] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            return None
+        role = item.get("role")
+        name = item.get("name")
+        effort = item.get("effort")
+        if role not in ("main", "sidekick") or not isinstance(name, str) or not name:
+            return None
+        if not isinstance(effort, str) or not effort:
+            return None
+        components.append({"role": role, "name": name, "effort": effort})
+        roles.append(role)
+    if roles.count("main") != 1 or len(roles) != len(set(roles)):
+        return None
+    return components
+
+
+def selection_basis(args: argparse.Namespace) -> dict[str, Any]:
+    """What this invocation asked to launch, plus the preset display facts.
+
+    Explicit ``--model`` wins over the tier preset. Explicit ``--effort`` wins
+    over the preset's launch effort and attaches only to the model selected
+    with it. A resume/continue without tier/model/effort preserves the native
+    session and carries no preset display. Component metadata never becomes
+    the launch effort.
+    """
+    manifest = args.manifest
+    tier = args.tier or "default"
+    preserve = bool(args.resume or args.use_continue) and not (
+        args.model or args.effort or args.tier
+    )
+    if args.model:
+        return {
+            "source": "user",
+            "requested": args.model,
+            "candidate": args.model,
+            "effort": args.effort or "",
+            "tier": tier,
+            "display_name": None,
+            "preset_id": None,
+            "preset_effort": None,
+            "components_raw": "",
+        }
+    if preserve:
+        return {
+            "source": "resume-preserved",
+            "requested": "native saved session selection",
+            "candidate": "",
+            "effort": "",
+            "tier": tier,
+            "display_name": None,
+            "preset_id": None,
+            "preset_effort": None,
+            "components_raw": "",
+        }
+    prefix = tier_prefix(manifest, tier)
+    preset_effort = manifest.get(f"{prefix}_model_effort") or ""
+    return {
+        "source": f"runner-{tier}",
+        "requested": manifest.get(f"{prefix}_model_name") or "",
+        "candidate": manifest.get(f"{prefix}_model_id") or "",
+        "effort": args.effort or preset_effort,
+        "tier": tier,
+        "display_name": manifest.get(f"{prefix}_model_name") or None,
+        "preset_id": f"{args.platform}/{tier}",
+        "preset_effort": preset_effort or None,
+        "components_raw": manifest.get(f"{prefix}_model_components") or "",
+    }
+
+
+def model_display_fact(basis: dict[str, Any]) -> dict[str, Any]:
+    """Consumer display for one invocation. Preset effort stays the declaration.
+
+    ``name`` is null when this invocation did not select a preset. ``components``
+    is null when the preset declares none, or when the declaration is unreadable.
+    """
+    return {
+        "name": basis.get("display_name"),
+        "preset_id": basis.get("preset_id"),
+        "preset_effort": basis.get("preset_effort"),
+        "components": parse_model_components(str(basis.get("components_raw") or "")),
+    }
+
+
 def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     """Resolve tier/model/effort/Fast through the shared model-policy helper.
 
@@ -1967,27 +2067,13 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     with.  A resume/continue without tier/model/effort preserves the saved
     native session selection (no Runner model override).
     """
+    basis = selection_basis(args)
+    tier = basis["tier"]
+    source = basis["source"]
+    requested = basis["requested"]
+    candidate = basis["candidate"]
+    effort = basis["effort"]
     manifest = args.manifest
-    tier = args.tier or "default"
-    preserve = bool(args.resume or args.use_continue) and not (
-        args.model or args.effort or args.tier
-    )
-    if args.model:
-        source = "user"
-        requested = args.model
-        candidate = args.model
-        effort = args.effort or ""
-    elif preserve:
-        source = "resume-preserved"
-        requested = "native saved session selection"
-        candidate = ""
-        effort = ""
-    else:
-        prefix = tier_prefix(manifest, tier)
-        source = f"runner-{tier}"
-        requested = manifest.get(f"{prefix}_model_name") or ""
-        candidate = manifest.get(f"{prefix}_model_id") or ""
-        effort = args.effort or manifest.get(f"{prefix}_model_effort") or ""
     runtime_bin = runtime_binary(manifest)
     fast_support = manifest.get("fast_support") or ""
     mechanism = (
@@ -2034,16 +2120,18 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                 },
             },
         }
+    policy["model_display"] = model_display_fact(basis)
+    policy["requested_effort"] = args.effort or None
     return policy
 
 
 def merge_policy_evidence(receipt: dict[str, Any], policy: dict[str, Any]) -> None:
     for key in (
         "requested_model_source", "requested_model_name", "requested_tier",
-        "requested_fast", "resolved_runtime_model_id",
+        "requested_fast", "requested_effort", "resolved_runtime_model_id",
         "resolved_runtime_model_display", "resolved_parameters", "resolved_fast",
         "actual_runtime_model_id", "actual_parameters", "model_verified",
-        "model_mismatch_reason", "model_evidence_provenance",
+        "model_mismatch_reason", "model_evidence_provenance", "model_display",
     ):
         if key in policy:
             receipt[key] = policy[key]
@@ -2650,7 +2738,8 @@ def echo_model_verification(
 # their existing names. `model_evidence_provenance` drops only its bulky
 # `catalog_probe` output.
 START_EVIDENCE_KEYS = (
-    "model_selection", "config_application", "effective_selection", "fast",
+    "model_selection", "model_display", "requested_effort",
+    "config_application", "effective_selection", "fast",
     "host_selection", "model_verified", "model_mismatch_reason",
     "actual_runtime_model_id", "actual_parameters",
 )
