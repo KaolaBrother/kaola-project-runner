@@ -165,9 +165,13 @@ into more than one root does not repeat it.
 1. Survey. Reuse `kaola-acp survey` (read-only; it runs no platform binary) together with the
    explicit install selection. Check each detected in-scope runtime once. `--runtime` selects
    the consuming Skill destination, not the only worker CLI to inspect. `--platform` narrows
-   worker scope; with no `--platform`, cover every detected supported runtime. Report absent
-   and unknown separately. Installing ten Skill folders does not prove ten CLIs are present.
-   Do not install an absent CLI automatically.
+   worker scope; with no `--platform`, cover every detected supported runtime. Required
+   preparation covers installed runtimes: an absent CLI the selection did not explicitly
+   request is outside that scope — report it skipped, not as an obligation to install
+   everything. A runtime explicitly requested but missing is a distinct recovery item. An
+   unresolved `unknown` is a missing fact to resolve, not guessed absence. Installing ten
+   Skill folders does not prove ten CLIs are present. Do not install an absent CLI
+   automatically.
 2. Install or update the selected Skill payloads with `install-local.sh` and accept only its
    existing payload verification. A nonzero exit stops this procedure.
 3. For each in-scope runtime the survey reports present, resolve the actual launch path and
@@ -214,11 +218,15 @@ installation complete only when every required in-scope preparation has supporti
 Otherwise report the completed subset and the concrete outstanding work. A guide link, a
 recorded pin, or a proposed upgrade is not that result.
 
-Report an absent runtime as `not-ready: absent` with the concrete recovery (install that named
-CLI through its supported mechanism and rerun this selection). Report `unknown` as
-`not-ready: unknown`, which is not the same row as absent. Prerequisites that block a launch
-stay in the row: Node.js/npm before the Codex adapter, or `KAOLA_ZCODE_ENTRY` and
-`KAOLA_ZCODE_NODE` for ZCode ([ZCode host](zcode-host.md)).
+Report an absent unrequested runtime as `skipped: absent` — outside required preparation, not
+a blocker for calling the installation complete. Report a runtime the selection explicitly
+requested but found absent as `not-ready: absent` with the concrete recovery (install that
+named CLI through its supported mechanism and rerun this selection). Report `unknown` as
+`not-ready: unknown`, a different row from absent, with its concrete resolution: rerun the
+existing survey in the correct bound-target launch environment (login shell, PATH, and any
+manifest binary override) and resolve the missing fact before deciding absence. Prerequisites
+that block a launch stay in the row: Node.js/npm before the Codex adapter, or
+`KAOLA_ZCODE_ENTRY` and `KAOLA_ZCODE_NODE` for ZCode ([ZCode host](zcode-host.md)).
 
 | Platform | Actual ACP layer and update boundary |
 |---|---|
