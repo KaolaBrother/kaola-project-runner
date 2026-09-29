@@ -120,7 +120,7 @@ Quota packages (read-only catalog; never changes the count cap), limit-failure b
 
 | Item | Default / rule |
 |---|---|
-| Allowed CLIs | See Authorization above. |
+| Allowed CLIs | See Authorization above. No authorized task: ask; start no worker or heartbeat. |
 | Count | Named CLI without a count: one; it bounds live processes. |
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices. |
 | Other tiers | Only default is common; tiers are platform-specific/unranked. No automatic model, tier, or transport switch; only owner-authorized model/preset changes stay within runtime. |
