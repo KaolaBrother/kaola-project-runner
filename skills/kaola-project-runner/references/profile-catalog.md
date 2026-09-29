@@ -23,7 +23,8 @@ absent means none.
 
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
-| Elite | Claude Code | `default` | `claude-code/default` | Opus | effort=high | All-round worker for every kind of task, especially strong at complex work, and preferred for the more complex and harder tasks. |
+| Elite | Claude Code | `default` | `claude-code/default` | Opus | effort=xhigh | Plans and reviews difficult, complex work and handles deep reasoning tasks; does not perform implementation. |
+| Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, well suited to well-scoped work. |
 | Elite | Codex CLI | `default` | `codex/default` | GPT-6 Sol | effort=high | Good at exploring directions, finding problems, review, and computer use, but prone to over-engineering; set a clear scope and hold it to the minimal necessary solution. |
 | Elite | Cursor CLI | `default` | `cursor-cli/default` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Investigates unfamiliar problems, explores solution paths, and autonomously carries them through implementation; well suited to long-running, adaptive work. |
 | Elite | Cursor CLI | `opus` | `cursor-cli/opus` | Claude Opus 5.5 | effort=medium (encoded in model ID) | All-round worker for every kind of task, especially strong at complex work. |
@@ -34,7 +35,6 @@ absent means none.
 | Elite | Grok CLI | `default` | `grok/default` | Grok 4.7 | effort=xhigh, fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
 | Elite | Kimi CLI | `default` | `kimi-cli/default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Elite | Kimi CLI | `kimi-k2-8` | `kimi-cli/kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
-| Worker | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=max | Disciplined implementation worker; give it a detailed plan and constraints, and it excels at executing within them. |
 | Worker | Codex CLI | `luna` | `codex/luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with good reasoning for its class and computer-use capability; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
 | Worker | Devin CLI | `default` | `devin/default` | SWE-2 Max | effort=max (encoded in model ID) | Capable full-cycle engineering worker. |
 | Worker | dsh | `default` | `dsh/default` | DeepSeek V4.1 Flash | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |

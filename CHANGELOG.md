@@ -6,6 +6,30 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Claude Code Sonnet and Opus task profiles (Issue #228).** Preset ids stay
+  `claude-code/sonnet` and `claude-code/default` (`sonnet` and `opus` remain the
+  native model aliases). `claude-code/sonnet` is Elite at effort `high`, with the
+  profile "All-round execution worker, well suited to well-scoped work." It
+  leaves the Worker pool. The five remaining Worker presets stay
+  default-authorized and outside the general worker cap. Sonnet uses the
+  existing Elite grant (preset and count): no default seat and no
+  preset-specific cap. `claude-code/default` stays Elite at effort `xhigh`,
+  with the profile "Plans and reviews difficult, complex work and handles deep
+  reasoning tasks; does not perform implementation." That limit is this
+  preset's profile. Fable is unchanged. No ordinary Opus or Sonnet seat is
+  granted. A resume that does not name a tier, model, or effort keeps the
+  native selection.
+
+Seats: restart required
+
+The operator diff from v0.6.9 to this candidate
+(`git diff v0.6.9..HEAD -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is non-empty. Changed paths are `platforms/claude-code.yaml`,
+`platforms/codex.yaml`, and `scripts/adapters/claude-code.sh`.
+`scripts/kaola-acp-holder.py`, `scripts/kaola-zcode-acp.py`, and
+`scripts/kaola-quota.py` are unchanged. Running seats keep the bytes they
+started with and must restart after installing this change.
+
 ## 0.6.9 — 2026-09-29 (quota mappings, heartbeat authorization rows, permission wording)
 
 Seats: restart required

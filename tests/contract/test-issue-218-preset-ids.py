@@ -8,7 +8,7 @@ mapping behind. This suite pins four things:
 
 * the exact catalog: the README's generated region and the installed
   ``profile-catalog.md`` table carry the same 20 Preset ID cells in the issue's
-  class grouping (Elite 11 / Worker 6 / Expert 3), each ID resolving to its
+  class grouping (Elite 12 / Worker 5 / Expert 3), each ID resolving to its
   manifest model name on the same row;
 * the similar-name pairs the IDs exist to keep apart — ``cursor-cli/default``
   vs ``grok/default``, ``claude-code/default`` vs ``claude-code/sonnet`` — plus
@@ -42,12 +42,11 @@ README = PROJECT / "README.md"
 # order). A declaration change regenerates these rows; this pin fails loudly
 # instead of letting the catalog and the issue's grants drift apart.
 ELITE = [
-    "claude-code/default", "codex/default", "cursor-cli/default", "cursor-cli/opus",
-    "devin/opus-fusion", "droid/default", "droid/opus", "droid/core", "grok/default",
-    "kimi-cli/default", "kimi-cli/kimi-k2-8",
+    "claude-code/default", "claude-code/sonnet", "codex/default", "cursor-cli/default",
+    "cursor-cli/opus", "devin/opus-fusion", "droid/default", "droid/opus", "droid/core",
+    "grok/default", "kimi-cli/default", "kimi-cli/kimi-k2-8",
 ]
-WORKER = ["claude-code/sonnet", "codex/luna", "devin/default", "dsh/default",
-          "opencode/default", "zcode/default"]
+WORKER = ["codex/luna", "devin/default", "dsh/default", "opencode/default", "zcode/default"]
 EXPERT = ["claude-code/fable", "codex/astra", "devin/fable"]
 EXPECTED_ORDER = ELITE + WORKER + EXPERT
 
@@ -140,7 +139,26 @@ class PresetCatalogTest(unittest.TestCase):
         # Same runtime, similar tier words: different class and model.
         default, sonnet = rows["claude-code/default"], rows["claude-code/sonnet"]
         self.assertEqual(default["class"], "Elite")
-        self.assertEqual(sonnet["class"], "Worker")
+        self.assertEqual(default["parameters"].strip(), "effort=xhigh")
+        self.assertEqual(
+            default["profile"].strip(),
+            "Plans and reviews difficult, complex work and handles deep reasoning tasks; does not perform implementation.")
+        self.assertEqual(sonnet["class"], "Elite")
+        self.assertEqual(sonnet["parameters"].strip(), "effort=high")
+        self.assertEqual(
+            sonnet["profile"].strip(),
+            "All-round execution worker, well suited to well-scoped work.")
+        self.assertEqual(rows["claude-code/fable"]["class"], "Expert")
+        self.assertEqual(rows["claude-code/fable"]["parameters"].strip(), "effort=high")
+        self.assertEqual(
+            rows["cursor-cli/opus"]["profile"].strip(),
+            "All-round worker for every kind of task, especially strong at complex work.")
+        self.assertEqual(
+            rows["droid/opus"]["profile"].strip(),
+            "All-round worker for every kind of task, especially strong at complex work.")
+        self.assertEqual(
+            rows["devin/opus-fusion"]["profile"].strip(),
+            "All-round worker for every kind of task, especially strong at complex work; not strong at UI or other visual design.")
         self.assertNotEqual(default["model"], sonnet["model"])
 
     def test_worker_pool_line_names_exact_ids(self) -> None:
@@ -257,6 +275,34 @@ class AuthorizationNotationTest(unittest.TestCase):
         self.assertEqual(source.count("def preset_id("), 1)
         for name in ("preset-ids", "preset_ids", "preset-registry"):
             self.assertFalse(list(SCRIPTS.glob(f"*{name}*")), name)
+
+    def test_sonnet_is_elite_without_a_preset_cap_or_pool_seat(self) -> None:
+        """Issue #228: Sonnet is Elite at high. The five Workers stay exempt."""
+        readme = README.read_text(encoding="utf-8")
+        self.assertIn("| **Elite** | 12 |", readme)
+        self.assertIn("| **Worker** | 5 |", readme)
+        self.assertIn("| **Expert** | 3 |", readme)
+        self.assertIn("no default seat and no preset-specific", readme)
+        pool = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
+        membership = pool.split("The Worker pool is exactly:", 1)[1].split(".", 1)[0]
+        self.assertNotIn("claude-code/sonnet", membership)
+        skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
+        example = json.loads(re.search(r"例：(\{.*\})", skeleton).group(1))
+        self.assertNotIn("claude-code/sonnet", [row["id"] for row in example["authorization"]["rows"]])
+        self.assertIn("五个池", skeleton)
+        stale = (
+            "six Worker", "Six Worker", "six-preset", "these six presets",
+            "Disciplined implementation", "strongest in Worker Class",
+            "preferred for the more complex and harder tasks",
+        )
+        surfaces = [
+            ORCHESTRATOR / "references" / "worker-profiles.md",
+            ORCHESTRATOR / "references" / "profile-catalog.md",
+        ]
+        for path in surfaces:
+            text = path.read_text(encoding="utf-8")
+            for needle in stale:
+                self.assertNotIn(needle, text, f"{path}: {needle}")
 
 
 if __name__ == "__main__":

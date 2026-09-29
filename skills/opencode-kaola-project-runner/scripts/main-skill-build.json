@@ -1,18 +1,18 @@
 {
-  "build": "577bb974ffc1",
+  "build": "a437e8fe3afb",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "bcfddb2e687b304861fd80ea40d39240aa7b15c11a2a57e3e3c6b5fdea333715",
+    "SKILL.md": "b6ad5b4fa80c9bdf9d25bf98f454accb28c84d1dc6da84fe898dac0a3621342c",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
     "references/doc-maintenance.md": "aaa43b70d4cbca6f0edcd399ed9de2ee0ea8bcc9c9d7c6ebe6de353796b86f83",
-    "references/heartbeat-skeleton.md": "1fe5d6daf3293ff57f1d1f2d7de8f6e59aa739b7d1b61088463497a2e1f54292",
+    "references/heartbeat-skeleton.md": "fe95c4551b342f5df85315d2673c87b8af198286d7dc17da11c65ae1973dd190",
     "references/host-entry-matrix.md": "162a620c4b932a59b44e773d152873e401ccabcf3bee71c1e0ec37a3f384bf23",
     "references/host-startup.md": "4fe4f49ff842b4516f31f613aaf4154696b9849fa23259eff20ed78aab5904d0",
     "references/issue-dispatch.md": "51a6f337daf56ca815fb6340b18c7078fcda5925ebaa83139ec5ebf419c1a9d1",
-    "references/profile-catalog.md": "4f743efb37f22aee5ed85d35ce0d5784f3f43732b5720e1dc4358ed90ee443ee",
+    "references/profile-catalog.md": "cfdaf0ac9e97bbf9cabc742ae967db6dad5b1aa028ae9a28f1ce782b7ec18299",
     "references/qa-evidence.md": "64b8d6be69edc0bdd55b6c15343cfcf7539c822a943795ba4503aa1d9743ceb7",
     "references/quota-packages.md": "1c4e61a670d1d7a8fd06ca9ce18049c1492f3ff1d76cb94fa3777a0ffa3c886d",
-    "references/worker-profiles.md": "3cd6a7256d9a73a1e53fb6aced6668f8f082db5922cc288a4759259e96dc7aea",
+    "references/worker-profiles.md": "3a85088e351f603528b13dd1bb76cae36205cb58aa7d82a269d0af725c6cfe26",
     "references/workflow-worktree.md": "8a85aefd6747f42c29943f7d70f911aa900b2e56e43083247628fc6837d200b0",
     "references/zcode-host-dispatch.md": "98ee3a82b9ad45bb7a5672fa759ad34d2101efefd03a6ff0943d44f623dea232",
     "references/zcode-native-skill-entry.md": "03b9da8e27c8d319c532cc41e3a605fb578d5bbf9ab4d007359cb0ef656242e7"

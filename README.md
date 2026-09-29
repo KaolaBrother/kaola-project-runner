@@ -265,7 +265,7 @@ Model selection uses `--tier NAME` or an explicit `--model ID` with optional
 is common to every platform and applies when `--tier` is omitted. Every other name is
 that platform's own model or purpose word, with no universal ranking, alias, or
 "upgrade" between them; effort is a separate parameter, not a universal quality tier,
-so the `max` on Sonnet or Luna does not make either an upgrade. A name the platform
+so the `xhigh` on Claude Code Opus or the `max` on Luna does not make either an upgrade. A name the platform
 does not declare (including the retired `upgrade`) is a typed `tier-not-declared`
 refusal, never a quiet fallback to `default`. Presets live in the
 [platform manifests](platforms/); Fast is off unless requested. Resume with
@@ -276,15 +276,15 @@ it.
 
 Every runtime/preset belongs to one of three owner-defined operating classes. The
 class attaches to the **preset**, not the whole runtime: Claude Code, for example, has
-an Elite `claude-code/default`, a Worker `claude-code/sonnet`, and an Expert
+Elite presets `claude-code/default` and `claude-code/sonnet`, and an Expert
 `claude-code/fable`. Classes are operating
 roles, not benchmark claims, and they do not change which model a Host itself runs.
 
 | Class | Presets | Role | Authorization |
 |---|---|---|---|
 | **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit permission for **each** task or use. The Host judges completion and exact-stops the seat; another use needs fresh permission, while the same approved task continues across turns and recovery without asking again. |
-| **Worker** | 6 | Cheaper and generally weaker; simpler, well-defined work that adds parallel throughput. | Default-authorized: no per-seat, count, or priority approval, and outside the general worker cap. Real account/token/service limits and your explicit restrictions still apply. |
-| **Elite** | 11 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
+| **Worker** | 5 | Cheaper and generally weaker; simpler, well-defined work that adds parallel throughput. | Default-authorized: no per-seat, count, or priority approval, and outside the general worker cap. Real account/token/service limits and your explicit restrictions still apply. |
+| **Elite** | 12 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
 An Expert review informs the Host; it never replaces the Host's acceptance or its
 ownership of the seat lifecycle.
@@ -308,7 +308,8 @@ explicit `--model` choices, not a separate Fast toggle.
 <!-- KW-README-PRESETS-START -->
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
-| Elite | Claude Code | `default` | `claude-code/default` | Opus | effort=high | All-round worker for every kind of task, especially strong at complex work, and preferred for the more complex and harder tasks. |
+| Elite | Claude Code | `default` | `claude-code/default` | Opus | effort=xhigh | Plans and reviews difficult, complex work and handles deep reasoning tasks; does not perform implementation. |
+| Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, well suited to well-scoped work. |
 | Elite | Codex CLI | `default` | `codex/default` | GPT-6 Sol | effort=high | Good at exploring directions, finding problems, review, and computer use, but prone to over-engineering; set a clear scope and hold it to the minimal necessary solution. |
 | Elite | Cursor CLI | `default` | `cursor-cli/default` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Investigates unfamiliar problems, explores solution paths, and autonomously carries them through implementation; well suited to long-running, adaptive work. |
 | Elite | Cursor CLI | `opus` | `cursor-cli/opus` | Claude Opus 5.5 | effort=medium (encoded in model ID) | All-round worker for every kind of task, especially strong at complex work. |
@@ -319,7 +320,6 @@ explicit `--model` choices, not a separate Fast toggle.
 | Elite | Grok CLI | `default` | `grok/default` | Grok 4.7 | effort=xhigh, fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
 | Elite | Kimi CLI | `default` | `kimi-cli/default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Elite | Kimi CLI | `kimi-k2-8` | `kimi-cli/kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
-| Worker | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=max | Disciplined implementation worker; give it a detailed plan and constraints, and it excels at executing within them. |
 | Worker | Codex CLI | `luna` | `codex/luna` | GPT-6 Luna | effort=max | Fast, flexible implementation worker with good reasoning for its class and computer-use capability; relatively exploratory and suited to tasks whose implementation path is not fully predetermined. |
 | Worker | Devin CLI | `default` | `devin/default` | SWE-2 Max | effort=max (encoded in model ID) | Capable full-cycle engineering worker. |
 | Worker | dsh | `default` | `dsh/default` | DeepSeek V4.1 Flash | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
@@ -369,15 +369,18 @@ Workers run only under authorization, and what you authorize depends on the
 
 ### Authorization by class
 
-- **Worker presets** — the six Worker rows of the catalog — need nothing more than an
+- **Worker presets** — the five Worker rows of the catalog — need nothing more than an
   authorized project task: no per-seat or per-preset approval and no priority order.
   Their live seats neither count toward nor are limited by the general worker
-  concurrency cap. Membership is exactly those six rows; being a runtime's `default`
+  concurrency cap. Membership is exactly those five rows; `claude-code/sonnet` is
+  Elite and is not a member. Being a runtime's `default`
   preset does not make a preset a Worker. Actual account/token/service and resource
   limits still apply (an unspecified quota is not unlimited), and any explicit owner
   restriction wins.
 - **Elite presets** need your explicit grant naming the runtime/preset and count.
-  Grants you already gave stay valid within their scope. The authorized count is a
+  `claude-code/sonnet` uses that same grant: no default seat and no preset-specific
+  cap, and this move does not raise the general worker cap. Grants you already gave
+  stay valid within their scope. The authorized count is a
   hard cap on live worker processes, ACP holders included: stop-before-start at the
   cap, and an accepted seat keeps only the finalize/cleanup duties it owns until it
   owns none or is abandoned, when it is exact-stopped; give a new task a new
@@ -392,7 +395,10 @@ Workers run only under authorization, and what you authorize depends on the
 The Host decides in this order: **current authorization → class responsibility →
 individual profile/task fit → available capacity and real resource limits.** Experts
 contribute complex thinking only when you permitted that task; Elite presets carry
-primary and demanding execution; Worker presets take simpler, bounded work. A
+primary and demanding execution. `claude-code/default` follows its profile:
+planning and review of difficult work, and it does not perform implementation.
+A Claude Code Host still plans, dispatches, and accepts.
+Worker presets take simpler, bounded work. A
 listed capability never bypasses a missing Expert or Elite authorization — the Host
 asks for it through the normal route when it genuinely needs it. Independent work
 runs in parallel while real dependencies and write ownership are preserved. There is
@@ -465,7 +471,7 @@ labeled quota or authentication.
 If a live delegated Host is confirmed stopped and its native resume id cannot restore
 it, start a new standard-named Host as a new ACP session only after current
 authorization is complete (goal, remaining work, platforms/members,
-counts/concurrency, quota, priority, delivery/stop boundary; the six Worker
+counts/concurrency, quota, priority, delivery/stop boundary; the five Worker
 presets need no per-seat entries). Missing key values: ask,
 do not `start`, do not guess a stale quota. Quota travels in the units the user
 actually gave: a unit the user never gave is carried as unspecified and does not
