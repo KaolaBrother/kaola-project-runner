@@ -145,6 +145,9 @@ class QuotaSchemaTest(unittest.TestCase):
     def test_partial_rules_leave_unverified_ids_unmapped(self) -> None:
         cases = [
             ("claude-code", "opus", "claude-code:subscription"),
+            # Issue #230: opus-xhigh is a preset ID. Both Opus presets launch
+            # the alias ``opus``, which is the subscription map key.
+            ("claude-code", "opus-xhigh", None),
             ("claude-code", "sonnet", "claude-code:subscription"),
             ("claude-code", "haiku", "claude-code:subscription"),
             ("claude-code", "default", "claude-code:subscription"),

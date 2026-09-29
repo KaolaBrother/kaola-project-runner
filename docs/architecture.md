@@ -38,7 +38,7 @@ ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 hol
 Main-model choice is a per-run transport fact. A current-request `--model` wins; otherwise
 `--tier NAME` selects the manifest's declared preset (`default` when unset), resolved against the
 current catalog. Only `default` is common; other names are the platform's own words listed in
-`named_tiers` (e.g. `--tier sonnet`, `--tier opus-fusion`, `--tier kimi-k2-8`) with no universal
+`named_tiers` (e.g. `--tier sonnet`, `--tier opus-xhigh`, `--tier opus-fusion`, `--tier kimi-k2-8`) with no universal
 ranking, and a tier the platform does not declare (including the retired `upgrade`) is refused by
 name rather than resolved to `default`. `--effort` applies only to the model selected in the same request, and
 `--fast on` is an explicit per-run opt-in applied through an ACP config option (the Claude

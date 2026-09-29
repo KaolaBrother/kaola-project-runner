@@ -11,13 +11,16 @@ by current authorization
 
 Each row's **Preset ID** `<platform>/<tier>` is its one stable ID (the manifest
 platform id and its declared `--tier` word, e.g. `claude-code/default` vs
-`claude-code/sonnet`, or `cursor-cli/default` vs `grok/default`): grants,
+`claude-code/opus-xhigh` vs `claude-code/sonnet`, or `cursor-cli/default` vs
+`grok/default`): grants,
 snapshots and authorization relays name a seat by that exact ID, and its Model
 and parameters stay on the same row — never a second mapping. The ID names a
 **configured preset**, not proof of the actually-running model: the manifest's
 model name and native launch ID come from the declaration, while installation,
 entitlement, applied selection and authorization remain separate facts (Droid's
-`auto` and Devin's ACP display both drift from these names). An authorization
+`auto` and Devin's ACP display both drift from these names). `claude-code/default`
+and `claude-code/opus-xhigh` both declare native launch ID `opus`; that alias is
+not a preset ID. An authorization
 item carries `special_requirements` only when the owner actually supplied one;
 absent means none.
 

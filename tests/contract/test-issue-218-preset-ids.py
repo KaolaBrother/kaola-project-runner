@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Issue #218: canonical `<runtime>/<tier>` preset IDs on the manifest-derived rows.
 
-The 20 IDs are not a second registry: every surface that carries them derives
+The catalog IDs are not a second registry: every surface that carries them derives
 them from ``platforms/<id>.yaml`` through ``render-skills.py``'s ``preset_id``,
 so a declaration change regenerates the rows instead of leaving a handwritten
 mapping behind. This suite pins four things:
 
 * the exact catalog: the README's generated region and the installed
-  ``profile-catalog.md`` table carry the same 20 Preset ID cells in the issue's
-  class grouping (Elite 12 / Worker 5 / Expert 3), each ID resolving to its
+  ``profile-catalog.md`` table carry the same 21 Preset ID cells in class
+  grouping (Elite 13 / Worker 5 / Expert 3), each ID resolving to its
   manifest model name on the same row;
 * the similar-name pairs the IDs exist to keep apart — ``cursor-cli/default``
   vs ``grok/default``, ``claude-code/default`` vs ``claude-code/sonnet`` — plus
@@ -38,11 +38,12 @@ ORCHESTRATOR = SKILLS / "kaola-project-runner"
 DELEGATOR = SKILLS / "kaola-delegator"
 README = PROJECT / "README.md"
 
-# The issue body's exact 20 IDs, in catalog render order (class, then manifest
-# order). A declaration change regenerates these rows; this pin fails loudly
-# instead of letting the catalog and the issue's grants drift apart.
+# Catalog render order (class, then manifest order). Issue #230 inserts
+# ``claude-code/opus-xhigh`` after ``claude-code/default``. A declaration change
+# regenerates these rows; this pin fails loudly instead of letting the catalog
+# and the issue's grants drift apart.
 ELITE = [
-    "claude-code/default", "claude-code/sonnet", "codex/default", "cursor-cli/default",
+    "claude-code/default", "claude-code/opus-xhigh", "claude-code/sonnet", "codex/default", "cursor-cli/default",
     "cursor-cli/opus", "devin/opus-fusion", "droid/default", "droid/opus", "droid/core",
     "grok/default", "kimi-cli/default", "kimi-cli/kimi-k2-8",
 ]
@@ -104,11 +105,11 @@ class PresetCatalogTest(unittest.TestCase):
         assert readme_region is not None
         cls.readme_rows = catalog_rows(readme_region.group(0))
 
-    def test_exact_twenty_ids_in_issue_order(self) -> None:
+    def test_exact_catalog_ids_in_order(self) -> None:
         for label, rows in (("profile-catalog", self.orchestrator_rows),
                             ("README region", self.readme_rows)):
             self.assertEqual(catalog_ids(rows), EXPECTED_ORDER, label)
-            self.assertEqual(len(set(catalog_ids(rows))), 20, label)
+            self.assertEqual(len(set(catalog_ids(rows))), 21, label)
 
     def test_class_grouping_matches_issue(self) -> None:
         for rows in (self.orchestrator_rows, self.readme_rows):
@@ -136,29 +137,52 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(cursor["model"], grok["model"])
         self.assertNotEqual(cursor["runtime"], grok["runtime"])
         self.assertNotEqual(cursor, grok)
-        # Same runtime, similar tier words: different class and model.
-        default, sonnet = rows["claude-code/default"], rows["claude-code/sonnet"]
+        # Same runtime: default and opus-xhigh share the native alias ``opus``
+        # and stay different preset IDs, efforts, and profiles.
+        default = rows["claude-code/default"]
+        extra = rows["claude-code/opus-xhigh"]
+        sonnet = rows["claude-code/sonnet"]
         self.assertEqual(default["class"], "Elite")
-        self.assertEqual(default["parameters"].strip(), "effort=xhigh")
+        self.assertEqual(default["model"].strip(), "Opus 5.5")
+        self.assertEqual(default["parameters"].strip(), "effort=medium")
         self.assertEqual(
             default["profile"].strip(),
-            "Plans and reviews difficult, complex work and handles deep reasoning tasks; does not perform implementation.")
+            "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
+        self.assertEqual(extra["class"], "Elite")
+        self.assertEqual(extra["model"].strip(), "Opus Extra High")
+        self.assertEqual(extra["parameters"].strip(), "effort=xhigh")
+        self.assertEqual(
+            extra["profile"].strip(),
+            "Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation.")
+        default_manifest, _ = self.by_id["claude-code/default"]
+        extra_manifest, _ = self.by_id["claude-code/opus-xhigh"]
+        self.assertEqual(default_manifest["default_model_id"], "opus")
+        self.assertEqual(extra_manifest["opus_xhigh_model_id"], "opus")
+        self.assertNotEqual(default["preset"], extra["preset"])
         self.assertEqual(sonnet["class"], "Elite")
         self.assertEqual(sonnet["parameters"].strip(), "effort=high")
         self.assertEqual(
             sonnet["profile"].strip(),
-            "All-round execution worker, well suited to well-scoped work.")
+            "All-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation.")
         self.assertEqual(rows["claude-code/fable"]["class"], "Expert")
         self.assertEqual(rows["claude-code/fable"]["parameters"].strip(), "effort=high")
+        self.assertEqual(rows["cursor-cli/opus"]["class"], "Elite")
+        self.assertEqual(rows["cursor-cli/opus"]["parameters"].strip(), "effort=medium (encoded in model ID)")
         self.assertEqual(
             rows["cursor-cli/opus"]["profile"].strip(),
-            "All-round worker for every kind of task, especially strong at complex work.")
+            "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
+        self.assertEqual(rows["droid/opus"]["class"], "Elite")
+        self.assertEqual(rows["droid/opus"]["parameters"].strip(), "reasoning_effort=medium")
         self.assertEqual(
             rows["droid/opus"]["profile"].strip(),
-            "All-round worker for every kind of task, especially strong at complex work.")
+            "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
+        self.assertEqual(rows["devin/opus-fusion"]["class"], "Elite")
+        self.assertEqual(rows["devin/opus-fusion"]["parameters"].strip(), "effort=medium (encoded in model ID)")
         self.assertEqual(
             rows["devin/opus-fusion"]["profile"].strip(),
-            "All-round worker for every kind of task, especially strong at complex work; not strong at UI or other visual design.")
+            "All-round execution worker, especially strong at complex execution work.")
+        self.assertNotIn("UI", rows["devin/opus-fusion"]["profile"])
+        self.assertNotIn("3D", rows["devin/opus-fusion"]["profile"])
         self.assertNotEqual(default["model"], sonnet["model"])
 
     def test_worker_pool_line_names_exact_ids(self) -> None:
@@ -279,13 +303,15 @@ class AuthorizationNotationTest(unittest.TestCase):
     def test_sonnet_is_elite_without_a_preset_cap_or_pool_seat(self) -> None:
         """Issue #228: Sonnet is Elite at high. The five Workers stay exempt."""
         readme = README.read_text(encoding="utf-8")
-        self.assertIn("| **Elite** | 12 |", readme)
+        self.assertIn("| **Elite** | 13 |", readme)
         self.assertIn("| **Worker** | 5 |", readme)
         self.assertIn("| **Expert** | 3 |", readme)
         self.assertIn("no default seat and no preset-specific", readme)
         pool = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
         membership = pool.split("The Worker pool is exactly:", 1)[1].split(".", 1)[0]
         self.assertNotIn("claude-code/sonnet", membership)
+        self.assertIn("`claude-code/opus-xhigh` does not perform implementation", pool)
+        self.assertNotIn("`claude-code/default` does not perform implementation", pool)
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
         example = json.loads(re.search(r"例：(\{.*\})", skeleton).group(1))
         self.assertNotIn("claude-code/sonnet", [row["id"] for row in example["authorization"]["rows"]])
