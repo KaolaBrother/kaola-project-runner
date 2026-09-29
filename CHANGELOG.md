@@ -6,6 +6,51 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.6.9 — 2026-09-29 (quota mappings, heartbeat authorization rows, permission wording)
+
+Seats: restart required
+
+The operator diff from v0.6.8 to this release
+(`git diff v0.6.8..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is non-empty. Changed paths are `scripts/kaola-quota.py`,
+`platforms/cursor-cli.yaml`, `platforms/droid.yaml`, `platforms/dsh.yaml`,
+`platforms/opencode.yaml`, `platforms/zcode.yaml`, `scripts/adapters/dsh.sh`,
+and `scripts/adapters/opencode.sh`. `scripts/kaola-acp-holder.py` and
+`scripts/kaola-zcode-acp.py` are unchanged. The holder pins the quota catalog
+at startup (Issue #162), so running seats keep the bytes they started with and
+must restart after installing this release. The Grok Bot bridge is pinned in
+the release's follow-up pin commit. The ten worker platforms keep their v0.6.8
+`acp_command`, `acp_wrapper_pin`, and `acp_verified_versions`; those adapter
+pins are intentionally not bumped in this release.
+
+- **Quota model-package mappings and DeepSeek display names (Issue #222).**
+  Cursor CLI's Grok 4.7 family (`grok-4.7`, `grok-4.7-xhigh`,
+  `grok-4.7-xhigh-fast`) now maps to the `cursor-models` package; the Claude
+  Opus family stays `other-models`, and `auto` / `default` stay
+  `cursor-models`. Droid's static preset knowledge maps `auto` and
+  `claude-opus-5-5` to Standard and `kimi-k3` to Core when the native
+  `billingPool` is missing, null, or empty; a present native value still wins,
+  and an unknown present value stays unmapped. ZCode's bare model id `GLM-5.3`
+  maps to `bigmodel-coding-plan` (provider-qualified routes unchanged), and
+  that package's display name is GLM Coding Plan. dsh and OpenCode display
+  names are shortened to DeepSeek V4.1 Flash; launch model ids, preset ids,
+  and the OpenCode Go package name are unchanged.
+- **Heartbeat authorization carries Class definitions and eligible rows (Issue #223).**
+  The Host heartbeat `authorization` object now directly carries the shared
+  Expert, Elite, and Worker Class definitions and one row per locally
+  available, currently authorized preset: exact id, class, the catalog's
+  one-line profile verbatim, and grant, count, and state. A source pointer may
+  name where those facts come from and does not replace them. The definitions
+  grant no seats by themselves; eligible rows are the dispatchable set.
+- **Worker-pool access is permission, and revocation stays durable (Issue #224).**
+  The six Worker-pool presets are default-authorized permission, not a
+  preference over a suitable authorized Elite preset. They stay outside the
+  live-process cap; Elite still needs an explicit grant and Expert still needs
+  per-task permission. Paused, revoked, and excluded presets remain recorded
+  inside `authorization` when they are omitted from eligible rows. Compaction
+  or recovery does not restore a revoked grant; restoration is only by owner
+  reauthorization.
+
 ## 0.6.8 — 2026-09-28 (Host and Delegator state, authorization, QA, and installation)
 
 Seats: restart required
