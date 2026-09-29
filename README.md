@@ -30,7 +30,7 @@ a recoverable path from issue to verified delivery.
 1. [Choose an entry](#choose-an-entry) — Delegator / Project Runner / Platform Runner / Workflow Next
 2. [Kaola Workflow integration](#kaola-workflow-integration) — normal path, orchestrator binding, evidence-backed exception
 3. [Install and begin](#install-and-begin)
-4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 10 runtimes, 20 presets), [platform notes](#platform-notes)
+4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 10 runtimes, 21 presets), [platform notes](#platform-notes)
 5. [Authorization](#authorization) — [authorization by class](#authorization-by-class), [choosing a worker](#choosing-a-worker), [seat binding and switching](#seat-binding-and-switching), [authorization before a new Host](#authorization-before-a-new-host)
 6. [What you specify and what agents own](#what-you-specify-and-what-agents-own)
 7. [Daily use](#daily-use) — session commands, steering, watching ACP sessions
@@ -265,7 +265,7 @@ Model selection uses `--tier NAME` or an explicit `--model ID` with optional
 is common to every platform and applies when `--tier` is omitted. Every other name is
 that platform's own model or purpose word, with no universal ranking, alias, or
 "upgrade" between them; effort is a separate parameter, not a universal quality tier,
-so the `xhigh` on Claude Code Opus or the `max` on Luna does not make either an upgrade. A name the platform
+so Claude Code's `opus-xhigh` preset or the `max` on Luna does not make either an upgrade. A name the platform
 does not declare (including the retired `upgrade`) is a typed `tier-not-declared`
 refusal, never a quiet fallback to `default`. Presets live in the
 [platform manifests](platforms/); Fast is off unless requested. Resume with
@@ -276,15 +276,15 @@ it.
 
 Every runtime/preset belongs to one of three owner-defined operating classes. The
 class attaches to the **preset**, not the whole runtime: Claude Code, for example, has
-Elite presets `claude-code/default` and `claude-code/sonnet`, and an Expert
-`claude-code/fable`. Classes are operating
+Elite presets `claude-code/default`, `claude-code/opus-xhigh`, and
+`claude-code/sonnet`, and an Expert `claude-code/fable`. Classes are operating
 roles, not benchmark claims, and they do not change which model a Host itself runs.
 
 | Class | Presets | Role | Authorization |
 |---|---|---|---|
 | **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit permission for **each** task or use. The Host judges completion and exact-stops the seat; another use needs fresh permission, while the same approved task continues across turns and recovery without asking again. |
 | **Worker** | 5 | Cheaper and generally weaker; simpler, well-defined work that adds parallel throughput. | Default-authorized: no per-seat, count, or priority approval, and outside the general worker cap. Real account/token/service limits and your explicit restrictions still apply. |
-| **Elite** | 12 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
+| **Elite** | 13 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
 An Expert review informs the Host; it never replaces the Host's acceptance or its
 ownership of the seat lifecycle.
@@ -296,9 +296,11 @@ same rows as the generated
 [profile-catalog.md](skills/kaola-project-runner/references/profile-catalog.md)
 reference — grouped by class. Each row's **Preset ID** `<platform>/<tier>` is its one
 stable ID: grants, seat snapshots, and authorization relays name a preset by that
-exact ID (so `cursor-cli/default` and `grok/default`, or `claude-code/default` and
-`claude-code/sonnet`, never blur), with the model name and parameters on the same
-row. The ID names a configured preset, not proof of the actually-running model. Each
+exact ID (so `cursor-cli/default` and `grok/default`, or `claude-code/default`,
+`claude-code/opus-xhigh`, and `claude-code/sonnet`, never blur), with the model name and parameters on the same
+row. The ID names a configured preset, not proof of the actually-running model.
+`claude-code/default` and `claude-code/opus-xhigh` both launch the native model
+alias `opus` at different efforts; the preset ID is not that alias. Each
 profile line is user-defined selection guidance,
 not a measured capability; it never changes the preset's model, effort, or Fast and
 never gates `start`. Devin applies each preset through its launch `--model`; both
@@ -308,8 +310,9 @@ explicit `--model` choices, not a separate Fast toggle.
 <!-- KW-README-PRESETS-START -->
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
-| Elite | Claude Code | `default` | `claude-code/default` | Opus | effort=xhigh | Plans and reviews difficult, complex work and handles deep reasoning tasks; does not perform implementation. |
-| Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, well suited to well-scoped work. |
+| Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=medium | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
+| Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus Extra High | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
+| Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation. |
 | Elite | Codex CLI | `default` | `codex/default` | GPT-6 Sol | effort=high | Good at exploring directions, finding problems, review, and computer use, but prone to over-engineering; set a clear scope and hold it to the minimal necessary solution. |
 | Elite | Cursor CLI | `default` | `cursor-cli/default` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Investigates unfamiliar problems, explores solution paths, and autonomously carries them through implementation; well suited to long-running, adaptive work. |
 | Elite | Cursor CLI | `opus` | `cursor-cli/opus` | Claude Opus 5.5 | effort=medium (encoded in model ID) | All-round worker for every kind of task, especially strong at complex work. |
@@ -379,7 +382,9 @@ Workers run only under authorization, and what you authorize depends on the
   restriction wins.
 - **Elite presets** need your explicit grant naming the runtime/preset and count.
   `claude-code/sonnet` uses that same grant: no default seat and no preset-specific
-  cap, and this move does not raise the general worker cap. Grants you already gave
+  cap, and this move does not raise the general worker cap. `claude-code/opus-xhigh`
+  is the thinking-only Opus preset. Moving that role off `claude-code/default` does
+  not grant the new Medium default and does not add a seat. Grants you already gave
   stay valid within their scope. The authorized count is a
   hard cap on live worker processes, ACP holders included: stop-before-start at the
   cap, and an accepted seat keeps only the finalize/cleanup duties it owns until it
@@ -395,8 +400,9 @@ Workers run only under authorization, and what you authorize depends on the
 The Host decides in this order: **current authorization → class responsibility →
 individual profile/task fit → available capacity and real resource limits.** Experts
 contribute complex thinking only when you permitted that task; Elite presets carry
-primary and demanding execution. `claude-code/default` follows its profile:
-planning and review of difficult work, and it does not perform implementation.
+primary and demanding execution. `claude-code/default` is the Opus Medium
+fallback, including when Claude Code is the Host and no tier was chosen, and
+it implements. `claude-code/opus-xhigh` does not perform implementation.
 A Claude Code Host still plans, dispatches, and accepts.
 Worker presets take simpler, bounded work. A
 listed capability never bypasses a missing Expert or Elite authorization — the Host

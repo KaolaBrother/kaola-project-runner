@@ -709,8 +709,11 @@ Droid's default is Auto Model (`auto`) with no effort pin; `--tier opus` is Opus
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
 
-Claude Code's `--tier default` is Opus (`opus`) at `effort=xhigh` (Elite; planning and
-review, and it does not perform implementation). `--tier sonnet` is Sonnet (`sonnet`)
+Claude Code's `--tier default` is Opus 5.5 (`opus`) at `effort=medium` (Elite;
+implementation, and the Host fallback when no tier is chosen). `--tier opus-xhigh`
+is Opus Extra High, preset `claude-code/opus-xhigh`, native alias `opus` at
+`effort=xhigh` (Elite; planning, design, and review; it does not perform
+implementation). The preset ID is not the alias. `--tier sonnet` is Sonnet (`sonnet`)
 at `effort=high` (Elite; an explicit preset and count grant, not a Worker-pool member).
 Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max` (Issue #188): a
 lower-cost worker choice, not an upgrade. These are applied as ordinary ACP config

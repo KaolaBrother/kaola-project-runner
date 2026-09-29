@@ -18,7 +18,24 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   reasoning tasks; does not perform implementation." That limit is this
   preset's profile. Fable is unchanged. No ordinary Opus or Sonnet seat is
   granted. A resume that does not name a tier, model, or effort keeps the
-  native selection.
+  native selection. Issue #230 moves that thinking-only role from
+  `claude-code/default` to `claude-code/opus-xhigh`.
+
+- **Claude Code Opus Medium default and Opus Extra High (Issue #230).**
+  `claude-code/default` is Opus 5.5 (native alias `opus`) at effort `medium`,
+  Elite, and implements: "All-round execution worker, especially strong at
+  complex execution work and UI and 3D visual implementation." It stays the
+  runtime and Host fallback when no tier is chosen. Named tier `opus-xhigh`
+  (`claude-code/opus-xhigh`, display Opus Extra High, the same native alias
+  `opus`, effort `xhigh`, Elite) is thinking-only: "Plans, designs, and reviews
+  difficult, complex work and handles deep reasoning tasks, with particular
+  strength in UI and 3D visual design and review; does not perform
+  implementation." The preset ID is not the model alias. Both presets use the
+  existing `opus` subscription map entry. `claude-code/sonnet` stays Elite at
+  effort `high`: "All-round execution worker, well suited to well-scoped work,
+  especially UI and 3D visual implementation." Fable is unchanged. This split
+  does not add a seat and does not retarget a live resume. A resume or continue
+  that does not name a tier, model, or effort keeps the native selection.
 
 Seats: restart required
 
