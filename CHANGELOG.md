@@ -20,6 +20,13 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   granted. A resume that does not name a tier, model, or effort keeps the
   native selection.
 
+- **dsh ACP harness version check at install (Issue #231).** README Install
+  and begin now shows how to read the loaded `@deepseek-ai/dsh-acp-app` and
+  `@deepseek-ai/dsh-acp` versions instead of `agentInfo`. The verified
+  harness is 0.1.7-rc.2. The launcher pins the harness to its own version, so
+  an older harness needs a whole-dsh upgrade that the user decides. Only the
+  dsh `acp_quirks` wording changed; there is no code or protocol change.
+
 Seats: restart required
 
 The operator diff from v0.6.9 to this candidate

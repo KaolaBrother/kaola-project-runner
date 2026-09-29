@@ -225,6 +225,30 @@ installed by default only for the Codex destination; use `--bin-links` elsewhere
 `--uninstall --bin-links` to remove them. See the
 [installer reference](docs/api.md#installer) for all options.
 
+**dsh ACP harness.** When the installation includes dsh, check the ACP harness dsh
+actually loads. `agentInfo` (`deepseek-harness-acp/0.0.1`) is the same on every
+measured release and does not name it. The harness is `@deepseek-ai/dsh-acp-app`
+and `@deepseek-ai/dsh-acp`, resolved from the launcher's own install:
+
+```bash
+node -e 'const p=require("path"),f=require("fs");let d=p.dirname(process.argv[1]);for(const n of ["dsh","dsh-acp-app","dsh-acp"]){let m;for(let c=d;!m;c=p.dirname(c)){const x=p.join(c,"node_modules/@deepseek-ai",n,"package.json");if(f.existsSync(x))m=x;else if(c===p.dirname(c))break}if(!m){console.log(n,"not found");break}console.log(n,JSON.parse(f.readFileSync(m)).version,m);d=p.dirname(m)}' \
+  "$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$(command -v "${DSH_BIN:-dsh}")")"
+```
+
+The verified harness is 0.1.7-rc.2 (ACP protocol 1; see the closed #227
+[evidence](kaola-workflow/archive/issue-227/dsh-0.1.7-compat-evidence.md)). If it is
+loaded, keep that install and its existing configuration. The launcher package
+`@deepseek-ai/dsh` pins both harness packages to its own exact version, so there
+is no standalone harness upgrade. An older harness means an older dsh runtime.
+Replacing it (for example `npm install -g @deepseek-ai/dsh@0.1.7-rc.2` with the
+npm prefix that installed it) upgrades all of dsh. Report that as the required
+action and leave the decision to the user. If a verified copy is already
+installed elsewhere, set `DSH_BIN` to it; the Runner then launches that binary.
+Check ACP communication with the dsh Skill's `preflight`, `start` (receipt
+`transport.agent_info`), `status`, and an exact `stop`. That needs no model turn.
+Report a model, provider, or credential failure separately. Do not fix it by
+changing providers, models, or credentials, and do not log in.
+
 Use the host's Skill discovery mechanism, or have the agent read the installed
 `SKILL.md` directly. In Codex, a Skill can be invoked as
 `$claude-code-kaola-project-runner`, for example.
