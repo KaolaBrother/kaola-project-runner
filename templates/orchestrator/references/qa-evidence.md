@@ -50,14 +50,14 @@ authorized seat when independence or profile fit helps. Independent checks may
 run in parallel on suitable authorized seats with distinct scopes and one Host
 verdict; an integrated-candidate check waits for that candidate. For visual analysis or
 screenshot review, the owner's preference remains an authorized Opus preset
-or GPT-6 Sol first, then Kimi — selection guidance, not a measured ranking or
+or GPT-6.1 Sol first, then Kimi — selection guidance, not a measured ranking or
 new grant. "Opus" names only the already-defined runtime/preset/effort. Grok
 means Grok CLI default and Cursor CLI default, not Cursor's Opus preset. Visual
 review does not establish computer-operation capability.
 
 For a task that operates a computer, use only the two owner-designated Codex
 presets in [worker-profiles.md](worker-profiles.md): prefer local, available
-GPT-6 Sol when its current explicit grant covers it; otherwise use locally
+GPT-6.1 Sol when its current explicit grant covers it; otherwise use locally
 available GPT-6 Luna under the Worker pool rules. Never infer this capability
 from a visual profile or silently substitute another preset. An Expert review
 needs its own per-task permission and informs, never replaces, Host acceptance.

@@ -1670,7 +1670,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(
             self.config_events(),
             [
-                ("model", "gpt-6-sol"),
+                ("model", "gpt-6.1-sol"),
                 ("reasoning_effort", "high"),
                 ("fast-mode", "off"),
                 ("mode", "agent-full-access"),
@@ -1683,7 +1683,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("source"), "runner-default")
         self.assertEqual(selection.get("tier"), "default")
-        self.assertEqual(selection.get("resolved_model"), "gpt-6-sol")
+        self.assertEqual(selection.get("resolved_model"), "gpt-6.1-sol")
         self.assertEqual(selection.get("resolved_effort"), "high")
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("requested"), "off")
@@ -1736,7 +1736,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         """Issue #237: an explicit effort that the agent rejects is not effective."""
         receipt = self.start("codex", "--effort", "low", caps="reject-effort")
         display = receipt["model_display"]
-        self.assertEqual(display["name"], "GPT-6 Sol")
+        self.assertEqual(display["name"], "GPT-6.1 Sol")
         self.assertEqual(display["preset_id"], "codex/default")
         self.assertEqual(display["preset_effort"], "high")
         self.assertIsNone(display["components"])
@@ -1749,7 +1749,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         viewed = self.cli("view", platform="codex")
         model = viewed["model"]
         self.assertEqual(model["model_display"]["preset_effort"], "high")
-        self.assertEqual(model["model_display"]["name"], "GPT-6 Sol")
+        self.assertEqual(model["model_display"]["name"], "GPT-6.1 Sol")
         self.assertEqual(model["requested_effort"], "low")
         self.assertEqual(model["resolved_effort"], "low")
         self.assertFalse(model["applied_effort"]["applied"])
@@ -1760,7 +1760,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertIsNone(model["current"]["name_provenance"])
         self.assertNotEqual(model["current"]["name"], model["model_display"]["name"])
         status = self.cli("status", platform="codex")
-        self.assertEqual(status["start_evidence"]["model_display"]["name"], "GPT-6 Sol")
+        self.assertEqual(status["start_evidence"]["model_display"]["name"], "GPT-6.1 Sol")
         self.assertEqual(status["start_evidence"]["requested_effort"], "low")
         self.assertNotEqual(
             status["start_evidence"]["effective_selection"].get("effective_effort"), "low")
@@ -1820,9 +1820,9 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             self.assertIn(config_id, advertised)
         options = (receipt.get("transport") or {}).get("advertised_config_options") or []
         model_option = next((o for o in options if o.get("id") == "model"), {})
-        self.assertIn("gpt-6-sol", model_option.get("values") or [])
+        self.assertIn("gpt-6.1-sol", model_option.get("values") or [])
         selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("resolved_model"), "gpt-6-sol")
+        self.assertEqual(selection.get("resolved_model"), "gpt-6.1-sol")
         self.assertFalse((receipt.get("config_application") or {}).get("applied"))
 
     def test_codex_rejected_fast_config_reports_unknown(self) -> None:
@@ -2255,12 +2255,12 @@ class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
         native = first["acp_session_id"]
         self.stop()
         self.clear_mock_log()
-        resumed = self.codex_start("--resume", native, "--model", "gpt-6-sol",
+        resumed = self.codex_start("--resume", native, "--model", "gpt-6.1-sol",
                                    extra_env=self.RESUME_ENV)
-        self.assertIn(("model", "gpt-6-sol"), self.config_events())
+        self.assertIn(("model", "gpt-6.1-sol"), self.config_events())
         evidence = self.cli("status", platform="codex")["start_evidence"]
         self.assertEqual(evidence["model_selection"]["source"], "user")
-        self.assertEqual(evidence["model_selection"]["resolved_model"], "gpt-6-sol")
+        self.assertEqual(evidence["model_selection"]["resolved_model"], "gpt-6.1-sol")
         self.assertEqual(evidence["config_application"], resumed["config_application"])
         self.assertEqual(evidence["inherited"]["model_selection"]["source"], "runner-astra")
 

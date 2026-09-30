@@ -2158,12 +2158,7 @@ def parse_acp_model_map(raw: str) -> dict[str, str]:
     values the agent actually advertises for the same model — e.g. Cursor's
     ``grok-4.7-xhigh`` onto ``grok-4.7[effort=high,fast=true]``.
     """
-    mapping: dict[str, str] = {}
-    for pair in (raw or "").split(";"):
-        key, separator, value = pair.partition("=")
-        if separator and key.strip() and value.strip():
-            mapping[key.strip()] = value.strip()
-    return mapping
+    return quota_module().parse_acp_model_map(raw)
 
 
 def parse_manifest_meta(raw: str) -> dict[str, Any]:

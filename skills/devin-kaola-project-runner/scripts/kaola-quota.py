@@ -277,19 +277,36 @@ def read_manifest(platform: str, script_dir: Path | None = None) -> dict[str, st
     return result
 
 
+def parse_acp_model_map(raw: str) -> dict[str, str]:
+    """Declared native ID to ACP option value mappings."""
+    mapping = {}
+    for pair in (raw or "").split(";"):
+        key, separator, value = pair.partition("=")
+        if separator and key.strip() and value.strip():
+            mapping[key.strip()] = value.strip()
+    return mapping
+
+
 def declared_display_name(fields: dict[str, Any], native_id: Any) -> str | None:
     """Label one exact declared native model id, or None.
 
-    Scans ``*_model_id``. When every match has the same non-empty
-    ``*_model_name``, that name is the label. The lookup does not choose a
+    Scans ``*_model_id`` and their declared ACP wire mappings. When every
+    match has the same non-empty ``*_model_name``, that name is the label. The lookup does not choose a
     preset, copy that preset's effort, or prove a request was applied. An
     unknown id, an empty id, or disagreeing names return None.
     """
     if not isinstance(fields, dict) or not isinstance(native_id, str) or not native_id:
         return None
+    mapping = parse_acp_model_map(fields.get("acp_model_map", ""))
+    # ZCode's provider qualification is not part of its model identity.
+    lookup_id = native_id
+    if fields.get("id") == "zcode":
+        lookup_id = native_id.split("\\")[-1].split("/")[-1].strip()
     names: list[str] = []
     for key, value in fields.items():
-        if not isinstance(key, str) or not key.endswith("_model_id") or value != native_id:
+        if not isinstance(key, str) or not key.endswith("_model_id"):
+            continue
+        if value != lookup_id and mapping.get(value) != native_id:
             continue
         name = fields.get(key[: -len("_model_id")] + "_model_name")
         if not isinstance(name, str) or not name:

@@ -99,7 +99,7 @@ a model-switch grant and does not extend Host model selection.
 ## Computer interaction
 
 The owner designates exactly two presets for tasks that operate a computer:
-`codex/default` (GPT-6 Sol, effort=high; Elite) and `codex/luna` (GPT-6
+`codex/default` (GPT-6.1 Sol, effort=high; Elite) and `codex/luna` (GPT-6
 Luna, effort=max; Worker). Prefer Sol only when its local row is discovered,
 available for the task, and covered by the user's explicit preset/seat grant.
 If no eligible Sol is available, use locally available Luna under the Worker

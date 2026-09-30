@@ -826,13 +826,14 @@ is one JSON array encoded as a JSON string. Each object is `{role, name, effort}
 not copied into `<w>_model_effort`, spawn argv, or `session/set_config_option`. A fusion preset
 does not publish one scalar as both components' effort.
 
-Display names after the ten-runtime audit (preset IDs, native IDs, profiles, classes, quota
-bindings, and launch efforts unchanged): Claude Code `default` and `opus-xhigh` are both
+Display names (preset IDs, profiles, classes, quota bindings, and launch efforts unchanged):
+Claude Code `default` and `opus-xhigh` are both
 `Opus 5.5`, with launch efforts `medium` and `xhigh`. Devin `default` is `SWE-2` (main effort
 `max` on the component). Devin `opus-fusion` is `Opus Fusion` (main `Opus 5.5` at `medium`,
 sidekick `SWE-2` at `medium`). Devin `fable` is `Fable Fusion` (main `Fable 5.1` at `high`,
-sidekick `SWE-2` at `medium`). These identities were already clean and stay as declared:
-`Fable`, `Sonnet`, `GPT-6 Sol`, `GPT-6 Astra`, `GPT-6 Luna`, `Grok 4.7`, `Claude Opus 5.5`,
+sidekick `SWE-2` at `medium`). Codex `default` now selects `gpt-6.1-sol` at `high`.
+Other display identities are:
+`Fable`, `Sonnet`, `GPT-6.1 Sol`, `GPT-6 Astra`, `GPT-6 Luna`, `Grok 4.7`, `Claude Opus 5.5`,
 `Auto Model`, `DeepSeek V4.1 Flash`, `Kimi K3`, `Kimi K2.8`, `GLM 5.3`. `Flash` is the model
 variant, `Auto Model` is the `auto` catalog identity, and Cursor's `Claude` prefix is the
 declared family name.
@@ -850,8 +851,9 @@ not apply them; its `config_application` object is the read-only notice, not an 
 A direct `--model` does not select a preset. `preset_id`, `preset_effort`, and `components`
 stay null, and the launch effort is only the explicit `--effort` (or none). It does not copy
 the matched preset's default effort or its components. When that native ID equals one or more
-declared `*_model_id` values and those declarations share one non-empty `*_model_name`,
-`model_display.name` is that name. The match is an exact catalog label of the requested ID.
+declared `*_model_id` values or their `acp_model_map` wire values, and those declarations share
+one non-empty `*_model_name`, `model_display.name` is that name. ZCode's provider-qualified
+ID is matched by its model component, as in existing ZCode identity checks.
 An ID the manifest does not declare, or one whose declarations disagree on the name, leaves
 `name` null. The raw ID remains `resolved_runtime_model_id`. No suffix is stripped from an
 unknown native ID to invent a name or an effort, and the tier word is not turned into a
@@ -875,7 +877,7 @@ The coherent current read is `view.model.current`:
 |---|---|
 | `native_id` | live `session_meta.configOptions[].currentValue` whose `id` is the manifest `acp_model_config_id`; null when that option or `currentValue` is missing |
 | `effort` | live `currentValue` whose `id` is `start_evidence.effective_selection.effort_config_id`; the same value as `view.model.current_effort` |
-| `name` | exact catalog label of `native_id` (the same `*_model_id` rule as a direct `--model`), or null |
+| `name` | catalog label of `native_id` (the same declared mapping rule as a direct `--model`), or null |
 | `name_provenance` | `catalog-declared` when `name` is set; otherwise null |
 
 `name_provenance: catalog-declared` labels the live ID from the manifest. It does not prove a
@@ -928,9 +930,9 @@ Direct `--model custom-model-max`: `model_display.name` is null,
 suffix is not an effort. A preserved resume uses that same null `model_display`.
 `start_evidence.inherited` is the previous start.
 
-After a launch whose `start_evidence.model_display.name` is `GPT-6 Sol`, a later live
+After a launch whose `start_evidence.model_display.name` is `GPT-6.1 Sol`, a later live
 `configOptions` value of `model=gpt-6-luna` and `reasoning_effort=max` leaves
-`view.model.model_display.name` as `GPT-6 Sol` and sets:
+`view.model.model_display.name` as `GPT-6.1 Sol` and sets:
 
 ```json
 {"name": "GPT-6 Luna", "native_id": "gpt-6-luna", "effort": "max", "name_provenance": "catalog-declared"}

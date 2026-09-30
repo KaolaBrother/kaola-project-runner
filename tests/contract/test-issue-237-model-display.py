@@ -137,7 +137,7 @@ class ModelDisplayContract(unittest.TestCase):
     def test_rejected_override_is_not_the_current_effort(self) -> None:
         view = self.view_model("codex", {
             "model_display": {
-                "name": "GPT-6 Sol",
+                "name": "GPT-6.1 Sol",
                 "preset_id": "codex/default",
                 "preset_effort": "high",
                 "components": None,
@@ -150,7 +150,7 @@ class ModelDisplayContract(unittest.TestCase):
                 "effective_effort": "high",
             },
         }, [
-            {"id": "model", "currentValue": "gpt-6-sol"},
+            {"id": "model", "currentValue": "gpt-6.1-sol"},
             {"id": "reasoning_effort", "currentValue": "high"},
         ])
         self.assertEqual(view["requested_effort"], "low")
@@ -206,6 +206,28 @@ class ModelDisplayContract(unittest.TestCase):
             "name_provenance": None,
         })
 
+    def test_declared_acp_wire_ids_keep_names_without_inheriting_effort(self) -> None:
+        for platform, native_id, name in (
+            ("cursor-cli", "grok-4.7", "Grok 4.7"),
+            ("cursor-cli", "claude-opus-5-5", "Claude Opus 5.5"),
+            ("dsh", '["opencode-go","deepseek-v4.1-flash"]', "DeepSeek V4.1 Flash"),
+            ("zcode", "account:bigmodel-individual-coding-plan\\GLM-5.3", "GLM 5.3"),
+            ("zcode", "builtin:bigmodel-coding-plan\\GLM-5.3-Flash", None),
+        ):
+            with self.subTest(platform=platform, native_id=native_id):
+                view = self.view_model(platform, {}, [
+                    {"id": "model", "currentValue": native_id},
+                ])
+                self.assertEqual(view["current"]["name"], name)
+                self.assertEqual(view["current"]["native_id"], native_id)
+                self.assertIsNone(view["current"]["effort"])
+                manifest = self.quota.read_manifest(platform, SCRIPTS)
+                direct = self.acp.model_display_fact(self.acp.selection_basis(
+                    args(platform, manifest, model=native_id)))
+                self.assertEqual(direct["name"], name)
+                self.assertIsNone(direct["preset_id"])
+                self.assertIsNone(direct["preset_effort"])
+
     def test_preserved_resume_uses_current_evidence_only(self) -> None:
         manifest = self.manifests["codex"]
         preserved = self.acp.selection_basis(args("codex", manifest, resume="sess-1"))
@@ -215,7 +237,7 @@ class ModelDisplayContract(unittest.TestCase):
             "name": None, "preset_id": None, "preset_effort": None, "components": None,
         })
         inherited = {
-            "name": "GPT-6 Sol",
+            "name": "GPT-6.1 Sol",
             "preset_id": "codex/default",
             "preset_effort": "high",
             "components": None,
@@ -255,19 +277,19 @@ class ModelDisplayContract(unittest.TestCase):
     def test_live_option_change_is_not_paired_with_the_launch_name(self) -> None:
         view = self.view_model("codex", {
             "model_display": {
-                "name": "GPT-6 Sol",
+                "name": "GPT-6.1 Sol",
                 "preset_id": "codex/default",
                 "preset_effort": "high",
                 "components": None,
             },
             "requested_effort": None,
-            "model_selection": {"resolved_effort": "high", "resolved_model": "gpt-6-sol"},
+            "model_selection": {"resolved_effort": "high", "resolved_model": "gpt-6.1-sol"},
             "effective_selection": {"effort_config_id": "reasoning_effort"},
         }, [
             {"id": "model", "currentValue": "gpt-6-luna"},
             {"id": "reasoning_effort", "currentValue": "max"},
         ])
-        self.assertEqual(view["model_display"]["name"], "GPT-6 Sol")
+        self.assertEqual(view["model_display"]["name"], "GPT-6.1 Sol")
         self.assertEqual(view["current_effort"], "max")
         self.assertEqual(view["current"], {
             "name": "GPT-6 Luna",
@@ -306,7 +328,7 @@ class ModelDisplayContract(unittest.TestCase):
     def test_missing_current_value_stays_null(self) -> None:
         view = self.view_model("codex", {
             "model_display": {
-                "name": "GPT-6 Sol", "preset_id": "codex/default",
+                "name": "GPT-6.1 Sol", "preset_id": "codex/default",
                 "preset_effort": "high", "components": None,
             },
             "effective_selection": {"effort_config_id": "reasoning_effort"},
@@ -318,7 +340,7 @@ class ModelDisplayContract(unittest.TestCase):
         self.assertEqual(view["current"], {
             "name": None, "native_id": None, "effort": None, "name_provenance": None,
         })
-        self.assertEqual(view["model_display"]["name"], "GPT-6 Sol")
+        self.assertEqual(view["model_display"]["name"], "GPT-6.1 Sol")
 
 
 if __name__ == "__main__":
