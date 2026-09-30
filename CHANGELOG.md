@@ -4,6 +4,30 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.6.14 — 2026-09-30 (Codex ACP pair 0.159.2 / 2.0.1 for GPT-6.1 Sol)
+
+Seats: restart required
+
+The operator diff from v0.6.13 to this release
+(`git diff v0.6.13..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+changes `platforms/codex.yaml`: `acp_command` moves from
+`@openai/codex@0.158.0` + `@agentclientprotocol/codex-acp@2.0.0` to
+`@openai/codex@0.159.2` + `@agentclientprotocol/codex-acp@2.0.1`, and
+`acp_verified_versions` now records the actually tested pair
+(`cli=0.159.2;adapter=2.0.1;protocol=1`, `acp_wrapper_pin` `2.0.1`).
+Running seats keep the bytes they started with and must restart after
+installing this release. The Grok Bot bridge is pinned in the release's
+follow-up pin commit.
+
+- **Codex ACP compatibility with GPT-6.1 Sol.** The previously pinned pair
+  (0.158.0 / 2.0.0) rejected `gpt-6.1-sol` with an invalid-params error and
+  left the old effective model selected. The new pair was live-tested over ACP:
+  `gpt-6.1-sol` with effort high applied, the exact prompt returned
+  `SOL61_ACP_OK`, zero tools or files changed, and the disposable session was
+  exact-stopped with no residual processes. Model, profile, and effort choices
+  are unchanged; the other nine platforms are unchanged and keep their
+  existing pins.
+
 ## 0.6.13 — 2026-09-30 (Codex Sol 6.1 profile alignment)
 
 Seats: restart required
