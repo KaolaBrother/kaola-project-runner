@@ -847,19 +847,44 @@ that read, or null. Request and launch argv prove what was requested or applied.
 prove the runtime kept it. `preflight` reports `model_display` and `requested_effort` and does
 not apply them; its `config_application` object is the read-only notice, not an effort result.
 
-A direct `--model`, and a preserved `--resume` or `--continue` with no new tier, model, or
-effort, set `model_display` to `{"name": null, "preset_id": null, "preset_effort": null, "components": null}`.
-The native ID remains `resolved_runtime_model_id`. No suffix is stripped from an unknown native
-ID to invent a name or an effort, and the tier word is not turned into a current effort.
+A direct `--model` does not select a preset. `preset_id`, `preset_effort`, and `components`
+stay null, and the launch effort is only the explicit `--effort` (or none). It does not copy
+the matched preset's default effort or its components. When that native ID equals one or more
+declared `*_model_id` values and those declarations share one non-empty `*_model_name`,
+`model_display.name` is that name. The match is an exact catalog label of the requested ID.
+An ID the manifest does not declare, or one whose declarations disagree on the name, leaves
+`name` null. The raw ID remains `resolved_runtime_model_id`. No suffix is stripped from an
+unknown native ID to invent a name or an effort, and the tier word is not turned into a
+current effort.
+
+A preserved `--resume` or `--continue` with no new tier, model, or effort still sets
+`model_display` to `{"name": null, "preset_id": null, "preset_effort": null, "components": null}`.
+That invocation has no current native ID to label. `start_evidence.inherited` stays the previous
+start. It is not a current observation, and its `model_display` is not copied onto this start
+or onto `view.model.current`.
 
 `status` and `observe` keep those start facts on `start_evidence` (`model_display`,
 `requested_effort`, `model_selection.resolved_effort`, `config_application.effort`). That object
-is the start, not a new observation. The current effort is `session_meta.configOptions[].currentValue`
-on the option whose `id` is `start_evidence.effective_selection.effort_config_id`. A missing
-option or a missing `currentValue` is null. `view.model` repeats the split for a live watch:
-`model_display`, `requested_effort`, `resolved_effort`, `applied_effort`, `current_effort`.
-`view.models` remains the quota-stamped available-model list. `view.model.current_effort` is
-only that live option. A preserved resume's `start_evidence.inherited` stays historical.
+is the start, not a new observation. `view.model.model_display`, `requested_effort`,
+`resolved_effort`, and `applied_effort` repeat that launch record. They are historical. Do not
+pair `view.model.model_display.name` with a live effort.
+
+The coherent current read is `view.model.current`:
+
+| Field | Meaning |
+|---|---|
+| `native_id` | live `session_meta.configOptions[].currentValue` whose `id` is the manifest `acp_model_config_id`; null when that option or `currentValue` is missing |
+| `effort` | live `currentValue` whose `id` is `start_evidence.effective_selection.effort_config_id`; the same value as `view.model.current_effort` |
+| `name` | exact catalog label of `native_id` (the same `*_model_id` rule as a direct `--model`), or null |
+| `name_provenance` | `catalog-declared` when `name` is set; otherwise null |
+
+`name_provenance: catalog-declared` labels the live ID from the manifest. It does not prove a
+request was applied, and it does not assign a preset. `view.models` remains the quota-stamped
+available-model list. A missing option or a missing `currentValue` leaves that current field
+null. Devin's live model option can still be the stale advertisement: `current.native_id` is
+that advertised value, while `start_evidence.effective_selection.effective_model` stays the
+launch argv and `advertised_model` stays the separate advertisement. The current read does not
+replace one with the other.
 
 Preset view, same Claude identity, distinct preset efforts (`model_display` for `--tier default`
 and `--tier opus-xhigh` with no `--model` and no `--effort`):
@@ -893,11 +918,26 @@ is `role` `main`. Do not label `high` as the sidekick effort or as `current_effo
 {"name": "Fable Fusion", "preset_id": "devin/fable", "preset_effort": null, "components": [{"role": "main", "name": "Fable 5.1", "effort": "high"}, {"role": "sidekick", "name": "SWE-2", "effort": "medium"}]}
 ```
 
-Direct `--model custom-model-max` with no tier: `model_display.name` is null,
+Direct `--model gpt-6-luna --effort high` on Codex: `model_display.name` is `GPT-6 Luna`,
+`preset_id` and `preset_effort` are null, `requested_effort` and
+`model_selection.resolved_effort` are `high` (not the luna preset's `max`), and
+`resolved_runtime_model_id` is `gpt-6-luna`.
+
+Direct `--model custom-model-max`: `model_display.name` is null,
 `resolved_runtime_model_id` is `custom-model-max`, and `requested_effort` is null. The `-max`
-suffix is not an effort. A preserved resume uses the same null `model_display`.
-`start_evidence.inherited` is the previous start. `view.model.current_effort` is the live
-option value or null, not the inherited effort.
+suffix is not an effort. A preserved resume uses that same null `model_display`.
+`start_evidence.inherited` is the previous start.
+
+After a launch whose `start_evidence.model_display.name` is `GPT-6 Sol`, a later live
+`configOptions` value of `model=gpt-6-luna` and `reasoning_effort=max` leaves
+`view.model.model_display.name` as `GPT-6 Sol` and sets:
+
+```json
+{"name": "GPT-6 Luna", "native_id": "gpt-6-luna", "effort": "max", "name_provenance": "catalog-declared"}
+```
+
+That object is `view.model.current`. A preserved resume with no live `currentValue` keeps
+`view.model.current.name` null even when `start_evidence.inherited.model_display.name` is set.
 
 Launch evidence (Issue #203). After applying the selection, `start` hands its own evidence to the
 holder, which keeps it as `start_evidence` in `record.json` and every `status`/`observe` reply (from

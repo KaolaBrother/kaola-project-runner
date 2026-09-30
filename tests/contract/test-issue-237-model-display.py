@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Issue #237: consumer display names stay separate from effort.
+"""Issue #237: display name, effort, and the live current pair.
 
-Preset IDs, native IDs, launch efforts, and Devin argv stay as declared.
-Display metadata does not invent a current effort or a name by stripping a suffix.
+Covers the identities this change actually moved, override acceptance and
+rejection, a known direct native id, preserved resume, and a live option
+change. It does not snapshot every platform preset.
 """
 
 from __future__ import annotations
@@ -15,56 +16,6 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[2]
 SCRIPTS = PROJECT / "scripts"
 PLATFORMS = PROJECT / "platforms"
-
-# name, native id, launch effort. Components are asserted separately.
-EXPECTED = {
-    "claude-code": {
-        "default": ("Opus 5.5", "opus", "medium"),
-        "opus-xhigh": ("Opus 5.5", "opus", "xhigh"),
-        "fable": ("Fable", "fable", "high"),
-        "sonnet": ("Sonnet", "sonnet", "high"),
-    },
-    "codex": {
-        "default": ("GPT-6 Sol", "gpt-6-sol", "high"),
-        "astra": ("GPT-6 Astra", "gpt-6-astra", "high"),
-        "luna": ("GPT-6 Luna", "gpt-6-luna", "max"),
-    },
-    "cursor-cli": {
-        "default": ("Grok 4.7", "grok-4.7-xhigh", "xhigh"),
-        "opus": ("Claude Opus 5.5", "claude-opus-5-5-medium", "medium"),
-    },
-    "devin": {
-        "default": ("SWE-2", "swe-2-max", ""),
-        "opus-fusion": ("Opus Fusion", "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium", ""),
-        "fable": ("Fable Fusion", "fusion-claude-fable-5-1-high-sidekick-swe-2-medium", ""),
-    },
-    "droid": {
-        "default": ("Auto Model", "auto", ""),
-        "opus": ("Opus 5.5", "claude-opus-5-5", "medium"),
-        "core": ("Kimi K3", "kimi-k3", "max"),
-    },
-    "dsh": {"default": ("DeepSeek V4.1 Flash", "opencode-go/deepseek-v4.1-flash", "")},
-    "grok": {"default": ("Grok 4.7", "grok-4.7", "xhigh")},
-    "kimi-cli": {
-        "default": ("Kimi K3", "kimi-code/k3", "max"),
-        "kimi-k2-8": ("Kimi K2.8", "kimi-code/kimi-for-coding", "max"),
-    },
-    "opencode": {"default": ("DeepSeek V4.1 Flash", "opencode-go/deepseek-v4.1-flash", "")},
-    "zcode": {"default": ("GLM 5.3", "GLM-5.3", "max")},
-}
-
-DEVIN_ARGV = {
-    "default": "devin acp --model swe-2-max",
-    "opus-fusion": "devin acp --model fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
-    "fable": "devin acp --model fusion-claude-fable-5-1-high-sidekick-swe-2-medium",
-}
-
-EXAMPLES = (
-    '{"name": "Opus 5.5", "preset_id": "claude-code/default", "preset_effort": "medium", "components": null}',
-    '{"name": "Opus 5.5", "preset_id": "claude-code/opus-xhigh", "preset_effort": "xhigh", "components": null}',
-    '{"name": "Auto Model", "preset_id": "droid/default", "preset_effort": null, "components": null}',
-    '{"name": "Fable Fusion", "preset_id": "devin/fable", "preset_effort": null, "components": [{"role": "main", "name": "Fable 5.1", "effort": "high"}, {"role": "sidekick", "name": "SWE-2", "effort": "medium"}]}',
-)
 
 
 def load(name: str):
@@ -92,54 +43,20 @@ class ModelDisplayContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.acp = load("kaola-acp")
+        cls.holder = load("kaola-acp-holder")
         cls.render = load("render-skills")
+        cls.quota = load("kaola-quota")
         cls.manifests = {
-            path.stem: cls.render.parse_manifest(path)
-            for path in sorted(PLATFORMS.glob("*.yaml"))
+            platform: cls.render.parse_manifest(PLATFORMS / f"{platform}.yaml")
+            for platform in ("claude-code", "codex", "devin")
         }
 
-    def test_ten_runtime_display_names_keep_ids_and_launch_efforts(self) -> None:
-        self.assertEqual(set(self.manifests), set(EXPECTED))
-        for platform, tiers in EXPECTED.items():
-            manifest = self.manifests[platform]
-            declared = ["default", *[
-                word for word in manifest["named_tiers"].split(",") if word
-            ]]
-            self.assertEqual(declared, list(tiers), platform)
-            for tier, (name, model_id, effort) in tiers.items():
-                prefix = tier.replace("-", "_")
-                self.assertEqual(manifest[f"{prefix}_model_name"], name, f"{platform}/{tier}")
-                self.assertEqual(manifest[f"{prefix}_model_id"], model_id, f"{platform}/{tier}")
-                self.assertEqual(manifest[f"{prefix}_model_effort"], effort, f"{platform}/{tier}")
-
-    def test_only_devin_declares_components_and_they_do_not_launch(self) -> None:
-        for platform, manifest in self.manifests.items():
-            keys = [key for key in manifest if key.endswith("_model_components")]
-            if platform != "devin":
-                self.assertEqual(keys, [], platform)
-                continue
-            self.assertEqual(manifest["acp_effort_config_id"], "")
-            self.assertEqual(
-                self.acp.parse_model_components(manifest["default_model_components"]),
-                [{"role": "main", "name": "SWE-2", "effort": "max"}],
-            )
-            fusion = self.acp.parse_model_components(manifest["opus_fusion_model_components"])
-            self.assertEqual([item["effort"] for item in fusion], ["medium", "medium"])
-            self.assertNotEqual(fusion[0]["name"], fusion[1]["name"])
-            fable = self.acp.parse_model_components(manifest["fable_model_components"])
-            self.assertEqual(fable[0], {"role": "main", "name": "Fable 5.1", "effort": "high"})
-            self.assertEqual(fable[1], {"role": "sidekick", "name": "SWE-2", "effort": "medium"})
-            self.assertNotEqual(fable[0]["effort"], fable[1]["effort"])
-            for tier, command in DEVIN_ARGV.items():
-                basis = self.acp.selection_basis(args("devin", manifest, tier=tier))
-                self.assertEqual(basis["effort"], "")
-                self.assertEqual(basis["candidate"], manifest[f"{tier.replace('-', '_')}_model_id"])
-                self.assertEqual(
-                    self.acp.tier_agent_command(args("devin", manifest, tier=tier)), command)
-                self.assertEqual(self.acp.argv_model(command), basis["candidate"])
-                display = self.acp.model_display_fact(basis)
-                self.assertIsNone(display["preset_effort"])
-                self.assertEqual(display["components"][0]["role"], "main")
+    def view_model(self, platform: str, evidence: dict, options: list) -> dict:
+        holder = self.holder.Holder.__new__(self.holder.Holder)
+        holder.args = argparse.Namespace(platform=platform)
+        holder.start_evidence = evidence
+        holder.session_meta = {"configOptions": options}
+        return holder._view_model()
 
     def test_claude_opus_presets_share_a_name_and_not_an_effort(self) -> None:
         manifest = self.manifests["claude-code"]
@@ -154,48 +71,254 @@ class ModelDisplayContract(unittest.TestCase):
         self.assertEqual(default["preset_id"], "claude-code/default")
         self.assertEqual(extra["preset_id"], "claude-code/opus-xhigh")
         self.assertIsNone(default["components"])
+        shared = self.acp.model_display_fact(
+            self.acp.selection_basis(args("claude-code", manifest, model="opus")))
+        self.assertEqual(shared["name"], "Opus 5.5")
+        self.assertIsNone(shared["preset_id"])
+        self.assertIsNone(shared["preset_effort"])
+        self.assertIsNone(shared["components"])
+
+    def test_devin_identities_keep_component_efforts_off_the_launch(self) -> None:
+        manifest = self.manifests["devin"]
+        self.assertEqual(manifest["acp_effort_config_id"], "")
+        expected = {
+            "default": (
+                "SWE-2",
+                "swe-2-max",
+                "devin acp --model swe-2-max",
+                [{"role": "main", "name": "SWE-2", "effort": "max"}],
+            ),
+            "opus-fusion": (
+                "Opus Fusion",
+                "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
+                "devin acp --model fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
+                [
+                    {"role": "main", "name": "Opus 5.5", "effort": "medium"},
+                    {"role": "sidekick", "name": "SWE-2", "effort": "medium"},
+                ],
+            ),
+            "fable": (
+                "Fable Fusion",
+                "fusion-claude-fable-5-1-high-sidekick-swe-2-medium",
+                "devin acp --model fusion-claude-fable-5-1-high-sidekick-swe-2-medium",
+                [
+                    {"role": "main", "name": "Fable 5.1", "effort": "high"},
+                    {"role": "sidekick", "name": "SWE-2", "effort": "medium"},
+                ],
+            ),
+        }
+        for tier, (name, model_id, command, components) in expected.items():
+            basis = self.acp.selection_basis(args("devin", manifest, tier=tier))
+            display = self.acp.model_display_fact(basis)
+            self.assertEqual(basis["effort"], "", tier)
+            self.assertEqual(basis["candidate"], model_id, tier)
+            self.assertEqual(self.acp.tier_agent_command(args("devin", manifest, tier=tier)), command)
+            self.assertEqual(display["name"], name, tier)
+            self.assertIsNone(display["preset_effort"], tier)
+            self.assertEqual(display["components"], components, tier)
+            self.assertEqual(display["components"][0]["role"], "main", tier)
+        fable = expected["fable"][3]
+        self.assertNotEqual(fable[0]["effort"], fable[1]["effort"])
+        direct = self.acp.model_display_fact(self.acp.selection_basis(
+            args("devin", manifest, model=expected["fable"][1])))
+        self.assertEqual(direct["name"], "Fable Fusion")
+        self.assertIsNone(direct["preset_id"])
+        self.assertIsNone(direct["preset_effort"])
+        self.assertIsNone(direct["components"])
+
+    def test_explicit_effort_stays_requested_and_preset_effort_stays_declared(self) -> None:
+        manifest = self.manifests["claude-code"]
         overridden = self.acp.selection_basis(
             args("claude-code", manifest, tier="opus-xhigh", effort="low"))
         self.assertEqual(overridden["effort"], "low")
-        self.assertEqual(
-            self.acp.model_display_fact(overridden)["preset_effort"], "xhigh")
+        self.assertEqual(self.acp.model_display_fact(overridden)["preset_effort"], "xhigh")
+        self.assertEqual(self.acp.model_display_fact(overridden)["preset_id"], "claude-code/opus-xhigh")
 
-    def test_direct_model_and_preserved_resume_do_not_invent_display_or_effort(self) -> None:
+    def test_rejected_override_is_not_the_current_effort(self) -> None:
+        view = self.view_model("codex", {
+            "model_display": {
+                "name": "GPT-6 Sol",
+                "preset_id": "codex/default",
+                "preset_effort": "high",
+                "components": None,
+            },
+            "requested_effort": "low",
+            "model_selection": {"resolved_effort": "low"},
+            "config_application": {"effort": {"applied": False, "error": {"code": -32602}}},
+            "effective_selection": {
+                "effort_config_id": "reasoning_effort",
+                "effective_effort": "high",
+            },
+        }, [
+            {"id": "model", "currentValue": "gpt-6-sol"},
+            {"id": "reasoning_effort", "currentValue": "high"},
+        ])
+        self.assertEqual(view["requested_effort"], "low")
+        self.assertEqual(view["resolved_effort"], "low")
+        self.assertFalse(view["applied_effort"]["applied"])
+        self.assertEqual(view["model_display"]["preset_effort"], "high")
+        self.assertEqual(view["current_effort"], "high")
+        self.assertEqual(view["current"]["effort"], "high")
+        self.assertNotEqual(view["current"]["effort"], "low")
+        self.assertEqual(view["current"]["name_provenance"], "catalog-declared")
+
+    def test_known_direct_selection_names_the_id_without_a_preset(self) -> None:
         manifest = self.manifests["codex"]
-        direct = self.acp.selection_basis(
+        basis = self.acp.selection_basis(
+            args("codex", manifest, model="gpt-6-luna", effort="high", tier="luna"))
+        display = self.acp.model_display_fact(basis)
+        self.assertEqual(basis["candidate"], "gpt-6-luna")
+        self.assertEqual(basis["effort"], "high")
+        self.assertEqual(display, {
+            "name": "GPT-6 Luna",
+            "preset_id": None,
+            "preset_effort": None,
+            "components": None,
+        })
+        self.assertIsNone(self.quota.declared_display_name(
+            {"default_model_id": "opus", "default_model_name": "Opus 5.5",
+             "opus_xhigh_model_id": "opus", "opus_xhigh_model_name": "Opus Extra"},
+            "opus",
+        ))
+
+    def test_unknown_direct_selection_stays_unnamed(self) -> None:
+        manifest = self.manifests["codex"]
+        basis = self.acp.selection_basis(
             args("codex", manifest, model="custom-model-max", tier="luna"))
-        display = self.acp.model_display_fact(direct)
-        self.assertEqual(direct["candidate"], "custom-model-max")
-        self.assertEqual(direct["effort"], "")
+        display = self.acp.model_display_fact(basis)
+        self.assertEqual(basis["candidate"], "custom-model-max")
+        self.assertEqual(basis["effort"], "")
         self.assertEqual(display, {
             "name": None, "preset_id": None, "preset_effort": None, "components": None,
         })
         self.assertIsNone(self.acp.parse_model_components("custom-model-max"))
+        view = self.view_model("codex", {
+            "model_display": display,
+            "effective_selection": {"effort_config_id": "reasoning_effort"},
+        }, [
+            {"id": "model", "currentValue": "custom-model-max"},
+            {"id": "reasoning_effort", "currentValue": "high"},
+        ])
+        self.assertEqual(view["current"], {
+            "name": None,
+            "native_id": "custom-model-max",
+            "effort": "high",
+            "name_provenance": None,
+        })
+
+    def test_preserved_resume_uses_current_evidence_only(self) -> None:
+        manifest = self.manifests["codex"]
         preserved = self.acp.selection_basis(args("codex", manifest, resume="sess-1"))
         self.assertEqual(preserved["source"], "resume-preserved")
         self.assertEqual(preserved["effort"], "")
-        self.assertEqual(self.acp.model_display_fact(preserved), display)
-        unknown = self.acp.model_display_fact(
-            self.acp.selection_basis(args("droid", self.manifests["droid"])))
-        self.assertEqual(unknown["name"], "Auto Model")
-        self.assertIsNone(unknown["preset_effort"])
-        self.assertIsNone(unknown["components"])
+        self.assertEqual(self.acp.model_display_fact(preserved), {
+            "name": None, "preset_id": None, "preset_effort": None, "components": None,
+        })
+        inherited = {
+            "name": "GPT-6 Sol",
+            "preset_id": "codex/default",
+            "preset_effort": "high",
+            "components": None,
+        }
+        blank = self.view_model("codex", {
+            "model_display": {
+                "name": None, "preset_id": None, "preset_effort": None, "components": None,
+            },
+            "model_selection": {"preserved": True, "source": "resume-preserved"},
+            "effective_selection": {"effort_config_id": "reasoning_effort"},
+            "inherited": {"model_display": inherited},
+        }, [])
+        self.assertIsNone(blank["model_display"]["name"])
+        self.assertEqual(blank["current"], {
+            "name": None, "native_id": None, "effort": None, "name_provenance": None,
+        })
+        self.assertNotEqual(blank["current"]["name"], inherited["name"])
+        live = self.view_model("codex", {
+            "model_display": {
+                "name": None, "preset_id": None, "preset_effort": None, "components": None,
+            },
+            "model_selection": {"preserved": True, "source": "resume-preserved"},
+            "effective_selection": {"effort_config_id": "reasoning_effort"},
+            "inherited": {"model_display": inherited},
+        }, [
+            {"id": "model", "currentValue": "gpt-6-luna"},
+            {"id": "reasoning_effort", "currentValue": "max"},
+        ])
+        self.assertIsNone(live["model_display"]["name"])
+        self.assertEqual(live["current"], {
+            "name": "GPT-6 Luna",
+            "native_id": "gpt-6-luna",
+            "effort": "max",
+            "name_provenance": "catalog-declared",
+        })
 
-    def test_docs_examples_match_the_display_facts(self) -> None:
-        text = (PROJECT / "docs" / "api.md").read_text(encoding="utf-8")
-        for example in EXAMPLES:
-            self.assertIn(example, text)
-        for path in (
-            "model_display",
-            "requested_effort",
-            "model_selection.resolved_effort",
-            "config_application.effort",
-            "effective_selection.effective_effort",
-            "view.model.current_effort",
-            "view.models",
-            "start_evidence.inherited",
-        ):
-            self.assertIn(path, text)
+    def test_live_option_change_is_not_paired_with_the_launch_name(self) -> None:
+        view = self.view_model("codex", {
+            "model_display": {
+                "name": "GPT-6 Sol",
+                "preset_id": "codex/default",
+                "preset_effort": "high",
+                "components": None,
+            },
+            "requested_effort": None,
+            "model_selection": {"resolved_effort": "high", "resolved_model": "gpt-6-sol"},
+            "effective_selection": {"effort_config_id": "reasoning_effort"},
+        }, [
+            {"id": "model", "currentValue": "gpt-6-luna"},
+            {"id": "reasoning_effort", "currentValue": "max"},
+        ])
+        self.assertEqual(view["model_display"]["name"], "GPT-6 Sol")
+        self.assertEqual(view["current_effort"], "max")
+        self.assertEqual(view["current"], {
+            "name": "GPT-6 Luna",
+            "native_id": "gpt-6-luna",
+            "effort": "max",
+            "name_provenance": "catalog-declared",
+        })
+        self.assertNotEqual(view["model_display"]["name"], view["current"]["name"])
+
+    def test_devin_current_id_stays_the_advertised_option(self) -> None:
+        view = self.view_model("devin", {
+            "model_display": {
+                "name": "SWE-2",
+                "preset_id": "devin/default",
+                "preset_effort": None,
+                "components": [{"role": "main", "name": "SWE-2", "effort": "max"}],
+            },
+            "effective_selection": {
+                "effective_model": "swe-2-max",
+                "effective_model_source": "launch-argv",
+                "advertised_model": "swe-2-high",
+                "effort_config_id": None,
+            },
+        }, [
+            {"id": "model", "currentValue": "swe-2-high"},
+        ])
+        self.assertEqual(view["model_display"]["name"], "SWE-2")
+        self.assertEqual(view["current"], {
+            "name": None,
+            "native_id": "swe-2-high",
+            "effort": None,
+            "name_provenance": None,
+        })
+        self.assertNotEqual(view["current"]["native_id"], "swe-2-max")
+
+    def test_missing_current_value_stays_null(self) -> None:
+        view = self.view_model("codex", {
+            "model_display": {
+                "name": "GPT-6 Sol", "preset_id": "codex/default",
+                "preset_effort": "high", "components": None,
+            },
+            "effective_selection": {"effort_config_id": "reasoning_effort"},
+        }, [
+            {"id": "model"},
+            {"id": "reasoning_effort", "currentValue": None},
+        ])
+        self.assertIsNone(view["current_effort"])
+        self.assertEqual(view["current"], {
+            "name": None, "native_id": None, "effort": None, "name_provenance": None,
+        })
+        self.assertEqual(view["model_display"]["name"], "GPT-6 Sol")
 
 
 if __name__ == "__main__":

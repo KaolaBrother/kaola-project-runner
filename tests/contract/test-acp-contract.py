@@ -1710,12 +1710,27 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("source"), "user")
         display = receipt.get("model_display") or {}
-        self.assertIsNone(display.get("name"))
+        self.assertEqual(display.get("name"), "GPT-6 Astra")
         self.assertIsNone(display.get("preset_id"))
         self.assertIsNone(display.get("preset_effort"))
         self.assertIsNone(display.get("components"))
         self.assertIsNone(receipt.get("requested_effort"))
         self.assertEqual(receipt.get("resolved_runtime_model_id"), "gpt-6-astra")
+
+    def test_codex_known_direct_model_keeps_requested_effort(self) -> None:
+        receipt = self.start("codex", "--model", "gpt-6-luna", "--effort", "high")
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertIn(("model", "gpt-6-luna"), self.config_events())
+        self.assertIn(("reasoning_effort", "high"), self.config_events())
+        self.assertNotIn(("reasoning_effort", "max"), self.config_events())
+        display = receipt["model_display"]
+        self.assertEqual(display["name"], "GPT-6 Luna")
+        self.assertIsNone(display["preset_id"])
+        self.assertIsNone(display["preset_effort"])
+        self.assertIsNone(display["components"])
+        self.assertEqual(receipt["requested_effort"], "high")
+        self.assertEqual(receipt["model_selection"]["resolved_effort"], "high")
+        self.assertEqual(receipt["resolved_runtime_model_id"], "gpt-6-luna")
 
     def test_rejected_effort_stays_distinct_from_preset_and_current(self) -> None:
         """Issue #237: an explicit effort that the agent rejects is not effective."""
@@ -1734,10 +1749,16 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         viewed = self.cli("view", platform="codex")
         model = viewed["model"]
         self.assertEqual(model["model_display"]["preset_effort"], "high")
+        self.assertEqual(model["model_display"]["name"], "GPT-6 Sol")
         self.assertEqual(model["requested_effort"], "low")
         self.assertEqual(model["resolved_effort"], "low")
         self.assertFalse(model["applied_effort"]["applied"])
         self.assertNotEqual(model["current_effort"], "low")
+        self.assertEqual(model["current"]["effort"], model["current_effort"])
+        self.assertIsNone(model["current"]["native_id"])
+        self.assertIsNone(model["current"]["name"])
+        self.assertIsNone(model["current"]["name_provenance"])
+        self.assertNotEqual(model["current"]["name"], model["model_display"]["name"])
         status = self.cli("status", platform="codex")
         self.assertEqual(status["start_evidence"]["model_display"]["name"], "GPT-6 Sol")
         self.assertEqual(status["start_evidence"]["requested_effort"], "low")
@@ -2191,7 +2212,13 @@ class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
             "name": None, "preset_id": None, "preset_effort": None, "components": None,
         })
         self.assertIsNone(evidence["requested_effort"])
-        self.assertIsNone(self.cli("view", platform="codex")["model"]["current_effort"])
+        viewed = self.cli("view", platform="codex")["model"]
+        self.assertIsNone(viewed["current_effort"])
+        self.assertEqual(viewed["current"], {
+            "name": None, "native_id": None, "effort": None, "name_provenance": None,
+        })
+        self.assertEqual(evidence["inherited"]["model_display"]["name"], "GPT-6 Astra")
+        self.assertNotEqual(viewed["current"]["name"], evidence["inherited"]["model_display"]["name"])
         self.assertIs(evidence["resumed"], True)
         inherited = evidence["inherited"]
         self.assertEqual(inherited, resumed["inherited_start_evidence"])

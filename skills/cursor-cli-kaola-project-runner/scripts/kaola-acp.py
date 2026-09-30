@@ -1997,9 +1997,11 @@ def selection_basis(args: argparse.Namespace) -> dict[str, Any]:
 
     Explicit ``--model`` wins over the tier preset. Explicit ``--effort`` wins
     over the preset's launch effort and attaches only to the model selected
-    with it. A resume/continue without tier/model/effort preserves the native
-    session and carries no preset display. Component metadata never becomes
-    the launch effort.
+    with it. A known ``--model`` may take its display name from an exact
+    ``*_model_id`` match; that label does not assign the preset or its effort.
+    A resume/continue without tier/model/effort preserves the native session
+    and carries no display: a current name is a live option read, not inherited
+    launch metadata. Component metadata never becomes the launch effort.
     """
     manifest = args.manifest
     tier = args.tier or "default"
@@ -2013,7 +2015,7 @@ def selection_basis(args: argparse.Namespace) -> dict[str, Any]:
             "candidate": args.model,
             "effort": args.effort or "",
             "tier": tier,
-            "display_name": None,
+            "display_name": quota_module().declared_display_name(manifest, args.model),
             "preset_id": None,
             "preset_effort": None,
             "components_raw": "",
@@ -2048,8 +2050,12 @@ def selection_basis(args: argparse.Namespace) -> dict[str, Any]:
 def model_display_fact(basis: dict[str, Any]) -> dict[str, Any]:
     """Consumer display for one invocation. Preset effort stays the declaration.
 
-    ``name`` is null when this invocation did not select a preset. ``components``
-    is null when the preset declares none, or when the declaration is unreadable.
+    ``name`` is the preset's display name, or the catalog label of an explicit
+    native id when every matching ``*_model_id`` agrees. It stays null for an
+    unknown id and for a preserved resume. ``preset_id`` and ``preset_effort``
+    are set only when this invocation selected a preset. ``components`` is null
+    when that preset declares none, when the declaration is unreadable, or when
+    no preset was selected.
     """
     return {
         "name": basis.get("display_name"),

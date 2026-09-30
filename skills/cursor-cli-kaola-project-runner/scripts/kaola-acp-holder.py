@@ -3677,11 +3677,14 @@ class Holder:
         return payload
 
     def _view_model(self) -> dict[str, Any]:
-        """This session's display and effort facts for a live view.
+        """Launch facts stay historical. ``current`` is the live name, id, and effort.
 
-        ``models`` stays the quota-stamped available-model catalog. ``current_effort``
-        is the live config option only. Start evidence is not reread as current,
-        and a missing effort option stays null rather than a tier or component guess.
+        ``model_display`` is the start record. Do not pair it with ``current_effort``.
+        ``current`` reads ``session_meta.configOptions`` only. A catalog name labels
+        the live native id (``catalog-declared``) and does not prove a request was
+        applied. A missing option or ``currentValue`` stays null. Inherited launch
+        metadata is not a current observation. Devin's advertised model option stays
+        the live id; the launch argv on ``effective_selection`` is not substituted.
         """
         evidence = self.start_evidence if isinstance(self.start_evidence, dict) else {}
         display = evidence.get("model_display")
@@ -3693,25 +3696,55 @@ class Holder:
         application = application if isinstance(application, dict) else {}
         effective = evidence.get("effective_selection")
         effective = effective if isinstance(effective, dict) else {}
+        current_effort = self._option_current(effective.get("effort_config_id"))
         return {
             "model_display": display,
             "requested_effort": evidence.get("requested_effort"),
             "resolved_effort": selection.get("resolved_effort"),
             "applied_effort": application.get("effort"),
-            "current_effort": self._live_effort(effective.get("effort_config_id")),
+            "current_effort": current_effort,
+            "current": self._current_model(current_effort),
         }
 
-    def _live_effort(self, effort_id: Any) -> Any:
-        if not isinstance(effort_id, str) or not effort_id:
+    def _option_current(self, option_id: Any) -> str | None:
+        """Live ``currentValue`` for one config option, or null when unreadable."""
+        if not isinstance(option_id, str) or not option_id:
             return None
         meta = self.session_meta if isinstance(self.session_meta, dict) else {}
         options = meta.get("configOptions")
         if not isinstance(options, list):
             return None
         for option in options:
-            if isinstance(option, dict) and option.get("id") == effort_id:
-                return option.get("currentValue")
+            if not isinstance(option, dict) or option.get("id") != option_id:
+                continue
+            value = option.get("currentValue")
+            if isinstance(value, str) and value:
+                return value
+            return None
         return None
+
+    def _current_model(self, effort: str | None) -> dict[str, Any]:
+        """Name, native id, and effort from the live model and effort options."""
+        native_id = None
+        name = None
+        module = quota_module()
+        manifest = None
+        if module is not None:
+            try:
+                manifest = module.read_manifest(
+                    self.args.platform, Path(__file__).resolve().parent)
+            except module.QuotaError:
+                manifest = None
+        if isinstance(manifest, dict) and module is not None:
+            native_id = self._option_current(manifest.get("acp_model_config_id") or "")
+            if native_id:
+                name = module.declared_display_name(manifest, native_id)
+        return {
+            "name": name,
+            "native_id": native_id,
+            "effort": effort,
+            "name_provenance": "catalog-declared" if name else None,
+        }
 
     def _quota_models(self) -> dict[str, Any] | None:
         """Stamped model rows for the view payload. ``session_meta`` is not modified."""

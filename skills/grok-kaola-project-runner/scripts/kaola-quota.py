@@ -277,6 +277,30 @@ def read_manifest(platform: str, script_dir: Path | None = None) -> dict[str, st
     return result
 
 
+def declared_display_name(fields: dict[str, Any], native_id: Any) -> str | None:
+    """Label one exact declared native model id, or None.
+
+    Scans ``*_model_id``. When every match has the same non-empty
+    ``*_model_name``, that name is the label. The lookup does not choose a
+    preset, copy that preset's effort, or prove a request was applied. An
+    unknown id, an empty id, or disagreeing names return None.
+    """
+    if not isinstance(fields, dict) or not isinstance(native_id, str) or not native_id:
+        return None
+    names: list[str] = []
+    for key, value in fields.items():
+        if not isinstance(key, str) or not key.endswith("_model_id") or value != native_id:
+            continue
+        name = fields.get(key[: -len("_model_id")] + "_model_name")
+        if not isinstance(name, str) or not name:
+            return None
+        if name not in names:
+            names.append(name)
+    if len(names) == 1:
+        return names[0]
+    return None
+
+
 def _read_manifest_file(path: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
