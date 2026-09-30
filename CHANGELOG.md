@@ -4,6 +4,50 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.6.12 — 2026-09-30 (complete install through ACP preparation, model name/effort separation, Sol 6.1)
+
+Seats: restart required
+
+The operator diff from v0.6.11 to this release
+(`git diff v0.6.11..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is non-empty. Changed paths are `platforms/claude-code.yaml`,
+`platforms/codex.yaml`, `platforms/devin.yaml`,
+`scripts/adapters/claude-code.sh`, `scripts/adapters/codex.sh`,
+`scripts/adapters/devin.sh`, `scripts/kaola-acp-holder.py`, and
+`scripts/kaola-quota.py`. Running seats keep the bytes they started with and
+must restart after installing this release. The Grok Bot bridge is pinned in
+the release's follow-up pin commit.
+
+- **Complete installation through actual ACP preparation (Issue #236).**
+  Every installation entry — the README install sections, the Grok Bot
+  installation/update guide, and `install-local.sh`'s successful-install
+  footer — routes completion through
+  `docs/api.md#acp-layer-preparation-during-install` instead of stopping at
+  Skill payload verification: a compact per-runtime result row
+  (component, loaded versions, verified record, action, readiness), one survey
+  per installation where `--runtime` only selects the Skill destination,
+  absent unrequested runtimes reported as skipped rather than an install
+  obligation, and unknown survey states resolved by rerunning the survey in
+  the correct bound-target launch environment. Between releases the Grok Bot
+  accepted revision now moves through its normal content stage (unpinned,
+  not saveable) so renderer checks stay green on a moving main.
+- **Consumer model display names separated from effort (Issue #237).**
+  Downstream consumers such as Kaola Terminal read a model identity without
+  parsing prose or native IDs: the preset catalog carries `<w>_model_name`,
+  `<w>_model_id`, `<w>_model_effort`, and optional `<w>_model_components`
+  (Devin fusion presets split main/sidekick efforts), and receipts carry
+  `model_display`, `requested_effort`, `resolved_effort`, `applied_effort`,
+  `current_effort`, plus `view.model.current` — a same-object live
+  name/native-id/effort pair labeled `catalog-declared` that never proves a
+  request was applied. A known direct model selection (for example
+  `codex --model gpt-6-luna`) resolves its declared name without preset
+  assignment or preset effort; unknown IDs stay unnamed with the raw ID
+  preserved; preserved resumes keep historical launch facts historical.
+- **Codex default Sol is GPT-6.1 Sol (Issue #237 follow-up).**
+  `codex/default` names GPT-6.1 Sol with native id `gpt-6.1-sol`, effort
+  unchanged at high; declared ACP display-name mapping is preserved and the
+  profile wording corrected. Luna and Astra are unchanged.
+
 ## 0.6.11 — 2026-09-29 (Host closeout clarity, scoped pause adoption, DSH doc link)
 
 Seats: restart required
