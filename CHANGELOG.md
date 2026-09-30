@@ -4,6 +4,24 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.6.13 — 2026-09-30 (Codex Sol 6.1 profile alignment)
+
+Seats: restart required
+
+The operator diff from v0.6.12 to this release
+(`git diff v0.6.12..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+changes `platforms/codex.yaml` (profile wording only; the holder, bridge, and
+quota catalog are unchanged). Running seats keep the bytes they started with
+and must restart after installing this release. The Grok Bot bridge is pinned
+in the release's follow-up pin commit.
+
+- **Codex Sol 6.1 profile alignment.** The `codex/default` preset profile now
+  reads "All-round execution worker, strong at exploring directions, finding
+  problems, and review; good at UI and 3D visual work, with computer-use
+  capability." Model id `gpt-6.1-sol`, effort high, and the Elite class are
+  unchanged; README, the profile catalog, and the generated platform rows
+  agree. Luna and Astra are unchanged.
+
 ## 0.6.12 — 2026-09-30 (complete install through ACP preparation, model name/effort separation, Sol 6.1)
 
 Seats: restart required
