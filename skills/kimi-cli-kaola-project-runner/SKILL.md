@@ -125,13 +125,10 @@ names or fuzzy session matches.
 ## Ending, releasing, and resuming
 
 The controlling Agent owns every completion judgment; the Runner executes the chosen operation
-and reports the true result. These are suggestions, never gates:
+and reports the true result. These are operation facts, never gates:
 
 - A finished reply is not a finished task: an `end_turn` event, an idle terminal, or a
   successful `send` receipt never establishes completion.
-- When this delegation's work is delivered and no immediate interaction is expected, the
-  default recommendation is to `stop` the exactly-owned running session. Keep it running
-  when the Agent expects to resume interacting right away or the user asked for it to stay.
 - `stop` releases the owned runtime (the ACP holder and its agent). It never deletes CLI
   history, session records, work artifacts, or unrelated resources. Judge success by the
   `stop`/`status` result evidence, not by a completed call.
@@ -143,23 +140,14 @@ and reports the true result. These are suggestions, never gates:
   `start --continue` for the platform's latest conversation, or a fresh `start` plus existing
   records where the platform cannot resume.
 
-## Optional Kaola Workflow recommendation
+## Optional Kaola Workflow
 
-For project work, when Kaola Workflow is available to Kimi CLI and fits the user's task,
-consider telling the user whether you plan to use it. Ordinary Workflow-backed work binds `--repo`
-to the consuming project's canonical Git root and asks this CLI to invoke its installed
+Ordinary Workflow-backed work binds `--repo` to the consuming project's canonical Git root and asks this CLI to invoke its installed
 `workflow-next`, so that runtime's Workflow creates or recovers the child worktree; this Skill only
 transports the exact session. Linked-worktree starts, outer-prepared bundles, and existing-run
-recovery are Agent decisions, not transport gates. Inspect Git and Workflow evidence first, report
-the chosen Git root, and allow several exact sessions at one canonical root with separate Workflow
-worktrees. A session already in a child worktree is advisory: preserve work, then continue,
+recovery are Agent decisions, not transport gates. A session already in a child worktree is advisory: preserve work, then continue,
 stop/restart at root, or use another Workflow recovery path. Installation for another runtime alone
-does not establish availability here; the Agent decides whether to adopt this recommendation.
-
-If adopted, consider supervising `kaola-workflow-finalize` through the selected merge/sync or PR
-delivery, verifying the actual result and cleanup of this task's workspace, worktrees, and branches.
-PR delivery is not a merged result; preserve resources still needed by an open PR or other active
-work. These are suggestions for the Agent, not automatic Runner actions or communication gates.
+does not establish availability here.
 
 ## Evidence boundary
 

@@ -37,6 +37,19 @@ Delegator-inquiry sweep (one owned permission event needs no full sweep):
 [host-startup.md](references/host-startup.md) ·
 [zcode-native-skill-entry.md](references/zcode-native-skill-entry.md) ·
 [host-entry-matrix.md](references/host-entry-matrix.md).
+A Host (any platform with a `host_skill_entry`) is event-driven: no
+Routine, cron, or sleep loop. Its first prompt names its
+`platform`/`session`/`repo`; `KAOLA_ACP_DISPATCHER` carries them to its shell.
+Beat mechanics - binding, non-blocking dispatch, ending the
+turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
+Each inner worker is its own session and process group: an inner stop never
+reaches the Host, and the Host's stop sweeps only recorded inner sessions.
+Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
+which starts one Host of any platform that loads this Skill. `--platform grok` is the
+Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
+Routine to run this Skill. Keep the Host shell cwd at the canonical root: never
+`cd` into a worktree finalize/sink may remove; use absolute paths, `git -C`, or
+`(cd ... && ...)`.
 
 ## Consumer-project boundary
 
@@ -64,36 +77,19 @@ preference); Elite needs an explicit grant; Expert is complex thinking only,
 with fresh user permission per task. Choose by authorization, availability,
 class responsibility, profile/task fit, resources; prior success is evidence,
 not sole reason. The heartbeat holds authorized
-[profile rows](references/profile-catalog.md) and Class definitions.
+[profile rows](references/profile-catalog.md) and Class definitions. Read
+exact applicable catalog rows only at intake or a grant change.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. No serial build, GPU, port, or cache constraint blocks
 unrelated parallel work.
 
-### Supported workers
+### Selected platform
 
-Derived from this checkout's platform manifests (not a hardcoded roster); every
-platform's default transport is ACP:
-
-{{SUPPORTED_WORKERS}}
-
-### Hosts
-
-This Skill is host-neutral. Any `install-local.sh --runtime`, or
-`--skills-dir`, installs it with the workers as sibling Skill directories; Host
-admission per platform is [host-entry-matrix.md](references/host-entry-matrix.md).
-Each inner worker is its own session and process group: an inner stop never
-reaches the Host, and the Host's stop sweeps only recorded inner sessions. A Host (any platform with a `host_skill_entry`) is event-driven: no
-Routine, cron, or sleep loop. Its first prompt names its
-`platform`/`session`/`repo`; `KAOLA_ACP_DISPATCHER` carries them to its shell.
-Beat mechanics - binding, non-blocking dispatch, ending the
-turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
-Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
-which starts one Host of any platform that loads this Skill. `--platform grok` is the
-Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
-Routine to run this Skill. Keep the Host shell cwd at the canonical root: never
-`cd` into a worktree finalize/sink may remove; use absolute paths, `git -C`, or
-`(cd ... && ...)`.
+Call the matching platform Runner by its installed directory
+`<id>-kaola-project-runner`. Every platform's default transport is ACP.
+Eligible seats, Class, and profile come from the current heartbeat JSON, not
+a roster in this Skill.
 
 ### Progressive disclosure
 
@@ -103,7 +99,7 @@ whole files into context: receipts, hashes, counts and bounded excerpts are the
 evidence. Ordinary `observe`, `status` and `capture --lines` receipts stay bounded
 (`truncated` names dropped fields); `capture --full` is the only unbounded
 request.
-Quota packages (read-only catalog; never changes the count cap), limit-failure by class and account-unavailable pause, no login: [quota-packages.md](references/quota-packages.md).
+Never log in, relogin, switch accounts, or repair credentials. A confirmed limit or account refusal follows [quota-packages.md](references/quota-packages.md); that rule does not change the count cap.
 
 ### Defaults
 
@@ -114,7 +110,7 @@ Quota packages (read-only catalog; never changes the count cap), limit-failure b
 | Model / transport | Platform `--tier default`, Fast off, default transport. Explicit human choices win. Resume preserves saved native choices. |
 | Other tiers | Only default is common; tiers are platform-specific/unranked. No automatic model, tier, or transport switch; only owner-authorized model/preset changes stay within runtime. |
 | Workflow | On. If explicitly off or unavailable, use authorized PR/verification delivery and disclose the limitation; do not fake Workflow records. |
-| Heartbeat | Non-Host: {{HEARTBEAT_DEFAULT}}; zero or "no heartbeat" means one-shot; one host-native carrier, else same-session sleep, never both. Host: event-driven only (see Hosts). |
+| Heartbeat | Non-Host: {{HEARTBEAT_DEFAULT}}; zero or "no heartbeat" means one-shot; one host-native carrier, else same-session sleep, never both. Host beats are event-driven (Heartbeat). |
 | Permissions | Per platform, not one global bypass. Honor explicit permission-mode overrides. Ordinary approval leftovers are handled here within authorized scope, not routinely sent to the human. |
 | Cursor | Never use `/model` as a read-only probe. |
 
@@ -174,13 +170,28 @@ sink, and write ownership.
    orchestrator's own call; replace it with `drain-restart` at idle
    (see zcode-host-dispatch.md).
    Examine authorized remaining work. {{IDLE_BEFORE_STOP}}.
-   State the task, working location, write ownership,
-   delivery requirements, and the doc-impact call in its prompt; merely seeing a
+   Call `<id>-kaola-project-runner`. Pass the selected authorized `--tier`,
+   default included; read its receipt before the first send
+   (zcode-host-dispatch.md). Do not pass a permission-mode override unless the
+   human wrote one. One dispatch prompt per ready session. State the task,
+   working location, write ownership, constraints, delivery requirements, and
+   the doc-impact call in its prompt, plus whether Workflow is on. That prompt
+   carries the assignment only: never orchestration policy or the seat roster.
+   The worker must not self-finalize before acceptance; irreversible or value
+   choices print `HUMAN_DECISION_REQUIRED` and wait. Merely seeing a
    worktree or ledger is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims. Pass still-valid candidate
    evidence; recheck changed/invalidated facts or actual gaps. Keep required
    project/release checks. Substantive failure: [task-failure.md](references/task-failure.md).
+   One run claims one real issue: never a bundle claim, worktree, ledger or
+   session spanning several, and collaborating workers share that issue's run under
+   distinct names. Choose the real open issue before start, name the session
+   `<platform>-<CODE>-i<ISSUE>-<purpose>` (`droid-KT-i274-parser`) with `CODE` the
+   heartbeat's declared project short code, verify it in the start receipt, and
+   keep the rule on later dispatches and restarts. Hosts, diagnostics and
+   issue-less tasks carry no issue number and never an invented one. Detail:
+   [references/issue-dispatch.md](references/issue-dispatch.md).
 3. **Accept the delivery.** {{ACCEPTANCE_BEFORE_FINALIZE}}. When a worker
    claims completion, judge its actual diff, checks, docs and run records
    against that assignment under the effective global Workflow rules. Reuse
@@ -208,16 +219,12 @@ sink, and write ownership.
    keep-alive or completion. A Host that
    ended its turn while workers are in flight, or with delivery, acceptance or
    close-out open, is not an idle worker: keep it and send it no "continue"; its
-   next beat is a worker event. Before quiescence, reconcile actual owner
-   goal/stop with heartbeat project.goal/stop, active/pending (authorized backlog
-   and aggregate QA/doc duties); completed worker/run/batch doesn't end an
-   open mandate. If open, step 2 selects actionable authorized work/duties
-   within grants/caps; claim issues only while intake open. Keep
-   all-blocked work event-driven. Cancel on completed scope/duties or stop
-   boundary after in-hand close-out. Keep recovery info; assign the rest an
-   owner. Direct cleanup of completed, unreferenced
-   worktrees/branches; protect in-flight work and evidence. Session stop, acceptance, merge, closure and cleanup are different facts, not
-   interchangeable completion labels.
+   next beat is a worker event. Before quiescence, reconcile owner goal/stop
+   with heartbeat project.goal/stop and pending QA/doc duties; a completed
+   worker or batch does not end an open mandate. Claim new issues only while
+   intake is open; all-blocked work stays event-driven. Stop boundary, scoped
+   pause, and cleanup are Ending a run. Session stop, acceptance, merge,
+   closure and cleanup are different facts, not interchangeable completion labels.
 
 ## Ending a run
 
@@ -236,29 +243,6 @@ recovery-preserving branches; do not merge or clean beyond that scope.
 New authorized work or another task gets a fresh `start` under a new standard
 name, never a finished seat; `--resume`/`--continue` recover the same assignment
 only.
-
-## Dispatch notes
-
-Call the matching platform Runner Skill by its installed directory. Pass the
-selected authorized `--tier`, default included; read its receipt before the
-first send (zcode-host-dispatch.md). Do not pass a permission-mode override
-unless the human wrote one. One dispatch prompt per ready session.
-
-The worker is not the orchestrator. Its prompt should name the authorized
-scope, whether Workflow is on, its child worktree and write ownership, that it
-must not self-finalize before acceptance, and that irreversible or value choices
-print `HUMAN_DECISION_REQUIRED` and wait.
-
-### Issue-scoped names, one issue per run
-
-One run claims one real issue: never a bundle claim, worktree, ledger or
-session spanning several, and collaborating workers share that issue's run under
-distinct names. Choose the real open issue before start, name the session
-`<platform>-<CODE>-i<ISSUE>-<purpose>` (`droid-KT-i274-parser`) with `CODE` the
-heartbeat's declared project short code, verify it in the start receipt, and
-keep the rule on later dispatches and restarts. Hosts, diagnostics and
-issue-less tasks carry no issue number and never an invented one. Detail and
-negatives: [references/issue-dispatch.md](references/issue-dispatch.md).
 
 ## Report
 

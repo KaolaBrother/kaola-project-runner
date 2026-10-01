@@ -593,6 +593,7 @@ def external_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         "RUNNER_DISPLAY": ORCHESTRATOR_DISPLAY,
         "LOCATOR": LOCATOR_COMMAND,
         "HOST_PLATFORM_ROWS": host_platform_rows(manifests),
+        "WORKER_POOL_MEMBERS": worker_pool_members(manifests),
         "DESCRIPTION": json.dumps(
             "Use when an outer Agent (Grok Bot, Codex, or generic) should delegate a "
             "project run through Kaola-Delegator to one CLI Host on any "

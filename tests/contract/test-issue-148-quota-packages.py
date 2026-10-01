@@ -418,8 +418,14 @@ class QuotaQueryCliTest(unittest.TestCase):
         self.assertFalse((self.markers / "codex-ran").exists())
 
     def test_orchestrator_package_examples_match_cli_output(self) -> None:
-        reference = (PROJECT / "templates" / "orchestrator" / "references"
-                     / "quota-packages.md").read_text(encoding="utf-8")
+        # Issue #239: catalog examples and the display rule live in docs/api.md.
+        # The installed quota reference keeps the seat-failure rule only.
+        reference = (PROJECT / "docs" / "api.md").read_text(encoding="utf-8")
+        seat = (PROJECT / "templates" / "orchestrator" / "references"
+                / "quota-packages.md").read_text(encoding="utf-8")
+        self.assertIn("## Confirmed exhaustion", seat)
+        self.assertIn("## Account unavailable", seat)
+        self.assertNotIn("```json", seat)
         self.assertNotIn("windows is null until a release seeds one", reference)
         self.assertIn("show the weekly or monthly window when the plan has one", reference)
         self.assertIn("show the 5h window only when it has neither", reference)

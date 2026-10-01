@@ -78,8 +78,7 @@ declared `--tier` with its requested/applied receipt — no new flag or gate.
 
 Decide in this order: **current authorization → local availability → class
 responsibility → profile/task fit → capacity and known resource limits.**
-Expert contributes complex thinking only for its permitted task; Elite performs
-primary and demanding execution. `claude-code/opus-xhigh` does not perform implementation; a Claude Code Host still plans, dispatches, and accepts. Worker handles simpler bounded work. Listed
+`claude-code/opus-xhigh` does not perform implementation; a Claude Code Host still plans, dispatches, and accepts. Listed
 capability never bypasses missing Expert or Elite authorization; ask through
 the existing authorization route when needed. Keep real dependencies and write
 ownership. Do not rank models, invent a complexity classifier or routing

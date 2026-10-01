@@ -28,13 +28,38 @@ history:
 
 The existing native timer is the only scheduler; its prompt stays static:
 Skill entry and project locator. A full sweep is one Delegator inquiry; one
-owned permission event needs no additional full sweep. Each inquiry: read the
-file, verify `host` by fresh Runner `status`, audit the Host `body` (its `authorization` holds the
+owned permission event needs no additional full sweep. Each inquiry of an
+already-verified unchanged Host uses the commands below: read this file,
+verify `host` by fresh Runner `status`, audit the Host `body` (its `authorization` holds the
 three Class definitions and an ID/Class/profile row per authorized preset),
-send one correction with current values, replace stale facts. Relay urgent
-owner stops immediately; never wait to consolidate other changes. Never write
+send one correction with current values, replace stale facts. The correction
+may carry `sweep=Delegator inquiry: list --repo, verify identity, stop orphans only, keep in-flight, report`.
+Relay urgent owner stops immediately; never wait to consolidate other changes. Never write
 the Host JSON, copy its rows here, or select workers. Missing or unreadable: report, then recover from owner,
 Runner and forge records before any `start`; never blank authorization.
+Start, resume, replace, or uncertain identity: [handoff.md](handoff.md).
+
+## Inquiry commands
+
+```bash
+PLATFORM="<host platform id>"
+RUNNER="<skills>/$PLATFORM-kaola-project-runner/scripts/runtime-tmux.sh"
+PROJECT="/abs/path/to/consumer-project"
+HOST="$PLATFORM-<PROJECT_CODE>-orchestrator-main"
+"$RUNNER" status --repo "$PROJECT" --session "$HOST"
+"$RUNNER" observe --repo "$PROJECT" --session "$HOST"
+"$RUNNER" capture --repo "$PROJECT" --session "$HOST" --lines 200
+"$RUNNER" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<correction>'
+```
+
+`<skills>` is the sibling Skill directory, or the bridge's `ROOT/skills`. A busy Host uses `steer` (or interrupt for an urgent owner stop), not a queue. `--no-wait` admission is not delivery.
+
+Grok Bot account bridge, before `status`, `send`, and `stop`, attests without `--intent` and refuses any `refused` receipt. Codex and generic skip this. `$HOST` is the exact live session, never any other.
+
+```bash
+kaola-project-runner-locate --target local|cloud \
+  --project "$PROJECT" --worker "$PLATFORM" --session "$HOST"
+```
 
 ## Day boundary
 

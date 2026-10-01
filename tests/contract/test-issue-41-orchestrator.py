@@ -323,44 +323,15 @@ class Issue41RendererContract(unittest.TestCase):
             self.assertEqual(loaded["description"], description)
 
     def test_supported_worker_summary_is_derived_from_manifests(self) -> None:
-        unique_skill = "grok-probe-worker-zx41"
-        unique_display = "Probe Worker ZX41 Token"
-        with tempfile.TemporaryDirectory(prefix="kaola-issue-41-summary-") as temporary:
-            copy = copy_repo(temporary)
-            grok = copy / "platforms" / "grok.yaml"
-            original = grok.read_text(encoding="utf-8")
-            grok.write_text(
-                original.replace(
-                    'skill_name: "grok-kaola-project-runner"',
-                    f'skill_name: "{unique_skill}"',
-                ).replace(
-                    'display_name: "Grok Kaola Project Runner"',
-                    f'display_name: "{unique_display}"',
-                ),
-                encoding="utf-8",
-            )
-            stale = copy / "skills" / "grok-kaola-project-runner"
-            if stale.exists():
-                shutil.rmtree(stale)
-            written = run_renderer(copy, "--write")
-            self.assertEqual(written.returncode, 0, written.stderr or written.stdout)
-            text = require_orchestrator_markdown(copy)
-            self.assertIn(
-                unique_skill,
-                text,
-                "supported-worker summary must come from platform manifests, not a hardcoded worker list",
-            )
-            self.assertIn(
-                unique_display,
-                text,
-                "supported-worker summary must include manifest display names",
-            )
-            for platform_id in WORKER_IDS:
-                self.assertRegex(
-                    normalize(text),
-                    rf"\b{re.escape(platform_id)}\b",
-                    f"supported-worker summary omitted platform id {platform_id}",
-                )
+        # Issue #239: the main Skill no longer embeds a roster. Eligible seats
+        # come from the heartbeat JSON; the directory rule is the only lookup.
+        text = (orchestrator_package() / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("`<id>-kaola-project-runner`", text)
+        self.assertNotIn("| Platform id | Skill directory | Display name |", text)
+        self.assertNotIn("{{SUPPORTED_WORKERS}}", (PROJECT / "templates" / "orchestrator" / "SKILL.md.tmpl").read_text(encoding="utf-8"))
+        catalog = (orchestrator_package() / "references" / "profile-catalog.md").read_text(encoding="utf-8")
+        for platform_id in WORKER_IDS:
+            self.assertIn(f"`{platform_id}/", catalog, platform_id)
 
 
 class Issue41GoldenAndWorkerPreservation(unittest.TestCase):

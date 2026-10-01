@@ -25,11 +25,9 @@ specific reason, not a keyword match. Where the installed Workflow still runs
 documentation docking, it records this — no doc ledger,
 second acceptance gate, or per-file sign-off table.
 
-Shared docs touched by several issues may be integrated and checked together
-at their delivery boundary; that pending check stays among the heartbeat's
-unfinished duties and is not PASS because one issue closed. A concrete
-misleading instruction current users or agents rely on is fixed when it
-matters, never knowingly left for a later sweep.
+Shared docs touched by several issues may be integrated at their delivery
+boundary. A concrete misleading instruction current users or agents rely on
+is fixed when it matters.
 
 ## AGENTS.md — verified facts only
 
@@ -42,7 +40,7 @@ consumer project instructions.
 
 ## After finalize
 
-Verify the delivery results main Skill step 4 names. If project instructions
+If project instructions
 changed, notify in-flight Agents at a safe boundary to sync or reload; do not
 interrupt a measurement to push the notice. The heartbeat tracks only
 unfinished duties, never a per-beat documentation scan or a full sweep per

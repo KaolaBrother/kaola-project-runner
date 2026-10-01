@@ -55,12 +55,10 @@ new grant. "Opus" names only the already-defined runtime/preset/effort. Grok
 means Grok CLI default and Cursor CLI default, not Cursor's Opus preset. Visual
 review does not establish computer-operation capability.
 
-For a task that operates a computer, use only the two owner-designated Codex
-presets in [worker-profiles.md](worker-profiles.md): prefer local, available
-GPT-6.1 Sol when its current explicit grant covers it; otherwise use locally
-available GPT-6 Luna under the Worker pool rules. Never infer this capability
-from a visual profile or silently substitute another preset. An Expert review
-needs its own per-task permission and informs, never replaces, Host acceptance.
+For a task that operates a computer, follow
+[worker-profiles.md](worker-profiles.md) Computer interaction; do not restate
+it here. An Expert review needs its own per-task permission and informs, never
+replaces, Host acceptance.
 
 ## Tools and authority
 
@@ -94,9 +92,11 @@ necessarily unexecuted — distinguish "no record", "recorded as not run", and
 Keep separate: the **observation** (exact command/step and result, on which
 build); the **plausible cause** (candidate regression; pre-existing bug also on
 baseline; unsupported/misconfigured setup; tool/environment failure; flake);
-the **uncertainty** (what was and was not tried). Failing on the baseline too
-does not by itself prove an environment cause. The Host decides whether it
-blocks, needs a narrower repro, is an open observation, or is out of scope.
+the **uncertainty** (what was and was not tried). A judgment with no spec,
+including an unspecified preference, is an observation, not a proven failure.
+Failing on the baseline too does not by itself prove an environment cause. The
+Host decides whether it blocks, needs a narrower repro, is an open observation,
+or is out of scope.
 
 ## Redundancy
 
@@ -114,26 +114,3 @@ An incomplete or unclear QA record goes back to its owner as the same
 assignment, with the concrete gap named. A concrete product defect goes to the
 implementing owner. Release each seat per main Skill step 5; enough evidence
 is enough.
-
-## Examples
-
-- **CLI.** Issue: `export --format json` exits 0 with valid JSON; an invalid
-  format exits 2. Unit tests cover the parser only. Bounded check: run the
-  commands on the built binary, capture stdout/exit codes, validate the JSON,
-  diff `--help` against the README usage block. A stale README flag routes to
-  the implementer; re-check only that diff — no repository-wide doc sweep.
-- **UI.** Settings saves the timezone; nothing shows the dashboard. On a seat
-  with browser tooling already authorized: save, reload, fresh session,
-  confirm the dashboard, attach a screenshot; a spacing note is recorded as
-  "layout judgment, no spec", not a failure.
-- **Docs-only.** Document `--dry-run`: read the diff and any recorded `--help`
-  output; if none and self-execute is off, the owner runs and records it.
-- **Two related issues.** One adds `--quiet`, the next documents it. Each
-  worker runs its focused checks and edits affected docs; the Host accepts each
-  assignment and keeps "shared CLI/README check, before the release cut" in
-  unfinished duties — the first closure is not its PASS. After both merge, one
-  bounded check runs the flag and diffs `--help` against the README.
-- **High-risk gap.** Stop handling was rewritten, dependent work is queued,
-  and no record stopped a live seat. Before that dispatch the Host asks for one
-  bounded exact-stop check, not a full-suite rerun; required validation still
-  runs at its boundary.

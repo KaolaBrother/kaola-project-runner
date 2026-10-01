@@ -19,64 +19,16 @@ Recovery belongs to the outer Agent:
 
 ## Limit-failed Host
 
-Act only on a confirmed limit failure of the Host's own account: an explicit
-runtime/provider error or usage fact in its capture, receipts or events that
-the quota is exhausted, a rate limit was reached, or a reset/window/account
-limit was stated. A bare 429, timeout, network error, transient failure or
-reset-window metadata without an explicit limiting reason is not, nor is a
-session still connecting or awaiting a reply: keep the unknown and keep the
-Host, observing at the existing cadence and escalating a persistent blocker
-with evidence. No probe or retry loop; existing records keep the evidence and
-any known pool/reset facts.
+**Limit, same trigger** as Project Runner `references/quota-packages.md`: a confirmed limit failure of the Host's own account. Unknown evidence, an authentication or account refusal, or a brick does not use this fallback; a brick keeps its same-platform replacement above. Preserve the frontier from records (grants including revoked seats, issues, evidence, worker ownership, pending close-out).
 
-1. Preserve the frontier from those records: grants (Elite rows, approved
-   Expert tasks, seats the Host revoked), issues and claims, valid evidence,
-   worker ownership (sessions, native resume ids, worktrees) and pending
-   close-out. The Host `stop` also ends its recorded inner holders.
-2. A non-ZCode Host: this rule authorizes one ZCode Host; do not re-ask the
-   Host platform. Exact-stop and prove gone as above, then start
-   `zcode-<PROJECT_CODE>-orchestrator-<purpose>` as a new ACP session under
-   the carried authorization, asking only missing or conflicting values.
-   Never `--resume` another runtime's native id as ZCode. Hand off those
-   facts in the existing fields; the new Host resumes attested worker seats,
-   and nothing is re-claimed or redone.
-3. The limited Host is already ZCode, or the ZCode Host cannot start or
-   operate: preserve the recovery state and ask the user. Never recreate the
-   same limited Host, switch automatically to another platform, loop, or run
-   two Hosts.
+- **Non-ZCode Host.** Exact-stop it, prove it gone, and start one ZCode Host as a new ACP session under the carried authorization. Do not re-ask the platform. Never `--resume` another runtime's native id as ZCode. Re-claim and redo nothing.
+- **Host already ZCode, or ZCode cannot start or operate.** Preserve and ask the user.
+- **Never.** Recreate the same limited Host, switch automatically elsewhere, loop, or run two Hosts.
 
-Never log in: do not attempt, retry or delegate login, logout/login cycling,
-credential refresh or replacement, or account switching, and change no
-credentials, billing routes or purchased quota. A seat the Host revoked for a
-limit failure stays out of later handoffs and KPR-update reconciliation until
-the user reauthorizes it. Worker-seat limit failure is the Host's (Project
-Runner `references/quota-packages.md`).
+Never log in. Seats the Host revoked stay out of later handoffs and KPR-update reconciliation until the user reauthorizes them. Worker-seat limit failure stays the Host's (`references/quota-packages.md`).
 
 ## Account-unavailable Host
 
-An explicit `login expired`, `authentication required`, revoked/invalid
-credentials, `account disabled` or equivalent account-access refusal in the
-Host's capture, receipts or events establishes this path; a timeout, 429,
-network error or uncertain message does not: keep the unknown, attempt no
-login, and report a blocking access failure if the Host cannot continue. This
-is not a limit failure: never invoke the ZCode fallback above or any other
-Host replacement for it.
+An explicit `login expired`, `authentication required`, revoked or invalid credentials, `account disabled`, or an equivalent account-access refusal. A timeout, 429, network error, or uncertain message stays unknown: no login, and report a blocking access failure if the Host cannot continue. This never uses the ZCode fallback.
 
-Pause the Host. Preserve the frontier and every in-flight worker's ownership
-evidence (session, native resume id, worktree) and valid output, bind no new
-work to it, then once its failed turn settles exact-stop it under the existing
-safe lifecycle and mark it temporarily paused in the current run's
-authorization/heartbeat snapshot. Contain it through that evidence and the
-safe handoff boundary - force-clean no in-flight seat and drop no worker. The
-pause is temporary: it neither revokes the user's grant nor deletes a
-model/profile.
-
-Report to the user the affected Host runtime, the exact runtime message, what
-was preserved, and that account repair outside KPR or another course is the
-user's call; ask for no secrets in chat, and never silently dispatch another
-Host or seat for the blocked task before user direction.
-
-After the user confirms restoration and directs continuation, resume that same
-Host from the existing start/receipt records: no duplicate claim and no lost
-valid work. A user-directed replacement Host follows that direction and the
-existing seat/class boundaries. No automatic login probe or scheduled retry.
+Pause the Host and preserve the frontier, including each in-flight worker's session, native resume id, worktree, and valid output. Bind no new work, exact-stop it once it settles, and mark it paused. Report the runtime, the exact message, and what was preserved. Ask for no secrets. Resume the same Host only on the user's direction. No automatic substitution and no login.

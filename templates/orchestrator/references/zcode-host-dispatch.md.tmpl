@@ -63,10 +63,7 @@ proof. Outside grant: exact-stop an unused seat and start the intended
 Before `send` or `steer`, read `status`. `stale: true` means a restart-required
 file this seat loaded now differs on disk: `kaola-acp-holder.py`,
 `kaola-zcode-acp.py`, `kaola-quota.py`, `scripts/adapters/`, or the platform
-manifest (`stale_reasons`, `restart_files`). That is the same set as the
-release-note operator test. `reported_drift` lists report-only drift codes,
-non-blocking. `baseline_exempt` is
-true only for a direct checkout start, not a `~/.local/bin` start.
+manifest (`stale_reasons`, `restart_files`). `reported_drift` lists report-only drift codes and is non-blocking.
 Do not dispatch a `stale: true` seat. An operator-confirmed exception on that
 one `send`/`steer` is the orchestrator's own call; there is no flag or
 rebind. `drain-restart --continue` or `--resume ID` checks
@@ -117,7 +114,9 @@ then `kaola-host-notify/1`, one JSON object per event —
 `heartbeat-prompt>>>`.
 
 **The notification is not the worker's reply and is not a success verdict.** Read
-what happened with the event's own `platform`/`session`/`repo` and that Skill.
+what happened with the event's own `platform`/`session`/`repo` using the
+`observe`/`capture` commands below. Open that platform's Runner Skill again
+only when its procedure is no longer in context, or for `permit` syntax.
 
 **`event_cursor` is the end of the turn, not the start** — `19` is where that
 turn ended, so `capture --since <event_cursor>` sees only carrier and title
@@ -150,8 +149,7 @@ authorization or escalated to the user.
 ## Workers and the notification carrier
 
 The worker Agent owns its delivery; it never fabricates events and never writes
-to your stdin — its holder sends the event over your holder's admin socket;
-never ask it to notify you or duplicate the carrier.
+to your stdin. Never ask it to notify you or duplicate the carrier.
 
 Delivery rules you can rely on:
 

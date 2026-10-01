@@ -13,13 +13,9 @@ Every prompt that opens a Host turn — an idle `send`, the first handoff, a
 resume or attach update, a worker-event notification, and the round after
 any compaction — **opens with the native Skill command
 `/kaola-project-runner` on its own first line**, followed by that prompt's
-own content. ZCode keeps each enabled Skill's metadata visible to the model
-in every request — injected alongside the `AGENTS.md` prefix, outside the
-history compaction rewrites — and instructs it to invoke `/<skill-name>`
-through the Skill tool. A prompt opening with the command therefore produces
-a native `Skill` tool_call that loads the body, and the rest of the prompt
-is handled normally. Re-invocation while the body is loaded is a cheap
-idempotent repeat — right whether or not the last turn's context survived.
+own content. A prompt opening with the command produces a native `Skill` tool_call that loads the body; the rest of the prompt is handled normally.
+On ZCode each such turn-opening prompt loads the body again. Do not assume
+another runtime caches or skips that load.
 
 Where each entry point gets the line:
 

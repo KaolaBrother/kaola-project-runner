@@ -82,9 +82,7 @@ reports `brick`, asks to be replaced, and stops acting.
 Kaola-Workflow finalize mirrors untracked residue from the main checkout into
 the finalize worktree. An upstream defect (tracked as Kaola-Workflow #1110,
 unresolved pending a verified fixed-version adoption) can copy a foreign file
-into that mirror and then exempt it as machinery-owned, so files belonging to
-another session have reached delivered trees (#192, #194, #206; the #206 copy
-was a dangling local commit caught before push). Treat finalize residue as
+into that mirror and then exempt it as machinery-owned. Treat finalize residue as
 untrusted and keep the duties below.
 
 1. **Convey the constraint.** When a known foreign or protected file or an

@@ -36,32 +36,17 @@ platforms/<id>.yaml; an empty entry is host-entry-unsupported.
   CLI (the `KAOLA_ZCODE_*` gate is zcode-only). Liveness is Runner
   `status`/`list`.
 
-## Worker classes and local choices
+## Classes, pool, and grants
 
-Read the installed worker-profiles.md for class meanings, exact pool membership,
-local-availability and computer-use rules. profile-catalog.md is the full
-supported catalog.
+Relay these facts. The Host selects seats; do not load its selection policy.
 
-For local choices, require both a present runtime from the existing survey on
-the bound execution target and its discovered installed platform Runner's
-scripts/platform.yaml declaring the tier. Use those target facts, never the
-outer computer's PATH. A tier is a Runner mapping; a native provider model
-catalog is not an installation gate.
+- **Expert**: complex thinking only. Each task needs explicit user permission. No implementation.
+- **Elite**: primary implementation and demanding execution, only inside an explicit preset/count grant.
+- **Worker**: simpler bounded work. The pool is exactly: `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`. Those five are default-authorized and outside the general concurrency cap; real limits and owner exclusions still apply. Default authorization is permission, not a preference over a suitable Elite.
 
-Show users only rows with both facts and include Class, profile, and current
-authorization. Omit missing runtime/Runner/preset rows; report unknown
-separately with the actual missing fact. Installed Elite/Expert options may be
-shown for grants, but visibility is not authorization. Worker pool membership
-is default authorization, not installation proof. Host context intersects
-local rows with current authorization and loads only exact applicable catalog
-rows. Relay grants and exclusions by exact catalog preset id
-(`<platform>/<tier>`; absent `special_requirements` means none), never profile
-tables.
+Name every granted, paused, or revoked seat by its exact catalog preset id (`<platform>/<tier>`; absent `special_requirements` means none). A switch grant is per seat and stays inside that runtime. Visibility is not authorization.
 
-Refresh through existing intake/update/recovery facts after relevant
-install, uninstall, or explicit-path changes. Do not poll or rescan each beat,
-interrupt a verified active session, or recreate a seat. If no row qualifies,
-report the missing fact; do not install a runtime or silently substitute one.
+For a choice on the bound target, require both a present survey runtime and that target's installed Runner declaring the tier. Never use the outer computer's PATH. Omit missing rows; keep unknown discovery unknown. Read only the exact catalog rows for runtimes present on that target. Do not load the full catalog, install a runtime, authenticate, or substitute. Refresh after an install or explicit-path change; do not rescan each beat or interrupt a verified session.
 
 ## KPR updates
 
@@ -71,9 +56,8 @@ valid user instructions, and fresh records. Preserve grants, counts, limits,
 exclusions, seat bindings, switch grants, live identities, the task frontier,
 and in-flight locators; remove stopped seats using Runner status/receipts and
 keep session, ACP, holder, and native resume ids distinct. An update grants no
-seats, switches, or other-project permissions. Apply current local-availability
-and authorized-row rules from worker-profiles.md; a loaded main Skill alone
-does not prove worker runtime installation.
+seats, switches, or other-project permissions. Apply the class, pool, exact-id, and local-choice rules above; a loaded main
+Skill alone does not prove worker runtime installation.
 
 Use the existing idle send / busy steer route in
 [handoff.md](handoff.md#handoff-and-updates) to update the same Host's
@@ -117,5 +101,4 @@ never substitute a manual read. Elsewhere a missing quote may also be the
 runtime; escalate to the owner rather than guess.
 
 codex: a Host the owner accepted on an explicit installed-Skill read plus a
-working bind/wake loop is that owner acceptance, not E1/E2 (codex-acp probe
-history: the evidence doc above).
+working bind/wake loop is that owner acceptance, not E1/E2.

@@ -35,7 +35,7 @@ Select any supported Host platform
 `<platform>-{{RUNNER_SKILL}}`, entry line, native resume id. If that Runner
 is missing, report not executable; claim no Host.
 
-One live Host per repo, whatever its platform. Recover at canonical root: `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` and Runner receipts; A Git worktree is not an ACP id. Attach exact verified identity even if its recorded name is not the new form. `host-exists` means attach its `existing_host`; never rename and retry. Missing standard name permits no second Host. Failed identity is exact-stopped, proven gone (`residual_pids: []`) before replacement. Resume with attested native id; authorize before start. Never restart in-flight work; interrupt/cancel only for urgent scoped owner stops. [Bricked or quota-exhausted Host](references/host-brick.md); never log in. Grok Bot account bridge attests via locator; Codex/generic don't. Commands and `sweep=` line: [handoff.md](references/handoff.md).
+One live Host per repo, whatever its platform. Recover at canonical root: `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` and Runner receipts; A Git worktree is not an ACP id. Attach exact verified identity even if its recorded name is not the new form. `host-exists` means attach its `existing_host`; never rename and retry. Missing standard name permits no second Host. Failed identity is exact-stopped, proven gone (`residual_pids: []`) before replacement. Resume with attested native id; authorize before start. Never restart in-flight work; interrupt/cancel only for urgent scoped owner stops. [Bricked or quota-exhausted Host](references/host-brick.md); never log in. Grok Bot account bridge attests via locator; Codex/generic don't. Start/resume/replace/attach: [handoff.md](references/handoff.md).
 
 Pass no per-worker `--repo`, scheduling, or heartbeat instructions.
 Exact Host `stop` and live attach use `holder_instance_id` from its
@@ -47,6 +47,6 @@ Relay user changes to the same Host: idle `send`; busy `steer` or wait for idle
 (no queue). `--no-wait` admission and Host `end_turn` are not delivery. After
 the first Host beat, verify file/work-product evidence and the first dispatch
 receipt against plan and authorization; do not trust the Host's self-description.
-Correct mismatches on this Host; do not accept completion. At cadence, read the [snapshot and day boundary](references/snapshot.md) and observe/capture outcomes. Pass valid evidence forward; recheck only changed facts or gaps. Relay pacing if warranted; escalate unresolved human decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
+Correct mismatches on this Host; do not accept completion. At cadence, read the [snapshot (`sweep=` line)](references/snapshot.md) and observe/capture outcomes. Pass valid evidence forward; recheck only changed facts or gaps. Relay pacing if warranted; escalate unresolved human decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
 
 KPR update: [host-platforms.md](references/host-platforms.md#kpr-updates); a notice proves no updated install or loaded guidance, authorizes no install/restart.

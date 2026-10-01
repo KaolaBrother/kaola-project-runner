@@ -6,6 +6,13 @@ installed. [zcode-native-skill-entry.md](zcode-native-skill-entry.md) stays the
 ZCode detail; this file is the cross-platform table. Probe method, versions and
 negative controls: `docs/host-entry-evidence.md` in the Project Runner checkout.
 
+## Install
+
+Any `install-local.sh --runtime`, or
+`--skills-dir`, installs this Skill with the platform Runners as sibling Skill
+directories. Host admission per platform is this matrix: a filled
+`host_skill_entry`, not a hand-written runtime list.
+
 ## The entry fact
 
 `host_skill_entry` in `platforms/<id>.yaml` is the complete first line of every
@@ -23,8 +30,8 @@ on it, a worker `start` it dispatches (`heartbeat_host_source:
 dispatcher-no-carrier`), and a start whose `KAOLA_ACP_HEARTBEAT_HOST` names it
 all refuse `reason: host-entry-unsupported` before any record, socket or holder
 exists (`mutation_performed: false`, exit 1); its holder still refuses
-`worker_event`. As an ordinary worker it is unaffected. Admission is the
-measurement: a row is filled only from a live run with trigger evidence.
+`worker_event`. As an ordinary worker it is unaffected. A row is filled only
+from measured trigger evidence.
 
 ## Matrix
 

@@ -81,13 +81,13 @@ owner-aware refresh route and verify command (stale siblings: a complete-root
 refresh); retry is safe — `mutation_status=not_started`. A Host that cannot
 install sends that route to the Delegator or operator and keeps its task and
 seat; it never deletes a foreign path.
-`host-exists` (Issue #132, same shape) refuses a Host-named `start` while another
+`host-exists` refuses a Host-named `start` while another
 Host-named holder of this canonical root may be live (only a dead or reused PID
 frees it) — any
 platform, a dispatched Host-named worker included. `existing_host` (with its
 `identity`) holds the root: attach it if verified, else sweep it; never rename.
 
-The same `start` pinned this Host's model (Issue #108): a
+The same `start` pinned this Host's model: a
 `zcode-<PROJECT_CODE>-orchestrator-<purpose>` session gets the manifest's Host
 model/effort, applied then verified against the holder's advertised config and
 reported in the receipt's `host_selection`; a `host-model-mismatch` /
