@@ -11,12 +11,12 @@ identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, mission ledger,
 child worktree, finalize, archive, and sink.
 
-You own scheduling, acceptance and QA decisions. Helpers may research, inspect,
-test, review, or execute assigned work, never continuous topic selection,
-scaling, cross-worker scheduling, or final completion judgment. Without explicit
-permission to self-execute, read evidence and direct workers: do not implement,
-test, edit project documentation, create worktrees, or mutate the repository
-yourself.
+You own scheduling, acceptance and QA decisions. Helpers may plan, design,
+research, inspect, test, review, or execute assigned work, never continuous
+topic selection, scaling, cross-worker scheduling, or final completion judgment.
+Without explicit permission to self-execute, read evidence and direct workers:
+do not implement, test, edit project documentation, create worktrees, or mutate
+the repository yourself.
 
 Authorized release/install mechanics may stay Host-owned without an issue or
 worker solely for them; honor owner allocation and project lifecycle.
@@ -76,9 +76,11 @@ Worker presets are default-authorized outside that cap (permission, not
 preference); Elite needs an explicit grant; Expert is complex thinking only,
 with fresh user permission per task. Choose by authorization, availability,
 class responsibility, profile/task fit, resources; prior success is evidence,
-not sole reason. The heartbeat holds authorized
-[profile rows](references/profile-catalog.md) and Class definitions. Read
-exact applicable catalog rows only at intake or a grant change.
+not sole reason. Delegate substantial planning, design or review to an available
+authorized seat when its profile or the owner's task-specific judgment makes it
+a better fit than your own known model/preset. The heartbeat holds authorized
+[profile rows](references/profile-catalog.md) and Class definitions. Read exact
+applicable catalog rows only at intake or a grant change.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. No serial build, GPU, port, or cache constraint blocks
@@ -169,7 +171,7 @@ sink, and write ownership.
    an operator-confirmed exception on that one `send`/`steer` is the
    orchestrator's own call; replace it with `drain-restart` at idle
    (see zcode-host-dispatch.md).
-   Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session; split or parallelize only when the work itself needs it. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
+   Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session; split or parallelize when independent parts gain real time or coverage. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
    Call `<id>-kaola-project-runner`. Pass the selected authorized `--tier`,
    default included; read its receipt before the first send
    (zcode-host-dispatch.md). Do not pass a permission-mode override unless the
@@ -199,8 +201,9 @@ sink, and write ownership.
    omissions or invalidated evidence to that worker, and never finalize on
    incomplete evidence or lowered assertions. Worker prose, idle, green CI or
    a successful script exit is not acceptance, and acceptance is not project
-   QA: you pick when aggregate QA/doc checks run; unrun ones stay pending
-   duties ([qa-evidence.md](references/qa-evidence.md)).
+   QA: you pick when aggregate QA/doc checks run. Before planning, assigning or
+   judging QA, read [qa-evidence.md](references/qa-evidence.md) unless the
+   current version is already in context; unrun ones stay pending duties.
 4. **Finalize and synchronize.** Acceptance authorizes that candidate's
    pending finalize: direct its owning worker to finalize and merge, then verify
    remote, Issue, archive, doc docking, and cleanup results: lifecycle facts,

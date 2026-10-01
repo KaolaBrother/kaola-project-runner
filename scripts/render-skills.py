@@ -525,7 +525,7 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         "WORKER_POOL_MEMBERS": worker_pool_members(manifests),
         "IDLE_BEFORE_STOP": (
             "Give each clear task directly to a suitable authorized worker as a new "
-            "session; split or parallelize only when the work itself needs it. The count "
+            "session; split or parallelize when independent parts gain real time or coverage. The count "
             "is a ceiling, not a target to fill; never invent work or expand authorization. "
             "At the hard cap, stop one seat before starting any new one (stop-before-start)"
         ),

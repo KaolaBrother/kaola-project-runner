@@ -296,7 +296,7 @@ roles, not benchmark claims, and they do not change which model a Host itself ru
 | Class | Presets | Role | Authorization |
 |---|---|---|---|
 | **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit permission for **each** task or use. The Host judges completion and exact-stops the seat; another use needs fresh permission, while the same approved task continues across turns and recovery without asking again. |
-| **Worker** | 5 | Cheaper and generally weaker; simpler, well-defined work that adds parallel throughput. | Default-authorized: no per-seat, count, or priority approval, and outside the general worker cap. Real account/token/service limits and your explicit restrictions still apply. |
+| **Worker** | 5 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no per-seat, count, or priority approval, and outside the general worker cap. Real account/token/service limits and your explicit restrictions still apply. |
 | **Elite** | 13 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
 An Expert review informs the Host; it never replaces the Host's acceptance or its

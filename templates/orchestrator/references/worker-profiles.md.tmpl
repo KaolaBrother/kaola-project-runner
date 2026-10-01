@@ -10,7 +10,7 @@ start behavior. The class attaches to the preset, not the whole runtime.
 | Class | Responsibility | Authorization and lifecycle |
 |---|---|---|
 | **Expert** | Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Explicit user permission for each task/use. The Host judges its completion and reclaims (exact-stops) the seat. A completed task authorizes no reuse; another use needs fresh permission. Continuing turns or recovery of the same approved task need no repeated approval. |
-| **Worker** | Cheaper and generally weaker; simpler, well-defined work supporting parallel throughput. | The exact five-preset pool below is default-authorized for authorized project tasks. |
+| **Worker** | Cheaper and generally weaker; simpler, bounded work supporting parallel throughput. | The exact five-preset pool below is default-authorized for authorized project tasks. |
 | **Elite** | Main execution workforce: primary implementation and demanding execution. | Existing explicit runtime/preset/count grants, applicable caps and seat-switch rules. A valid grant stays valid within its scope; no per-task permission. |
 
 Expert review informs the Host; it never replaces Host acceptance or
@@ -78,12 +78,13 @@ declared `--tier` with its requested/applied receipt — no new flag or gate.
 
 Decide in this order: **current authorization → local availability → class
 responsibility → profile/task fit → capacity and known resource limits.**
-`claude-code/opus-xhigh` does not perform implementation; a Claude Code Host still plans, dispatches, and accepts. Listed
-capability never bypasses missing Expert or Elite authorization; ask through
-the existing authorization route when needed. Keep real dependencies and write
-ownership. Do not rank models, invent a complexity classifier or routing
-engine, force equal runtime distribution, create work to fill capacity, or
-interrupt useful work.
+`claude-code/opus-xhigh` plans, designs and reviews but does not implement; a
+Claude Code Host still plans, dispatches, and accepts. Listed capability never
+bypasses missing Expert or Elite authorization; ask through the existing
+authorization route when needed. Keep real dependencies and write ownership.
+Do not keep a universal model ranking, invent a complexity classifier or
+routing engine, force equal runtime distribution, create work to fill
+capacity, or interrupt useful work.
 
 The Worker pool is exactly: {{WORKER_POOL_MEMBERS}}.
 For an authorized project

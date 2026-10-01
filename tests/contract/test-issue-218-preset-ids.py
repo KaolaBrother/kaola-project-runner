@@ -312,7 +312,7 @@ class AuthorizationNotationTest(unittest.TestCase):
         pool = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
         membership = pool.split("The Worker pool is exactly:", 1)[1].split(".", 1)[0]
         self.assertNotIn("claude-code/sonnet", membership)
-        self.assertIn("`claude-code/opus-xhigh` does not perform implementation", pool)
+        self.assertIn("`claude-code/opus-xhigh` plans, designs and reviews but does not implement", pool)
         self.assertNotIn("`claude-code/default` does not perform implementation", pool)
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
         example = json.loads(re.search(r"例：(\{.*\})", skeleton).group(1))

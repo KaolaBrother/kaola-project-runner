@@ -48,14 +48,20 @@ check or claim validation nobody performed.
 
 Host judgment from existing profile rows, not a router: the original owner
 when the check is a command or step it can run and record; a separate
-authorized seat when independence or profile fit helps. Independent checks may
-run in parallel on suitable authorized seats with distinct scopes and one Host
-verdict; an integrated-candidate check waits for that candidate. For visual analysis or
-screenshot review, the owner's preference remains an authorized Opus preset
-or GPT-6.1 Sol first, then Kimi — selection guidance, not a measured ranking or
+authorized seat when independence or profile fit helps. A better-fitting
+authorized seat may draft the QA plan; the verdict stays yours. Prefer
+suitable available Worker-Class seats for exploratory checks and heavy or
+long-running test runs, chosen per scope by profile fit, not one habitual
+runtime; use a fitting authorized Elite when they lack a needed capability.
+Independent checks may run in parallel with distinct scopes, non-interfering
+state (data, accounts, ports, desktop) and one Host verdict; an exploratory
+check fixes its question, scope and stopping point, not its route or findings.
+An integrated-candidate check waits for that candidate. For visual analysis or
+screenshot review, the owner's preference remains an authorized Opus preset or
+GPT-6.1 Sol first, then Kimi — selection guidance, not a measured ranking or
 new grant. "Opus" names only the already-defined runtime/preset/effort. Grok
-means Grok CLI default and Cursor CLI default, not Cursor's Opus preset. Visual
-review does not establish computer-operation capability.
+means Grok CLI default and Cursor CLI default, not Cursor's Opus preset.
+Visual review does not establish computer-operation capability.
 
 For a task that operates a computer, follow
 [worker-profiles.md](worker-profiles.md) Computer interaction; do not restate
@@ -85,7 +91,7 @@ edit the affected tests/guidance within scope. Do not self-finalize;
 A factual record, not a verdict: the build actually tested; per check what ran
 and what was observed; artifacts (output, screenshot, snapshot) for visual or
 interpretive findings, with uncertainty stated in a phrase; anything not
-executed and why. No record means unverified or insufficient evidence, not
+executed or explored and why. No record means unverified or insufficient evidence, not
 necessarily unexecuted — distinguish "no record", "recorded as not run", and
 "recorded as run with a result"; only the third supports acceptance.
 
