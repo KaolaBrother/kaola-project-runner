@@ -22,9 +22,11 @@ Host independent checks on this tree, all matching the worker report:
 - Generated UTF-8 bytes: Host entry 16148, Delegator entry 4094, wake 8104, skeleton 7866, worker-profiles 8042, quota-packages 3222.
 - `docs/api.md` is the specified relocation of the quota API exposition.
 - Invariants checked inline: no-login, identity, canonical cwd, no blind replay, accept-before-finalize, directory-rule roster with the transport line, `sweep=` retained, #207/#216 short rule including the skeleton revoked-Elite-stays-revoked form, and host-brick confirmed-limit-only fallback.
-- `./scripts/render-skills.py --check` PASS, progressive-disclosure OK, validate-skill PASS on the Host rerun.
+- `./scripts/render-skills.py --check` PASS, progressive-disclosure OK, validate-skill PASS on the Host rerun. These are focused checks. This record has no complete `./scripts/validate.sh` receipt, so it does not call that suite green.
 
-Worker evidence reused for the same bytes: `./scripts/render-skills.py --check`; `python3 tests/contract/test-progressive-disclosure.py` (15 OK); `python3 scripts/validate-skill.py` (`validate-skill: PASS (12 Skill(s))`); contract tests 41, 49, 52, 65, 68, 70, 72, 74, 75, 94, 118, 148, 168, 218; `test-generated-skills.py` PASS; `test-lifecycle-contract.py` PASS; `test_canonical_heartbeat_spec_stays_one_set` 12 checks OK.
+Worker evidence reused for the same bytes: `./scripts/render-skills.py --check`; `python3 tests/contract/test-progressive-disclosure.py` (15 OK); `python3 scripts/validate-skill.py` (`validate-skill: PASS (12 Skill(s))`); contract tests 41, 49, 52, 65, 68, 70, 72, 74, 75, 94, 118, 148, 168, 218; `test-generated-skills.py` PASS; `test-lifecycle-contract.py` PASS; `test_canonical_heartbeat_spec_stays_one_set` 12 checks OK. Same limit: focused checks, not a complete `./scripts/validate.sh` receipt.
+
+Equivalent required-read file bytes, generated UTF-8, baseline `d2b03772` to candidate `9b4012bc`: main Skill plus `quota-packages.md` is 25523 -> 19370. The 33715 baseline figure is that pair plus `worker-profiles.md` (8192). That profiles file is a conditional extra read when those rules are not already in context, not an inevitable cost of the main-plus-quota path. These figures are file bytes. They are not a token count or a cache measurement.
 
 `.cache/final-validation.md` in this run folder binds the recorded verdict to this worktree.
 
@@ -32,7 +34,7 @@ Protected files, including untracked `docs/harness-acp-compat-2026-10-01.md` and
 
 ## Known failures or unverified scope
 
-`tests/contract/test-issue-187-delegator-any-host.py` `NonZCodeHostLifecycle` failed 3 tests with `holder-start-timeout` on this candidate. The Host reran the same file on unmodified baseline `d2b03772` and got the same 3 failures. The finding is pre-existing and environmental. The wording class `GeneratedDelegator` in that file passed on the candidate. No live failure injection was added. The rest of `test-zcode-heartbeat-contract.py` is holder delivery; holder sources have zero diff, and only `test_canonical_heartbeat_spec_stays_one_set` was rerun.
+`tests/contract/test-issue-187-delegator-any-host.py` `NonZCodeHostLifecycle` failed 3 tests with `holder-start-timeout` on this candidate. The Host reran the same file on unmodified baseline `d2b03772` and got the same 3 failures. The retained baseline transcript is `/tmp/187-baseline.log` (`FAILED (failures=3)`; the same three tests, each `holder-start-timeout`). A separate candidate transcript file was not retained next to that log; the identical outcome is the Host's recorded rerun of that file on `d2b03772` against the candidate. Identical outputs prove the failures are pre-existing. The root cause is unknown. Those outputs do not prove an environmental cause. The wording class `GeneratedDelegator` in that file passed on the candidate. No live failure injection was added. The rest of `test-zcode-heartbeat-contract.py` is holder delivery; holder sources have zero diff, and only `test_canonical_heartbeat_spec_stays_one_set` was rerun.
 
 No release, tag, install, or CHANGELOG release section, by the Host boundary for this run. `main-skill-build.json` hashes changed; this run did not reinstall.
 
@@ -43,6 +45,8 @@ green: true
 mode: final-validation
 
 agent validation recorded and bound to this tree
+
+The `green: true` mark binds the focused command in `.cache/final-validation.md` (`render-skills.py --check`, `test-progressive-disclosure.py`, and `validate-skill.py`). It is not a `./scripts/validate.sh` receipt.
 
 ## Changed Paths
 
@@ -107,7 +111,7 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 ## Follow-Up Items
 
-None. The test-187 timeout is recorded above as pre-existing environmental evidence, not as a defect of this delivery.
+None filed as a defect of this delivery. The three test-187 failures are a pre-existing observation. Their cause stays unknown.
 
 ## Readiness
 
