@@ -4,6 +4,52 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.6.15 — 2026-10-01 (Host task-failure escalation policy, role-scoped prompts)
+
+Seats: restart not required
+
+The operator diff from v0.6.14 to this release
+(`git diff v0.6.14..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is empty: the holder, ZCode bridge, quota catalog, adapters, and platform
+manifests are unchanged. Running seats keep the bytes they started with and may
+stay up; this release changes Skill prompt content only. The Grok Bot bridge is
+pinned in the release's follow-up pin commit.
+
+- **Host escalation policy after substantive worker task failure (Issue
+  #238).** A new compact reference (`references/task-failure.md`) guides the
+  Host when a worker substantively fails an engineering task: the trigger is
+  judged on concrete evidence (core objective unreachable, approach disproved,
+  or repair no longer making meaningful progress - no fixed retry count,
+  timer, or classifier; routine repair stays with the current worker). Worker
+  failure prefers a fitting already-authorized Elite, else another eligible
+  Worker with a materially different approach; Elite failure first raises
+  effort on the same model when runtime, authorization, and owner restrictions
+  allow, else reassigns to another fitting already-authorized Elite before
+  any request for new authorization; with no eligible recovery the Host
+  reports the gap and asks. A task may move to a different authorized
+  seat/runtime through existing lifecycle operations - only a bound seat
+  cannot hot-switch. Handoff preserves the original issue/run, valid work and
+  evidence under one writer, recording only the failure evidence, attempted
+  approach, preserved locator, and what the next owner does differently;
+  `failed`/`done` mission lines are never rewritten.
+- **Role-scoped Agent prompts (Issue #239).** Each Agent surface now carries
+  only what its current role and task need, per the agreed minimum design:
+  the Delegator inquiry snapshot is self-contained (exact recorded Host
+  session, turn-opening Skill entry for idle sends and composite interrupts,
+  Grok attestation before guarded commands) without the full startup handoff
+  manual; `host-brick.md` decides Host replacement on a local
+  confirmed-limit trigger; `quota-packages.md` keeps the concise actionable
+  #207/#216 seat-failure rule (confirmed limit only; authentication pauses
+  and asks; a revoked Elite stays revoked) with the downstream API
+  exposition moved to `docs/api.md`; the main Skill replaces the worker
+  roster with the Skill-directory rule, merges dispatch notes into step 2,
+  and keeps the stop/pause authority; worker Skills drop delivery-adjacent
+  advice while keeping operation parameters and receipts. Generated UTF-8
+  bytes drop across the measured prompt surfaces (Host entry 17,407→16,148;
+  quota guidance 8,155→3,222; worker entry 11,362→10,330 per platform) with
+  no budget raised and no authorization, transport, or lifecycle behavior
+  changed.
+
 ## 0.6.14 — 2026-09-30 (Codex ACP pair 0.159.2 / 2.0.1 for GPT-6.1 Sol)
 
 Seats: restart required
