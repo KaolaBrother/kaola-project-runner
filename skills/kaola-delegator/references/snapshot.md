@@ -41,24 +41,29 @@ Start, resume, replace, or uncertain identity: [handoff.md](handoff.md).
 
 ## Inquiry commands
 
+`$HOST` is the exact `--session` already recorded on this snapshot's `host` object. Do not construct `$PLATFORM-<PROJECT_CODE>-orchestrator-main` for an already-verified Host.
+
+Idle `send`, and a composite `steer --steer-mode interrupt`, each open a new turn. That text starts with the selected platform's exact `host_skill_entry` as its own first line. Recover the line from the installed host-platforms row (`platforms/<id>.yaml`), including kimi-cli's trailing space and codex's `$` form single-quoted in a shell; do not add a registry. Native busy `steer` stays in the loaded turn and adds no entry. `--no-wait` admission is not delivery.
+
+Grok Bot account bridge attests that exact session, without `--intent`, before `status`, `send`, and `stop`, and refuses any `refused` receipt. Codex and generic skip this.
+
 ```bash
-PLATFORM="<host platform id>"
+PLATFORM="<recorded host platform id>"
 RUNNER="<skills>/$PLATFORM-kaola-project-runner/scripts/runtime-tmux.sh"
 PROJECT="/abs/path/to/consumer-project"
-HOST="$PLATFORM-<PROJECT_CODE>-orchestrator-main"
+HOST="<exact --session recorded on this snapshot>"
+kaola-project-runner-locate --target local|cloud \
+  --project "$PROJECT" --worker "$PLATFORM" --session "$HOST"
+```
+
+`<skills>` is the sibling Skill directory, or the bridge's `ROOT/skills`. The locate command is the Grok Bot bridge only.
+
+```bash
 "$RUNNER" status --repo "$PROJECT" --session "$HOST"
 "$RUNNER" observe --repo "$PROJECT" --session "$HOST"
 "$RUNNER" capture --repo "$PROJECT" --session "$HOST" --lines 200
-"$RUNNER" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<correction>'
-```
-
-`<skills>` is the sibling Skill directory, or the bridge's `ROOT/skills`. A busy Host uses `steer` (or interrupt for an urgent owner stop), not a queue. `--no-wait` admission is not delivery.
-
-Grok Bot account bridge, before `status`, `send`, and `stop`, attests without `--intent` and refuses any `refused` receipt. Codex and generic skip this. `$HOST` is the exact live session, never any other.
-
-```bash
-kaola-project-runner-locate --target local|cloud \
-  --project "$PROJECT" --worker "$PLATFORM" --session "$HOST"
+"$RUNNER" send --repo "$PROJECT" --session "$HOST" --no-wait --text '<host_skill_entry>
+<correction>'
 ```
 
 ## Day boundary
@@ -82,9 +87,10 @@ Record the exact scope and permitted continuation in existing `stop`/`watch`
 before another affected action; safe state updates, reporting, checkpointing
 and reconciliation remain allowed. Preserve unrelated work. A release pause
 covers installation even when called preparation; unrelated authorized
-diagnosis continues. For an urgent
-stop, use the exact Host: idle `send`, busy
-`steer --steer-mode interrupt` with the stop text. Confirm Host
+diagnosis continues. For an urgent stop, use the exact recorded Host. Idle `send` and busy
+`steer --steer-mode interrupt` each open a new turn, so the stop text starts
+with that same `host_skill_entry` line. Native busy `steer` does not. Grok Bot
+attests that session before `send` or `stop`. Confirm Host
 acknowledgment, the current heartbeat snapshot and cessation of affected
 actions from `observe`/`capture` receipts. Admission, `injected`, or
 `end_turn` alone is not adoption. If unconfirmed, report and reconcile without

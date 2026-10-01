@@ -19,7 +19,7 @@ Recovery belongs to the outer Agent:
 
 ## Limit-failed Host
 
-**Limit, same trigger** as Project Runner `references/quota-packages.md`: a confirmed limit failure of the Host's own account. Unknown evidence, an authentication or account refusal, or a brick does not use this fallback; a brick keeps its same-platform replacement above. Preserve the frontier from records (grants including revoked seats, issues, evidence, worker ownership, pending close-out).
+**Limit.** An explicit exhaustion, a reached rate limit, or a stated window or account limit on the Host's own account. An unknown connection or an ambiguous failure does not use this fallback. An authentication or account refusal, or a brick, does not either; a brick keeps its same-platform replacement above. Preserve the frontier from records (grants including revoked seats, issues, evidence, worker ownership, pending close-out).
 
 - **Non-ZCode Host.** Exact-stop it, prove it gone, and start one ZCode Host as a new ACP session under the carried authorization. Do not re-ask the platform. Never `--resume` another runtime's native id as ZCode. Re-claim and redo nothing.
 - **Host already ZCode, or ZCode cannot start or operate.** Preserve and ask the user.
