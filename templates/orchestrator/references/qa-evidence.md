@@ -38,6 +38,8 @@ bounded, for a concrete uncertainty, high-risk or important affected behavior,
 an undemonstrated in-scope user-facing outcome (behavior, output, rendering,
 doc accuracy), evidenced redundancy, or an explicit user request
 (exploratory, user-flow, release QA). Small changes normally end at reuse.
+Check relevant edge cases and failure paths according to the risk of affected
+behavior; reuse valid evidence without exhaustive or duplicate testing.
 Project- and user-required checks stay binding at their boundary: reduce
 redundant optional coverage or frequency, never silently waive a binding
 check or claim validation nobody performed.
