@@ -74,13 +74,12 @@ quota system: the cap is that count, enforced from `status`/`stop` receipts.
 Preset classes ([worker-profiles.md](references/worker-profiles.md)): five
 Worker presets are default-authorized outside that cap (permission, not
 preference); Elite needs an explicit grant; Expert is complex thinking only,
-with fresh user permission per task. Choose by authorization, availability,
-class responsibility, profile/task fit, resources; prior success is evidence,
-not sole reason. Delegate substantial planning, design or review to an available
-authorized seat when its profile or the owner's task-specific judgment makes it
-a better fit than your own known model/preset. The heartbeat holds authorized
-[profile rows](references/profile-catalog.md) and Class definitions. Read exact
-applicable catalog rows only at intake or a grant change.
+with fresh user permission per task. Delegate substantial planning, design or
+review to an available authorized seat when its profile or the owner's
+task-specific judgment makes it a better fit than your own known model/preset.
+The heartbeat holds authorized [profile rows](references/profile-catalog.md)
+and Class definitions. Read exact applicable catalog rows only at intake or a
+grant change.
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. No serial build, GPU, port, or cache constraint blocks
@@ -171,7 +170,7 @@ sink, and write ownership.
    an operator-confirmed exception on that one `send`/`steer` is the
    orchestrator's own call; replace it with `drain-restart` at idle
    (see zcode-host-dispatch.md).
-   Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session; split or parallelize when independent parts gain real time or coverage. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
+   Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session, chosen from the current heartbeat authorization and rows by owner direction, class responsibility, profile/task fit and capacity; past dispatch or success informs that choice, never replaces it. Split or parallelize when independent parts gain real time or coverage. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
    Call `<id>-kaola-project-runner`. Pass the selected authorized `--tier`,
    default included; read its receipt before the first send
    (zcode-host-dispatch.md). Do not pass a permission-mode override unless the
