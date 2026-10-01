@@ -68,7 +68,8 @@ python3 -c 'import json,sys;r=[json.loads(l) for l in open(sys.argv[1]) if l.str
 
 `todo` / `in-flight`: never send a second worker to the same mission. `done`: counts
 toward progress. `failed`: one dispatch has one result; the run's orchestrator decides any new
-mission, the Host may redispatch a worker and never edits the line. `blocked`: escalate
+mission, the Host may redispatch per the applicable recovery and never edits the line. A substantive task
+failure follows [task-failure.md](task-failure.md). `blocked`: escalate
 authorization or `HUMAN_DECISION_REQUIRED`, or supply the missing authorization so the worker
 returns to `in-flight`.
 

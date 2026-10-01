@@ -134,8 +134,7 @@ updates. Read from an earlier anchor:
 Confirm you read the turn you dispatched: `observe`'s
 `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
 and `turn_outcome`/`stop_reason` must show it finished. No assistant text
-means the window was wrong — widen it. Then accept or send the repair (the
-same assignment), and keep or exact-`stop` the seat per main Skill step 5.
+means the window was wrong — widen it. Then accept or send a routine repair, or else [task-failure.md](task-failure.md), and keep or exact-`stop` the seat per main Skill step 5.
 Update the heartbeat prompt, and end the turn.
 
 `kind` is `idle` when the worker's turn ended (`reason`

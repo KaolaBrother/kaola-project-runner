@@ -19,7 +19,7 @@ body 是「当前有效状态快照」，不是变更日志：恰好一个紧凑
 
 写回：每拍按最新 Forge/Workflow/Runner 事实与授权重写 body，先删后写。确认的变更同拍替换全部冲突值；收到用户明确暂停要求时，立即暂停所指动作并更新现有状态；无关的已授权工作继续。单个精确归属席位的权限事件无需额外 sweep。Delegator 的 `.kaola/delegator-heartbeat.json` 仍由它自己写。Delegator 的当日收工（pause_new_claims_keep_inflight）只暂停新 Issue 认领：回复确认并记入 authorization，此后到重新开放前不认领新 Issue；在飞任务与工人照常，不是停止 Host 或完成任务。
    删除：已被替代的额度、优先级和平台/模型选择，已作废的计划，重复叙述，无后续影响的已完成事项（已关闭 Issue 离开 active），暂态故障和调配历史。
-   保留：本项目短码与仓库身份，当前有效的项目约束，在飞任务的定位（会话、worktree、Issue/PR），未完成的交付、验收、同步、清理义务与待办 QA/文档核对及其责任人（跨 Issue 的 QA 留在 pending，直到 Host 据证据作出判定），尚待决定事项，恢复所需的最小指针。
+   保留：本项目短码与仓库身份，当前有效的项目约束，在飞任务的定位（会话、worktree、Issue/PR），未完成的交付、验收、同步、清理义务与待办 QA/文档核对及其责任人（跨 Issue 的 QA 留在 pending，直到 Host 据证据作出判定），尚待决定事项，恢复所需的最小指针，当前实质性失败交接（task-failure.md）。
    写回后 body 不得同时存在两个互相矛盾的额度或优先级，也不能只追加一句「新规则优先」就留着旧值；从本篇移除不等于删除证据，更不改写已完成 Mission 的 result。
    载体按本宿主现有机制：Host 更新项目根 `.kaola/heartbeat-prompt.json`（JSON 对象，状态对象序列化后放在名为 `body` 的非空字符串字段；字段名错或为空则投递缺失报告而非你的状态）；非 Host 的 Codex 更新其定时系统已有的提示词载体（Skill 入口加同样的 JSON 对象）。不新建 schema、额度账本、调度器或清理脚本。投递时载体自带首行 Skill 入口（`host_skill_entry`；ZCode 为 `/kaola-project-runner`）与事件信封，本篇只写 `body` 正文：不重复入口行，也不复制 Skill 正文。
 ```

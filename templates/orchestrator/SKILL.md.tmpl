@@ -180,11 +180,11 @@ sink, and write ownership.
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims. Pass still-valid candidate
    evidence; recheck changed/invalidated facts or actual gaps. Keep required
-   project/release checks.
+   project/release checks. Substantive failure: [task-failure.md](references/task-failure.md).
 3. **Accept the delivery.** {{ACCEPTANCE_BEFORE_FINALIZE}}. When a worker
    claims completion, judge its actual diff, checks, docs and run records
    against that assignment under the effective global Workflow rules. Reuse
-   sufficient evidence for this candidate; return only concrete deviations,
+   sufficient evidence for this candidate; return only concrete routine deviations,
    omissions or invalidated evidence to that worker, and never finalize on
    incomplete evidence or lowered assertions. Worker prose, idle, green CI or
    a successful script exit is not acceptance, and acceptance is not project
@@ -200,7 +200,7 @@ sink, and write ownership.
    When records are inconsistent, investigate and direct a scoped repair;
    never fabricate claim identities.
 5. **Release and report.** The only legal idle seat is one whose delivery is
-   awaiting acceptance; a rejected delivery's repair is the same assignment,
+   awaiting acceptance; a rejected delivery's repair is the same assignment unless it is substantive ([task-failure.md](references/task-failure.md)),
    and an accepted seat keeps only the finalize/cleanup duties it owns. Once
    it owns none (done or explicitly handed off) or the seat is abandoned,
    exact-stop it in that same beat. The stop action is the exact owned session
