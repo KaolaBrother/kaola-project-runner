@@ -4,6 +4,39 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.6.16 — 2026-10-01 (delegation by profile fit, Worker-preferred parallel QA)
+
+Seats: restart not required
+
+The operator diff from v0.6.15 to this release
+(`git diff v0.6.15..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is empty: the holder, ZCode bridge, quota catalog, adapters, and platform
+manifests are unchanged. Running seats keep the bytes they started with and may
+stay up; this release changes Skill prompt content only. The Grok Bot bridge is
+pinned in the release's follow-up pin commit.
+
+- **Delegation by profile fit (Issue #240).** The Host entry now carries one
+  principle: delegate substantial planning, design or review to an available
+  authorized seat when its profile or the owner's task-specific judgment makes
+  it a better fit than the Host's own known model/preset — routine routing
+  stays local, with no mandatory consultant stage and no universal model
+  ranking (the Choosing ban now reads "Do not keep a universal model
+  ranking"). Helpers "may plan, design, research, inspect" in the task list;
+  parallel splitting is warranted when independent parts gain real time or
+  coverage; the Worker class does "simpler, bounded work";
+  `claude-code/opus-xhigh` is clarified as plans/designs/reviews but does not
+  implement.
+- **Worker-preferred parallel QA and the QA-read rule (Issue #240).** The QA
+  guidance's Who section now prefers suitable available Worker-Class seats for
+  exploratory checks and heavy or long-running test runs, chosen per scope by
+  profile fit rather than one habitual runtime, with a fitting authorized
+  Elite when the pool lacks a needed capability; exploratory checks fix their
+  question, scope and stopping point, not their route or findings. The main
+  entry now explicitly requires reading the QA reference before planning,
+  assigning or judging QA, unless the current version is already in context.
+  Host entry +318 B (headroom 942), worker-profiles +32 B, QA reference +445
+  B, heartbeat unchanged; no ceiling raised.
+
 ## 0.6.15 — 2026-10-01 (Host task-failure escalation policy, role-scoped prompts)
 
 Seats: restart not required
