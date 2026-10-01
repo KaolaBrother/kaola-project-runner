@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/render-skills.py --check && python3 tests/contract/test-progressive-disclosure.py && python3 tests/contract/test-issue-41-orchestrator.py && python3 tests/contract/test-generated-skills.py && python3 tests/contract/test-issue-218-preset-ids.py && python3 tests/contract/test-issue-65-host-contract.py && python3 tests/contract/test-zcode-host-contract.py && python3 tests/contract/test-issue-119-host-entry.py && python3 tests/contract/test-issue-68-heartbeat-snapshot.py && python3 tests/contract/test-issue-49-grok-bot-host.py
+validated_candidate_hash: cb78b12fbab1c244d199e9de161fb14cd71ed7f1c638909ed49b3ccb5bbbfccc
