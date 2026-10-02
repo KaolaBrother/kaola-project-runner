@@ -2255,6 +2255,9 @@ class Holder:
         if refusal is not None:
             return refusal
         with self.lock:
+            expected = params.get("expected_holder_instance_id")
+            if expected is not None and expected != self.holder_instance_id:
+                return self._holder_instance_mismatch("prompt", expected)
             if self.stop_requested:
                 return {"outcome": "stopping", "mutation_status": "not_started",
                         "mutation_performed": False,

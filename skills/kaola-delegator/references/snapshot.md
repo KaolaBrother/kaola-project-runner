@@ -31,7 +31,8 @@ Skill entry and project locator. A full sweep is one Delegator inquiry; one
 owned permission event needs no additional full sweep. Each inquiry of an
 already-verified unchanged Host uses the commands below: read this file,
 verify `host` by fresh Runner `status`, audit the Host `body` (its `authorization` holds the
-three Class definitions and an ID/Class/profile row per authorized preset),
+three Class definitions, a compact capability summary, and durable grants named by exact preset id;
+catalog profiles are not copied into that routine body),
 send one correction with current values, replace stale facts. The correction
 may carry `sweep=Delegator inquiry: list --repo, verify identity, stop orphans only, keep in-flight, report`.
 Relay urgent owner stops immediately; never wait to consolidate other changes. Never write

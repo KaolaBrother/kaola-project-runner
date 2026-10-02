@@ -4536,10 +4536,13 @@ def main() -> int:
             text = sys.stdin.read()
         if not text:
             die("send requires --text or --stdin")
+        prompt_params = {"text": text, "wait": args.wait, "timeout": timeout,
+                         "max_final_chars": args.max_final_chars}
+        if args.expected_holder_instance_id is not None:
+            prompt_params["expected_holder_instance_id"] = args.expected_holder_instance_id
         receipt = op_or_holder_lost(
             args, repo, directory, "prompt",
-            {"text": text, "wait": args.wait, "timeout": timeout,
-             "max_final_chars": args.max_final_chars},
+            prompt_params,
             sock_timeout,
         )
     elif args.command == "steer":

@@ -1,7 +1,8 @@
 # Documentation Index
 
 - [Architecture](architecture.md): golden contract, worker vs main Skill, generated Skills, boundaries, ownership, and canonical-root versus Workflow child worktree guidance
-- [API](api.md): renderer, installer, Runner entrypoint, status, adapter contracts, and the `steer`
+- [Dispatch and collect guide](dispatch-collect.md): project, admit, collect, and Host exact-stop for a bounded research, QA, or report plan
+- [API](api.md): renderer, installer, dispatch/collect entry, Runner entrypoint, status, adapter contracts, and the `steer`
   operation (native and composite modes, receipt vocabulary)
 - [Grok Bot host](grok-bot-host.md): one thin Kaola-Delegator bridge Skill, execution-target binding (Local Computer vs cloud), device-local locator and fail-closed attestation, one-write install, read-only Mac UAT boundary, token-cost comparison; Grok Bot is not a Project Runner host
 - [Codex Host](codex-host.md): Codex as consuming runtime — skill install plus the two

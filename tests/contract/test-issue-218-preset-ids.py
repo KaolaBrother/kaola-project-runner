@@ -261,8 +261,8 @@ class AuthorizationNotationTest(unittest.TestCase):
         self.assertNotIn("claude-code opus", skeleton)
 
     def test_heartbeat_example_rows_and_class_definitions(self) -> None:
-        """#223: authorization carries ID/Class/profile rows and the three
-        shared Class definitions exactly once, never a pointer instead."""
+        """#223 kept the three Class definitions once. #244 stops copying the
+        profile roster into the routine example: grants keep exact preset ids."""
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
         self.assertNotIn("或其指针", skeleton)
         example = re.search(r"例：(\{.*\})", skeleton)
@@ -271,16 +271,21 @@ class AuthorizationNotationTest(unittest.TestCase):
         self.assertEqual(sorted(auth["classes"]), ["Elite", "Expert", "Worker"])
         for definition in auth["classes"].values():
             self.assertEqual(skeleton.count(definition), 1, definition)
+        self.assertNotIn("rows", auth)
+        self.assertIn("capability_summary", auth)
+        self.assertEqual(sorted(auth["capability_summary"]), ["presets", "text"])
+        self.assertIn("droid/opus", auth["capability_summary"]["presets"])
+        self.assertNotIn("Expert not granted", auth["capability_summary"]["text"])
+        self.assertNotIn("computer_interaction", auth["capability_summary"])
         catalog = {}
         for line in (ORCHESTRATOR / "references" / "profile-catalog.md").read_text(encoding="utf-8").splitlines():
             match = ROW.match(line)
             if match:
-                catalog[match["preset"]] = (match["class"], match["profile"])
-        classes = set()
-        for row in auth["rows"]:
-            self.assertEqual((row["class"], row["profile"]), catalog[row["id"]], row["id"])
-            classes.add(row["class"])
-        self.assertEqual(classes, {"Elite", "Worker"})
+                catalog[match["preset"]] = match["profile"]
+        for grant in auth["grants"]:
+            self.assertIn(grant["id"], catalog)
+            self.assertNotIn("profile", grant)
+            self.assertNotIn(catalog[grant["id"]], json.dumps(auth))
 
     def test_catalog_teaches_configured_not_running_caveat(self) -> None:
         catalog = flat((ORCHESTRATOR / "references" / "profile-catalog.md")
@@ -316,7 +321,7 @@ class AuthorizationNotationTest(unittest.TestCase):
         self.assertNotIn("`claude-code/default` does not perform implementation", pool)
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
         example = json.loads(re.search(r"例：(\{.*\})", skeleton).group(1))
-        self.assertNotIn("claude-code/sonnet", [row["id"] for row in example["authorization"]["rows"]])
+        self.assertNotIn("claude-code/sonnet", [row["id"] for row in example["authorization"]["grants"]])
         self.assertIn("五个池", skeleton)
         stale = (
             "six Worker", "Six Worker", "six-preset", "these six presets",

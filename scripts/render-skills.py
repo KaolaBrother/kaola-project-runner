@@ -525,7 +525,7 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         "WORKER_POOL_MEMBERS": worker_pool_members(manifests),
         "IDLE_BEFORE_STOP": (
             "Give each clear task directly to a suitable authorized worker as a new "
-            "session, chosen from the current heartbeat authorization and rows by owner "
+            "session, chosen from the current eligible-candidate projection by owner "
             "direction, class responsibility, profile/task fit and capacity; past dispatch "
             "or success informs that choice, never replaces it. Split or parallelize when "
             "independent parts gain real time or coverage. The count "
@@ -571,6 +571,10 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
             ).encode()
         else:
             result[relative.as_posix()] = source.read_bytes()
+    dispatch_script = ROOT / "scripts" / "kaola-dispatch.py"
+    if not dispatch_script.is_file():
+        raise ValueError(f"missing dispatch entry: {dispatch_script}")
+    result["scripts/kaola-dispatch.py"] = dispatch_script.read_bytes()
     return result
 
 

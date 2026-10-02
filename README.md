@@ -349,10 +349,11 @@ explicit `--model` choices, not a separate Fast toggle.
 This is the full supported-runtime catalog, not a machine-local choice list.
 Local choices require a runtime discovered in the bound execution target's
 effective launch context and a matching installed platform Runner that declares
-the tier. Show each discovered row with its Class, profile, and current
-authorization. A Host keeps only locally available rows allowed by current
-authorization in its working context; it reads the applicable rows without
-loading the full table. The README stays the full catalog on every machine.
+the tier. Show each discovered runtime with its Class and current authorization.
+Routine context keeps a capability summary of present profiles, not one
+profile row per preset. At a dispatch decision the Host projects eligible
+candidates and does not load the full table. The README stays the full
+catalog on every machine.
 See [choosing a worker](#choosing-a-worker).
 
 ### Platform notes
@@ -426,16 +427,16 @@ equal distribution across runtimes, or invented work to fill capacity. Worker
 profiles keep their individual strengths — the GLM and SWE-2 presets carry
 substantial, full-cycle tasks.
 
-The Host keeps short class meanings and only rows that are both local and
-currently authorized: discovered Worker pool members (minus your restrictions),
-granted Elite rows with their limits, and an Expert row only while its permitted
-task is active. A local row requires a runtime discovered in the bound target's
-effective launch context and a matching installed platform Runner that declares
-the preset. Unknown discovery stays separate. The Host reads exact applicable
-rows without loading the whole table; later installation or authorization
-changes update only affected rows. Kaola-Delegator relays grants and bound-target
-runtime/preset facts, not the catalog. No separate profile registry or
-permission service exists.
+The Host keeps short class meanings and a capability summary of presets that
+are both local and currently authorized: discovered Worker pool members (minus
+your restrictions), granted Elite presets with their limits, and an Expert
+preset only while its permitted task is active. A local preset requires a
+runtime discovered in the bound target's effective launch context and a
+matching installed platform Runner. Unknown discovery stays in the candidate
+projection and is not described as absent or as a capability. At a dispatch
+decision the Host reads that projection instead of a profile row per preset.
+Kaola-Delegator relays grants and bound-target runtime/preset facts, not the
+catalog. No separate profile registry or permission service exists.
 ### Seat binding and switching
 
 A seat keeps its bound platform and preset; general dispatch authorization is not a
@@ -624,6 +625,12 @@ conversations where supported, or start a fresh session; and expose ACP sessions
 human inspection through `list`, `view`, and `follow`. The controlling agent chooses
 the task, interprets the output, and decides what to do next.
 
+- **Dispatch/collect**: Project Runner's routine heartbeat carries a compact
+  capability summary. At a dispatch decision the same entry projects eligible
+  candidates and runs one adopted research, QA, or report item, or a bounded
+  fan-out, through the existing platform Runners. An on-demand Sidekick may
+  prepare that plan, synthesize evidence, or do explicitly scoped light work.
+  The Host still adopts the plan, accepts the result, and exact-stops seats.
 - **Skill names**: `<platform>-kaola-project-runner` for each of the ten runtimes,
   `kaola-project-runner` (display name Project Runner) as the control plane, and
   `kaola-delegator` (display name Kaola-Delegator) for external delegation.

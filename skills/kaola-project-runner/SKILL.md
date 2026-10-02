@@ -11,9 +11,13 @@ identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, mission ledger,
 child worktree, finalize, archive, and sink.
 
-You own scheduling, acceptance and QA decisions. Helpers may plan, design,
-research, inspect, test, review, or execute assigned work, never continuous
-topic selection, scaling, cross-worker scheduling, or final completion judgment.
+You own scheduling, acceptance and QA decisions. One Host owns this project.
+Helpers may plan, design, research, inspect, test, review, prepare bounded
+cross-worker material, synthesize evidence, do explicitly scoped light work,
+or execute an assignment. They never continuously select topics, scale the
+pool, run another scheduling loop, control other workers, grant permission,
+or judge final completion. Sidekick:
+[dispatch-collect.md](references/dispatch-collect.md).
 Without explicit permission to self-execute, read evidence and direct workers:
 do not implement, test, edit project documentation, create worktrees, or mutate
 the repository yourself.
@@ -77,9 +81,12 @@ preference); Elite needs an explicit grant; Expert is complex thinking only,
 with fresh user permission per task. Delegate substantial planning, design or
 review to an available authorized seat when its profile or the owner's
 task-specific judgment makes it a better fit than your own known model/preset.
-The heartbeat holds authorized [profile rows](references/profile-catalog.md)
-and Class definitions. Read exact applicable catalog rows only at intake or a
-grant change.
+The heartbeat holds the three Class meanings and a compact capability
+summary. Catalog profiles stay in
+[profile-catalog.md](references/profile-catalog.md). Exact grants stay in the
+heartbeat authorization. At a dispatch decision, project eligible candidates
+instead of keeping the profile roster in routine context
+([dispatch-collect.md](references/dispatch-collect.md)).
 
 Follow human instructions, project contracts, and evidenced shared-resource
 constraints. No serial build, GPU, port, or cache constraint blocks
@@ -89,8 +96,7 @@ unrelated parallel work.
 
 Call the matching platform Runner by its installed directory
 `<id>-kaola-project-runner`. Every platform's default transport is ACP.
-Eligible seats, Class, and profile come from the current heartbeat JSON, not
-a roster in this Skill.
+Eligible seats come from the dispatch projection, not a roster in this Skill.
 
 ### Progressive disclosure
 
@@ -170,13 +176,16 @@ sink, and write ownership.
    an operator-confirmed exception on that one `send`/`steer` is the
    orchestrator's own call; replace it with `drain-restart` at idle
    (see zcode-host-dispatch.md).
-   Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session, chosen from the current heartbeat authorization and rows by owner direction, class responsibility, profile/task fit and capacity; past dispatch or success informs that choice, never replaces it. Split or parallelize when independent parts gain real time or coverage. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
+   Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session, chosen from the current eligible-candidate projection by owner direction, class responsibility, profile/task fit and capacity; past dispatch or success informs that choice, never replaces it. Split or parallelize when independent parts gain real time or coverage. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
    Before planning, assigning or judging QA, read
    [qa-evidence.md](references/qa-evidence.md) unless the current version is
    already in context. Call `<id>-kaola-project-runner`. Pass the selected authorized `--tier`,
    default included; read its receipt before the first send
    (zcode-host-dispatch.md). Do not pass a permission-mode override unless the
-   human wrote one. One dispatch prompt per ready session. State the task,
+   human wrote one. One dispatch prompt per ready session. An adopted research, QA, or report
+   plan — one item or a bounded fan-out — runs through the dispatch/collect
+   entry ([dispatch-collect.md](references/dispatch-collect.md)); a simple exact
+   selection skips the Sidekick. You still accept and exact-stop. State the task,
    working location, write ownership, constraints, delivery requirements, and
    the doc-impact call in its prompt, plus whether Workflow is on. That prompt
    carries the assignment only: never orchestration policy or the seat roster.

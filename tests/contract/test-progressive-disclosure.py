@@ -127,7 +127,9 @@ class ActivationBoundaries(unittest.TestCase):
         for marker in WORKER_BODY_MARKERS:
             self.assertNotIn(marker, text, marker)
         self.assertFalse((PROJECT / "skills" / ORCHESTRATOR_ID / "workers").exists())
-        self.assertFalse((PROJECT / "skills" / ORCHESTRATOR_ID / "scripts").exists(), "control plane ships no transport scripts")
+        scripts = PROJECT / "skills" / ORCHESTRATOR_ID / "scripts"
+        self.assertEqual(sorted(p.name for p in scripts.iterdir()), ["kaola-dispatch.py"],
+                         "control plane ships the dispatch entry and no transport scripts")
         self.assertIn("Load one selected worker Skill only at dispatch", text)
         external = (PROJECT / "skills" / EXTERNAL_ID / "SKILL.md").read_bytes()
         self.assertLessEqual(len(external), BUDGETS["external_skill_bytes"])

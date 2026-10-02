@@ -4,6 +4,58 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.7.0 — 2026-10-03 (capability summary, Sidekick, dispatch/collect)
+
+Seats: restart required
+
+The operator diff from v0.6.18 to this release
+(`git diff v0.6.18..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is not empty: `scripts/kaola-acp-holder.py` refuses a `prompt` when
+`--expected-holder-instance-id` is present and does not match that holder.
+Omitting the flag keeps the previous unbound send. A running seat keeps the
+holder bytes it started with, so restart a seat before a bound send can be
+enforced. The ZCode bridge, quota catalog, adapters, and platform manifests
+are unchanged. This content commit returns the Grok Bot bridge to the
+unpinned content stage (`saveable: false`); the bridge is pinned in the
+release's follow-up pin commit.
+
+- **Routine context and dispatch projection (Issue #244).** The heartbeat no
+  longer carries a profile row per authorized preset. It keeps the three Class
+  meanings, a compact capability summary compressed from the profile text of
+  presets that are actually authorized and locally present, and durable grants
+  (exact preset id, count, structured shared seat, exclusions, owner special
+  requirements). The summary states those profiles' own distinctions, such as
+  planning and review versus implementation. It is not Class booleans and not
+  a hardcoded computer-use list. At a dispatch decision,
+  `scripts/kaola-dispatch.py project` projects each eligible candidate. Unknown
+  availability stays visible and is not advertised as a capability, a mismatch,
+  or a new refusal. No capability-tag taxonomy, ranking, or second model
+  registry is added.
+- **One dispatch/collect entry (Issue #244).** `execute` admits an adopted
+  research, QA, or report plan — one item or a bounded fan-out — through the
+  existing platform Runners. A `--no-wait` admission is `in-flight`, not a
+  result. `collect` later reads one status and, for a completed matching turn,
+  one capture, and can return a finished item while a slower sibling stays
+  `in-flight`. The Host remains the acceptance owner. Applied selection is read
+  from `config_application`, including nested start evidence; a timeout or an
+  unreadable receipt is `unknown`, and an unapplied value is not reported as
+  applied. A fresh start's holder is stored and passed as
+  `--expected-holder-instance-id` on the send. Recovery binds repo, session,
+  preset, holder, and prompt sha256; fingerprint equality alone does not count
+  as already dispatched. An authorization `elite_cap` stays in force when the
+  plan omits `seat_cap`; a plan cap may only tighten it. Live seats from fresh
+  Runner facts occupy that cap and shared seats. Owner special requirements
+  beat item overrides. The index is correlation only and is rewritten as each
+  item completes. `snapshot` writes the heartbeat file so the nested `body` is
+  one JSON object. Production mutation fan-out, a pipeline language, and
+  automatic choose-and-dispatch are outside this scope.
+- **On-demand Sidekick (Issue #244).** Default preset `zcode/default`, or
+  another authorized and locally available preset the owner selects. It may
+  draft a plan, synthesize evidence, identify gaps, and do explicitly scoped
+  light work. It does not control other workers, grant permission, accept the
+  product, or run a scheduling loop. Helper wording now allows bounded
+  cross-worker preparation while one Host still owns scheduling and acceptance.
+
 ## 0.6.18 — 2026-10-02 (lifecycle guidance placement; execution Opus presets high)
 
 Seats: restart required

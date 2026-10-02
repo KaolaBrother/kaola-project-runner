@@ -47,18 +47,15 @@ presets. Keep unresolved discovery `unknown` and report the actual missing
 fact separately when relevant. Installed Elite and Expert rows may be shown
 for a user to grant; visibility never grants authorization.
 
-Host working context is the intersection of local rows and current
-authorization: discovered Worker pool members without owner restrictions,
-granted Elite rows with their limits, and an Expert row only for its currently
-permitted task. Read the exact applicable rows from
-[profile-catalog.md](profile-catalog.md) after establishing availability and
-authorization; never load the full catalog just to discard rows. The heartbeat
-`authorization` carries these rows directly (exact ID, Class, catalog profile
-text) plus the three Class definitions once; a pointer never replaces them
-([heartbeat-skeleton.md](heartbeat-skeleton.md)). Rebuild at intake or
-recovery; update only on an actual grant, profile, install, or launch-path
-change; do not poll, cache a second registry, or rescan each beat. A verified
-active session keeps its ownership when availability changes.
+Host routine context is the three Class meanings and a compact capability
+summary of presets that are both authorized and locally present. Durable
+grants keep exact ids, counts, structured shared-seat fields, exclusions, and
+owner special_requirements, without catalog profile text. At a dispatch
+decision, [dispatch-collect.md](dispatch-collect.md) projects each eligible
+candidate. Rebuild the summary at intake or recovery; update it only when a
+grant, profile, install, or availability fact changes. Do not inject the full
+catalog or the profile roster into the routine heartbeat. A verified active
+session keeps its ownership when availability changes.
 
 ## Preset IDs in authorization
 

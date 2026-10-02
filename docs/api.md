@@ -420,6 +420,23 @@ boundary; no content hashing). Git runs with `GIT_TERMINAL_PROMPT=0`; no credent
 printed, hashed, or forwarded; paths in the receipt are local evidence and never enter an
 account Skill.
 
+## Dispatch and collect (`kaola-dispatch.py`)
+
+The orchestrator Skill ships one entry, `scripts/kaola-dispatch.py`, for an
+adopted research, QA, or report plan. `project` prints a compact capability
+summary taken from the profile text of presets that are authorized and marked
+present, plus the eligible candidates' exact preset ids, Class, catalog
+profile, selection parameters, and structured restrictions. `execute` admits
+that plan through each platform's existing `runtime-tmux.sh` and writes a
+correlation index (`correlation_only`); a `--no-wait` admission is `in-flight`,
+not a result. `collect` later correlates one status and, for a completed
+turn, one capture, without waiting out a slower sibling. `snapshot` writes
+the path given by `--out` (the Host carrier is
+`.kaola/heartbeat-prompt.json`) so `body` is a string that parses as one JSON
+object. The wrapper adds no schema key. The index is not a mission ledger, and the entry does not choose a
+plan, grant a seat, accept a result, or stop a session. Detail:
+`templates/orchestrator/references/dispatch-collect.md`.
+
 ## Runner entrypoint (`kaola-tmux.sh`)
 
 The file keeps its historical name; it drives ACP only and starts no tmux session.
@@ -455,7 +472,7 @@ different root is refused with `{"result":"refused","reason":"canonical-root-mis
 starts; accepted invocations add `canonical_repo` to the receipt. Other commands keep the `--repo`
 they were given, so an existing session stays observable and exactly stoppable.
 
-`--expected-holder-instance-id ID` binds `permit`, `cancel`, `key`, and `stop` to one ACP holder
+`--expected-holder-instance-id ID` binds `send`, `permit`, `cancel`, `key`, and `stop` to one ACP holder
 instance. A mismatch returns `{"error":{"code":"holder-instance-mismatch"}}` with
 `mutation_performed: false` and changes nothing, so a same-named session rebuilt by a later holder
 is never stopped in place of the one the Agent verified.
