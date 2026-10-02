@@ -4,6 +4,30 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.6.17 — 2026-10-02 (dispatch selection grounded in the current heartbeat)
+
+Seats: restart not required
+
+The operator diff from v0.6.16 to this release
+(`git diff v0.6.16..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is empty: the holder, ZCode bridge, quota catalog, adapters, and platform
+manifests are unchanged. Running seats keep the bytes they started with and may
+stay up; this release changes Skill prompt content only. The Grok Bot bridge is
+pinned in the release's follow-up pin commit.
+
+- **Selection grounded at the decision point (Issue #241).** The Decide and
+  dispatch step now says each clear task goes to a suitable authorized worker
+  "chosen from the current heartbeat authorization and rows by owner direction,
+  class responsibility, profile/task fit and capacity; past dispatch or success
+  informs that choice, never replaces it" — so a new selection reads the
+  current authorization instead of repeating the last seat, while routine
+  repair, resume, finalize and safe-idle switch ownership are unchanged. The
+  duplicated Choose-by sentence in the always-loaded Authorization section is
+  removed; the delegation principle, Class grants, the heartbeat eligibility
+  pointer and the intake/grant-change catalog-row trigger stay, and
+  worker-profiles remains the detailed policy home. Host entry +61 B (16,527 of
+  17,408); references and heartbeat unchanged; no ceiling raised.
+
 ## 0.6.16 — 2026-10-01 (delegation by profile fit, Worker-preferred parallel QA)
 
 Seats: restart not required
