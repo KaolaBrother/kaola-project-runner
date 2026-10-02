@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/render-skills.py --check && python3 tests/contract/test-progressive-disclosure.py && python3 tests/contract/test-issue-41-orchestrator.py && python3 tests/contract/test-generated-skills.py && python3 tests/contract/test-issue-118-seat-cap.py && python3 tests/contract/test-issue-119-host-entry.py && python3 tests/contract/test-issue-65-host-contract.py && python3 tests/contract/test-issue-68-heartbeat-snapshot.py && python3 tests/contract/test-issue-72-session-naming.py && python3 tests/contract/test-issue-49-grok-bot-host.py Issue49PinModel.test_project_stage_is_consistent_with_its_own_checkout
+validated_candidate_hash: adbc3a065f67d304abd8601f166e7e232ccf4da58e4ce96a95b82415827938e3
