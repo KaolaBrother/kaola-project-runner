@@ -1885,11 +1885,13 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         # and the receipt names the argv, keeping the stale advertised value.
         # Issue #197: the advertised value is not actual-model evidence (a
         # default seat advertised swe-2-high while Devin's native session
-        # recorded swe-2-max), so the verdict stays unknown for every tier.
+        # recorded swe-2-max). Issue #243 launches the high opus-fusion slug;
+        # an advertisement of the earlier medium slug stays stale, so the
+        # verdict stays unknown for every tier.
         for tier, model, advertised in (
             ("default", "swe-2-max", "swe-2-high"),
-            ("opus-fusion", "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
-             "fusion-claude-opus-5-5-high-sidekick-swe-2-medium"),
+            ("opus-fusion", "fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
+             "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium"),
         ):
             with self.subTest(tier=tier):
                 receipt = self.start_devin_argv_tier(tier, model, advertised)
@@ -1914,7 +1916,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
                     else:
                         self.assertEqual(display["name"], "Opus Fusion")
                         self.assertEqual([item["effort"] for item in display["components"]],
-                                         ["medium", "medium"])
+                                         ["high", "medium"])
                     selection = receipt.get("effective_selection") or {}
                     self.assertEqual(selection.get("effective_model"), model)
                     self.assertEqual(selection.get("effective_model_source"), "launch-argv")
@@ -2015,13 +2017,13 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             self.config_events(),
             [
                 ("model", "claude-opus-5-5"),
-                ("effort", "medium"),
+                ("effort", "high"),
                 ("fast", "false"),
             ],
         )
         model = (receipt.get("config_application") or {}).get("model") or {}
         self.assertTrue(model.get("applied"))
-        self.assertEqual(model.get("requested_id"), "claude-opus-5-5-medium")
+        self.assertEqual(model.get("requested_id"), "claude-opus-5-5-high")
         # Regression guard against a naive flip to reasoning_effort (#135):
         # Claude Opus 5.5 advertises its effort option as ``effort`` (#143).
         effort = (receipt.get("config_application") or {}).get("effort") or {}
@@ -2029,8 +2031,67 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(effort.get("config_id"), "effort")
         self.assertIs(effort.get("advertised"), True)
         selection = receipt.get("effective_selection") or {}
-        self.assertEqual(selection.get("effective_effort"), "medium")
+        self.assertEqual(selection.get("effective_effort"), "high")
         self.assertEqual(selection.get("effort_config_id"), "effort")
+        display = receipt.get("model_display") or {}
+        self.assertEqual(display.get("name"), "Claude Opus 5.5")
+        self.assertEqual(display.get("preset_id"), "cursor-cli/opus")
+        self.assertEqual(display.get("preset_effort"), "high")
+        self.assertIsNone(display.get("components"))
+
+    def test_cursor_opus_explicit_effort_overrides_the_preset(self) -> None:
+        receipt = self.start(
+            "cursor-cli", "--tier", "opus", "--effort", "medium",
+            caps="cursor-params,strict-config",
+        )
+        self.assertEqual(
+            [event for event in self.config_events() if event[0] in ("model", "effort")],
+            [("model", "claude-opus-5-5"), ("effort", "medium")],
+        )
+        model = (receipt.get("config_application") or {}).get("model") or {}
+        self.assertEqual(model.get("requested_id"), "claude-opus-5-5-high")
+        self.assertEqual((receipt.get("model_display") or {}).get("preset_effort"), "high")
+        self.assertEqual(receipt.get("requested_effort"), "medium")
+        self.assertEqual((receipt.get("model_selection") or {}).get("resolved_effort"), "medium")
+
+    def test_cursor_explicit_medium_variant_still_splits_model_and_effort(self) -> None:
+        # The medium picker id stays a mapped override. It is not the preset.
+        receipt = self.start(
+            "cursor-cli", "--model", "claude-opus-5-5-medium",
+            caps="cursor-params,strict-config",
+        )
+        self.assertEqual(
+            [event for event in self.config_events() if event[0] in ("model", "effort")],
+            [("model", "claude-opus-5-5"), ("effort", "medium")],
+        )
+        self.assertIsNone((receipt.get("model_display") or {}).get("preset_id"))
+        self.assertIsNone(receipt.get("requested_effort"))
+
+    def test_claude_code_default_applies_effort_high(self) -> None:
+        receipt = self.start("claude-code")
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertEqual(
+            [event for event in self.config_events() if event[0] in ("model", "effort")],
+            [("model", "opus"), ("effort", "high")],
+        )
+        effort = (receipt.get("config_application") or {}).get("effort") or {}
+        self.assertTrue(effort.get("applied"))
+        self.assertEqual(effort.get("config_id"), "effort")
+        self.assertEqual(effort.get("value"), "high")
+        display = receipt.get("model_display") or {}
+        self.assertEqual(display.get("name"), "Opus 5.5")
+        self.assertEqual(display.get("preset_id"), "claude-code/default")
+        self.assertEqual(display.get("preset_effort"), "high")
+        self.assertIsNone(display.get("components"))
+
+    def test_claude_code_explicit_effort_overrides_the_default_preset(self) -> None:
+        receipt = self.start("claude-code", "--effort", "medium")
+        self.assertIn(("model", "opus"), self.config_events())
+        self.assertIn(("effort", "medium"), self.config_events())
+        self.assertNotIn(("effort", "high"), self.config_events())
+        self.assertEqual((receipt.get("model_display") or {}).get("preset_effort"), "high")
+        self.assertEqual(receipt.get("requested_effort"), "medium")
+        self.assertEqual((receipt.get("model_selection") or {}).get("resolved_effort"), "medium")
 
     def test_cursor_explicit_fast_variant_id_decomposes(self) -> None:
         # A bare explicit fast-variant picker ID carries its semantics in the

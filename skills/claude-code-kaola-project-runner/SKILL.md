@@ -45,7 +45,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**Opus 5.5**: `opus`, effort=medium), `--tier opus-xhigh` (**Opus 5.5**: `opus`, effort=xhigh), `--tier fable` (**Fable**: `fable`, effort=high), and `--tier sonnet` (**Sonnet**: `sonnet`, effort=high) — and `default` applies whenever nothing more specific was chosen. Pass
+presets — `--tier default` (**Opus 5.5**: `opus`, effort=high), `--tier opus-xhigh` (**Opus 5.5**: `opus`, effort=xhigh), `--tier fable` (**Fable**: `fable`, effort=high), and `--tier sonnet` (**Sonnet**: `sonnet`, effort=high) — and `default` applies whenever nothing more specific was chosen. Pass
 another `--tier` when the human or an existing authorization — the default-authorized Worker pool included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.

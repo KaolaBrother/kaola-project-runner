@@ -6,7 +6,7 @@
 - Standalone session prefix: `devin-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
 - Runner default preset `devin/default` (`--tier default`): **SWE-2** — `swe-2-max` with `effort=max (encoded in model ID)`
-- Runner opus-fusion preset `devin/opus-fusion` (`--tier opus-fusion`): **Opus Fusion** — `fusion-claude-opus-5-5-medium-sidekick-swe-2-medium` with `effort=medium (encoded in model ID)`
+- Runner opus-fusion preset `devin/opus-fusion` (`--tier opus-fusion`): **Opus Fusion** — `fusion-claude-opus-5-5-high-sidekick-swe-2-medium` with `effort=high (encoded in model ID)`
 - Runner fable preset `devin/fable` (`--tier fable`): **Fable Fusion** — `fusion-claude-fable-5-1-high-sidekick-swe-2-medium` with `effort=high (encoded in model ID)`
 - Fast support: Fast via catalog `-fast`/`-priority` model variants only when the resolved model advertises one; preset models have no fast variant
 

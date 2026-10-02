@@ -48,7 +48,7 @@ class ModelDisplayContract(unittest.TestCase):
         cls.quota = load("kaola-quota")
         cls.manifests = {
             platform: cls.render.parse_manifest(PLATFORMS / f"{platform}.yaml")
-            for platform in ("claude-code", "codex", "devin")
+            for platform in ("claude-code", "codex", "cursor-cli", "devin", "droid")
         }
 
     def view_model(self, platform: str, evidence: dict, options: list) -> dict:
@@ -66,7 +66,7 @@ class ModelDisplayContract(unittest.TestCase):
             self.acp.selection_basis(args("claude-code", manifest, tier="opus-xhigh")))
         self.assertEqual(default["name"], extra["name"])
         self.assertEqual(default["name"], "Opus 5.5")
-        self.assertEqual(default["preset_effort"], "medium")
+        self.assertEqual(default["preset_effort"], "high")
         self.assertEqual(extra["preset_effort"], "xhigh")
         self.assertEqual(default["preset_id"], "claude-code/default")
         self.assertEqual(extra["preset_id"], "claude-code/opus-xhigh")
@@ -90,10 +90,10 @@ class ModelDisplayContract(unittest.TestCase):
             ),
             "opus-fusion": (
                 "Opus Fusion",
-                "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
-                "devin acp --model fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
+                "fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
+                "devin acp --model fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
                 [
-                    {"role": "main", "name": "Opus 5.5", "effort": "medium"},
+                    {"role": "main", "name": "Opus 5.5", "effort": "high"},
                     {"role": "sidekick", "name": "SWE-2", "effort": "medium"},
                 ],
             ),
@@ -229,6 +229,13 @@ class ModelDisplayContract(unittest.TestCase):
                 self.assertIsNone(direct["preset_effort"])
 
     def test_preserved_resume_uses_current_evidence_only(self) -> None:
+        for platform in ("claude-code", "cursor-cli", "devin", "droid"):
+            preserved_preset = self.acp.selection_basis(
+                args(platform, self.manifests[platform], resume="sess-1"))
+            self.assertEqual(preserved_preset["source"], "resume-preserved", platform)
+            self.assertEqual(preserved_preset["effort"], "", platform)
+            self.assertEqual(preserved_preset["candidate"], "", platform)
+            self.assertIsNone(self.acp.model_display_fact(preserved_preset)["preset_effort"], platform)
         manifest = self.manifests["codex"]
         preserved = self.acp.selection_basis(args("codex", manifest, resume="sess-1"))
         self.assertEqual(preserved["source"], "resume-preserved")

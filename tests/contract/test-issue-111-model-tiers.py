@@ -54,7 +54,8 @@ LIVE_PRESETS = {
         # Issue #125 (correcting #117): default is Auto; the alternative tier
         # stays deleted. Issue #188 adds opus beside the existing core.
         "default": ("Auto Model", "auto", ""),
-        "named": [("opus", "Opus 5.5", "claude-opus-5-5", "medium"),
+        # Issue #243: the opus preset effort is high. The catalog id is unchanged.
+        "named": [("opus", "Opus 5.5", "claude-opus-5-5", "high"),
                   ("core", "Kimi K3", "kimi-k3", "max")],
     },
     "dsh": {
@@ -70,8 +71,10 @@ LIVE_PRESETS = {
         # Issue #144: `fable` is the Fable fusion; the pure
         # claude-fable-5-1-high preset is retired.
         # Issue #237: display names drop the encoded effort; launch effort stays empty.
+        # Issue #243: the preset id is the high main-component slug. Launch effort
+        # stays empty; the SWE-2 sidekick effort stays on the component list.
         "named": [("opus-fusion", "Opus Fusion",
-                   "fusion-claude-opus-5-5-medium-sidekick-swe-2-medium", ""),
+                   "fusion-claude-opus-5-5-high-sidekick-swe-2-medium", ""),
                   ("fable", "Fable Fusion",
                    "fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "")],
     },
@@ -245,7 +248,7 @@ class TierAgentCommand(unittest.TestCase):
 
     DEVIN = {
         "default": "devin acp --model swe-2-max",
-        "opus-fusion": "devin acp --model fusion-claude-opus-5-5-medium-sidekick-swe-2-medium",
+        "opus-fusion": "devin acp --model fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
         "fable": "devin acp --model fusion-claude-fable-5-1-high-sidekick-swe-2-medium",
     }
 

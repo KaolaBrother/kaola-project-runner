@@ -26,15 +26,15 @@ absent means none.
 
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
-| Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=medium | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
+| Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus 5.5 | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
 | Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation. |
 | Elite | Codex CLI | `default` | `codex/default` | GPT-6.1 Sol | effort=high | All-round execution worker, strong at exploring directions, finding problems, and review; good at UI and 3D visual work, with computer-use capability. |
 | Elite | Cursor CLI | `default` | `cursor-cli/default` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Investigates unfamiliar problems, explores solution paths, and autonomously carries them through implementation; well suited to long-running, adaptive work. |
-| Elite | Cursor CLI | `opus` | `cursor-cli/opus` | Claude Opus 5.5 | effort=medium (encoded in model ID) | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
-| Elite | Devin CLI | `opus-fusion` | `devin/opus-fusion` | Opus Fusion | effort=medium (encoded in model ID) | All-round execution worker, especially strong at complex execution work. |
+| Elite | Cursor CLI | `opus` | `cursor-cli/opus` | Claude Opus 5.5 | effort=high (encoded in model ID) | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
+| Elite | Devin CLI | `opus-fusion` | `devin/opus-fusion` | Opus Fusion | effort=high (encoded in model ID) | All-round execution worker, especially strong at complex execution work. |
 | Elite | Droid | `default` | `droid/default` | Auto Model | no Runner effort override | All-round worker, balanced in every respect, suited to many kinds of tasks. |
-| Elite | Droid | `opus` | `droid/opus` | Opus 5.5 | reasoning_effort=medium | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
+| Elite | Droid | `opus` | `droid/opus` | Opus 5.5 | reasoning_effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Droid | `core` | `droid/core` | Kimi K3 | reasoning_effort=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Elite | Grok CLI | `default` | `grok/default` | Grok 4.7 | effort=xhigh, fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
 | Elite | Kimi CLI | `default` | `kimi-cli/default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |

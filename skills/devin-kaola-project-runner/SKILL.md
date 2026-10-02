@@ -45,7 +45,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**SWE-2**: `swe-2-max`, effort=max (encoded in model ID)), `--tier opus-fusion` (**Opus Fusion**: `fusion-claude-opus-5-5-medium-sidekick-swe-2-medium`, effort=medium (encoded in model ID)), and `--tier fable` (**Fable Fusion**: `fusion-claude-fable-5-1-high-sidekick-swe-2-medium`, effort=high (encoded in model ID)) — and `default` applies whenever nothing more specific was chosen. Pass
+presets — `--tier default` (**SWE-2**: `swe-2-max`, effort=max (encoded in model ID)), `--tier opus-fusion` (**Opus Fusion**: `fusion-claude-opus-5-5-high-sidekick-swe-2-medium`, effort=high (encoded in model ID)), and `--tier fable` (**Fable Fusion**: `fusion-claude-fable-5-1-high-sidekick-swe-2-medium`, effort=high (encoded in model ID)) — and `default` applies whenever nothing more specific was chosen. Pass
 another `--tier` when the human or an existing authorization — the default-authorized Worker pool included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.

@@ -144,7 +144,7 @@ class PresetCatalogTest(unittest.TestCase):
         sonnet = rows["claude-code/sonnet"]
         self.assertEqual(default["class"], "Elite")
         self.assertEqual(default["model"].strip(), "Opus 5.5")
-        self.assertEqual(default["parameters"].strip(), "effort=medium")
+        self.assertEqual(default["parameters"].strip(), "effort=high")
         self.assertEqual(
             default["profile"].strip(),
             "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
@@ -169,17 +169,17 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(rows["claude-code/fable"]["class"], "Expert")
         self.assertEqual(rows["claude-code/fable"]["parameters"].strip(), "effort=high")
         self.assertEqual(rows["cursor-cli/opus"]["class"], "Elite")
-        self.assertEqual(rows["cursor-cli/opus"]["parameters"].strip(), "effort=medium (encoded in model ID)")
+        self.assertEqual(rows["cursor-cli/opus"]["parameters"].strip(), "effort=high (encoded in model ID)")
         self.assertEqual(
             rows["cursor-cli/opus"]["profile"].strip(),
             "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
         self.assertEqual(rows["droid/opus"]["class"], "Elite")
-        self.assertEqual(rows["droid/opus"]["parameters"].strip(), "reasoning_effort=medium")
+        self.assertEqual(rows["droid/opus"]["parameters"].strip(), "reasoning_effort=high")
         self.assertEqual(
             rows["droid/opus"]["profile"].strip(),
             "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
         self.assertEqual(rows["devin/opus-fusion"]["class"], "Elite")
-        self.assertEqual(rows["devin/opus-fusion"]["parameters"].strip(), "effort=medium (encoded in model ID)")
+        self.assertEqual(rows["devin/opus-fusion"]["parameters"].strip(), "effort=high (encoded in model ID)")
         self.assertEqual(
             rows["devin/opus-fusion"]["profile"].strip(),
             "All-round execution worker, especially strong at complex execution work.")

@@ -368,6 +368,35 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
                     [("autonomy_level", expected)],
                 )
 
+    def test_opus_tier_applies_reasoning_effort_high(self) -> None:
+        """Issue #243: droid/opus is claude-opus-5-5 at reasoning_effort=high."""
+        receipt = self.start("--tier", "opus")
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        selection = receipt.get("model_selection") or {}
+        self.assertEqual(selection.get("source"), "runner-opus")
+        self.assertEqual(selection.get("resolved_model"), "claude-opus-5-5")
+        self.assertEqual(selection.get("resolved_effort"), "high")
+        self.assertEqual(
+            self.config_events(),
+            [("model", "claude-opus-5-5"), ("reasoning_effort", "high"),
+             ("autonomy_level", "auto-high")],
+        )
+        effort = (receipt.get("config_application") or {}).get("effort") or {}
+        self.assertTrue(effort.get("applied"))
+        self.assertEqual(effort.get("config_id"), "reasoning_effort")
+        self.assertEqual(effort.get("value"), "high")
+        self.assertEqual(receipt.get("actual_parameters"), {"effort": "high"})
+
+    def test_opus_explicit_effort_overrides_the_preset(self) -> None:
+        receipt = self.start("--tier", "opus", "--effort", "medium")
+        self.assertEqual(
+            [event for event in self.config_events() if event[0] != "autonomy_level"],
+            [("model", "claude-opus-5-5"), ("reasoning_effort", "medium")],
+        )
+        self.assertEqual((receipt.get("model_display") or {}).get("preset_effort"), "high")
+        self.assertEqual(receipt.get("requested_effort"), "medium")
+        self.assertEqual((receipt.get("model_selection") or {}).get("resolved_effort"), "medium")
+
     def test_core_tier_applies_kimi_k3_max(self) -> None:
         """Issue #125: core (Kimi K3 Max) is the third tier, not the upgrade:
         kimi-k3 at reasoning_effort=max."""
@@ -441,6 +470,7 @@ class DroidAcpResumeTests(DroidAcpSessionFixture):
         # asserted through autonomy_level.
         events = self.config_events()
         self.assertNotIn("model", [config_id for config_id, _ in events])
+        self.assertNotIn("reasoning_effort", [config_id for config_id, _ in events])
         self.assertEqual(
             [event for event in events if event[0] == "autonomy_level"],
             [("autonomy_level", "auto-high")],

@@ -5,7 +5,7 @@
 - Binary override: `CLAUDE_BIN`
 - Standalone session prefix: `claude-code-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
-- Runner default preset `claude-code/default` (`--tier default`): **Opus 5.5** — `opus` with `effort=medium`
+- Runner default preset `claude-code/default` (`--tier default`): **Opus 5.5** — `opus` with `effort=high`
 - Runner opus-xhigh preset `claude-code/opus-xhigh` (`--tier opus-xhigh`): **Opus 5.5** — `opus` with `effort=xhigh`
 - Runner fable preset `claude-code/fable` (`--tier fable`): **Fable** — `fable` with `effort=high`
 - Runner sonnet preset `claude-code/sonnet` (`--tier sonnet`): **Sonnet** — `sonnet` with `effort=high`

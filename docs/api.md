@@ -273,7 +273,7 @@ Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `auto-high|auto-low|auto-medium|auto-high|normal` through `acp_mode_config_id: autonomy_level`.
 ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reasoning_effort`, and
 `autonomy_level`. Droid's default preset is Auto (`auto`); `--tier opus` is Opus 5.5 (`claude-opus-5-5`,
-`reasoning_effort=medium`) and `--tier core` is Kimi K3 (`kimi-k3`, `reasoning_effort=max`); it has no
+`reasoning_effort=high`) and `--tier core` is Kimi K3 (`kimi-k3`, `reasoning_effort=max`); it has no
 separate Fast toggle.
 
 `--runtime` selects a verified consuming-runtime destination: `codex` →
@@ -838,10 +838,10 @@ is one JSON array encoded as a JSON string. Each object is `{role, name, effort}
 not copied into `<w>_model_effort`, spawn argv, or `session/set_config_option`. A fusion preset
 does not publish one scalar as both components' effort.
 
-Display names (preset IDs, profiles, classes, quota bindings, and launch efforts unchanged):
+Display names (preset IDs, profiles, classes, and quota bindings stay with these identities):
 Claude Code `default` and `opus-xhigh` are both
-`Opus 5.5`, with launch efforts `medium` and `xhigh`. Devin `default` is `SWE-2` (main effort
-`max` on the component). Devin `opus-fusion` is `Opus Fusion` (main `Opus 5.5` at `medium`,
+`Opus 5.5`, with launch efforts `high` and `xhigh`. Devin `default` is `SWE-2` (main effort
+`max` on the component). Devin `opus-fusion` is `Opus Fusion` (main `Opus 5.5` at `high`,
 sidekick `SWE-2` at `medium`). Devin `fable` is `Fable Fusion` (main `Fable 5.1` at `high`,
 sidekick `SWE-2` at `medium`). Codex `default` now selects `gpt-6.1-sol` at `high`.
 Other display identities are:
@@ -904,7 +904,7 @@ Preset view, same Claude identity, distinct preset efforts (`model_display` for 
 and `--tier opus-xhigh` with no `--model` and no `--effort`):
 
 ```json
-{"name": "Opus 5.5", "preset_id": "claude-code/default", "preset_effort": "medium", "components": null}
+{"name": "Opus 5.5", "preset_id": "claude-code/default", "preset_effort": "high", "components": null}
 {"name": "Opus 5.5", "preset_id": "claude-code/opus-xhigh", "preset_effort": "xhigh", "components": null}
 ```
 
@@ -976,12 +976,12 @@ to fill these fields. The start receipt reports `start_evidence_recorded` (and
 over 16 KiB); neither is a refusal. Old records without `start_evidence` stay readable.
 
 Droid's default is Auto Model (`auto`) with no effort pin; `--tier opus` is Opus 5.5
-(`claude-opus-5-5` at `reasoning_effort=medium`) and `--tier core` is Kimi K3 (`kimi-k3` at
+(`claude-opus-5-5` at `reasoning_effort=high`) and `--tier core` is Kimi K3 (`kimi-k3` at
 `reasoning_effort=max`). These ids are catalog values, so `acp_model_map` stays empty. `--tier alternative` stays the typed `tier-not-declared` refusal. Its native ACP mode option is
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
 
-Claude Code's `--tier default` is Opus 5.5 (`opus`) at `effort=medium` (Elite;
+Claude Code's `--tier default` is Opus 5.5 (`opus`) at `effort=high` (Elite;
 implementation, and the Host fallback when no tier is chosen). `--tier opus-xhigh`
 is the same display name Opus 5.5, preset `claude-code/opus-xhigh`, native alias `opus` at
 `effort=xhigh` (Elite; planning, design, and review; it does not perform
