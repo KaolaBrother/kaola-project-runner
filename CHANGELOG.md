@@ -4,6 +4,43 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.6.18 — 2026-10-02 (lifecycle guidance placement; execution Opus presets high)
+
+Seats: restart required
+
+The operator diff from v0.6.17 to this release
+(`git diff v0.6.17..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is not empty this release: the four platform manifests `platforms/claude-code.yaml`,
+`platforms/cursor-cli.yaml`, `platforms/devin.yaml`, and `platforms/droid.yaml` and their four
+matching adapter scripts changed (+18/−18), raising four execution Opus 5.5 preset efforts from
+medium to high. Platforms are holder-pinned at startup, so a running seat keeps the preset bytes
+it started with; restart a seat to pick up the new presets. The Grok Bot bridge is pinned in the
+release's follow-up pin commit.
+
+- **Lifecycle guidance at the step that uses it (Issue #242).** Four reviewed placement edits
+  move existing orchestrator guidance to where it is used: the QA-read trigger joins Decide and
+  dispatch; the fresh-start/same-assignment and same-beat-stop sentences join Release and report;
+  the not-an-idle-Host rule gets its own paragraph; and step 5 gains the heading "Reclaim seats
+  and report". No rule text was added or removed — apart from the heading and two punctuation
+  joins the bytes are unchanged; references, Delegator, renderer and budgets untouched. Host
+  entry 16527 -> 16539 B (+12).
+- **Execution Opus 5.5 presets raised from medium to high (Issue #243).** `claude-code/default`
+  launches Opus 5.5 at effort=high; `cursor-cli/opus` uses the existing high variant
+  `claude-opus-5-5-high` (effort high encoded in the model ID, with the parameterized ACP
+  mapping to the base model preserved); `droid/opus` applies `claude-opus-5-5` at
+  `reasoning_effort=high`; and `devin/opus-fusion` uses
+  `fusion-claude-opus-5-5-high-sidekick-swe-2-medium` (main Opus 5.5 high, SWE-2 sidekick
+  medium) in the preset and the native launch argv. Preset IDs, classes, profiles, counts,
+  permissions, packages and Fast policy are unchanged; `claude-code/opus-xhigh` stays xhigh and
+  thinking-only; this is not a global medium replacement — explicit user overrides, supported
+  effort values, old-version history, and the SWE-2 sidekick remain medium; display names stay
+  separate from effort and Fusion component semantics are preserved (no top-level uniform
+  effort). New starts use the updated defaults while ordinary resume keeps the saved
+  model/effort unless explicitly overridden, and historical Devin #190/#197 medium observations
+  stay historical. Generated Skills, catalogs, README and API docs are synced through the
+  renderer, and six new contract tests cover the four resolutions plus explicit-effort overrides
+  and the medium-variant split.
+
 ## 0.6.17 — 2026-10-02 (dispatch selection grounded in the current heartbeat)
 
 Seats: restart not required
