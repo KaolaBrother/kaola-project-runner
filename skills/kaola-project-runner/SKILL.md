@@ -171,7 +171,9 @@ sink, and write ownership.
    orchestrator's own call; replace it with `drain-restart` at idle
    (see zcode-host-dispatch.md).
    Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session, chosen from the current heartbeat authorization and rows by owner direction, class responsibility, profile/task fit and capacity; past dispatch or success informs that choice, never replaces it. Split or parallelize when independent parts gain real time or coverage. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
-   Call `<id>-kaola-project-runner`. Pass the selected authorized `--tier`,
+   Before planning, assigning or judging QA, read
+   [qa-evidence.md](references/qa-evidence.md) unless the current version is
+   already in context. Call `<id>-kaola-project-runner`. Pass the selected authorized `--tier`,
    default included; read its receipt before the first send
    (zcode-host-dispatch.md). Do not pass a permission-mode override unless the
    human wrote one. One dispatch prompt per ready session. State the task,
@@ -200,9 +202,7 @@ sink, and write ownership.
    omissions or invalidated evidence to that worker, and never finalize on
    incomplete evidence or lowered assertions. Worker prose, idle, green CI or
    a successful script exit is not acceptance, and acceptance is not project
-   QA: you pick when aggregate QA/doc checks run. Before planning, assigning or
-   judging QA, read [qa-evidence.md](references/qa-evidence.md) unless the
-   current version is already in context; unrun ones stay pending duties.
+   QA: you pick when aggregate QA/doc checks run; unrun ones stay pending duties.
 4. **Finalize and synchronize.** Acceptance authorizes that candidate's
    pending finalize: direct its owning worker to finalize and merge, then verify
    remote, Issue, archive, doc docking, and cleanup results: lifecycle facts,
@@ -212,16 +212,19 @@ sink, and write ownership.
    mid-measurement or reuse invalidated evidence. History rewriting needs applicable authorization.
    When records are inconsistent, investigate and direct a scoped repair;
    never fabricate claim identities.
-5. **Release and report.** The only legal idle seat is one whose delivery is
+5. **Reclaim seats and report.** The only legal idle seat is one whose delivery is
    awaiting acceptance; a rejected delivery's repair is the same assignment unless substantive (task-failure),
    and an accepted seat keeps only the finalize/cleanup duties it owns. Once
    it owns none (done or explicitly handed off) or the seat is abandoned,
    exact-stop it in that same beat. The stop action is the exact owned session
    `stop` via the matching platform Skill, which ends its ACP holder. Idle is not
-   keep-alive or completion. A Host that
-   ended its turn while workers are in flight, or with delivery, acceptance or
-   close-out open, is not an idle worker: keep it and send it no "continue"; its
-   next beat is a worker event. Before quiescence, reconcile owner goal/stop
+   keep-alive or completion. New authorized work or another task gets a fresh
+   `start` under a new standard name, never a finished seat;
+   `--resume`/`--continue` recover the same assignment only.
+
+   A Host that ended its turn while workers are in flight, or with delivery,
+   acceptance or close-out open, is not an idle worker: keep it and send it no
+   "continue"; its next beat is a worker event. Before quiescence, reconcile owner goal/stop
    with heartbeat project.goal/stop and pending QA/doc duties; a completed
    worker or batch does not end an open mandate. Claim new issues only while
    intake is open; all-blocked work stays event-driven. Stop boundary, scoped
@@ -241,10 +244,6 @@ start new issues. After time-up, still finish in-hand and merge/clean.
 The time/condition boundary is not the scoped pause. Only an explicit owner
 "stop here and continue later" with stated scope skips cleanup and permits
 recovery-preserving branches; do not merge or clean beyond that scope.
-
-New authorized work or another task gets a fresh `start` under a new standard
-name, never a finished seat; `--resume`/`--continue` recover the same assignment
-only.
 
 ## Report
 
