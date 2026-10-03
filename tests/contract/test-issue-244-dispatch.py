@@ -2321,6 +2321,7 @@ class DispatchEntry(unittest.TestCase):
 
     def turn_view(self, events, *, status_extra=None, item_extra=None, capture_extra=None):
         install_fake(self.skills, ["codex"])
+        if self.log.exists(): self.log.unlink()
         session = "codex-KPR-i252-qa"
         item = {"item_id": "qa", "platform": "codex", "preset": "codex/luna",
                 "repo": str(self.repo), "session": session, "holder_instance_id": "holder-252",
@@ -2342,6 +2343,8 @@ class DispatchEntry(unittest.TestCase):
         code, view = run(["collect", "--index", str(index), "--skills-root", str(self.skills),
                           "--item", "qa"], self.env)
         self.assertEqual(code, 0, view)
+        self.turn_view_bytes = len((json.dumps(view, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode())
+        self.assertLessEqual(self.turn_view_bytes, 8192)
         self.assertEqual(index.read_bytes(), before)
         self.assertEqual(set(self.root.rglob("*")) - files_before, {self.log} if self.log.exists() else set())
         self.assertTrue(all(row["command"] in ("status", "capture") for row in commands(self.log)))
@@ -2375,27 +2378,46 @@ class DispatchEntry(unittest.TestCase):
         self.assertIn("--full", capture["argv"])
         self.assertIn("--inline", capture["argv"])
 
-    def test_turn_view_metadata_is_not_a_failure_but_system_error_is(self):
-        view = self.turn_view([
+    def test_turn_view_metadata_and_recovered_or_foreign_signals_are_not_failures(self):
+        events = [
             {"cursor": 8, "kind": "session_update", "update": {
-                "sessionUpdate": "session_info_update", "_meta": {
-                    "context_usage": {"used": 100, "size": 1000}}}},
-            {"cursor": 9, "kind": "session_update", "update": {
-                "sessionUpdate": "session_info_update", "_meta": {
-                    "codex": {"threadStatus": {"type": "idle"}}}}},
-            {"cursor": 10, "kind": "session_update", "update": {
+                "sessionUpdate": "session_info_update", "_meta": {"context_usage": 100}}},
+            {"cursor": 9, "kind": "session_update", "sessionId": "acp-252", "update": {
                 "sessionUpdate": "session_info_update", "_meta": {
                     "codex": {"threadStatus": {"type": "systemError"}}}}},
-            {"cursor": 11, "kind": "turn_ended", "prompt_fingerprint": "fp-252",
+            {"cursor": 10, "kind": "session_update", "sessionId": "acp-252", "update": {
+                "sessionUpdate": "session_info_update", "_meta": {
+                    "codex": {"threadStatus": {"type": "idle"}}}}},
+            {"cursor": 11, "kind": "session_update", "sessionId": "child-thread", "update": {
+                "sessionUpdate": "session_info_update", "_meta": {
+                    "codex": {"threadStatus": {"type": "systemError"}}}}},
+            {"cursor": 12, "kind": "turn_ended", "prompt_fingerprint": "fp-252",
                 "outcome": "turn_completed", "stop_reason": "end_turn"},
-        ])
-        self.assertEqual(view["failure_count"], 1)
-        self.assertEqual([e["cursor"] for e in view["failure_evidence"]], [10])
-        self.assertEqual(view["failure_evidence"][0]["error"],
-                         {"code": "agent-system-error", "threadStatus": "systemError"})
+        ]
+        view = self.turn_view(events, status_extra={"acp_session_id": "acp-252"})
+        self.assertEqual(view["failure_count"], 0)
+        self.assertFalse(view["failure_present"])
+        self.assertEqual(view["failure_evidence"], [])
         self.assertEqual(view["outcome"], "turn_completed")
         self.assertFalse(view["truncation"]["evidence"])
         self.assertEqual(view["unknown_reasons"], [])
+
+    def test_turn_view_system_error_uses_holder_terminal_and_keeps_raw_provenance(self):
+        terminal = {"cursor": 9, "kind": "turn_ended", "prompt_fingerprint": "fp-252",
+                    "outcome": "turn_failed", "stop_reason": "end_turn"}
+        view = self.turn_view([
+            {"cursor": 8, "kind": "session_update", "sessionId": "acp-252", "update": {
+                "sessionUpdate": "session_info_update", "_meta": {
+                    "codex": {"threadStatus": {"type": "systemError"}}}}},
+            terminal,
+        ], status_extra={"acp_session_id": "acp-252", "turn_outcome": "turn_failed"})
+        self.assertEqual(view["outcome"], "turn_failed")
+        self.assertEqual(view["failure_count"], 1)
+        self.assertEqual(view["failure_evidence"], [terminal])
+        self.assertNotIn("error", view["failure_evidence"][0])
+        raw_error = {"cursor": 8, "kind": "error", "error": {"code": "raw-error"}}
+        view = self.turn_view([raw_error])
+        self.assertEqual(view["failure_evidence"], [raw_error])
 
     def test_turn_view_compacts_large_bodies_without_losing_evidence(self):
         view = self.turn_view([
@@ -2454,6 +2476,76 @@ class DispatchEntry(unittest.TestCase):
         self.assertLess(len(json.dumps(view).encode()), 6000)
         self.assertTrue(view["truncation"]["evidence"])
         self.assertEqual(view["failure_count"], 1)
+
+    def test_turn_view_bounds_whole_view_and_accounts_for_every_entry(self):
+        for body in ("x" * 1700, "讀" * 60000):
+            with self.subTest(body_bytes=len(body.encode())):
+                events = [{"cursor": 8 + n, "kind": "session_update", "update": {
+                    "sessionUpdate": "tool_call_update", "toolCallId": str(n),
+                    "status": "failed", "content": body}} for n in range(300)]
+                events += [{"cursor": 308 + n, "kind": "request_permission", "request": {
+                    "request_id": str(n), "title": body}} for n in range(300)]
+                events.append({"cursor": 608, "kind": "turn_ended", "prompt_fingerprint": "fp-252",
+                               "outcome": "turn_completed", "stop_reason": "end_turn"})
+                view = self.turn_view(events, status_extra={"pending_permissions": [
+                    {"request_id": str(n), "title": body} for n in range(300)]})
+                self.assertLessEqual(self.turn_view_bytes, 8192)
+                self.assertEqual(view["failure_count"], 300)
+                self.assertEqual(view["permission_count"], 300)
+                self.assertEqual(view["pending_permission_count"], 300)
+                self.assertTrue(view["failure_present"])
+                self.assertTrue(view["permission_present"])
+                self.assertTrue(view["range_complete"])
+                self.assertTrue(view["truncation"]["evidence"])
+                self.assertEqual(view["unknown_reasons"], [])
+                for key in ("failure_evidence", "permission_evidence", "pending_permissions"):
+                    summary = view["evidence_summary"][key]
+                    self.assertEqual(summary["count"], 300)
+                    self.assertEqual(summary["shown_entries"], len(view[key]))
+                    self.assertEqual(summary["shown_entries"] + summary["omitted_entries"], 300)
+                    self.assertGreater(summary["omitted_entries"], 0)
+                    self.assertEqual(summary["body_truncated_entries"], 300 if len(body) > 2048 else 0)
+                    if key == "pending_permissions":
+                        self.assertEqual(view[summary["raw"]["source"]][summary["raw"]["argv_key"]][0], "status")
+                    else:
+                        raw = summary["raw"]["events"]
+                        self.assertEqual(view[raw["source"]]["event_log_path"], "/raw/events.jsonl")
+                        self.assertEqual(raw["since"], 7)
+                        self.assertEqual(raw["through"], 608)
+                        self.assertIn("--full", view[raw["source"]][raw["argv_key"]])
+                        first = 8 if key == "failure_evidence" else 308
+                        self.assertEqual(summary["first_cursor"], first)
+                        self.assertEqual(summary["last_cursor"], first + 299)
+                        self.assertEqual(summary["omitted_first_cursor"], first + summary["shown_entries"])
+                        self.assertEqual(summary["omitted_last_cursor"], first + 299)
+
+    def test_turn_view_early_returns_keep_counts_and_unknown_ranges(self):
+        cases = [
+            ([], {"events": None}, {}, "event-range-unavailable", 1),
+            ([], {"session": "foreign"}, {}, "capture-identity-unbound", 1),
+            ([{"cursor": 8, "kind": "turn_ended", "prompt_fingerprint": "foreign"}], {}, {},
+             "turn-fingerprint-differs", 1),
+            ([], {}, {"prompt_fingerprint": "foreign"}, "turn-fingerprint-unknown-or-differs", 0),
+        ]
+        for events, capture, status, reason, known in cases:
+            with self.subTest(reason=reason):
+                view = self.turn_view(events, capture_extra=capture, status_extra={
+                    "fatal_error": {"code": "fixture-fatal", "message": "x" * 60000},
+                    "pending_permissions": [{"request_id": "p1"}], **status})
+                self.assertIn(reason, view["unknown_reasons"])
+                self.assertEqual(view["retained_failure_count"], known)
+                self.assertEqual(view["retained_permission_count"], 0)
+                self.assertIsNone(view["failure_count"])
+                self.assertIsNone(view["permission_count"])
+                self.assertIsNone(view["range_complete"])
+                self.assertEqual(view["failure_present"], True if known else None)
+                self.assertIsNone(view["permission_present"])
+                self.assertEqual(view["pending_permission_count"], 1 if known else None)
+                self.assertLessEqual(self.turn_view_bytes, 8192)
+        view = self.turn_view([], capture_extra={"events": None})
+        self.assertEqual(view["retained_failure_count"], 0)
+        self.assertIsNone(view["failure_count"])
+        self.assertIsNone(view["failure_present"])
 
     def test_turn_view_reports_unknown_gaps_and_truncation(self):
         view = self.turn_view([

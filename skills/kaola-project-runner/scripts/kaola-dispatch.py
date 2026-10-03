@@ -1964,6 +1964,7 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
                    "as_of": observed_at()},
         "unknown_reasons": [], "outcome": None, "stop_reason": None,
         "permission_evidence": [], "failure_evidence": [], "excerpt": None,
+        "range_complete": None,
         "truncation": {"reply": False, "evidence": False},
     }
     unknown = result["unknown_reasons"]
@@ -1983,22 +1984,93 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
             if isinstance(value, dict):
                 summary[key] = {field: value[field] for field in fields if field in value}
         summary.update(truncated=True, payload_bytes=size,
-                       payload_excerpt=text[:480], raw=raw)
+                       payload_excerpt=text.encode("utf-8")[:480].decode("utf-8", errors="ignore"), raw=raw)
+        if len(json.dumps(summary, ensure_ascii=False).encode("utf-8")) > 2048:
+            # Oversized identities are bodies too; the raw cursor stays exact.
+            summary = {"cursor": raw.get("cursor"), "truncated": True,
+                       "payload_bytes": size, "payload_excerpt": text[:240], "raw": raw}
         result["truncation"]["evidence"] = True
         return summary
 
+    def finish() -> int:
+        # Counts describe all inspected, retained evidence, including entries
+        # omitted from this view. Unknown/unavailable ranges never prove absence.
+        for operation, argv_key in (("status", "status_argv"), ("after_status", "status_argv"),
+                                    ("capture", "capture_argv")):
+            facts = result["source"].get(operation)
+            if facts is not None:
+                size = len(json.dumps(facts, ensure_ascii=False).encode("utf-8"))
+                if size > 1024:
+                    result["source"][operation] = {
+                        "truncated": True, "payload_bytes": size,
+                        "raw": {"source": "source", "argv_key": argv_key}}
+                    result["truncation"]["evidence"] = True
+        summaries = result["evidence_summary"] = {}
+        for key in ("failure_evidence", "permission_evidence", "pending_permissions"):
+            entries = result.get(key)
+            count = len(entries) if isinstance(entries, list) else None
+            if key != "pending_permissions":
+                label = key.removesuffix("_evidence")
+                result[label + "_count"] = count if result["range_complete"] is True else None
+                result["retained_" + label + "_count"] = count
+                result[label + "_present"] = (True if count else
+                    False if result["range_complete"] is True else None)
+            else:
+                result["pending_permission_count"] = count
+            if not isinstance(entries, list):
+                continue
+            cursors = [entry["cursor"] for entry in entries
+                       if isinstance(entry, dict) and isinstance(entry.get("cursor"), int)]
+            summaries[key] = {
+                "count": count, "shown_entries": count, "omitted_entries": 0,
+                "body_truncated_entries": sum(isinstance(entry, dict) and entry.get("truncated") is True
+                                              for entry in entries),
+                "first_cursor": min(cursors) if cursors else None,
+                "last_cursor": max(cursors) if cursors else None,
+                "omitted_first_cursor": None, "omitted_last_cursor": None,
+                # One exact raw range locator replaces hundreds of repeated paths.
+                "raw": ({"events": {"source": "source", "argv_key": "capture_argv",
+                         "since": cursor, "through": result["source"].get("through")},
+                         "status": {"source": "source", "argv_key": "status_argv"}}
+                        if key != "pending_permissions" else
+                        {"source": "source", "argv_key": "status_argv"}),
+            }
+        result["count_scope"] = "complete-range totals or null; retained counts are inspected lower bounds"
+        result["view_limit_bytes"] = 8192
+        def text() -> str:
+            return json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+
+        # Measure the entire returned encoding, including the final newline.
+        while len(text().encode("utf-8")) > 8192:
+            keys = [key for key in summaries if result[key]]
+            if not keys:
+                break
+            key = max(keys, key=lambda key: len(json.dumps(result[key], ensure_ascii=False).encode("utf-8")))
+            entry = result[key].pop()
+            summary = summaries[key]
+            summary["shown_entries"] -= 1
+            summary["omitted_entries"] += 1
+            entry_cursor = entry.get("cursor") if isinstance(entry, dict) else None
+            if isinstance(entry_cursor, int):
+                summary["omitted_first_cursor"] = entry_cursor
+                if summary["omitted_last_cursor"] is None:
+                    summary["omitted_last_cursor"] = entry_cursor
+            result["truncation"]["evidence"] = True
+        sys.stdout.write(text())
+        return 0
+
     if not same_repo(item.get("repo"), repo):
         unknown.append("dispatch-repo-mismatch")
-        return emit(result)
+        return finish()
     if (not isinstance(item.get("holder_instance_id"), str) or not item["holder_instance_id"]
             or not isinstance(item.get("session"), str) or not SESSION_OK.fullmatch(item["session"])
             or not finger_norm(item.get("prompt_fingerprint") or item.get("prompt_sha256"))
             or isinstance(cursor, bool) or not isinstance(cursor, int) or cursor < 0):
         unknown.append("dispatch-binding-missing")
-        return emit(result)
+        return finish()
     if not script.is_file():
         unknown.append("runner-missing")
-        return emit(result)
+        return finish()
 
     def bound(receipt: dict[str, Any] | None) -> bool:
         return (isinstance(receipt, dict) and same_repo(repo_of(receipt), repo)
@@ -2006,12 +2078,13 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
                 and holder_of(receipt) == item["holder_instance_id"])
 
     status_raw = {"runner": str(script), "argv": launch_argv(item, repo, "status")}
+    result["source"]["status_argv"] = status_raw["argv"]
     code, status, note = run_runner(script, status_raw["argv"])
     result["source"]["status"] = evidence(status, code, note)
     unread = receipt_unreadable(code, status, note)
     if unread or not bound(status):
         unknown.append("status-" + (unread or "identity-unbound"))
-        return emit(result)
+        return finish()
     current_turn = fingers_equal(fingerprint_of(status), item.get("prompt_fingerprint") or item.get("prompt_sha256"))
     if current_turn:
         active, outcome, stop = turn_facts(status)
@@ -2045,7 +2118,7 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
             or not bound(after)):
         result.update(outcome=None, stop_reason=None, turn_active=None)
         unknown.append("capture-" + (unread or "identity-unbound"))
-        return emit(result)
+        return finish()
     result["source"]["event_log_path"] = capture.get("event_log_path")
     end_cursor = nested(status, "event_cursor")
     result["source"]["through"] = end_cursor
@@ -2053,7 +2126,7 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
     if (not isinstance(events, list) or isinstance(end_cursor, bool)
             or not isinstance(end_cursor, int) or end_cursor < cursor):
         unknown.append("event-range-unavailable")
-        return emit(result)
+        return finish()
     cursors = [event.get("cursor") for event in events if isinstance(event, dict)
                and isinstance(event.get("cursor"), int) and not isinstance(event.get("cursor"), bool)]
     window = sorted((event for event in events if isinstance(event, dict)
@@ -2065,13 +2138,13 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
         if not fingers_equal(terminal.get("prompt_fingerprint"), expected):
             result.update(outcome=None, stop_reason=None, turn_active=None)
             unknown.append("turn-fingerprint-differs")
-            return emit(result)
+            return finish()
         window = [event for event in window if event["cursor"] <= terminal["cursor"]]
         result.update(turn_active=False, outcome=terminal.get("outcome"), stop_reason=terminal.get("stop_reason"))
         result["source"]["through"] = terminal["cursor"]
     elif not current_turn:
         unknown.append("turn-fingerprint-unknown-or-differs")
-        return emit(result)
+        return finish()
     else:
         active, outcome, stop = turn_facts(status)
         result.update(turn_active=active, outcome=outcome, stop_reason=stop)
@@ -2083,6 +2156,8 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
             or any(event["cursor"] != cursor + offset for offset, event in enumerate(window, 1))):
         result["truncation"]["evidence"] = True
         unknown.append("cursor-range-incomplete")
+    result["range_complete"] = not any(reason in unknown for reason in
+                                      ("capture-truncated", "cursor-range-incomplete"))
     result["source"]["oldest_available_cursor"] = min(cursors) if cursors else None
     reply_chars = 0
     for event in window:
@@ -2092,31 +2167,24 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
                "event_log_path": capture.get("event_log_path"), "cursor": event["cursor"]}
         if kind in ("request_permission", "permission_answered", "permission_cancelled"):
             result["permission_evidence"].append(compact(event, raw))
-        meta = update.get("_meta")
-        codex = meta.get("codex") if isinstance(meta, dict) else None
-        thread_status = codex.get("threadStatus") if isinstance(codex, dict) else None
-        system_error = isinstance(thread_status, dict) and thread_status.get("type") == "systemError"
+        # Codex threadStatus is a transient wire observation, possibly from a
+        # child thread. The holder owns identity/recovery and the turn verdict;
+        # raw capture retains these signals without inventing event errors.
         if (kind in ("process_exited", "agent_message_error", "malformed_stdout")
                 or event.get("error")
                 or (kind == "turn_ended" and event.get("outcome") in ("turn_failed", "turn_canceled", "process_exited"))
                 or (update.get("sessionUpdate") in ("tool_call", "tool_call_update")
-                    and update.get("status") in ("failed", "error"))
-                or system_error):
-            if system_error:
-                # Same structured error the holder records for this wire signal.
-                event = {**event, "error": {"code": "agent-system-error", "threadStatus": "systemError"}}
+                    and update.get("status") in ("failed", "error"))):
             result["failure_evidence"].append(compact(event, raw))
         if update.get("sessionUpdate") == "agent_message_chunk":
             content = update.get("content")
             if isinstance(content, dict) and isinstance(content.get("text"), str):
                 reply_chars += len(content["text"])
-    result["permission_count"] = len(result["permission_evidence"])
-    result["failure_count"] = len(result["failure_evidence"])
     result["excerpt"] = result_excerpt({"events": window})
     result["truncation"]["reply"] = reply_chars > 480
     if result["outcome"] is None:
         unknown.append("turn-outcome-unavailable")
-    return emit(result)
+    return finish()
 
 
 def command_snapshot(args: argparse.Namespace) -> int:
