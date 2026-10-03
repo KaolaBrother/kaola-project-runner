@@ -1,0 +1,9 @@
+[
+  {
+    "candidate": "workflow/issue-249 @ 5bbbe6abecfef3b100e7d85d105e5e2ed3fd7b54; claim 4ce260b013effde371a605b106a33f5955c5bbe3caa30fd3a3c06407ae51ffea; ledger n=1 done; tracked tree clean",
+    "evidence": "Sidekick record /tmp/kpr-i249-sidekick-qa.md; guidance duty-reconcile.md loaded at 5bbbe6ab; exhibit /tmp/kpr-i249-prior-host-snapshot.json sha256:0bb1dbbde0d224c50e35fa92a25a5dcf719baca829948745d0787cf2c8a46701 lacks filed #249 scope; issue #249 body still has it; live records already cover it; repo untouched; turn fp sha256:6cadc4277562fd69f9572784450ee7783dc90b6465928624324a7840c770a607 end_turn; stop /tmp/kpr-i249-sidekick-stop.json residual_pids [] exit 0. validate exit 1 matches parent c47daa1e test-issue-244-dispatch.py:882. Finalize fp sha256:54b5ff42ee5a8910b3747a6dd8934f45d03c923251f0de339daf22e41ec74179 dispatch_event_cursor 2474 turn_request_id 9 outcome in_progress; /tmp/kpr-i249-finalize-send.json. Read hold lifted after the #250 design stop.",
+    "next": "Accepted. Finalize prompt admitted. Do not exact-stop this seat. On idle, verify close, archive, sink, and cleanup. No release or install. A real merge conflict stops for the Host. The validate exit 1 stays an open observation.",
+    "ref": "#249",
+    "session": "codex-KPR-i249-reconcile codex/default, GPT-6.1 Sol/high, Fast effective off, holder 7bfb1e814d80974c4a35b4b2163f8b53, acp_session_id 01a0fff8-4305-70d2-83f6-4a8aa79ff6aa, finalize in flight"
+  }
+]

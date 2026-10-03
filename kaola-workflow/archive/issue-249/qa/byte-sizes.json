@@ -1,0 +1,62 @@
+[
+  {
+    "path": "templates/orchestrator/SKILL.md.tmpl",
+    "bytes": 16467
+  },
+  {
+    "path": "skills/kaola-project-runner/SKILL.md",
+    "bytes": 17301
+  },
+  {
+    "path": "templates/orchestrator/references/duty-reconcile.md",
+    "bytes": 4803
+  },
+  {
+    "path": "skills/kaola-project-runner/references/duty-reconcile.md",
+    "bytes": 4803
+  },
+  {
+    "path": "templates/orchestrator/references/host-startup.md.tmpl",
+    "bytes": 8164
+  },
+  {
+    "path": "skills/kaola-project-runner/references/host-startup.md",
+    "bytes": 8170
+  },
+  {
+    "path": "templates/kaola-delegator/references/snapshot.md",
+    "bytes": 6895
+  },
+  {
+    "path": "skills/kaola-delegator/references/snapshot.md",
+    "bytes": 6895
+  },
+  {
+    "path": "templates/orchestrator/references/dispatch-collect.md",
+    "bytes": 8184
+  },
+  {
+    "path": "skills/kaola-project-runner/references/dispatch-collect.md",
+    "bytes": 8184
+  },
+  {
+    "path": "skills/kaola-delegator/SKILL.md",
+    "bytes": 4094
+  },
+  {
+    "path": "hosts/grok-bot/kaola-delegator.md",
+    "bytes": 2555
+  },
+  {
+    "path": "hosts/grok-bot/INSTALL.md",
+    "bytes": 7965
+  },
+  {
+    "path": "hosts/grok-bot/bridge.json",
+    "bytes": 830
+  },
+  {
+    "path": "templates/grok-bot/accepted-revision.json",
+    "bytes": 636
+  }
+]

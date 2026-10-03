@@ -1,0 +1,23 @@
+One read-only check for issue #249. Workflow is off. Do not invoke workflow-next. Do not claim, dispatch, permit, accept, or finalize. Do not edit the repository, any worktree, `.kaola/heartbeat-prompt.json`, `.kaola/delegator-heartbeat.json`, or the snapshot file named below.
+
+Canonical root: /Users/ylmacstudio/Workspace/kaola-project-runner
+Scope: issue #249 only.
+Candidate: workflow/issue-249 at 5bbbe6abecfef3b100e7d85d105e5e2ed3fd7b54
+Question: follow the candidate guidance once. Read the requirement sources before the snapshot. Report whether an obligation present in those sources is absent from the saved Host snapshot, using only the guidance's result classes.
+
+Load and follow this file before any snapshot. The installed Skill does not contain it. Do not start or install anything from a candidate skills tree:
+/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-249/templates/orchestrator/references/duty-reconcile.md
+
+Sources, read first:
+- Issue #249 body: https://github.com/KaolaBrother/kaola-project-runner/issues/249
+- Current owner record, read only: project.goal and project.stop in /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json
+
+Snapshot under test, read after those sources:
+- /tmp/kpr-i249-prior-host-snapshot.json
+Saved prior Host snapshot, sha256:0bb1dbbde0d224c50e35fa92a25a5dcf719baca829948745d0787cf2c8a46701, 9038 bytes. This file is the exhibit. Do not use the live heartbeat file as the exhibit.
+
+Existing run records you may read if the guidance needs them for this scope, still read-only:
+- /Users/ylmacstudio/Workspace/kaola-project-runner/kaola-workflow/issue-249/workflow-state.md
+- /Users/ylmacstudio/Workspace/kaola-project-runner/kaola-workflow/.ledger/issue-249.jsonl
+
+Do not invent a duty and do not change live state to create a gap. Write the factual record only to /tmp/kpr-i249-sidekick-qa.md. Include the guidance path you loaded, the checked scope, the source pointers, the snapshot path and fingerprint, each finding with its source, evidence or gap, and smallest correction, or an explicit no-findings for this scope, and anything you did not read. Do not call the candidate accepted. Doc impact: none. Stop when that file is written.
