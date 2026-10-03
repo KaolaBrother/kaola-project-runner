@@ -70,17 +70,19 @@ A `--no-wait` admission is `in-flight` with reason `admitted` and
 
 Optional item `role` is session-identity metadata, not a second Class and
 not an admission rule. Omit it, or set JSON `null`, for an ordinary preset
-start; a null role is not written onto the index. The only value that
-reaches the holder is exact `sidekick`: `execute` passes `--role sidekick`
-on that item's Runner `start`. Any other value stays on the index as raw
+start; a null role is not written onto the index. The current value that
+reaches the holder is exact `sideagent`: `execute` passes `--role sideagent`
+on that item's Runner `start`. Apart from the legacy alias below, other values stay on the index as raw
 metadata. It does not authorize that role, relabel a holder, or refuse an
 otherwise valid item. The seat's identity still comes from the Host name,
-that explicit sidekick flag, or the preset this start actually selected.
-Sidekick does not change `elite_cap`, preset `count`, or a shared seat; the
+that explicit sideagent flag, or the preset this start actually selected.
+Sideagent does not change `elite_cap`, preset `count`, or a shared seat; the
 underlying preset Class still does. On recovery of a live session, the
 entry does not start again and does not change that session's
-`session_role`. When a requested `sidekick` is not the persisted role, the
-item gains `evidence.role_note` and keeps the status it already had.
+`session_role`. When a requested `sideagent` is not the persisted role, the
+item gains `evidence.role_note` and keeps the status it already had. Legacy
+`sidekick` plans remain accepted and correlate unchanged; both spellings denote
+Sideagent for recovery. See [session-role compatibility](api.md#session-role).
 
 The same assignment is repo, preset, session, and prompt. A matching
 `unknown` prior, including `send-timeout`, whose record is now absent stays

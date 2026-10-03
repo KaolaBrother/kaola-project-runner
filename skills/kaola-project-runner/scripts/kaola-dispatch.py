@@ -1484,9 +1484,9 @@ def launch_argv(item: dict[str, Any], repo: str, command: str) -> list[str]:
             argv.extend(["--model", item["_model"]])
         if item.get("_effort"):
             argv.extend(["--effort", item["_effort"]])
-        # Issue #245: sidekick is the only role that reaches the holder.
-        if item.get("role") == "sidekick":
-            argv.extend(["--role", "sidekick"])
+        # Sideagent is explicit; retain legacy plan values without rewriting them.
+        if item.get("role") in ("sideagent", "sidekick"):
+            argv.extend(["--role", item["role"]])
     elif command == "send":
         argv.extend(["--no-wait", "--text", item["prompt"]])
         holder = item.get("_holder") or item.get("holder_instance_id")
@@ -1619,16 +1619,16 @@ def assignment_bound(prior: dict[str, Any] | None, item: dict[str, Any],
 
 def note_persisted_role(item: dict[str, Any], receipt: dict[str, Any],
                         base: dict[str, Any]) -> None:
-    """A requested sidekick that is not the persisted role is a note only.
+    """A requested Sideagent absent from the persisted role is a note only.
 
     Recovery does not start again and does not change the live session's role.
     """
-    if item.get("role") != "sidekick":
+    if item.get("role") not in ("sideagent", "sidekick"):
         return
     persisted = receipt.get("session_role") if isinstance(receipt, dict) else None
-    if persisted not in ("host", "sidekick", "expert", "elite", "worker"):
+    if persisted not in ("host", "sideagent", "sidekick", "expert", "elite", "worker"):
         persisted = None
-    if persisted == "sidekick":
+    if persisted in ("sideagent", "sidekick"):
         return
     evidence = base.get("evidence")
     if not isinstance(evidence, dict):
@@ -1636,7 +1636,7 @@ def note_persisted_role(item: dict[str, Any], receipt: dict[str, Any],
         base["evidence"] = evidence
     shown = "null" if persisted is None else persisted
     evidence["role_note"] = (
-        f"persisted session_role is {shown}; requested sidekick was not applied"
+        f"persisted session_role is {shown}; requested Sideagent was not applied"
     )
 
 

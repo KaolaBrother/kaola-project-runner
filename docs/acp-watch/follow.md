@@ -28,16 +28,17 @@ iOS 远程 v1 **不用**本命令：Citadel `execute()` 15 秒且等进程退出
 
 ## `session_role`
 
-snapshot 与 view 同一对象，带 `session_role`，不带 list 行的 `host_class`。五值见 [list-view.md](list-view.md)。紧凑一行：
+snapshot 与 view 同一对象，带 `session_role`，不带 list 行的 `host_class`。当前角色见 [list-view.md](list-view.md)。紧凑一行：
 
 ```json
-{"kind":"snapshot","schema":"kaola-acp-view/1","session":"codex-KPR-i245-draft","session_role":"sidekick"}
+{"kind":"snapshot","schema":"kaola-acp-view/1","session":"codex-KPR-i245-draft","session_role":"sideagent"}
 ```
 
 | `session_role` | 消费者读法 |
 |---|---|
 | `host` | Host 卡 |
-| `sidekick` | Sidekick，不是普通 worker |
+| `sidekick` | 旧值；消费者显示 Sideagent，原始记录不改写 |
+| `sideagent` | Sideagent，不是普通 worker |
 | `expert` | Expert Class 的工作会话 |
 | `elite` | Elite Class 的工作会话 |
 | `worker` | Worker Class 的工作会话 |

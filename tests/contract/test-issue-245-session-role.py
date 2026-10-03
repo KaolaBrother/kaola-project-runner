@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import select
 import subprocess
 import sys
 import tempfile
@@ -26,7 +27,7 @@ HOLDER = PROJECT / "scripts" / "kaola-acp-holder.py"
 DISPATCH = PROJECT / "scripts" / "kaola-dispatch.py"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 PLATFORMS = PROJECT / "platforms"
-ROLES = ("host", "sidekick", "expert", "elite", "worker")
+ROLES = ("host", "sideagent", "sidekick", "expert", "elite", "worker")
 
 
 def load_module(name: str, path: Path):
@@ -63,14 +64,16 @@ class SessionRoleDerivation(unittest.TestCase):
         basis = self.acp.selection_basis(ns)
         return self.acp.session_role_value(ns, basis, prior, repo, acp_id)
 
-    def test_five_roles_and_the_null_cases(self) -> None:
+    def test_current_roles_legacy_alias_and_the_null_cases(self) -> None:
         self.assertEqual(self.acp.SESSION_ROLES, frozenset(ROLES))
-        host = self.namespace("grok", "grok-KPR-orchestrator-main", role="sidekick")
+        host = self.namespace("grok", "grok-KPR-orchestrator-main", role="sideagent")
         self.assertEqual(self.role(host), "host")
         self.assertTrue(self.acp.host_session("grok", host.session))
 
-        sidekick = self.namespace("grok", "grok-i245-draft", role="sidekick")
-        self.assertEqual(self.role(sidekick), "sidekick")
+        sideagent = self.namespace("grok", "grok-i245-draft", role="sideagent")
+        self.assertEqual(self.role(sideagent), "sideagent")
+        legacy = self.namespace("grok", "grok-i245-draft", role="sidekick")
+        self.assertEqual(self.role(legacy), "sidekick")
 
         expert = self.namespace("codex", "codex-i245-think", tier="astra")
         self.assertEqual(self.role(expert), "expert")
@@ -114,6 +117,16 @@ class SessionRoleDerivation(unittest.TestCase):
             },
         }
         self.assertEqual(self.role(ns, prior, "/repo", "native-1"), "expert")
+        for role in ("sideagent", "sidekick"):
+            with self.subTest(role=role):
+                legacy = dict(prior, session_role=role)
+                self.assertEqual(self.role(ns, legacy, "/repo", "native-1"), role)
+                self.assertIsNone(self.role(ns, legacy, "/repo", "native-other"))
+                for requested in ("sideagent", "sidekick"):
+                    explicit = self.namespace("codex", "codex-i245-resume",
+                                              resume="native-1", role=requested)
+                    self.assertEqual(self.role(explicit, legacy, "/repo", "native-1"), role)
+                    self.assertEqual(self.role(explicit, legacy, "/repo", "native-other"), requested)
         self.assertIsNone(self.role(ns, prior, "/repo", "native-other"))
         self.assertIsNone(self.role(ns, prior, "/repo", None))
         missing = dict(prior)
@@ -244,10 +257,11 @@ class SessionRoleWire(unittest.TestCase):
         self.assertEqual(refused.returncode, 2, refused.stderr)
         self.assertIn("invalid choice", refused.stderr)
 
-    def test_preset_class_and_sidekick_persist_across_stop(self) -> None:
+    def test_preset_class_and_sideagent_persist_across_stop(self) -> None:
         cases = (
             ("grok", "grok-i245-elite", ("--tier", "default"), "elite"),
-            ("grok", "grok-i245-side", ("--role", "sidekick"), "sidekick"),
+            ("grok", "grok-i245-side", ("--role", "sideagent"), "sideagent"),
+            ("grok", "grok-i245-legacy-side", ("--role", "sidekick"), "sidekick"),
             ("codex", "codex-i245-luna", ("--tier", "luna"), "worker"),
             ("codex", "codex-i245-astra", ("--tier", "astra"), "expert"),
             ("codex", "codex-i245-custom", ("--model", "gpt-6-luna"), None),
@@ -260,6 +274,20 @@ class SessionRoleWire(unittest.TestCase):
                 for command in ("status", "observe", "view"):
                     receipt = self.invoke(platform, command, session=session)
                     self.assertEqual(receipt.get("session_role"), expected, (command, receipt))
+                if expected in ("sideagent", "sidekick"):
+                    follower = subprocess.Popen(
+                        [sys.executable, str(CLI), platform, "follow", "--repo", str(self.repo),
+                         "--session", session], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        text=True, env=self.env(),
+                    )
+                    try:
+                        self.assertTrue(select.select([follower.stdout], [], [], 10)[0])
+                        snapshot = json.loads(follower.stdout.readline())
+                        self.assertEqual(snapshot["kind"], "snapshot")
+                        self.assertEqual(snapshot["session_role"], expected)
+                    finally:
+                        follower.terminate()
+                        follower.communicate(timeout=10)
                 listed = self.row(session)
                 self.assertIs(listed["host_class"], False)
                 self.assertEqual(listed["session_role"], expected)
@@ -271,9 +299,9 @@ class SessionRoleWire(unittest.TestCase):
                 stopped = self.invoke(platform, "status", session=session, check=False)
                 self.assertEqual(stopped.get("session_role"), expected, stopped)
 
-    def test_host_name_stays_host_even_with_sidekick_flag(self) -> None:
+    def test_host_name_stays_host_even_with_sideagent_flag(self) -> None:
         session = "grok-KPR-orchestrator-main"
-        started = self.start("grok", session, "--role", "sidekick")
+        started = self.start("grok", session, "--role", "sideagent")
         self.assertEqual(started.get("session_role"), "host", started)
         listed = self.row(session)
         self.assertIs(listed["host_class"], True)
@@ -308,6 +336,21 @@ class SessionRoleWire(unittest.TestCase):
         )
         self.assertIsNone(other.get("session_role"), other)
 
+    def test_legacy_role_survives_same_native_resume_with_current_flag(self) -> None:
+        session = "grok-i252-sidekick-locator"
+        first = self.start("grok", session, "--role", "sidekick", caps="resume")
+        native = first["acp_session_id"]
+        self.invoke("grok", "stop", "--force", session=session)
+        self.started.remove(("grok", session))
+        resumed = self.start(
+            "grok", session, "--resume", native, "--role", "sideagent",
+            extra_env={"MOCK_ACP_RESUME_ANY": "1"}, caps="resume",
+        )
+        self.assertEqual(resumed["acp_session_id"], native)
+        self.assertEqual(resumed["session_role"], "sidekick")
+        self.assertEqual(self.record("grok", session)["session_role"], "sidekick")
+        self.assertEqual(self.row(session)["session"], session)
+
     def test_legacy_list_rows_fall_back_without_relabeling(self) -> None:
         repo = os.path.realpath(str(self.repo))
         digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
@@ -332,6 +375,8 @@ class SessionRoleWire(unittest.TestCase):
         write("grok", "grok-i245-legacy")
         write("grok", "grok-i245-known", session_role="elite")
         write("grok", "grok-i245-junk", session_role="guru")
+        write("grok", "grok-i245-legacy-side", session_role="sidekick")
+        legacy_before = self.record("grok", "grok-i245-legacy-side")
         rows = {item["session"]: item for item in self.rows("--include-dead")}
         self.assertEqual(rows["grok-KPR-orchestrator-legacy"]["session_role"], "host")
         self.assertIs(rows["grok-KPR-orchestrator-legacy"]["host_class"], True)
@@ -339,6 +384,8 @@ class SessionRoleWire(unittest.TestCase):
         self.assertIsNone(rows["grok-i245-legacy"]["session_role"])
         self.assertEqual(rows["grok-i245-known"]["session_role"], "elite")
         self.assertIsNone(rows["grok-i245-junk"]["session_role"])
+        self.assertEqual(rows["grok-i245-legacy-side"]["session_role"], "sidekick")
+        self.assertEqual(self.record("grok", "grok-i245-legacy-side"), legacy_before)
         self.assertIs(rows["grok-i245-known"]["host_class"], False)
 
 
@@ -428,7 +475,7 @@ class SessionRoleDispatch(unittest.TestCase):
             if line.strip()
         ]
 
-    def test_unproven_role_stays_metadata_and_only_sidekick_reaches_argv(self) -> None:
+    def test_unproven_role_stays_metadata_and_only_sideagent_reaches_argv(self) -> None:
         install_fake(self.skills, ["codex"])
         repo = str(self.repo)
 
@@ -461,9 +508,9 @@ class SessionRoleDispatch(unittest.TestCase):
                 {"item_id": "worker", "preset": "codex/luna", "session": "codex-KPR-i245-wk",
                  "prompt": "b", "role": "worker"},
                 {"item_id": "cased", "preset": "codex/luna", "session": "codex-KPR-i245-cs",
-                 "prompt": "c", "role": "Sidekick"},
+                 "prompt": "c", "role": "Sideagent"},
                 {"item_id": "ok", "preset": "codex/luna", "session": "codex-KPR-i245-ok",
-                 "prompt": "d", "role": "sidekick"},
+                 "prompt": "d", "role": "sideagent"},
             ],
         }
         payload = self.execute(plan, auth, live={"rows": []})
@@ -481,9 +528,23 @@ class SessionRoleDispatch(unittest.TestCase):
         for session in ("codex-KPR-i245-ex", "codex-KPR-i245-wk", "codex-KPR-i245-cs"):
             self.assertNotIn("--role", started[session]["argv"])
         ok_argv = started["codex-KPR-i245-ok"]["argv"]
-        self.assertEqual(ok_argv[ok_argv.index("--role") + 1], "sidekick")
+        self.assertEqual(ok_argv[ok_argv.index("--role") + 1], "sideagent")
 
-    def test_sidekick_does_not_change_class_capacity(self) -> None:
+    def test_legacy_plan_role_still_reaches_start_without_rewriting(self) -> None:
+        dispatch = load_module("dispatch252_legacy", DISPATCH)
+        for role in ("sideagent", "sidekick"):
+            with self.subTest(role=role):
+                item = {"session": "unchanged-sidekick-locator", "_tier": "luna", "role": role}
+                before = dict(item)
+                argv = dispatch.launch_argv(item, str(self.repo), "start")
+                self.assertEqual(argv[argv.index("--role") + 1], role)
+                self.assertEqual(item, before)
+                for persisted in ("sideagent", "sidekick"):
+                    evidence = {}
+                    dispatch.note_persisted_role(item, {"session_role": persisted}, evidence)
+                    self.assertNotIn("evidence", evidence)
+
+    def test_sideagent_does_not_change_class_capacity(self) -> None:
         install_fake(self.skills, ["claude-code"])
         repo = str(self.repo)
         self.spec_path.write_text(json.dumps({"sessions": {
@@ -510,7 +571,7 @@ class SessionRoleDispatch(unittest.TestCase):
             auth,
             live={"rows": [{
                 "preset": "claude-code/opus-xhigh", "platform": "claude-code",
-                "repo": repo, "state": "ready", "session_role": "sidekick",
+                "repo": repo, "state": "ready", "session_role": "sideagent",
                 "host_class": False,
             }]},
         )
@@ -521,7 +582,7 @@ class SessionRoleDispatch(unittest.TestCase):
             auth,
             live={"rows": [{
                 "preset": "codex/luna", "platform": "codex", "repo": repo,
-                "state": "ready", "session_role": "sidekick", "host_class": False,
+                "state": "ready", "session_role": "sideagent", "host_class": False,
             }]},
         )
         self.assertEqual(admitted["items"][0]["status"], "in-flight", admitted["items"][0])
@@ -559,7 +620,7 @@ class SessionRoleDispatch(unittest.TestCase):
                 "item_id": item_id, "preset": "codex/luna", "session": session,
                 "repo": repo, "status": "in-flight", "reason": "admitted",
                 "prompt_sha256": finger, "prompt_fingerprint": finger,
-                "holder_instance_id": holder, "role": "sidekick",
+                "holder_instance_id": holder, "role": "sideagent",
             }
 
         payload = self.execute(
@@ -567,9 +628,9 @@ class SessionRoleDispatch(unittest.TestCase):
                 "scope": "research", "repo": repo,
                 "items": [
                     {"item_id": "keep", "preset": "codex/luna", "session": "codex-KPR-i245-keep",
-                     "prompt": prompt, "role": "sidekick"},
+                     "prompt": prompt, "role": "sideagent"},
                     {"item_id": "same", "preset": "codex/luna", "session": "codex-KPR-i245-same",
-                     "prompt": prompt, "role": "sidekick"},
+                     "prompt": prompt, "role": "sideagent"},
                 ],
             },
             {
@@ -587,7 +648,7 @@ class SessionRoleDispatch(unittest.TestCase):
         by_id = {item["item_id"]: item for item in payload["items"]}
         self.assertEqual(by_id["keep"]["status"], "in-flight")
         self.assertEqual(by_id["keep"]["reason"], "already-admitted")
-        self.assertEqual(by_id["keep"]["role"], "sidekick")
+        self.assertEqual(by_id["keep"]["role"], "sideagent")
         self.assertIn("worker", by_id["keep"]["evidence"]["role_note"])
         self.assertIn("not applied", by_id["keep"]["evidence"]["role_note"])
         self.assertEqual(by_id["same"]["reason"], "already-admitted")
@@ -637,20 +698,20 @@ class SessionRoleAdapter(unittest.TestCase):
         self.assertTrue(self.record.is_file(), result.stderr)
         return self.record.read_text(encoding="utf-8").splitlines()
 
-    def test_start_forwards_role_sidekick_to_kaola_acp(self) -> None:
+    def test_start_forwards_role_sideagent_to_kaola_acp(self) -> None:
         start = [
             "start", "--repo", str(self.repo), "--session", "zcode-KPR-i245-fwd",
-            "--role", "sidekick",
+            "--role", "sideagent",
         ]
         source = self.forwarded(PROJECT / "scripts" / "kaola-tmux.sh", ["zcode", *start])
         self.assertTrue(source[0].endswith("kaola-acp.py"), source)
         self.assertEqual(source[1:3], ["zcode", "start"])
-        self.assertEqual(source[source.index("--role") + 1], "sidekick")
+        self.assertEqual(source[source.index("--role") + 1], "sideagent")
         generated = PROJECT / "skills" / "zcode-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
         wrapped = self.forwarded(generated, start)
         self.assertTrue(wrapped[0].endswith("kaola-acp.py"), wrapped)
         self.assertEqual(wrapped[1:3], ["zcode", "start"])
-        self.assertEqual(wrapped[wrapped.index("--role") + 1], "sidekick")
+        self.assertEqual(wrapped[wrapped.index("--role") + 1], "sideagent")
         plain = self.forwarded(
             PROJECT / "scripts" / "kaola-tmux.sh",
             ["zcode", "start", "--repo", str(self.repo), "--session", "zcode-KPR-i245-fwd"],
@@ -659,7 +720,7 @@ class SessionRoleAdapter(unittest.TestCase):
         status = self.forwarded(
             PROJECT / "scripts" / "kaola-tmux.sh",
             ["zcode", "status", "--repo", str(self.repo), "--session", "zcode-KPR-i245-fwd",
-             "--role", "sidekick"],
+             "--role", "sideagent"],
         )
         self.assertNotIn("--role", status)
 

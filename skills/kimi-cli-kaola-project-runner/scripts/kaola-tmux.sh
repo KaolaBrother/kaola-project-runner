@@ -18,7 +18,7 @@ ACP_CLI="$script_dir/kaola-acp.py"
 usage() {
   printf '%s\n' 'Usage:
   kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
-  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|PLATFORM_TIER] [--model ID --effort LEVEL] [--fast on|off] [--role sidekick]
+  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|PLATFORM_TIER] [--model ID --effort LEVEL] [--fast on|off] [--role sideagent]
   kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N] [--full]

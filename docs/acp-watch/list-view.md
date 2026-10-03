@@ -82,7 +82,7 @@
 | `transport` | 恒为 `"acp"` |
 | `identity` | Issue #132：`verified` \| `dead` \| `unreachable` \| `mismatch`；record 在、PID 活、套接字应答、`state` 回报的 `holder_instance_id` 与 record 相等才是 `verified`（对该套接字发一次只读 `state`，上限 5 s）；PID 活不等于活 |
 | `host_class` | bool；会话名是标准 Host 名 `<platform>-<CODE>-orchestrator-<purpose>` |
-| `session_role` | string \| null；`host` `sidekick` `expert` `elite` `worker` 之一。`host_class` 为 true 时 list 给出 `host`；否则用记录里的值；没有或无法识别则为 null。见下方五值表 |
+| `session_role` | string \| null；`host` `sideagent` `expert` `elite` `worker` 之一。`host_class` 为 true 时 list 给出 `host`；否则用记录里的值；没有或无法识别则为 null。见下方当前角色表 |
 | `dispatcher` | object \| null；该 holder 继承的派工 holder 身份（`holder_instance_id` `platform` `repo` `session`） |
 | `heartbeat_host` / `heartbeat_host_known` | 记录中的绑定事实（#70 三态） |
 
@@ -93,7 +93,8 @@
 | 值 | 含义 |
 |---|---|
 | `host` | 标准 Host 名；与 `host_class: true` 一致。list 在该布尔为真时直接给出 `host` |
-| `sidekick` | 仅显式 start `--role sidekick`（dispatch 计划项 `role: "sidekick"`） |
+| `sidekick` | 旧值；消费者显示 Sideagent，原始记录不改写 |
+| `sideagent` | 仅显式 start `--role sideagent`（dispatch 计划项 `role: "sideagent"`） |
 | `expert` | 这次实际选中的 preset，其 manifest Class 为 Expert |
 | `elite` | 这次实际选中的 preset，其 manifest Class 为 Elite |
 | `worker` | 这次实际选中的 preset，其 manifest Class 为 Worker |
@@ -107,7 +108,7 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 {
   "session": "codex-KPR-i245-draft",
   "host_class": false,
-  "session_role": "sidekick",
+  "session_role": "sideagent",
   "dispatcher": {
     "holder_instance_id": "9f2ab1c4d8e0736fa051b2c9d4e68a71",
     "platform": "codex",
@@ -127,7 +128,7 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 |---|---|
 | `schema` | 恒为 `"kaola-acp-view/1"` |
 | `platform` `session` `repo` | 身份三元组，同 list 行 |
-| `session_role` | string \| null；与 list 相同的五值。view/follow 传 holder 记录值，不另做 host 投影 |
+| `session_role` | string \| null；与 list 相同的当前角色。view/follow 传 holder 记录值，不另做 host 投影 |
 | `state` | 同 list 行 |
 | `holder_pid` | int；世代栅栏，Terminal permit 必须核对 |
 | `holder_instance_id` | string；本 holder 进程实例身份（#39），比 PID 更强的绑定，`permit`/`cancel` 可用 `--expected-holder-instance-id` 钉住 |

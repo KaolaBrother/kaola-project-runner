@@ -19,7 +19,7 @@ worker when enough, or the existing finite research fan-out
 ([dispatch-collect.md](dispatch-collect.md)) for genuinely independent
 questions. Avoid redundant searches; a source conflict, a changed version or
 a distinct verification question can justify overlap, and no duplicate
-independent survey is required. Sidekick, grants, tools, dispatch and reclaim
+independent survey is required. Sideagent, grants, tools, dispatch and reclaim
 rules stay unchanged.
 
 Brief the question, relevant versions/constraints, sufficient evidence,

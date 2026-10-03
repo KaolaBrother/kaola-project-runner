@@ -1472,8 +1472,8 @@ def parse_init_meta(raw: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-# Issue #245: the five session identities. Anything else is rejected at spawn.
-SESSION_ROLES = frozenset({"host", "sidekick", "expert", "elite", "worker"})
+# Sideagent session identity; retain sidekick for legacy records and callers.
+SESSION_ROLES = frozenset({"host", "sideagent", "sidekick", "expert", "elite", "worker"})
 
 
 def normalize_session_role(raw: Any) -> str | None:

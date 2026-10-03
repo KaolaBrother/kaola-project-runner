@@ -48,13 +48,13 @@ route immediately. Missing/unreadable snapshot is absent/unknown, never proof
 of no Delegator or no changes; direct relay still works. Host may read relevant
 changes at decision boundaries and adopts only into its own body. Observe a
 source-correlated adopted value/duty before confirming/compacting your record;
-read, admission, end-turn or Sidekick return alone is insufficient. One-shot
+read, admission, end-turn or Sideagent return alone is insufficient. One-shot
 actions need action evidence, urgent stops need cessation. Preserve partial
 effects; no exactly-once claim. Later explicit owner direction can reauthorize
 a stopped scope; stale proposals cannot overwrite newer grants/revocations. During an
 inquiry you may independently ask the sole Host in plain language for a bounded
 omission check, supplying scope and source pointers; it reuses an in-flight check
-or sufficient unchanged evidence, or assigns its authorized Sidekick per
+or sufficient unchanged evidence, or assigns its authorized Sideagent per
 `kaola-project-runner/references/duty-reconcile.md`.
 
 With an open mandate and no work in flight, check the Host body for a blocked

@@ -628,7 +628,7 @@ the task, interprets the output, and decides what to do next.
 - **Dispatch/collect**: Project Runner's routine heartbeat carries a compact
   capability summary. At a dispatch decision the same entry projects eligible
   candidates and runs one adopted research, QA, or report item, or a bounded
-  fan-out, through the existing platform Runners. An on-demand Sidekick may
+  fan-out, through the existing platform Runners. An on-demand Sideagent may
   prepare that plan, synthesize evidence, or do explicitly scoped light work.
   The Host still adopts the plan, accepts the result, and exact-stops seats.
 - **Skill names**: `<platform>-kaola-project-runner` for each of the ten runtimes,

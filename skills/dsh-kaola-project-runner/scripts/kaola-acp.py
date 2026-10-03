@@ -34,8 +34,8 @@ HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
 MODEL_POLICY_HELPER = SCRIPT_DIR / "kaola-model-policy.py"
 FAST_VARIANT_SUFFIXES = ("-fast", "-priority")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
-# Issue #245: additive session identity. Null is absence, never a sixth label.
-SESSION_ROLES = frozenset({"host", "sidekick", "expert", "elite", "worker"})
+# Session identity: sidekick is the legacy Sideagent value; never rewrite live records.
+SESSION_ROLES = frozenset({"host", "sideagent", "sidekick", "expert", "elite", "worker"})
 PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli", "opencode", "zcode")
 START_WAIT = 20.0
 # Issue #146: the holder's shared session/new wait. A manifest
@@ -3089,16 +3089,18 @@ def session_role_value(args: argparse.Namespace, basis: dict[str, Any],
                        acp_session_id: Any = None) -> str | None:
     """Issue #245 session identity for this start.
 
-    Host name derivation is authoritative. ``--role sidekick`` is the only
-    flag that sets a role. Expert, elite, and worker come only from the
-    selected preset id and its manifest class. Custom ``--model``, a
+    Host name derivation is authoritative. ``--role sideagent`` sets this role;
+    ``sidekick`` remains accepted for legacy callers and recovery. Expert, elite,
+    and worker come only from the selected preset id and its manifest class. Custom ``--model``, a
     resume-preserved start that is not the same native session, an unknown
     class, and missing evidence stay null.
     """
     if host_session(getattr(args, "platform", ""), getattr(args, "session", None)):
         return "host"
-    if getattr(args, "role", None) == "sidekick":
-        return "sidekick"
+    if getattr(args, "role", None) in ("sideagent", "sidekick"):
+        inherited = inherited_session_role(prior, args, repo, acp_session_id)
+        # A new spelling is not a new identity on the same native session.
+        return inherited if inherited in ("sideagent", "sidekick") else args.role
     if basis.get("preset_id"):
         return preset_class_role(args, basis)
     if basis.get("source") == "resume-preserved" and isinstance(repo, str):
@@ -4808,7 +4810,8 @@ def main() -> int:
     parser.add_argument("--tier", metavar="default|PLATFORM_TIER")
     # Issue #245: the only start flag that sets a session role. Host, expert,
     # elite, and worker are derived, never accepted as this flag.
-    parser.add_argument("--role", choices=("sidekick",))
+    parser.add_argument("--role", choices=("sideagent", "sidekick"),
+                        help="Sideagent session identity (sidekick: legacy compatibility)")
     # Issue #181: None means "not passed", so explicit detection is None-ness.
     # Every consumer that relied on the old "off" default treats None as off.
     parser.add_argument("--fast", choices=("on", "off"))

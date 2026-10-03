@@ -27,12 +27,12 @@ Input keys: `grants[]` (`id`, `state`, `count`, `shared_seat`,
 `paused`, `revoked`, or `excluded`. Historical `N live` is granted. Any other
 state is `state-unreadable` for the Host. Elite and Expert need `granted`.
 
-## Sidekick
+## Sideagent
 
-Sidekick is optional and short-lived: default `zcode/default`, or an
+Sideagent is optional and short-lived: default `zcode/default`, or an
 owner-selected authorized available alternative. For nontrivial allocation,
 Host gives outcome, abilities, constraints and expected artifacts. Using
-current candidates/profiles, Sidekick proposes useful count, exact presets,
+current candidates/profiles, Sideagent proposes useful count, exact presets,
 bounded assignments and ownership. Host adopts/adjusts against current grants
 and pending changes, then executes. A simple exact dispatch skips it. Do not
 invent parallel work to fill seats or force model balance.
@@ -41,7 +41,7 @@ It may reconcile conflicts, check omissions, synthesize or do
 explicitly scoped light work. It does not start other workers, dispatch, grant or accept; writes neither
 control JSON and runs no scheduler. Keep useful conclusions, sources
 and output files; Host records adopted decisions. Native history stays native,
-with the only recovery anchor preserved. Exact-stop a finished Sidekick.
+with the only recovery anchor preserved. Exact-stop finished Sideagent.
 
 ## Commands and compact reads
 

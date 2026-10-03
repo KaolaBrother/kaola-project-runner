@@ -1,18 +1,18 @@
 {
-  "build": "865158f60e40",
+  "build": "d731032e419d",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "17ceac106e1a2c1a80f020449e621d69120449ba6bdf269cdb5a2b68f071eea8",
+    "SKILL.md": "ad6a7a8bab1e7468bb3031c072b1887a5dcb385d4bd318173adea391b5d95ef6",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
-    "references/dispatch-collect.md": "7026484d5442d4cd1e007f0bc5119b8a64ea3796966015c9e964885340942044",
+    "references/dispatch-collect.md": "4e4da8deecb2e886868eb59819591f6cbded7029d24859ed9880f62288847f98",
     "references/doc-maintenance.md": "d94e40b71e40f2ee713fa08836b0a6126b1052082fb23dc201f432de14e8abee",
-    "references/duty-reconcile.md": "0d966f9419e91b868d1d03e14e147949eb6b7ed1625a406a8ab2081dec619e20",
-    "references/heartbeat-skeleton.md": "5ab3b151afec79b474ace1201b5b8341a8a05f56317b1a7e0f6d83900fd11a49",
+    "references/duty-reconcile.md": "ccfb3d55b5d3184bb740433a5f750a1af84b11664dd4899bad2aa64b7b40e40d",
+    "references/heartbeat-skeleton.md": "39dc64851a4346304d1c2e6891e4a1d7a6708e6964294e76f635a27842c69cf3",
     "references/host-entry-matrix.md": "8a1d2b9c4c165fecfe1d1d6c1ee57bdc07c7c508bce828d746b51b06e8fd5370",
     "references/host-startup.md": "64089461cf8d1b246d89df18ef302a38dd35314a5e4be2ccdb101cecb2412a94",
     "references/issue-dispatch.md": "e3b1a21e7e7fef51c1047227d7012b4efb3ddcf822d73d79b4f7d1c7702630fc",
     "references/profile-catalog.md": "95870e58b72cb3dd701bd7df1ea89fa6140ea9436c2cc56dbd26b4faa742ef9a",
-    "references/public-research.md": "5dbcf359f201fc93984278bd7d81eb0362a5ce40f2a67b40bfd4e4a16b854b0a",
+    "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "23ea5275a4858f1b7958be1d35f17957bd46b3e4715e45f21976a092161d6ba5",
     "references/quota-packages.md": "34ccde184f59fc6f9adb8d008fbb3fb2f8037d8d70480f7738cdab1b2417dbdd",
     "references/task-failure.md": "a98c1ba8bd4868c4c2f8c38310dbdded66be45be0e029eade64ba101cf9c9b9e",
@@ -20,7 +20,7 @@
     "references/workflow-worktree.md": "ddd3980b760a1e5c62e1e1f436a761444e41327516de22eec1e66e63317ea94e",
     "references/zcode-host-dispatch.md": "16f38b70b77a248c9ec8ee927125e00de75e1b82e16c797c3e7c91ff5503b7e9",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
-    "scripts/kaola-dispatch.py": "c49129c90be82983a9e4113aa6b5a9e4d062407b5863c1f212ebb669a217cf3f"
+    "scripts/kaola-dispatch.py": "e5d1ea9fb6386aadc14d0d96ce527ba6ba8dbfd371e5883da038ff6313b6c2bb"
   },
   "skill": "kaola-project-runner"
 }

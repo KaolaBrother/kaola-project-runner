@@ -287,7 +287,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(start["argv"][start["argv"].index("--effort") + 1], "high")
         self.assertNotIn("--model", start["argv"])
 
-    def test_sidekick_role_reaches_start_argv(self) -> None:
+    def test_sideagent_role_reaches_start_argv(self) -> None:
         install_fake(self.skills, ["codex"])
         repo = str(self.repo)
         self.use_spec({
@@ -299,19 +299,19 @@ class DispatchEntry(unittest.TestCase):
         })
         auth = self.authorization([{"id": "codex/luna", "state": "granted"}])
         plan = self.plan([{
-            "item_id": "sidekick",
+            "item_id": "sideagent",
             "preset": "codex/luna",
             "session": "codex-KPR-i245-role",
             "prompt": "draft only",
-            "role": "sidekick",
+            "role": "sideagent",
         }])
         payload = self.execute(plan, auth, self.availability(["codex/luna"]))
         item = payload["items"][0]
         self.assertEqual(item["status"], "in-flight")
         self.assertEqual(item["reason"], "admitted")
-        self.assertEqual(item["role"], "sidekick")
+        self.assertEqual(item["role"], "sideagent")
         start = next(row for row in commands(self.log) if row["command"] == "start")
-        self.assertEqual(start["argv"][start["argv"].index("--role") + 1], "sidekick")
+        self.assertEqual(start["argv"][start["argv"].index("--role") + 1], "sideagent")
         self.assertNotIn("--model", start["argv"])
 
     def test_provider_qualified_model_matches_and_a_different_id_does_not(self) -> None:
@@ -2460,12 +2460,24 @@ class DispatchEntry(unittest.TestCase):
 
 
 class RenderedGuidance(unittest.TestCase):
-    def test_entry_is_discoverable_and_sidekick_includes_light_work(self) -> None:
+    def test_entry_is_discoverable_and_sideagent_includes_light_work(self) -> None:
         skill = (ORCHESTRATOR / "SKILL.md").read_text(encoding="utf-8")
         reference = (ORCHESTRATOR / "references" / "dispatch-collect.md").read_text(encoding="utf-8")
         profiles = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
         snapshot = (DELEGATOR / "references" / "snapshot.md").read_text(encoding="utf-8")
+        for text in (skill, reference, skeleton, snapshot):
+            self.assertIn("Sideagent", text)
+            self.assertNotIn("Sidekick", text)
+        for name in ("duty-reconcile.md", "public-research.md"):
+            text = (ORCHESTRATOR / "references" / name).read_text(encoding="utf-8")
+            self.assertIn("Sideagent", text)
+            self.assertNotIn("Sidekick", text)
+        for name in ("README.md", "docs/api.md", "docs/dispatch-collect.md",
+                     "docs/acp-watch/list-view.md", "docs/acp-watch/follow.md"):
+            text = (REPO / name).read_text(encoding="utf-8")
+            self.assertIn("Sideagent", text)
+            self.assertNotIn("Sidekick", text)
         self.assertIn("explicitly scoped light work", skill)
         self.assertIn("another scheduling loop", skill)
         self.assertIn("dispatch-collect.md", skill)

@@ -15,7 +15,7 @@ One Host owns scheduling, acceptance and QA.
 Helpers do bounded planning, research, QA, synthesis, explicitly scoped light work
 or an assignment. They never scale, control workers, run another scheduling loop,
 grant permission or accept the project.
-Optional Sidekick proposals: [dispatch-collect.md](references/dispatch-collect.md).
+Optional Sideagent proposals: [dispatch-collect.md](references/dispatch-collect.md).
 Without explicit permission to self-execute, read evidence and direct workers:
 do not implement, test, edit project documentation, create worktrees, or mutate
 the repository yourself.
