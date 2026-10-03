@@ -51,7 +51,8 @@ The prompt that woke you already loaded the main Skill through its first-line
 entry (`/kaola-project-runner` on ZCode) — startup, resume and post-compaction rounds
 alike. On ZCode never `read` a `SKILL.md` path by hand; elsewhere a runtime's
 own reread instruction (the Codex compact hook) stays valid. Read the plan and
-the project's recovery records, and answer
+the project's recovery records; see [duty-reconcile.md](duty-reconcile.md) for
+duty reconciliation, and answer
 with a short startup receipt: role, authorization per class (worker-profiles.md;
 counts, implement or supervise-only), lifecycle target and stop boundary, where
 those facts came from, and every unresolved conflict. Then,

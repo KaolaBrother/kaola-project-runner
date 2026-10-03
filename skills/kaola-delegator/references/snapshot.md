@@ -40,6 +40,13 @@ the Host JSON, copy its rows here, or select workers. Missing or unreadable: rep
 Runner and forge records before any `start`; never blank authorization.
 Start, resume, replace, or uncertain identity: [handoff.md](handoff.md).
 
+Keep new owner requirements and source pointers in this snapshot or the issue
+handoff, retaining an existing dated quote or pointer when available. During an
+inquiry you may independently ask the sole Host in plain language for a bounded
+omission check, supplying scope and source pointers; it reuses an in-flight check
+or sufficient unchanged evidence, or assigns its authorized Sidekick per
+`kaola-project-runner/references/duty-reconcile.md`.
+
 ## Inquiry commands
 
 `$HOST` is the exact `--session` already recorded on this snapshot's `host` object. Do not construct `$PLATFORM-<PROJECT_CODE>-orchestrator-main` for an already-verified Host.

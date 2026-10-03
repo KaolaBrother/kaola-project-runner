@@ -235,7 +235,8 @@ sink, and write ownership.
    acceptance or close-out open, is not an idle worker: keep it and send it no
    "continue"; its next beat is a worker event. Before quiescence, reconcile owner goal/stop
    with heartbeat project.goal/stop and pending QA/doc duties; a completed
-   worker or batch does not end an open mandate. Claim new issues only while
+   worker or batch does not end an open mandate. See [duty-reconcile.md](references/duty-reconcile.md) for duty reconciliation.
+   Claim new issues only while
    intake is open; all-blocked work stays event-driven. Stop boundary, scoped
    pause, and cleanup are Ending a run. Session stop, acceptance, merge,
    closure and cleanup are different facts, not interchangeable completion labels.
