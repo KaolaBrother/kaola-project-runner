@@ -1,0 +1,72 @@
+# Issue 252 Sideagent correction: bytes per touched surface
+
+Compared with unchanged parent `df69f546f0a99c847a9bbd8fc38ac54d0714670e`. All sizes are bytes. Existing budgets are unchanged, including 17408 and 8192.
+
+| Surface | Parent | Candidate | Change |
+|---|---:|---:|---:|
+| `README.md` | 45428 | 45429 | +1 |
+| `docs/acp-watch/follow.md` | 2589 | 2674 | +85 |
+| `docs/acp-watch/list-view.md` | 15826 | 15919 | +93 |
+| `docs/api.md` | 101146 | 101603 | +457 |
+| `docs/dispatch-collect.md` | 5781 | 5986 | +205 |
+| `scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `scripts/kaola-dispatch.py` | 93907 | 93983 | +76 |
+| `scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/claude-code-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/claude-code-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/claude-code-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/codex-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/codex-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/codex-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/cursor-cli-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/cursor-cli-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/cursor-cli-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/devin-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/devin-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/devin-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/droid-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/droid-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/droid-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/dsh-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/dsh-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/dsh-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/dsh-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/grok-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/grok-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/grok-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/kaola-delegator/references/snapshot.md` | 8012 | 8014 | +2 |
+| `skills/kaola-project-runner/SKILL.md` | 17354 | 17355 | +1 |
+| `skills/kaola-project-runner/references/dispatch-collect.md` | 8189 | 8191 | +2 |
+| `skills/kaola-project-runner/references/duty-reconcile.md` | 5979 | 5988 | +9 |
+| `skills/kaola-project-runner/references/heartbeat-skeleton.md` | 8160 | 8161 | +1 |
+| `skills/kaola-project-runner/references/public-research.md` | 2471 | 2472 | +1 |
+| `skills/kaola-project-runner/scripts/kaola-dispatch.py` | 93907 | 93983 | +76 |
+| `skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/kimi-cli-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/kimi-cli-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/kimi-cli-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/opencode-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/opencode-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/opencode-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py` | 218196 | 218208 | +12 |
+| `skills/zcode-kaola-project-runner/scripts/kaola-acp.py` | 235161 | 235556 | +395 |
+| `skills/zcode-kaola-project-runner/scripts/kaola-tmux.sh` | 15357 | 15358 | +1 |
+| `skills/zcode-kaola-project-runner/scripts/main-skill-build.json` | 2159 | 2159 | +0 |
+| `templates/kaola-delegator/references/snapshot.md` | 8012 | 8014 | +2 |
+| `templates/orchestrator/SKILL.md.tmpl` | 16520 | 16521 | +1 |
+| `templates/orchestrator/references/dispatch-collect.md` | 8189 | 8191 | +2 |
+| `templates/orchestrator/references/duty-reconcile.md` | 5979 | 5988 | +9 |
+| `templates/orchestrator/references/heartbeat-skeleton.txt` | 7894 | 7895 | +1 |
+| `templates/orchestrator/references/public-research.md` | 2471 | 2472 | +1 |
+| `tests/contract/test-issue-244-dispatch.py` | 124445 | 125155 | +710 |
+| `tests/contract/test-issue-245-session-role.py` | 29492 | 33272 | +3780 |
+
+64 touched surfaces; net change +10003 bytes.

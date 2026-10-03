@@ -1,0 +1,386 @@
+[
+  {
+    "path": "README.md",
+    "parent_bytes": 45428,
+    "candidate_bytes": 45429,
+    "delta": 1
+  },
+  {
+    "path": "docs/acp-watch/follow.md",
+    "parent_bytes": 2589,
+    "candidate_bytes": 2674,
+    "delta": 85
+  },
+  {
+    "path": "docs/acp-watch/list-view.md",
+    "parent_bytes": 15826,
+    "candidate_bytes": 15919,
+    "delta": 93
+  },
+  {
+    "path": "docs/api.md",
+    "parent_bytes": 101146,
+    "candidate_bytes": 101603,
+    "delta": 457
+  },
+  {
+    "path": "docs/dispatch-collect.md",
+    "parent_bytes": 5781,
+    "candidate_bytes": 5986,
+    "delta": 205
+  },
+  {
+    "path": "scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "scripts/kaola-dispatch.py",
+    "parent_bytes": 93907,
+    "candidate_bytes": 93983,
+    "delta": 76
+  },
+  {
+    "path": "scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/claude-code-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/claude-code-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/claude-code-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/codex-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/codex-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/codex-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/cursor-cli-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/devin-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/devin-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/devin-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/droid-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/droid-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/droid-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/dsh-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/dsh-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/dsh-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/dsh-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/grok-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/grok-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/grok-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/kaola-delegator/references/snapshot.md",
+    "parent_bytes": 8012,
+    "candidate_bytes": 8014,
+    "delta": 2
+  },
+  {
+    "path": "skills/kaola-project-runner/SKILL.md",
+    "parent_bytes": 17354,
+    "candidate_bytes": 17355,
+    "delta": 1
+  },
+  {
+    "path": "skills/kaola-project-runner/references/dispatch-collect.md",
+    "parent_bytes": 8189,
+    "candidate_bytes": 8191,
+    "delta": 2
+  },
+  {
+    "path": "skills/kaola-project-runner/references/duty-reconcile.md",
+    "parent_bytes": 5979,
+    "candidate_bytes": 5988,
+    "delta": 9
+  },
+  {
+    "path": "skills/kaola-project-runner/references/heartbeat-skeleton.md",
+    "parent_bytes": 8160,
+    "candidate_bytes": 8161,
+    "delta": 1
+  },
+  {
+    "path": "skills/kaola-project-runner/references/public-research.md",
+    "parent_bytes": 2471,
+    "candidate_bytes": 2472,
+    "delta": 1
+  },
+  {
+    "path": "skills/kaola-project-runner/scripts/kaola-dispatch.py",
+    "parent_bytes": 93907,
+    "candidate_bytes": 93983,
+    "delta": 76
+  },
+  {
+    "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/kimi-cli-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/opencode-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/opencode-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/opencode-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py",
+    "parent_bytes": 218196,
+    "candidate_bytes": 218208,
+    "delta": 12
+  },
+  {
+    "path": "skills/zcode-kaola-project-runner/scripts/kaola-acp.py",
+    "parent_bytes": 235161,
+    "candidate_bytes": 235556,
+    "delta": 395
+  },
+  {
+    "path": "skills/zcode-kaola-project-runner/scripts/kaola-tmux.sh",
+    "parent_bytes": 15357,
+    "candidate_bytes": 15358,
+    "delta": 1
+  },
+  {
+    "path": "skills/zcode-kaola-project-runner/scripts/main-skill-build.json",
+    "parent_bytes": 2159,
+    "candidate_bytes": 2159,
+    "delta": 0
+  },
+  {
+    "path": "templates/kaola-delegator/references/snapshot.md",
+    "parent_bytes": 8012,
+    "candidate_bytes": 8014,
+    "delta": 2
+  },
+  {
+    "path": "templates/orchestrator/SKILL.md.tmpl",
+    "parent_bytes": 16520,
+    "candidate_bytes": 16521,
+    "delta": 1
+  },
+  {
+    "path": "templates/orchestrator/references/dispatch-collect.md",
+    "parent_bytes": 8189,
+    "candidate_bytes": 8191,
+    "delta": 2
+  },
+  {
+    "path": "templates/orchestrator/references/duty-reconcile.md",
+    "parent_bytes": 5979,
+    "candidate_bytes": 5988,
+    "delta": 9
+  },
+  {
+    "path": "templates/orchestrator/references/heartbeat-skeleton.txt",
+    "parent_bytes": 7894,
+    "candidate_bytes": 7895,
+    "delta": 1
+  },
+  {
+    "path": "templates/orchestrator/references/public-research.md",
+    "parent_bytes": 2471,
+    "candidate_bytes": 2472,
+    "delta": 1
+  },
+  {
+    "path": "tests/contract/test-issue-244-dispatch.py",
+    "parent_bytes": 124445,
+    "candidate_bytes": 125155,
+    "delta": 710
+  },
+  {
+    "path": "tests/contract/test-issue-245-session-role.py",
+    "parent_bytes": 29492,
+    "candidate_bytes": 33272,
+    "delta": 3780
+  }
+]

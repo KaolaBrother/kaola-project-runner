@@ -1,0 +1,12 @@
+{
+  "archive_unchanged": true,
+  "archive_files": 47,
+  "protected_docs_unchanged": {
+    "docs/harness-acp-codex-160-live-2026-10-03.md": true,
+    "docs/harness-acp-compat-2026-10-01.md": true,
+    "docs/harness-acp-compat-2026-10-03.md": true,
+    "docs/harness-acp-reverify-2026-10-01.md": true
+  },
+  "control_files_written_by_this_agent": false,
+  "budgets_unchanged": true
+}
