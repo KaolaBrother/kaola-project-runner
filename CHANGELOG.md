@@ -4,7 +4,22 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.8.0 — 2026-10-04 (breadth work, standing Expert grants)
+
+Seats: restart required
+
+The operator diff from v0.7.0 to this release
+(`git diff v0.7.0..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is not empty. `scripts/kaola-acp-holder.py` adds session-role handling.
+`platforms/claude-code.yaml`, `platforms/codex.yaml`, and `platforms/devin.yaml`
+change: the Expert profiles say an explicit task or standing grant, and Codex
+launches adapter `@agentclientprotocol/codex-acp@2.0.1` with the child CLI
+selected by an absolute `CODEX_PATH` at requested CLI 0.160.0. The ZCode
+bridge, quota catalog, and adapters are unchanged in that diff. A running seat
+keeps the holder and platform bytes it started with, so restart a seat before
+those bytes apply. This content commit leaves the Grok Bot bridge at the
+unpinned content stage (`saveable: false`); the bridge is pinned in the
+release's follow-up pin commit.
 
 - **Spread breadth work across fitting Worker presets (Issue #252).** The
   dispatch entry now prefers spreading useful parallel gathering, independent
