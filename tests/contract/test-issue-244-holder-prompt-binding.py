@@ -172,8 +172,19 @@ class PromptBinding(unittest.TestCase):
                   "dispatcher": caller, "heartbeat_host": binding}
         args = argparse.Namespace(wait=None, record_root=str(root),
                                   platform="zcode", session=worker["session"])
+        legacy = {k: v for k, v in host.items() if k != "session_role"}
         cases = [(host, worker, False),
+                 (legacy, worker, False),
+                 ({**legacy, "session_role": None}, worker, False),
                  ({**host, "session_role": "worker"}, worker, True),
+                 ({**host, "session_role": "guru"}, worker, True),
+                 ({**legacy, "holder_instance_id": "replacement"}, worker, True),
+                 ({**legacy, "session": "zcode-KPR-orchestrator-other"}, worker, True),
+                 ({**legacy, "platform": "grok"}, worker, True),
+                 ({**legacy, "repo": "/foreign"}, worker, True),
+                 ({**legacy, "holder_instance_id": None}, worker, True),
+                 ({**legacy, "holder_pid": None}, worker, True),
+                 ({**legacy, "agent_alive": False}, worker, True),
                  ({**host, "agent_alive": False}, worker, True),
                  ({**host, "holder_pid": None}, worker, True),
                  ({**host, "holder_instance_id": "replacement"}, worker, True),
@@ -199,6 +210,35 @@ class PromptBinding(unittest.TestCase):
             self.assertEqual(holder_id, None if expected_wait else "worker-exact")
             if expected_wait:
                 self.assertTrue(selection.get("detail"))
+
+        # All exact ownership facts match; vague names, worker-marked names,
+        # and a supplied host_class bool still cannot invent the legacy role.
+        for session in ("zcode-KPR-orch-main", "zcode-KPR-i246-orchestrator-main",
+                        "grok-KPR-orchestrator-main", "zcode-KPR-orchestrator-"):
+            named_caller = {**caller, "session": session}
+            named_host = {**legacy, "session": session, "host_class": True}
+            named_worker = {**worker, "dispatcher": named_caller,
+                            "heartbeat_host": {**binding, "session": session}}
+            with self.subTest(session=session), patch.dict(
+                    os.environ, {acp_module.DISPATCHER_ENV: json.dumps(named_caller)}), patch.object(
+                    acp_module, "read_record", side_effect=lambda path:
+                    named_worker if path == worker_dir else named_host), patch.object(
+                    acp_module, "sock_path_for_directory", return_value=sock):
+                selection, holder_id = acp_module.resolve_send_wait(args, str(PROJECT), worker_dir)
+            self.assertIs(selection["wait"], True)
+            self.assertEqual(selection["source"], "standalone-default")
+            self.assertTrue(selection.get("detail"))
+            self.assertIsNone(holder_id)
+
+    def test_explicit_wait_flags_do_not_read_identity_records(self) -> None:
+        for wait in (True, False):
+            with self.subTest(wait=wait), patch.object(
+                    acp_module, "dispatcher_identity", side_effect=AssertionError("no identity needed")), patch.object(
+                    acp_module, "read_record", side_effect=AssertionError("no records needed")):
+                selection, holder_id = acp_module.resolve_send_wait(
+                    argparse.Namespace(wait=wait), str(PROJECT), Path(self._tmp.name))
+            self.assertEqual(selection, {"wait": wait, "source": "explicit"})
+            self.assertIsNone(holder_id)
 
     def test_rendered_worker_scripts_are_the_candidate_bytes(self) -> None:
         for name in ("kaola-acp-holder.py", "kaola-acp.py"):

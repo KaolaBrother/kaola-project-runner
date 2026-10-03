@@ -2665,9 +2665,14 @@ def resolve_send_wait(args: argparse.Namespace, repo: str,
     host = read_record(host_dir)
     if not isinstance(host, dict):
         return blocking("caller record is missing or unusable")
+    role = host.get("session_role")
+    # Legacy records predate session_role. Reuse list/start's Host-class fact;
+    # the exact dispatcher/record/binding checks still establish ownership.
+    if role is None and host_session(dispatcher["platform"], host.get("session")):
+        role = "host"
     if (any(host.get(k) != dispatcher[k] for k in
             ("platform", "session", "repo", "holder_instance_id"))
-            or host.get("session_role") != "host" or host.get("agent_alive") is not True):
+            or role != "host" or host.get("agent_alive") is not True):
         return blocking("caller record does not prove a live Host role and identity")
     problem = verify_dispatcher_host_live(args, dispatcher, target)
     if problem:
