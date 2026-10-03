@@ -587,5 +587,72 @@ class SessionRoleDispatch(unittest.TestCase):
         self.assertFalse(any("--role" in row["argv"] for row in commands))
 
 
+class SessionRoleAdapter(unittest.TestCase):
+    """The real Runner adapter must forward --role into kaola-acp.py.
+
+    Dispatch calls the generated runtime-tmux.sh. A fake Runner spec never
+    reaches this parser, which is where Host QA saw ``unknown argument: --role``.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.record = self.root / "argv.txt"
+        self.recorder = self.root / "python-record.sh"
+        self.recorder.write_text(
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$@\" > \"$KAOLA_ACP_ARGV_RECORD\"\n"
+            "printf '%s\\n' '{\"result\":\"ready\"}'\n",
+            encoding="utf-8",
+        )
+        self.recorder.chmod(0o755)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def forwarded(self, runner: Path, args: list[str]) -> list[str]:
+        env = {key: value for key, value in os.environ.items() if not key.startswith("KAOLA_")}
+        env["PYTHON_BIN"] = str(self.recorder)
+        env["KAOLA_ACP_ARGV_RECORD"] = str(self.record)
+        if self.record.exists():
+            self.record.unlink()
+        result = subprocess.run(
+            ["bash", str(runner), *args],
+            capture_output=True, text=True, env=env, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("unknown argument", result.stderr)
+        self.assertTrue(self.record.is_file(), result.stderr)
+        return self.record.read_text(encoding="utf-8").splitlines()
+
+    def test_start_forwards_role_sidekick_to_kaola_acp(self) -> None:
+        start = [
+            "start", "--repo", str(self.repo), "--session", "zcode-KPR-i245-fwd",
+            "--role", "sidekick",
+        ]
+        source = self.forwarded(PROJECT / "scripts" / "kaola-tmux.sh", ["zcode", *start])
+        self.assertTrue(source[0].endswith("kaola-acp.py"), source)
+        self.assertEqual(source[1:3], ["zcode", "start"])
+        self.assertEqual(source[source.index("--role") + 1], "sidekick")
+        generated = PROJECT / "skills" / "zcode-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
+        wrapped = self.forwarded(generated, start)
+        self.assertTrue(wrapped[0].endswith("kaola-acp.py"), wrapped)
+        self.assertEqual(wrapped[1:3], ["zcode", "start"])
+        self.assertEqual(wrapped[wrapped.index("--role") + 1], "sidekick")
+        plain = self.forwarded(
+            PROJECT / "scripts" / "kaola-tmux.sh",
+            ["zcode", "start", "--repo", str(self.repo), "--session", "zcode-KPR-i245-fwd"],
+        )
+        self.assertNotIn("--role", plain)
+        status = self.forwarded(
+            PROJECT / "scripts" / "kaola-tmux.sh",
+            ["zcode", "status", "--repo", str(self.repo), "--session", "zcode-KPR-i245-fwd",
+             "--role", "sidekick"],
+        )
+        self.assertNotIn("--role", status)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

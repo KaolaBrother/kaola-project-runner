@@ -3597,8 +3597,9 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   the preset that start actually selected. Custom `--model`, an unproven
   resume, and an unknown class stay `null` and are not labeled Worker.
   `host_class` is unchanged. A dispatch `role` other than `sidekick` is
-  `not-run` / `role-unproven`. Recovery does not change a live session's
-  role. Occupancy stays catalog-Class-based. A running seat keeps the holder
+  `not-run` / `role-unproven`. The shared `kaola-tmux.sh` start parser
+  accepts `--role` and forwards it to `kaola-acp.py`. Recovery does not
+  change a live session's role. Occupancy stays catalog-Class-based. A running seat keeps the holder
   it started with, so that seat emits the field only after it is replaced
   (`Seats: restart required` for the field; this issue does not restart
   seats). Kaola Terminal's UI is unchanged. The Grok Bot bridge returns to

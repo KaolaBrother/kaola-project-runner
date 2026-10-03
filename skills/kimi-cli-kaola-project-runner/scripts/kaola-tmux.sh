@@ -18,7 +18,7 @@ ACP_CLI="$script_dir/kaola-acp.py"
 usage() {
   printf '%s\n' 'Usage:
   kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
-  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|PLATFORM_TIER] [--model ID --effort LEVEL] [--fast on|off]
+  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|PLATFORM_TIER] [--model ID --effort LEVEL] [--fast on|off] [--role sidekick]
   kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N] [--full]
@@ -75,7 +75,7 @@ case "$command_name" in preflight|start|observe|status|capture|send|steer|wait|p
 repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_value="" text_given=false
 if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
 model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false
-tier="" tier_given=false fast="off" fast_given=false
+tier="" tier_given=false fast="off" fast_given=false role="" role_given=false
 acp_wait=true timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
 expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" cancel_timeout=""
 while [[ $# -gt 0 ]]; do
@@ -86,6 +86,7 @@ while [[ $# -gt 0 ]]; do
     --require-empty-editor) require_empty_editor=true; shift ;; --decision-id) decision_id="$2"; shift 2 ;;
     --replace-editor) replace_editor=true; shift ;; --model) model="$2"; model_given=true; shift 2 ;;
     --effort) effort="$2"; effort_given=true; shift 2 ;; --tier) tier="$2"; tier_given=true; shift 2 ;;
+    --role) role="$2"; role_given=true; shift 2 ;;
     --fast) fast="$2"; fast_given=true; shift 2 ;; --permission-mode) permission_mode="$2"; permission_mode_given=true; shift 2 ;;
     --transport) transport="$2"; transport_given=true; shift 2 ;; --key) key_name="$2"; shift 2 ;;
     --steer-mode) steer_mode="$2"; shift 2 ;; --cancel-timeout) cancel_timeout="$2"; shift 2 ;;
@@ -192,6 +193,7 @@ if [[ "$command_name" == start || "$command_name" == preflight || "$command_name
   [[ "$effort_given" == true ]] && acp_args+=(--effort "$effort")
   [[ "$tier_given" == true ]] && acp_args+=(--tier "$tier")
   [[ "$fast_given" == true ]] && acp_args+=(--fast "$fast")
+  [[ "$role_given" == true ]] && acp_args+=(--role "$role")
 fi
 # Issue #181: the per-platform permission-mode default lives once, in
 # kaola-acp.py's ACP_SKIP_MODE. This layer forwards only an explicit choice;
