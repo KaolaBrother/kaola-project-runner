@@ -95,7 +95,6 @@ work proceeds.
 
 Call the matching platform Runner by its installed directory
 `<id>-kaola-project-runner`. Every platform's default transport is ACP.
-Eligible seats come from the dispatch projection, not a roster in this Skill.
 
 ### Progressive disclosure
 
@@ -181,10 +180,7 @@ sink, and write ownership.
    already in context. Call `<id>-kaola-project-runner`. Pass the selected authorized `--tier`,
    default included; read its receipt before the first send
    (zcode-host-dispatch.md). Do not pass a permission-mode override unless the
-   human wrote one. One dispatch prompt per ready session. An adopted research, QA, or report
-   plan — one item or a bounded fan-out — runs through the dispatch/collect
-   entry ([dispatch-collect.md](references/dispatch-collect.md)); a simple exact
-   selection skips the Sidekick. You still accept and exact-stop. State the task,
+   human wrote one. One dispatch prompt per ready session. External knowledge gap behind a route, obstacle, failure or QA question: [public-research.md](references/public-research.md). An adopted research, QA, or report plan — one item or a bounded fan-out — runs through [dispatch-collect.md](references/dispatch-collect.md). You still accept and exact-stop. State the task,
    working location, write ownership, constraints, delivery requirements, and
    the doc-impact call in its prompt, plus whether Workflow is on. That prompt
    carries the assignment only: never orchestration policy or the seat roster.
