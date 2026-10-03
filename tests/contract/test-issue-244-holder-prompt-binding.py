@@ -11,6 +11,8 @@ import argparse
 import importlib.util
 import io
 import json
+import os
+from unittest.mock import patch
 import sys
 import tempfile
 import threading
@@ -139,6 +141,64 @@ class PromptBinding(unittest.TestCase):
         self.assertEqual(captured["params"]["text"], "look")
         receipt = json.loads(stdout.getvalue())
         self.assertEqual(receipt.get("outcome"), "in_progress")
+
+    def test_owning_host_default_pins_admission_to_the_read_worker_holder(self) -> None:
+        captured = {}
+        def capture(args, repo, directory, op, params, timeout):
+            captured.update(params)
+            return {"outcome": "in_progress"}
+        argv = ["kaola-acp.py", "zcode", "send", "--repo", str(PROJECT),
+                "--session", "zcode-KPR-i246-bind", "--text", "look"]
+        with patch.object(sys, "argv", argv), patch.object(
+                acp_module, "resolve_send_wait",
+                return_value=({"wait": False, "source": "owning-host-default"}, "worker-exact")), patch.object(
+                acp_module, "op_or_holder_lost", side_effect=capture), redirect_stdout(io.StringIO()):
+            self.assertEqual(acp_module.main(), 0)
+        self.assertIs(captured["wait"], False)
+        self.assertEqual(captured["expected_holder_instance_id"], "worker-exact")
+
+    def test_wait_default_requires_all_existing_identity_and_binding_facts(self) -> None:
+        root = Path(self._tmp.name)
+        worker_dir = root / "worker"
+        sock = root / "holder.sock"
+        sock.touch()
+        caller = {"platform": "zcode", "session": "zcode-KPR-orchestrator-main",
+                  "repo": str(PROJECT), "holder_instance_id": "host-exact"}
+        host = {**caller, "holder_pid": os.getpid(), "agent_alive": True, "session_role": "host"}
+        binding = {k: caller[k] for k in ("platform", "session", "repo")}
+        binding["socket"] = str(sock)
+        worker = {"platform": "zcode", "session": "zcode-KPR-i246-bind", "repo": str(PROJECT),
+                  "holder_instance_id": "worker-exact", "holder_pid": os.getpid(),
+                  "dispatcher": caller, "heartbeat_host": binding}
+        args = argparse.Namespace(wait=None, record_root=str(root),
+                                  platform="zcode", session=worker["session"])
+        cases = [(host, worker, False),
+                 ({**host, "session_role": "worker"}, worker, True),
+                 ({**host, "agent_alive": False}, worker, True),
+                 ({**host, "holder_pid": None}, worker, True),
+                 ({**host, "holder_instance_id": "replacement"}, worker, True),
+                 ({**host, "repo": "/foreign"}, worker, True),
+                 ({}, worker, True),
+                 (["unusable host record"], worker, True),
+                 (host, ["unusable worker record"], True),
+                 (host, {**worker, "repo": "/foreign"}, True),
+                 (host, {**worker, "dispatcher": None}, True),
+                 (host, {**worker, "heartbeat_host": None}, True),
+                 (host, {**worker, "heartbeat_host": {**binding, "socket": "/wrong"}}, True),
+                 (host, {**worker, "holder_instance_id": None}, True),
+                 (host, {**worker, "holder_pid": None}, True)]
+        for host_fact, worker_fact, expected_wait in cases:
+            with self.subTest(host=host_fact, worker=worker_fact), patch.dict(
+                    os.environ, {acp_module.DISPATCHER_ENV: json.dumps(caller)}), patch.object(
+                    acp_module, "read_record", side_effect=lambda path:
+                    worker_fact if path == worker_dir else host_fact), patch.object(
+                    acp_module, "sock_path_for_directory", return_value=sock), patch.object(
+                    acp_module, "socket_request", side_effect=AssertionError("no probe allowed")):
+                selection, holder_id = acp_module.resolve_send_wait(args, str(PROJECT), worker_dir)
+            self.assertIs(selection["wait"], expected_wait)
+            self.assertEqual(holder_id, None if expected_wait else "worker-exact")
+            if expected_wait:
+                self.assertTrue(selection.get("detail"))
 
     def test_rendered_worker_scripts_are_the_candidate_bytes(self) -> None:
         for name in ("kaola-acp-holder.py", "kaola-acp.py"):

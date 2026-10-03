@@ -27,9 +27,7 @@ worker solely for them; honor owner allocation and project lifecycle.
 
 ## Two entry points
 
-**Ordinary worker supervision** - you dispatch and accept from your own session
-with the loop below; that worker carries no Host obligation, no event binding and
-no extra gate.
+**Standalone/non-Host supervision** - use the loop below without Host event binding.
 
 **Host** - you are already a named Host session that loaded this Skill through
 the native `/kaola-project-runner` Skill invocation (ZCode) or your platform's
@@ -44,8 +42,8 @@ Delegator-inquiry sweep (one owned permission event needs no full sweep):
 A Host (any platform with a `host_skill_entry`) is event-driven: no
 Routine, cron, or sleep loop. Its first prompt names its
 `platform`/`session`/`repo`; `KAOLA_ACP_DISPATCHER` carries them to its shell.
-Beat mechanics - binding, non-blocking dispatch, ending the
-turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
+Every Host assignment uses `--no-wait`, then ends the turn, including direct
+Runner/Workflow, continuation, repair and finalize. Beat mechanics - ending the turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
 Each inner worker is its own session and process group: an inner stop never
 reaches the Host, and the Host's stop sweeps only recorded inner sessions.
 Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,

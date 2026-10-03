@@ -1,6 +1,6 @@
-# Startup: ordinary worker flow, and the Host's own startup receipt
+# Startup: non-Host supervision and Host receipt
 
-Read this for ordinary worker supervision, or when this session **is** the
+Read this for standalone/non-Host supervision, or when this session **is** the
 Host doing its own startup. Commands here are the installed form.
 
 ```bash
@@ -9,7 +9,7 @@ WORKER="$SKILLS/codex-kaola-project-runner/scripts/runtime-tmux.sh"
 PROJECT="/abs/path/to/project"     # the consuming project's canonical Git root
 ```
 
-## A. Ordinary worker supervision
+## A. Standalone/non-Host worker supervision
 
 You keep authorization, dispatch, acceptance and close-out in your own session.
 Nothing below in this file applies: no event binding, no heartbeat file, no Host.
@@ -28,7 +28,7 @@ unchanged across all five operations.
 Check each receipt: a `start` without a ready session started nothing, a `send`
 `error` dispatched nothing, and a `prompt_timeout` or missing receipt leaves
 consumption **unknown** — `observe` establishes the fact before anything is
-re-sent. Blocking `send` is normal and supported here.
+re-sent. Blocking `send` is for non-Hosts; Host Workflow tasks use C.
 
 ## B. Outer Agent: starting a Host
 

@@ -482,20 +482,26 @@ def test_permission_required_wakes_idle_host_while_turn_active() -> None:
 def test_permission_event_stages_on_busy_host_then_flushes() -> None:
     sandbox = Sandbox("busy")
     try:
-        host = sandbox.session()
+        host = f"zcode-KPR-orchestrator-{uuid.uuid4().hex[:8]}"
         worker = sandbox.session()
         sandbox.start(host, "permission")
         sandbox.write_prompt_file("HEARTBEAT BUSY: staged permission flush.")
-        sandbox.start(
-            worker, "permission",
-            heartbeat_host={"platform": "zcode", "session": host, "repo": str(sandbox.repo)})
+        record = json.loads((sandbox.record_dir(host) / "record.json").read_text())
+        dispatcher = {key: record[key] for key in
+                      ("holder_instance_id", "platform", "session", "repo")}
+        sandbox.start(worker, "permission", extra_env={
+            "KAOLA_ACP_DISPATCHER": json.dumps(dispatcher)})
 
         # The host is itself mid-turn on a permission: the wake must stage.
         sandbox.cli("send", "--no-wait", "--text", "host busy turn", session=host)
         wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions")
                             or []), 15, "host turn is busy waiting on a permission")
 
-        sandbox.cli("send", "--no-wait", "--text", "worker work", session=worker)
+        admitted = sandbox.cli("send", "--text", "worker work", session=worker,
+                               KAOLA_ACP_DISPATCHER=json.dumps(dispatcher))
+        check(admitted.get("outcome") == "in_progress"
+              and admitted.get("wait_selection") == {"wait": False, "source": "owning-host-default"},
+              "owning Host omission returns admission before its turn boundary")
         wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
                             or []), 15, "worker turn is waiting on a permission")
         host_dir = sandbox.record_dir(host)

@@ -387,12 +387,12 @@ worker agent terminated / worker turn ended (one idle episode)
   Skill change is the minimal ZCode-host override that documents the carrier
   and its prompt file.
 
-## Two startup flows (Issue #66)
+## Two startup flows (Issues #66, #246)
 
 The main Skill opens with two short entry points, and only the second involves
 any of the machinery above:
 
-- **Ordinary worker supervision** — the controlling Agent dispatches and accepts
+- **Standalone/non-Host worker supervision** — the controlling Agent dispatches and accepts
   from its own session. No Host, no `KAOLA_ACP_HEARTBEAT_HOST`, no heartbeat
   prompt file, and no added gate; blocking `send` stays a normal way to wait.
 - **Orchestrator (ZCode Host) supervision** — an outer Agent starts a named
@@ -407,8 +407,14 @@ any of the machinery above:
   `start` and check the receipt, dispatch `--no-wait`, end the turn as the
   wait), and which record holds roles, progress, current state, and facts.
 
-No role parameter, launcher, state machine, config system, scheduler, or
-approval gate was added for either flow.
+An ordinary Workflow implementation assignment does not change a Host into a
+non-Host supervisor. Its direct Runner, continuation, repair and finalize sends,
+including tasks outside dispatch/collect, use `--no-wait`; it then ends its turn.
+A background shell or repeated TaskOutput does not make that Host idle. Omitted
+wait selection is resolved from existing ownership facts as documented in
+[the Runner API](api.md#runner-entrypoint-kaola-tmuxsh); ambiguous evidence keeps
+the standalone blocking default without adding a transport gate. The detailed
+binding, permission and wake procedure stays in the existing dispatch reference.
 
 ## The native Skill entry, including across compaction (Issue #94)
 

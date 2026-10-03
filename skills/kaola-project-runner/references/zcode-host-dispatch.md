@@ -1,18 +1,15 @@
 # Host: dispatch, end the turn, wake on worker events
 
-Host beat: [host-startup.md](host-startup.md). Outer start: Kaola-Delegator
-(`kaola-delegator`).
+Startup: [host-startup.md](host-startup.md); outer start: `kaola-delegator`.
 
 ## Three identities, never interchangeable
 
-Runner session (what `--session` takes, chosen at `start`), ACP session id
-(`acp_session_id` in receipts) and native session id (`sess_…`, for `--resume`)
-are different things. A `sess_…` value is never a Runner session name, and
-never guess one. `holder_pid` is a fourth fact that proves nothing without
-`holder_instance_id`.
+Runner session (`--session`), ACP session id (`acp_session_id`) and native
+session id (`sess_…`, `--resume`) differ. A `sess_…` value is never a Runner
+session name; never guess one. `holder_pid` is a fourth fact that proves nothing
+without `holder_instance_id`.
 
-Each Skill's `scripts/runtime-tmux.sh` is platform-pinned, so commands below
-take **no** platform argument.
+Platform-pinned wrappers take **no** platform argument.
 
 ## One Host beat
 
@@ -75,28 +72,32 @@ Host so the new start adopts your instance. Nothing scans other seats: the
 
 ### Dispatch without blocking
 
+Host sends use `--no-wait`: direct Runner/Workflow, outside dispatch/collect,
+continuation, repair and finalize. Omission is nonblocking only for proven live
+Host ownership; `wait_selection` reports why. Flags win; standalone blocks.
+
 ```bash
 "$W" send --repo "$WORK_REPO" --session codex-KT-i274-parser --no-wait --text '<the task>'
 ```
 
-`--no-wait` returns once the prompt is admitted: `"outcome": "in_progress"`,
-`"mutation_status": "in_progress"` — **accepted and running — not finished, and
-not correct**. An `error` (`prompt-in-progress`, `agent-not-running`) dispatched
+`--no-wait` returns admission: `"outcome": "in_progress"`,
+`"mutation_status": "in_progress"` — running — not finished, and not correct. An `error` (`prompt-in-progress`, `agent-not-running`) dispatched
 nothing; a `prompt_timeout`/missing receipt leaves consumption unknown —
 establish it with `observe` before re-sending.
 
-**Keep two values**: `prompt_fingerprint`, the turn you dispatched, and
-`dispatch_event_cursor`, the cursor *before* it produced anything.
+**Keep** `prompt_fingerprint` (the dispatched turn) and
+`dispatch_event_cursor` (before its output).
 
 ### Finish the beat, then end your turn
 
-Do the rest of this beat, update the heartbeat prompt at
+Finish this beat, update the heartbeat at
 `<project>/.kaola/heartbeat-prompt.json` (`body`: the current JSON state),
 report as main Skill §Report says, then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
 `sleep`, poll in a loop, or hold this turn open with a blocking `wait` — an
-active Host turn keeps events undelivered. Do not `stop` or
+active Host turn keeps events undelivered. A background shell or repeated
+TaskOutput does not end the Host turn. Do not `stop` or
 `cancel` yourself or an in-flight worker to manufacture a wake-up.
 
 ### When an event wakes you

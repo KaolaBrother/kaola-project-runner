@@ -2623,6 +2623,63 @@ def verify_dispatcher_host_live(args: argparse.Namespace, dispatcher: dict[str, 
     return None
 
 
+def resolve_send_wait(args: argparse.Namespace, repo: str,
+                      directory: Path) -> tuple[dict[str, Any], str | None]:
+    """Resolve omission from existing records only; uncertainty stays blocking.
+
+    No Host op/probe or heartbeat-file read. The worker's recorded dispatcher
+    and carrier must name this exact live Host instance in this same repo.
+    Return the worker holder id too, so admission keeps the existing exact-
+    holder guard across a replacement between this read and the prompt.
+    """
+    if args.wait is not None:
+        return {"wait": args.wait, "source": "explicit"}, None
+
+    def blocking(detail: str) -> tuple[dict[str, Any], None]:
+        return {"wait": True, "source": "standalone-default", "detail": detail}, None
+
+    dispatcher, problem = dispatcher_identity()
+    if problem or dispatcher is None:
+        return blocking(problem or "no caller dispatcher identity")
+    if (not host_capable(dispatcher["platform"])
+            or dispatcher["repo"] != repo
+            or not SESSION_PATTERN.fullmatch(dispatcher["session"])):
+        return blocking("caller is not a Host candidate in the target repo")
+    worker = read_record(directory)
+    if not isinstance(worker, dict):
+        return blocking("target record is missing or unusable")
+    if any(worker.get(k) != v for k, v in
+           {"platform": args.platform, "session": args.session, "repo": repo}.items()):
+        return blocking("target record identity is missing or mismatched")
+    owner = worker.get("dispatcher")
+    if not isinstance(owner, dict) or any(owner.get(k) != dispatcher[k] for k in
+                                         ("platform", "session", "repo", "holder_instance_id")):
+        return blocking("target dispatcher does not prove this caller owns it")
+    digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
+    host_dir = record_root(args) / dispatcher["platform"] / dispatcher["session"] / digest
+    target = {k: dispatcher[k] for k in ("platform", "session", "repo")}
+    target["socket"] = str(sock_path_for_directory(host_dir))
+    binding = worker.get("heartbeat_host")
+    if not isinstance(binding, dict) or any(binding.get(k) != v for k, v in target.items()):
+        return blocking("target heartbeat binding does not match this caller")
+    host = read_record(host_dir)
+    if not isinstance(host, dict):
+        return blocking("caller record is missing or unusable")
+    if (any(host.get(k) != dispatcher[k] for k in
+            ("platform", "session", "repo", "holder_instance_id"))
+            or host.get("session_role") != "host" or host.get("agent_alive") is not True):
+        return blocking("caller record does not prove a live Host role and identity")
+    problem = verify_dispatcher_host_live(args, dispatcher, target)
+    if problem:
+        return blocking(problem)
+    holder_id = worker.get("holder_instance_id")
+    if (not isinstance(holder_id, str) or not holder_id
+            or not pid_alive(worker.get("holder_pid"))
+            or not sock_path_for_directory(directory).exists()):
+        return blocking("target holder identity or live transport is missing")
+    return {"wait": False, "source": "owning-host-default"}, holder_id
+
+
 def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     """Resolve the notification target of this start (design #99 §a.2).
 
@@ -4724,7 +4781,7 @@ def main() -> int:
     parser.add_argument("--continue", dest="use_continue", action="store_true")
     parser.add_argument("--text")
     parser.add_argument("--stdin", action="store_true")
-    parser.add_argument("--wait", dest="wait", action="store_true", default=True)
+    parser.add_argument("--wait", dest="wait", action="store_true", default=None)
     parser.add_argument("--no-wait", dest="wait", action="store_false")
     parser.add_argument("--timeout", type=float)
     parser.add_argument("--max-final-chars", type=int, default=4000)
@@ -4816,15 +4873,19 @@ def main() -> int:
             text = sys.stdin.read()
         if not text:
             die("send requires --text or --stdin")
-        prompt_params = {"text": text, "wait": args.wait, "timeout": timeout,
+        wait_selection, bound_holder_id = resolve_send_wait(args, repo, directory)
+        prompt_params = {"text": text, "wait": wait_selection["wait"], "timeout": timeout,
                          "max_final_chars": args.max_final_chars}
         if args.expected_holder_instance_id is not None:
             prompt_params["expected_holder_instance_id"] = args.expected_holder_instance_id
+        elif bound_holder_id is not None:
+            prompt_params["expected_holder_instance_id"] = bound_holder_id
         receipt = op_or_holder_lost(
             args, repo, directory, "prompt",
             prompt_params,
             sock_timeout,
         )
+        receipt["wait_selection"] = wait_selection
     elif args.command == "steer":
         text = args.text
         if args.stdin:

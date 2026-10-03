@@ -276,11 +276,18 @@ class Sandbox:
     def invoke(self, command: str, *args: str, session: str | None = None,
                scenario: str | None = None, platform: str = "zcode",
                timeout: float = 120, cli_path: Path | None = None,
+               shell_entry: str | None = None,
                **env_overrides: str | None) -> tuple[subprocess.CompletedProcess[str], dict | None]:
         # ``cli_path`` runs an installed Skill tree's own copy instead of the
         # checkout CLI (Issue #105 compares installed copies against the tree
         # the running CLI came from, which a checkout invocation does not have).
-        argv = [PYTHON, str(cli_path or CHECKOUT_CLI), platform, command, "--repo", str(self.repo)]
+        if shell_entry == "shared":
+            argv = ["bash", str(ROOT / "scripts/kaola-tmux.sh"), platform]
+        elif shell_entry == "runtime":
+            argv = ["bash", str(ROOT / f"skills/{platform}-kaola-project-runner/scripts/runtime-tmux.sh")]
+        else:
+            argv = [PYTHON, str(cli_path or CHECKOUT_CLI), platform]
+        argv += [command, "--repo", str(self.repo)]
         if session:
             argv += ["--session", session]
             if command == "start":
@@ -2171,6 +2178,78 @@ def test_issue_108_worker_names_are_never_pinned() -> None:
               "an explicit worker effort still wins over the preset")
         stop = sandbox.cli("stop", "--force", session=explicit)
         check(stop.get("residual_pids") == [], "the explicit worker stops cleanly")
+    finally:
+        sandbox.cleanup()
+
+
+
+def test_issue_246_wait_selection_through_direct_and_shell_entries() -> None:
+    """Real admission/default receipts on all existing entries, no live model."""
+    sandbox = Sandbox("i246-wait")
+    try:
+        host = f"zcode-KPR-orchestrator-{uuid.uuid4().hex[:8]}"
+        sandbox.start(host, "basic")
+        caller = dispatcher_of(sandbox, host)
+        env = {DISPATCHER_ENV: json.dumps(caller)}
+        worker = sandbox.session()
+        ready = sandbox.cli("start", "--mode", "yolo", session=worker,
+                            scenario="permission", **env)
+        check(ready.get("state") == "ready", "bound permission worker starts")
+        basic = sandbox.session()
+        ready = sandbox.cli("start", "--mode", "yolo", session=basic,
+                            scenario="basic", **env)
+        check(ready.get("state") == "ready", "bound basic worker starts")
+        standalone = sandbox.session()
+        sandbox.start(standalone, "basic")
+        sandbox.write_prompt_file("I246 CONTRACT: admission, permission, completion.")
+
+        def send(session, flags=(), caller_env=None, expected_wait=False, source="explicit"):
+            result, receipt = sandbox.invoke(
+                "send", *flags, "--text", "useful fixture task", session=session,
+                shell_entry=entry, **(caller_env or {}))
+            check(result.returncode == 0 and isinstance(receipt, dict),
+                  f"{entry}: send exits 0 with receipt ({result.stderr})")
+            selection = receipt.get("wait_selection") or {}
+            check(selection.get("wait") is expected_wait and selection.get("source") == source,
+                  f"{entry}: wait selection {selection}, expected {expected_wait}/{source}")
+            check(not receipt.get("error") and receipt.get("result") != "refused",
+                  f"{entry}: selection adds no refusal ({receipt})")
+            return receipt
+
+        for entry in (None, "shared", "runtime"):
+            for flags, source in (((), "owning-host-default"), (("--no-wait",), "explicit")):
+                receipt = send(worker, flags, env, source=source)
+                check(receipt.get("outcome") == "in_progress",
+                      f"{entry}: returns admission while permission worker runs")
+                wait_until(lambda: sandbox.cli("status", session=worker).get("pending_permissions"),
+                           15, "permission is pending after admission")
+                status = sandbox.cli("status", session=worker)
+                check(status.get("turn_active") is True, "nonblocking left worker active")
+                check(sandbox.cli("permit", "--option", "allow", session=worker).get("permitted")
+                      is not None, "fixture authorizes permission explicitly")
+                sandbox.cli("wait", session=worker)
+            for flags in (("--wait",), ("--no-wait", "--wait")):
+                receipt = send(basic, flags, env, True)
+                check(receipt.get("outcome") == "turn_completed", "explicit wait returns completion")
+            receipt = send(basic, ("--wait", "--no-wait"), env)
+            check(receipt.get("outcome") == "in_progress", "last explicit no-wait wins")
+            sandbox.cli("wait", session=basic)
+            receipt = send(standalone, expected_wait=True, source="standalone-default")
+            check(receipt.get("outcome") == "turn_completed", "standalone omission blocks")
+            for evidence in (None, "not-json", json.dumps(dict(caller, holder_instance_id="0" * 32)),
+                             json.dumps(dict(caller, repo=str(sandbox.dir))),
+                             json.dumps(dict(caller, session=worker))):
+                receipt = send(basic, caller_env={DISPATCHER_ENV: evidence},
+                               expected_wait=True, source="standalone-default")
+                check(receipt.get("outcome") == "turn_completed", "unproven caller stays blocking")
+                check(bool(receipt["wait_selection"].get("detail")), "limitation reported")
+            receipt = send(basic, ("--no-wait",), {DISPATCHER_ENV: "not-json"})
+            check(receipt.get("outcome") == "in_progress", "explicit no-wait needs no Host evidence")
+            sandbox.cli("wait", session=basic)
+            mismatch = sandbox.cli("send", "--text", "not admitted", "--expected-holder-instance-id",
+                                   "wrong-holder", session=worker, **env)
+            check((mismatch.get("error") or {}).get("code") == "holder-instance-mismatch",
+                  "omitted Host wait preserves explicit exact-holder protection")
     finally:
         sandbox.cleanup()
 

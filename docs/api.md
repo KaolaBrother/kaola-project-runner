@@ -477,6 +477,21 @@ instance. A mismatch returns `{"error":{"code":"holder-instance-mismatch"}}` wit
 `mutation_performed: false` and changes nothing, so a same-named session rebuilt by a later holder
 is never stopped in place of the one the Agent verified.
 
+`send` preserves omitted wait selection through `runtime-tmux.sh`, `kaola-tmux.sh`,
+and direct `kaola-acp.py`. Explicit `--wait` blocks and `--no-wait` returns admission;
+when both are supplied, the last wins. Omission remains blocking except when the
+existing caller `KAOLA_ACP_DISPATCHER`, live Host record (including `session_role: host`),
+and target worker record prove the same repo, exact owning Host instance, and matching
+worker dispatcher/heartbeat binding. That default returns admission and pins the prompt
+to the recorded worker holder with the existing expected-holder guard. It reads existing
+records and socket existence only; it does not probe the Host or read its heartbeat file.
+The receipt adds `wait_selection` with `wait`, `source` (`explicit`, `owning-host-default`,
+or `standalone-default`), and a `detail` for blocking fallback. Older records missing the
+role or dispatcher, missing sockets, and ambiguous or foreign evidence keep blocking;
+this creates no refusal or permission decision. A Host still explicitly sends `--no-wait`
+for every assignment and ends its turn; see the existing
+[Host dispatch procedure](../skills/kaola-project-runner/references/zcode-host-dispatch.md).
+
 Executable overrides are `GROK_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `KIMI_BIN`,
 `CURSOR_AGENT_BIN`, `DEVIN_BIN`, and `DROID_BIN` (read by `preflight` for the runtime version
 fact). The entrypoint's test/embedding override is `PYTHON_BIN`.

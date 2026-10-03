@@ -76,7 +76,7 @@ repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_v
 if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
 model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false
 tier="" tier_given=false fast="off" fast_given=false role="" role_given=false
-acp_wait=true timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
+acp_wait="" timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
 expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" cancel_timeout=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -172,6 +172,7 @@ acp_args=("$PYTHON_BIN" "$ACP_CLI" "$platform" "$command_name" --repo "$repo")
 [[ "$force" == true ]] && acp_args+=(--force)
 [[ "$text_given" == true ]] && acp_args+=(--text "$text_value")
 [[ ( "$command_name" == send || "$command_name" == steer ) && "$text_given" == false ]] && acp_args+=(--stdin)
+[[ "$acp_wait" == true ]] && acp_args+=(--wait)
 [[ "$acp_wait" == false ]] && acp_args+=(--no-wait)
 [[ -n "$timeout" ]] && acp_args+=(--timeout "$timeout")
 [[ -n "$steer_mode" ]] && acp_args+=(--steer-mode "$steer_mode")
