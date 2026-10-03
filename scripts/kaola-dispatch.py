@@ -850,15 +850,6 @@ def command_execute(args: argparse.Namespace) -> int:
         prompt = item.get("prompt")
         if not isinstance(preset, str) or not isinstance(session, str) or not isinstance(prompt, str):
             return fail("invalid-input", f"{item.get('item_id')}: preset, session, and prompt must be strings")
-        # Issue #245: only an explicit sidekick role is proven. Absent/null
-        # stays an ordinary preset start. Any other value is not admitted.
-        role = item.get("role", None)
-        if role is not None and role != "sidekick":
-            blocked.append(blank_item(
-                item["item_id"], preset, session, "not-run", "role-unproven",
-                {"role": role},
-            ))
-            continue
         if not SESSION_OK.fullmatch(session):
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", "session-name"))
             continue

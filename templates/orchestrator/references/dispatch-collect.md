@@ -108,7 +108,7 @@ is absent is `not-run` and is not started. Duplicate session names are
 a result. Timeout or an unreadable receipt is `unknown`, not `failed`. A
 send-time `holder-instance-mismatch` is `unknown`. Exit 0
 with unknown mutation and outcome is `unknown`. The index is replaced after
-each item. `prompt_sha256` is `sha256:` plus hex. A non-sidekick `role` is `role-unproven`.
+each item. `prompt_sha256` is `sha256:` plus hex.
 
 Applied fields come from `config_application`, including nested
 `start_evidence`. `resolved_*` is not applied evidence. `applied: false` and

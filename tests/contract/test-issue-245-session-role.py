@@ -428,17 +428,24 @@ class SessionRoleDispatch(unittest.TestCase):
             if line.strip()
         ]
 
-    def test_forged_roles_are_not_run_and_sidekick_reaches_argv(self) -> None:
+    def test_unproven_role_stays_metadata_and_only_sidekick_reaches_argv(self) -> None:
         install_fake(self.skills, ["codex"])
         repo = str(self.repo)
-        self.spec_path.write_text(json.dumps({"sessions": {
-            "codex-KPR-i245-ok": {
+
+        def seat(holder: str) -> dict:
+            return {
                 "status": {"error": {"code": "no-session"}},
-                "start": {"repo": repo, "holder_instance_id": "holder-ok",
+                "start": {"repo": repo, "holder_instance_id": holder,
                           "config_application": {"model": {"applied": True, "value": "gpt-6-luna"}}},
                 "send": {"outcome": "in_progress", "mutation_status": "in_progress",
-                         "prompt_fingerprint": "fp-ok"},
-            },
+                         "prompt_fingerprint": holder},
+            }
+
+        self.spec_path.write_text(json.dumps({"sessions": {
+            "codex-KPR-i245-ex": seat("holder-ex"),
+            "codex-KPR-i245-wk": seat("holder-wk"),
+            "codex-KPR-i245-cs": seat("holder-cs"),
+            "codex-KPR-i245-ok": seat("holder-ok"),
         }}), encoding="utf-8")
         self.env["FAKE_SPEC"] = str(self.spec_path)
         auth = {
@@ -461,17 +468,20 @@ class SessionRoleDispatch(unittest.TestCase):
         }
         payload = self.execute(plan, auth, live={"rows": []})
         by_id = {item["item_id"]: item for item in payload["items"]}
-        for item_id in ("expert", "worker", "cased"):
-            self.assertEqual(by_id[item_id]["status"], "not-run", by_id[item_id])
-            self.assertEqual(by_id[item_id]["reason"], "role-unproven")
+        for item_id in ("expert", "worker", "cased", "ok"):
+            self.assertEqual(by_id[item_id]["status"], "in-flight", by_id[item_id])
+            self.assertEqual(by_id[item_id]["reason"], "admitted")
             self.assertEqual(by_id[item_id]["role"], plan["items"][
                 ["expert", "worker", "cased", "ok"].index(item_id)
             ]["role"])
-        self.assertEqual(by_id["ok"]["status"], "in-flight")
-        self.assertEqual(by_id["ok"]["role"], "sidekick")
-        started = [row for row in self.commands() if row["command"] == "start"]
-        self.assertEqual([row["session"] for row in started], ["codex-KPR-i245-ok"])
-        self.assertEqual(started[0]["argv"][started[0]["argv"].index("--role") + 1], "sidekick")
+        started = {row["session"]: row for row in self.commands() if row["command"] == "start"}
+        self.assertEqual(set(started), {
+            "codex-KPR-i245-ex", "codex-KPR-i245-wk", "codex-KPR-i245-cs", "codex-KPR-i245-ok",
+        })
+        for session in ("codex-KPR-i245-ex", "codex-KPR-i245-wk", "codex-KPR-i245-cs"):
+            self.assertNotIn("--role", started[session]["argv"])
+        ok_argv = started["codex-KPR-i245-ok"]["argv"]
+        self.assertEqual(ok_argv[ok_argv.index("--role") + 1], "sidekick")
 
     def test_sidekick_does_not_change_class_capacity(self) -> None:
         install_fake(self.skills, ["claude-code"])

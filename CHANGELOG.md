@@ -3596,10 +3596,12 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   `--role sidekick` is the only role flag. The three Classes come only from
   the preset that start actually selected. Custom `--model`, an unproven
   resume, and an unknown class stay `null` and are not labeled Worker.
-  `host_class` is unchanged. A dispatch `role` other than `sidekick` is
-  `not-run` / `role-unproven`. The shared `kaola-tmux.sh` start parser
-  accepts `--role` and forwards it to `kaola-acp.py`. Recovery does not
-  change a live session's role. Occupancy stays catalog-Class-based. A running seat keeps the holder
+  `host_class` is unchanged. A dispatch plan `role` other than exact
+  `sidekick` stays index metadata and does not refuse the item. Only
+  `sidekick` is forwarded as start `--role sidekick`. The shared
+  `kaola-tmux.sh` start parser accepts `--role` and forwards it to
+  `kaola-acp.py`. Recovery does not change a live session's role.
+  Occupancy stays catalog-Class-based. A running seat keeps the holder
   it started with, so that seat emits the field only after it is replaced
   (`Seats: restart required` for the field; this issue does not restart
   seats). Kaola Terminal's UI is unchanged. The Grok Bot bridge returns to
