@@ -17,7 +17,7 @@ project runs only one Agent for it.
 
 From the user and Git/Workflow/Issue/Runner records collect:
 goal; progress; the Host platform; authorized worker platforms by class;
-Elite grants/counts; permitted Expert task; bound-target local choices
+Elite grants/counts; Expert grants/lifetime; bound-target local choices
 separate from authorization (host-platforms.md); Worker pool rules;
 exclusions; the quota the user actually gave, each figure in its own unit;
 priority; delivery/stop boundary; project path.

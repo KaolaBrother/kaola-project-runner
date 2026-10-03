@@ -295,7 +295,7 @@ roles, not benchmark claims, and they do not change which model a Host itself ru
 
 | Class | Presets | Role | Authorization |
 |---|---|---|---|
-| **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit permission for **each** task or use. The Host judges completion and exact-stops the seat; another use needs fresh permission, while the same approved task continues across turns and recovery without asking again. |
+| **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit grant. A task grant (the default) ends with its task. A standing grant, only when you say so, lets the Host use that preset within its stated scope, count and limits until you revoke it or it expires. The Host judges completion and exact-stops the seat; that stop revokes no standing grant, and the same approved task continues across turns and recovery without asking again. |
 | **Worker** | 5 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no per-seat, count, or priority approval, and outside the general worker cap. Real account/token/service limits and your explicit restrictions still apply. |
 | **Elite** | 13 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
@@ -341,9 +341,9 @@ explicit `--model` choices, not a separate Fast toggle.
 | Worker | dsh | `default` | `dsh/default` | DeepSeek V4.1 Flash | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
 | Worker | OpenCode | `default` | `opencode/default` | DeepSeek V4.1 Flash | no Runner effort override | Fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
 | Worker | ZCode | `default` | `zcode/default` | GLM 5.3 | thought=max | Autonomous engineering worker inclined to investigate, make decisions, iterate through failures, and carry substantial tasks toward completion with less hand-holding. |
-| Expert | Claude Code | `fable` | `claude-code/fable` | Fable | effort=high | Design, goal definition and decomposition, issue creation, and review; only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
-| Expert | Codex CLI | `astra` | `codex/astra` | GPT-6 Astra | effort=high | Design, goal definition and decomposition, issue creation, and review; only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
-| Expert | Devin CLI | `fable` | `devin/fable` | Fable Fusion | effort=high (encoded in model ID) | Non-visual design, goal definition and decomposition, issue creation, and review; not strong at UI or other visual design. Only with explicit user permission for each task; no concrete implementation or execution, not a regular worker. |
+| Expert | Claude Code | `fable` | `claude-code/fable` | Fable | effort=high | Design, goal definition and decomposition, issue creation, and review; only under an explicit task or standing grant; no concrete implementation or execution, not a regular worker. |
+| Expert | Codex CLI | `astra` | `codex/astra` | GPT-6 Astra | effort=high | Design, goal definition and decomposition, issue creation, and review; only under an explicit task or standing grant; no concrete implementation or execution, not a regular worker. |
+| Expert | Devin CLI | `fable` | `devin/fable` | Fable Fusion | effort=high (encoded in model ID) | Non-visual design, goal definition and decomposition, issue creation, and review; not strong at UI or other visual design. Only under an explicit task or standing grant; no concrete implementation or execution, not a regular worker. |
 <!-- KW-README-PRESETS-END -->
 
 This is the full supported-runtime catalog, not a machine-local choice list.
@@ -404,10 +404,11 @@ Workers run only under authorization, and what you authorize depends on the
   cap, and an accepted seat keeps only the finalize/cleanup duties it owns until it
   owns none or is abandoned, when it is exact-stopped; give a new task a new
   session; idle is not keep-alive.
-- **Expert presets** need your explicit permission for each task or use. When that
-  task is complete the Host reclaims (exact-stops) the seat; the completed permission
-  does not carry over to another task. Continuing or recovering the same approved
-  task does not ask again.
+- **Expert presets** need your explicit grant. A task grant ends with its task, and
+  the Host reclaims (exact-stops) the seat; it does not carry over to another task. A
+  standing grant, given only when you say so, lasts until you revoke it or it expires,
+  and stopping a finished session does not revoke it. Continuing or recovering the
+  same approved task does not ask again.
 
 ### Choosing a worker
 
@@ -511,7 +512,7 @@ and [kaola-project-runner](skills/kaola-project-runner/SKILL.md) Skills and the
 |---|---|
 | The goal, the project, and the stop boundary | Choosing prompts, keys, and native tools; interpreting replies |
 | Authorized platforms, worker count/concurrency, quota, priority | Exact-session transport: start, send, read, stop |
-| Elite grants, per-task permission for any Expert use, and per-seat switch grants | Evidence-first review, acceptance before finalize, close-out |
+| Elite grants, task or standing grants for any Expert use, and per-seat switch grants | Evidence-first review, acceptance before finalize, close-out |
 | When to finalize, archive, or stop | Semantic completion judgments; never auto-retry, model upgrades, or scheduling |
 
 Runner reports runtime and model observations as evidence. A successful send or a

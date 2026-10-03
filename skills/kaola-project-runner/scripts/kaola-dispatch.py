@@ -35,6 +35,8 @@ LAUNCH_OVERRIDE_KEYS = frozenset({"model", "effort"})
 RECORDED_OVERRIDE_KEYS = LAUNCH_OVERRIDE_KEYS | frozenset({"task_scope"})
 SESSION_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 GRANT_STATES = frozenset({"granted", "paused", "revoked", "excluded"})
+GRANT_LIFETIMES = frozenset({"task", "standing"})
+EXPERT_WITHHELD_REASONS = frozenset({"lifetime-unreadable", "expiry-unreadable", "expired"})
 LEGACY_LIVE_STATE = re.compile(r"^\d+\s+live$")
 COVERAGE = ("in-flight", "returned", "failed", "unknown", "not-run")
 RUNNER_TIMEOUT = float(os.environ.get("KAOLA_DISPATCH_RUNNER_TIMEOUT", "120"))
@@ -220,15 +222,39 @@ def normalize_grants(auth: dict[str, Any]) -> list[dict[str, Any]]:
         special = item.get("special_requirements")
         if special is not None and not isinstance(special, dict):
             raise ValueError(f"{preset}: special_requirements must be an object")
-        grants.append({
+        lifetime = item.get("lifetime")
+        if lifetime is not None and not isinstance(lifetime, str):
+            raise ValueError(f"{preset}: lifetime must be a string")
+        expires = item.get("expires")
+        if expires is not None and not isinstance(expires, str):
+            raise ValueError(f"{preset}: expires must be a string")
+        grant = {
             "id": preset,
             "state": state,
             "count": count,
             "shared_seat": shared,
             "special_requirements": special,
             "model_switch": switch is True,
-        })
+        }
+        # Carried only when stated, so a grant without them projects as before.
+        if lifetime is not None:
+            grant["lifetime"] = lifetime
+        if expires is not None:
+            grant["expires"] = expires
+        grants.append(grant)
     return grants
+
+
+def parse_expiry(value: str) -> datetime | None:
+    """An ISO-8601 instant with an offset, else None. `Z` is accepted for 3.10."""
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None and moment.utcoffset() is not None else None
 
 
 def availability_map(doc: dict[str, Any] | None) -> dict[str, str]:
@@ -297,6 +323,26 @@ def eligibility(
         if presence == "absent":
             withhold(preset, "absent")
             continue
+        expert = {}
+        if row["class"] == "Expert" and granted:
+            # Only the grant's own words make an Expert grant standing. The
+            # tool never infers one and never mutates the grant.
+            lifetime = grant.get("lifetime")
+            lifetime = "task" if lifetime is None else lifetime.strip()
+            if lifetime not in GRANT_LIFETIMES:
+                withhold(preset, "lifetime-unreadable")
+                continue
+            expires = grant.get("expires")
+            if expires is not None:
+                moment = parse_expiry(expires)
+                if moment is None:
+                    withhold(preset, "expiry-unreadable")
+                    continue
+                if moment <= datetime.now(timezone.utc):
+                    withhold(preset, "expired")
+                    continue
+                expert["expires"] = expires
+            expert["lifetime"] = lifetime
         special = grant.get("special_requirements") if grant else None
         candidate = {
             "id": preset,
@@ -311,6 +357,7 @@ def eligibility(
             "shared_seat": grant.get("shared_seat") if grant else None,
             "count": grant.get("count") if grant else None,
             "model_switch": bool(grant.get("model_switch")) if grant else False,
+            **expert,
         }
         if special:
             candidate["special_requirements"] = special
@@ -838,7 +885,7 @@ def command_execute(args: argparse.Namespace) -> int:
             load_object(Path(args.availability)) if args.availability else None
         )
         catalog = catalog_from_files(platform_paths(Path(__file__), args.platforms))
-        candidates, _withheld = eligibility(catalog, auth, grants, available)
+        candidates, withheld = eligibility(catalog, auth, grants, available)
         prior_path = args.prior_index
         if not prior_path and args.index and Path(args.index).is_file():
             prior_path = args.index
@@ -846,6 +893,7 @@ def command_execute(args: argparse.Namespace) -> int:
     except ValueError as exc:
         return fail("invalid-input", str(exc))
     by_candidate = {item["id"]: item for item in candidates}
+    withheld_reason = {item["id"]: item["reason"] for item in withheld}
     prior_items = {}
     if prior is not None:
         rows = prior.get("items")
@@ -945,6 +993,8 @@ def command_execute(args: argparse.Namespace) -> int:
                 reason = "paused"
             elif auth_grant and auth_grant.get("state") not in {None, "granted"}:
                 reason = "state-unreadable"
+            elif withheld_reason.get(preset) in EXPERT_WITHHELD_REASONS:
+                reason = withheld_reason[preset]
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", reason))
             continue
         overrides = item.get("overrides") or {}

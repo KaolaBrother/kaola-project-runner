@@ -13,7 +13,8 @@ history:
   count, Class grant lifetime, cap, quota units, seat identity and switch
   authorization kept as separate facts, and an optional
   `special_requirements` only when the owner actually supplied one (absent
-  means none); relay owner-explicit model/seat choices unchanged and infer no
+  means none); an Expert grant is `task` unless the owner said `standing`, and
+  you infer no standing grant; relay owner-explicit model/seat choices unchanged and infer no
   worker allocation or extra constraint; `watch` (open progress/decisions,
   source pointers); `stop`.
 - `cadence`: `timezone`, `start_local`, `end_local`, `interval_minutes`

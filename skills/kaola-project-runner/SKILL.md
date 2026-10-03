@@ -74,7 +74,7 @@ quota system: the cap is that count, enforced from `status`/`stop` receipts.
 Preset classes ([worker-profiles.md](references/worker-profiles.md)): five
 Worker presets are default-authorized outside that cap (permission, not
 preference); Elite needs an explicit grant; Expert is complex thinking only,
-with fresh user permission per task. Delegate substantial planning, design or
+under an explicit standing grant or fresh user permission per task. Delegate substantial planning, design or
 review to an available authorized seat when its profile or the owner's
 task-specific judgment makes it a better fit than your own known model/preset.
 The heartbeat holds the three Class meanings and a compact capability

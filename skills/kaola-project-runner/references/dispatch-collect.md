@@ -4,6 +4,11 @@
 grant, accept or stop seats. Host allocates within authorization. Index is
 correlation, not a ledger; trivial calls use no model.
 
+Gathering, independent research, counterexamples or critique, edge exploration,
+verification: spread useful parallel items as evenly as reasonably possible across
+fitting Worker-Class presets, not one habitual runtime. Fit, authority and real
+limits first; no invented work or fixed quota ([Choosing](worker-profiles.md)).
+
 ## Routine context
 
 Keep goals, progress, Class meanings and `capability_summary`.
@@ -14,15 +19,14 @@ Host facts/duties without write/read-back.
 
 `project` reads authorization plus manifests (`platforms/` or a Runner's
 `scripts/platform.yaml`). Availability JSON lists `present` and `absent`;
-every other id is `unknown`, not a mismatch or refusal.
+every other id is `unknown`: no capability, mismatch or refusal.
 `capability_summary` lists eligible preset ids and copies no profile
 text. Exact id, Class, profile and selection stay on
-`candidates`. The Host's capability paragraph changes only when a
-grant, profile or availability fact changes. Unknown availability is no capability. `absent` is withheld; ungranted
+`candidates`. `absent` is withheld; ungranted
 Expert does not appear.
 
 Input: `grants[]` (`id`, `state`, `count`, `shared_seat`,
-`special_requirements`, `model_switch`), `exclusions`, `paused`, `revoked`,
+`special_requirements`, `model_switch`, `lifetime`, `expires`), `exclusions`, `paused`, `revoked`,
 `elite_cap`, `model_switches`. `rows` is not grants. `state`: `granted`,
 `paused`, `revoked` or `excluded`. Historical `N live` is granted; any other
 state is `state-unreadable`. Elite and Expert need `granted`.
@@ -32,12 +36,11 @@ state is `state-unreadable`. Elite and Expert need `granted`.
 Sideagent is optional and short-lived: default `zcode/default`, or an
 owner-selected authorized available alternative. For nontrivial allocation,
 Host gives outcome, abilities, constraints, expected artifacts, the authorized
-current candidate projection or its locator, and the known relevant facts.
+current candidate projection or its locator, and known relevant facts.
 Sideagent reuses them, queries only missing or stale evidence (unknown is not
 absent; PATH is not adapter availability), and proposes useful count, exact
 presets, bounded assignments and ownership by profile and task fit. Host adopts/adjusts against current grants
-and pending changes, then executes. A simple exact dispatch skips it. Do not
-invent parallel work to fill seats or force model balance.
+and pending changes, then executes. A simple exact dispatch skips it.
 
 It may reconcile conflicts, check omissions, synthesize or do
 explicitly scoped light work. It does not start other workers, dispatch, grant or accept, write control
@@ -51,19 +54,20 @@ Call `python3 "$SKILL_DIR/scripts/kaola-dispatch.py"` with:
 
 - `project --authorization "$AUTH" [--availability "$AVAIL"]`: candidates.
 - `project --seats --repo "$PROJECT" --authorization "$AUTH" [--live "$LIVE"]
-  [--index "$INDEX"] [--skills-root "$SKILLS"]`: observed seats against supplied
-  grants, count/cap/shared occupancy and unknown reasons. No authority verdict.
+[--index "$INDEX"] [--skills-root "$SKILLS"]`: observed seats against supplied
+grants, count/cap/shared occupancy and unknown reasons. No authority verdict.
 - `execute --plan "$PLAN" --authorization "$AUTH" --skills-root "$SKILLS"
-  [--availability "$AVAIL"] [--prior-index "$PRIOR"] [--index "$INDEX"] [--live "$LIVE"]`.
+[--availability "$AVAIL"] [--prior-index "$PRIOR"] [--index "$INDEX"] [--live "$LIVE"]`.
 - `collect --index "$INDEX" --skills-root "$SKILLS"`: update correlation.
-- Add `--item <exact item_id>` to `collect` for a read-only turn view: index
-  stays untouched. Identity/cursor-bound outcome, pending/historical permissions
-  and structured failures survive the 480-character reply excerpt. Full native
-  capture reads rotated logs; source/as-of, raw event-log/Runner pointers and
-  truncation/unknown reasons stay visible. Missing ranges are uncertainty.
-- `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`.
+- Add `--item <exact item_id>` to `collect` for a read-only turn view.
+Identity/cursor-bound outcome, pending/historical permissions
+and structured failures survive the 480-character reply excerpt. Full native
+capture reads rotated logs; source/as-of, raw event-log/Runner pointers and
+truncation/unknown reasons stay visible. Missing ranges are uncertainty.
+- `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`: atomically replaces
+`--out` with only `body`, a string that parses as the state object.
 
-`$SKILLS` contains `<platform>-kaola-project-runner`. `$LIVE` is `{ "rows": [...] }`
+`$SKILLS` contains `<platform>-kaola-project-runner`. `$LIVE` is `{"rows":[...]}`
 from `kaola-acp.py list --repo`, or omitted for a fresh list. A supplied file is
 an observation, not proof of freshness. Compact reads store no state or
 acceptance verdict. If live facts a count/cap/shared seat needs cannot be
@@ -94,11 +98,11 @@ seat depends on it, unless known rows already fill the limit. Shared labels
 come from the row or resolved preset's grant, never from a platform name.
 
 Assignment identity is repo, preset, session and prompt; admission is separate.
-Reconcile an identity/holder-bound `in-flight`/`returned` item before capacity
+Reconcile an identity/holder-bound `in-flight`/`returned` item first
 (no second seat/send). Missing session stays `session-gone` with its binding.
 Matching unknown with an absent record stays `reconciliation-needed`, no
 start/send. Same `--index` is prior. Capacity applies only to new starts.
-Rejected re-execution keeps correlation in `evidence.blocked_attempt`.
+Rejected re-execution keeps correlation, adds `evidence.blocked_attempt`.
 `--dry-run` writes no index: admitted rows are `reconciled`, new ones `dry-run`.
 
 New items call `status`, `start` only for absent (`no-session`), then
@@ -132,13 +136,7 @@ For each in-flight item, status supplies active/outcome/stop (including
 true; `mutation_status` `in_progress` alone does not. A completed match, even stopped, gets `capture --since` its dispatch cursor:
 `returned` / `collected`, acceptance pending. No completed idle result stays `in-flight` / `no-result`; identity mismatch is unknown.
 
-## snapshot
-
-`snapshot` atomically replaces `--out` with only `body`, a string that parses
-as the state object.
-
 ## Outside this entry
 
-No production-mutation fan-out, pipeline or automatic choose-and-dispatch.
+No production-mutation fan-out or pipeline.
 No second scheduler. Quota stays in [quota-packages.md](quota-packages.md).
-Never log in, relogin or repair credentials.

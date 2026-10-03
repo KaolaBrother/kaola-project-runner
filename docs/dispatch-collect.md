@@ -27,6 +27,15 @@ not edit the repository. The Host exact-stops every session the plan starts.
 by exact preset id, optional `elite_cap` (an integer covering Elite and
 Expert; the Worker pool is excluded), per-grant `model_switch`, top-level
 `model_switches`, `count`, `shared_seat`, and owner `special_requirements`.
+An Expert grant may also carry `lifetime` (`task`, the default when absent, or
+`standing`) and `expires` (an ISO-8601 instant with an offset, `Z` accepted).
+Both are read for Expert presets only; Elite and Worker rows ignore them. A
+task grant ends with its task; a standing grant holds until the owner revokes
+it or it expires, and the tool never infers `standing`. An unknown `lifetime`
+is withheld as `lifetime-unreadable`, an unparseable `expires` as
+`expiry-unreadable`, and a past one as `expired`; `execute` reports the same
+reason as `not-run`. The Host removes a finished task grant; exact-stopping an
+Expert session releases the seat and keeps a standing grant.
 Do not keep a second durable copy such as `.kaola/dispatch-auth.json`.
 `--authorization` also accepts that authorization object directly. An
 unreadable body is an error, not an empty grant list. `$AVAIL` lists

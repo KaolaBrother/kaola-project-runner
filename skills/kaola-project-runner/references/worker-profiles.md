@@ -9,13 +9,14 @@ start behavior. The class attaches to the preset, not the whole runtime.
 
 | Class | Responsibility | Authorization and lifecycle |
 |---|---|---|
-| **Expert** | Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Explicit user permission for each task/use. The Host judges its completion and reclaims (exact-stops) the seat. A completed task authorizes no reuse; another use needs fresh permission. Continuing turns or recovery of the same approved task need no repeated approval. |
+| **Expert** | Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat. | An explicit grant. A task grant (the default) ends with its task. A standing grant lets the Host invoke that preset within its stated scope, count and resource limits until revoked or expired, without asking again; never infer one from a task or finished grant. The Host judges completion and reclaims (exact-stops) the seat; that stop revokes no standing grant. Continuing turns or recovery of the same approved task need no repeated approval. |
 | **Worker** | Cheaper and generally weaker; simpler, bounded work supporting parallel throughput. | The exact five-preset pool below is default-authorized for authorized project tasks. |
 | **Elite** | Main execution workforce: primary implementation and demanding execution. | Existing explicit runtime/preset/count grants, applicable caps and seat-switch rules. A valid grant stays valid within its scope; no per-task permission. |
 
 Expert review informs the Host; it never replaces Host acceptance or
 lifecycle ownership. No Expert use follows from a listed profile, a general
-grant, or an earlier approved task.
+grant, or an earlier approved task. With no applicable grant, ask when the
+expected value warrants it.
 A seat's confirmed limit failure is recovered by its class, never by
 login: [quota-packages.md](quota-packages.md#confirmed-exhaustion). An
 authentication or account-access failure instead pauses that seat and goes to
@@ -62,7 +63,8 @@ session keeps its ownership when availability changes.
 A granted, paused, or revoked seat is named by its exact catalog Preset ID
 `<platform>/<tier>`; a platform word alone names no seat. Count, Class grant
 lifetime, cap, quota units, seat identity and switch authorization stay
-separate facts; a Worker exclusion names its exact ID. An authorization item
+separate facts; an Expert grant's `lifetime` is `task` when absent, or
+`standing`, and `expires` is optional; a Worker exclusion names its exact ID. An authorization item
 carries `special_requirements` only when the owner actually supplied a
 deviation (`{"effort":"high"}`, `{"task_scope":"visual QA"}`); omit by
 default — tier defaults, profile text, or Host judgment are
@@ -80,7 +82,7 @@ Claude Code Host still plans, dispatches, and accepts. Listed capability never
 bypasses missing Expert or Elite authorization; ask through the existing
 authorization route when needed. Keep real dependencies and write ownership.
 Do not keep a universal model ranking, invent a complexity classifier or
-routing engine, force equal runtime distribution, create work to fill
+routing engine, fix per-runtime quotas, create work to fill
 capacity, or interrupt useful work.
 
 The Worker pool is exactly: `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`.
@@ -119,5 +121,5 @@ idle, through the existing `drain-restart --resume ID` (or `--continue`) with an
 explicit `--tier`/`--model`: an exact stop and resume, not a live hot switch (a
 busy seat refuses `drain-not-idle`). A new standard-named seat is a new seat,
 not a switch of this one. A switch grant never authorizes an Expert use: an
-Expert preset runs only under its per-task permission above. Record grants with
+Expert preset runs only under its own grant above. Record grants with
 the other authorization in the consuming project's run records.

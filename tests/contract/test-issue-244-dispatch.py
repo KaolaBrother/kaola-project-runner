@@ -2768,6 +2768,247 @@ class DispatchEntry(unittest.TestCase):
         self.assertIsNone(view["grants"][0]["observed_live"])
         self.assertIn("live-source-unavailable", view["unknown_reasons"])
 
+    # Standing Expert grants and breadth (#252). Stub-Runner fixtures only: a
+    # pass here is not live evidence and no Expert session was started.
+    def candidate(self, payload: dict, preset: str) -> dict | None:
+        return next((row for row in payload["candidates"] if row["id"] == preset), None)
+
+    def withheld(self, payload: dict, preset: str) -> str | None:
+        return next((row["reason"] for row in payload["withheld"] if row["id"] == preset), None)
+
+    def test_expert_lifetime_is_task_unless_the_grant_says_standing(self) -> None:
+        avail = self.availability(["codex/astra", "codex/default", "zcode/default"])
+        none = self.project(self.authorization([{"id": "codex/astra", "state": "granted"}]), avail)
+        self.assertEqual(self.candidate(none, "codex/astra")["lifetime"], "task")
+        self.assertNotIn("expires", self.candidate(none, "codex/astra"))
+        task = self.project(self.authorization([
+            {"id": "codex/astra", "state": "granted", "lifetime": "task"}]), avail)
+        self.assertEqual(self.candidate(task, "codex/astra")["lifetime"], "task")
+        standing = self.project(self.authorization([
+            {"id": "codex/astra", "state": "granted", "lifetime": "standing"}]), avail)
+        self.assertEqual(self.candidate(standing, "codex/astra")["lifetime"], "standing")
+        other = self.project(self.authorization([
+            {"id": "codex/astra", "state": "granted", "lifetime": "forever"}]), avail)
+        self.assertIsNone(self.candidate(other, "codex/astra"))
+        self.assertEqual(self.withheld(other, "codex/astra"), "lifetime-unreadable")
+        code, payload = run(["project", "--authorization", str(self.authorization([
+            {"id": "codex/astra", "state": "granted", "lifetime": 3}])),
+            "--platforms", str(PLATFORMS)], self.env)
+        self.assertNotEqual(code, 0, payload)
+
+    def test_elite_and_worker_rows_ignore_the_expert_keys(self) -> None:
+        avail = self.availability(["codex/default", "zcode/default"])
+        plain = self.project(self.authorization([
+            {"id": "codex/default", "state": "granted", "count": 1},
+            {"id": "zcode/default", "state": "granted"}]), avail)
+        keyed = self.project(self.authorization([
+            {"id": "codex/default", "state": "granted", "count": 1,
+             "lifetime": "standing", "expires": "2000-01-01T00:00:00+00:00"},
+            {"id": "zcode/default", "state": "granted",
+             "lifetime": "bogus", "expires": "not a time"}]), avail)
+        self.assertEqual(plain["candidates"], keyed["candidates"])
+        self.assertEqual(plain["withheld"], keyed["withheld"])
+        for preset in ("codex/default", "zcode/default"):
+            row = self.candidate(keyed, preset)
+            self.assertNotIn("lifetime", row)
+            self.assertNotIn("expires", row)
+
+    def test_expert_expiry_is_withheld_and_execute_reports_the_reason(self) -> None:
+        install_fake(self.skills, ["codex"])
+        repo = str(self.repo)
+        self.use_spec({
+            "codex-KPR-i252-astra": {
+                "status": absent(repo), "start": started(repo, "gpt-6-astra", "high"), "send": sent("fp-a"),
+            },
+        })
+        avail = self.availability(["codex/astra"])
+        cases = (
+            ("2000-01-01T00:00:00+00:00", "expired"),
+            ("2000-01-01T00:00:00Z", "expired"),
+            ("2999-01-01 not a time", "expiry-unreadable"),
+            ("2999-01-01T00:00:00", "expiry-unreadable"),
+        )
+        for expires, reason in cases:
+            with self.subTest(expires=expires):
+                auth = self.authorization([
+                    {"id": "codex/astra", "state": "granted", "lifetime": "standing", "expires": expires}],
+                    elite_cap=1)
+                payload = self.project(auth, avail)
+                self.assertIsNone(self.candidate(payload, "codex/astra"))
+                self.assertEqual(self.withheld(payload, "codex/astra"), reason)
+                plan = self.plan([{
+                    "item_id": "x", "preset": "codex/astra", "session": "codex-KPR-i252-astra", "prompt": "design"}])
+                run_payload = self.execute(plan, auth, avail)
+                self.assertEqual(run_payload["items"][0]["status"], "not-run")
+                self.assertEqual(run_payload["items"][0]["reason"], reason)
+        self.assertEqual(commands(self.log), [])
+        future = self.authorization([
+            {"id": "codex/astra", "state": "granted", "lifetime": "standing",
+             "expires": "2999-01-01T00:00:00+08:00"}], elite_cap=1)
+        row = self.candidate(self.project(future, avail), "codex/astra")
+        self.assertEqual(row["lifetime"], "standing")
+        self.assertEqual(row["expires"], "2999-01-01T00:00:00+08:00")
+        revoked = self.authorization([
+            {"id": "codex/astra", "state": "revoked", "lifetime": "standing",
+             "expires": "2000-01-01T00:00:00+00:00"}])
+        self.assertEqual(self.withheld(self.project(revoked, avail), "codex/astra"), "revoked")
+
+    def test_no_expert_is_exposed_without_its_own_grant(self) -> None:
+        avail = self.availability(["codex/astra", "codex/default", "claude-code/fable"])
+        payload = self.project(self.authorization([
+            {"id": "codex/default", "state": "granted", "model_switch": True, "lifetime": "standing"},
+        ], model_switches=["codex/default"]), avail)
+        ids = {row["id"] for row in payload["candidates"]}
+        self.assertNotIn("codex/astra", ids)
+        self.assertNotIn("claude-code/fable", ids)
+        self.assertNotIn("codex/astra", payload["capability_summary"]["presets"])
+        task = self.project(self.authorization([{"id": "codex/astra", "state": "granted"}]), avail)
+        self.assertNotEqual(self.candidate(task, "codex/astra")["lifetime"], "standing")
+
+    def test_standing_grant_outlives_its_session_and_a_new_name_admits(self) -> None:
+        install_fake(self.skills, ["codex"])
+        repo = str(self.repo)
+        self.use_spec({
+            "codex-KPR-i252-second": {
+                "status": absent(repo), "start": started(repo, "gpt-6-astra", "high"), "send": sent("fp-s"),
+            },
+        })
+        avail = self.availability(["codex/astra"])
+        auth = self.authorization([
+            {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"}], elite_cap=1)
+        self.assertEqual(self.candidate(self.project(auth, avail), "codex/astra")["lifetime"], "standing")
+        stopped = write_json(self.root, "stopped-live.json", {"rows": [{
+            "repo": os.path.realpath(repo), "state": "stopped", "session": "codex-KPR-i252-first"}]})
+        code, view = run(["project", "--seats", "--repo", repo, "--authorization", str(auth),
+                          "--platforms", str(PLATFORMS), "--live", str(stopped)], self.env)
+        self.assertEqual(code, 0, view)
+        grant = view["grants"][0]
+        self.assertEqual(grant["id"], "codex/astra")
+        self.assertEqual(grant["observed_live"], 0)
+        self.assertEqual(grant["lifetime"], "standing")
+        plan = self.plan([{
+            "item_id": "second", "preset": "codex/astra", "session": "codex-KPR-i252-second", "prompt": "review"}])
+        payload = self.execute(plan, auth, avail)
+        self.assertEqual(payload["items"][0]["status"], "in-flight", payload)
+        removed = self.project(self.authorization([]), avail)
+        self.assertIsNone(self.candidate(removed, "codex/astra"))
+
+    def test_seats_view_without_the_new_keys_is_unchanged(self) -> None:
+        auth = self.authorization([{"id": "codex/default", "state": "granted", "count": 1}], elite_cap=1)
+        live = write_json(self.root, "empty-live.json", {"rows": []})
+        code, view = run(["project", "--seats", "--repo", str(self.repo), "--authorization", str(auth),
+                          "--platforms", str(PLATFORMS), "--live", str(live)], self.env)
+        self.assertEqual(code, 0, view)
+        self.assertNotIn("lifetime", view["grants"][0])
+        self.assertNotIn("expires", view["grants"][0])
+
+    def test_worker_fan_out_ignores_a_full_elite_cap_and_expert_count_still_binds(self) -> None:
+        install_fake(self.skills, ["codex", "devin", "dsh", "opencode", "zcode"])
+        repo = str(self.repo)
+        real = os.path.realpath(repo)
+        pool = (
+            ("codex/luna", "codex-KPR-i252-luna", started(repo, "gpt-6-luna", "max")),
+            ("devin/default", "devin-KPR-i252-def", started(repo, "swe-2-max")),
+            ("dsh/default", "dsh-KPR-i252-def", started(repo, "opencode-go/deepseek-v4.1-flash")),
+            ("opencode/default", "opencode-KPR-i252-def", started(repo, "opencode-go/deepseek-v4.1-flash")),
+            ("zcode/default", "zcode-KPR-i252-def", started(repo, "GLM-5.3", "max")),
+        )
+        spec = {session: {"status": absent(repo), "start": receipt, "send": sent("fp-" + preset)}
+                for preset, session, receipt in pool}
+        spec["codex-KPR-i252-astra1"] = {
+            "status": absent(repo), "start": started(repo, "gpt-6-astra", "high"), "send": sent("fp-astra1")}
+        spec["codex-KPR-i252-astra2"] = {
+            "status": absent(repo), "start": started(repo, "gpt-6-astra", "high"), "send": sent("fp-astra2")}
+        spec["codex-KPR-i252-elite"] = {
+            "status": absent(repo), "start": started(repo, "gpt-6.1-sol", "high"), "send": sent("fp-elite")}
+        self.use_spec(spec)
+        live = write_json(self.root, "full-cap-live.json", {"rows": [{
+            "preset": "codex/default", "platform": "codex", "repo": real, "state": "running",
+            "session": "codex-KPR-i252-held", "identity": "verified", "holder_instance_id": "h-held"}]})
+        auth = self.authorization([
+            {"id": "codex/default", "state": "granted"},
+            {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"},
+        ], elite_cap=1)
+        items = [
+            {"item_id": preset, "preset": preset, "session": session, "prompt": "gather " + preset}
+            for preset, session, _ in pool
+        ]
+        items.append({"item_id": "elite", "preset": "codex/default",
+                      "session": "codex-KPR-i252-elite", "prompt": "more"})
+        avail = self.availability([preset for preset, _, _ in pool] + ["codex/default", "codex/astra"])
+        payload = self.execute(self.plan(items), auth, avail, live=live)
+        by_id = {row["item_id"]: row for row in payload["items"]}
+        for preset, _, _ in pool:
+            self.assertEqual(by_id[preset]["status"], "in-flight", payload)
+        self.assertEqual(by_id["elite"]["status"], "not-run")
+        self.assertEqual(by_id["elite"]["reason"], "seat-cap")
+
+        roomy = self.authorization([
+            {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"}], elite_cap=2)
+        two = self.plan([
+            {"item_id": "e1", "preset": "codex/astra", "session": "codex-KPR-i252-astra1", "prompt": "a"},
+            {"item_id": "e2", "preset": "codex/astra", "session": "codex-KPR-i252-astra2", "prompt": "b"},
+        ])
+        payload = self.execute(two, roomy, self.availability(["codex/astra"]))
+        statuses = sorted((row["status"], row["reason"]) for row in payload["items"])
+        self.assertEqual(statuses, [("in-flight", "admitted"), ("not-run", "count")], payload)
+
+    def test_changed_authorization_refuses_the_item_and_keeps_an_admitted_binding(self) -> None:
+        install_fake(self.skills, ["codex", "zcode"])
+        repo = str(self.repo)
+        prompt = "kept"
+        sha = "sha256:" + hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        session = "codex-KPR-i252-kept"
+        self.use_spec({
+            "zcode-KPR-i252-free": {
+                "status": absent(repo), "start": started(repo, "GLM-5.3", "max"), "send": sent("fp-free")},
+            session: {"status": started(repo, "gpt-6-astra", "high", holder="holder-live")},
+        })
+        index = write_json(self.root, "kept-index.json", {
+            "schema": "kaola-dispatch-index/1", "correlation_only": True, "repo": repo,
+            "items": [{
+                "item_id": "kept", "preset": "codex/astra", "platform": "codex", "session": session,
+                "repo": repo, "holder_instance_id": "holder-kept", "prompt_sha256": sha,
+                "prompt_fingerprint": sha, "status": "in-flight", "reason": "admitted",
+                "acceptance": "pending", "dispatch_event_cursor": 4,
+            }],
+        })
+        live = write_json(self.root, "kept-live.json", {"rows": [{
+            "platform": "codex", "session": session, "repo": repo, "state": "ready",
+            "holder_instance_id": "holder-kept", "preset": "codex/astra"}]})
+        avail = self.availability(["codex/astra", "zcode/default"])
+        for grant, reason in (
+            ({"id": "codex/astra", "state": "granted", "lifetime": "standing",
+              "expires": "2000-01-01T00:00:00+00:00"}, "expired"),
+            ({"id": "codex/astra", "state": "revoked", "lifetime": "standing"}, "revoked"),
+        ):
+            with self.subTest(reason=reason):
+                auth = self.authorization([grant], elite_cap=1)
+                plan = self.plan([
+                    {"item_id": "kept", "preset": "codex/astra", "session": session, "prompt": prompt},
+                    {"item_id": "free", "preset": "zcode/default", "session": "zcode-KPR-i252-free", "prompt": "w"},
+                ])
+                payload = self.execute(plan, auth, avail, live=live, index=index)
+                by_id = {row["item_id"]: row for row in payload["items"]}
+                self.assertEqual(by_id["free"]["status"], "in-flight", payload)
+                kept = by_id["kept"]
+                self.assertEqual(kept["status"], "in-flight")
+                self.assertEqual(kept["holder_instance_id"], "holder-kept")
+                self.assertEqual(kept["dispatch_event_cursor"], 4)
+                self.assertEqual(kept["evidence"]["blocked_attempt"], {"reason": reason})
+                self.log.write_text("", encoding="utf-8")
+                self.use_spec({
+                    "zcode-KPR-i252-free": {
+                        "status": absent(repo), "start": started(repo, "GLM-5.3", "max"), "send": sent("fp-free")},
+                    session: {"status": started(repo, "gpt-6-astra", "high", holder="holder-live")},
+                })
+        fresh = self.plan([{
+            "item_id": "new", "preset": "codex/astra", "session": "codex-KPR-i252-new", "prompt": "n"}])
+        payload = self.execute(fresh, self.authorization([
+            {"id": "codex/astra", "state": "granted", "lifetime": "standing",
+             "expires": "2000-01-01T00:00:00+00:00"}], elite_cap=1), avail)
+        self.assertEqual(payload["items"][0]["reason"], "expired")
+
 
 class RenderedGuidance(unittest.TestCase):
     def test_dispatch_guidance_preserves_authorization_and_unknown_selection(self) -> None:
@@ -2783,6 +3024,25 @@ class RenderedGuidance(unittest.TestCase):
         self.assertIn("advertised differences stay unknown and do not block send", text)
         self.assertNotIn("Host chooses, grants", text)
         self.assertNotIn("Explicit unapplied/unverified", text)
+
+    def test_entry_prefers_spread_breadth_without_a_quota_and_states_b1(self) -> None:
+        text = (ORCHESTRATOR / "references/dispatch-collect.md").read_text(encoding="utf-8")
+        self.assertIn("as evenly as reasonably possible", text)
+        self.assertIn("not one habitual runtime", text)
+        self.assertIn("no invented work or fixed quota", text)
+        self.assertIn("Rejected re-execution keeps correlation, adds `evidence.blocked_attempt`.", text)
+        self.assertNotIn("force model balance", text)
+        self.assertLessEqual(len(text.encode("utf-8")), 8192)
+        skill = (ORCHESTRATOR / "SKILL.md").read_bytes()
+        self.assertLessEqual(len(skill), 17408)
+        profiles = (ORCHESTRATOR / "references/worker-profiles.md").read_text(encoding="utf-8")
+        self.assertIn("fix per-runtime quotas", profiles)
+        self.assertNotIn("force equal runtime distribution", profiles)
+        self.assertIn("never infer one from a task or finished grant", profiles)
+        self.assertLessEqual(len(profiles.encode("utf-8")), 8192)
+        self.assertIn("`lifetime`", text)
+        self.assertIn("`expires`", text)
+        self.assertIn("standing grant", skill.decode("utf-8"))
 
     def test_entry_is_discoverable_and_sideagent_includes_light_work(self) -> None:
         skill = (ORCHESTRATOR / "SKILL.md").read_text(encoding="utf-8")

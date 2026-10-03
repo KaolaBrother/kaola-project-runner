@@ -68,7 +68,7 @@ Visual review does not establish computer-operation capability.
 
 For a task that operates a computer, follow
 [worker-profiles.md](worker-profiles.md) Computer interaction; do not restate
-it here. An Expert review needs its own per-task permission and informs, never
+it here. An Expert review needs an applicable task or standing grant and informs, never
 replaces, Host acceptance.
 
 ## Tools and authority

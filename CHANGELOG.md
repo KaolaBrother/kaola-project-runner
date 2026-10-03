@@ -4,6 +4,30 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+- **Spread breadth work across fitting Worker presets (Issue #252).** The
+  dispatch entry now prefers spreading useful parallel gathering, independent
+  research, counterexample or critique, edge-exploration and verification items
+  as evenly as reasonably possible across fitting Worker-Class presets instead
+  of one habitual runtime. Fit, authority and real limits come first, with no
+  invented work and no fixed per-runtime quota. No router or schema is added;
+  `execute` and `collect` already run items in parallel. The entry also states
+  that a rejected re-execution keeps correlation and adds
+  `evidence.blocked_attempt` with only the reason.
+- **Standing Expert grants (Issue #252).** An Expert grant may carry optional
+  `lifetime` (`task`, the default, or `standing`) and `expires` (an ISO-8601
+  instant with an offset). A task grant still ends with its task; a standing
+  grant lets the Host invoke that Expert preset within its stated scope, count
+  and limits without asking again until the owner revokes it or it expires,
+  and exact-stopping a finished session does not revoke it. A standing grant
+  exists only when the owner said so. `project` withholds an Expert grant as
+  `lifetime-unreadable`, `expiry-unreadable` or `expired`, and `execute`
+  reports the same reason as `not-run`. Elite and Worker rows are unchanged.
+  Expert profile text in `platforms/` now reads "only under an explicit task
+  or standing grant"; the Host class text, worker profiles, heartbeat
+  skeleton and Kaola-Delegator snapshot guidance follow.
+
 ## 0.7.0 — 2026-10-03 (capability summary, Sidekick, dispatch/collect)
 
 Seats: restart required
