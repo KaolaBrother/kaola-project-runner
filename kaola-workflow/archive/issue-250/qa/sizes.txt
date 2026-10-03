@@ -1,0 +1,4 @@
+main Skill: 17336/17408; remaining 72 bytes
+Delegator snapshot: 7204/8192; remaining 988 bytes
+Delegator entry unchanged: 4094/4096 bytes
+Ceilings unchanged. #246 can still add one short sentence to main entry; no #246 implementation here.

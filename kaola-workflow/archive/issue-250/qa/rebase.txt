@@ -1,0 +1,6 @@
+Rebased tip: 4f90b832645bc327e4f84d004f5cd39dfb2b4df3
+Base: d5f2881ffe893ea88ba757812d5766334cc666e0
+Original accepted commit: bf6341a8bba45e009af1f3125779557bf89afbaf, unamended; original parent remains 65da3996088d681687af7b600d16f6cbaf92b488
+Only ten generated build manifests conflicted at each of two commits; resolved via renderer --write and staging generated outputs only. Renderer exit 0 both times.
+Three source edits and corresponding generated text remain byte-identical to accepted wording. Only normal generated manifests differ for current main.
+Main 17336/17408 (72 spare); snapshot 7204/8192 (988 spare); ceilings unchanged.
