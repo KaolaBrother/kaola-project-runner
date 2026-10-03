@@ -88,9 +88,10 @@ heartbeat authorization. At a dispatch decision, project eligible candidates
 instead of keeping the profile roster in routine context
 ([dispatch-collect.md](references/dispatch-collect.md)).
 
-Follow human instructions, project contracts, and evidenced shared-resource
-constraints. No serial build, GPU, port, or cache constraint blocks
-unrelated parallel work.
+Obey owner/project and single-writer rules. Holds stop only source-named actions.
+Distinguish implementation prerequisites, merge order and resource occupancy;
+a copied Host summary alone establishes no dependency. Unaffected authorized
+work proceeds.
 
 ### Selected platform
 
@@ -231,15 +232,15 @@ sink, and write ownership.
    `start` under a new standard name, never a finished seat;
    `--resume`/`--continue` recover the same assignment only.
 
-   A Host that ended its turn while workers are in flight, or with delivery,
-   acceptance or close-out open, is not an idle worker: keep it and send it no
-   "continue"; its next beat is a worker event. Before quiescence, reconcile owner goal/stop
-   with heartbeat project.goal/stop and pending QA/doc duties; a completed
-   worker or batch does not end an open mandate. See [duty-reconcile.md](references/duty-reconcile.md) for duty reconciliation.
-   Claim new issues only while
-   intake is open; all-blocked work stays event-driven. Stop boundary, scoped
-   pause, and cleanup are Ending a run. Session stop, acceptance, merge,
-   closure and cleanup are different facts, not interchangeable completion labels.
+   Keep Hosts with in-flight or open delivery/acceptance/close-out; no "continue";
+   next beat: worker event. Before quiescence match owner/heartbeat project.goal/stop
+   and QA/docs; worker done ends no open mandate.
+   [duty-reconcile.md](references/duty-reconcile.md).
+   Claim only with intake open. Blocked duties keep next action/reopening condition
+   in existing heartbeat values. Assignment-local retry bounds imply no project
+   pause; owner/project bounds keep scope. Worker stop/replacement never resets
+   attempt limits. Stop/pause/cleanup: Ending a run;
+   stop/acceptance/merge/closure/cleanup differ.
 
 ## Ending a run
 

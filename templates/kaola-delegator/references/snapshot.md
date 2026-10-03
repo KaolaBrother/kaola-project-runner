@@ -47,6 +47,11 @@ omission check, supplying scope and source pointers; it reuses an in-flight chec
 or sufficient unchanged evidence, or assigns its authorized Sidekick per
 `kaola-project-runner/references/duty-reconcile.md`.
 
+With an open mandate and no work in flight, check the Host body for a blocked
+duty missing its next action or reopening condition; include that specific gap
+in the one correction. Do not choose a worker, implementation route or retry.
+A justified unchanged wait is not failure and gets no repeated reminder.
+
 ## Inquiry commands
 
 `$HOST` is the exact `--session` already recorded on this snapshot's `host` object. Do not construct `$PLATFORM-<PROJECT_CODE>-orchestrator-main` for an already-verified Host.
