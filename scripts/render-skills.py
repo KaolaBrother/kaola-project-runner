@@ -88,6 +88,10 @@ OPTIONAL = {"acp_command_default",
             # response; absent keeps the shared 15 s. A measured per-platform
             # latency fact, never a gate.
             "acp_session_new_timeout",
+            # Issue #247: the CLI version the seat asks CODEX_PATH to run.
+            # Separate from acp_wrapper_pin and from acp_verified_versions cli=,
+            # which records the child package version of a launch.
+            "acp_requested_cli",
             # Issue #237: declared component identity/effort for the default
             # preset. Absent on presets whose `*_model_effort` is already the
             # consumer-facing preset effort. Never a launch parameter.

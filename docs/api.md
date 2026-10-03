@@ -232,7 +232,7 @@ that block a launch stay in the row: Node.js/npm before the Codex adapter, or
 | Platform | Actual ACP layer and update boundary |
 |---|---|
 | `claude-code` | The vendored `claude-code-acp` Node bridge ships in the KPR Skill; reinstall that Skill to refresh the bridge, and check the Claude CLI version separately. |
-| `codex` | The manifest's pinned `npx` command is the ACP launch (`@agentclientprotocol/codex-acp` with its paired `@openai/codex`). `CODEX_PATH` and any other effective launch override select the Codex binary that pair uses; `codex` on `PATH` is a different fact and is not that pair. Node.js and npm/npx are prerequisites. |
+| `codex` | The manifest npx command launches adapter `@agentclientprotocol/codex-acp` 2.0.1. The child CLI is the absolute `CODEX_PATH` binary (requested Codex CLI 0.160.0). Install that 0.160.0 binary through Codex's own installer and set `CODEX_PATH` to it. PATH does not select the child. The adapter's nested `@openai/codex` package does not select the child. `acp_verified_versions` records the launched child's package version in `cli=` and the adapter in `adapter=`, separate from `acp_requested_cli`. Node.js and npm/npx are prerequisites. |
 | `cursor-cli` | `cursor-agent --yolo acp` is native to Cursor CLI; there is no separate adapter to update. |
 | `devin` | `devin acp` is native to Devin CLI; there is no separate adapter to update. |
 | `droid` | `droid exec --output-format acp` is native to Droid CLI; there is no separate adapter to update. |

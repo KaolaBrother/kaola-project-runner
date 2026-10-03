@@ -170,6 +170,12 @@ class TestStartWait(unittest.TestCase):
         self.repo.mkdir()
         subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
         self.record_root = root / "records"
+        # Skill-mediated start compares this copy with Skill roots under the
+        # real home. A private home keeps that comparison from refusing the
+        # start when those installed copies are an older build. The wait
+        # assertions below stay the session/new contract.
+        self.home = root / "home"
+        self.home.mkdir()
         self.skill = root / "skill"
         shutil.copytree(SKILLS / "grok-kaola-project-runner", self.skill)
         self.session = f"i146-{self._testMethodName.lower()}-{os.getpid()}"[:79]
@@ -189,6 +195,7 @@ class TestStartWait(unittest.TestCase):
              "--command", mock_command(), *args],
             capture_output=True, text=True, timeout=timeout,
             env=hermetic_env(KAOLA_ACP_RECORD_ROOT=str(self.record_root),
+                             HOME=str(self.home),
                              **{DELAY_ENV: str(delay_ms)}),
         )
         try:

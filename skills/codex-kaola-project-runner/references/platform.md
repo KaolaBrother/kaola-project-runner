@@ -21,7 +21,7 @@ catalog is still launched as the exact declared literal, and the catalog fact is
 
 ## Launch
 
-ACP runs the pinned npx codex-acp wrapper (@openai/codex plus @agentclientprotocol/codex-acp); ACP start sets mode=agent-full-access after initialize.
+ACP runs adapter @agentclientprotocol/codex-acp@2.0.1. The child CLI is the absolute CODEX_PATH binary (requested Codex CLI 0.160.0). PATH does not select that child. The adapter's nested @openai/codex package does not select that child. ACP start sets mode=agent-full-access after initialize.
 
 The Agent decides every action; operate through `"$SKILL_DIR/scripts/runtime-tmux.sh"` as SKILL.md
 shows, and read [acp.md](acp.md) before any action that can change the runtime.

@@ -360,12 +360,192 @@ def loopback_no_proxy(env: dict[str, str]) -> dict[str, str]:
     return changes
 
 
+def codex_manifest_launch(args: argparse.Namespace) -> bool:
+    """True when this Codex start uses the manifest ``acp_command``.
+
+    ``--command`` and ``KAOLA_ACP_COMMAND`` stay caller-owned and do not gain
+    the CODEX_PATH requirement. Issue #247.
+    """
+    if getattr(args, "platform", None) != "codex":
+        return False
+    if getattr(args, "agent_command_given", False):
+        return False
+    if os.environ.get("KAOLA_ACP_COMMAND"):
+        return False
+    return True
+
+
+def absolute_codex_path(env: dict[str, str]) -> str:
+    """An absolute ``CODEX_PATH``, or empty. A relative value is not a path."""
+    path = env.get("CODEX_PATH") or ""
+    return path if os.path.isabs(path) else ""
+
+
+def codex_child_error(args: argparse.Namespace) -> dict[str, str] | None:
+    """Why a manifest Codex launch must not start, or None.
+
+    codex-acp runs its nested ``@openai/codex`` when ``CODEX_PATH`` is unset.
+    A ``codex`` entry on PATH does not change that child. The supported child
+    is the absolute ``CODEX_PATH`` binary. This does not read the binary's
+    version and does not search PATH.
+    """
+    if not codex_manifest_launch(args):
+        return None
+    path = absolute_codex_path(os.environ)
+    requested = (getattr(args, "manifest", None) or {}).get("acp_requested_cli") or ""
+    if not path:
+        return {
+            "code": "codex-child-path",
+            "message": (
+                "Codex child CLI requires an absolute CODEX_PATH "
+                f"(requested Codex CLI {requested}). PATH does not select the child. "
+                "The adapter's nested @openai/codex package does not select the child"
+            ),
+        }
+    if not os.path.isfile(path):
+        return {"code": "codex-child-path", "message": f"CODEX_PATH is not a file: {path}"}
+    if not os.access(path, os.X_OK):
+        return {"code": "codex-child-path",
+                "message": f"CODEX_PATH is not executable: {path}"}
+    return None
+
+
+def codex_child_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any] | None:
+    """Pre-spawn receipt when the Codex child path cannot launch, or None."""
+    error = codex_child_error(args)
+    if error is None:
+        return None
+    receipt = base_receipt(args, repo)
+    receipt.update(bridge_facts(args))
+    receipt["error"] = error
+    receipt["mutation_status"] = "not_started"
+    receipt["mutation_performed"] = False
+    return receipt
+
+
+def codex_package_at(binary: str) -> tuple[str, str] | None:
+    """``(name, version)`` of the ``@openai/codex`` package that owns ``binary``.
+
+    Walks parents of the real path and stops at the first package whose name
+    starts with ``@openai/codex``. Never spawns the binary.
+    """
+    try:
+        directory = os.path.dirname(os.path.realpath(binary))
+    except OSError:
+        return None
+    for _ in range(8):
+        candidate = os.path.join(directory, "package.json")
+        try:
+            data = json.loads(Path(candidate).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = None
+        if isinstance(data, dict):
+            name = data.get("name")
+            version = data.get("version")
+            if (isinstance(name, str) and name.startswith("@openai/codex")
+                    and isinstance(version, str)):
+                return name, version
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            break
+        directory = parent
+    return None
+
+
+def codex_binary_from_table(rows: dict[int, tuple[int, str]], agent_pid: int) -> str | None:
+    """Absolute Codex binary among ``agent_pid``'s descendants running ``app-server``.
+
+    Prefers a path whose package name is ``@openai/codex``. Does not search PATH.
+    """
+    children: dict[int, list[int]] = {}
+    for pid, (ppid, _command) in rows.items():
+        children.setdefault(ppid, []).append(pid)
+    stack = list(children.get(agent_pid, []))
+    seen: set[int] = set()
+    paths: list[str] = []
+    while stack:
+        pid = stack.pop()
+        if pid in seen or pid not in rows:
+            continue
+        seen.add(pid)
+        _ppid, command = rows[pid]
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            tokens = command.split()
+        if "app-server" in tokens:
+            for token in tokens:
+                if token.startswith("/") and os.path.basename(token) not in {"node", "env"}:
+                    paths.append(token)
+        stack.extend(children.get(pid, []))
+    for token in paths:
+        package = codex_package_at(token)
+        if package and package[0] == "@openai/codex":
+            return token
+    return paths[0] if paths else None
+
+
+def codex_child_from_process(agent_pid: Any) -> dict[str, str | None]:
+    """Package name and version of the Codex ``app-server`` this seat spawned."""
+    empty: dict[str, str | None] = {
+        "child_path": None, "child_package": None, "child_version": None}
+    if not isinstance(agent_pid, int) or isinstance(agent_pid, bool) or agent_pid <= 0:
+        return empty
+    table = run_ps(["pid", "ppid", "command"])
+    rows: dict[int, tuple[int, str]] = {}
+    for line in table.stdout.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            rows[int(parts[0])] = (int(parts[1]), parts[2])
+    binary = codex_binary_from_table(rows, agent_pid)
+    if not binary:
+        return empty
+    package = codex_package_at(binary)
+    return {
+        "child_path": binary,
+        "child_package": package[0] if package else None,
+        "child_version": package[1] if package else None,
+    }
+
+
+def codex_version_fact(args: argparse.Namespace, agent_pid: Any,
+                       agent_info: Any) -> dict[str, Any] | None:
+    """Adapter version, requested CLI, and launched child package as separate facts.
+
+    Adapter version is ``agentInfo.version`` from this launch. Requested CLI is
+    the manifest. The child package is read from the ``app-server`` process.
+    A missing read stays null. Never a gate and never a version probe of PATH.
+    """
+    if not codex_manifest_launch(args):
+        return None
+    adapter = None
+    if isinstance(agent_info, dict) and isinstance(agent_info.get("version"), str):
+        adapter = agent_info["version"]
+    fact: dict[str, Any] = {
+        "adapter": adapter,
+        "requested_cli": (args.manifest.get("acp_requested_cli") or None),
+        "child_path": None,
+        "child_package": None,
+        "child_version": None,
+    }
+    try:
+        fact.update(codex_child_from_process(agent_pid))
+    except (OSError, ValueError):
+        pass
+    return fact
+
+
 def agent_environment(args: argparse.Namespace) -> dict[str, str]:
     """Environment for the holder and its agent process: inherited whole, plus
     the exact binary path for a vendored bridge. A non-absolute value is passed
     as-is so the bridge refuses it (fail closed) instead of searching PATH.
     Loopback-reaching platforms also get the loopback proxy bypass; that lands
-    in this copy only, never in ``os.environ``."""
+    in this copy only, never in ``os.environ``.
+
+    Issue #247: a Codex manifest launch keeps an absolute ``CODEX_PATH`` and
+    drops any other value, so the adapter cannot treat a bare name as PATH or
+    fall through to its nested ``@openai/codex`` package.
+    """
     env = dict(os.environ)
     bridge_env = BRIDGE_BINARY_ENV.get(args.platform)
     if bridge_env:
@@ -374,6 +554,12 @@ def agent_environment(args: argparse.Namespace) -> dict[str, str]:
         env.update(loopback_no_proxy(env))
     if args.platform == "dsh":
         env[DSH_PERMISSION_ENV] = dsh_permission_mode(args)[0]
+    if codex_manifest_launch(args):
+        path = absolute_codex_path(env)
+        if path:
+            env["CODEX_PATH"] = path
+        else:
+            env.pop("CODEX_PATH", None)
     return env
 
 
@@ -2292,6 +2478,9 @@ def command_preflight(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     if error is not None:
         receipt["error"] = error
         return receipt
+    refused = codex_child_refusal(args, repo)
+    if refused is not None:
+        return refused
     probe_argv = [
         sys.executable, str(HOLDER), "--probe", "--repo", repo,
         "--platform", args.platform, "--command", args.agent_command,
@@ -3751,6 +3940,9 @@ def pre_spawn_refusal(args: argparse.Namespace,
         receipt["mutation_status"] = "not_started"
         receipt["mutation_performed"] = False
         return receipt, {}
+    refused_child = codex_child_refusal(args, repo)
+    if refused_child is not None:
+        return refused_child, {}
     hostish = args.platform == "zcode" or (
         host_capable(args.platform) and host_session(args.platform, args.session))
     alignment = worker_skill_alignment(repo, args.platform)
@@ -3938,6 +4130,9 @@ def command_start(args: argparse.Namespace, repo: str,
     attach_binding_fact(receipt, state)
     receipt["transport"]["protocol_version"] = state.get("protocol_version")
     receipt["transport"]["agent_info"] = state.get("agent_info")
+    versions = codex_version_fact(args, state.get("agent_pid"), state.get("agent_info"))
+    if versions is not None:
+        receipt["codex_versions"] = versions
     if "cli_version" in state:
         receipt["transport"]["cli_version"] = state["cli_version"]
     receipt["transport"]["capabilities"] = state.get("capabilities")

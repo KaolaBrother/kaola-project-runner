@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport
 
-ACP is the only transport (Issue #130). The ACP command is `npx --yes --package @openai/codex@0.159.2 --package @agentclientprotocol/codex-acp@2.0.1 codex-acp`; prompts travel over its stdio JSON-RPC, never shell eval. Login is a human act outside the Runner and needs no terminal. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
+ACP is the only transport (Issue #130). The ACP command is `npx --yes --package @agentclientprotocol/codex-acp@2.0.1 codex-acp`; prompts travel over its stdio JSON-RPC, never shell eval. Login is a human act outside the Runner and needs no terminal. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
 
 | `mutation_status` | Safe interpretation |
 |---|---|

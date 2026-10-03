@@ -160,6 +160,7 @@ python_suites_all=(
   "test-issue-244-dispatch.py"
   "test-issue-244-holder-prompt-binding.py"
   "test-issue-245-session-role.py"
+  "test-issue-247-codex-child.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -233,6 +234,7 @@ python_suites_b=(
   "test-issue-244-dispatch.py"
   "test-issue-244-holder-prompt-binding.py"
   "test-issue-245-session-role.py"
+  "test-issue-247-codex-child.py"
 )
 run_suite_lane() {
   local status=0 rc
