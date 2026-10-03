@@ -2319,6 +2319,146 @@ class DispatchEntry(unittest.TestCase):
             self.assertNotIn(preset, payload["capability_summary"]["presets"])
 
 
+    def turn_view(self, events, *, status_extra=None, item_extra=None, capture_extra=None):
+        install_fake(self.skills, ["codex"])
+        session = "codex-KPR-i252-qa"
+        item = {"item_id": "qa", "platform": "codex", "preset": "codex/luna",
+                "repo": str(self.repo), "session": session, "holder_instance_id": "holder-252",
+                "prompt_fingerprint": "fp-252", "dispatch_event_cursor": 7, "status": "in-flight"}
+        item.update(item_extra or {})
+        status = {"repo": str(self.repo), "session": session, "holder_instance_id": "holder-252",
+                  "prompt_fingerprint": "fp-252", "event_cursor": 7 + len(events),
+                  "turn_active": False, "turn_outcome": "turn_completed", "stop_reason": "end_turn",
+                  "pending_permissions": []}
+        status.update(status_extra or {})
+        capture = {"repo": str(self.repo), "session": session, "events": events,
+                   "event_log_path": "/raw/events.jsonl"}
+        capture.update(capture_extra or {})
+        self.use_spec({session: {"status": status, "capture": capture}})
+        index = write_json(self.root, "turn-index.json", {"schema": "kaola-dispatch-index/1",
+                  "repo": str(self.repo), "items": [item]})
+        before = index.read_bytes()
+        files_before = set(self.root.rglob("*"))
+        code, view = run(["collect", "--index", str(index), "--skills-root", str(self.skills),
+                          "--item", "qa"], self.env)
+        self.assertEqual(code, 0, view)
+        self.assertEqual(index.read_bytes(), before)
+        self.assertEqual(set(self.root.rglob("*")) - files_before, {self.log} if self.log.exists() else set())
+        self.assertTrue(all(row["command"] in ("status", "capture") for row in commands(self.log)))
+        self.assertNotIn("acceptance", view)
+        return view
+
+    def test_turn_view_retains_permission_and_failure_outside_excerpt(self):
+        events = [
+            {"cursor": 8, "kind": "session_update", "update": {
+                "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "x" * 2000}}},
+            {"cursor": 9, "kind": "request_permission", "request": {"request_id": "p1", "title": "read"}},
+            {"cursor": 10, "kind": "session_update", "update": {
+                "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "failed",
+                "content": [{"type": "text", "text": "fixture failure"}]}},
+            {"cursor": 11, "kind": "permission_answered", "request_id": "p1", "option": "allow_once"},
+            {"cursor": 12, "kind": "turn_ended", "prompt_fingerprint": "fp-252",
+                "outcome": "turn_failed", "stop_reason": "end_turn"},
+            {"cursor": 13, "kind": "request_permission", "request": {"request_id": "other-turn"}},
+        ]
+        view = self.turn_view(events)
+        self.assertEqual(view["outcome"], "turn_failed")
+        self.assertEqual(len(view["excerpt"]), 480)
+        self.assertEqual([e["cursor"] for e in view["permission_evidence"]], [9, 11])
+        self.assertEqual([e["cursor"] for e in view["failure_evidence"]], [10, 12])
+        self.assertTrue(view["truncation"]["reply"])
+        self.assertFalse(view["truncation"]["evidence"])
+        self.assertEqual(view["source"]["event_log_path"], "/raw/events.jsonl")
+        self.assertEqual(view["source"]["through"], 12)
+        self.assertEqual(view["unknown_reasons"], [])
+        capture = next(row for row in commands(self.log) if row["command"] == "capture")
+        self.assertIn("--full", capture["argv"])
+        self.assertIn("--inline", capture["argv"])
+
+    def test_turn_view_reports_unknown_gaps_and_truncation(self):
+        view = self.turn_view([
+            {"cursor": 10, "kind": "turn_ended", "prompt_fingerprint": "fp-252", "outcome": "turn_canceled"}
+        ], status_extra={"event_cursor": 10}, capture_extra={"truncated": {"dropped": 2}})
+        self.assertEqual(view["outcome"], "turn_canceled")
+        self.assertIn("cursor-range-incomplete", view["unknown_reasons"])
+        self.assertIn("capture-truncated", view["unknown_reasons"])
+        self.assertTrue(view["truncation"]["evidence"])
+
+    def test_turn_view_never_substitutes_another_holder_or_turn(self):
+        for field in ("holder", "fingerprint", "cursor"):
+            with self.subTest(field=field):
+                if self.log.exists(): self.log.unlink()
+                events = [{"cursor": 8, "kind": "turn_ended", "prompt_fingerprint": "foreign",
+                           "outcome": "turn_completed"}]
+                view = self.turn_view(events,
+                    status_extra={"holder_instance_id": "foreign"} if field == "holder" else {},
+                    item_extra={"dispatch_event_cursor": None} if field == "cursor" else {})
+                self.assertIsNone(view["outcome"] if field != "fingerprint" else view["excerpt"])
+                self.assertTrue(view["unknown_reasons"])
+                self.assertEqual(view["failure_evidence"], [])
+
+    def test_turn_view_item_repo_must_match_index_repo(self):
+        view = self.turn_view([], item_extra={"repo": "/foreign"})
+        self.assertEqual(view["unknown_reasons"], ["dispatch-repo-mismatch"])
+        self.assertEqual(commands(self.log), [])
+
+    def test_turn_view_keeps_partial_permission_and_process_exit(self):
+        view = self.turn_view([
+            {"cursor": 8, "kind": "request_permission", "request": {"request_id": "pending"}},
+            {"cursor": 9, "kind": "process_exited", "code": 1},
+        ], status_extra={"turn_outcome": "process_exited", "stop_reason": None,
+                         "pending_permissions": [{"request_id": "pending"}], "state": "stopped"})
+        self.assertEqual(view["outcome"], "process_exited")
+        self.assertEqual(view["pending_permissions"], [{"request_id": "pending"}])
+        self.assertEqual(view["failure_evidence"][0]["code"], 1)
+        self.assertEqual(view["unknown_reasons"], [])
+
+    def test_turn_view_missing_capture_is_unknown_without_mutation(self):
+        view = self.turn_view([], status_extra={"state": "stopped"}, capture_extra={"events": None})
+        self.assertIn("event-range-unavailable", view["unknown_reasons"])
+        self.assertEqual(view["outcome"], "turn_completed")
+        self.assertIsNone(view["excerpt"])
+
+    def test_seats_view_binds_identity_and_retains_grant_states(self):
+        auth = self.authorization([
+            {"id": "droid/opus", "state": "revoked", "shared_seat": "droid", "count": 1},
+            {"id": "codex/luna", "state": "granted"}], elite_cap=2)
+        rows = [
+            {"repo": str(self.repo), "identity": "verified", "holder_instance_id": "h1",
+             "platform": "droid", "preset": "droid/opus", "session": "droid-KPR-i252-qa", "state": "ready"},
+            {"repo": str(self.repo), "identity": "verified", "holder_instance_id": "h2",
+             "platform": "codex", "preset": "codex/luna", "session": "codex-KPR-i252-qa", "state": "ready"},
+            {"repo": str(self.repo), "identity": "verified", "holder_instance_id": "host",
+             "platform": "codex", "session": "codex-KPR-orchestrator-main", "host_class": True},
+            {"repo": "/foreign", "identity": "verified", "holder_instance_id": "foreign",
+             "platform": "droid", "preset": "droid/opus", "session": "foreign", "state": "ready"},
+            {"repo": str(self.repo), "identity": "unknown", "platform": "codex", "session": "unbound"},
+            {"repo": str(self.repo), "state": "stopped", "session": "done"},
+        ]
+        live = write_json(self.root, "seats-live.json", {"rows": rows})
+        before = {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        code, view = run(["project", "--seats", "--repo", str(self.repo), "--authorization", str(auth),
+                          "--platforms", str(PLATFORMS), "--live", str(live)], self.env)
+        self.assertEqual(code, 0, view)
+        self.assertEqual(view["observed_elite_expert"], 1)
+        self.assertEqual(view["grants"][0]["state"], "revoked")
+        self.assertEqual(view["grants"][0]["observed_live"], 1)
+        self.assertTrue(view["grants"][0]["shared_occupied"])
+        self.assertEqual(len(view["sessions"]), 2)
+        self.assertIn("unbound-live-row:unbound", view["unknown_reasons"])
+        self.assertNotIn("candidates", view)
+        self.assertEqual(before, {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
+
+    def test_seats_missing_source_does_not_claim_zero_occupancy(self):
+        auth = self.authorization([{"id": "codex/default", "state": "granted", "count": 1}])
+        code, view = run(["project", "--seats", "--repo", str(self.repo), "--authorization", str(auth),
+                          "--live", str(self.root / "missing.json")], self.env)
+        self.assertEqual(code, 0, view)
+        self.assertIsNone(view["observed_elite_expert"])
+        self.assertIsNone(view["grants"][0]["observed_live"])
+        self.assertIn("live-source-unavailable", view["unknown_reasons"])
+
+
 class RenderedGuidance(unittest.TestCase):
     def test_entry_is_discoverable_and_sidekick_includes_light_work(self) -> None:
         skill = (ORCHESTRATOR / "SKILL.md").read_text(encoding="utf-8")

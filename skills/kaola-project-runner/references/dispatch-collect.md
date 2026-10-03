@@ -1,14 +1,16 @@
 # Dispatch and collect
 
-`scripts/kaola-dispatch.py` admits an adopted finite plan through existing
-Runners and correlates receipts. It doesn't choose workers, grant
-seats, accept, or stop seats. Index is correlation only, not a
-ledger. Trivial start, count, and stop do not call a model.
+`scripts/kaola-dispatch.py` executes an adopted finite plan and correlates
+Runner receipts. Host chooses, grants, accepts and stops. Index is correlation,
+not a ledger; trivial transport/counting calls no model.
 
 ## Routine context
 
-Keep goals, progress, the three Class meanings, and `capability_summary`.
-At a dispatch decision, run `project`.
+Keep goals, progress, Class meanings and `capability_summary`.
+At a relevant claim, dispatch, adoption or acceptance decision, fetch only
+fresh facts that can affect it. Reuse state read in this turn; a Runner return
+uses its correlated receipt, not a full heartbeat reload. Update changed
+Host facts/duties without a write/read-back loop. Detailed profiles stay on demand.
 
 `project` reads authorization plus manifests (`platforms/` or a Runner's
 `scripts/platform.yaml`). Availability JSON lists `present` and `absent`;
@@ -16,8 +18,7 @@ every other id is `unknown` and is not a mismatch or a refusal.
 `capability_summary` lists eligible preset ids and does not read profile
 wording or copy profiles. Exact id, Class, profile, and selection stay on
 `candidates`. The Host's short capability paragraph changes only when a
-grant, profile, or availability fact changes. Unknown availability is
-`availability unknown`, not a capability. `absent` is withheld. Ungranted
+grant, profile, or availability fact changes. Unknown availability is no capability. `absent` is withheld. Ungranted
 Expert does not appear.
 
 Input keys: `grants[]` (`id`, `state`, `count`, `shared_seat`,
@@ -28,30 +29,43 @@ state is `state-unreadable` for the Host. Elite and Expert need `granted`.
 
 ## Sidekick
 
-Default `zcode/default`, or an owner-selected authorized available
-alternative. One short-lived assignment may draft,
-synthesize, or do other explicitly scoped light work; the Host then
-exact-stops it. It does not start other workers, grant permission, accept
-the product, or run a scheduling loop. A simple exact selection skips it.
+Sidekick is optional and short-lived: default `zcode/default`, or an
+owner-selected authorized available alternative. For nontrivial allocation,
+Host gives outcome, abilities, constraints and expected artifacts. Using
+current candidates/profiles, Sidekick proposes useful count, exact presets,
+bounded assignments and ownership. Host adopts/adjusts against current grants
+and pending changes, then executes. A simple exact dispatch skips it. Do not
+invent parallel work to fill seats or force model balance.
 
-## Commands
+It may reconcile conflicts, check omissions, synthesize or do
+explicitly scoped light work. It does not start other workers, dispatch, grant or accept; writes neither
+control JSON and runs no scheduler. Keep useful conclusions, sources
+and output files; Host records adopted decisions. Native history stays native,
+with the only recovery anchor preserved. Exact-stop a finished Sidekick.
 
-```bash
-python3 "$SKILL_DIR/scripts/kaola-dispatch.py" project \
-  --authorization "$AUTH" --availability "$AVAIL"
-python3 "$SKILL_DIR/scripts/kaola-dispatch.py" execute \
-  --plan "$PLAN" --authorization "$AUTH" --availability "$AVAIL" \
-  --skills-root "$SKILLS" --prior-index "$PRIOR" --index "$INDEX" --live "$LIVE"
-python3 "$SKILL_DIR/scripts/kaola-dispatch.py" collect \
-  --index "$INDEX" --skills-root "$SKILLS"
-python3 "$SKILL_DIR/scripts/kaola-dispatch.py" snapshot \
-  --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"
-```
+## Commands and compact reads
 
-`$SKILLS` contains `<platform>-kaola-project-runner`. `$LIVE` is
-`{ "rows": [...] }` from `kaola-acp.py list --repo`, or omitted. If a cap,
-count, or shared seat is in force and live facts cannot be read, those items
-are `not-run` / `occupancy-unknown`.
+Call `python3 "$SKILL_DIR/scripts/kaola-dispatch.py"` with:
+
+- `project --authorization "$AUTH" [--availability "$AVAIL"]`: candidates.
+- `project --seats --repo "$PROJECT" --authorization "$AUTH" [--live "$LIVE"]
+  [--index "$INDEX"] [--skills-root "$SKILLS"]`: observed seats against supplied
+  grants, count/cap/shared occupancy and unknown reasons. No authority verdict.
+- `execute --plan "$PLAN" --authorization "$AUTH" --skills-root "$SKILLS"
+  [--availability "$AVAIL"] [--prior-index "$PRIOR"] [--index "$INDEX"] [--live "$LIVE"]`.
+- `collect --index "$INDEX" --skills-root "$SKILLS"`: update correlation.
+- Add `--item <exact item_id>` to `collect` for a read-only turn view: index
+  stays untouched. Identity/cursor-bound outcome, pending/historical permissions
+  and structured failures survive the 480-character reply excerpt. Full native
+  capture reads rotated logs; source/as-of, raw event-log/Runner pointers and
+  truncation/unknown reasons remain visible. Missing ranges are uncertainty.
+- `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`.
+
+`$SKILLS` contains `<platform>-kaola-project-runner`. `$LIVE` is `{ "rows": [...] }`
+from `kaola-acp.py list --repo`, or omitted for a fresh list. A supplied file is
+a source observation, not proof of freshness. Compact reads store no state or
+acceptance verdict. If live facts needed by a count/cap/shared seat cannot be
+read, execute reports `not-run` / `occupancy-unknown`.
 
 ## execute
 
@@ -60,70 +74,50 @@ before comparison. Each item has `item_id`, `preset`, `session`, and
 `prompt`, plus optional `overrides`, `resources`, `expected_holder_instance_id`,
 `shared_seat`, and `role`.
 
-`--tier` comes from the preset. `--model` and `--effort` are passed only for
-an explicit owner or item value. Owner `special_requirements` win. A
-conflicting item override is `not-run` / `override-conflicts-owner`. A model
-that differs from the catalog model is `not-run` / `model-switch-unauthorized`
-unless the owner named it, `model_switch` is true, or `model_switches` lists
-the preset. A bare model does not inherit preset effort. `task_scope` is
-copied onto the item. Other override keys are `override-unapplied`.
+Preset supplies `--tier`. Model/effort overrides require explicit owner/item
+values; owner `special_requirements` win (`override-conflicts-owner` otherwise).
+Noncatalog model needs owner choice, `model_switch` or `model_switches`, else
+`model-switch-unauthorized`. A bare model inherits no effort. `task_scope`
+only narrows; other keys are `override-unapplied`.
 
 Shared seat, write path, `desktop: true`, account, or port: all conflicting
-items are `not-run` / `resource-conflict`. A string `writes` value is
-`resources-unreadable`. A non-string `ports` entry says `ports must be strings`.
+items are `not-run` / `resource-conflict`. Unreadable resources are reported.
 A live shared seat is `shared-occupied`.
 
-`elite_cap` limits Elite and Expert. Plan `seat_cap` may only tighten it.
-Worker-pool items do not consume it. `count` limits that preset. A Runner
-list row has no preset or class. A row whose `host_class` is true is this
-project's Host and is not a worker seat. Any other row counts only when its
-preset is on the row, on an identity-bound index item (repo, session,
-holder, and preset), or on that session's status/start applied model and
-effort. Class comes from that preset. A platform name is not a Class. An
-unresolved row stays unknown: it is not an Elite seat, and a cap, count, or
-shared seat that depends on it is `occupancy-unknown` unless the resolved
-rows already fill that limit. A shared seat is occupied when the resolved
-preset's grant names it, or the row itself carries `shared_seat`. That label
-is not a platform name.
+`elite_cap` limits Elite+Expert; plan `seat_cap` only tightens it. Worker pool
+is outside it; `count` limits that preset. Host rows (`host_class: true`) are
+not worker seats. Resolve a row's preset from the row, identity-bound index
+(repo/session/holder/preset), or applied status/start model+effort. Platform
+name is no Class. Unresolved occupancy is unknown where a cap/count/shared
+seat depends on it, unless known rows already fill that limit. Shared labels
+come from the row or resolved preset's grant, never from a platform name.
 
-The same assignment is repo, preset, session, and prompt; admission state is
-separate. Already admitted (identity, holder, `in-flight`/`returned`) is
-reconciled before capacity: no new seat, no second send. An absent record
-stays that status with reason `session-gone`, not `not-run`; the binding
-stays for the Host. Matching `unknown`, including `send-timeout`, with an
-absent record stays `unknown` / `reconciliation-needed`: no start, no send.
-Same `--index` is the prior. Capacity applies only to a new start. A session
-name alone is not the assignment. Holder, cursor, evidence, and result stay
-only for this identity. A rejected re-execution keeps that status; this
-attempt is `evidence.blocked_attempt`, not `not-run`. `--dry-run` writes no
-index at all. Admitted plan row is `reconciled`; a new row is `dry-run`.
+Assignment identity is repo, preset, session and prompt; admission is separate.
+Reconcile an identity/holder-bound `in-flight`/`returned` item before capacity
+(no second seat/send). Missing session stays `session-gone` with its binding.
+Matching unknown with an absent record stays `reconciliation-needed`, no
+start/send. Same `--index` is prior. Capacity applies only to new starts.
+Rejected re-execution preserves correlation and uses `evidence.blocked_attempt`.
+`--dry-run` writes no index: admitted rows are `reconciled`, new rows `dry-run`.
 
-Each ready new item calls `status`, then `start` only when the session is absent
-(`no-session`), then `send --no-wait`. A stopped record, including one with
-`residual_pids: []`, is not absent: that session name cannot be reused and
-needs a new name. The start holder is stored and sent as
+New items call `status`, `start` only for absent (`no-session`), then
+`send --no-wait`. Stopped records need a new name, even with no residual PIDs. The start holder is stored and sent as
 `--expected-holder-instance-id` when known. An expected holder whose session
 is absent is `not-run` and is not started. Duplicate session names are
 `not-run`. Admission is `in-flight` / `admitted`, `acceptance: pending`, not
-a result. Timeout or an unreadable receipt is `unknown`, not `failed`. A
-send-time `holder-instance-mismatch` is `unknown`. Exit 0
-with unknown mutation and outcome is `unknown`. The index is replaced after
-each item. `prompt_sha256` is `sha256:` plus hex.
+a result. Timeout or an unreadable receipt is `unknown`, not `failed`. Send-time holder mismatch or unknown mutation/outcome stays unknown,
+even at exit 0. Index updates per item; hashes use `sha256:` plus hex.
 
-Applied fields come from `config_application`, including nested
-`start_evidence`. `resolved_*` is not applied evidence. `applied: false` and
-`model_verified: false` are not reported as applied and do not send
-(`selection-mismatch`). A missing application is `unknown` and does not block
-send. A mapped slot matches when `requested_id` is the catalog id. An
-advertised difference, including a non-string value, is `unknown` and does
-not set `comparison` to `mismatch`. A provider-qualified id matches on the
-tail after `\`. A slash stays part of the id.
+Applied selection comes from `config_application` (including nested
+`start_evidence`), never `resolved_*`. Explicit unapplied/unverified fields
+do not send (`selection-mismatch`); missing application is unknown and does
+not block. Mapped `requested_id` matches catalog id. Advertised differences
+remain unknown, not applied mismatches. Provider qualification matches after
+`\`; a slash stays part of the id.
 
-A live record binds this assignment only when repo, session, preset, holder,
-and `prompt_sha256` all match. Fingerprint equality alone is
-`assignment-unbound` and does not send. A bound in-progress or completed row
-is not replayed. `mutation_status` `not_started` may take the first send.
-A matching `unknown` prior may not.
+A live assignment binds only matching repo, session, preset, holder and prompt
+hash; fingerprint alone is `assignment-unbound`. Bound active/completed work
+is never replayed. `not_started` may take its first send; matching unknown may not.
 
 Coverage is `in-flight`, `returned`, `failed`, `unknown`, `not-run`.
 Coverage is not acceptance. Another scope, or `mutation: true`, is `not-run`
@@ -131,20 +125,16 @@ and calls no Runner.
 
 ## collect
 
-One `status` per `in-flight` item reads `turn_active`, `turn_outcome`,
-`stop_reason` (including `record.last_prompt`), and the fingerprint against
-the current prompt. `turn_failed`, `turn_canceled`, and `process_exited` are
+For each in-flight item, status supplies active/outcome/stop (including
+`record.last_prompt`) and prompt fingerprint. `turn_failed`, `turn_canceled`, and `process_exited` are
 `failed` before the in-progress check. `still-running` requires `turn_active`
-true; `mutation_status` `in_progress` alone does not. A completed turn on an
-already-stopped seat is collected, not `no-result`. A completed match then
-gets one `capture --since` the dispatch cursor and becomes `returned` /
-`collected`. `acceptance` stays `pending`. Idle with no completed turn stays
-`in-flight` / `no-result`. An identity mismatch is `unknown`.
+true; `mutation_status` `in_progress` alone does not. A completed match, even stopped, gets `capture --since` its dispatch cursor:
+`returned` / `collected`, acceptance pending. No completed idle result stays `in-flight` / `no-result`; identity mismatch is unknown.
 
 ## snapshot
 
-`snapshot` replaces `--out` atomically. The file's only key is `body`, a
-string that parses as the state object. No schema key is added.
+`snapshot` atomically replaces `--out` with only `body`, a string parsing
+as the state object.
 
 ## Outside this entry
 

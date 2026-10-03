@@ -17,7 +17,7 @@ Platform-pinned wrappers take **no** platform argument.
 
 ```bash
 W="/abs/path/to/codex-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
-WORK_REPO="/abs/path/to/project"      # the worker's repo
+WORK_REPO="/abs/path/to/project"
 "$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser --tier luna
 ```
 
@@ -81,23 +81,21 @@ Host ownership; `wait_selection` reports why. Flags win; standalone blocks.
 ```
 
 `--no-wait` returns admission: `"outcome": "in_progress"`,
-`"mutation_status": "in_progress"` — running — not finished, and not correct. An `error` (`prompt-in-progress`, `agent-not-running`) dispatched
-nothing; a `prompt_timeout`/missing receipt leaves consumption unknown —
-establish it with `observe` before re-sending.
+`"mutation_status": "in_progress"` — running — not finished, and not correct. An error (`prompt-in-progress`, `agent-not-running`) dispatched nothing;
+`prompt_timeout`/missing receipt means consumption unknown: `observe` before resending.
 
 **Keep** `prompt_fingerprint` (the dispatched turn) and
 `dispatch_event_cursor` (before its output).
 
 ### Finish the beat, then end your turn
 
-Finish this beat, update the heartbeat at
+Finish this beat; if current facts/duties changed, update the heartbeat at
 `<project>/.kaola/heartbeat-prompt.json` (`body`: the current JSON state),
 report as main Skill §Report says, then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not
 `sleep`, poll in a loop, or hold this turn open with a blocking `wait` — an
-active Host turn keeps events undelivered. A background shell or repeated
-TaskOutput does not end the Host turn. Do not `stop` or
+active Host turn keeps events undelivered. Background commands do not end the turn. Do not `stop` or
 `cancel` yourself or an in-flight worker to manufacture a wake-up.
 
 ### When an event wakes you
@@ -135,7 +133,7 @@ Confirm you read the turn you dispatched: `observe`'s
 `last_prompt.fingerprint` must equal the dispatch receipt's `prompt_fingerprint`,
 and `turn_outcome`/`stop_reason` must show it finished. No assistant text
 means the window was wrong — widen it. Then accept, send a routine repair, or task-failure, and keep or exact-`stop` the seat per main Skill step 5.
-Update the heartbeat prompt, and end the turn.
+Update changed facts/duties; no full JSON reload after Runner returns. End the turn.
 
 `kind` is `idle` when the worker's turn ended (`reason`
 `outcome=<turn_completed|turn_failed> stop_reason=<…>`) and `terminated` when
@@ -149,8 +147,7 @@ authorization or escalated to the user.
 
 ## Workers and the notification carrier
 
-The worker Agent owns its delivery; it never fabricates events and never writes
-to your stdin. Never ask it to notify you or duplicate the carrier.
+A worker owns delivery and never fabricates events or writes your stdin; do not duplicate the carrier.
 
 Delivery rules you can rely on:
 

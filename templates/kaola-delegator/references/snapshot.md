@@ -40,8 +40,18 @@ the Host JSON, copy its rows here, or select workers. Missing or unreadable: rep
 Runner and forge records before any `start`; never blank authorization.
 Start, resume, replace, or uncertain identity: [handoff.md](handoff.md).
 
-Keep new owner requirements and source pointers in this snapshot or the issue
-handoff, retaining an existing dated quote or pointer when available. During an
+Keep independent scoped owner changes and source pointers in existing
+`watch` until adoption is evidenced. A trusted relay needs no verbatim quote.
+Direct delivery remains yours: idle send, native noninterrupting steer if
+supported, otherwise retain until idle. Urgent stop uses the existing interrupt
+route immediately. Missing/unreadable snapshot is absent/unknown, never proof
+of no Delegator or no changes; direct relay still works. Host may read relevant
+changes at decision boundaries and adopts only into its own body. Observe a
+source-correlated adopted value/duty before confirming/compacting your record;
+read, admission, end-turn or Sidekick return alone is insufficient. One-shot
+actions need action evidence, urgent stops need cessation. Preserve partial
+effects; no exactly-once claim. Later explicit owner direction can reauthorize
+a stopped scope; stale proposals cannot overwrite newer grants/revocations. During an
 inquiry you may independently ask the sole Host in plain language for a bounded
 omission check, supplying scope and source pointers; it reuses an in-flight check
 or sufficient unchanged evidence, or assigns its authorized Sidekick per
@@ -85,7 +95,8 @@ First beat in the window (`day_start`): refresh Host identity, authorization,
 open backlog and in-flight work, then let the Host open new claims only if
 still authorized. Final beat (`day_end`): tell the same Host to stop new issue
 claims for the day; its in-flight work and workers keep running. Confirm both
-the Host's acknowledgment (`host_ack`) and claim records showing no new claim
+source-correlated Host adoption (`host_ack`; body evidence can suffice) and
+claim records showing no new claim
 after the cutoff (`claim_check`); send admission alone is not confirmation.
 Unconfirmed: keep `pending`, report the specific gap, reconcile next beat.
 The daily pause is never a Host stop or task completion. `final_stop` uses the

@@ -11,13 +11,11 @@ identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, mission ledger,
 child worktree, finalize, archive, and sink.
 
-You own scheduling, acceptance and QA decisions. One Host owns this project.
-Helpers may plan, design, research, inspect, test, review, prepare bounded
-cross-worker material, synthesize evidence, do explicitly scoped light work,
-or execute an assignment. They never continuously select topics, scale the
-pool, run another scheduling loop, control other workers, grant permission,
-or judge final completion. Sidekick:
-[dispatch-collect.md](references/dispatch-collect.md).
+One Host owns scheduling, acceptance and QA.
+Helpers do bounded planning, research, QA, synthesis, explicitly scoped light work
+or an assignment. They never scale, control workers, run another scheduling loop,
+grant permission or accept the project.
+Optional Sidekick proposals: [dispatch-collect.md](references/dispatch-collect.md).
 Without explicit permission to self-execute, read evidence and direct workers:
 do not implement, test, edit project documentation, create worktrees, or mutate
 the repository yourself.
@@ -136,9 +134,10 @@ The heartbeat is the working prompt itself: a Host (any platform with a
 a non-Host Codex supervisor; host-native carriers. Its `body` is one JSON object per
 [references/heartbeat-skeleton.md](references/heartbeat-skeleton.md), from
 authorization and project instructions. It is the effective-now snapshot, not a
-log: rewrite it from fresh facts, replacing superseded quota, priority and
-plans, and keeping in-flight locators and unfinished duties. A confirmed change
-applies in that beat; a lowered quota alone cancels nothing. A report-only
+log: update changed facts/duties, replacing superseded quota, priority and
+plans, keeping in-flight locators and unfinished duties. A confirmed change
+applies in that beat; decision-boundary adoption:
+[duty-reconcile.md](references/duty-reconcile.md); a lowered quota alone cancels nothing. A report-only
 request disables execution actions. When an updated Skill loads, reconcile the
 heartbeat once with current rules, latest valid instructions and fresh seat
 facts, keeping user limits and the frontier.
@@ -159,8 +158,9 @@ sink, and write ownership.
 
 ## Main execution loop
 
-1. **Recover and observe.** Read worker/run records, relevant
-   Git/Forge state, and fresh Runner evidence. Use exact owned sessions and
+1. **Recover and observe.** Load compact current state as needed on a new
+   turn or recovery; reuse facts already read this turn. Read only fresh
+   worker/run, Git/Forge and Runner facts relevant to the next decision. Use exact owned sessions and
    current platform Skills. Observe busy workers without injecting "status?"
    messages or polling raw frames as a human UI. Do not replay a prompt whose
    acceptance or effects are known or uncertain; investigate the existing action

@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 import threading
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -353,12 +354,78 @@ def command_project(args: argparse.Namespace) -> int:
         candidates, withheld = eligibility(catalog, auth, grants, available)
     except ValueError as exc:
         return fail("invalid-input", str(exc))
+    if args.seats:
+        if not args.repo:
+            return fail("invalid-input", "--seats needs --repo")
+        return project_seats(args, auth, grants, catalog)
     # Eligible ids only. The Host keeps the capability paragraph.
     return emit({
         "schema": "kaola-dispatch-project/1",
         "capability_summary": capability_summary(candidates),
         "candidates": candidates,
         "withheld": withheld,
+    })
+
+
+def observed_at() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def project_seats(args: argparse.Namespace, auth: dict[str, Any],
+                  grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]]) -> int:
+    """Read the existing occupancy facts; report limits without deciding authority."""
+    repo = str(Path(args.repo).resolve())
+    unknown: list[str] = []
+    try:
+        rows, state = live_facts(args.live, repo, Path(__file__))
+    except ValueError as exc:
+        rows, state = [], "unavailable"
+        unknown.append(str(exc))
+    items = {}
+    if args.index:
+        try:
+            index = load_object(Path(args.index))
+            if index.get("schema") != "kaola-dispatch-index/1" or not same_repo(index.get("repo"), repo):
+                raise ValueError("index identity/schema differs")
+            if not isinstance(index.get("items"), list):
+                raise ValueError("index items unavailable")
+            items = {item["item_id"]: item for item in index.get("items", [])
+                     if isinstance(item, dict) and isinstance(item.get("item_id"), str)}
+        except ValueError as exc:
+            unknown.append(str(exc))
+    bound = []
+    for row in rows:
+        if row.get("state") == "stopped" or row.get("host_class") is True:
+            continue
+        if isinstance(row.get("repo"), str) and not same_repo(row["repo"], repo):
+            continue
+        if (row.get("identity") != "verified" or not same_repo(row.get("repo"), repo)
+                or not row.get("holder_instance_id") or not row.get("session")):
+            unknown.append("unbound-live-row:" + str(row.get("session")))
+            continue
+        bound.append(row)
+    resolved = resolve_live_presets(bound, repo, catalog, items,
+                                   Path(args.skills_root) if args.skills_root else None,
+                                   require_identity=True)
+    used, elite, shared, unnamed = live_occupancy(bound, repo, catalog, grants, resolved)
+    unknown.extend("preset-unresolved:" + grant["id"] for grant in grants if grant["id"] not in catalog)
+    unknown.extend("preset-unknown:" + row["session"] for row in bound
+                   if row["session"] not in resolved)
+    if state != "known":
+        unknown.append("live-source-unavailable")
+    return emit({
+        "schema": "kaola-dispatch-seats/1", "repo": repo,
+        "source": {"authorization": args.authorization, "live": args.live or "Runner list --repo",
+                   "index": args.index, "as_of": observed_at()},
+        "unknown_reasons": unknown,
+        "elite_cap": auth.get("elite_cap"), "observed_elite_expert": elite if state == "known" else None,
+        "grants": [{**grant, "observed_live": used.get(grant["id"], 0) if state == "known" else None,
+                    "occupancy_unknown": bool(unknown) or catalog.get(grant["id"], {}).get("platform") in unnamed,
+                    "shared_occupied": grant.get("shared_seat") in shared if state == "known" else None}
+                   for grant in grants],
+        "sessions": [{"session": row["session"], "platform": row.get("platform"),
+                      "holder_instance_id": row["holder_instance_id"], "state": row.get("state"),
+                      "preset": resolved.get(row["session"])} for row in bound],
     })
 
 
@@ -1319,7 +1386,7 @@ def preset_from_bound_index(items: dict[str, dict[str, Any]], row: dict[str, Any
 
 def resolve_live_presets(rows: list[dict[str, Any]], repo: str, catalog: dict[str, dict[str, Any]],
                          prior_items: dict[str, dict[str, Any]],
-                         skills_root: Path | None) -> dict[str, str]:
+                         skills_root: Path | None, *, require_identity: bool = False) -> dict[str, str]:
     """Preset for a list row that does not carry one. Platform name is not a Class."""
     resolved: dict[str, str] = {}
     for row in rows:
@@ -1347,6 +1414,10 @@ def resolve_live_presets(rows: list[dict[str, Any]], repo: str, catalog: dict[st
             continue
         code, receipt, note = run_runner(script, ["status", "--repo", repo, "--session", session])
         if receipt_unreadable(code, receipt, note) or not isinstance(receipt, dict):
+            continue
+        if require_identity and (not same_repo(repo_of(receipt), repo)
+                                 or receipt.get("session") != session
+                                 or holder_of(receipt) != row.get("holder_instance_id")):
             continue
         applied = preset_from_applied(catalog, platform, receipt)
         if applied:
@@ -1839,6 +1910,12 @@ def command_collect(args: argparse.Namespace) -> int:
     repo = index.get("repo")
     if not isinstance(repo, str):
         return fail("invalid-input", "index repo is required")
+    if args.item:
+        matches = [item for item in index["items"]
+                   if isinstance(item, dict) and item.get("item_id") == args.item]
+        if len(matches) != 1:
+            return fail("invalid-input", "--item must name one exact index item")
+        return read_turn(matches[0], repo, Path(args.skills_root), args.index)
     skills_root = Path(args.skills_root)
     pending = [item for item in index["items"] if isinstance(item, dict) and item.get("status") == "in-flight"]
     updated: dict[str, dict[str, Any]] = {}
@@ -1874,6 +1951,138 @@ def command_collect(args: argparse.Namespace) -> int:
     return finish_index(index, args.index)
 
 
+def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: str) -> int:
+    """One read-only projection. Full native capture keeps evidence outside the excerpt."""
+    platform = item.get("platform") or str(item.get("preset", "")).split("/", 1)[0]
+    script = skills_root / f"{platform}-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
+    cursor = item.get("dispatch_event_cursor")
+    result: dict[str, Any] = {
+        "schema": "kaola-dispatch-turn/1", "item_id": item.get("item_id"),
+        "repo": repo, "session": item.get("session"),
+        "holder_instance_id": item.get("holder_instance_id"),
+        "source": {"index": index_path, "runner": str(script), "since": cursor,
+                   "as_of": observed_at()},
+        "unknown_reasons": [], "outcome": None, "stop_reason": None,
+        "permission_evidence": [], "failure_evidence": [], "excerpt": None,
+        "truncation": {"reply": False, "evidence": False},
+    }
+    unknown = result["unknown_reasons"]
+    if not same_repo(item.get("repo"), repo):
+        unknown.append("dispatch-repo-mismatch")
+        return emit(result)
+    if (not isinstance(item.get("holder_instance_id"), str) or not item["holder_instance_id"]
+            or not isinstance(item.get("session"), str) or not SESSION_OK.fullmatch(item["session"])
+            or not finger_norm(item.get("prompt_fingerprint") or item.get("prompt_sha256"))
+            or isinstance(cursor, bool) or not isinstance(cursor, int) or cursor < 0):
+        unknown.append("dispatch-binding-missing")
+        return emit(result)
+    if not script.is_file():
+        unknown.append("runner-missing")
+        return emit(result)
+
+    def bound(receipt: dict[str, Any] | None) -> bool:
+        return (isinstance(receipt, dict) and same_repo(repo_of(receipt), repo)
+                and receipt.get("session") == item["session"]
+                and holder_of(receipt) == item["holder_instance_id"])
+
+    code, status, note = run_runner(script, launch_argv(item, repo, "status"))
+    result["source"]["status"] = evidence(status, code, note)
+    unread = receipt_unreadable(code, status, note)
+    if unread or not bound(status):
+        unknown.append("status-" + (unread or "identity-unbound"))
+        return emit(result)
+    current_turn = fingers_equal(fingerprint_of(status), item.get("prompt_fingerprint") or item.get("prompt_sha256"))
+    if current_turn:
+        active, outcome, stop = turn_facts(status)
+        result.update(turn_active=active, outcome=outcome, stop_reason=stop)
+        result["pending_permissions"] = nested(status, "pending_permissions")
+        if result["pending_permissions"] is None:
+            unknown.append("pending-permissions-unavailable")
+        if status.get("truncated"):
+            result["truncation"]["status"] = status["truncated"]
+            unknown.append("status-truncated")
+        for key in ("error", "fatal_error"):
+            if status.get(key):
+                result["failure_evidence"].append({key: status[key]})
+    # --full --inline uses the existing rotated-log reader and bypasses the tail budget.
+    argv = ["capture", "--repo", repo, "--session", item["session"], "--full", "--inline"]
+    cap_code, capture, cap_note = run_runner(script, argv)
+    result["source"]["capture_argv"] = argv
+    result["source"]["capture"] = evidence(capture, cap_code, cap_note)
+    unread = receipt_unreadable(cap_code, capture, cap_note)
+    # Capture has no holder field on current Runners; bracket it with status.
+    after_code, after, after_note = run_runner(script, launch_argv(item, repo, "status"))
+    result["source"]["after_status"] = evidence(after, after_code, after_note)
+    capture_bound = (isinstance(capture, dict) and same_repo(repo_of(capture), repo)
+                     and capture.get("session") == item["session"]
+                     and holder_of(capture) in (None, item["holder_instance_id"]))
+    if (unread or not capture_bound or receipt_unreadable(after_code, after, after_note)
+            or not bound(after)):
+        result.update(outcome=None, stop_reason=None, turn_active=None)
+        unknown.append("capture-" + (unread or "identity-unbound"))
+        return emit(result)
+    result["source"]["event_log_path"] = capture.get("event_log_path")
+    end_cursor = nested(status, "event_cursor")
+    result["source"]["through"] = end_cursor
+    events = capture.get("events")
+    if (not isinstance(events, list) or isinstance(end_cursor, bool)
+            or not isinstance(end_cursor, int) or end_cursor < cursor):
+        unknown.append("event-range-unavailable")
+        return emit(result)
+    cursors = [event.get("cursor") for event in events if isinstance(event, dict)
+               and isinstance(event.get("cursor"), int) and not isinstance(event.get("cursor"), bool)]
+    window = sorted((event for event in events if isinstance(event, dict)
+                     and isinstance(event.get("cursor"), int) and not isinstance(event.get("cursor"), bool)
+                     and cursor < event["cursor"] <= end_cursor), key=lambda event: event["cursor"])
+    terminal = next((event for event in window if event.get("kind") == "turn_ended"), None)
+    expected = item.get("prompt_fingerprint") or item.get("prompt_sha256")
+    if terminal:
+        if not fingers_equal(terminal.get("prompt_fingerprint"), expected):
+            result.update(outcome=None, stop_reason=None, turn_active=None)
+            unknown.append("turn-fingerprint-differs")
+            return emit(result)
+        window = [event for event in window if event["cursor"] <= terminal["cursor"]]
+        result.update(turn_active=False, outcome=terminal.get("outcome"), stop_reason=terminal.get("stop_reason"))
+        result["source"]["through"] = terminal["cursor"]
+    elif not current_turn:
+        unknown.append("turn-fingerprint-unknown-or-differs")
+        return emit(result)
+    else:
+        active, outcome, stop = turn_facts(status)
+        result.update(turn_active=active, outcome=outcome, stop_reason=stop)
+    if capture.get("truncated"):
+        result["truncation"]["capture"] = capture["truncated"]
+        result["truncation"]["evidence"] = True
+        unknown.append("capture-truncated")
+    if (len(window) != result["source"]["through"] - cursor
+            or any(event["cursor"] != cursor + offset for offset, event in enumerate(window, 1))):
+        result["truncation"]["evidence"] = True
+        unknown.append("cursor-range-incomplete")
+    result["source"]["oldest_available_cursor"] = min(cursors) if cursors else None
+    reply_chars = 0
+    for event in window:
+        kind = event.get("kind")
+        update = event.get("update") if isinstance(event.get("update"), dict) else {}
+        if kind in ("request_permission", "permission_answered", "permission_cancelled"):
+            result["permission_evidence"].append(event)
+        if (kind in ("process_exited", "agent_message_error", "malformed_stdout")
+                or event.get("error")
+                or (kind == "turn_ended" and event.get("outcome") in ("turn_failed", "turn_canceled", "process_exited"))
+                or (update.get("sessionUpdate") in ("tool_call", "tool_call_update")
+                    and update.get("status") in ("failed", "error"))
+                or (update.get("sessionUpdate") == "session_info_update" and update.get("_meta"))):
+            result["failure_evidence"].append(event)
+        if update.get("sessionUpdate") == "agent_message_chunk":
+            content = update.get("content")
+            if isinstance(content, dict) and isinstance(content.get("text"), str):
+                reply_chars += len(content["text"])
+    result["excerpt"] = result_excerpt({"events": window})
+    result["truncation"]["reply"] = reply_chars > 480
+    if result["outcome"] is None:
+        unknown.append("turn-outcome-unavailable")
+    return emit(result)
+
+
 def command_snapshot(args: argparse.Namespace) -> int:
     try:
         state = load_object(Path(args.state))
@@ -1905,6 +2114,11 @@ def build_parser() -> argparse.ArgumentParser:
     project.add_argument("--authorization", required=True)
     project.add_argument("--availability")
     project.add_argument("--platforms")
+    project.add_argument("--seats", action="store_true", help="read occupancy against supplied grants")
+    project.add_argument("--repo")
+    project.add_argument("--live")
+    project.add_argument("--index")
+    project.add_argument("--skills-root")
     project.set_defaults(func=command_project)
 
     execute = commands.add_parser("execute")
@@ -1922,6 +2136,7 @@ def build_parser() -> argparse.ArgumentParser:
     collect = commands.add_parser("collect")
     collect.add_argument("--index", required=True)
     collect.add_argument("--skills-root", required=True)
+    collect.add_argument("--item", help="read one exact turn without rewriting the index")
     collect.set_defaults(func=command_collect)
 
     snapshot = commands.add_parser("snapshot")

@@ -75,10 +75,30 @@ every interval. This gives the owner a recurring opportunity for independent
 reconciliation while preserving scoped pauses, current authorization and Host
 identity recovery under the existing snapshot/handoff rules.
 
-A JSON-driven script carrier could supply that opportunity where no usable
-native timer exists, but adds process ownership, platform-specific wakeup,
-failure monitoring and duplicate-inquiry risk; it adds no judgment or
-deduplication. It must replace the single carrier via normal timer handoff,
-retiring the old carrier first, never coexist as another scheduler. No script
-is needed or implemented while the existing mechanism suffices. No new schema,
-ledger, registry, protocol token or automatic snapshot mutation is introduced.
+## Owner changes at a decision boundary
+
+Direct Delegator relay owns delivery: idle send, native noninterrupting steer
+when supported, otherwise retain until idle. Urgent scoped stop/revocation
+uses the existing immediate interrupt route; never delay for Sidekick or reads.
+A trusted relay needs no verbatim quote. Missing/unreadable Delegator snapshot
+means absent/unknown, not proof of no Delegator or no changes; direct relay works.
+
+At a relevant claim, dispatch, plan adoption or acceptance, Host may read
+relevant pending changes in the existing Delegator snapshot, without waiting
+for its timer or mechanically sweeping every state. Delegator alone retains
+scoped source-backed changes in its own snapshot until adoption is evidenced;
+Host alone adopts into its body. Delegator observes that evidence and confirms
+or compacts its record. Neither writes the other's file.
+
+Admission, end-turn, file read or Sidekick receipt alone proves no adoption.
+An ordinary scoped adopted value/duty with source correlation can suffice
+without an extra reply. Identical values do not prove a one-shot action ran;
+urgent stops require actual cessation evidence. Keep independent pending
+actions and partial effects, not one scalar or an exactly-once claim.
+
+Authority/scope precede time. Later explicit owner direction may supersede
+earlier direction, including reauthorization after a stop. Stale drafts
+cannot overwrite newer grants or runtime revocation. Re-evaluate only affected
+items. Recover ambiguous sends, partial fan-out and interrupted Host/Sidekick
+from existing records before replaying admitted work; unaffected authorized
+work continues. No new queue, marker/revision protocol, ledger or scheduler.
