@@ -2375,6 +2375,86 @@ class DispatchEntry(unittest.TestCase):
         self.assertIn("--full", capture["argv"])
         self.assertIn("--inline", capture["argv"])
 
+    def test_turn_view_metadata_is_not_a_failure_but_system_error_is(self):
+        view = self.turn_view([
+            {"cursor": 8, "kind": "session_update", "update": {
+                "sessionUpdate": "session_info_update", "_meta": {
+                    "context_usage": {"used": 100, "size": 1000}}}},
+            {"cursor": 9, "kind": "session_update", "update": {
+                "sessionUpdate": "session_info_update", "_meta": {
+                    "codex": {"threadStatus": {"type": "idle"}}}}},
+            {"cursor": 10, "kind": "session_update", "update": {
+                "sessionUpdate": "session_info_update", "_meta": {
+                    "codex": {"threadStatus": {"type": "systemError"}}}}},
+            {"cursor": 11, "kind": "turn_ended", "prompt_fingerprint": "fp-252",
+                "outcome": "turn_completed", "stop_reason": "end_turn"},
+        ])
+        self.assertEqual(view["failure_count"], 1)
+        self.assertEqual([e["cursor"] for e in view["failure_evidence"]], [10])
+        self.assertEqual(view["failure_evidence"][0]["error"],
+                         {"code": "agent-system-error", "threadStatus": "systemError"})
+        self.assertEqual(view["outcome"], "turn_completed")
+        self.assertFalse(view["truncation"]["evidence"])
+        self.assertEqual(view["unknown_reasons"], [])
+
+    def test_turn_view_compacts_large_bodies_without_losing_evidence(self):
+        view = self.turn_view([
+            {"cursor": 8, "kind": "session_update", "update": {
+                "sessionUpdate": "session_info_update", "_meta": {"context_usage": 100}}},
+            {"cursor": 9, "kind": "request_permission", "request": {
+                "request_id": "p-large", "tool_call_id": "t-large", "title": "讀" * 60000}},
+            {"cursor": 10, "kind": "session_update", "sessionId": "acp-252", "update": {
+                "sessionUpdate": "tool_call_update", "toolCallId": "t-large", "status": "failed",
+                "content": [{"type": "text", "text": "x" * 60000}]}},
+            {"cursor": 11, "kind": "permission_cancelled", "request_id": "p-large",
+                "detail": "x" * 60000},
+            {"cursor": 12, "kind": "error", "error": {
+                "code": "fixture-error", "message": "x" * 60000}},
+            {"cursor": 13, "kind": "turn_ended", "prompt_fingerprint": "fp-252",
+                "outcome": "turn_completed", "stop_reason": "end_turn"},
+            {"cursor": 14, "kind": "request_permission", "request": {"request_id": "later"}},
+        ])
+        self.assertEqual(view["permission_count"], 2)
+        self.assertEqual(view["failure_count"], 2)
+        self.assertEqual([e["cursor"] for e in view["permission_evidence"]], [9, 11])
+        self.assertEqual([e["cursor"] for e in view["failure_evidence"]], [10, 12])
+        self.assertEqual(view["permission_evidence"][0]["request"]["request_id"], "p-large")
+        self.assertEqual(view["permission_evidence"][0]["request"]["tool_call_id"], "t-large")
+        self.assertEqual(view["permission_evidence"][1]["request_id"], "p-large")
+        self.assertEqual(view["failure_evidence"][0]["update"]["toolCallId"], "t-large")
+        self.assertEqual(view["failure_evidence"][0]["update"]["status"], "failed")
+        self.assertEqual(view["failure_evidence"][0]["sessionId"], "acp-252")
+        self.assertEqual(view["failure_evidence"][1]["error"]["code"], "fixture-error")
+        for entry in view["permission_evidence"] + view["failure_evidence"]:
+            self.assertTrue(entry["truncated"])
+            self.assertGreater(entry["payload_bytes"], 60000)
+            self.assertEqual(entry["raw"]["cursor"], entry["cursor"])
+            self.assertEqual(entry["raw"]["event_log_path"], "/raw/events.jsonl")
+            self.assertIn("--full", entry["raw"]["argv"])
+        self.assertLess(len(json.dumps(view, ensure_ascii=False).encode()), 12000)
+        self.assertTrue(view["truncation"]["evidence"])
+        self.assertFalse(view["truncation"]["reply"])
+        self.assertEqual(view["source"]["through"], 13)
+        self.assertEqual(view["unknown_reasons"], [])
+
+    def test_turn_view_compacts_pending_permission_and_status_error(self):
+        view = self.turn_view([], status_extra={
+            "turn_active": True, "turn_outcome": None, "stop_reason": None,
+            "pending_permissions": [{"request_id": "pending", "tool_call_id": "t1",
+                                     "title": "x" * 60000}],
+            "fatal_error": {"code": "fixture-fatal", "message": "x" * 60000}})
+        pending = view["pending_permissions"][0]
+        failure = view["failure_evidence"][0]
+        self.assertEqual(pending["request_id"], "pending")
+        self.assertEqual(pending["tool_call_id"], "t1")
+        self.assertEqual(failure["fatal_error"]["code"], "fixture-fatal")
+        for entry in (pending, failure):
+            self.assertTrue(entry["truncated"])
+            self.assertEqual(entry["raw"]["argv"][0], "status")
+        self.assertLess(len(json.dumps(view).encode()), 6000)
+        self.assertTrue(view["truncation"]["evidence"])
+        self.assertEqual(view["failure_count"], 1)
+
     def test_turn_view_reports_unknown_gaps_and_truncation(self):
         view = self.turn_view([
             {"cursor": 10, "kind": "turn_ended", "prompt_fingerprint": "fp-252", "outcome": "turn_canceled"}
@@ -2460,6 +2540,20 @@ class DispatchEntry(unittest.TestCase):
 
 
 class RenderedGuidance(unittest.TestCase):
+    def test_dispatch_guidance_preserves_authorization_and_unknown_selection(self) -> None:
+        template = (REPO / "templates/orchestrator/references/dispatch-collect.md").read_bytes()
+        generated = (ORCHESTRATOR / "references/dispatch-collect.md").read_bytes()
+        self.assertEqual(template, generated)
+        self.assertLessEqual(len(template), 8192)
+        text = generated.decode()
+        self.assertIn("does not choose workers,\ngrant, accept or stop seats", text)
+        self.assertIn("Host allocates within authorization", text)
+        self.assertIn("Explicit `applied: false` or `model_verified: false`", text)
+        self.assertIn("Missing application, unknown observations", text)
+        self.assertIn("advertised differences stay unknown and do not block send", text)
+        self.assertNotIn("Host chooses, grants", text)
+        self.assertNotIn("Explicit unapplied/unverified", text)
+
     def test_entry_is_discoverable_and_sideagent_includes_light_work(self) -> None:
         skill = (ORCHESTRATOR / "SKILL.md").read_text(encoding="utf-8")
         reference = (ORCHESTRATOR / "references" / "dispatch-collect.md").read_text(encoding="utf-8")

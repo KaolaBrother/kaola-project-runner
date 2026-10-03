@@ -1,8 +1,8 @@
 # Dispatch and collect
 
-`scripts/kaola-dispatch.py` executes an adopted finite plan and correlates
-Runner receipts. Host chooses, grants, accepts and stops. Index is correlation,
-not a ledger; trivial transport/counting calls no model.
+`scripts/kaola-dispatch.py` executes an adopted plan; it does not choose workers,
+grant, accept or stop seats. Host allocates within authorization. Index is
+correlation, not a ledger; trivial calls use no model.
 
 ## Routine context
 
@@ -108,12 +108,12 @@ is absent is `not-run` and is not started. Duplicate session names are
 a result. Timeout or an unreadable receipt is `unknown`, not `failed`. Send-time holder mismatch or unknown mutation/outcome stays unknown,
 even at exit 0. Index updates per item; hashes use `sha256:` plus hex.
 
-Applied selection comes from `config_application` (including nested
-`start_evidence`), never `resolved_*`. Explicit unapplied/unverified fields
-do not send (`selection-mismatch`); missing application is unknown and does
-not block. Mapped `requested_id` matches catalog id. Advertised differences
-remain unknown, not applied mismatches. Provider qualification matches after
-`\`; a slash stays part of the id.
+Applied selection uses `config_application` (also nested `start_evidence`),
+never `resolved_*`. Explicit `applied: false` or `model_verified: false` does
+not send (`selection-mismatch`). Missing application, unknown observations and
+advertised differences stay unknown and do not block send. Mapped
+`requested_id` matches catalog id. Provider qualification matches after `\\`;
+a slash stays part of the id.
 
 A live assignment binds only matching repo, session, preset, holder and prompt
 hash; fingerprint alone is `assignment-unbound`. Bound active/completed work

@@ -1967,6 +1967,26 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
         "truncation": {"reply": False, "evidence": False},
     }
     unknown = result["unknown_reasons"]
+
+    def compact(payload: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+        text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        size = len(text.encode("utf-8"))
+        if size <= 2048:
+            return payload
+        # Keep identities and cursors even when bodies move to the raw capture.
+        fields = ("cursor", "kind", "sessionId", "request_id", "tool_call_id",
+                  "toolCallId", "sessionUpdate", "status", "prompt_fingerprint",
+                  "outcome", "stop_reason", "code", "threadStatus", "option")
+        summary = {key: payload[key] for key in fields if key in payload}
+        for key in ("request", "update", "error", "fatal_error"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                summary[key] = {field: value[field] for field in fields if field in value}
+        summary.update(truncated=True, payload_bytes=size,
+                       payload_excerpt=text[:480], raw=raw)
+        result["truncation"]["evidence"] = True
+        return summary
+
     if not same_repo(item.get("repo"), repo):
         unknown.append("dispatch-repo-mismatch")
         return emit(result)
@@ -1985,7 +2005,8 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
                 and receipt.get("session") == item["session"]
                 and holder_of(receipt) == item["holder_instance_id"])
 
-    code, status, note = run_runner(script, launch_argv(item, repo, "status"))
+    status_raw = {"runner": str(script), "argv": launch_argv(item, repo, "status")}
+    code, status, note = run_runner(script, status_raw["argv"])
     result["source"]["status"] = evidence(status, code, note)
     unread = receipt_unreadable(code, status, note)
     if unread or not bound(status):
@@ -1995,7 +2016,11 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
     if current_turn:
         active, outcome, stop = turn_facts(status)
         result.update(turn_active=active, outcome=outcome, stop_reason=stop)
-        result["pending_permissions"] = nested(status, "pending_permissions")
+        pending = nested(status, "pending_permissions")
+        result["pending_permissions"] = [
+            compact(entry, status_raw) if isinstance(entry, dict) else entry
+            for entry in pending
+        ] if isinstance(pending, list) else pending
         if result["pending_permissions"] is None:
             unknown.append("pending-permissions-unavailable")
         if status.get("truncated"):
@@ -2003,7 +2028,7 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
             unknown.append("status-truncated")
         for key in ("error", "fatal_error"):
             if status.get(key):
-                result["failure_evidence"].append({key: status[key]})
+                result["failure_evidence"].append(compact({key: status[key]}, status_raw))
     # --full --inline uses the existing rotated-log reader and bypasses the tail budget.
     argv = ["capture", "--repo", repo, "--session", item["session"], "--full", "--inline"]
     cap_code, capture, cap_note = run_runner(script, argv)
@@ -2063,19 +2088,30 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
     for event in window:
         kind = event.get("kind")
         update = event.get("update") if isinstance(event.get("update"), dict) else {}
+        raw = {"runner": str(script), "argv": argv,
+               "event_log_path": capture.get("event_log_path"), "cursor": event["cursor"]}
         if kind in ("request_permission", "permission_answered", "permission_cancelled"):
-            result["permission_evidence"].append(event)
+            result["permission_evidence"].append(compact(event, raw))
+        meta = update.get("_meta")
+        codex = meta.get("codex") if isinstance(meta, dict) else None
+        thread_status = codex.get("threadStatus") if isinstance(codex, dict) else None
+        system_error = isinstance(thread_status, dict) and thread_status.get("type") == "systemError"
         if (kind in ("process_exited", "agent_message_error", "malformed_stdout")
                 or event.get("error")
                 or (kind == "turn_ended" and event.get("outcome") in ("turn_failed", "turn_canceled", "process_exited"))
                 or (update.get("sessionUpdate") in ("tool_call", "tool_call_update")
                     and update.get("status") in ("failed", "error"))
-                or (update.get("sessionUpdate") == "session_info_update" and update.get("_meta"))):
-            result["failure_evidence"].append(event)
+                or system_error):
+            if system_error:
+                # Same structured error the holder records for this wire signal.
+                event = {**event, "error": {"code": "agent-system-error", "threadStatus": "systemError"}}
+            result["failure_evidence"].append(compact(event, raw))
         if update.get("sessionUpdate") == "agent_message_chunk":
             content = update.get("content")
             if isinstance(content, dict) and isinstance(content.get("text"), str):
                 reply_chars += len(content["text"])
+    result["permission_count"] = len(result["permission_evidence"])
+    result["failure_count"] = len(result["failure_evidence"])
     result["excerpt"] = result_excerpt({"events": window})
     result["truncation"]["reply"] = reply_chars > 480
     if result["outcome"] is None:
