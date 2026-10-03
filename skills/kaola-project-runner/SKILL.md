@@ -232,15 +232,15 @@ sink, and write ownership.
    `start` under a new standard name, never a finished seat;
    `--resume`/`--continue` recover the same assignment only.
 
-   Keep Hosts with in-flight or open delivery/acceptance/close-out; no "continue";
-   next beat: worker event. Before quiescence match owner/heartbeat project.goal/stop
-   and QA/docs; worker done ends no open mandate.
-   [duty-reconcile.md](references/duty-reconcile.md).
+   A Host with in-flight/delivery/acceptance/close-out is not an idle worker;
+   keep it; send it no "continue". Next beat: worker event. Before quiescence
+   reconcile owner/heartbeat project.goal/stop and QA/docs; worker done ends no
+   open mandate. [duty-reconcile.md](references/duty-reconcile.md).
    Claim only with intake open. Blocked duties keep next action/reopening condition
-   in existing heartbeat values. Assignment-local retry bounds imply no project
-   pause; owner/project bounds keep scope. Worker stop/replacement never resets
-   attempt limits. Stop/pause/cleanup: Ending a run;
-   stop/acceptance/merge/closure/cleanup differ.
+   in existing heartbeat values. Assignment-local retry bounds never pause project;
+   owner/project bounds keep scope. Worker stop/replacement never resets attempt limits.
+   Ending a run: stop/pause/cleanup. Session stop is not issue closure;
+   acceptance/merge/cleanup differ.
 
 ## Ending a run
 

@@ -1,8 +1,8 @@
 {
-  "build": "301856bafe29",
+  "build": "a039c45f0728",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "d79468deb170c38c02f4c542ee48bb5699f09cdb7de9c7251ec26fdeb2aad87a",
+    "SKILL.md": "6cbba6bb0a1177277998f122dfc9c3ce2bcf4ac1d81bb26e936e93df09902644",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
     "references/dispatch-collect.md": "a30fc6f7899ee8010cdf9ba6178f67d4a6f7a1b2a610a6cac362145297d4e564",
     "references/doc-maintenance.md": "d94e40b71e40f2ee713fa08836b0a6126b1052082fb23dc201f432de14e8abee",
