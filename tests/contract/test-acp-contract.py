@@ -1112,6 +1112,7 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row["identity"], "verified")
         self.assertIs(row["host_class"], False)
+        self.assertEqual(row["session_role"], "elite")
         self.assertEqual(row["holder_instance_id"], first["holder_instance_id"])
 
     def test_t9_unbound_live_holder_row_says_unbound(self) -> None:

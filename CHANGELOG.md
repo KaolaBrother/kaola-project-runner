@@ -3589,6 +3589,21 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Expose Host, Sidekick, Expert, Elite, and Worker session identity (Issue #245).**
+  `session_role` is an additive field on the holder record and on `list`,
+  `status`/`observe`, and `view`/`follow`. Values are `host`, `sidekick`,
+  `expert`, `elite`, `worker`, or `null`. A standard Host name is `host`.
+  `--role sidekick` is the only role flag. The three Classes come only from
+  the preset that start actually selected. Custom `--model`, an unproven
+  resume, and an unknown class stay `null` and are not labeled Worker.
+  `host_class` is unchanged. A dispatch `role` other than `sidekick` is
+  `not-run` / `role-unproven`. Recovery does not change a live session's
+  role. Occupancy stays catalog-Class-based. A running seat keeps the holder
+  it started with, so that seat emits the field only after it is replaced
+  (`Seats: restart required` for the field; this issue does not restart
+  seats). Kaola Terminal's UI is unchanged. The Grok Bot bridge returns to
+  the content stage (`saveable: false`) so this content can pass the pin
+  gate; the next pin is a separate commit and is not part of this issue.
 - **Pause an unusable account seat and route login recovery to the user (Issue #216).**
   The Delegator `host-brick` reference and the Project Runner `quota-packages` reference now
   separate three causes from existing receipts, captures and events, and the Delegator

@@ -37,6 +37,7 @@ GROK_ACP_REF = PROJECT / "skills" / "grok-kaola-project-runner" / "references" /
 LIST_ROW_KEYS = {
     "platform", "session", "repo", "state", "holder_pid", "agent_alive",
     "event_cursor", "mutation_status", "pending_count", "socket_ok", "transport",
+    "session_role",
 }
 L0_FORBIDDEN = {"timeline", "thinking_text", "plan", "messages", "tools"}
 CONTENT_TYPES = {"text", "diff", "terminal"}

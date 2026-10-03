@@ -12,7 +12,7 @@ iOS 远程 v1 **不用**本命令：Citadel `execute()` 15 秒且等进程退出
 ## 行为
 
 - CLI：`kaola-acp <platform> follow --repo … --session … [--since CURSOR]`  
-- stdout NDJSON，每行 `{kind:snapshot|delta|heartbeat|eof|error, ...}`。snapshot/delta 的载荷与 `view` 同 schema。  
+- stdout NDJSON，每行 `{kind:snapshot|delta|heartbeat|eof|error, ...}`。snapshot/delta 的载荷与 `view` 同 schema，含 `session_role`。
 - 该 Unix 连接在首包 `follow` op 之后**只读**：`prompt` / `permit` / `cancel` / `stop` 必须走另一条短连接。  
 - 心跳带全量 `pending_permissions` 与 `mutation_status`，避免丢 delta 就丢权限卡。  
 - 慢消费者：该 follower 队列 >256 行则 `follow-dropped` 并断开**这一路**；agent stdio 不停。  
@@ -25,6 +25,25 @@ iOS 远程 v1 **不用**本命令：Citadel `execute()` 15 秒且等进程退出
 - 第三条套接字仍可 `permit`（#25 的锁仍然适用）。  
 - 杀掉 follow CLI 不停止 holder/agent。  
 - `process_exited` 后跟 eof；eof 之后 holder 关闭该连接，CLI 退出；agent 已退出后再 attach 的 follower 收到 snapshot 后立即 eof。holder-lost 为 error 行。
+
+## `session_role`
+
+snapshot 与 view 同一对象，带 `session_role`，不带 list 行的 `host_class`。五值见 [list-view.md](list-view.md)。紧凑一行：
+
+```json
+{"kind":"snapshot","schema":"kaola-acp-view/1","session":"codex-KPR-i245-draft","session_role":"sidekick"}
+```
+
+| `session_role` | 消费者读法 |
+|---|---|
+| `host` | Host 卡 |
+| `sidekick` | Sidekick，不是普通 worker |
+| `expert` | Expert Class 的工作会话 |
+| `elite` | Elite Class 的工作会话 |
+| `worker` | Worker Class 的工作会话 |
+| `null` | 旧记录或无法证明；list 行再用 `host_class` 回退 |
+
+原生 Fusion 组件 `role: "sidekick"` 不是这个字段。follow 不另开一条 role 通道。
 
 ## 非本单
 

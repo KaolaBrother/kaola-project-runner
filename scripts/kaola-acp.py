@@ -34,6 +34,8 @@ HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
 MODEL_POLICY_HELPER = SCRIPT_DIR / "kaola-model-policy.py"
 FAST_VARIANT_SUFFIXES = ("-fast", "-priority")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
+# Issue #245: additive session identity. Null is absence, never a sixth label.
+SESSION_ROLES = frozenset({"host", "sidekick", "expert", "elite", "worker"})
 PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli", "opencode", "zcode")
 START_WAIT = 20.0
 # Issue #146: the holder's shared session/new wait. A manifest
@@ -624,9 +626,15 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
         state = record.get("state")
         if state not in HOLDER_STATES:
             state = str(state) if state is not None else "error"
+        row_platform = record.get("platform") or platform
+        row_session = record.get("session") or session
+        host = host_session(row_platform, row_session)
+        persisted_role = record.get("session_role")
+        if persisted_role not in SESSION_ROLES:
+            persisted_role = None
         rows.append({
-            "platform": record.get("platform") or platform,
-            "session": record.get("session") or session,
+            "platform": row_platform,
+            "session": row_session,
             "repo": repo,
             "state": state,
             "holder_pid": pid,
@@ -640,8 +648,10 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             # Issue #132: the identity check, the Host-name fact, and the
             # recorded binding the repo sweep classifies a row by.
             "identity": identity,
-            "host_class": host_session(record.get("platform") or platform,
-                                       record.get("session") or session),
+            "host_class": host,
+            # Issue #245: host_class stays the name-pattern bool. session_role
+            # mirrors it when that bool is true; otherwise the persisted value.
+            "session_role": "host" if host else persisted_role,
             "dispatcher": record.get("dispatcher"),
         })
         fresh = seat_freshness(record)
@@ -2788,6 +2798,63 @@ def inherited_start_evidence(prior: Any, args: argparse.Namespace, repo: str,
     return inherited
 
 
+def preset_class_role(args: argparse.Namespace, basis: dict[str, Any]) -> str | None:
+    """Lowercased manifest Class for the preset this start actually selected.
+
+    ``preset_id`` is the only evidence. An undeclared tier, a foreign
+    platform, or a class outside Expert/Elite/Worker is null — never Worker.
+    """
+    preset_id = basis.get("preset_id")
+    if not isinstance(preset_id, str):
+        return None
+    platform, separator, tier = preset_id.partition("/")
+    if not separator or platform != getattr(args, "platform", None) or not tier:
+        return None
+    manifest = getattr(args, "manifest", None) or {}
+    if tier not in declared_tiers(manifest):
+        return None
+    raw = manifest.get(f"{tier.replace('-', '_')}_model_class") or ""
+    if not isinstance(raw, str):
+        return None
+    lowered = raw.strip().lower()
+    if lowered in ("expert", "elite", "worker"):
+        return lowered
+    return None
+
+
+def inherited_session_role(prior: Any, args: argparse.Namespace, repo: str,
+                           acp_session_id: Any) -> str | None:
+    """The prior role when this resume is the same native session, else null."""
+    if inherited_start_evidence(prior, args, repo, acp_session_id) is None:
+        return None
+    role = prior.get("session_role") if isinstance(prior, dict) else None
+    if role in SESSION_ROLES:
+        return role
+    return None
+
+
+def session_role_value(args: argparse.Namespace, basis: dict[str, Any],
+                       prior: Any = None, repo: str | None = None,
+                       acp_session_id: Any = None) -> str | None:
+    """Issue #245 session identity for this start.
+
+    Host name derivation is authoritative. ``--role sidekick`` is the only
+    flag that sets a role. Expert, elite, and worker come only from the
+    selected preset id and its manifest class. Custom ``--model``, a
+    resume-preserved start that is not the same native session, an unknown
+    class, and missing evidence stay null.
+    """
+    if host_session(getattr(args, "platform", ""), getattr(args, "session", None)):
+        return "host"
+    if getattr(args, "role", None) == "sidekick":
+        return "sidekick"
+    if basis.get("preset_id"):
+        return preset_class_role(args, basis)
+    if basis.get("source") == "resume-preserved" and isinstance(repo, str):
+        return inherited_session_role(prior, args, repo, acp_session_id)
+    return None
+
+
 def record_start_evidence(sock: Path, receipt: dict[str, Any], args: argparse.Namespace,
                           repo: str, prior: Any) -> None:
     """Hand this start's selection/application evidence to its holder (Issue #203).
@@ -2804,8 +2871,17 @@ def record_start_evidence(sock: Path, receipt: dict[str, Any], args: argparse.Na
     if inherited is not None:
         evidence["inherited"] = inherited
         receipt["inherited_start_evidence"] = inherited
-    reply = socket_request(sock, "record_start_evidence", {"evidence": evidence}, 10.0)
+    # Resume identity is knowable only after the native session id comes back.
+    # The spawn value stays until the holder accepts this final one.
+    role = session_role_value(args, selection_basis(args), prior, repo,
+                              receipt.get("acp_session_id"))
+    reply = socket_request(
+        sock, "record_start_evidence",
+        {"evidence": evidence, "session_role": role}, 10.0,
+    )
     receipt["start_evidence_recorded"] = reply.get("recorded") is True
+    if receipt["start_evidence_recorded"]:
+        receipt["session_role"] = role
     if reply.get("error"):
         receipt["start_evidence_error"] = reply["error"]
 
@@ -3797,6 +3873,11 @@ def command_start(args: argparse.Namespace, repo: str,
     accepted = current_accepted_revision()
     holder_argv += ["--accepted-revision", accepted or ""]
     holder_argv += ["--baseline-exempt", "1" if skew_baseline_dir() is None else "0"]
+    # Issue #245: computed before spawn. A resume-preserved role stays null
+    # until the native session id proves the same session, below.
+    role = session_role_value(args, selection_basis(args), prior_record, repo)
+    receipt["session_role"] = role
+    holder_argv += ["--session-role", role or ""]
     holder_argv += ["--start-selection", json.dumps({
         "model": args.model,
         "effort": args.effort,
@@ -3807,6 +3888,7 @@ def command_start(args: argparse.Namespace, repo: str,
         # drain-restart lose a state this start really applied.
         "fast": fast_intent(args),
         "mode": mode_value,
+        "session_role": role,
     }, sort_keys=True)]
     cli_version = cli_version_fact(args, holder_env)
     if cli_version is not None:
@@ -4467,6 +4549,9 @@ def main() -> int:
     # Issue #111/#188: validated against the manifest's declared presets after
     # it loads, so an undeclared name answers a typed refusal, not exit 2.
     parser.add_argument("--tier", metavar="default|PLATFORM_TIER")
+    # Issue #245: the only start flag that sets a session role. Host, expert,
+    # elite, and worker are derived, never accepted as this flag.
+    parser.add_argument("--role", choices=("sidekick",))
     # Issue #181: None means "not passed", so explicit detection is None-ness.
     # Every consumer that relied on the old "off" default treats None as off.
     parser.add_argument("--fast", choices=("on", "off"))
@@ -4663,6 +4748,13 @@ def main() -> int:
             # evidence; an old record without it stays without it.
             if "start_evidence" not in receipt and "start_evidence" in record:
                 receipt["start_evidence"] = record["start_evidence"]
+            # Issue #245: same lift as start evidence. A live state reply
+            # already carries the field; a stopped or legacy record fills it.
+            if "session_role" not in receipt:
+                persisted_role = record.get("session_role")
+                receipt["session_role"] = (
+                    persisted_role if persisted_role in SESSION_ROLES else None
+                )
         # Only a session that exists has a binding to report; ``no-session``
         # stays silent rather than answering "unknown" about nothing.
         if record is not None or "heartbeat_host" in receipt:

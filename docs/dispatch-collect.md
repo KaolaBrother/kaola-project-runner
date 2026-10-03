@@ -68,6 +68,18 @@ A `--no-wait` admission is `in-flight` with reason `admitted` and
 `holder-instance-mismatch` is `unknown`. Coverage also lists `failed` and
 `not-run`. `correlation_only` is true. The Host still accepts.
 
+Optional item `role` is session identity, not a second Class. Omit it, or
+set JSON `null`, for an ordinary preset start; a null role is not written
+onto the index. The only value that starts is `sidekick`: `execute` passes
+`--role sidekick` on that item's Runner `start`, and the index keeps `role`
+for correlation. Any other value (`expert`, `elite`, `worker`, `host`, a
+different spelling) is `not-run` with reason `role-unproven` and calls no
+Runner. Sidekick does not change `elite_cap`, preset `count`, or a shared
+seat; the underlying preset Class still does. On recovery of a live session,
+the entry does not start again and does not change that session's
+`session_role`. When the persisted role is not `sidekick`, the item gains
+`evidence.role_note` and keeps the status it already had.
+
 The same assignment is repo, preset, session, and prompt. A matching
 `unknown` prior, including `send-timeout`, whose record is now absent stays
 `unknown` / `reconciliation-needed`: no start and no send. An already-admitted

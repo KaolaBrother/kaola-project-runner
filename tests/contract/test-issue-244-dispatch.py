@@ -287,6 +287,33 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(start["argv"][start["argv"].index("--effort") + 1], "high")
         self.assertNotIn("--model", start["argv"])
 
+    def test_sidekick_role_reaches_start_argv(self) -> None:
+        install_fake(self.skills, ["codex"])
+        repo = str(self.repo)
+        self.use_spec({
+            "codex-KPR-i245-role": {
+                "status": absent(repo),
+                "start": started(repo, "gpt-6-luna", "max"),
+                "send": sent("fp-role"),
+            }
+        })
+        auth = self.authorization([{"id": "codex/luna", "state": "granted"}])
+        plan = self.plan([{
+            "item_id": "sidekick",
+            "preset": "codex/luna",
+            "session": "codex-KPR-i245-role",
+            "prompt": "draft only",
+            "role": "sidekick",
+        }])
+        payload = self.execute(plan, auth, self.availability(["codex/luna"]))
+        item = payload["items"][0]
+        self.assertEqual(item["status"], "in-flight")
+        self.assertEqual(item["reason"], "admitted")
+        self.assertEqual(item["role"], "sidekick")
+        start = next(row for row in commands(self.log) if row["command"] == "start")
+        self.assertEqual(start["argv"][start["argv"].index("--role") + 1], "sidekick")
+        self.assertNotIn("--model", start["argv"])
+
     def test_provider_qualified_model_matches_and_a_different_id_does_not(self) -> None:
         install_fake(self.skills, ["zcode", "codex", "opencode"])
         repo = str(self.repo)
@@ -852,11 +879,12 @@ class DispatchEntry(unittest.TestCase):
     def test_timeout_and_unknown_mutation_are_not_failed_or_returned(self) -> None:
         install_fake(self.skills, ["zcode"])
         repo = str(self.repo)
-        self.env["KAOLA_DISPATCH_RUNNER_TIMEOUT"] = "0.2"
+        self.env["KAOLA_DISPATCH_RUNNER_TIMEOUT"] = "2"
         self.use_spec({
             "zcode-KPR-i244-hang": {
                 "status": absent(repo),
                 "hang": ["start"],
+                "hang_for": 30,
                 "send": sent(),
             },
             "zcode-KPR-i244-junk": {

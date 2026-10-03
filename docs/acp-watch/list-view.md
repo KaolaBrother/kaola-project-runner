@@ -82,10 +82,42 @@
 | `transport` | 恒为 `"acp"` |
 | `identity` | Issue #132：`verified` \| `dead` \| `unreachable` \| `mismatch`；record 在、PID 活、套接字应答、`state` 回报的 `holder_instance_id` 与 record 相等才是 `verified`（对该套接字发一次只读 `state`，上限 5 s）；PID 活不等于活 |
 | `host_class` | bool；会话名是标准 Host 名 `<platform>-<CODE>-orchestrator-<purpose>` |
+| `session_role` | string \| null；`host` `sidekick` `expert` `elite` `worker` 之一。`host_class` 为 true 时 list 给出 `host`；否则用记录里的值；没有或无法识别则为 null。见下方五值表 |
 | `dispatcher` | object \| null；该 holder 继承的派工 holder 身份（`holder_instance_id` `platform` `repo` `session`） |
 | `heartbeat_host` / `heartbeat_host_known` | 记录中的绑定事实（#70 三态） |
 
 扫描根：`${KAOLA_ACP_RECORD_ROOT:-XDG_RUNTIME_DIR|TMPDIR}/kaola-<uid>/<platform>/<session>/<sha16>/record.json`。`--platform` / `--repo` 只做过滤。
+
+### `session_role`
+
+| 值 | 含义 |
+|---|---|
+| `host` | 标准 Host 名；与 `host_class: true` 一致。list 在该布尔为真时直接给出 `host` |
+| `sidekick` | 仅显式 start `--role sidekick`（dispatch 计划项 `role: "sidekick"`） |
+| `expert` | 这次实际选中的 preset，其 manifest Class 为 Expert |
+| `elite` | 这次实际选中的 preset，其 manifest Class 为 Elite |
+| `worker` | 这次实际选中的 preset，其 manifest Class 为 Worker |
+| `null` | 自定义 `--model`、对不上同一 native session 的 resume、未知 Class、或旧记录没有该字段 |
+
+`null` 时沿用现有 `host_class`：true 仍是 Host，false 仍是普通会话。不要把未知标成 `worker`。`session_role` 不改变 preset Class 的额度、并发和失败规则。Devin Fusion 的 `model_display.components[].role`（`main` / `sidekick`）是模型组成事实，不是 `session_role`。
+
+Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
+
+```json
+{
+  "session": "codex-KPR-i245-draft",
+  "host_class": false,
+  "session_role": "sidekick",
+  "dispatcher": {
+    "holder_instance_id": "9f2ab1c4d8e0736fa051b2c9d4e68a71",
+    "platform": "codex",
+    "repo": "/Users/me/src/app",
+    "session": "codex-KPR-orchestrator-main"
+  }
+}
+```
+
+同一条 list 里，Host 行是 `"host_class": true, "session_role": "host"`。旧 Host 记录没有 `session_role` 时，list 仍给出 `"session_role": "host"`；`status` 上的持久化值可以是 `null`，消费者再用 `host_class` 回退。
 
 ## `kaola-acp-view/1`
 
@@ -95,6 +127,7 @@
 |---|---|
 | `schema` | 恒为 `"kaola-acp-view/1"` |
 | `platform` `session` `repo` | 身份三元组，同 list 行 |
+| `session_role` | string \| null；与 list 相同的五值。view/follow 传 holder 记录值，不另做 host 投影 |
 | `state` | 同 list 行 |
 | `holder_pid` | int；世代栅栏，Terminal permit 必须核对 |
 | `holder_instance_id` | string；本 holder 进程实例身份（#39），比 PID 更强的绑定，`permit`/`cancel` 可用 `--expected-holder-instance-id` 钉住 |
@@ -128,6 +161,7 @@
   "schema": "kaola-acp-view/1",
   "platform": "kimi-cli",
   "session": "fix-login",
+  "session_role": null,
   "repo": "/Users/me/src/app",
   "state": "ready",
   "holder_pid": 48213,

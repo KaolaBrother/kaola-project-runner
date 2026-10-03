@@ -1472,6 +1472,24 @@ def parse_init_meta(raw: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+# Issue #245: the five session identities. Anything else is rejected at spawn.
+SESSION_ROLES = frozenset({"host", "sidekick", "expert", "elite", "worker"})
+
+
+def normalize_session_role(raw: Any) -> str | None:
+    """Map a spawn value to one known role or null. Reject every other value."""
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ValueError("session-role")
+    text = raw.strip().lower()
+    if text in ("", "null", "none"):
+        return None
+    if text in SESSION_ROLES:
+        return text
+    raise ValueError(text)
+
+
 class Holder:
     def __init__(self, args: argparse.Namespace):
         self.args = args
@@ -1577,6 +1595,16 @@ class Holder:
         except ValueError:
             parsed_selection = None
         self.start_selection = parsed_selection if isinstance(parsed_selection, dict) else None
+        # Issue #245: spawn argv, already checked in main. A direct constructor
+        # still normalizes; an unknown value does not start the agent.
+        raw_role = getattr(args, "session_role", "")
+        try:
+            self.session_role = (
+                raw_role if raw_role in SESSION_ROLES or raw_role is None
+                else normalize_session_role(raw_role)
+            )
+        except ValueError as exc:
+            raise SystemExit(2) from exc
         # Issue #203: the start's own selection/application evidence, handed in
         # once by `start` after it applied the config options. Held here so every
         # whole-record rewrite and every state reply carries it; None until then
@@ -1635,6 +1663,7 @@ class Holder:
             "accepted_revision": self.runner_identity["accepted_revision"],
             "script_paths": self.runner_identity["script_paths"],
             "start_selection": self.start_selection,
+            "session_role": self.session_role,
             "start_evidence": self.start_evidence,
             "baseline_exempt": self.baseline_exempt,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
@@ -2134,6 +2163,7 @@ class Holder:
             "accepted_revision": self.runner_identity["accepted_revision"],
             "script_paths": self.runner_identity["script_paths"],
             "start_selection": self.start_selection,
+            "session_role": self.session_role,
             "start_evidence": self.start_evidence,
             "baseline_exempt": self.baseline_exempt,
             "agent_pid": self.agent.proc.pid if self.agent.proc else None,
@@ -3648,6 +3678,7 @@ class Holder:
             "schema": VIEW_SCHEMA,
             "platform": self.args.platform,
             "session": self.args.session,
+            "session_role": self.session_role,
             "repo": self.args.repo,
             "state": self.state,
             "holder_pid": os.getpid(),
@@ -4059,7 +4090,19 @@ class Holder:
         if size > START_EVIDENCE_BYTES:
             return {"error": {"code": "start-evidence-too-large", "bytes": size,
                               "limit": START_EVIDENCE_BYTES}}
+        # Issue #245: start completes a resume-preserved role only after the
+        # native session id is known. Absent key leaves the spawn value.
+        updated_role = None
+        if "session_role" in params:
+            try:
+                updated_role = normalize_session_role(params.get("session_role"))
+            except ValueError:
+                return {"error": {"code": "invalid-session-role"}}
         self.start_evidence = evidence
+        if "session_role" in params:
+            self.session_role = updated_role
+            if isinstance(self.start_selection, dict):
+                self.start_selection["session_role"] = updated_role
         self.write_record()
         return {"recorded": True}
 
@@ -4447,9 +4490,15 @@ def main() -> int:
     parser.add_argument("--cli-version", default="")
     parser.add_argument("--accepted-revision", default="")
     parser.add_argument("--start-selection", default="")
+    parser.add_argument("--session-role", default="")
     parser.add_argument("--baseline-exempt", default="")
     parser.add_argument("--probe", action="store_true")
     args = parser.parse_args()
+    try:
+        args.session_role = normalize_session_role(args.session_role)
+    except ValueError:
+        print("invalid --session-role", file=sys.stderr)
+        return 2
     if args.probe:
         return run_probe(args)
     holder = Holder(args)

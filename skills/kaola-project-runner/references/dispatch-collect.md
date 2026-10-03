@@ -1,8 +1,8 @@
 # Dispatch and collect
 
 `scripts/kaola-dispatch.py` admits an adopted finite plan through existing
-Runners and later correlates receipts. It does not choose workers, grant
-seats, accept work, or stop seats. The index is correlation only, not a
+Runners and correlates receipts. It doesn't choose workers, grant
+seats, accept, or stop seats. Index is correlation only, not a
 ledger. Trivial start, count, and stop do not call a model.
 
 ## Routine context
@@ -108,7 +108,7 @@ is absent is `not-run` and is not started. Duplicate session names are
 a result. Timeout or an unreadable receipt is `unknown`, not `failed`. A
 send-time `holder-instance-mismatch` is `unknown`. Exit 0
 with unknown mutation and outcome is `unknown`. The index is replaced after
-each item. `prompt_sha256` is `sha256:` plus hex. A null `role` is omitted.
+each item. `prompt_sha256` is `sha256:` plus hex. A non-sidekick `role` is `role-unproven`.
 
 Applied fields come from `config_application`, including nested
 `start_evidence`. `resolved_*` is not applied evidence. `applied: false` and

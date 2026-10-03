@@ -2,6 +2,7 @@
   "schema": "kaola-acp-view/1",
   "platform": "kimi-cli",
   "session": "fix-login",
+  "session_role": null,
   "repo": "/Users/me/src/app",
   "state": "ready",
   "holder_pid": 48213,

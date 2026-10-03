@@ -850,6 +850,15 @@ def command_execute(args: argparse.Namespace) -> int:
         prompt = item.get("prompt")
         if not isinstance(preset, str) or not isinstance(session, str) or not isinstance(prompt, str):
             return fail("invalid-input", f"{item.get('item_id')}: preset, session, and prompt must be strings")
+        # Issue #245: only an explicit sidekick role is proven. Absent/null
+        # stays an ordinary preset start. Any other value is not admitted.
+        role = item.get("role", None)
+        if role is not None and role != "sidekick":
+            blocked.append(blank_item(
+                item["item_id"], preset, session, "not-run", "role-unproven",
+                {"role": role},
+            ))
+            continue
         if not SESSION_OK.fullmatch(session):
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", "session-name"))
             continue
@@ -1413,6 +1422,9 @@ def launch_argv(item: dict[str, Any], repo: str, command: str) -> list[str]:
             argv.extend(["--model", item["_model"]])
         if item.get("_effort"):
             argv.extend(["--effort", item["_effort"]])
+        # Issue #245: sidekick is the only role that reaches the holder.
+        if item.get("role") == "sidekick":
+            argv.extend(["--role", "sidekick"])
     elif command == "send":
         argv.extend(["--no-wait", "--text", item["prompt"]])
         holder = item.get("_holder") or item.get("holder_instance_id")
@@ -1543,8 +1555,32 @@ def assignment_bound(prior: dict[str, Any] | None, item: dict[str, Any],
     return True
 
 
+def note_persisted_role(item: dict[str, Any], receipt: dict[str, Any],
+                        base: dict[str, Any]) -> None:
+    """A requested sidekick that is not the persisted role is a note only.
+
+    Recovery does not start again and does not change the live session's role.
+    """
+    if item.get("role") != "sidekick":
+        return
+    persisted = receipt.get("session_role") if isinstance(receipt, dict) else None
+    if persisted not in ("host", "sidekick", "expert", "elite", "worker"):
+        persisted = None
+    if persisted == "sidekick":
+        return
+    evidence = base.get("evidence")
+    if not isinstance(evidence, dict):
+        evidence = {}
+        base["evidence"] = evidence
+    shown = "null" if persisted is None else persisted
+    evidence["role_note"] = (
+        f"persisted session_role is {shown}; requested sidekick was not applied"
+    )
+
+
 def recover_or_send(item: dict[str, Any], repo: str, script: Path, base: dict[str, Any],
                     receipt: dict[str, Any], prior: dict[str, Any] | None) -> dict[str, Any]:
+    note_persisted_role(item, receipt, base)
     seen_repo = repo_of(receipt)
     if not same_repo(seen_repo, repo):
         base.update(status="unknown", reason="repo-mismatch")
