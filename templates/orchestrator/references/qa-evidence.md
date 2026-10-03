@@ -43,6 +43,9 @@ behavior; reuse valid evidence without exhaustive or duplicate testing.
 Project- and user-required checks stay binding at their boundary: reduce
 redundant optional coverage or frequency, never silently waive a binding
 check or claim validation nobody performed.
+Uncertainty about relevant edges, expected behavior or an observed result may
+justify public research ([public-research.md](public-research.md)), including
+while forming the plan; routine planning alone does not.
 
 ## Who
 

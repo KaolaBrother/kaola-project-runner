@@ -14,6 +14,8 @@ Use only seats current authorization already allows. A task may move to a differ
 
 **Elite failure.** When insufficient reasoning is the plausible gap, first raise effort on the same model when the runtime supports a higher effort, existing authorization permits it, and the owner's current restriction allows that raise. Role limits stay in [worker-profiles.md](worker-profiles.md). If effort cannot be raised because it is already at its supported ceiling, the runtime cannot raise it, the owner's current restriction forbids the raise, or effort is irrelevant to the failure, reassignment to another fitting already-authorized Elite remains a recovery before any request for new authorization: prefer one better suited to the problem, or, when none is clearly better suited, a complementary Elite with a concrete different approach. There is no universal effort ladder and no fixed model ranking.
 
+**Knowledge gap.** When a failure may turn on missing external evidence — an upstream defect, a version limit, an unknown method or environment fact — consider whether that calls for research ([public-research.md](public-research.md)) rather than another same-approach elevation. Missing knowledge and insufficient reasoning can coexist, so research can complement an elevation or reassignment; neither must come first.
+
 **No useful recovery.** When no eligible already-authorized recovery remains, report the specific gap and seek the missing authorization or task decision through the existing authorization route or `HUMAN_DECISION_REQUIRED`. Do not rotate indefinitely through models, and do not retry the same approach without new information.
 
 ## Handoff
