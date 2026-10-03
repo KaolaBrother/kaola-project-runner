@@ -42,6 +42,15 @@ FAKE_RUNNER = textwrap.dedent(
         handle.write(json.dumps({"command": command, "session": session, "argv": argv, "t": time.time()}) + "\\n")
         handle.flush()
         fcntl.flock(handle, fcntl.LOCK_UN)
+    if command == "status":
+        calls = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+        if sum(c["command"] == "status" and c["session"] == session for c in calls) >= 2:
+            if row.get("second_status_hang"):
+                time.sleep(row.get("hang_for") or 2)
+                raise SystemExit(0)
+            if "status_second" in row:
+                print(json.dumps(row["status_second"]))
+                raise SystemExit(0)
     time.sleep(row.get("sleep") or 0)
     if command in row.get("hang", []):
         time.sleep(row.get("hang_for") or 2)
@@ -2319,7 +2328,7 @@ class DispatchEntry(unittest.TestCase):
             self.assertNotIn(preset, payload["capability_summary"]["presets"])
 
 
-    def turn_view(self, events, *, status_extra=None, item_extra=None, capture_extra=None):
+    def turn_view(self, events, *, status_extra=None, item_extra=None, capture_extra=None, row_extra=None):
         install_fake(self.skills, ["codex"])
         if self.log.exists(): self.log.unlink()
         session = "codex-KPR-i252-qa"
@@ -2335,7 +2344,7 @@ class DispatchEntry(unittest.TestCase):
         capture = {"repo": str(self.repo), "session": session, "events": events,
                    "event_log_path": "/raw/events.jsonl"}
         capture.update(capture_extra or {})
-        self.use_spec({session: {"status": status, "capture": capture}})
+        self.use_spec({session: {"status": status, "capture": capture, **(row_extra or {})}})
         index = write_json(self.root, "turn-index.json", {"schema": "kaola-dispatch-index/1",
                   "repo": str(self.repo), "items": [item]})
         before = index.read_bytes()
@@ -2590,6 +2599,135 @@ class DispatchEntry(unittest.TestCase):
         self.assertIn("event-range-unavailable", view["unknown_reasons"])
         self.assertEqual(view["outcome"], "turn_completed")
         self.assertIsNone(view["excerpt"])
+
+    def test_turn_view_keeps_status_verdict_when_only_the_capture_read_fails(self):
+        self.env["KAOLA_DISPATCH_RUNNER_TIMEOUT"] = "1"
+        failing = {"turn_outcome": "turn_failed", "stop_reason": "error"}
+        cases = [
+            ("capture-timeout", {"hang": ["capture"], "hang_for": 4}),
+            ("capture-unreadable", {"garbage": ["capture"]}),
+            ("after-status-timeout", {"second_status_hang": True, "hang_for": 4}),
+        ]
+        for reason, row in cases:
+            with self.subTest(reason=reason):
+                view = self.turn_view([], status_extra=failing, row_extra=row)
+                self.assertIn(reason, view["unknown_reasons"])
+                self.assertEqual(view["outcome"], "turn_failed")
+                self.assertEqual(view["stop_reason"], "error")
+                self.assertIs(view["turn_active"], False)
+                self.assertTrue(view["source"]["verdict_as_of"])
+                self.assertIsNone(view["range_complete"])
+                self.assertIsNone(view["failure_count"])
+                self.assertIsNone(view["source"].get("through"))
+
+    def test_turn_view_identity_conflict_clears_the_verdict_before_a_timeout(self):
+        self.env["KAOLA_DISPATCH_RUNNER_TIMEOUT"] = "1"
+        foreign_after = {"repo": str(self.repo), "session": "codex-KPR-i252-qa",
+                         "holder_instance_id": "foreign", "prompt_fingerprint": "fp-252"}
+        cases = [
+            ("foreign capture", {}, {"session": "foreign"}),
+            ("foreign after-status", {"status_second": foreign_after}, {}),
+            ("foreign after-status and capture timeout",
+             {"status_second": foreign_after, "hang": ["capture"], "hang_for": 4}, {}),
+            ("foreign capture and after-status timeout",
+             {"second_status_hang": True, "hang_for": 4}, {"session": "foreign"}),
+        ]
+        for label, row, capture in cases:
+            with self.subTest(label=label):
+                view = self.turn_view([], row_extra=row, capture_extra=capture)
+                self.assertIn("capture-identity-unbound", view["unknown_reasons"])
+                self.assertIsNone(view["outcome"])
+                self.assertIsNone(view["stop_reason"])
+                self.assertIsNone(view["turn_active"])
+
+    def test_turn_view_failure_entries_are_observations_beside_the_turn_verdict(self):
+        view = self.turn_view([
+            {"cursor": 8, "kind": "session_update", "update": {
+                "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "failed"}},
+            {"cursor": 9, "kind": "turn_ended", "prompt_fingerprint": "fp-252",
+                "outcome": "turn_completed", "stop_reason": "end_turn"},
+        ])
+        self.assertTrue(view["failure_present"])
+        self.assertEqual(view["failure_count"], 1)
+        self.assertEqual(view["outcome"], "turn_completed")
+        self.assertEqual(view["unknown_reasons"], [])
+
+    LIST_STUB = textwrap.dedent(
+        """\
+        import json, sys
+        repo = sys.argv[sys.argv.index("--repo") + 1]
+        print(json.dumps({"schema": "kaola-acp-list/1", "rows": [{
+            "repo": repo, "identity": "verified", "holder_instance_id": "stub-holder",
+            "platform": "zcode", "session": "zcode-KPR-stub", "state": "ready"}]}))
+        """
+    )
+
+    def installed_dispatch(self, stub_platform: str | None) -> Path:
+        scripts = self.skills / "kaola-project-runner" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "kaola-dispatch.py").write_bytes(SCRIPT.read_bytes())
+        worker = self.skills / "zcode-kaola-project-runner" / "scripts"
+        worker.mkdir(parents=True)
+        (worker / "platform.yaml").write_bytes((PLATFORMS / "zcode.yaml").read_bytes())
+        if stub_platform:
+            stub = self.skills / f"{stub_platform}-kaola-project-runner" / "scripts" / "kaola-acp.py"
+            stub.parent.mkdir(parents=True, exist_ok=True)
+            stub.write_text(self.LIST_STUB, encoding="utf-8")
+            stub.chmod(0o644)
+        return scripts / "kaola-dispatch.py"
+
+    def installed_seats(self, dispatch: Path, *extra: str) -> dict:
+        auth = self.authorization([{"id": "zcode/default", "state": "granted", "count": 1}])
+        proc = subprocess.run(
+            [sys.executable, str(dispatch), "project", "--seats", "--repo", str(self.repo),
+             "--authorization", str(auth), *extra],
+            capture_output=True, text=True, env=self.env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_seats_omitted_live_lists_through_a_non_executable_installed_runner(self):
+        dispatch = self.installed_dispatch("zcode")
+        stub = self.skills / "zcode-kaola-project-runner" / "scripts" / "kaola-acp.py"
+        self.assertFalse(os.access(stub, os.X_OK))
+        view = self.installed_seats(dispatch)
+        self.assertNotIn("live-source-unavailable", view["unknown_reasons"])
+        self.assertEqual([row["session"] for row in view["sessions"]], ["zcode-KPR-stub"])
+        self.assertEqual(view["source"]["live"], str(stub.resolve()))
+        self.assertIsNotNone(view["observed_elite_expert"])
+
+    def test_seats_explicit_skills_root_governs_and_is_not_replaced_by_another(self):
+        dispatch = self.installed_dispatch("zcode")
+        empty = self.root / "empty-skills"
+        empty.mkdir()
+        view = self.installed_seats(dispatch, "--skills-root", str(empty))
+        self.assertIn("live-source-unavailable", view["unknown_reasons"])
+        self.assertIsNone(view["source"]["live"])
+        self.assertEqual(view["sessions"], [])
+        view = self.installed_seats(dispatch, "--skills-root", str(self.skills))
+        self.assertEqual([row["session"] for row in view["sessions"]], ["zcode-KPR-stub"])
+        view = self.installed_seats(dispatch, "--skills-root", str(self.root / "missing"))
+        self.assertIn("live-source-unavailable", view["unknown_reasons"])
+
+    def test_seats_omitted_live_without_an_installed_runner_stays_unknown(self):
+        view = self.installed_seats(self.installed_dispatch(None))
+        self.assertIn("live-source-unavailable", view["unknown_reasons"])
+        self.assertIsNone(view["source"]["live"])
+        self.assertIsNone(view["observed_elite_expert"])
+
+    def test_execute_omitted_live_lists_through_the_skills_root_runner(self):
+        install_fake(self.skills, ["claude-code"])
+        stub = self.skills / "claude-code-kaola-project-runner" / "scripts" / "kaola-acp.py"
+        stub.write_text('import json\nprint(json.dumps({"schema": "kaola-acp-list/1", "rows": []}))\n',
+                        encoding="utf-8")
+        stub.chmod(0o644)
+        repo = str(self.repo)
+        self.use_spec({"claude-code-KPR-i252-opus": {
+            "status": absent(repo), "start": started(repo, "opus", "xhigh"), "send": sent("fp-opus")}})
+        capped = self.authorization([{"id": "claude-code/opus-xhigh", "state": "granted"}], elite_cap=1)
+        plan = self.plan([{"item_id": "opus", "preset": "claude-code/opus-xhigh",
+                           "session": "claude-code-KPR-i252-opus", "prompt": "a"}])
+        payload = self.execute(plan, capped, self.availability(["claude-code/opus-xhigh"]), live="omit")
+        self.assertEqual(payload["items"][0]["status"], "in-flight", payload)
 
     def test_seats_view_binds_identity_and_retains_grant_states(self):
         auth = self.authorization([

@@ -376,8 +376,9 @@ def project_seats(args: argparse.Namespace, auth: dict[str, Any],
     """Read the existing occupancy facts; report limits without deciding authority."""
     repo = str(Path(args.repo).resolve())
     unknown: list[str] = []
+    skills = Path(args.skills_root) if args.skills_root else None
     try:
-        rows, state = live_facts(args.live, repo, Path(__file__))
+        rows, state = live_facts(args.live, repo, Path(__file__), skills)
     except ValueError as exc:
         rows, state = [], "unavailable"
         unknown.append(str(exc))
@@ -413,9 +414,10 @@ def project_seats(args: argparse.Namespace, auth: dict[str, Any],
                    if row["session"] not in resolved)
     if state != "known":
         unknown.append("live-source-unavailable")
+    listed = None if args.live else acp_runner(Path(__file__), skills)
     return emit({
         "schema": "kaola-dispatch-seats/1", "repo": repo,
-        "source": {"authorization": args.authorization, "live": args.live or "Runner list --repo",
+        "source": {"authorization": args.authorization, "live": args.live or (str(listed) if listed else None),
                    "index": args.index, "as_of": observed_at()},
         "unknown_reasons": unknown,
         "elite_cap": auth.get("elite_cap"), "observed_elite_expert": elite if state == "known" else None,
@@ -1079,7 +1081,7 @@ def command_execute(args: argparse.Namespace) -> int:
 
     skills_root = Path(args.skills_root) if args.skills_root else None
     try:
-        live_rows, occupancy = live_facts(getattr(args, "live", None), repo, Path(__file__))
+        live_rows, occupancy = live_facts(getattr(args, "live", None), repo, Path(__file__), skills_root)
     except ValueError as exc:
         return fail("invalid-input", str(exc))
     needs_live = effective_cap is not None or any(
@@ -1253,17 +1255,31 @@ def authorization_cap(value: Any) -> int | None:
     return value
 
 
-def live_facts(path: str | None, repo: str, script: Path) -> tuple[list[dict[str, Any]], str]:
+def acp_runner(script: Path, skills_root: Path | None) -> Path | None:
+    """The Runner entry for a fresh list; an explicit skills root is the only place looked in."""
+    if skills_root is not None:
+        found = sorted(skills_root.glob("*-kaola-project-runner/scripts/kaola-acp.py"))
+        return found[0] if found else None
+    beside = script.resolve().parent / "kaola-acp.py"
+    if beside.is_file():
+        return beside
+    found = sorted(script.resolve().parent.parent.parent.glob("*-kaola-project-runner/scripts/kaola-acp.py"))
+    return found[0] if found else None
+
+
+def live_facts(path: str | None, repo: str, script: Path,
+               skills_root: Path | None = None) -> tuple[list[dict[str, Any]], str]:
     if path:
         document = load_object(Path(path))
         rows = document.get("rows")
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
             raise ValueError("live facts rows must be an array of objects")
         return rows, "known"
-    acp = script.resolve().parent / "kaola-acp.py"
-    if not acp.is_file():
+    acp = acp_runner(script, skills_root)
+    if acp is None:
         return [], "unavailable"
-    code, receipt, note = run_runner(acp, ["list", "--repo", repo])
+    # Generated copies are not executable; the interpreter runs them.
+    code, receipt, note = run_runner(Path(sys.executable), [str(acp), "list", "--repo", repo])
     if receipt_unreadable(code, receipt, note) or not isinstance(receipt, dict):
         return [], "unavailable"
     rows = receipt.get("rows")
@@ -2035,7 +2051,8 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
                         if key != "pending_permissions" else
                         {"source": "source", "argv_key": "status_argv"}),
             }
-        result["count_scope"] = "complete-range totals or null; retained counts are inspected lower bounds"
+        result["count_scope"] = ("complete-range totals or null; retained counts are inspected lower bounds; "
+                                 "failure entries are observations, recovered ones included; outcome is the turn verdict")
         result["view_limit_bytes"] = 8192
         def text() -> str:
             return json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
@@ -2081,6 +2098,7 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
     result["source"]["status_argv"] = status_raw["argv"]
     code, status, note = run_runner(script, status_raw["argv"])
     result["source"]["status"] = evidence(status, code, note)
+    status_at = observed_at()
     unread = receipt_unreadable(code, status, note)
     if unread or not bound(status):
         unknown.append("status-" + (unread or "identity-unbound"))
@@ -2114,10 +2132,16 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
     capture_bound = (isinstance(capture, dict) and same_repo(repo_of(capture), repo)
                      and capture.get("session") == item["session"]
                      and holder_of(capture) in (None, item["holder_instance_id"]))
-    if (unread or not capture_bound or receipt_unreadable(after_code, after, after_note)
-            or not bound(after)):
+    after_unread = receipt_unreadable(after_code, after, after_note)
+    # A readable receipt for another identity clears the verdict, before any retrieval failure.
+    if (not unread and not capture_bound) or (not after_unread and not bound(after)):
         result.update(outcome=None, stop_reason=None, turn_active=None)
-        unknown.append("capture-" + (unread or "identity-unbound"))
+        unknown.append("capture-identity-unbound")
+        return finish()
+    if unread or after_unread:
+        # The status verdict is identity- and fingerprint-bound; only the capture read failed.
+        result["source"]["verdict_as_of"] = status_at
+        unknown.append(("capture-" + unread) if unread else ("after-status-" + after_unread))
         return finish()
     result["source"]["event_log_path"] = capture.get("event_log_path")
     end_cursor = nested(status, "event_cursor")
