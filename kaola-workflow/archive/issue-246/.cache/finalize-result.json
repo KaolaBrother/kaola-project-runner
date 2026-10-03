@@ -1,0 +1,124 @@
+{
+  "command": "node /Users/ylmacstudio/.agents/kaola-workflow/scripts/kaola-workflow-claim.js finalize --project issue-246 --keep-worktree --json",
+  "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-246",
+  "exit_code": 0,
+  "stdout": "{\"status\":\"closed\",\"archived\":true,\"dest\":\"/Users/ylmacstudio/Workspace/kaola-project-runner/kaola-workflow/archive/issue-246\",\"ledger\":\"moved\",\"claim_label_removed\":\"removed\",\"archive_state_stamped\":\"not_needed\",\"issue_disposition\":\"close-pending\",\"validation\":{\"classification\":\"chains_green\",\"green\":true,\"mode\":\"final-validation\",\"chains\":[],\"detail\":[\"agent validation recorded and bound to this tree\"],\"operator_hint\":null,\"validated_candidate_hash\":\"07e1d88f3573a6b71d165aa0dfff550550c5df94a7060a3995ba96edf15474b5\"},\"changed_paths\":[\"docs/api.md\",\"docs/zcode-host.md\",\"scripts/kaola-acp.py\",\"scripts/kaola-tmux.sh\",\"skills/claude-code-kaola-project-runner/scripts/kaola-acp.py\",\"skills/claude-code-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/claude-code-kaola-project-runner/scripts/main-skill-build.json\",\"skills/codex-kaola-project-runner/scripts/kaola-acp.py\",\"skills/codex-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/codex-kaola-project-runner/scripts/main-skill-build.json\",\"skills/cursor-cli-kaola-project-runner/scripts/kaola-acp.py\",\"skills/cursor-cli-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/cursor-cli-kaola-project-runner/scripts/main-skill-build.json\",\"skills/devin-kaola-project-runner/scripts/kaola-acp.py\",\"skills/devin-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/devin-kaola-project-runner/scripts/main-skill-build.json\",\"skills/droid-kaola-project-runner/scripts/kaola-acp.py\",\"skills/droid-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/droid-kaola-project-runner/scripts/main-skill-build.json\",\"skills/dsh-kaola-project-runner/scripts/kaola-acp.py\",\"skills/dsh-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/dsh-kaola-project-runner/scripts/main-skill-build.json\",\"skills/grok-kaola-project-runner/scripts/kaola-acp.py\",\"skills/grok-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/grok-kaola-project-runner/scripts/main-skill-build.json\",\"skills/kaola-project-runner/SKILL.md\",\"skills/kaola-project-runner/references/host-startup.md\",\"skills/kaola-project-runner/references/zcode-host-dispatch.md\",\"skills/kimi-cli-kaola-project-runner/scripts/kaola-acp.py\",\"skills/kimi-cli-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/kimi-cli-kaola-project-runner/scripts/main-skill-build.json\",\"skills/opencode-kaola-project-runner/scripts/kaola-acp.py\",\"skills/opencode-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/opencode-kaola-project-runner/scripts/main-skill-build.json\",\"skills/zcode-kaola-project-runner/scripts/kaola-acp.py\",\"skills/zcode-kaola-project-runner/scripts/kaola-tmux.sh\",\"skills/zcode-kaola-project-runner/scripts/main-skill-build.json\",\"templates/orchestrator/SKILL.md.tmpl\",\"templates/orchestrator/references/host-startup.md.tmpl\",\"templates/orchestrator/references/zcode-host-dispatch.md.tmpl\",\"tests/contract/test-issue-244-holder-prompt-binding.py\",\"tests/contract/test-issue-76-permission-wake.py\",\"tests/contract/test-zcode-heartbeat-contract.py\"],\"closure_receipt\":{\"project\":\"issue-246\",\"issue_number\":246,\"archive\":\"closed\",\"remote_issue_closed\":\"close_pending\",\"claim_label_removed\":\"removed\",\"worktree_removed\":\"kept\",\"branch_removed\":\"kept\",\"warnings\":[],\"goal_declared\":true,\"goal_declared_source\":\"ledger\",\"goal_declared_probed\":[\"/Users/ylmacstudio/Workspace/kaola-project-runner/kaola-workflow/archive/issue-246/mission-ledger.jsonl\"],\"selection_evidence\":\"absent\",\"keep_open_requested\":false,\"close_disposition\":\"close_pending\",\"anchored_root\":\"/Users/ylmacstudio/Workspace/kaola-project-runner\",\"closure\":{\"attempted\":[246],\"closed\":[],\"failed\":[],\"skipped_offline\":[],\"kept_open\":[]},\"mission_ledger\":\"moved\"},\"closure_invariants\":{\"ok\":true,\"violations\":[]},\"finalize_transaction\":{\"mirror\":\"mirrored\",\"residue_mirrored\":0,\"impl_commit\":\"not_applicable\",\"roadmap_staged\":false,\"archive_commit\":\"deferred_to_sink\",\"residue_stage\":\"skipped\",\"archive_stage\":\"skipped\",\"finalize_commit\":\"nothing_to_commit\",\"residue_unattributed\":[\"docs/harness-acp-codex-160-live-2026-10-03.md\",\"docs/harness-acp-compat-2026-10-01.md\",\"docs/harness-acp-compat-2026-10-03.md\",\"docs/harness-acp-reverify-2026-10-01.md\"],\"findings\":[\"residue_unattributed\"]}}\n",
+  "stderr": "kaola-workflow-claim finalize: WARNING: 4 path(s) in the main checkout could not be attributed to issue-246 \u2014 they are NOT in the `chore: finalize` commit and they were not copied, deleted, reverted or relocated: docs/harness-acp-codex-160-live-2026-10-03.md, docs/harness-acp-compat-2026-10-01.md, docs/harness-acp-compat-2026-10-03.md, docs/harness-acp-reverify-2026-10-01.md\n",
+  "receipt": {
+    "status": "closed",
+    "archived": true,
+    "dest": "/Users/ylmacstudio/Workspace/kaola-project-runner/kaola-workflow/archive/issue-246",
+    "ledger": "moved",
+    "claim_label_removed": "removed",
+    "archive_state_stamped": "not_needed",
+    "issue_disposition": "close-pending",
+    "validation": {
+      "classification": "chains_green",
+      "green": true,
+      "mode": "final-validation",
+      "chains": [],
+      "detail": [
+        "agent validation recorded and bound to this tree"
+      ],
+      "operator_hint": null,
+      "validated_candidate_hash": "07e1d88f3573a6b71d165aa0dfff550550c5df94a7060a3995ba96edf15474b5"
+    },
+    "changed_paths": [
+      "docs/api.md",
+      "docs/zcode-host.md",
+      "scripts/kaola-acp.py",
+      "scripts/kaola-tmux.sh",
+      "skills/claude-code-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/claude-code-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/claude-code-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/codex-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/codex-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/codex-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/cursor-cli-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/cursor-cli-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/cursor-cli-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/devin-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/devin-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/devin-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/droid-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/droid-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/droid-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/dsh-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/dsh-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/dsh-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/grok-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/grok-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/grok-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/kaola-project-runner/SKILL.md",
+      "skills/kaola-project-runner/references/host-startup.md",
+      "skills/kaola-project-runner/references/zcode-host-dispatch.md",
+      "skills/kimi-cli-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/kimi-cli-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/kimi-cli-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/opencode-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/opencode-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/opencode-kaola-project-runner/scripts/main-skill-build.json",
+      "skills/zcode-kaola-project-runner/scripts/kaola-acp.py",
+      "skills/zcode-kaola-project-runner/scripts/kaola-tmux.sh",
+      "skills/zcode-kaola-project-runner/scripts/main-skill-build.json",
+      "templates/orchestrator/SKILL.md.tmpl",
+      "templates/orchestrator/references/host-startup.md.tmpl",
+      "templates/orchestrator/references/zcode-host-dispatch.md.tmpl",
+      "tests/contract/test-issue-244-holder-prompt-binding.py",
+      "tests/contract/test-issue-76-permission-wake.py",
+      "tests/contract/test-zcode-heartbeat-contract.py"
+    ],
+    "closure_receipt": {
+      "project": "issue-246",
+      "issue_number": 246,
+      "archive": "closed",
+      "remote_issue_closed": "close_pending",
+      "claim_label_removed": "removed",
+      "worktree_removed": "kept",
+      "branch_removed": "kept",
+      "warnings": [],
+      "goal_declared": true,
+      "goal_declared_source": "ledger",
+      "goal_declared_probed": [
+        "/Users/ylmacstudio/Workspace/kaola-project-runner/kaola-workflow/archive/issue-246/mission-ledger.jsonl"
+      ],
+      "selection_evidence": "absent",
+      "keep_open_requested": false,
+      "close_disposition": "close_pending",
+      "anchored_root": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "closure": {
+        "attempted": [
+          246
+        ],
+        "closed": [],
+        "failed": [],
+        "skipped_offline": [],
+        "kept_open": []
+      },
+      "mission_ledger": "moved"
+    },
+    "closure_invariants": {
+      "ok": true,
+      "violations": []
+    },
+    "finalize_transaction": {
+      "mirror": "mirrored",
+      "residue_mirrored": 0,
+      "impl_commit": "not_applicable",
+      "roadmap_staged": false,
+      "archive_commit": "deferred_to_sink",
+      "residue_stage": "skipped",
+      "archive_stage": "skipped",
+      "finalize_commit": "nothing_to_commit",
+      "residue_unattributed": [
+        "docs/harness-acp-codex-160-live-2026-10-03.md",
+        "docs/harness-acp-compat-2026-10-01.md",
+        "docs/harness-acp-compat-2026-10-03.md",
+        "docs/harness-acp-reverify-2026-10-01.md"
+      ],
+      "findings": [
+        "residue_unattributed"
+      ]
+    }
+  }
+}

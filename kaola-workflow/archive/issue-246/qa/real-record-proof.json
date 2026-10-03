@@ -1,0 +1,97 @@
+{
+  "proof": "read-only decision using exact live legacy Host and bound #246 worker; no prompt sent",
+  "preserved_failed_trial": {
+    "wait_selection": {
+      "source": "standalone-default",
+      "wait": true,
+      "detail": "caller record does not prove a live Host role and identity"
+    },
+    "duration_ms": 763316,
+    "outcome": "turn_completed",
+    "verdict": "failure"
+  },
+  "host": {
+    "holder_instance_id": "074ab8b888837ea60a0af9595579ad07",
+    "platform": "grok",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "grok-KPR-orchestrator-main",
+    "host_class": true,
+    "identity": "verified",
+    "agent_alive": true,
+    "session_role_present": false
+  },
+  "worker": {
+    "platform": "codex",
+    "session": "codex-KPR-i246-legacy",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "holder_instance_id": "15ad9d6d7592d35a725a2e110289581a",
+    "dispatcher": {
+      "holder_instance_id": "074ab8b888837ea60a0af9595579ad07",
+      "platform": "grok",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "session": "grok-KPR-orchestrator-main"
+    },
+    "heartbeat_host": {
+      "platform": "grok",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "session": "grok-KPR-orchestrator-main",
+      "socket": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kaola-501-acp/28125a2d31d374c32ee11e0a.sock"
+    }
+  },
+  "worker_identity": "verified",
+  "results": {
+    "prior": {
+      "wait_selection": {
+        "wait": true,
+        "source": "standalone-default",
+        "detail": "caller record does not prove a live Host role and identity"
+      },
+      "expected_holder_instance_id": null
+    },
+    "candidate": {
+      "wait_selection": {
+        "wait": false,
+        "source": "owning-host-default"
+      },
+      "expected_holder_instance_id": "15ad9d6d7592d35a725a2e110289581a"
+    },
+    "missing": {
+      "wait_selection": {
+        "wait": true,
+        "source": "standalone-default",
+        "detail": "no caller dispatcher identity"
+      },
+      "expected_holder_instance_id": null
+    },
+    "mismatched_holder": {
+      "wait_selection": {
+        "wait": true,
+        "source": "standalone-default",
+        "detail": "target dispatcher does not prove this caller owns it"
+      },
+      "expected_holder_instance_id": null
+    },
+    "foreign_repo": {
+      "wait_selection": {
+        "wait": true,
+        "source": "standalone-default",
+        "detail": "caller is not a Host candidate in the target repo"
+      },
+      "expected_holder_instance_id": null
+    },
+    "explicit_True": {
+      "wait_selection": {
+        "wait": true,
+        "source": "explicit"
+      },
+      "expected_holder_instance_id": null
+    },
+    "explicit_False": {
+      "wait_selection": {
+        "wait": false,
+        "source": "explicit"
+      },
+      "expected_holder_instance_id": null
+    }
+  }
+}

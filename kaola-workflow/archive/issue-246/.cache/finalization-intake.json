@@ -1,0 +1,13 @@
+{
+  "branch": "workflow/issue-246",
+  "issue_number": "246",
+  "sink": "merge",
+  "main_root": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "worktree_path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-246",
+  "claim_identity_digest": "bca135097e6df14413eda101bd7bfc9e7aeca4eb1a6b53fd149301f64c425533",
+  "accepted_candidate": "8115c73df48458f79da73037184257f0730c35c9",
+  "accepted_parent": "1b6c6f6642349a8838a6f0c0c5bb5bff03d29e82",
+  "implementation_unchanged": true,
+  "resume_result": false,
+  "authority": "Host/user explicitly accepted legacy compatibility behavior and instructed finalization, sink, issue close, archive and cleanup"
+}

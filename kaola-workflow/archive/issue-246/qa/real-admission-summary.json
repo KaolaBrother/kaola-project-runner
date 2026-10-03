@@ -1,0 +1,20 @@
+{
+  "verdict": "PASS isolated real Grok CLI wait-selection/admission proof",
+  "legacy_revision": "959af8a4^",
+  "host": {
+    "platform": "grok",
+    "session": "grok-KPR-orchestrator-legacy246proof-d48a579e",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-246",
+    "holder_instance_id": "95740645ea9c6be1d7290dc40514335c"
+  },
+  "session_role_present": false,
+  "worker": "grok-KPR-i246-proof-d48a579e",
+  "wait_selection": {
+    "source": "owning-host-default",
+    "wait": false
+  },
+  "admission_outcome": "in_progress",
+  "worker_active_after_admission": true,
+  "completion": "turn_completed",
+  "limitation": "Direct transport proof only. This does not prove model-driven Host dispatch, Host permission handling, or repair the preserved failed live trial."
+}

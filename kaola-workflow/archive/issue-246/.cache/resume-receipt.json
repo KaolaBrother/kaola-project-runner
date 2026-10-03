@@ -1,0 +1,7 @@
+{
+  "command": "node /Users/ylmacstudio/.agents/kaola-workflow/scripts/kaola-workflow-claim.js resume --project issue-246 --json",
+  "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-246",
+  "exit_code": 1,
+  "stdout": "{\"resumed\":false,\"reason\":\"no active workflow project\"}\n",
+  "stderr": ""
+}

@@ -1,0 +1,11 @@
+{
+  "candidate": "8115c73df48458f79da73037184257f0730c35c9",
+  "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-246",
+  "command": "env -u FORCE_COLOR -u CLICOLOR_FORCE NO_COLOR=1 CLICOLOR=0 ./scripts/validate.sh",
+  "exit_code": 0,
+  "log": "qa/validate-8115c73.log",
+  "log_sha256": "838bfcd56838bf3a9cf4f428122c2c9803e1ca3f8bee2c778eef904deee35fe1",
+  "named_limitation": "Bash 3.2 lacks mapfile/BASHPID; watchdog wrapper skipped, affected suites run unwatched",
+  "contract_suite_skips": false,
+  "prior_frozen_validate_scope": "1b6c6f6642349a8838a6f0c0c5bb5bff03d29e82 only"
+}
