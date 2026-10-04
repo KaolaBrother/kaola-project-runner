@@ -139,6 +139,13 @@ bridge at the unpinned content stage (`saveable: false`).
   holder process is gone. Before, a late confirmation read the `stopped`
   record, the next fresh node start was refused `session-exists`, and that
   one failure turned node mode off for the carrier.
+- **A Host stop ends its own node (Issue #255).** In every stop mode the Host
+  holder starts no new node, waits up to 8 s for a node start in flight, and
+  exact-stops its running node. Before, stopping the last worker and then the
+  Host (the usual close-out order) left the node that the worker's
+  `terminated` event had started running with no carrier: no spawn line or
+  agent sweep reaches a holder-started node, and a preserving stop spared it
+  as a dispatched worker.
 - **Not yet verified live:** native partial or missing node checkpoints
   (`maintenance-returned`), an unconfirmed node stop, process survival through a real preserving Host
   replacement, per-platform process preservation (a ZCode

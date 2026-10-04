@@ -252,6 +252,9 @@ HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatche
 # exact-stops it after its turn end. Bounds on that one start and stop only.
 NODE_START_TIMEOUT = 180.0
 NODE_STOP_CONFIRM_SECONDS = 30.0
+# A carrier's own stop waits this long for a node start in flight and for the
+# node stop, inside the Runner's 30 s stop request.
+NODE_RECLAIM_SECONDS = 8.0
 SIDEAGENT_ROLES = ("sideagent", "sidekick")
 RELAY_SCHEMA = "kaola-sideagent-relay/1"
 OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
@@ -1739,6 +1742,7 @@ class Holder:
         self.undelivered_wakes_lock = threading.Lock()
         # Issue #255: the one maintenance node this carrier runs, in memory.
         self.node: dict[str, Any] = {}
+        self.node_start: threading.Thread | None = None
         self.heartbeat_host = parse_heartbeat_host()
         self.dispatched_by = parse_dispatcher()
         # Issue #119: the turn-opening Skill entry line and display name this
@@ -3240,6 +3244,9 @@ class Holder:
         failed start or an unconfirmed stop hands events to the Host and
         starts nothing further until the binding or the old holder changes.
         """
+        if self.stop_requested:
+            # A stopping carrier starts and feeds no node it could not reclaim.
+            return {}
         session = binding["session"]
         node = self.node
         if node.get("stop_unconfirmed"):
@@ -3290,7 +3297,9 @@ class Holder:
         target = self._sideagent_relay_target()
         if target is None:
             node.update(phase="starting", binding=fingerprint)
-            threading.Thread(target=self._start_node, args=(binding, fingerprint), daemon=True).start()
+            self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint),
+                                               daemon=True)
+            self.node_start.start()
             result["receipt"] = {"relayed": 0, "waiting": len(waiting), "reason": "node-starting"}
             return result
         maintenance = ((doc or {}).get("state") or {}).get("maintenance") or {}
@@ -3459,7 +3468,8 @@ class Holder:
                                     "code": code, "receipt": receipt if isinstance(receipt, dict) else None})
         self._kick_worker_events()
 
-    def _stop_node(self, holder: str) -> None:
+    def _stop_node(self, holder: str, wait: float | None = None) -> None:
+        wait = NODE_STOP_CONFIRM_SECONDS if wait is None else wait
         binding = self._node_binding() or {}
         receipt: dict[str, Any] = {}
         target = None
@@ -3474,7 +3484,7 @@ class Holder:
             try:
                 connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 try:
-                    connection.settimeout(NODE_STOP_CONFIRM_SECONDS)
+                    connection.settimeout(wait)
                     connection.connect(str(target))
                     connection.sendall(canonical({"op": "stop", "request_id": secrets.token_hex(8),
                                                   "params": {"expected_holder_instance_id": holder}}) + b"\n")
@@ -3490,7 +3500,7 @@ class Holder:
                 receipt = json.loads(line.decode("utf-8", "replace")) if line.strip() else {}
             except (OSError, ValueError) as exc:
                 receipt = {"error": {"code": "node-stop-unreachable", "message": str(exc)}}
-        deadline = time.monotonic() + NODE_STOP_CONFIRM_SECONDS
+        deadline = time.monotonic() + wait
         alive = bool(binding) and self._node_holder_alive(binding, holder)
         while alive and time.monotonic() < deadline:
             time.sleep(0.5)
@@ -3507,9 +3517,32 @@ class Holder:
                                                 if key in receipt}})
         self._kick_worker_events()
 
+    def _reclaim_node(self) -> None:
+        """A node is this carrier's own per-batch session, not a dispatched
+        worker: it ends with the carrier in every stop mode. Its start runs
+        from this holder, not the agent, so no spawn line or agent sweep
+        reaches it; a start still in flight is waited for first."""
+        start = self.node_start
+        if start is not None and start.is_alive():
+            start.join(NODE_RECLAIM_SECONDS)
+        with self.worker_events_lock:
+            holder = self.node.get("holder") if self.node.get("phase") in ("running", "stopping") else None
+            if holder:
+                self.node.update(phase="stopping", batch=None, fingerprint=None)
+        binding = self._node_binding() if holder is None and start is not None and start.is_alive() else None
+        if binding:
+            # Still starting: its record already names this carrier.
+            record = self._node_record(binding) or {}
+            if (record.get("dispatcher") or {}).get("holder_instance_id") == self.holder_instance_id:
+                holder = record.get("holder_instance_id")
+        if isinstance(holder, str) and holder:
+            self._stop_node(holder, NODE_RECLAIM_SECONDS)
+
     def _kick_worker_events(self) -> None:
         """Offer what is waiting at this new boundary: a node to the relay,
         anything the Host owns to an idle Host."""
+        if self.stop_requested:
+            return
         try:
             if not self.turn["active"] and self.agent.proc is not None and not self.agent.exited.is_set():
                 self._deliver_worker_events()
@@ -4713,6 +4746,7 @@ class Holder:
         self.state = "stopping"
         self.write_record()
         self._cancel_pending_permissions()
+        self._reclaim_node()
         if not force:
             if self.turn["active"]:
                 self.agent.send_message(

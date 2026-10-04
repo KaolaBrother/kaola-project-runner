@@ -525,6 +525,10 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   not by its `stopped` record; while it still runs (`sideagent_node_stop_unconfirmed`) the
   Host keeps new events, and once it is gone (`sideagent_node_stop_confirmed_late`) the
   next input starts a fresh node. A holder whose stop reply cannot be delivered still exits.
+  A node is the carrier's own session, not a dispatched worker: a Host `stop` in every mode
+  (default, `--force`, `--preserve-dispatched-workers`) starts no new node, waits up to 8 s
+  for a node start in flight, and exact-stops the running node, found by its record's
+  `dispatcher` when the start is still running.
 - `view --role host|sideagent|delegator` reads only. The Host view adds `host_revision`,
   `dispositions` and a `maintenance` brief; the Sideagent view adds `host_revision` and
   `pending_host_changes`; the Delegator view adds `maintenance`. The Delegator view lists the `AGENTS.md`

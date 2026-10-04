@@ -2196,7 +2196,7 @@ class MaintenanceCheckpoint(StateProject):
 
 FAKE_NODE_RUNNER = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, sys
+    import json, os, sys, time
     from pathlib import Path
     counter = Path(os.environ["FAKE_NODE_COUNTER"])
     n = int(counter.read_text()) + 1 if counter.exists() else 1
@@ -2206,7 +2206,9 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
     Path(os.environ["FAKE_NODE_RECORD"]).write_text(json.dumps({
         "session_role": "sideagent", "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
         "holder_instance_id": holder, "holder_pid": int(os.environ["FAKE_NODE_PID"]),
+        "dispatcher": json.loads(os.environ.get("KAOLA_ACP_DISPATCHER") or "null"),
         "holder_features": ["heartbeat-state/2", "sideagent-relay/1", "sideagent-node/1"]}))
+    time.sleep(float(os.environ.get("FAKE_NODE_DELAY") or 0))
     print(json.dumps({"holder_instance_id": holder, "session": "zcode-KT-sideagent"}))
 """)
 
@@ -2267,16 +2269,19 @@ class HolderNodeMode(HolderFixture):
         self.runner.chmod(0o755)
         self.saved_env = {key: os.environ.get(key) for key in
                           ("FAKE_NODE_COUNTER", "FAKE_NODE_ARGV", "FAKE_NODE_RECORD", "FAKE_NODE_REPO",
-                           "FAKE_NODE_PID")}
+                           "FAKE_NODE_PID", "FAKE_NODE_DELAY")}
         os.environ.update(FAKE_NODE_COUNTER=str(root / "count"), FAKE_NODE_ARGV=str(root / "argv"),
                           FAKE_NODE_RECORD=str(self.side_dir / "record.json"),
                           FAKE_NODE_REPO=str(self.repo), FAKE_NODE_PID=str(os.getpid()))
         self.fake = FakeNode(self.side_sock, self.side_dir / "record.json")
         self.saved_confirm = holder_module.NODE_STOP_CONFIRM_SECONDS
         holder_module.NODE_STOP_CONFIRM_SECONDS = 1.5
+        self.saved_reclaim = getattr(holder_module, "NODE_RECLAIM_SECONDS", None)
 
     def tearDown(self) -> None:
         holder_module.NODE_STOP_CONFIRM_SECONDS = self.saved_confirm
+        if self.saved_reclaim is not None:
+            holder_module.NODE_RECLAIM_SECONDS = self.saved_reclaim
         for key, value in self.saved_env.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -2407,6 +2412,46 @@ class HolderNodeMode(HolderFixture):
             holder_module.os._exit = saved_exit
             self.holder.handle_request = saved_handle
         self.assertEqual(exits, [0], "the reply cannot be sent, the holder still exits")
+
+    def node_count(self) -> int:
+        counter = Path(self.tmp.name) / "count"
+        return int(counter.read_text()) if counter.exists() else 0
+
+    def test_a_stopping_carrier_ends_its_running_node_and_starts_none(self) -> None:
+        self.write_node_state()
+        self.event("codex-KT-i1-a", "idle", 5)
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the batch")
+        self.holder.stop_requested = True
+        self.holder._reclaim_node()
+        self.assertEqual([stop["params"]["expected_holder_instance_id"] for stop in self.fake.stops],
+                         ["node-1"], "the carrier's own node is not a dispatched worker")
+        self.assertIn("sideagent_node_stopped", self.log_kinds())
+        self.event("codex-KT-i1-b", "idle", 6)
+        time.sleep(0.3)
+        self.assertEqual(self.node_count(), 1, "a stopping carrier starts no node")
+
+    def test_a_node_start_in_flight_ends_with_the_stopping_carrier(self) -> None:
+        self.write_node_state()
+        os.environ["FAKE_NODE_DELAY"] = "0.6"
+        self.event("codex-KT-i1-a", "idle", 5)
+        self.wait_for(lambda: self.node_count() == 1, "the start in flight")
+        self.holder.stop_requested = True
+        self.holder._reclaim_node()
+        self.assertEqual([stop["params"]["expected_holder_instance_id"] for stop in self.fake.stops],
+                         ["node-1"], "the start is waited for, then its node is stopped")
+        self.assertEqual(self.fake.prompts, [], "no batch goes to a node of a stopping carrier")
+
+    def test_a_start_slower_than_the_stop_is_found_by_its_record(self) -> None:
+        self.write_node_state()
+        holder_module.NODE_RECLAIM_SECONDS = 0.3
+        os.environ["FAKE_NODE_DELAY"] = "3"
+        self.event("codex-KT-i1-a", "idle", 5)
+        self.wait_for(lambda: (self.side_dir / "record.json").exists(), "the node's early record")
+        self.holder.stop_requested = True
+        self.holder._reclaim_node()
+        self.assertEqual([stop["params"]["expected_holder_instance_id"] for stop in self.fake.stops],
+                         ["node-1"], "the record naming this carrier as dispatcher finds the node")
+        self.holder.node_start.join(5)
 
     def test_a_resume_recipe_or_failed_start_is_not_retried(self) -> None:
         self.write_node_state(argv=["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent",
