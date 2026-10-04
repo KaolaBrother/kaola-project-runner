@@ -4,6 +4,17 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## Unreleased — OpenCode managed native policy (Issue #256)
+
+Fresh managed OpenCode V2 launches select a process-only native build full-access
+policy through `OPENCODE_CONFIG` when no existing config source or explicit mode
+is supplied. Existing global/project configuration (including non-permission
+config), supplied native config, resume/continue and custom commands suppress
+the default. Explicit `--permission-mode plan` selects the native plan agent.
+Model/provider/effort selection and explicit permission decisions are unchanged.
+No shared configuration is edited; this applies to newly started processes only.
+Verified CLI 2.0.22 uses ACP protocol 1; V1 compatibility is not claimed.
+
 ## 0.8.2 — 2026-10-04 (OpenCode DeepSeek advertisement)
 
 Seats: restart required

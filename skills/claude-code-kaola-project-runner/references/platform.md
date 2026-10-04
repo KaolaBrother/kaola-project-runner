@@ -24,5 +24,9 @@ catalog is still launched as the exact declared literal, and the catalog fact is
 
 ACP runs the vendored claude-code-acp bridge (node, Skill-relative dist), which drives the exact claude binary as one subscription subprocess per turn; ACP start sets mode=bypassPermissions after a working initialize.
 
+Native launch policy, when this adapter supports it, is reported separately from ACP mode
+selection. Read the platform permission facts in [acp.md](acp.md); existing explicit policy
+and contrary modes take precedence over a managed default.
+
 The Agent decides every action; operate through `"$SKILL_DIR/scripts/runtime-tmux.sh"` as SKILL.md
 shows, and read [acp.md](acp.md) before any action that can change the runtime.

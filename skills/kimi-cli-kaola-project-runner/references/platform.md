@@ -22,5 +22,9 @@ catalog is still launched as the exact declared literal, and the catalog fact is
 
 ACP runs kimi acp; ACP start sets mode=yolo after initialize and applies effort through the ACP thinking config option, whose ladder is low/high/max rather than the five-level KIMI_MODEL_THINKING_EFFORT env ladder (low/medium/high/xhigh/max) -- max is valid on both, but the two sets are not the same. The ACP model currentValue is kimi-code/kimi-for-coding, so the kimi-code/k3 default preset is applied, never inherited, and the preset is model=kimi-code/k3 plus thinking=max (the catalog carries no "Max" in any display name).
 
+Native launch policy, when this adapter supports it, is reported separately from ACP mode
+selection. Read the platform permission facts in [acp.md](acp.md); existing explicit policy
+and contrary modes take precedence over a managed default.
+
 The Agent decides every action; operate through `"$SKILL_DIR/scripts/runtime-tmux.sh"` as SKILL.md
 shows, and read [acp.md](acp.md) before any action that can change the runtime.

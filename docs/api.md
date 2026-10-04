@@ -367,6 +367,41 @@ recovery is not active in the session that ran the install. Direct actions:
 the project-level `prepare|install|bind|uninstall|status --project-root ROOT` actions are
 unchanged. See [Codex host](codex-host.md).
 
+## OpenCode managed native permissions
+
+OpenCode V2 CLI 2.0.22 includes its ACP server (protocol 1). A fresh managed
+`start` without an explicit mode, resume/continue or custom command selects an
+`OPENCODE_CONFIG` file in that exact session's record directory containing only
+`agents.build.permissions: [{action: "*", resource: "*", effect: "allow"}]`.
+Model/provider/effort selections stay on the existing ACP path. Preflight does
+not create or apply this file. `native_permission_policy.selected` reports the
+launch selection, not an independent runtime policy readback.
+
+The native file slot ranks above global config, and native build-agent rules
+can outrank root rules. Runner therefore leaves existing configuration intact:
+any supplied `OPENCODE_CONFIG`/`OPENCODE_CONFIG_CONTENT` (even empty), existing
+native JSON/JSONC config or agent-source directory, or unreadable source defers
+the default. Non-permission config also defers it; no parsing or merging occurs.
+The receipt names the reason and, when readable, the source path. Deferred
+launches still start normally with native policy. No shared configuration or
+parent environment is changed. The selected file remains with the existing
+session records after stop; it contains no model or account configuration.
+
+Explicit `--permission-mode plan` maps to native ACP `mode=plan`, suppressing
+the launch default. A later native plan selection also retains plan's edit
+restriction because the allow rule is scoped to build. Unknown explicit mode
+values are sent to the native option and retain its error; Runner does not
+substitute build. Pending permissions still require an explicit Agent decision;
+there is no automatic `permit` loop.
+
+Actual 2.0.22 ACP QA exercised the file slot, external dummy `.env` read,
+write/shell/reread, conflicting global/project policy, supplied native config,
+and simultaneous independent sessions. Older V2 compatibility is source-only;
+V1's `permission/bash/task` schema is distinct from V2's
+`permissions/shell/subagent`. Native policy changes made after start, remote
+well-known policy and arbitrary custom agents are not covered by this launch
+adaptation's QA. No installed runtime upgrade is implied by the version facts.
+
 ## Locator and host-target attestation
 
 ```text
@@ -734,8 +769,9 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
   current roster out of `platforms/*.yaml` rather than from this page: which platforms qualify
   changes as surfaces are investigated, so no count or list is pinned here. One case worth knowing is
   `opencode`, whose `-32601` probe ran on 1.18.17 and whose 2.0.11 `initialize` advertised no
-  steering `_meta`, while `acp_verified_versions` names 2.0.15 (record-only since the 2026-09-24
-  Pink batch) and no steering method was re-probed on either newer build: it is `unknown`, and the
+  steering `_meta`, while `acp_verified_versions` names 2.0.22 (permission QA only;
+  2.0.15 was record-only since the 2026-09-24 Pink batch). No steering method was
+  re-probed on any newer build: it is `unknown`, and the
   Runner reports an unverified capability (`steer_outcome: unknown`, `steer-capability-unknown`)
   instead of a proven absence. The refusal, the explicit composite and
   the no-auto-degrade rule are identical for `unsupported` and `unknown` alike.

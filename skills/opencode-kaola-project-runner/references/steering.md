@@ -1,7 +1,7 @@
 # OpenCode steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unknown**. Historical evidence, OpenCode 1.18.17: all four candidate steering methods answered JSON-RPC -32601 and `initialize` advertised no steering `_meta`. That is not a measurement of the verified 2.0.x builds: 2.0.11 `initialize` also advertised no steering `_meta`, but no steering method was re-probed on 2.0.11 or on the recorded 2.0.15, so native steering is unknown until a live probe settles it. The composite `--steer-mode interrupt` was exercised live on 1.18.31.
+**unknown**. Historical evidence, OpenCode 1.18.17: all four candidate steering methods answered JSON-RPC -32601 and `initialize` advertised no steering `_meta`. That is not a measurement of the verified 2.0.x builds: 2.0.11 `initialize` also advertised no steering `_meta`, but no steering method was re-probed on 2.0.11 or on the recorded 2.0.15 or permission-tested 2.0.22, so native steering is unknown until a live probe settles it. The composite `--steer-mode interrupt` was exercised live on 1.18.31.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
