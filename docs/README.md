@@ -1,5 +1,10 @@
 # Documentation Index
 
+- [Lifecycle and state maintenance design (2026-10-04)](designs/lifecycle-state-2026-10-04/design.md):
+  proposed role boundaries, structured current state, Sideagent dispatch, recovery, JSON growth
+  control and migration; **design agreement, not implemented**.
+  [Interactive HTML guide](designs/lifecycle-state-2026-10-04/index.html) (open locally in a browser;
+  self-contained, no external dependencies) and [joint design review](designs/lifecycle-state-2026-10-04/review.md).
 - [Architecture](architecture.md): golden contract, worker vs main Skill, generated Skills, boundaries, ownership, and canonical-root versus Workflow child worktree guidance
 - [Dispatch and collect guide](dispatch-collect.md): project, admit, collect, and Host exact-stop for a bounded research, QA, or report plan
 - [API](api.md): renderer, installer, dispatch/collect entry, Runner entrypoint, status, adapter contracts, and the `steer`

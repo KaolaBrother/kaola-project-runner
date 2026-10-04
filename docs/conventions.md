@@ -128,6 +128,40 @@ is outside this repository and is not verified here.
 
 ## Release notes
 
+### State-format updates and migration
+
+Any version that changes project state formats or the rules interpreting them must ship an
+explicit, verified upgrade path for existing projects. This includes the Delegator and Host
+JSON files, authorization and role semantics, and their heartbeat entry templates. Document
+the supported source versions or schemas, the target format, when migration runs, and any
+required holder update or safe restart. Do not claim an upgrade complete merely because new
+Skill files were installed.
+
+- Include old-format detection and migration instructions in the normal installation/update
+  and first-load recovery flow. Coordinate state adoption with the actual loaded Skill and
+  holder capabilities; do not expose an incompatible format to an old reader.
+- Preserve effective user authorization, goals, active and pending responsibilities,
+  in-flight session/dispatch associations, unresolved holds and warnings, and user schedule
+  settings. Reconcile with existing Runner, Git, forge and Workflow evidence; do not reset a
+  project, repeat admitted work, or automatically replan it because its storage format changed.
+- Replace superseded instructions and duplicate history only with supporting evidence.
+  Preserve unresolved ambiguities for review. Migrate already-evidenced user requirements
+  without asking the user to confirm the same decision again.
+- Prepare and validate the new state before replacing the old state. Keep the necessary
+  migration source evidence once, make interrupted/repeated migration recoverable without
+  duplicate effects, and provide an actionable recovery path if migration cannot finish.
+  Do not restart or stop healthy in-flight work merely to reorganize state.
+- Verify at least a representative supported old state, in-flight work, unresolved exceptions,
+  interrupted/repeated migration, and incompatible-reader handling. Report the actual source
+  and target versions, preserved associations, unresolved items and outcome using existing
+  upgrade evidence; add no permanent second state ledger.
+
+This is a release/update requirement. The lifecycle-state design under
+`docs/designs/lifecycle-state-2026-10-04/` is still a proposal; recording this convention does
+not claim that its migration tool has been implemented or run on existing projects.
+
+### Release labels and running seats
+
 Every `CHANGELOG.md` release section states whether running seats must restart,
 as its own line: `Seats: restart required` or `Seats: restart not required`.
 Seats must restart when the holder, the ZCode bridge, or the ACP protocol
