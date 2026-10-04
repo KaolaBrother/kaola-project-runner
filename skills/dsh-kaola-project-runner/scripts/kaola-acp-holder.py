@@ -3414,10 +3414,11 @@ class Holder:
         return record if isinstance(record, dict) else None
 
     def _node_holder_alive(self, binding: dict[str, Any], holder: Any) -> bool:
+        # The process, not the record state: a holder that wrote "stopped"
+        # but still runs owns the session, and a fresh start is refused.
         record = self._node_record(binding)
         return bool(record and record.get("holder_instance_id") == holder
-                    and isinstance(record.get("holder_pid"), int) and process_alive(record["holder_pid"])
-                    and record.get("state") != "stopped")
+                    and isinstance(record.get("holder_pid"), int) and process_alive(record["holder_pid"]))
 
     def _start_node(self, binding: dict[str, Any], fingerprint: str) -> None:
         recipe = binding["recipe"]
@@ -5027,10 +5028,18 @@ class Holder:
                         continue
                     response = self.handle_request(message)
                     exit_after = bool(response.pop("_exit_after_reply", False))
-                    connection.sendall(canonical(response) + b"\n")
-                    if exit_after:
-                        connection.close()
-                        os._exit(0)
+                    try:
+                        connection.sendall(canonical(response) + b"\n")
+                    finally:
+                        if exit_after:
+                            # A stop whose caller already gave up still ends
+                            # this holder; otherwise it lingers with a stopped
+                            # record and keeps owning the session.
+                            try:
+                                connection.close()
+                            except OSError:
+                                pass
+                            os._exit(0)
         except (OSError, ValueError):
             return
         finally:

@@ -520,8 +520,11 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `kaola-tmux.sh`, bound
   `--session` and `--repo`, `--role sideagent`, never `--continue`/`--resume`; an optional absolute `state_tool`), sends it
   one batch prompt naming the exact `state checkpoint` command and state file, settles the batch from that node's checkpoint at its turn end, returns the
-  rest to the Host once, and exact-stops the node. A failed start or an unconfirmed stop
-  starts no further node until reconciled.
+  rest to the Host once, and exact-stops the node. A failed start starts no further node
+  until the binding changes. A stop is confirmed when the node's holder process is gone,
+  not by its `stopped` record; while it still runs (`sideagent_node_stop_unconfirmed`) the
+  Host keeps new events, and once it is gone (`sideagent_node_stop_confirmed_late`) the
+  next input starts a fresh node. A holder whose stop reply cannot be delivered still exits.
 - `view --role host|sideagent|delegator` reads only. The Host view adds `host_revision`,
   `dispositions` and a `maintenance` brief; the Sideagent view adds `host_revision` and
   `pending_host_changes`; the Delegator view adds `maintenance`. The Delegator view lists the `AGENTS.md`

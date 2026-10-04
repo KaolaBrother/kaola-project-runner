@@ -2213,11 +2213,16 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
 
 class FakeNode(FakeSideagent):
     """A node holder socket: prompts are admitted; an exact stop marks the
-    record stopped unless the test holds it."""
+    record stopped and its holder gone unless the test holds it (``linger``
+    keeps the holder process after the stopped record)."""
 
     def __init__(self, path: Path, record: Path) -> None:
         self.record = record
         self.ignore_stop = False
+        self.linger = False
+        reaped = subprocess.Popen(["true"])
+        reaped.wait()
+        self.dead_pid = reaped.pid
         self.stops: list[dict] = []
         super().__init__(path)
 
@@ -2240,6 +2245,8 @@ class FakeNode(FakeSideagent):
                     if not self.ignore_stop:
                         record = json.loads(self.record.read_text())
                         record["state"] = "stopped"
+                        if not self.linger:
+                            record["holder_pid"] = self.dead_pid
                         self.record.write_text(json.dumps(record))
                     connection.sendall(json.dumps({"stopped": not self.ignore_stop}).encode() + b"\n")
                     continue
@@ -2356,6 +2363,50 @@ class HolderNodeMode(HolderFixture):
         self.assertEqual(int((Path(self.tmp.name) / "count").read_text()), 1, "no second node starts")
         self.assertTrue(any("codex-KT-i1-b" in prompt for prompt in self.agent.prompts()),
                         "the Host keeps the new input meanwhile")
+
+    def test_a_stopped_record_is_not_a_stopped_node_until_its_holder_is_gone(self) -> None:
+        self.write_node_state()
+        self.fake.linger = True
+        self.event("codex-KT-i1-a", "idle", 5)
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the batch")
+        batch = self.fake.prompts[0]["params"]["text"].split("batch ", 1)[1].split()[0]
+        self.checkpoint(batch, "node-1", ["codex/codex-KT-i1-a/idle/5"], True)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stop_unconfirmed" in self.log_kinds(),
+                      "a stop whose holder still runs")
+        self.assertNotIn("sideagent_node_stopped", self.log_kinds())
+        record = json.loads((self.side_dir / "record.json").read_text())
+        record["holder_pid"] = self.fake.dead_pid
+        (self.side_dir / "record.json").write_text(json.dumps(record))
+        self.event("codex-KT-i1-b", "idle", 6)
+        self.wait_for(lambda: len(self.fake.prompts) == 2, "a fresh node once the old holder is gone")
+        self.assertEqual(self.fake.prompts[1]["params"]["expected_holder_instance_id"], "node-2")
+        self.assertIn("sideagent_node_stop_confirmed_late", self.log_kinds())
+        self.assertNotIn("sideagent_node_start_failed", self.log_kinds())
+
+    def test_a_stop_whose_caller_gave_up_still_ends_the_holder(self) -> None:
+        ours, theirs = socket.socketpair()
+        theirs.sendall(b'{"op": "stop"}\n')
+        theirs.close()
+        exits: list[int] = []
+
+        class Exited(Exception):
+            pass
+
+        def fake_exit(code: int) -> None:
+            exits.append(code)
+            raise Exited
+
+        saved_exit, saved_handle = holder_module.os._exit, self.holder.handle_request
+        holder_module.os._exit = fake_exit
+        self.holder.handle_request = lambda message: {"stopped": True, "_exit_after_reply": True}
+        try:
+            with self.assertRaises(Exited):
+                self.holder.serve_connection(ours)
+        finally:
+            holder_module.os._exit = saved_exit
+            self.holder.handle_request = saved_handle
+        self.assertEqual(exits, [0], "the reply cannot be sent, the holder still exits")
 
     def test_a_resume_recipe_or_failed_start_is_not_retried(self) -> None:
         self.write_node_state(argv=["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent",

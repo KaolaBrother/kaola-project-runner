@@ -132,6 +132,13 @@ bridge at the unpinned content stage (`saveable: false`).
   maintenance node. Such a holder also never relays to a Sideagent or starts a
   node at its own turn ends. Explicit `KAOLA_ACP_HEARTBEAT_HOST` bindings and
   unknown-role dispatchers are unchanged.
+- **A stopped node is a gone holder (Issue #255).** A holder whose stop reply
+  cannot be delivered (the caller gave up waiting) still exits. Before, it
+  lingered with a `stopped` record until the 10-minute idle exit and kept
+  owning the session. The Host carrier counts a node stopped only once its
+  holder process is gone. Before, a late confirmation read the `stopped`
+  record, the next fresh node start was refused `session-exists`, and that
+  one failure turned node mode off for the carrier.
 - **Not yet verified live:** native partial or missing node checkpoints
   (`maintenance-returned`), an unconfirmed node stop, process survival through a real preserving Host
   replacement, per-platform process preservation (a ZCode

@@ -76,8 +76,9 @@ Host write stays pending. Unsettled inputs go to the Host once, in one
 
 The carrier stays quiet after a verified batch and hands the rest to the Host
 once after a partial or missing one, then exact-stops the node by holder. A
-failed start or `sideagent_node_stop_unconfirmed` starts no further node; the
-Host keeps new events until it reconciles that node. A replaced node's late
+failed start starts no further node. After `sideagent_node_stop_unconfirmed`
+the Host keeps new events while that node's holder process still runs; once it
+is gone, the next input starts a fresh node. A replaced node's late
 write is `binding-superseded`. There is no timer: the next eligible input
 starts the next node through the existing event and idle tick.
 
