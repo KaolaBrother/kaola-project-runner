@@ -3058,41 +3058,58 @@ def note_section_source(state: dict[str, Any], args: argparse.Namespace, section
     state["section_sources"] = sources
 
 
-def task_seats(task: dict[str, Any]) -> dict[str, str | None]:
-    """Worker seats a task itself names (migrated `assignments`, `sessions`
-    or a duty's `session`), each with its recorded holder when known."""
-    seats: dict[str, str | None] = {}
-    for row in task.get("assignments") or []:
-        if isinstance(row, dict) and isinstance(row.get("session"), str):
-            holder = row.get("holder_instance_id")
-            seats[row["session"]] = seats.get(row["session"]) or (holder if isinstance(holder, str) else None)
-    names = list(task.get("sessions") or []) + [task.get("session")]
-    for name in names:
-        name = name.get("session") if isinstance(name, dict) else name
-        if isinstance(name, str):
-            seats.setdefault(name, None)
-    return seats
+def seat_entries(task: dict[str, Any]) -> list[tuple[str, str | None]]:
+    """Each seat a task itself names, with the holder instance recorded with
+    it: migrated `assignments`, `sessions` (names or objects) and a duty's own
+    `session` with its `holder_instance_id`."""
+    found: list[tuple[str, str | None]] = []
+    rows = [row for row in task.get("assignments") or [] if isinstance(row, dict)]
+    rows += [row for row in task.get("sessions") or [] if isinstance(row, dict)]
+    rows += [{"session": name} for name in task.get("sessions") or [] if isinstance(name, str)]
+    if task.get("session") is not None:
+        rows.append({"session": task.get("session"), "holder_instance_id": task.get("holder_instance_id")})
+    for row in rows:
+        holder = row.get("holder_instance_id")
+        if isinstance(row.get("session"), str):
+            found.append((row["session"], holder if isinstance(holder, str) and holder else None))
+    return found
 
 
-def open_seats(seats: dict[str, str | None], rows: list[dict[str, Any]]) -> list[str]:
+def task_seats(task: dict[str, Any]) -> dict[str, list[str]]:
+    """Seat name to every holder instance recorded for it. A name with no
+    recorded holder is the only one a bare stopped row can prove."""
+    seats: dict[str, list[str]] = {}
+    for session, holder in seat_entries(task):
+        holders = seats.setdefault(session, [])
+        if holder and holder not in holders:
+            holders.append(holder)
+    return {session: sorted(holders) for session, holders in seats.items()}
+
+
+def open_seats(seats: dict[str, list[str]], rows: list[dict[str, Any]]) -> list[str]:
     """A named seat is shown stopped only by a live-row listing that has its
     session stopped, under its recorded holder when one is recorded; a
-    missing row, or a row of another holder, live or stopped, leaves the
-    association unresolved rather than proving cleanup."""
+    missing row, a row of another holder, live or stopped, or two different
+    recorded holders leave the association unresolved rather than proving
+    cleanup. A holder instance id is unique, so it also fixes platform and
+    root."""
     problems = []
-    for session, holder in sorted(seats.items()):
+    for session, holders in sorted(seats.items()):
         matches = [row for row in rows if row.get("session") == session]
         running = [row for row in matches if row.get("state") != "stopped"]
-        own = [row for row in matches if not holder or row.get("holder_instance_id") == holder]
-        if not matches:
+        own = [row for row in matches if not holders or row.get("holder_instance_id") in holders]
+        if len(holders) > 1:
+            problems.append(f"{session} has conflicting recorded holders {', '.join(holders)}; the "
+                            "association is unresolved")
+        elif not matches:
             problems.append(f"{session} is not in the live rows; its stop is not shown")
         elif any(row in own for row in running):
             problems.append(f"{session} is still live")
         elif running or not own:
             other = (running or matches)[0]
             problems.append(f"{session} is {'live' if running else 'stopped'} under holder "
-                            f"{other.get('holder_instance_id')}, not the recorded {holder}; the "
-                            "association is unresolved")
+                            f"{other.get('holder_instance_id')}, not the recorded "
+                            f"{holders[0] if holders else None}; the association is unresolved")
     return problems
 
 
@@ -3139,13 +3156,22 @@ def handoff_seats(receiver: dict[str, Any], task: dict[str, Any], task_id: str,
         mine = receiver.get("dispatch")
         mine = [mine] if isinstance(mine, str) else list(mine or [])
         receiver["dispatch"] = mine + [ref for ref in refs if ref not in mine]
-    if seats:
-        names = list(receiver.get("sessions") or [])
-        receiver["sessions"] = names + [name for name in sorted(seats) if name not in names]
     rows = [row for row in task.get("assignments") or [] if isinstance(row, dict)]
     if rows:
         receiver["assignments"] = list(receiver.get("assignments") or []) + [
             {**row, "handed_from": task_id} for row in rows]
+    if seats:
+        # Every recorded holder and its evidence moves with the seat; a seat
+        # known only by name stays a name.
+        names = list(receiver.get("sessions") or [])
+        moved = [{**row, "handed_from": task_id} for row in task.get("sessions") or []
+                 if isinstance(row, dict)]
+        if task.get("session") is not None:
+            moved.append({"session": task.get("session"), "handed_from": task_id,
+                          **({"holder_instance_id": task["holder_instance_id"]}
+                             if task.get("holder_instance_id") else {})})
+        bare = [name for name in task.get("sessions") or [] if isinstance(name, str)]
+        receiver["sessions"] = names + moved + [name for name in bare if name not in names]
     if refs or seats:
         receiver["rev"] = int(receiver.get("rev") or 0) + 1
         receiver["updated_at"] = observed_at()

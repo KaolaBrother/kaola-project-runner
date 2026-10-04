@@ -76,8 +76,9 @@ bridge at the unpinned content stage (`saveable: false`).
   accepted or cancelled verdict, closed dispatch items, and every seat the
   task names (migrated assignments included) shown stopped in the live rows;
   a missing row or a row of another holder keeps the duty (`done-seat-open`),
-  and `retire --handoff T` moves the seats and dispatch to a continuing task
-  instead. A task at `closeout` or `done` without an accepted, partial or
+  whichever seat shape recorded that holder, and `retire --handoff T` moves
+  the seats (with their holders and evidence) and dispatch to a continuing
+  task instead. A task at `closeout` or `done` without an accepted, partial or
   cancelled verdict stays under `attention` (`verdict-missing`). A `host`
   write from a caller whose record names no role is traced
   `(role unverified)`. A v1 pending key with no v1 meaning stays inert under

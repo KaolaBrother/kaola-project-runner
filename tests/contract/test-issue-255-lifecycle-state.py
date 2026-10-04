@@ -218,6 +218,54 @@ class StateTool(StateProject):
                                "--index", str(index), "--live", str(live))
         self.assertEqual(out["reason"], "retire-unmet", "the handed seat still needs its stop")
 
+    def test_a_known_holder_in_any_seat_shape_survives_a_handoff(self) -> None:
+        self.init()
+        live = self.repo / "live.json"
+        rows = lambda holder: live.write_text(json.dumps({"rows": [
+            {"session": name, "state": "stopped", "holder_instance_id": holder}
+            for name in ("worker-a", "worker-b")]}), encoding="utf-8")
+        accepted = {"stage": "done", "goal": "g", "verdict": {"value": "accepted"}}
+        self.update("host", "tasks", "direct", {**accepted, "session": "worker-a",
+                                                "holder_instance_id": "owned-a"})
+        self.update("host", "tasks", "object", {**accepted, "sessions": [
+            {"session": "worker-b", "holder_instance_id": "owned-b", "evidence": "start-receipt"}]})
+        self.update("host", "tasks", "next", {"stage": "doing", "goal": "continue"})
+        retire = lambda ident, rev, *extra: self.state(
+            "retire", "--file", str(self.file), "--writer", "host", "--source", "s", "--kind", "tasks",
+            "--id", ident, "--expect-rev", rev, "--evidence", "e", *extra)
+        rows("foreign")
+        for ident in ("direct", "object"):
+            code, out = retire(ident, "1", "--live", str(live))
+            self.assertEqual(out["reason"], "retire-unmet", f"{ident}: a foreign stop proves nothing")
+            self.assertIn("not the recorded owned-", out["detail"])
+        self.assertEqual(retire("direct", "1", "--handoff", "next")[0], 0)
+        self.assertEqual(retire("object", "1", "--handoff", "next")[0], 0)
+        receiver = self.doc()["state"]["tasks"]["next"]
+        self.assertIn({"session": "worker-b", "holder_instance_id": "owned-b", "evidence": "start-receipt",
+                       "handed_from": "object"}, receiver["sessions"])
+        self.assertIn({"session": "worker-a", "holder_instance_id": "owned-a", "handed_from": "direct"},
+                      receiver["sessions"])
+        self.update("host", "tasks", "next", accepted, "--expect-rev", str(receiver["rev"]))
+        rev = str(self.doc()["state"]["tasks"]["next"]["rev"])
+        code, out = retire("next", rev, "--live", str(live))
+        self.assertEqual(out["reason"], "retire-unmet", "a handoff keeps each recorded holder")
+        self.assertIn("worker-a is stopped under holder foreign", out["detail"])
+        self.assertIn("worker-b is stopped under holder foreign", out["detail"])
+        self.update("host", "tasks", "next", {"sessions": receiver["sessions"] + [
+            {"session": "worker-a", "holder_instance_id": "other-a"}]}, "--expect-rev", rev)
+        rev = str(self.doc()["state"]["tasks"]["next"]["rev"])
+        live.write_text(json.dumps({"rows": [
+            {"session": "worker-a", "state": "stopped", "holder_instance_id": "owned-a"},
+            {"session": "worker-b", "state": "stopped", "holder_instance_id": "owned-b"}]}), encoding="utf-8")
+        code, out = retire("next", rev, "--live", str(live))
+        self.assertIn("conflicting recorded holders other-a, owned-a", out.get("detail", ""),
+                      "two recorded holders stay unresolved, never a name-only match")
+        receiver = self.doc()["state"]["tasks"]["next"]
+        self.update("host", "tasks", "next", {"sessions": receiver["sessions"][:-1]}, "--expect-rev", rev)
+        rev = str(self.doc()["state"]["tasks"]["next"]["rev"])
+        code, out = retire("next", rev, "--live", str(live))
+        self.assertEqual(code, 0, out)
+
     def test_moving_past_review_without_a_verdict_keeps_the_host_asked(self) -> None:
         self.init()
         why = lambda: [(row["id"], row["why"]) for row in json.loads(self.doc()["body"])["attention"]]
@@ -1632,6 +1680,10 @@ class NestedWorkerTopology(unittest.TestCase):
         self.assertEqual(holder_module.dispatched_worker_groups(self.side_dir / "children.jsonl", live,
                                                                 holder_instance_id="side-1"),
                          set(), "a record that does not name the live holder proves nothing")
+        (self.worker_dir / "record.json").write_text("[1]", encoding="utf-8")
+        self.assertEqual(holder_module.holders_dispatched_by("side-1"), [], "a malformed record is skipped")
+        self.assertEqual(acp_module.holders_dispatched_by("side-1"), [])
+        (self.worker_dir / "record.json").write_text(saved, encoding="utf-8")
         record = {"session_role": "sideagent", "holder_instance_id": "side-1",
                   "agent_child_groups": {str(g): {str(p): s for p, s in m.items()} for g, m in self.noted.items()}}
         self.assertEqual(sorted(acp_module.recorded_groups(record, self.side_dir, verified_only=True)),

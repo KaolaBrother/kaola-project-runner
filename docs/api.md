@@ -464,11 +464,14 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   settled decision, or any hold or alert; a later update of that id is `record-retired`. A
   task's `dispatch` items must be closed in `--index`, and every seat it names (`assignments`,
   `sessions`, `session`, including migrated ones with no index match) must show its session
-  `stopped` in `--live` under the holder the task recorded; a missing row, or a live or
-  stopped row of a different holder, is not proof of stop, and `check --live` reports it as
-  `done-seat-open`. `retire --handoff TASK` instead moves the dispatch refs, `sessions` and
-  `assignments` (each marked `handed_from`) to another current task, which then owns their
-  stop; the tombstone records `handed_to`, `seats` and `dispatch`. A task in `review` without
+  `stopped` in `--live` under the holder the task recorded (`holder_instance_id` on an
+  assignment, on a `sessions` object, or beside the task's own `session`); a missing row, a
+  live or stopped row of a different holder, or two different recorded holders for one seat
+  is not proof of stop, and `check --live` reports it as `done-seat-open`. `retire --handoff
+  TASK` instead moves the dispatch refs, `sessions` and `assignments` (each object marked
+  `handed_from`, keeping its holder and evidence; the task's own `session` becomes such a
+  `sessions` object) to another current task, which then owns their stop; the tombstone
+  records `handed_to`, `seats` and `dispatch`. A task in `review` without
   a verdict is under `attention` with a `content` digest, so each new result is a new wake; a
   task at `closeout` or `done` without an `accepted`, `partial` or `cancelled` verdict stays
   under `attention` as `verdict-missing`. Each write records `writer`; a `host` write from a

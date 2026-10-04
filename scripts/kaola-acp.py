@@ -1974,7 +1974,9 @@ def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
             worker = json.loads((Path(match.group(1)) / "record.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        dispatcher = worker.get("dispatcher") if isinstance(worker, dict) else None
+        if not isinstance(worker, dict):
+            continue
+        dispatcher = worker.get("dispatcher")
         if (worker.get("holder_pid") == int(fields[0]) and isinstance(dispatcher, dict)
                 and dispatcher.get("holder_instance_id") == holder_instance_id):
             found.append(int(fields[0]))
