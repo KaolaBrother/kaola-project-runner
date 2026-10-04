@@ -22,7 +22,7 @@ next steps, never a copied backlog, ledger or history.
   settles an ordinary confirmation only inside the exact assignment and tool
   policy; anything absent, ambiguous or needing the user stays a pending
   `decisions` record.
-- Parallel research or QA helpers are worker items, authorized and counted.
+- Research or QA helpers are counted, authorized worker items.
 - Workers never write state (`writer-refused`).
 
 No synchronous Sideagent round trip or approval stage per action: coalesce
@@ -45,8 +45,9 @@ pending decisions; technical evidence stays reachable by reference.
 - `$S update --section project|authorization|sideagent|recovery|unverified
   --expect-revision N --set PATCH`: the first three are Host-only.
 - `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
-  [--index I --live L]`: a task needs verdict `accepted` or `cancelled`, its
-  dispatch items closed and seats stopped (`--index`/`--live`).
+  [--index I --live L] [--handoff TASK]`: a task needs verdict `accepted` or
+  `cancelled`, its dispatch items closed and seats stopped, or handed to a
+  continuing `TASK`.
 - `$S view --role host|sideagent|delegator [--repo ROOT]` (read-only).
 - `$S check [--index I] [--live L] [--repo R]`: read-only problems such as
   `doing-untraced`, `done-not-retired`, `transcription-unechoed`,
@@ -59,12 +60,11 @@ pending decisions; technical evidence stays reachable by reference.
 - `tasks` (stable id; `stage` `todo|doing|review|closeout|done`, `goal`):
   `source`, `scope`, `needs`, `depends`, `acceptance`, `keep_open`, `wait`,
   `dispatch` (index item ids), `evidence`, `next`, `verdict`. A repair keeps the
-  task id; one returned branch is not task completion. No issue, an adopted
-  issue, or an issue kept open are all valid; Workflow owners keep
-  claim/ledger/finalize.
+  task id; one returned branch is not completion. A task needs no issue;
+  Workflow owners keep claim/ledger/finalize.
 - `holds` (`scope`, `reason`): `evidence`, `impact`, `owner`, `resume_when`,
-  `next`. A hold keeps the grant. A successful takeover or a quota reset time
-  does not lift it.
+  `next`. A hold keeps the grant. Neither a takeover nor a quota reset lifts
+  it.
 - `alerts` (`level` `watch|warn|severe`, `summary`): level by evidence and
   impact, never by elapsed time. Read, acknowledged or in progress is not
   resolved; a warning blocks no unrelated work.
@@ -72,7 +72,7 @@ pending decisions; technical evidence stays reachable by reference.
   `status: settled` with evidence. A notification clears no duty.
 
 Authorization, occupancy, task stage and service availability stay separate
-facts. A stopped process deletes no task; a hold revokes no grant.
+facts. A stopped process deletes no task.
 
 ## Touchpoints
 
@@ -91,7 +91,9 @@ fields (`goal`, `scope`, `acceptance`, `needs`, `depends`, `source`,
 transcription with its own `update`, which is also the bootstrap and degraded
 path. Partial acceptance keeps the unfinished scope open; moving a `repair` or
 `partial` task back to `review` keeps that verdict as `prior_verdict` and asks
-again. A Sideagent settles a decision only with `--host-turn` and evidence.
+again. A task at `closeout` or `done` without `accepted`, `partial` or
+`cancelled` stays under `attention` (`verdict-missing`). A Sideagent settles a
+decision only with `--host-turn` and evidence.
 
 ## Sideagent binding
 
@@ -100,50 +102,50 @@ The Host starts the Sideagent, then sets `--section sideagent`
 add its own `holder_instance_id` once. One reply ending is not the end of the
 duty. To replace, the Host marks `replacing` or `failed`, starts a successor
 under a new name and binds it; the successor continues from state, index and
-receipts and replays no admitted work. A Sideagent stop spares Runner holders
-it started; a superseded seat's late write is `binding-superseded`. A failed
-Sideagent is never asked to repair its own record; the Host writes directly
-and holds that runtime within Sideagent recovery. If both fail, the Delegator
-recovers the Host first.
+receipts and replays no admitted work. A Sideagent stop spares each worker it
+dispatched (spawn line or its record's `dispatcher`); a superseded seat's late
+write is `binding-superseded`. The Host, not a failed Sideagent, repairs its
+record and holds that runtime. If both fail, the Delegator recovers the Host
+first.
 
 ## Events
 
 `execute` records the real dispatcher (`KAOLA_ACP_DISPATCHER`) apart from the
 notify target. Workers the bound Sideagent starts report to its live Host
-holder (`sideagent-host`). A Host holder advertising `sideagent-relay/1` relays
-them to the live bound Sideagent, which confirms at turn end and wakes the
-Host only when attention changed; a busy Sideagent keeps them; a dead one, or
-a failed or cancelled Sideagent turn, returns them to the Host. Delivery is
+holder (`sideagent-host`). A Host holder advertising `sideagent-relay/1`
+relays them to the live bound Sideagent, which confirms at turn end and wakes
+the Host only when attention changed; a busy Sideagent keeps them; a dead one,
+or a failed or cancelled Sideagent turn, returns them to the Host. Delivery is
 at-least-once and only a wake hint: rebuild from index and receipts. After a
 Host replacement, the new Host runs the seat's Runner `rebind-host` from its
-own session: the carrier moves in place; the worker runs on. An `unknown-op`
-holder predates it: `drain-restart` at idle.
+own session: only that seat's carrier moves; the worker runs on, its
+`dispatcher` still the old Host. Each seat (Sideagent too) needs its own call;
+events staged in a dead Host need adoption. An `unknown-op` holder predates
+it: `drain-restart` at idle.
 
 ## Size
 
-Repeats update the same id. Retire a task only once done or cancelled with
-applicable closeout and confirmed seat stop; a capped tombstone keeps the
-evidence, and a late event gets `record-retired`. Never drop an open duty to
+Repeats update the same id. A retired record leaves a capped tombstone with
+its evidence; a late event gets `record-retired`. Never drop an open duty to
 fit. The Host view is bounded at 64 KiB (`host-view-too-large`). The file may
-reach 1 MiB only after the live Host holder advertises `heartbeat-state/2`
-and migration recorded it as `carrier`, else 64 KiB (`carrier-limit`).
+reach 1 MiB only with a recorded `carrier` advertising `heartbeat-state/2`,
+else 64 KiB (`carrier-limit`).
 
 ## Migration
 
-At the first load of an updated Skill, at a safe point, run `$S migrate` with
-`--index` and `--live`; without `--write` it is a read-only plan. With
-`--write`, each v1 `active` row becomes a `doing` task with its assignment
-and fields kept, `pending` keeps its stated stage or stays `todo`, `recovery`
-and the v1 host are kept, and unknown keys, unassociated index rows and an
-unproven Sideagent binding become `unverified`. The live Host holder's
-features become `carrier`. The raw v1 file is kept once as
+After a Skill update, at a safe point, run `$S migrate --index I --live L`;
+without `--write` it only plans. With `--write`, each v1 `active` row becomes
+a `doing` task with its assignment and fields kept, `pending` keeps its stated
+stage or stays `todo`, `recovery` and the v1 host are kept, a pending row's
+unknown keys stay inert under `legacy`, and other unknown keys, unassociated
+index rows and an unproven Sideagent binding become `unverified`. The live
+Host holder's features become `carrier`. The raw v1 file is kept once as
 `heartbeat-prompt.v1-<sha12>.json`; a different copy alerts
-`state-overwritten`. An unknown schema is refused. A repeat reports
-`current`; after a Host holder upgrade, `migrate --write --live` records the carrier. Migration resets
-no task, replays no dispatch, re-plans nothing, re-asks no confirmed user
-requirement and restarts no healthy session. Unknown or conflicting items
-stay `unverified`, never a new grant.
+`state-overwritten`. An unknown schema is refused. A repeat reports `current`
+yet still records an upgraded carrier. Migration resets no task, replays no
+dispatch, re-plans nothing, re-asks no confirmed user requirement, restarts no
+healthy session and grants nothing new.
 
 Unproven until live runs: per-platform process preservation, re-anchor across
-real platforms, relay across holder death, native timer read-back and
+platforms, relay across holder death, native timer read-back and
 real-project state size.

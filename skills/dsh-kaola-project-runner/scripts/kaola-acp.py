@@ -1942,19 +1942,49 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None,
         delta = spawned_at / 1000.0 - started
         if -SPAWN_RECORD_SLACK <= delta <= SPAWN_RECORD_TOLERANCE:
             groups.append(child)
-    if record.get("session_role") in ("sideagent", "sidekick") and spawned:
+    if record.get("session_role") in ("sideagent", "sidekick") and groups:
         # Issue #255: workers a Sideagent dispatched keep running when it is
         # replaced; each has its own exact stop. Only this script's `start`
         # appends to the spawn record, so a verified entry is a Runner holder
-        # this agent started, and its whole process tree is kept.
-        kept = dispatched_worker_groups(spawned)
+        # this agent started; a live holder whose own record names this
+        # Sideagent's holder as dispatcher is one too. Its whole process tree
+        # is kept.
+        kept = dispatched_worker_groups(spawned, record.get("holder_instance_id"))
         groups = [group for group in groups if group not in kept]
     return groups
 
 
-def dispatched_worker_groups(spawned: list[dict[str, Any]]) -> set[int]:
+def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
+    """Live Runner holders whose own record (under their own argv
+    ``--record-dir``, naming them as ``holder_pid``) names this holder
+    instance as ``dispatcher``. ``KAOLA_ACP_DISPATCHER`` reaches a worker
+    start where the spawn-record variable does not (the ZCode bridge
+    forwards only its allowlist), so this needs no spawn line."""
+    if not isinstance(holder_instance_id, str) or not holder_instance_id:
+        return []
+    found = []
+    for line in run_ps(["pid", "command"], env=PS_ENV).stdout.splitlines():
+        fields = line.strip().split(None, 1)
+        if len(fields) != 2 or not fields[0].isdigit() or "kaola-acp-holder" not in fields[1]:
+            continue
+        match = HOLDER_RECORD_DIR.search(f" {fields[1]} ")
+        if match is None:
+            continue
+        try:
+            worker = json.loads((Path(match.group(1)) / "record.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        dispatcher = worker.get("dispatcher") if isinstance(worker, dict) else None
+        if (worker.get("holder_pid") == int(fields[0]) and isinstance(dispatcher, dict)
+                and dispatcher.get("holder_instance_id") == holder_instance_id):
+            found.append(int(fields[0]))
+    return found
+
+
+def dispatched_worker_groups(spawned: list[dict[str, Any]], holder_instance_id: Any = None) -> set[int]:
     """Issue #255: every process group of each Runner worker in ``spawned``
-    whose spawn identity (pid, pgid, spawn time) still holds: the holder's
+    whose spawn identity (pid, pgid, spawn time) still holds, or whose own
+    live record names ``holder_instance_id`` as dispatcher: the holder's
     group, each group a live descendant runs in (the native agent leads its
     own session, its tools may too), and the agent and child groups that
     worker's own record attests while a recorded member identity holds."""
@@ -1975,7 +2005,7 @@ def dispatched_worker_groups(spawned: list[dict[str, Any]]) -> set[int]:
         except ValueError:
             return None
 
-    kept: set[int] = set()
+    roots: dict[int, int] = {}
     for entry in spawned:
         pid, pgid, spawned_at = entry.get("pid"), entry.get("pgid"), entry.get("spawned_at")
         if not (isinstance(pid, int) and isinstance(pgid, int) and isinstance(spawned_at, (int, float))):
@@ -1984,6 +2014,12 @@ def dispatched_worker_groups(spawned: list[dict[str, Any]]) -> set[int]:
         started = epoch(live[1]) if live and live[0] == pgid else None
         if started is None or not -SPAWN_RECORD_SLACK <= spawned_at / 1000.0 - started <= SPAWN_RECORD_TOLERANCE:
             continue
+        roots[pid] = pgid
+    for pid in holders_dispatched_by(holder_instance_id):
+        if pid in by_pid:
+            roots.setdefault(pid, by_pid[pid][0])
+    kept: set[int] = set()
+    for pid, pgid in roots.items():
         kept.add(pgid)
         stack, seen = [pid], {pid}
         while stack:

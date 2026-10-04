@@ -112,7 +112,10 @@ outer ZCode Host session (holder A, pgid A)
   record. Only a holder sets it for its own agent, and the ZCode adapter does
   **not** forward it into the app-server child (it is absent from the adapter's
   env allowlist), so an external agent child never gains a write handle to
-  another holder's record.
+  another holder's record. A worker that a ZCode Sideagent starts therefore
+  writes no spawn line; when that Sideagent stops, its holder still spares the
+  worker through the worker's own live record, whose `dispatcher` names the
+  Sideagent holder (Issue #255, see [API](api.md)).
 
 Real model-driven dispatch — a ZCode Host that actually delegates a turn to a
 Worker through the Runner — is **not** claimed by this phase. It is deferred

@@ -2615,6 +2615,12 @@ def task_attention(task_id: str, task: dict[str, Any]) -> list[dict[str, Any]]:
         found.append({"kind": "tasks", "id": task_id, "why": "awaiting-verdict",
                       **({"prior_verdict": prior.get("value")} if prior else {}),
                       "content": judgment_digest(task)})
+    elif (task.get("stage") in ("closeout", "done")
+          and (verdict or {}).get("value") not in ("accepted", "partial", "cancelled")):
+        # Moving past review is a stage change, not a judgment: the Host is
+        # still asked until it records one.
+        found.append({"kind": "tasks", "id": task_id, "why": "verdict-missing", "stage": task["stage"],
+                      "content": judgment_digest(task)})
     if isinstance(task.get("transcribed"), dict):
         found.append({"kind": "tasks", "id": task_id, "why": "transcribed-check",
                       "host_turn": task["transcribed"].get("host_turn"),
@@ -2853,7 +2859,17 @@ def check_writer(args: argparse.Namespace, state: dict[str, Any]) -> dict[str, s
     if (args.writer == "host" and caller and isinstance(binding, dict)
             and caller["session"] == binding.get("session")):
         raise StateRefusal("writer-mismatch", "the bound Sideagent writes as sideagent, never as host")
-    return caller
+    return dict(caller, role=role) if caller else caller
+
+
+def writer_trace(args: argparse.Namespace, caller: dict[str, Any] | None) -> str:
+    """Who wrote, as far as this tool can tell. The writer flag is a trace,
+    not an identity proof: a `host` write from a caller whose own record
+    names no role says so instead of reading as a verified Host."""
+    if not caller:
+        return args.writer
+    unverified = args.writer == "host" and caller.get("role") is None
+    return f"{args.writer}:{caller['session']}" + (" (role unverified)" if unverified else "")
 
 
 def caller_role(caller: dict[str, str] | None) -> str | None:
@@ -2982,7 +2998,7 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     merged["rev"] = int((current or {}).get("rev") or 0) + 1
     merged["updated_at"] = observed_at()
     merged["source"] = args.source
-    merged["writer"] = args.writer if not caller else f"{args.writer}:{caller['session']}"
+    merged["writer"] = writer_trace(args, caller)
     records[record_id] = merged
     return merged
 
@@ -3060,19 +3076,23 @@ def task_seats(task: dict[str, Any]) -> dict[str, str | None]:
 
 def open_seats(seats: dict[str, str | None], rows: list[dict[str, Any]]) -> list[str]:
     """A named seat is shown stopped only by a live-row listing that has its
-    session stopped; a missing row or a live one under another holder leaves
-    the association unresolved rather than proving cleanup."""
+    session stopped, under its recorded holder when one is recorded; a
+    missing row, or a row of another holder, live or stopped, leaves the
+    association unresolved rather than proving cleanup."""
     problems = []
     for session, holder in sorted(seats.items()):
         matches = [row for row in rows if row.get("session") == session]
         running = [row for row in matches if row.get("state") != "stopped"]
+        own = [row for row in matches if not holder or row.get("holder_instance_id") == holder]
         if not matches:
             problems.append(f"{session} is not in the live rows; its stop is not shown")
-        elif any(not holder or row.get("holder_instance_id") == holder for row in running):
+        elif any(row in own for row in running):
             problems.append(f"{session} is still live")
-        elif running:
-            problems.append(f"{session} is live under holder {running[0].get('holder_instance_id')}, not "
-                            f"the recorded {holder}; the association is unresolved")
+        elif running or not own:
+            other = (running or matches)[0]
+            problems.append(f"{session} is {'live' if running else 'stopped'} under holder "
+                            f"{other.get('holder_instance_id')}, not the recorded {holder}; the "
+                            "association is unresolved")
     return problems
 
 
@@ -3090,8 +3110,8 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     if refs and (not getattr(args, "index", None) or not getattr(args, "live", None)):
         problems.append(f"dispatch {', '.join(refs)} needs --index and --live to show it closed and stopped")
     if seats and not getattr(args, "live", None):
-        problems.append(f"seat {', '.join(sorted(seats))} needs --live to show it stopped; or clear the "
-                        "seat from the task with the evidence that ends it")
+        problems.append(f"seat {', '.join(sorted(seats))} needs --live to show it stopped, or "
+                        "--handoff to the current task that continues it")
     if problems:
         return problems
     live = live_rows_of(args.live) or []
@@ -3105,6 +3125,32 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
             if row.get("state") != "stopped" and row.get("session") in sessions:
                 problems.append(f"{row.get('session')} is still live")
     return problems + open_seats(seats, live)
+
+
+def handoff_seats(receiver: dict[str, Any], task: dict[str, Any], task_id: str,
+                  args: argparse.Namespace) -> dict[str, Any]:
+    """Move a retiring task's dispatch refs, sessions and assignments onto
+    the continuing task, each assignment naming where it came from. Nothing
+    is dropped; the receiver's own retirement later needs them closed."""
+    refs = task.get("dispatch")
+    refs = [refs] if isinstance(refs, str) else [ref for ref in refs or [] if isinstance(ref, str)]
+    seats = task_seats(task)
+    if refs:
+        mine = receiver.get("dispatch")
+        mine = [mine] if isinstance(mine, str) else list(mine or [])
+        receiver["dispatch"] = mine + [ref for ref in refs if ref not in mine]
+    if seats:
+        names = list(receiver.get("sessions") or [])
+        receiver["sessions"] = names + [name for name in sorted(seats) if name not in names]
+    rows = [row for row in task.get("assignments") or [] if isinstance(row, dict)]
+    if rows:
+        receiver["assignments"] = list(receiver.get("assignments") or []) + [
+            {**row, "handed_from": task_id} for row in rows]
+    if refs or seats:
+        receiver["rev"] = int(receiver.get("rev") or 0) + 1
+        receiver["updated_at"] = observed_at()
+        receiver["writer"] = args.writer
+    return {"seats": sorted(seats), "dispatch": refs}
 
 
 def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, Any]:
@@ -3125,11 +3171,21 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
                                 or (current.get("stage") == "done" and verdict.get("value") == "accepted")):
         raise StateRefusal("retire-unmet", "a task leaves the current set only when the Host accepted it "
                            "done or cancelled it", current=current)
-    if kind == "tasks":
+    handoff = getattr(args, "handoff", None)
+    handed: dict[str, Any] = {}
+    if handoff and (kind != "tasks" or handoff == record_id or handoff not in state.get("tasks", {})):
+        raise StateRefusal("invalid-input", "--handoff names another current task that continues "
+                           "this task's seats and dispatch", current=current)
+    if kind == "tasks" and handoff:
+        # Design §6: a seat may end with this task or move, whole and with
+        # its evidence, to a continuing duty; the receiver owns its stop.
+        handed = handoff_seats(state["tasks"][handoff], current, record_id, args)
+    elif kind == "tasks":
         open_refs = open_dispatch(current, args)
         if open_refs:
             raise StateRefusal("retire-unmet", "its dispatched work is not shown closed: "
-                               + "; ".join(open_refs), current=current)
+                               + "; ".join(open_refs) + "; or --handoff it to a continuing task",
+                               current=current)
     if kind == "decisions" and current.get("status") != "settled":
         raise StateRefusal("retire-unmet", "a pending decision stays until it is settled", current=current)
     if (kind in ("tasks", "decisions") and args.writer == "sideagent"
@@ -3137,7 +3193,8 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
         raise StateRefusal("retire-unmet", "the Host has not yet seen this transcribed decision",
                            current=current)
     stone = {"kind": kind, "id": record_id, "outcome": args.outcome or current.get("stage") or "resolved",
-             "evidence": args.evidence, "at": observed_at(), "source": args.source}
+             "evidence": args.evidence, "at": observed_at(), "source": args.source,
+             **({"handed_to": handoff, **handed} if handoff else {})}
     del state[kind][record_id]
     stones = list(state.get("retired") or []) + [stone]
     state["retired"] = stones[-TOMBSTONE_CAP:]
@@ -3400,7 +3457,8 @@ def unmapped_fields(state: dict[str, Any], locator: str, entry: dict[str, Any],
     if extra:
         state["unverified"][f"{locator.replace('[', '-').rstrip(']')}-fields"] = {
             "summary": f"legacy {locator} keys {', '.join(extra)} have no lifecycle meaning yet; "
-                       "kept on the migrated record, confirm before use",
+                       "kept inert on the migrated record (`legacy`, or its assignment), confirm "
+                       "before use",
             "locator": [f"{locator}.{key}" for key in extra]}
 
 
@@ -3445,9 +3503,13 @@ def legacy_tasks(body: dict[str, Any], state: dict[str, Any]) -> None:
             state["unverified"][f"{ident}-stage"] = {
                 "summary": f"legacy pending duty {ident} states no stage; it is kept open as todo, "
                            "the Host sets its stage", "locator": locator}
-        tasks[ident] = {**{key: value for key, value in duty.items() if key != "stage"},
+        # A v1 key with no v1 meaning stays inert under `legacy`: one named
+        # like a v2 field (`verdict`, `dispatch`, ...) must not take effect.
+        extra = {key: value for key, value in duty.items() if key not in V1_PENDING_FIELDS}
+        tasks[ident] = {**{key: value for key, value in duty.items()
+                           if key in V1_PENDING_FIELDS and key != "stage"},
                         "stage": stage, "goal": duty.get("duty") or "legacy pending duty",
-                        "source": f"migrated:{locator}"}
+                        "source": f"migrated:{locator}", **({"legacy": extra} if extra else {})}
         unmapped_fields(state, locator, duty, V1_PENDING_FIELDS)
     for ident, task in tasks.items():
         if isinstance(task.get("evidence"), dict):
@@ -3701,6 +3763,7 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--outcome")
     retire.add_argument("--index", help="dispatch index showing the task's items closed")
     retire.add_argument("--live", help="Runner rows showing its sessions stopped")
+    retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
     retire.set_defaults(func=command_state_retire)
 
     view = actions.add_parser("view")

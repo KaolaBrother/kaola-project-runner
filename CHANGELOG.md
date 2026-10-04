@@ -10,8 +10,9 @@ Seats: restart required
 
 The holder diff is not empty. `scripts/kaola-acp-holder.py` advertises
 `holder_features` (`heartbeat-state/2`, `sideagent-relay/1`), reads a lifecycle
-state file up to 1 MiB, relays worker events to a bound Sideagent, and spares
-Runner holders when a Sideagent stops. A running seat keeps the holder it
+state file up to 1 MiB, relays worker events to a bound Sideagent, and keeps
+the whole process tree (holder, native agent, tools) of each worker a
+Sideagent dispatched when that Sideagent stops. A running seat keeps the holder it
 started with. Restart the Host holder at a safe point, then run
 `state migrate --write --live` to record it as the carrier. Healthy workers
 are not restarted for migration. This content commit leaves the Grok Bot
@@ -59,8 +60,14 @@ bridge at the unpinned content stage (`saveable: false`).
   worker holder's process tree it dispatched, nested or not, also when its
   holder is already dead. Relay is confirmed only by the matching Sideagent
   holder's completed turn; a failed or cancelled turn, a replaced Sideagent or
-  a dead one returns its events to the Host, and relay socket I/O is bounded.
-  The bound Sideagent never takes or waits for a worker shared seat. Migration
+  a dead one returns its events to the Host. A worker counts as the
+  Sideagent's by its spawn line or by its own live record naming that
+  Sideagent holder as `dispatcher` (the ZCode bridge forwards no spawn-record
+  variable). A Sideagent turn end settles its relays before queue admission,
+  so a full queue cannot refuse the completion that drains it; a later turn
+  end past a relay's dispatch cursor returns a relay whose own end was lost to
+  the Host (`turn-end-missing`). One 1 s deadline bounds each whole relay
+  round trip. The bound Sideagent never takes or waits for a worker shared seat. Migration
   keeps one task per v1 assignment with its fields, invents no stage, binds no
   Sideagent without proof, refuses unknown schemas and alerts on an overwritten
   raw copy. A later `repair`/`partial` verdict asks the Host again
@@ -68,14 +75,22 @@ bridge at the unpinned content stage (`saveable: false`).
   digest while a metadata-only rewrite stays quiet. Retirement needs an
   accepted or cancelled verdict, closed dispatch items, and every seat the
   task names (migrated assignments included) shown stopped in the live rows;
-  a missing or differently-held live row keeps the duty (`done-seat-open`).
-  A Sideagent decision settlement needs the Host turn and evidence. Section
+  a missing row or a row of another holder keeps the duty (`done-seat-open`),
+  and `retire --handoff T` moves the seats and dispatch to a continuing task
+  instead. A task at `closeout` or `done` without an accepted, partial or
+  cancelled verdict stays under `attention` (`verdict-missing`). A `host`
+  write from a caller whose record names no role is traced
+  `(role unverified)`. A v1 pending key with no v1 meaning stays inert under
+  the task's `legacy`. A Sideagent decision settlement needs the Host turn and evidence. Section
   writes keep their source, omitted text is marked, a worker cannot write as
   Host or Sideagent, and a retired fault id reopens only on a later
   observation.
-- **Not yet verified live:** per-platform process preservation, carrier
-  re-anchor across real platforms, relay across holder death, native timer
-  read-back on each outer platform, and state size on a real project.
+- **Not yet verified live:** per-platform process preservation (a ZCode
+  Sideagent stop during a dispatch included), carrier re-anchor across real
+  platforms, relay across holder death, native timer read-back on each outer
+  platform, and state size on a real project. `rebind-host` moves only the
+  carrier: each seat needs its own call, its `dispatcher` still names the old
+  Host, and events staged in a dead Host need the adoption pass.
 
 ## 0.8.2 — 2026-10-04 (OpenCode DeepSeek advertisement)
 

@@ -180,8 +180,14 @@ This is a release/update requirement. For the lifecycle state of
   Healthy workers are not restarted for migration; they get the new holder behavior at
   their next normal start.
 - Host replacement: the new Host runs `rebind-host` on each existing seat from its own session;
-  the carrier moves in place and the worker is not restarted. A holder older than that op
-  answers `unknown-op` and keeps the previous recovery (`drain-restart` at idle).
+  the carrier moves in place and the worker is not restarted. Only the carrier moves: the
+  seat's `dispatcher` still names the old Host, each seat (the Sideagent included) needs its own
+  call, and worker events staged in a Host holder that died stay there; the new Host adopts
+  that work from the index and receipts. A holder older than that op answers `unknown-op` and
+  keeps the previous recovery (`drain-restart` at idle).
+- A v1 `pending` key with no v1 meaning is kept under the task's `legacy`, inert, and listed
+  as `unverified`, so a key that shares a v2 field name (`verdict`, `dispatch`, `keep_open`,
+  ...) never takes effect.
 - Not yet verified on a real project: per-platform process preservation, carrier re-anchor
   across real platforms, relay across holder death, native timer read-back, and real state size.
 

@@ -464,9 +464,17 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   settled decision, or any hold or alert; a later update of that id is `record-retired`. A
   task's `dispatch` items must be closed in `--index`, and every seat it names (`assignments`,
   `sessions`, `session`, including migrated ones with no index match) must show its session
-  `stopped` in `--live`; a missing row or a live row under a different holder is not proof of
-  stop, and `check --live` reports it as `done-seat-open`. A task in `review` without a
-  verdict is under `attention` with a `content` digest, so each new result is a new wake.
+  `stopped` in `--live` under the holder the task recorded; a missing row, or a live or
+  stopped row of a different holder, is not proof of stop, and `check --live` reports it as
+  `done-seat-open`. `retire --handoff TASK` instead moves the dispatch refs, `sessions` and
+  `assignments` (each marked `handed_from`) to another current task, which then owns their
+  stop; the tombstone records `handed_to`, `seats` and `dispatch`. A task in `review` without
+  a verdict is under `attention` with a `content` digest, so each new result is a new wake; a
+  task at `closeout` or `done` without an `accepted`, `partial` or `cancelled` verdict stays
+  under `attention` as `verdict-missing`. Each write records `writer`; a `host` write from a
+  caller whose own record names no role reads `host:<session> (role unverified)`, because the
+  writer flag is a trace, not an identity proof. On migration a v1 `pending` key with no v1
+  meaning is kept under the task's `legacy` and never acts as a v2 field of the same name.
 - `view --role host|sideagent|delegator` reads only. The Delegator view lists the `AGENTS.md`
   user-requirements region, holds, alerts, pending decisions, `unverified`, then doing, todo,
   and outcomes.
@@ -634,7 +642,29 @@ logs `heartbeat_host_rebound`. Refusals are `{"result":"refused","reason":"rebin
 exit 1 before the seat is touched, and holder errors `no-heartbeat-host` (seat started unbound),
 `heartbeat-host-foreign-repo`, or `holder-instance-mismatch`. A holder that predates the op
 answers `unknown-op`; that seat recovers through `drain-restart` as before. A Sideagent whose
-own record names no Host now dispatches through the ordinary dispatcher rows.
+own record names no Host now dispatches through the ordinary dispatcher rows. `rebind-host`
+moves only the target seat's carrier: the seat's `dispatcher` still names the old Host, every
+seat (the Sideagent included) needs its own call, and worker events staged in a Host holder that
+died are not moved; the new Host adopts them from the index and receipts.
+
+Sideagent relay (`sideagent-relay/1`): a Host holder relays routine worker events (from any
+session but the Sideagent's own) to the bound Sideagent's live holder. Each relay round trip
+(connect, send, every read) shares one 1 s deadline, so a slow or trickling Sideagent cannot
+hold the event lock; a miss returns the event to the Host as `sideagent-unreachable`. The
+Sideagent may already have admitted that prompt, so the Host can see it as well (at-least-once).
+The relay mark keeps the Sideagent's `dispatch_event_cursor`. A Sideagent turn end is settled
+before queue admission, so a full queue never refuses the completion that drains it: a completed
+turn confirms its relays; a failed or cancelled one returns them to the Host; a later turn end
+whose cursor is past a relay's cursor returns that relay as `turn-end-missing` (its own end was
+lost). Each return is logged as `worker_event_relay_returned`. No timer is added.
+
+When a Sideagent holder stops (cooperatively or by `stop --force` after holder loss), it spares
+the whole process tree of every worker it dispatched. A worker counts as dispatched by it through
+its spawn line in `children.jsonl` or through its own live record: `dispatcher.holder_instance_id`
+equal to the Sideagent holder's, with the record's `holder_pid` running as a `kaola-acp-holder`
+under that record directory. The second source covers the ZCode bridge, which forwards no
+`KAOLA_ACP_CHILD_RECORD`. A foreign record, a wrong `holder_pid`, or a reused spawn line protects
+nothing.
 
 A `start` receipt also says where its request came from (Issue #104): `heartbeat_host_source` is
 `none` (no dispatching holder, no variable), `explicit` (`KAOLA_ACP_HEARTBEAT_HOST` given),

@@ -225,7 +225,9 @@ HEARTBEAT_NOTIFY_TIMEOUT = 5.0
 # own carrier send waits on before its event is staged. A non-waiting prompt
 # admission answers at once; bounding the relay well under the worker's 5 s
 # carrier timeout keeps a slow Sideagent from timing out a worker idle (an
-# unreachable Sideagent falls back to the Host).
+# unreachable Sideagent falls back to the Host). It is one deadline for the
+# whole round trip (connect, send, every receive), so a peer that trickles
+# bytes without a newline cannot extend it.
 RELAY_SEND_TIMEOUT = 1.0
 HEARTBEAT_NOTIFY_GRACE = 6.0
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
@@ -515,16 +517,61 @@ def worker_tree_groups(holder_pid: int, holder_pgid: int,
     return found
 
 
+def is_turn_end(event: dict[str, Any]) -> bool:
+    """A Sideagent holder's turn-end idle naming its holder and turn."""
+    return bool(event.get("kind") == "idle" and event.get("holder_instance_id")
+                and event.get("turn_fingerprint"))
+
+
+def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
+    """Live Runner holders whose own record (under the ``--record-dir`` of
+    their own argv, naming them as ``holder_pid``) names this holder instance
+    as their ``dispatcher``. That record field comes from the
+    ``KAOLA_ACP_DISPATCHER`` the start inherited, which reaches a worker even
+    where ``KAOLA_ACP_CHILD_RECORD`` does not (the ZCode bridge forwards only
+    its allowlist)."""
+    if not isinstance(holder_instance_id, str) or not holder_instance_id:
+        return []
+    try:
+        output = run_ps(["pid", "command"]).stdout
+    except KeyError:
+        return []
+    found = []
+    for line in output.splitlines():
+        fields = line.strip().split(None, 1)
+        if len(fields) != 2 or not fields[0].isdigit() or "kaola-acp-holder" not in fields[1]:
+            continue
+        match = HOLDER_RECORD_DIR_ARG.search(f" {fields[1]} ")
+        if match is None:
+            continue
+        try:
+            record = json.loads((Path(match.group(1)) / "record.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        dispatcher = record.get("dispatcher") if isinstance(record, dict) else None
+        if (record.get("holder_pid") == int(fields[0]) and isinstance(dispatcher, dict)
+                and dispatcher.get("holder_instance_id") == holder_instance_id):
+            found.append(int(fields[0]))
+    return found
+
+
 def dispatched_worker_groups(path: Path, live: dict[int, list[int]],
-                             table: list[tuple[int, int, int, str]] | None = None) -> set[int]:
+                             table: list[tuple[int, int, int, str]] | None = None,
+                             holder_instance_id: str | None = None) -> set[int]:
     """Issue #255: the groups of ``live`` that belong to a Runner worker this
-    agent started. A worker counts only by its exact spawn-record identity
-    (only a Runner `start` writes that record; pid, pgid and spawn time must
-    still hold); its whole process tree is kept, never only the holder."""
+    agent started. A worker counts by its exact spawn-record identity (only a
+    Runner `start` writes that record; pid, pgid and spawn time must still
+    hold) or by its own live record naming this holder instance as its
+    dispatcher; its whole process tree is kept, never only the holder."""
     table = table if table is not None else process_table()
+    by_pid = {pid: pgid for pid, _, pgid, _ in table}
+    roots = {entry["pid"]: entry["pgid"] for entry, _ in live_spawn_entries(path, table)}
+    for pid in holders_dispatched_by(holder_instance_id):
+        if pid in by_pid:
+            roots.setdefault(pid, by_pid[pid])
     found: set[int] = set()
-    for entry, _ in live_spawn_entries(path, table):
-        found |= worker_tree_groups(entry["pid"], entry["pgid"], table)
+    for pid, pgid in roots.items():
+        found |= worker_tree_groups(pid, pgid, table)
     return found & set(live)
 
 
@@ -2922,17 +2969,27 @@ class Holder:
         return "\n".join(lines)
 
     def _relay_send(self, target: dict[str, Any], text: str) -> dict[str, Any]:
+        deadline = time.monotonic() + RELAY_SEND_TIMEOUT
+
+        def remaining() -> float:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise socket.timeout("relay deadline passed")
+            return left
+
         try:
             connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             try:
-                connection.settimeout(RELAY_SEND_TIMEOUT)
+                connection.settimeout(remaining())
                 connection.connect(target["socket"])
+                connection.settimeout(remaining())
                 connection.sendall(canonical(
                     {"op": "prompt", "request_id": secrets.token_hex(8),
                      "params": {"text": text, "wait": False,
                                 "expected_holder_instance_id": target["holder_instance_id"]}}) + b"\n")
                 buffer = bytearray()
                 while b"\n" not in buffer:
+                    connection.settimeout(remaining())
                     data = connection.recv(65536)
                     if not data:
                         break
@@ -2955,6 +3012,50 @@ class Holder:
             self.pending_worker_events.remove(item)
         self._remember_confirmed_worker_events({event_id: cursor for event_id in ids})
 
+    def _settle_relays(self, ends: list[dict[str, Any]]) -> None:
+        """Apply Sideagent turn ends to the relays they settle. Caller holds
+        ``worker_events_lock``.
+
+        The turn that carried a relay confirms it only when it completed; a
+        failed or cancelled one returns it to the Host. A Sideagent runs one
+        turn at a time, so a later turn end from the same holder, past the
+        relay's own dispatch cursor, proves the carrying turn ended although
+        its end never arrived: those events go back to the Host with the
+        outcome unknown rather than staying marked for ever."""
+        ended = {(item["holder_instance_id"], item["turn_fingerprint"]): item.get("turn_outcome")
+                 for item in ends}
+        latest: dict[str, int] = {}
+        for item in ends:
+            cursor = item.get("event_cursor")
+            if isinstance(cursor, int) and not isinstance(cursor, bool):
+                holder = item["holder_instance_id"]
+                latest[holder] = max(latest.get(holder, cursor), cursor)
+
+        def turn_of(item: dict[str, Any]) -> tuple[Any, Any]:
+            mark = item.get("relayed") or {}
+            return mark.get("holder"), mark.get("fingerprint")
+
+        def end_missing(item: dict[str, Any]) -> bool:
+            mark = item.get("relayed") or {}
+            cursor = mark.get("cursor")
+            return (turn_of(item) not in ended and isinstance(cursor, int)
+                    and latest.get(mark.get("holder"), cursor) > cursor)
+
+        self._confirm_events([item for item in self.pending_worker_events
+                              if "relayed" in item and ended.get(turn_of(item), "") == "turn_completed"],
+                             "sideagent-relay")
+        returned = [(item, str(ended[turn_of(item)])) for item in self.pending_worker_events
+                    if "relayed" in item and turn_of(item) in ended]
+        returned += [(item, "turn-end-missing") for item in self.pending_worker_events
+                     if "relayed" in item and end_missing(item)]
+        if returned:
+            self.events.append({"kind": "worker_event_relay_returned",
+                                "event_ids": [item["event_id"] for item, _ in returned],
+                                "outcomes": sorted({outcome for _, outcome in returned})})
+            for item, _ in returned:
+                item.pop("relayed", None)
+                item["host_owned"] = True
+
     def _relay_pass(self) -> dict[str, Any]:
         """Route routine worker events to the bound Sideagent, at least once.
 
@@ -2975,28 +3076,7 @@ class Holder:
             for item in self.pending_worker_events:
                 item.pop("relayed", None)
             return {}
-        ended = {(item.get("holder_instance_id"), item.get("turn_fingerprint")): item.get("turn_outcome")
-                 for item in self.pending_worker_events
-                 if item.get("kind") == "idle" and item.get("holder_instance_id")
-                 and item.get("turn_fingerprint")}
-
-        def turn_of(item: dict[str, Any]) -> tuple[Any, Any]:
-            mark = item.get("relayed") or {}
-            return mark.get("holder"), mark.get("fingerprint")
-
-        self._confirm_events([item for item in self.pending_worker_events
-                              if ended.get(turn_of(item), "") == "turn_completed"], "sideagent-relay")
-        returned = [item for item in self.pending_worker_events
-                    if turn_of(item) in ended and ended[turn_of(item)] != "turn_completed"]
-        if returned:
-            # A failed or cancelled maintenance turn did not do the duty: the
-            # Host takes these events back instead of losing them.
-            self.events.append({"kind": "worker_event_relay_returned",
-                                "event_ids": [item["event_id"] for item in returned],
-                                "outcomes": sorted({str(ended[turn_of(item)]) for item in returned})})
-            for item in returned:
-                item.pop("relayed", None)
-                item["host_owned"] = True
+        self._settle_relays([item for item in self.pending_worker_events if is_turn_end(item)])
         moved = [item for item in self.pending_worker_events
                  if (item.get("relayed") or {}).get("holder") not in (None, target["holder_instance_id"])]
         if moved:
@@ -3025,9 +3105,12 @@ class Holder:
         error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
         if (error is None and receipt.get("outcome") == "in_progress"
                 and isinstance(receipt.get("prompt_fingerprint"), str)):
+            cursor = receipt.get("dispatch_event_cursor")
             for item in waiting:
                 item["relayed"] = {"holder": target["holder_instance_id"],
-                                   "fingerprint": receipt.get("prompt_fingerprint")}
+                                   "fingerprint": receipt.get("prompt_fingerprint"),
+                                   **({"cursor": cursor} if isinstance(cursor, int)
+                                      and not isinstance(cursor, bool) else {})}
             self.events.append({"kind": "worker_event_relayed", "target_session": target["session"],
                                 "target_holder": target["holder_instance_id"],
                                 "event_ids": [item["event_id"] for item in waiting],
@@ -3256,6 +3339,11 @@ class Holder:
                    for item in self.pending_worker_events):
                 return {"event_id": event["event_id"], "duplicate": True,
                         "pending": len(self.pending_worker_events)}
+            if is_turn_end(event):
+                # Issue #255: a Sideagent turn end settles its relays before
+                # admission, so a full queue never refuses the completion
+                # that drains it.
+                self._settle_relays([event])
             if len(self.pending_worker_events) >= HEARTBEAT_EVENT_CAP:
                 queue_full = True
             else:
@@ -4335,7 +4423,8 @@ class Holder:
             # sessions with their own exact stop; replacing the Sideagent must
             # not end them (holder, native agent, or its tools). Only its other
             # leftovers are swept.
-            spared = dispatched_worker_groups(self.record_dir / CHILD_RECORD_NAME, live)
+            spared = dispatched_worker_groups(self.record_dir / CHILD_RECORD_NAME, live,
+                                              holder_instance_id=self.holder_instance_id)
             self.spared_child_pgids = sorted(spared)
             live = {pgid: members for pgid, members in live.items() if pgid not in spared}
         self.swept_child_pgids = sorted(live)

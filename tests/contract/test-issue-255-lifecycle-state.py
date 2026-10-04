@@ -181,6 +181,60 @@ class StateTool(StateProject):
         code, out = retire("--index", str(index), "--live", str(live))
         self.assertEqual(code, 0, out)
 
+    def test_a_live_seat_can_be_handed_to_a_continuing_task_with_its_evidence(self) -> None:
+        self.init()
+        self.update("host", "tasks", "t5", {"stage": "done", "goal": "g", "dispatch": ["i7"],
+                                             "sessions": ["codex-KT-i7-a"], "verdict": {"value": "accepted"}})
+        self.update("host", "tasks", "t6", {"stage": "doing", "goal": "next", "dispatch": ["i8"]})
+        index = self.repo / "index.json"
+        index.write_text(json.dumps({"items": [{"item_id": "i7", "status": "returned",
+                                                "session": "codex-KT-i7-a"}]}), encoding="utf-8")
+        live = self.repo / "live.json"
+        live.write_text(json.dumps({"rows": [{"session": "codex-KT-i7-a", "state": "ready"}]}),
+                        encoding="utf-8")
+        retire = lambda *extra: self.state("retire", "--file", str(self.file), "--writer", "sideagent",
+                                           "--source", "s", "--kind", "tasks", "--id", "t5",
+                                           "--expect-rev", "1", "--evidence", "seat reused for t6", *extra)
+        code, out = retire("--index", str(index), "--live", str(live))
+        self.assertEqual(out["reason"], "retire-unmet", "a live seat is not a stop")
+        self.assertIn("--handoff", out["detail"])
+        for target in ("t5", "nope"):
+            code, out = retire("--handoff", target)
+            self.assertEqual(out["reason"], "invalid-input", target)
+        code, out = retire("--handoff", "t6")
+        self.assertEqual(code, 0, out)
+        doc = self.doc()
+        self.assertNotIn("t5", doc["state"]["tasks"])
+        stone = doc["state"]["retired"][-1]
+        self.assertEqual((stone["handed_to"], stone["seats"], stone["dispatch"], stone["evidence"]),
+                         ("t6", ["codex-KT-i7-a"], ["i7"], "seat reused for t6"))
+        receiver = doc["state"]["tasks"]["t6"]
+        self.assertEqual((receiver["dispatch"], receiver["sessions"], receiver["rev"]),
+                         (["i8", "i7"], ["codex-KT-i7-a"], 2), "the receiver owns the seat now")
+        self.update("host", "tasks", "t6", {"stage": "done", "verdict": {"value": "accepted"}},
+                    "--expect-rev", "2")
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
+                               "--kind", "tasks", "--id", "t6", "--expect-rev", "3", "--evidence", "e",
+                               "--index", str(index), "--live", str(live))
+        self.assertEqual(out["reason"], "retire-unmet", "the handed seat still needs its stop")
+
+    def test_moving_past_review_without_a_verdict_keeps_the_host_asked(self) -> None:
+        self.init()
+        why = lambda: [(row["id"], row["why"]) for row in json.loads(self.doc()["body"])["attention"]]
+        rev = lambda: str(self.doc()["state"]["tasks"]["t7"]["rev"])
+        self.update("host", "tasks", "t7", {"stage": "review", "goal": "g"})
+        self.assertEqual(why(), [("t7", "awaiting-verdict")])
+        for stage in ("closeout", "done"):
+            code, out = self.update("sideagent", "tasks", "t7", {"stage": stage}, "--expect-rev", rev())
+            self.assertEqual(code, 0, out)
+            self.assertEqual(why(), [("t7", "verdict-missing")], stage)
+        self.update("host", "tasks", "t7", {"verdict": {"value": "repair"}}, "--expect-rev", rev())
+        self.assertEqual(why(), [("t7", "verdict-missing")], "repair does not close a done task")
+        for value, stage in (("partial", "closeout"), ("cancelled", "done"), ("accepted", "done")):
+            self.update("host", "tasks", "t7", {"stage": stage, "verdict": {"value": value}},
+                        "--expect-rev", rev())
+            self.assertEqual(why(), [], f"{value} at {stage} is a judgment")
+
     def test_a_sideagent_settles_a_decision_only_as_transcribed_evidence(self) -> None:
         self.init()
         self.update("sideagent", "decisions", "d1", {"owner": "user", "question": "Expert?"})
@@ -306,6 +360,12 @@ class StateTool(StateProject):
         (worker_dir / "record.json").write_text(json.dumps({"holder_instance_id": "w-1"}), encoding="utf-8")
         code, out = self.update("host", "tasks", "t1", {"stage": "todo", "goal": "g"}, env=env)
         self.assertEqual(code, 0, "a record without a role is a trace, as before")
+        self.assertEqual(out["value"]["writer"], "host:codex-KT-i1-worker (role unverified)",
+                         "the trace does not claim a verified Host")
+        (worker_dir / "record.json").write_text(json.dumps({
+            "holder_instance_id": "w-1", "session_role": "host"}), encoding="utf-8")
+        code, out = self.update("host", "tasks", "t1", {"goal": "g2"}, "--expect-rev", "1", env=env)
+        self.assertEqual(out["value"]["writer"], "host:codex-KT-i1-worker")
 
     def test_host_view_marks_omitted_text_and_keeps_judgment_text_whole(self) -> None:
         self.init()
@@ -711,8 +771,9 @@ class Migration(StateProject):
         self.assertNotIn("active-1-fields", state["unverified"])
         duty = state["tasks"]["duty-1"]
         self.assertEqual(duty["stage"], "todo", "'continue implementation' is not closeout")
-        for key in ("next", "wait", "resume_when", "holder", "platform", "boundary", "follow_up"):
+        for key in ("next", "wait", "resume_when", "holder", "platform", "boundary"):
             self.assertEqual(duty[key], body["pending"][0][key])
+        self.assertEqual(duty["legacy"], {"follow_up": "doc check"}, "an unknown key is kept inert")
         self.assertEqual(state["unverified"]["pending-0-fields"]["locator"], ["pending[0].follow_up"])
         self.assertEqual(state["tasks"]["duty-2"]["stage"], "closeout", "an explicit stage is kept")
         self.assertNotIn("duty-2-stage", state["unverified"])
@@ -723,6 +784,27 @@ class Migration(StateProject):
         self.assertFalse([key for key in state["unverified"] if key.startswith("legacy-")],
                          "host and sideagent have a lifecycle home")
         self.assertTrue(Path(state["recovery"]["migration"]["raw"]).read_bytes() == raw)
+
+    def test_a_v1_key_named_like_a_v2_field_does_not_take_effect(self) -> None:
+        body = {"project": {"code": "KT"}, "authorization": AUTH,
+                "pending": [{"duty": "closeout #254", "stage": "done", "verdict": {"value": "accepted"},
+                             "dispatch": ["i9"], "keep_open": True}]}
+        self.write_legacy(body)
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 0, out)
+        state = self.doc()["state"]
+        task = state["tasks"]["duty-1"]
+        for key in ("verdict", "dispatch", "keep_open"):
+            self.assertNotIn(key, task, f"v1 {key} is not a v2 decision")
+            self.assertEqual(task["legacy"][key], body["pending"][0][key])
+        self.assertEqual(sorted(state["unverified"]["pending-0-fields"]["locator"]),
+                         ["pending[0].dispatch", "pending[0].keep_open", "pending[0].verdict"])
+        attention = json.loads(self.doc()["body"])["attention"]
+        self.assertEqual([(row["id"], row["why"]) for row in attention], [("duty-1", "verdict-missing")],
+                         "a done duty with no Host verdict asks the Host")
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+                               "--kind", "tasks", "--id", "duty-1", "--expect-rev", "1", "--evidence", "x")
+        self.assertEqual(out["reason"], "retire-unmet", "the copied v1 verdict accepts nothing")
 
     def test_a_migrated_task_with_a_known_seat_retires_only_once_it_is_shown_stopped(self) -> None:
         body = {"project": {"code": "KT"}, "authorization": AUTH,
@@ -746,7 +828,9 @@ class Migration(StateProject):
         cases = (([{"session": "still-working", "state": "ready", "holder_instance_id": "h"}], "still live"),
                  ([], "not in the live rows"),
                  ([{"session": "still-working", "state": "ready", "holder_instance_id": "h2"}],
-                  "association is unresolved"))
+                  "association is unresolved"),
+                 ([{"session": "still-working", "state": "stopped", "holder_instance_id": "h2"}],
+                  "stopped under holder h2"))
         for rows, why in cases:
             live.write_text(json.dumps({"rows": rows}), encoding="utf-8")
             code, out = retire("--live", str(live))
@@ -963,6 +1047,10 @@ class FakeSideagent:
         self.path = path
         self.busy = busy
         self.prompts: list[dict] = []
+        # Optional realism: the Sideagent holder's dispatch cursor per relay,
+        # and a peer that trickles bytes without ever ending its reply line.
+        self.cursor_step: int | None = None
+        self.trickle = False
         path.parent.mkdir(parents=True, exist_ok=True)
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(str(path))
@@ -985,10 +1073,20 @@ class FakeSideagent:
                     data += chunk
                 message = json.loads(data.decode())
                 self.prompts.append(message)
+                if self.trickle:
+                    try:
+                        for _ in range(30):
+                            connection.sendall(b" ")
+                            time.sleep(0.1)
+                    except OSError:
+                        pass
+                    continue
                 if self.busy:
                     reply = {"error": {"code": "prompt-in-progress"}, "outcome": "in_progress"}
                 else:
                     reply = {"outcome": "in_progress", "prompt_fingerprint": f"sha256:{len(self.prompts)}"}
+                    if self.cursor_step is not None:
+                        reply["dispatch_event_cursor"] = self.cursor_step * len(self.prompts)
                 connection.sendall(json.dumps(reply).encode() + b"\n")
 
     def close(self) -> None:
@@ -1241,6 +1339,111 @@ class HolderRelay(unittest.TestCase):
         self.assertIn("codex-KT-i1-a", prompts[0], "the Host takes over undelivered events")
         self.assertIn("zcode-KT-sideagent", prompts[0])
 
+    def test_a_third_review_on_the_host_direct_path_wakes_the_host(self) -> None:
+        def review(round_no: int) -> list:
+            task = {"stage": "review", "goal": "g", "evidence": [f"c{round_no}"],
+                    "prior_verdict": {"value": "repair", "by": "host", "host_turn": f"review-{round_no - 1}"}}
+            return dispatch_module.task_attention("t", task)
+
+        self.live_sideagent()
+        self.write_state(review(2))
+        self.sideagent_end(9, 50)
+        self.assertEqual(len(self.agent.prompts()), 1, "the Host sees round 2")
+        self.finish_host_turn()
+        # The Host records `repair` and asks the worker itself; no Sideagent
+        # turn ends while attention is empty. The fix comes back for round 3.
+        self.write_state(review(3))
+        self.sideagent_end(12, 51)
+        self.assertEqual(len(self.agent.prompts()), 2, "round 3 is a new judgment")
+        self.finish_host_turn()
+        self.sideagent_end(15, 52)
+        self.assertEqual(len(self.agent.prompts()), 2, "an unchanged round 3 stays quiet")
+
+    def pending_ids(self) -> list[str]:
+        return [item["event_id"] for item in self.holder.pending_worker_events]
+
+    def confirmed_ids(self) -> list[str]:
+        log = (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()
+        return [event_id for line in log for entry in [json.loads(line)]
+                if entry.get("kind") == "worker_event_confirmed" for event_id in entry["event_ids"]]
+
+    def test_a_lost_turn_end_returns_the_relay_to_the_host_once(self) -> None:
+        self.write_state([])
+        self.live_sideagent()
+        self.fake.cursor_step = 10
+        first = "codex/codex-KT-i1-a/idle/5"
+        self.event("codex-KT-i1-a", "idle", 5)            # relayed in turn sha256:1, cursor 10
+        # That turn's end never reaches the Host holder.
+        self.sideagent_end(8, 99)                          # an earlier turn's late end
+        self.assertIn(first, self.pending_ids(), "an end older than the relay proves nothing")
+        self.assertFalse(any("codex-KT-i1-a" in prompt for prompt in self.agent.prompts()))
+        while self.holder.turn.get("active"):
+            self.finish_host_turn()
+        self.event("codex-KT-i1-b", "idle", 6)             # relayed in turn sha256:2, cursor 20
+        self.assertNotIn("codex-KT-i1-a", self.fake.prompts[1]["params"]["text"], "not relayed twice")
+        self.sideagent_end(25, 2)
+        self.assertIn("codex/codex-KT-i1-b/idle/6", self.confirmed_ids(), "its own turn confirms the second")
+        self.assertIn("codex-KT-i1-a", self.agent.prompts()[-1],
+                      "the first event's outcome is unknown: the Host has it")
+        log = (Path(self.holder.args.record_dir) / "events.jsonl").read_text()
+        self.assertIn("turn-end-missing", log)
+        self.finish_host_turn()
+        self.assertEqual(self.confirmed_ids().count(first), 1, "confirmed exactly once")
+        self.sideagent_end(11, 1)                          # the lost end turns up late
+        self.assertEqual(self.confirmed_ids().count(first), 1, "and never a second time")
+        self.assertEqual(len(self.fake.prompts), 2)
+
+    def test_a_full_queue_still_takes_the_turn_end_that_drains_it(self) -> None:
+        self.write_state([])
+        self.live_sideagent()
+        self.fake.cursor_step = 10
+        cap = holder_module.HEARTBEAT_EVENT_CAP
+        for n in range(cap):
+            self.event(f"codex-KT-i2-w{n}", "idle", 1000 + n)
+        workers = [f"codex/codex-KT-i2-w{n}/idle/{1000 + n}" for n in range(cap)]
+        self.assertEqual(len(self.holder.pending_worker_events), cap)
+        self.assertEqual(self.event("codex-KT-i2-extra", "idle", 1)["error"]["code"], "worker-event-queue-full")
+        for turn in range(1, cap + 1):
+            self.sideagent_end(10 * turn + 5, turn)
+        self.assertEqual(sorted(set(self.confirmed_ids()) & set(workers)), sorted(workers),
+                         "every relay is confirmed by its own turn end")
+        self.assertFalse(any(item["event_id"] in workers for item in self.holder.pending_worker_events))
+        self.assertFalse(any("codex-KT-i2-w" in prompt for prompt in self.agent.prompts()),
+                         "a confirmed relay is not also given to the Host")
+        while self.holder.turn.get("active"):
+            self.finish_host_turn()
+        receipt = self.event("codex-KT-i2-new", "idle", 9000)
+        self.assertTrue(receipt.get("staged"), receipt)
+
+    def test_a_trickling_sideagent_cannot_hold_the_event_lock_past_the_deadline(self) -> None:
+        self.write_state([])
+        self.live_sideagent()
+        self.fake.trickle = True
+        results: dict[str, float] = {}
+
+        def send(name: str, cursor: int) -> None:
+            started = time.monotonic()
+            self.event(name, "idle", cursor)
+            results[name] = time.monotonic() - started
+
+        first = threading.Thread(target=send, args=("codex-KT-i3-a", 5))
+        first.start()
+        time.sleep(0.2)
+        second = threading.Thread(target=send, args=("codex-KT-i3-b", 6))
+        second.start()
+        first.join(10)
+        second.join(10)
+        bound = holder_module.RELAY_SEND_TIMEOUT
+        self.assertLess(results["codex-KT-i3-a"], bound + 0.5, "one total deadline, not per receive")
+        self.assertLess(results["codex-KT-i3-b"], 2 * bound + 1.0, "the waiting event is not held longer")
+        while self.holder.turn.get("active"):
+            self.finish_host_turn()
+        seen = " ".join(self.agent.prompts()) + " ".join(self.pending_ids())
+        for name in ("codex-KT-i3-a", "codex-KT-i3-b"):
+            self.assertIn(name, seen, f"{name} is not lost behind a slow Sideagent")
+        log = (Path(self.holder.args.record_dir) / "events.jsonl").read_text()
+        self.assertIn("worker_event_relay_failed", log)
+
     def test_without_a_binding_every_event_reaches_the_host(self) -> None:
         (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(
             json.dumps({"body": json.dumps({"project": {}})}), encoding="utf-8")
@@ -1401,15 +1604,74 @@ class NestedWorkerTopology(unittest.TestCase):
         self.unrelated.wait(timeout=5)
         self.assertFalse(self.alive(self.unrelated.pid))
 
+    def name_dispatcher(self, holder_instance_id: str, holder_pid: int | None = None) -> None:
+        record = json.loads((self.worker_dir / "record.json").read_text(encoding="utf-8"))
+        record["dispatcher"] = {"holder_instance_id": holder_instance_id, "platform": "zcode",
+                                "session": "zcode-KT-sideagent", "repo": self.tmp.name}
+        if holder_pid is not None:
+            record["holder_pid"] = holder_pid
+        (self.worker_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
+
     def test_a_foreign_record_or_lost_spawn_line_protects_nothing(self) -> None:
-        (self.worker_dir / "record.json").write_text(json.dumps({"holder_pid": 1}), encoding="utf-8")
         live = {pgid: [pgid] for pgid in self.groups}
+        saved = (self.worker_dir / "record.json").read_text(encoding="utf-8")
+        (self.worker_dir / "record.json").write_text(json.dumps({"holder_pid": 1}), encoding="utf-8")
         self.assertEqual(holder_module.dispatched_worker_groups(self.side_dir / "children.jsonl", live),
                          {self.holder.pid, self.native, self.tool},
                          "without its own record only the live descendants are the worker")
+        (self.worker_dir / "record.json").write_text(saved, encoding="utf-8")
         (self.side_dir / "children.jsonl").write_text("", encoding="utf-8")
-        self.assertEqual(holder_module.dispatched_worker_groups(self.side_dir / "children.jsonl", live),
+        self.assertEqual(holder_module.dispatched_worker_groups(self.side_dir / "children.jsonl", live,
+                                                                holder_instance_id="side-1"),
                          set(), "a command line alone is never worker identity")
+        self.name_dispatcher("side-other")
+        self.assertEqual(holder_module.dispatched_worker_groups(self.side_dir / "children.jsonl", live,
+                                                                holder_instance_id="side-1"),
+                         set(), "a worker another holder dispatched is not this Sideagent's")
+        self.name_dispatcher("side-1", holder_pid=1)
+        self.assertEqual(holder_module.dispatched_worker_groups(self.side_dir / "children.jsonl", live,
+                                                                holder_instance_id="side-1"),
+                         set(), "a record that does not name the live holder proves nothing")
+        record = {"session_role": "sideagent", "holder_instance_id": "side-1",
+                  "agent_child_groups": {str(g): {str(p): s for p, s in m.items()} for g, m in self.noted.items()}}
+        self.assertEqual(sorted(acp_module.recorded_groups(record, self.side_dir, verified_only=True)),
+                         sorted(self.groups))
+        (self.side_dir / "children.jsonl").write_text(json.dumps(
+            {"pid": self.holder.pid, "pgid": self.holder.pid, "spawned_at": 1}) + "\n", encoding="utf-8")
+        self.assertEqual(holder_module.dispatched_worker_groups(self.side_dir / "children.jsonl", live), set(),
+                         "a spawn line whose time does not match the live holder is a reused pid")
+
+    def test_a_worker_naming_this_sideagent_as_dispatcher_is_kept_without_a_spawn_line(self) -> None:
+        # The ZCode bridge does not forward KAOLA_ACP_CHILD_RECORD, so its
+        # Sideagent's spawn record stays empty; KAOLA_ACP_DISPATCHER does reach
+        # the worker start and lands in the worker's own record.
+        (self.side_dir / "children.jsonl").write_text("", encoding="utf-8")
+        self.name_dispatcher("side-1")
+        tree = {self.holder.pid, self.native, self.tool, self.orphan.pid}
+        live = {pgid: [pgid] for pgid in self.groups}
+        self.assertEqual(holder_module.dispatched_worker_groups(self.side_dir / "children.jsonl", live,
+                                                                holder_instance_id="side-1"), tree)
+        record = {"session_role": "sideagent", "holder_instance_id": "side-1",
+                  "agent_child_groups": {str(g): {str(p): s for p, s in m.items()} for g, m in self.noted.items()}}
+        for verified_only in (False, True):
+            self.assertEqual(acp_module.recorded_groups(record, self.side_dir, verified_only=verified_only),
+                             [self.unrelated.pid], f"dead-holder path, verified_only={verified_only}")
+        args = argparse.Namespace(record_dir=str(self.side_dir), socket=str(self.side_dir / "s.sock"),
+                                  platform="zcode", session="zcode-KT-sideagent", repo=self.tmp.name,
+                                  init_meta="", command="stub")
+        holder = holder_module.Holder(args)
+        holder.holder_instance_id = "side-1"
+        holder.agent = RealAgent()
+        holder.session_role = "sideagent"
+        holder.agent_child_groups = {pgid: dict(members) for pgid, members in self.noted.items()}
+        holder._terminate_group(False)
+        self.groups.append(holder.agent.proc.pid)
+        self.assertEqual(holder.swept_child_pgids, [self.unrelated.pid])
+        self.assertEqual(holder.spared_child_pgids, sorted(tree))
+        for pid in tree:
+            self.assertTrue(self.alive(pid), f"worker process {pid} survived the Sideagent stop")
+        self.unrelated.wait(timeout=5)
+        self.assertFalse(self.alive(self.unrelated.pid))
 
 
 class CarrierAnchor(unittest.TestCase):
