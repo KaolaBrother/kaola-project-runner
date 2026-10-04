@@ -3401,8 +3401,9 @@ class Holder:
 
         The node's turn end reaches the Host (once, at its safe boundary)
         when the checkpoint is missing or partial, or when the node changed
-        the Host view's attention to something the Host has not seen. A
-        verified batch that changed no attention stays quiet."""
+        the Host view's attention, with a record it wrote, to something the
+        Host has not seen. A verified batch that changed no attention stays
+        quiet."""
         node = self.node
         if not node.get("batch"):
             return
@@ -3425,7 +3426,8 @@ class Holder:
                             and end.get("turn_outcome") == "turn_completed")
             attention = attention_fingerprint(body) if doc else None
             changed = (verified and attention is not None and attention != node.get("attention_sent")
-                       and attention != self.host_attention_seen)
+                       and attention != self.host_attention_seen
+                       and self._node_wrote_attention(doc, body, node["holder"]))
             if verified and not changed:
                 end["node_quiet"] = True
             else:
@@ -3448,6 +3450,23 @@ class Holder:
             holder = node["holder"]
             node.update(phase="stopping", batch=None, fingerprint=None)
             threading.Thread(target=self._stop_node, args=(holder,), daemon=True).start()
+
+    @staticmethod
+    def _node_wrote_attention(doc: dict[str, Any] | None, body: str | None, holder: str) -> bool:
+        """Whether a Host-view attention item is a record this node wrote.
+        The Host's own writes during the batch change attention too, and are
+        not news to it."""
+        try:
+            rows = json.loads(body or "").get("attention")
+        except (ValueError, AttributeError):
+            return False
+        state = (doc or {}).get("state") or {}
+        for row in rows if isinstance(rows, list) else []:
+            records = state.get(row.get("kind")) if isinstance(row, dict) else None
+            record = records.get(row.get("id")) if isinstance(records, dict) else None
+            if isinstance(record, dict) and record.get("writer_holder") == holder:
+                return True
+        return False
 
     def _node_record(self, binding: dict[str, Any]) -> dict[str, Any] | None:
         directory = self.record_dir.parent.parent.parent / binding["platform"] / binding["session"] / self.record_dir.name

@@ -1,5 +1,5 @@
 {
-  "build": "72b660468316",
+  "build": "32575ed52a98",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "d742401465b7b1dff97d622ef9d4a5a2d419021b06add6c7036fd5e0f6394600",
@@ -16,13 +16,13 @@
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "4395ceac29d7cff92dc3f5df99e6ee9348e68c1a4a9d6b378449d92d9d6e66d6",
     "references/quota-packages.md": "34ccde184f59fc6f9adb8d008fbb3fb2f8037d8d70480f7738cdab1b2417dbdd",
-    "references/sideagent-node.md": "acb630eee96fc94cbe756278ea2dd3eb81a512e56f7beaa68ef68c24e8620193",
+    "references/sideagent-node.md": "cb819fb035b9e0c0cabde8d205d892b7f9813eda840b9d711b06fd9729f7d1fc",
     "references/task-failure.md": "a98c1ba8bd4868c4c2f8c38310dbdded66be45be0e029eade64ba101cf9c9b9e",
     "references/worker-profiles.md": "71024a8821e61d762dbe9ace6d5cc75b247d91346d997c5f2f970f83eb57bb67",
     "references/workflow-worktree.md": "ddd3980b760a1e5c62e1e1f436a761444e41327516de22eec1e66e63317ea94e",
     "references/zcode-host-dispatch.md": "e4dd550bd3847ab1f07073d8537827a2cdd33ebeaefa41ff181b8e472da7f75c",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
-    "scripts/kaola-dispatch.py": "334c17de8853d3493752795877b4abc0c84eb563c854ba64647c614a104e5ef8"
+    "scripts/kaola-dispatch.py": "585157c553b7e815bd672221d9f85e860f19cab25d9f631307ce8d5a541814d3"
   },
   "skill": "kaola-project-runner"
 }

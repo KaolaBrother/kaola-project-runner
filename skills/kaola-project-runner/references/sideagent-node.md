@@ -77,12 +77,14 @@ holder wrote. `retained` names a current record with `next`, `owner` or `wait`,
 or a Host `section/<name>`. Older or foreign evidence settles nothing. The
 result is `maintenance.last_checkpoint`; `last_verified` moves only when every
 input settled. `acked_host_revision` never passes an unsettled change; a later
-Host write stays pending. Unsettled inputs go to the Host once, in one
+Host write stays pending. An input the Host rewrote during the batch is
+`superseded`: its rewrite is the next batch's input. Unsettled inputs go to the Host once, in one
 `maintenance-returned` alert, and are never sent to another node.
 
 After a verified batch the carrier wakes the Host once, at its next idle
-boundary, only when the Host view's attention differs both from what the Host
-last saw and from the batch's start; otherwise it stays quiet. A partial or
+boundary, only when an attention item is a record this node wrote and the
+Host view's attention differs both from what the Host last saw and from the
+batch's start; otherwise it stays quiet. A partial or
 missing checkpoint, one whose `through` is below the batch's range, a refused
 batch, a failed start or a lost node reaches the Host once with the unhandled
 range; the carrier then exact-stops the node by holder and starts no node for

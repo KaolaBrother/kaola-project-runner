@@ -552,7 +552,8 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   either `applied` (current records or `retired:<kind>/<id>` this node's holder wrote) or
   `retained` (a current record with `next`, `owner` or `wait`, or a Host `section/<name>`).
   The checkpoint lands in `maintenance.last_checkpoint`; `last_verified` moves only when every
-  selected input settled; `acked_host_revision` never passes an unsettled change or one still
+  selected input settled; an entry for a batch change the Host rewrote after `R` is listed
+  under `superseded`, not returned, since the rewrite is the next batch's input; `acked_host_revision` never passes an unsettled change or one still
   open in the `maintenance-returned` alert, which receives each unsettled input once. A
   caller that is not the session's current node holder is `binding-superseded`; no caller
   identity is `node-identity-required`.
@@ -566,9 +567,10 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   state file, and the node's role limits (source pointers only, no restated result, no
   dispatch, session control, task authoring or Host decision). At that node's turn end it
   settles the batch from the node's checkpoint: verified, the node's turn end reaches the Host
-  once (`verified; Host attention changed`) only when the Host view's attention fingerprint
-  differs both from what the Host last saw and from the batch's start, and is quiet
-  otherwise; partial, missing, or a checkpoint `through` below the sent range reaches the Host
+  once (`verified; Host attention changed`) only when an attention item is a record that node
+  wrote and the Host view's attention fingerprint differs both from what the Host last saw and
+  from the batch's start, and is quiet otherwise (the Host's own writes during the batch
+  are not news to it); partial, missing, or a checkpoint `through` below the sent range reaches the Host
   once naming the unhandled range, and that range is not sent again. A batch the node does not
   admit, a failed start and a lost node are staged for the Host once as a `node` item naming
   the unhandled range; the first two start no further node until the binding changes. The

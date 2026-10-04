@@ -3787,7 +3787,12 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
     if through < handled or through > current:
         raise StateRefusal("invalid-input", f"--through-host-revision must be within {handled}..{current}")
     selected = host_changes(doc, handled, through)
+    # A batch input the Host rewrote after this batch was selected shows
+    # only its later change, which is past `through` and so in the next
+    # batch: superseded, not lost.
+    later = {ident.rpartition("@")[0] for ident in host_changes(doc, through, current)}
     settled: list[str] = []
+    superseded: list[str] = []
     returned: dict[str, str] = {}
     seen: set[str] = set()
     for entry in entries:
@@ -3795,10 +3800,14 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         if ident is None:
             raise StateRefusal("invalid-input", "each entry names its `input`")
         seen.add(ident)
+        revision = revision_of(ident)
         if problem:
             returned[ident] = problem
         elif ident in selected or ident in events:
             settled.append(ident)
+        elif (revision is not None and handled < revision <= through
+              and ident.rpartition("@")[0] in later):
+            superseded.append(ident)
         else:
             returned[ident] = "not-in-batch"
     for ident in [*selected, *events]:
@@ -3814,7 +3823,8 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
     record = {"batch": args.batch, "node": {"session": caller.get("session"), "holder_instance_id": holder},
               "at": observed_at(), "source": args.source, "verified": verified,
               "host_revision": {"from": handled, "through": through, "current": current},
-              "settled": sorted(settled), "returned_to_host": dict(sorted(returned.items()))}
+              "settled": sorted(settled), "returned_to_host": dict(sorted(returned.items())),
+              **({"superseded": sorted(superseded)} if superseded else {})}
     maintenance["last_checkpoint"] = record
     if verified:
         maintenance["last_verified"] = {key: record[key] for key in ("batch", "node", "at")}

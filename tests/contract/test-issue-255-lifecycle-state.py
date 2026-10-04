@@ -2248,6 +2248,30 @@ class MaintenanceCheckpoint(StateProject):
         attention = json.loads(self.doc()["body"])["attention"]
         self.assertIn("maintenance-returned", [row["id"] for row in attention])
 
+    def test_a_host_rewrite_during_the_batch_is_superseded_not_returned(self) -> None:
+        """Native QA: the Host's next turn rewrote batch records while the
+        node ran; the node's entries for the earlier changes were returned
+        as not-in-batch although the next batch carries the rewrite."""
+        self.init()
+        self.bind()
+        self.update("host", "tasks", "t1", {"stage": "doing", "goal": "a"})
+        through = self.doc()["host_revision"]
+        node1 = self.node("node-1")
+        self.update("host", "tasks", "t1", {"stage": "review"}, "--expect-rev", "1")
+        rewrite = self.doc()["host_revision"]
+        entries = [{"input": f"host:section/{name}@{revision}", "retained": f"section/{name}"}
+                   for name, revision in (("authorization", 1), ("project", 1), ("sideagent", through - 1))]
+        entries.append({"input": f"host:tasks/t1@{through}", "retained": "section/project"})
+        code, out = self.checkpoint(node1, "b-1", through, entries)
+        self.assertEqual(code, 0, out)
+        record = out["value"]
+        self.assertTrue(record["verified"], record)
+        self.assertEqual(record["superseded"], [f"host:tasks/t1@{through}"])
+        self.assertEqual(record["returned_to_host"], {})
+        self.assertNotIn("maintenance-returned", self.doc()["state"].get("alerts") or {})
+        self.assertEqual(self.sideagent_view()["pending_host_changes"], [f"host:tasks/t1@{rewrite}"],
+                         "the rewrite is the next batch's input")
+
     def test_a_checkpoint_needs_the_nodes_own_identity_and_a_valid_range(self) -> None:
         self.init()
         self.bind()
@@ -2359,17 +2383,27 @@ class HolderNodeMode(HolderFixture):
         super().tearDown()
 
     def write_node_state(self, maintenance: dict | None = None, argv: list | None = None,
-                         host_revision: int | None = None, attention: list | None = None) -> None:
+                         host_revision: int | None = None, attention: list | None = None,
+                         author: str | None = None) -> None:
+        """`author` is the holder that wrote the attention records, the Host
+        when None."""
         argv = argv or ["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent",
                         "--role", "sideagent"]
         self.rev = getattr(self, "rev", 0) if host_revision is None else host_revision
-        self.attention = getattr(self, "attention", []) if attention is None else attention
+        if attention is not None:
+            self.attention, self.author = attention, author
+        self.attention = getattr(self, "attention", [])
+        state = {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active",
+                               "mode": "node", "recipe": {"runner": str(self.runner), "argv": argv}},
+                 "maintenance": maintenance or {}}
+        for row in self.attention:
+            state.setdefault(row["kind"], {})[row["id"]] = {
+                "writer": "sideagent" if getattr(self, "author", None) else "host",
+                **({"writer_holder": self.author} if getattr(self, "author", None) else {})}
         (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps({
             "schema": "kaola-heartbeat-prompt/2", "host_revision": self.rev,
             "body": json.dumps({"view": "host", "attention": self.attention, "tasks": []}),
-            "state": {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active",
-                                    "mode": "node", "recipe": {"runner": str(self.runner), "argv": argv}},
-                      "maintenance": maintenance or {}}}), encoding="utf-8")
+            "state": state}), encoding="utf-8")
 
     def boundary(self) -> None:
         """A Host turn boundary or the holder tick."""
@@ -2396,16 +2430,19 @@ class HolderNodeMode(HolderFixture):
         return [json.loads(line)["kind"] for line in log.read_text().splitlines()] if log.exists() else []
 
     def checkpoint(self, batch: str, holder: str, through: int | None = None, verified: bool = True,
-                   attention: list | None = None) -> None:
+                   attention: list | None = None, author: str | None = "node") -> None:
         """The node's own checkpoint as `state checkpoint` records it; an
-        omitted `--through-host-revision` records the handled revision."""
+        omitted `--through-host-revision` records the handled revision.
+        Changed attention is the node's own records unless `author` is None
+        (the Host's)."""
         handled = getattr(self, "handled", 0)
         through = handled if through is None else through
         self.write_node_state({"last_checkpoint": {"batch": batch, "node": {"holder_instance_id": holder},
                                                    "host_revision": {"from": handled, "through": through,
                                                                      "current": self.rev},
                                                    "verified": verified},
-                               "handled_host_revision": through}, attention=attention)
+                               "handled_host_revision": through}, attention=attention,
+                              author=holder if author == "node" else author)
         self.handled = through
 
     def node_count(self) -> int:
@@ -2503,6 +2540,21 @@ class HolderNodeMode(HolderFixture):
                    if json.loads(line).get("kind") == "sideagent_node_settled"]
         self.assertEqual([(entry["checkpoint"], entry["host_woken"]) for entry in settled],
                          [("verified", False), ("verified", True)])
+
+    def test_the_hosts_own_attention_change_during_a_batch_stays_quiet(self) -> None:
+        """Native QA: the Host settled a decision and retired an alert while
+        a node ran; the node's verified batch then woke the Host for the
+        Host's own change."""
+        self.write_node_state(attention=[{"kind": "alerts", "id": "old-gap", "why": "warn"}])
+        batch = self.first_node()
+        self.checkpoint(batch, "node-1", through=4, attention=[], author=None)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the exact node stop")
+        self.assertEqual(self.agent.prompts(), [], "the Host's own change is not news to it")
+        log = Path(self.holder.args.record_dir) / "events.jsonl"
+        settled = [json.loads(line) for line in log.read_text().splitlines()
+                   if json.loads(line)["kind"] == "sideagent_node_settled"]
+        self.assertEqual([(row["checkpoint"], row["host_woken"]) for row in settled], [("verified", False)])
 
     def test_a_checkpoint_short_of_its_batch_is_partial_and_reaches_the_host_once(self) -> None:
         self.write_node_state()

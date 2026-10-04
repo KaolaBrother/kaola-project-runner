@@ -115,9 +115,10 @@ bridge at the unpinned content stage (`saveable: false`).
   only for the Host business changes of an ended Host turn (one turn's writes
   are one batch; tool and Sideagent writes start none). It settles the batch
   only from that node's `state checkpoint` (input-by-input accounting against
-  records it wrote or duties still owned) and exact-stops the node. A verified
-  batch wakes the Host once when it changed the Host view's attention, and
-  stays quiet otherwise; a partial or missing checkpoint, a checkpoint range
+  records it wrote or duties still owned; an input the Host rewrote meanwhile
+  is superseded by the next batch, not returned) and exact-stops the node. A
+  verified batch wakes the Host once when a record the node wrote changed the
+  Host view's attention, and stays quiet otherwise; a partial or missing checkpoint, a checkpoint range
   below the sent batch, a refused batch, a failed start or a lost node reaches
   the Host once naming the unhandled range (`maintenance-returned` for
   unsettled inputs) and is not re-sent. A failed start or unconfirmed stop
