@@ -2,8 +2,8 @@
 
 On every runtime the Delegator's one state file is
 `<repo>/.kaola/delegator-heartbeat.json` on the bound target (Grok Bot: via its
-locator); only it writes that file, and only the Host writes
-`heartbeat-prompt.json`. One compact JSON object of current facts, never a
+locator); only it writes that file, and only the Host and its bound Sideagent
+write `heartbeat-prompt.json`. One compact JSON object of current facts, never a
 history:
 
 - `project`; `host` (platform, exact `--session`, `holder_instance_id`,
@@ -28,12 +28,12 @@ history:
   the Delegator itself ends.
 
 The existing native timer is the only scheduler; its prompt stays static:
-Skill entry and project locator. A full sweep is one Delegator inquiry; one
+Skill entry and locator sentence ([inquiry-report.md](inquiry-report.md)). A full sweep is one Delegator inquiry; one
 owned permission event needs no additional full sweep. Each inquiry of an
 already-verified unchanged Host uses the commands below: read this file,
-verify `host` by fresh Runner `status`, audit the Host `body` (its `authorization` holds the
+verify `host` by fresh Runner `status`, report the delegator view, audit the Host `body` (its `authorization` holds the
 three Class definitions, a compact capability summary, and durable grants named by exact preset id;
-catalog profiles are not copied into that routine body),
+catalog profiles stay out of that body),
 send one correction with current values, replace stale facts. The correction
 may carry `sweep=Delegator inquiry: list --repo, verify identity, stop orphans only, keep in-flight, report`.
 Relay urgent owner stops immediately; never wait to consolidate other changes. Never write

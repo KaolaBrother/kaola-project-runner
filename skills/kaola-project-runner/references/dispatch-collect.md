@@ -33,20 +33,20 @@ state is `state-unreadable`. Elite and Expert need `granted`.
 
 ## Sideagent
 
-Sideagent is optional and short-lived: default `zcode/default`, or an
-owner-selected authorized available alternative. For nontrivial allocation,
-Host gives outcome, abilities, constraints, expected artifacts, the authorized
-current candidate projection or its locator, and known relevant facts.
-Sideagent reuses them, queries only missing or stale evidence (unknown is not
-absent; PATH is not adapter availability), and proposes useful count, exact
-presets, bounded assignments and ownership by profile and task fit. Host adopts/adjusts against current grants
-and pending changes, then executes. A simple exact dispatch skips it.
+One bound Sideagent (default `zcode/default`, or an
+owner-selected authorized available alternative) runs routine dispatch,
+collection, reclaim and state: [lifecycle-state.md](lifecycle-state.md).
+Host gives outcome, abilities, constraints, expected artifacts and known
+facts. Sideagent reuses them, queries only missing or stale evidence (unknown
+is not absent; PATH is not adapter availability), and picks count, exact
+presets, assignments and ownership by profile and task fit within
+current grants and pending changes. Host keeps plan and acceptance and may
+dispatch directly.
 
 It may reconcile conflicts, check omissions, synthesize or do
-explicitly scoped light work. It does not start other workers, dispatch, grant or accept, write control
-JSON, or run a scheduler. Keep useful conclusions, sources
-and outputs; Host records adopted decisions. Native history stays native;
-keep the only recovery anchor. Exact-stop finished Sideagent.
+explicitly scoped light work. It grants and accepts nothing and runs no
+scheduler. A parallel helper is a counted worker item; it does
+not start other workers. Exact-stop a Sideagent whose mandate ended.
 
 ## Commands and compact reads
 
@@ -65,7 +65,7 @@ and structured failures survive the 480-character reply excerpt. Full native
 capture reads rotated logs; source/as-of, raw event-log/Runner pointers and
 truncation/unknown reasons stay visible. Missing ranges are uncertainty.
 - `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`: atomically replaces
-`--out` with only `body`, a string that parses as the state object.
+`--out` with only `body`; a v2 `--out` is `state-managed`: use `state`.
 
 `$SKILLS` contains `<platform>-kaola-project-runner`. `$LIVE` is `{"rows":[...]}`
 from `kaola-acp.py list --repo`, or omitted for a fresh list. A supplied file is
@@ -78,7 +78,8 @@ read, execute reports `not-run` / `occupancy-unknown`.
 `scope` is `research`, `qa` or `report`. `repo` is absolute and realpathed
 before comparison. Each item has `item_id`, `preset`, `session` and
 `prompt`, plus optional `overrides`, `resources`, `expected_holder_instance_id`,
-`shared_seat` and `role`.
+`shared_seat`, `role`, `task_id`, `output` and `requires` (stated
+`class`/`presets`; unmet: `not-run` / `requirement-unmet`).
 
 Preset supplies `--tier`. Model/effort overrides require explicit owner/item
 values; owner `special_requirements` win (`override-conflicts-owner` otherwise).
@@ -91,7 +92,7 @@ items are `not-run` / `resource-conflict`. Unreadable resources are reported.
 A live shared seat is `shared-occupied`.
 
 `elite_cap` limits Elite+Expert; plan `seat_cap` only tightens it. Worker pool
-is outside it; `count` limits that preset. Host rows (`host_class: true`) are not worker seats. Resolve a row's preset from the row, identity-bound index
+is outside it; `count` limits that preset. Host rows (`host_class: true`) and the bound Sideagent (`seat_exempt`) are not worker seats. Resolve a row's preset from the row, identity-bound index
 (repo/session/holder/preset), or applied start/status model+effort. Platform
 name is no Class. Unresolved occupancy is unknown where a cap/count/shared
 seat depends on it, unless known rows already fill the limit. Shared labels

@@ -162,6 +162,7 @@ python_suites_all=(
   "test-issue-245-session-role.py"
   "test-issue-247-codex-child.py"
   "test-issue-254-opencode-model.py"
+  "test-issue-255-lifecycle-state.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -189,6 +190,7 @@ python_suites_a=(
   "test-lifecycle-contract.py"
   "test-issue-215-install-truthfulness.py"
   "test-issue-218-preset-ids.py"
+  "test-issue-255-lifecycle-state.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"

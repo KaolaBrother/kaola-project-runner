@@ -52,10 +52,12 @@ because it lacks a separate row. No findings establishes only the stated scope.
 
 The Host judges each finding and completion, records its decision and remaining
 duties in its own existing JSON/run records, and assigns any repair under
-current authorization. Sideagent writes no Host state, claims or dispatches no
-work, grants no permission, and accepts no work. Use the existing
-[Sideagent assignment, repair and exact-stop lifecycle](dispatch-collect.md);
-reclaim the finished seat, with no idle permanent assistant. Findings use
+current authorization. The check itself decides no finding, claims no work,
+grants no permission and accepts no work; the bound Sideagent records only the
+Host's adopted outcome ([lifecycle-state.md](lifecycle-state.md)). A separate
+check helper is a counted worker item
+([dispatch-collect.md](dispatch-collect.md)); reclaim it when finished, with no
+idle permanent assistant. Findings use
 existing QA/Workflow boundaries, not a new approval or completion gate.
 
 ## Independent Delegator inquiry and scheduling

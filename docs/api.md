@@ -433,9 +433,47 @@ not a result. `collect` later correlates one status and, for a completed
 turn, one capture, without waiting out a slower sibling. `snapshot` writes
 the path given by `--out` (the Host carrier is
 `.kaola/heartbeat-prompt.json`) so `body` is a string that parses as one JSON
-object. The wrapper adds no schema key. The index is not a mission ledger, and the entry does not choose a
+object. The wrapper adds no schema key. `snapshot` refuses an `--out` that already holds
+lifecycle state (`state-managed`). The index is not a mission ledger, and the entry does not choose a
 plan, grant a seat, accept a result, or stop a session. Detail:
 `templates/orchestrator/references/dispatch-collect.md`.
+
+Plan items may carry `task_id`, `output`, and `requires` (`{"class": ..., "presets": [...]}`, a
+requirement the Host stated for that item). All three are copied onto the index row. An
+unmet `requires` is `not-run` / `requirement-unmet` before any Runner call; an item without
+one is not compared. The index records `dispatcher` (the caller's `KAOLA_ACP_DISPATCHER`)
+apart from each row's `notify_target` (the start receipt's `heartbeat_host`).
+
+### Lifecycle state (`kaola-dispatch.py state`, Issue #255)
+
+`state` maintains `<project>/.kaola/heartbeat-prompt.json` at schema
+`kaola-heartbeat-prompt/2`: a structured `state` (`project`, `authorization`, `sideagent`,
+`recovery`, `unverified`, keyed `tasks`/`holds`/`alerts`/`decisions`, capped `retired`
+tombstones), a file `revision`, an optional `carrier`, and a generated `body` that is the
+projected Host view. Old readers keep receiving a string `body`. Subcommands:
+
+- `init`, `update`, `retire` write under a directory lock with `--writer host|sideagent` and
+  `--source`. Any other writer is `writer-refused`. A record update is a JSON merge patch with
+  `--expect-rev`; a stale revision exits 3 with `current` and `unapplied`. Section updates
+  use `--expect-revision`; `project`, `authorization`, and `sideagent` are Host-only, except
+  that the bound Sideagent may record its own `holder_instance_id` once. A Sideagent change to
+  a Host-owned task field or `verdict` needs `--host-turn` and stays under `attention` in the
+  Host view until the Host writes that task. A caller other than the bound Sideagent session
+  and holder is `binding-superseded` or `sideagent-unbound`; the bound Sideagent writing as
+  `host` is `writer-mismatch`. `retire` needs `--evidence` and a done or cancelled task, a
+  settled decision, or any hold or alert; a later update of that id is `record-retired`.
+- `view --role host|sideagent|delegator` reads only. The Delegator view lists the `AGENTS.md`
+  user-requirements region, holds, alerts, pending decisions, `unverified`, then doing, todo,
+  and outcomes.
+- `check [--index] [--live] [--repo]` reports problems without writing.
+- `timer --repo --target --entry --body|--body-file` compares a native timer body with the
+  entry line plus the fixed locator sentence; exit 1 on `mismatch`.
+- `migrate` is a read-only plan unless `--write`; see
+  [state-format migration](conventions.md#state-format-updates-and-migration).
+
+The Host view is bounded at 64 KiB (`host-view-too-large`). The whole file is bounded at
+1 MiB when `carrier.capability` is `heartbeat-state/2`, else at the 64 KiB legacy reader
+limit (`carrier-limit`). The tool refuses rather than truncating a record.
 
 ## Runner entrypoint (`kaola-tmux.sh`)
 
@@ -535,7 +573,7 @@ Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` 
 
 Derivation, in order: a standard Host name is `host` (authoritative; `session_role` mirrors `host_class`). An explicit start `--role sideagent` — the current role flag — is `sideagent`. `expert`, `elite`, and `worker` come only from the preset this start actually selected (`selection_basis.preset_id`) and that tier's manifest `{tier}_model_class`, lowercased. A custom `--model`, a resume that preserves the native session without the same-native-session inheritance identity, an unknown class, or missing evidence is `null`. Session-name spelling, model-id substrings, session purpose, and an unrelated default preset are not evidence. Unknown is never labeled `worker`.
 
-`list` projects `session_role` as `host` when `host_class` is true, otherwise the persisted record value, otherwise `null`. That is the consumer fallback for a legacy Host row: `host_class` true still reads as Host even when the stored field is missing. `status` and `observe` lift the persisted value to the top level next to `start_evidence` (a live state reply already carries it; a missing or unknown stored value is `null`). `view` and `follow` (snapshot, delta, and heartbeat) pass the holder value through. Sideagent does not change grants, `elite_cap`, preset counts, or shared seats: the underlying preset Class still governs those. A dispatch plan `role` of `sideagent` is passed as start `--role sideagent` and kept on the index for correlation. Apart from the legacy alias below, other `role` values stay index metadata: it does not authorize that role, relabel a holder, or refuse the item. The seat's `session_role` still comes from the Host name, that explicit sideagent flag, or the selected preset Class. Recovery does not re-send or change a live session's role; a persisted-versus-requested sideagent mismatch is a note only.
+`list` projects `session_role` as `host` when `host_class` is true, otherwise the persisted record value, otherwise `null`. That is the consumer fallback for a legacy Host row: `host_class` true still reads as Host even when the stored field is missing. `status` and `observe` lift the persisted value to the top level next to `start_evidence` (a live state reply already carries it; a missing or unknown stored value is `null`). `view` and `follow` (snapshot, delta, and heartbeat) pass the holder value through. Only the one maintenance Sideagent bound in lifecycle state (`state.sideagent`, `state: active`) is outside `elite_cap` and preset counts; its row and index item carry `seat_exempt: true`, and a shared seat it occupies stays occupied. Every other `sideagent`-role item is counted as a worker under its preset Class (`evidence.seat_note`). A dispatch plan `role` of `sideagent` is passed as start `--role sideagent` and kept on the index for correlation. Apart from the legacy alias below, other `role` values stay index metadata: it does not authorize that role, relabel a holder, or refuse the item. The seat's `session_role` still comes from the Host name, that explicit sideagent flag, or the selected preset Class. Recovery does not re-send or change a live session's role; a persisted-versus-requested sideagent mismatch is a note only.
 
 Legacy `sidekick` remains accepted in start flags and dispatch plans and stays
 verbatim in existing holder records, receipts and indexes. Consumers render both

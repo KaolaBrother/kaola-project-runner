@@ -56,10 +56,10 @@ duty reconciliation, and answer
 with a short startup receipt: role, authorization per class (worker-profiles.md;
 counts, implement or supervise-only), lifecycle target and stop boundary, where
 those facts came from, and every unresolved conflict. Then,
-**before the first dispatch**, write the working heartbeat prompt to
-`<project>/.kaola/heartbeat-prompt.json` as JSON with a non-empty string field
-named exactly `body` (see `references/heartbeat-skeleton.md`). Any other field
-name delivers a reported defect instead of your prompt; fix the file.
+**before the first dispatch**, create `<project>/.kaola/heartbeat-prompt.json`
+with `state init`, or `state migrate` a v1 file
+([lifecycle-state.md](lifecycle-state.md)); its non-empty string `body` is what
+the holder delivers. A missing `body` delivers a reported defect instead.
 
 Where a session's native id comes from differs by platform, and `--resume` is
 only honest with a verified one. ZCode reports its `sess_…` in that session's own
@@ -138,7 +138,7 @@ non-empty `residual_pids` is reported, never silent.
 |---|---|
 | Project Plan / authorized task plan | roles, authorization, lifecycle and stop boundary |
 | Workflow mission ledger `kaola-workflow/.ledger/issue-<N>.jsonl` | engineering progress per run; Workflow writes, the Runner only reads |
-| `.kaola/heartbeat-prompt.json` `body` | current identity, authorization, locators, frontier, open duties |
+| `.kaola/heartbeat-prompt.json` `state` (`body` is its Host view) | current identity, authorization, tasks, holds, alerts, decisions |
 | Runner receipts and holder events | what actually happened |
 
 Keep them separate: the heartbeat body is not a copy of the ledger. A `done`/`todo`

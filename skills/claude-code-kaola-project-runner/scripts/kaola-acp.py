@@ -850,6 +850,10 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             "missing_files": fresh["missing_files"],
             "baseline_exempt": fresh["baseline_exempt"],
         })
+        if isinstance(record.get("holder_features"), list):
+            # Issue #255: what this holder build can read and relay. Absent on
+            # older holders, which is unknown, never support.
+            rows[-1]["holder_features"] = record["holder_features"]
         attach_binding_fact(rows[-1], record)
     return {"schema": LIST_SCHEMA, "rows": rows}
 
@@ -1938,6 +1942,13 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None,
         delta = spawned_at / 1000.0 - started
         if -SPAWN_RECORD_SLACK <= delta <= SPAWN_RECORD_TOLERANCE:
             groups.append(child)
+    # Only this script's `start` appends to the spawn record, so each entry
+    # is a Runner holder the agent started.
+    holder_groups = {entry.get("pgid") for entry in spawned}
+    if record.get("session_role") in ("sideagent", "sidekick") and holder_groups:
+        # Issue #255: workers a Sideagent dispatched keep running when it is
+        # replaced; each has its own exact stop.
+        groups = [group for group in groups if group not in holder_groups]
     return groups
 
 
@@ -2754,6 +2765,42 @@ def resolve_send_wait(args: argparse.Namespace, repo: str,
     return {"wait": False, "source": "owning-host-default"}, holder_id
 
 
+def sideagent_host_anchor(args: argparse.Namespace, repo: str, dispatcher: dict[str, Any]
+                          ) -> tuple[dict[str, Any] | None, str | None] | None:
+    """Issue #255: where a Sideagent-dispatched worker sends its events.
+
+    None when the dispatcher is not a Sideagent-role session. Otherwise the
+    Host that Sideagent is itself bound to, so who dispatched (the Sideagent)
+    and who receives events (the existing Host holder) stay separate facts,
+    and a Sideagent replacement leaves its workers' carrier unchanged.
+    Returns ``(target, None)`` or ``(None, failed check)``."""
+    digest = hashlib.sha256(dispatcher["repo"].encode("utf-8")).hexdigest()[:16]
+    record = read_record(record_root(args) / dispatcher["platform"] / dispatcher["session"] / digest)
+    if not isinstance(record, dict) or record.get("session_role") not in ("sideagent", "sidekick"):
+        return None
+    if (record.get("holder_instance_id") != dispatcher["holder_instance_id"]
+            or not pid_alive(record.get("holder_pid"))):
+        return None, "the dispatching Sideagent's own record is not its live holder"
+    bound = record.get("heartbeat_host")
+    if not isinstance(bound, dict) or not all(isinstance(bound.get(key), str) and bound[key]
+                                              for key in ("platform", "session", "repo")):
+        return None, "the dispatching Sideagent is bound to no Host"
+    if not host_capable(bound["platform"]):
+        return None, f"the Sideagent's Host platform {bound['platform']} has no measured Host entry"
+    target = validate_heartbeat_target(
+        {key: bound[key] for key in ("platform", "session", "repo")}, args, repo, DISPATCHER_ENV)
+    host_digest = hashlib.sha256(target["repo"].encode("utf-8")).hexdigest()[:16]
+    host = read_record(record_root(args) / target["platform"] / target["session"] / host_digest)
+    role = host.get("session_role") if isinstance(host, dict) else None
+    if role is None and isinstance(host, dict) and host_session(target["platform"], host.get("session")):
+        role = "host"
+    if not isinstance(host, dict) or role != "host" or not pid_alive(host.get("holder_pid")):
+        return None, f"the Sideagent's Host {target['session']} has no live Host holder record"
+    if not Path(target["socket"]).exists():
+        return None, f"the Sideagent's Host admin socket is missing at {target['socket']}"
+    return target, None
+
+
 def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     """Resolve the notification target of this start (design #99 §a.2).
 
@@ -2787,6 +2834,23 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
     if dispatcher is None:
         return {"target": explicit, "source": "explicit" if explicit else "none",
                 "dispatcher": None, "refusal": None}
+    anchor = sideagent_host_anchor(args, repo, dispatcher)
+    if anchor is not None:
+        target, failed = anchor
+        if failed:
+            return {"target": None, "source": "sideagent-host", "dispatcher": dispatcher,
+                    "requested": explicit,
+                    "refusal": {"reason": "heartbeat-host-unresolved", "detail": failed}}
+        if explicit is not None and any(explicit[key] != target[key]
+                                        for key in ("platform", "session", "repo")):
+            return {"target": None, "source": "explicit", "dispatcher": dispatcher,
+                    "requested": explicit,
+                    "refusal": {"reason": "heartbeat-host-conflict",
+                                "detail": (f"{HEARTBEAT_HOST_ENV} names {explicit['session']} but "
+                                           f"the dispatching Sideagent is bound to Host "
+                                           f"{target['session']}")}}
+        return {"target": target, "source": "sideagent-host", "dispatcher": dispatcher,
+                "refusal": None}
     if not host_capable(dispatcher.get("platform")):
         # Row 4, Issue #122: dispatched by a platform with no measured Host
         # Skill entry. Fail closed - never an unbound start, and an explicit

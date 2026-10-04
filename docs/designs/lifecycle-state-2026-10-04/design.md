@@ -1,6 +1,6 @@
 # KPR 生命周期与状态维护设计
 
-2026-10-04 · 外层与 Claude Code Opus Extra High 已达成设计共识；待用户审阅，尚未实施
+2026-10-04 · 外层与 Claude Code Opus Extra High 已达成设计共识；用户已授权实施，由 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 承担。候选实现待联合验收，真实运行与正式迁移尚未验证
 
 ## 1. 目标
 
@@ -149,7 +149,7 @@ Host 更换后的通知目标需要安全接续，不能只为改变通知地址
 
 重点验收：正常/无 issue/keep-open 任务、混合能力 fan-out、容量等待与 Expert 上报、错误实际配置、发送未知、并发状态更新、返修与回收、授权变化、各类 hold 恢复、Sideagent/Host 故障、跨平台接续、迟到事件、大状态投影、模板核对及多轮自主纠错。
 
-本轮只交付设计。实现、真实运行验证和正式迁移尚未完成，不能据设计宣称绝对不会出错。
+实现由 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 负责：状态工具为 `kaola-dispatch.py state`，规则见生成的 Project Runner 参考 `references/lifecycle-state.md`。候选实现通过前，真实运行验证和正式迁移不得宣称已完成，更不能据设计宣称绝对不会出错。
 
 ### 已知限制
 
@@ -182,8 +182,8 @@ Host 更换后的通知目标需要安全接续，不能只为改变通知地址
 - 已确认的用户要求不因格式升级重复询问。会话在途时不为整理 JSON 强制重启，按已有安全恢复方式接续。
 - 升级整理的是状态结构和过时信息，不重置任务、不重派已执行项、不默认重新规划整个项目。只有实际目标/约束变化或新证据表明原计划不再成立时，Host 才调整受影响计划。
 
-以上是拟实现的迁移行为。保存本文不代表当前版本已具备自动迁移能力。
+以上迁移行为由 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 的 `state migrate`（默认只读计划，`--write` 才写入）实现候选；真实项目上的迁移尚未运行验证。
 
 ## 14. 共识记录
 
-外层完成亲审，Opus 明确同意五项最终协调结论，并确认本文无实质冲突。详见同目录 [联合审阅记录](review.md)。这构成设计共识，不构成用户实施授权。
+外层完成亲审，Opus 明确同意五项最终协调结论，并确认本文无实质冲突。详见同目录 [联合审阅记录](review.md)。这构成设计共识。之后用户已明确授权 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 实施并联合验收；历史审阅记录中的“仅设计”说明不撤销该授权。

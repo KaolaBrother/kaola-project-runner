@@ -90,7 +90,7 @@ Host ownership; `wait_selection` reports why. Flags win; standalone blocks.
 ### Finish the beat, then end your turn
 
 Finish this beat; if current facts/duties changed, update the heartbeat at
-`<project>/.kaola/heartbeat-prompt.json` (`body`: the current JSON state),
+`<project>/.kaola/heartbeat-prompt.json` through `state` (`body`: the Host view),
 report as main Skill §Report says, then **end your reply normally**.
 
 There is no "wait mode" command to call. Ending the turn *is* the wait. Do not

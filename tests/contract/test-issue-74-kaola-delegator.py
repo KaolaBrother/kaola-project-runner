@@ -356,7 +356,7 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           and "(references/snapshot.md)" in skill_one
           and "`<repo>/.kaola/delegator-heartbeat.json` on the bound target" in snapshot_one
           and "verify `host` by fresh Runner `status`" in snapshot_one
-          and "only the Host writes `heartbeat-prompt.json`" in snapshot_one,
+          and "only the Host and its bound Sideagent write `heartbeat-prompt.json`" in snapshot_one,
           "Skill links the one Delegator snapshot; identity stays with Runner status")
     # The daily close pauses new claims only and needs Host ack plus claim evidence.
     check(all(term in snapshot_one for term in (

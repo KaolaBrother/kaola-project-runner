@@ -4,6 +4,54 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+The holder diff is not empty. `scripts/kaola-acp-holder.py` advertises
+`holder_features` (`heartbeat-state/2`, `sideagent-relay/1`), reads a lifecycle
+state file up to 1 MiB, relays worker events to a bound Sideagent, and spares
+Runner holders when a Sideagent stops. A running seat keeps the holder it
+started with. Restart the Host holder at a safe point, then run
+`state migrate --write --live` to record it as the carrier. Healthy workers
+are not restarted for migration. This content commit leaves the Grok Bot
+bridge at the unpinned content stage (`saveable: false`).
+
+- **Lifecycle state tool (Issue #255).** `kaola-dispatch.py state`
+  (`init`, `update`, `retire`, `view`, `check`, `timer`, `migrate`) maintains
+  `.kaola/heartbeat-prompt.json` at schema `kaola-heartbeat-prompt/2`. Tasks,
+  holds, alerts and decisions are keyed records changed by JSON merge patch
+  with a per-record revision; a stale write exits 3 with the current value and
+  the unapplied change. Only `host` and the bound `sideagent` may write. A
+  Sideagent copy of a Host verdict names the Host turn and is shown back to the
+  Host until it writes that task. Finished records retire to capped
+  tombstones; a late update of a retired id is refused. The `body` is now a
+  generated Host view, bounded at 64 KiB; the tool refuses instead of
+  truncating. `snapshot` no longer overwrites a v2 file (`state-managed`).
+- **State migration (Issue #255).** `state migrate` reads a v1 file and plans
+  the v2 structure without writing; `--write` keeps the raw v1 file once,
+  maps `active`/`pending` to tasks, keeps recovery pointers, lists unknown
+  keys and unassociated index rows as `unverified`, and records the live Host
+  holder as the carrier. A repeat reports `current`. It resets no task,
+  replays no dispatch and restarts no session. See
+  `docs/conventions.md#state-format-updates-and-migration`.
+- **Dispatch roles (Issue #255).** `execute` records the real dispatcher apart
+  from the notify target, copies plan `task_id`, `output` and `requires` to the
+  index, and refuses an item whose stated `requires` does not match
+  (`requirement-unmet`). Only the one bound maintenance Sideagent is outside
+  `elite_cap` and preset counts (`seat_exempt`); other Sideagent-role items
+  count as workers. A worker the bound Sideagent starts reports to the
+  Sideagent's live Host (`heartbeat_host_source: sideagent-host`).
+- **Skill guidance (Issue #255).** Project Runner gains
+  `references/lifecycle-state.md` (roles, commands, records, touchpoints,
+  verdict transcription, Sideagent replacement, events, size and migration).
+  Kaola-Delegator gains `references/inquiry-report.md` (the delegator view,
+  the exact native timer sentence and its `timer` check, and the five-part
+  report).
+- **Not yet verified live:** per-platform process preservation, cross-platform
+  carrier re-anchor, relay across holder death, native timer read-back on each
+  outer platform, and state size on a real project.
+
 ## 0.8.2 — 2026-10-04 (OpenCode DeepSeek advertisement)
 
 Seats: restart required

@@ -228,6 +228,16 @@ HEARTBEAT_DEFECT_CHARS = 200
 # budget: one read of at most this many bytes plus one, so an oversized file
 # cannot dump an arbitrary body into session/prompt.
 HEARTBEAT_PROMPT_MAX_BYTES = 65536
+# Issue #255: a lifecycle-state file carries structured state beside its
+# projected `body`. This holder reads that whole file within this bound and
+# still injects at most HEARTBEAT_PROMPT_MAX_BYTES of `body`. It advertises the
+# format in its record so the state tool writes past 64KiB only for a Host
+# holder that can read it.
+HEARTBEAT_STATE_FILE_MAX_BYTES = 1048576
+HEARTBEAT_STATE_SCHEMA = "kaola-heartbeat-prompt/2"
+HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1")
+SIDEAGENT_ROLES = ("sideagent", "sidekick")
+RELAY_SCHEMA = "kaola-sideagent-relay/1"
 OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
 # Issue #94: every turn-opening prompt to a ZCode Host opens with the native
 # Skill command on its own first line so the Skill tool reloads the Project
@@ -286,54 +296,79 @@ def parse_heartbeat_host() -> dict[str, str] | None:
 
 
 def heartbeat_prompt_body(source: Path) -> tuple[str | None, str | None]:
-    """``(body, defect)`` from exactly ONE bounded read of the heartbeat prompt file.
+    """``(body, defect)`` of :func:`read_heartbeat_file`."""
+    _, body, defect = read_heartbeat_file(source)
+    return body, defect
+
+
+def attention_fingerprint(body: str | None) -> str | None:
+    """Fingerprint of the projected Host view's `attention` list, or None
+    for a body that is not a lifecycle-state projection."""
+    try:
+        view = json.loads(body or "")
+    except ValueError:
+        return None
+    if not isinstance(view, dict) or view.get("view") != "host" or not isinstance(view.get("attention"), list):
+        return None
+    text = json.dumps(view["attention"], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def read_heartbeat_file(source: Path) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    """``(document, body, defect)`` from exactly ONE bounded read of the heartbeat prompt file.
 
     Issue #66: one read, so the body that was checked is the body that is
     delivered - a check-then-reread would let a rewrite between the two ship
     something the checks never saw. An absent file is not a defect, it is the
     honest fallback; anything else that cannot supply a prompt comes back as
     its real defect so the Host fixes the file instead of assuming its own
-    prompt is in effect. Issue #87: the read itself is capped at
-    ``HEARTBEAT_PROMPT_MAX_BYTES``; an oversized file is a named defect and
-    its bytes are never injected, including as a truncated-looking body.
+    prompt is in effect. Issue #87: oversized bytes are a named defect and are
+    never injected, including as a truncated-looking body. Issue #255: the
+    file read is capped at ``HEARTBEAT_STATE_FILE_MAX_BYTES`` so structured
+    lifecycle state fits beside its projection, and the injected ``body``
+    itself is still capped at ``HEARTBEAT_PROMPT_MAX_BYTES``.
     Read-only, bounded, never fatal.
     """
     try:
         with source.open("rb") as handle:
-            raw = handle.read(HEARTBEAT_PROMPT_MAX_BYTES + 1)
+            raw = handle.read(HEARTBEAT_STATE_FILE_MAX_BYTES + 1)
     except FileNotFoundError:
-        return None, None
+        return None, None, None
     except OSError as exc:
-        return None, f"unreadable: {getattr(exc, 'strerror', None) or exc}"[
+        return None, None, f"unreadable: {getattr(exc, 'strerror', None) or exc}"[
             :HEARTBEAT_DEFECT_CHARS]
-    if len(raw) > HEARTBEAT_PROMPT_MAX_BYTES:
-        return None, (
-            f"file exceeds {HEARTBEAT_PROMPT_MAX_BYTES} bytes; rewrite "
-            f"{source.name} as a complete JSON object whose \"body\" is a "
-            "non-empty string at or under that size. oversized bytes were "
-            "not injected"
+    if len(raw) > HEARTBEAT_STATE_FILE_MAX_BYTES:
+        return None, None, (
+            f"file exceeds {HEARTBEAT_STATE_FILE_MAX_BYTES} bytes; retire finished "
+            f"records in {source.name} so its \"body\" stays at or under "
+            f"{HEARTBEAT_PROMPT_MAX_BYTES} bytes. oversized bytes were not injected"
         )[:HEARTBEAT_DEFECT_CHARS]
     try:
         text = raw.decode("utf-8")
     except UnicodeError as exc:
-        return None, f"unreadable: {getattr(exc, 'strerror', None) or exc}"[
+        return None, None, f"unreadable: {getattr(exc, 'strerror', None) or exc}"[
             :HEARTBEAT_DEFECT_CHARS]
     try:
         data = json.loads(text)
     except ValueError as exc:
-        return None, f"not valid JSON: {exc}"[:HEARTBEAT_DEFECT_CHARS]
+        return None, None, f"not valid JSON: {exc}"[:HEARTBEAT_DEFECT_CHARS]
     if not isinstance(data, dict):
-        return None, f'JSON {type(data).__name__}, not an object with a "body" field'
+        return None, None, f'JSON {type(data).__name__}, not an object with a "body" field'
     if "body" not in data:
         present = ", ".join(sorted(key for key in data if isinstance(key, str))[:8])
-        return None, (f'no "body" field (top-level fields present: {present or "none"})'
-                      )[:HEARTBEAT_DEFECT_CHARS]
+        return data, None, (f'no "body" field (top-level fields present: {present or "none"})'
+                            )[:HEARTBEAT_DEFECT_CHARS]
     value = data["body"]
     if not isinstance(value, str):
-        return None, f'"body" is {type(value).__name__}, not a string'
+        return data, None, f'"body" is {type(value).__name__}, not a string'
     if not value:
-        return None, '"body" is an empty string'
-    return value, None
+        return data, None, '"body" is an empty string'
+    if len(value.encode("utf-8")) > HEARTBEAT_PROMPT_MAX_BYTES:
+        return data, None, (
+            f"\"body\" exceeds {HEARTBEAT_PROMPT_MAX_BYTES} bytes; rewrite it as the "
+            "projected Host view at or under that size. oversized bytes were not injected"
+        )[:HEARTBEAT_DEFECT_CHARS]
+    return data, value, None
 # ``ps lstart`` is truncated to the second and the agent records ``Date.now()``
 # only after ``spawn`` returned, so a genuine child's start time is at or
 # before its recorded time, by under a second plus the spawn latency. The
@@ -419,6 +454,26 @@ def compact_spawn_record(path: Path) -> None:
         path.write_text("".join(line + "\n" for line in kept), encoding="utf-8")
     except OSError:
         pass
+
+
+def runner_holder_groups(path: Path, live: dict[int, list[int]]) -> set[int]:
+    """Live child groups led by a Runner holder: in the spawn record (only a
+    Runner `start` writes it), or whose leader runs the holder script when the
+    spawn line was lost."""
+    found = {entry["pgid"] for entry, _ in live_spawn_entries(path) if entry["pgid"] in live}
+    unknown = [pgid for pgid in live if pgid not in found]
+    if unknown:
+        try:
+            output = run_ps(["pid", "command"]).stdout
+        except KeyError:
+            # The libproc fallback has no command column: the spawn record decides.
+            output = ""
+        for line in output.splitlines():
+            fields = line.strip().split(None, 1)
+            if (len(fields) == 2 and fields[0].isdigit() and int(fields[0]) in unknown
+                    and "kaola-acp-holder.py" in fields[1]):
+                found.add(int(fields[0]))
+    return found
 
 
 def live_child_groups(groups: dict[int, dict[int, str]]) -> dict[int, list[int]]:
@@ -1552,6 +1607,10 @@ class Holder:
         # whenever this cache is no longer their complete summary.
         self.confirmed_worker_events: dict[str, int] = {}
         self.confirmed_worker_events_partial = False
+        # Issue #255: fingerprint of the Host-view `attention` last delivered
+        # to this Host, so a bound Sideagent's routine turn end that changed
+        # nothing needing a Host judgment does not wake the Host.
+        self.host_attention_seen: str | None = None
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
         # Issue #92: the one worker event that cannot be re-derived later. A
@@ -1680,6 +1739,7 @@ class Holder:
             "agent_info": self.agent_info,
             "cli_version": self.cli_version,
             "capabilities": self.capabilities,
+            "holder_features": list(HOLDER_FEATURES),
             "state": self.state,
             # The target this holder really adopted at startup, or null for a
             # plain unbound worker. A surface without the key predates Issue #70
@@ -2737,11 +2797,153 @@ class Holder:
         meta: dict[str, Any] = {"heartbeat_fingerprint": f"sha256:{digest}",
                                 "heartbeat_source": str(source),
                                 "heartbeat_maintained": maintained}
+        attention = attention_fingerprint(body) if maintained else None
+        if attention is not None:
+            meta["attention_fingerprint"] = attention
         if defect is not None:
             meta["heartbeat_body_error"] = defect
         if overflow_full_check:
             meta["overflow_full_check"] = True
         return "\n".join(lines), meta
+
+    # -- bound Sideagent relay (Issue #255) -------------------------------------
+
+    def _sideagent_relay_target(self) -> dict[str, Any] | None:
+        """The bound maintenance Sideagent this Host holder relays routine
+        worker events to, or None. The binding comes from the lifecycle state;
+        the Sideagent's own live record and socket must prove it."""
+        doc, body, _ = read_heartbeat_file(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json")
+        if not isinstance(doc, dict) or doc.get("schema") != HEARTBEAT_STATE_SCHEMA:
+            return None
+        state = doc.get("state")
+        binding = state.get("sideagent") if isinstance(state, dict) else None
+        if not isinstance(binding, dict) or binding.get("state") != "active":
+            return None
+        platform, session = binding.get("platform"), binding.get("session")
+        if (not isinstance(platform, str) or not platform or not isinstance(session, str)
+                or not session or session == self.args.session):
+            return None
+        directory = self.record_dir.parent.parent.parent / platform / session / self.record_dir.name
+        try:
+            record = json.loads((directory / "record.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        holder = record.get("holder_instance_id") if isinstance(record, dict) else None
+        if (not isinstance(record, dict) or record.get("session_role") not in SIDEAGENT_ROLES
+                or record.get("repo") != self.args.repo or record.get("state") != "ready"
+                or not isinstance(holder, str) or not holder
+                or (binding.get("holder_instance_id") and binding["holder_instance_id"] != holder)
+                or not isinstance(record.get("holder_pid"), int)
+                or not process_alive(record["holder_pid"])):
+            return None
+        digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
+        sock = Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+        if not sock.exists():
+            return None
+        return {"platform": platform, "session": session, "holder_instance_id": holder,
+                "socket": str(sock), "attention": attention_fingerprint(body)}
+
+    def _relay_prompt(self, events: list[dict[str, Any]]) -> str:
+        lines = [f"{RELAY_SCHEMA}: worker events relayed by the {self.host_name} Host holder "
+                 f"{self.args.session}",
+                 "worker events (structured, one JSON object per line):"]
+        for event in events:
+            lines.append(json.dumps(
+                {key: event[key] for key in
+                 ("event_id", "kind", "platform", "session", "repo", "reason",
+                  "event_cursor", "request_id") if event.get(key) is not None},
+                ensure_ascii=False, sort_keys=True))
+        lines.append("As the bound maintenance Sideagent: read each related task and its real "
+                     "receipts, update only the affected lifecycle records with the state tool, "
+                     "and record anything that needs a Host judgment as a durable decision or "
+                     "alert. Do not wait on the Host. The Host is woken when its view's attention "
+                     "changes.")
+        return "\n".join(lines)
+
+    def _relay_send(self, target: dict[str, Any], text: str) -> dict[str, Any]:
+        try:
+            connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                connection.settimeout(HEARTBEAT_NOTIFY_TIMEOUT)
+                connection.connect(target["socket"])
+                connection.sendall(canonical(
+                    {"op": "prompt", "request_id": secrets.token_hex(8),
+                     "params": {"text": text, "wait": False,
+                                "expected_holder_instance_id": target["holder_instance_id"]}}) + b"\n")
+                buffer = bytearray()
+                while b"\n" not in buffer:
+                    data = connection.recv(65536)
+                    if not data:
+                        break
+                    buffer.extend(data)
+            finally:
+                connection.close()
+            receipt = json.loads(bytes(buffer.partition(b"\n")[0]).decode("utf-8", "replace"))
+        except (OSError, ValueError) as exc:
+            return {"error": {"code": "sideagent-unreachable", "message": str(exc)}}
+        return receipt if isinstance(receipt, dict) else {"error": {"code": "sideagent-receipt-unreadable"}}
+
+    def _confirm_events(self, items: list[dict[str, Any]], via: str) -> None:
+        """Durable confirmation of events a relay settled. Caller holds
+        ``worker_events_lock``."""
+        if not items:
+            return
+        ids = [item["event_id"] for item in items]
+        cursor = self.events.append({"kind": "worker_event_confirmed", "event_ids": ids, "via": via})
+        for item in items:
+            self.pending_worker_events.remove(item)
+        self._remember_confirmed_worker_events({event_id: cursor for event_id in ids})
+
+    def _relay_pass(self) -> dict[str, Any]:
+        """Route routine worker events to the bound Sideagent, at least once.
+
+        Caller holds ``worker_events_lock``. Events from other sessions go to
+        the Sideagent; the Sideagent's own events stay with the Host. Its own
+        turn end confirms what it was relayed, and wakes the Host only when the
+        Host view's attention changed since the Host last saw it. Without a
+        provable live binding every event goes to the Host as before.
+        """
+        if not self.pending_worker_events:
+            return {}
+        target = self._sideagent_relay_target()
+        if target is None:
+            for item in self.pending_worker_events:
+                item.pop("relayed", None)
+            return {}
+        own = [item for item in self.pending_worker_events if item.get("session") == target["session"]]
+        if any(item.get("kind") == "idle" for item in own):
+            self._confirm_events([item for item in self.pending_worker_events
+                                  if (item.get("relayed") or {}).get("holder")
+                                  == target["holder_instance_id"]], "sideagent-relay")
+            if target["attention"] is not None and target["attention"] == self.host_attention_seen:
+                self._confirm_events([item for item in own if item.get("kind") == "idle"
+                                      and "prompt_fingerprint" not in item], "sideagent-quiet")
+        waiting = [item for item in self.pending_worker_events
+                   if item.get("session") != target["session"] and "relayed" not in item
+                   and "prompt_fingerprint" not in item]
+        result: dict[str, Any] = {"live": True, "session": target["session"]}
+        if not waiting:
+            return result
+        receipt = self._relay_send(target, self._relay_prompt(waiting))
+        error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
+        if error is None and receipt.get("outcome") == "in_progress":
+            for item in waiting:
+                item["relayed"] = {"holder": target["holder_instance_id"],
+                                   "fingerprint": receipt.get("prompt_fingerprint")}
+            self.events.append({"kind": "worker_event_relayed", "target_session": target["session"],
+                                "event_ids": [item["event_id"] for item in waiting],
+                                "prompt_fingerprint": receipt.get("prompt_fingerprint")})
+            result["receipt"] = {"relayed": len(waiting), "target_session": target["session"]}
+        elif error is not None and error.get("code") in ("prompt-in-progress", "stopping"):
+            # Busy is not lost: its own turn end is the next delivery boundary.
+            result["receipt"] = {"relayed": 0, "waiting": len(waiting), "reason": error["code"]}
+        else:
+            # Unreachable or refused: the Host keeps these events this pass.
+            result = {"receipt": {"relayed": 0, "fallback": "host",
+                                  "reason": (error or {}).get("code") or "relay-unadmitted"}}
+            self.events.append({"kind": "worker_event_relay_failed", "target_session": target["session"],
+                                "receipt": receipt})
+        return result
 
     def _deliver_worker_events(self) -> dict[str, Any]:
         """Deliver every staged event as one ordinary prompt through the
@@ -2762,14 +2964,17 @@ class Holder:
         ``op_prompt``); no path takes them the other way round.
         """
         with self.worker_events_lock:
+            relay = self._relay_pass()
             staged = [item for item in self.pending_worker_events
-                      if "prompt_fingerprint" not in item]
+                      if "prompt_fingerprint" not in item and "relayed" not in item
+                      and not (relay.get("live") and item.get("session") != relay.get("session"))]
             overflow_ready = (
                 self.overflow_generation > self.overflow_confirmed_generation
                 and self.overflow_inflight_generation is None)
             overflow_generation = self.overflow_generation
             if not staged and not overflow_ready:
-                return {"delivered": False, "reason": "queue-empty"}
+                return {"delivered": False, "reason": "queue-empty",
+                        **({"relay": relay["receipt"]} if relay.get("receipt") else {})}
             if self.agent.proc is None or self.agent.exited.is_set():
                 return {"delivered": False, "reason": "agent-not-running"}
             if self.turn["active"]:
@@ -2783,6 +2988,7 @@ class Holder:
                 # refused or unwritten prompt always left them.
                 return {"delivered": False, "error": error or prompt}
             fingerprint = prompt.get("prompt_fingerprint")
+            self.host_attention_seen = meta.get("attention_fingerprint")
             for item in staged:
                 item["prompt_fingerprint"] = fingerprint
             if overflow_ready:
@@ -2972,6 +3178,12 @@ class Holder:
         if (not self.turn["active"] and self.agent.proc is not None
                 and not self.agent.exited.is_set()):
             receipt.update(self._deliver_worker_events())
+        elif self.turn["active"]:
+            # A busy Host does not hold up routine events its Sideagent owns.
+            with self.worker_events_lock:
+                relay = self._relay_pass()
+            if relay.get("receipt"):
+                receipt["relay"] = relay["receipt"]
         return receipt
 
     @staticmethod
@@ -3947,6 +4159,8 @@ class Holder:
         self.write_record()
         result = {"stopped": True, "residual_pids": residual,
                   "swept_child_pgids": self.swept_child_pgids,
+                  **({"spared_child_pgids": self.spared_child_pgids}
+                     if getattr(self, "spared_child_pgids", None) else {}),
                   "agent_exit_code": self.agent.exit_code,
                   "agent_exit_signal": self.agent.exit_signal,
                   "mutation_status": self.turn.get("mutation_status"),
@@ -4013,6 +4227,13 @@ class Holder:
         # could not reach because it died first, is terminated here. Only a
         # group whose recorded member identity still holds is touched.
         live = live_child_groups(self.agent_child_groups)
+        if self.session_role in SIDEAGENT_ROLES:
+            # Issue #255: a Sideagent's dispatched workers are their own Runner
+            # sessions with their own exact stop; replacing the Sideagent must
+            # not end them. Only its other leftovers are swept.
+            spared = runner_holder_groups(self.record_dir / CHILD_RECORD_NAME, live)
+            self.spared_child_pgids = sorted(spared)
+            live = {pgid: members for pgid, members in live.items() if pgid not in spared}
         self.swept_child_pgids = sorted(live)
         if live:
             for child in self.swept_child_pgids:

@@ -156,9 +156,27 @@ Skill files were installed.
   and target versions, preserved associations, unresolved items and outcome using existing
   upgrade evidence; add no permanent second state ledger.
 
-This is a release/update requirement. The lifecycle-state design under
-`docs/designs/lifecycle-state-2026-10-04/` is still a proposal; recording this convention does
-not claim that its migration tool has been implemented or run on existing projects.
+This is a release/update requirement. For the lifecycle state of
+[#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) (`docs/designs/lifecycle-state-2026-10-04/`):
+
+- Source `kaola-heartbeat-prompt/1` (a `body` string holding `project`, `authorization`,
+  `active`, `pending`, `recovery`); target `kaola-heartbeat-prompt/2` (structured `state` plus a
+  generated Host-view `body`, so old readers still receive a string `body`).
+- Migration runs at the first load of the updated Skill, at a safe handoff point, through
+  `kaola-dispatch.py state migrate --file <project>/.kaola/heartbeat-prompt.json --index <index>
+  --live <list>`. Without `--write` it is a read-only plan; with `--write` it keeps the raw v1
+  file once as `heartbeat-prompt.v1-<sha12>.json`, maps `active` to `doing` tasks and `pending`
+  to review/closeout duties, keeps `recovery`, lists unknown keys and unassociated index rows as
+  `unverified`, and binds one live Sideagent row. A repeat reports `current`; a conflicting raw
+  copy or an unreadable file is left unchanged and reported.
+- Holder: the v2 file may exceed 64 KiB only after the live Host holder advertises
+  `heartbeat-state/2` and migration recorded it as `carrier`. An older Host holder keeps the
+  64 KiB whole-file limit (`carrier-limit`). Adoption path: restart the Host holder on the new
+  build at a safe point, then run `state migrate --write --live <list>` to record the carrier.
+  Healthy workers are not restarted for migration; they get the new holder behavior at
+  their next normal start.
+- Not yet verified on a real project: per-platform process preservation, cross-platform carrier
+  re-anchor, relay across holder death, native timer read-back, and real state size.
 
 ### Release labels and running seats
 

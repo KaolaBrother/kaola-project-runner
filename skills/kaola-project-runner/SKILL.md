@@ -11,11 +11,11 @@ identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, mission ledger,
 child worktree, finalize, archive, and sink.
 
-One Host owns scheduling, acceptance and QA.
+One Host owns the plan, acceptance and QA.
 Helpers do bounded planning, research, QA, synthesis, explicitly scoped light work
 or an assignment. They never scale, control workers, run another scheduling loop,
 grant permission or accept the project.
-Optional Sideagent proposals: [dispatch-collect.md](references/dispatch-collect.md).
+One bound Sideagent maintains dispatch and state: [lifecycle-state.md](references/lifecycle-state.md).
 Without explicit permission to self-execute, read evidence and direct workers:
 do not implement, test, edit project documentation, create worktrees, or mutate
 the repository yourself.
@@ -132,15 +132,15 @@ permission may still arise: `permit` settles it; never add a gate.
 The heartbeat is the working prompt itself: a Host (any platform with a
 `host_skill_entry`) runs it on each worker event; Codex's own timer serves only
 a non-Host Codex supervisor; host-native carriers. Its `body` is one JSON object per
-[references/heartbeat-skeleton.md](references/heartbeat-skeleton.md), from
-authorization and project instructions. It is the effective-now snapshot, not a
+[references/heartbeat-skeleton.md](references/heartbeat-skeleton.md), written
+only by `state`. It is the effective-now snapshot, not a
 log: update changed facts/duties, replacing superseded quota, priority and
 plans, keeping in-flight locators and unfinished duties. A confirmed change
 applies in that beat; decision-boundary adoption:
 [duty-reconcile.md](references/duty-reconcile.md); a lowered quota alone cancels nothing. A report-only
 request disables execution actions. When an updated Skill loads, reconcile the
 heartbeat once with current rules, latest valid instructions and fresh seat
-facts, keeping user limits and the frontier.
+facts, keeping user limits and the frontier (v1: `state migrate`).
 
 After close-out, cancel the native heartbeat or stop scheduling the next
 sleep. Having no ready task now is not

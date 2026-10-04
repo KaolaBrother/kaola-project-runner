@@ -22,8 +22,9 @@ not edit the repository. The Host exact-stops every session the plan starts.
 
 ## 1. Project the candidates
 
-`$AUTH` is the existing Host heartbeat, the file `snapshot` writes. It is
-`{"body":"<state JSON>"}`. The state object's `authorization` holds grants
+`$AUTH` is the existing Host heartbeat. A legacy file is `{"body":"<state JSON>"}`
+written by `snapshot`; a lifecycle-state file (`kaola-heartbeat-prompt/2`, written only by
+`state`) is read from its `state.authorization`. The authorization object holds grants
 by exact preset id, optional `elite_cap` (an integer covering Elite and
 Expert; the Worker pool is excluded), per-grant `model_switch`, top-level
 `model_switches`, `count`, `shared_seat`, and owner `special_requirements`.
@@ -85,8 +86,9 @@ on that item's Runner `start`. Apart from the legacy alias below, other values s
 metadata. It does not authorize that role, relabel a holder, or refuse an
 otherwise valid item. The seat's identity still comes from the Host name,
 that explicit sideagent flag, or the preset this start actually selected.
-Sideagent does not change `elite_cap`, preset `count`, or a shared seat; the
-underlying preset Class still does. On recovery of a live session, the
+Only the maintenance Sideagent bound in lifecycle state is outside `elite_cap` and
+preset `count` (`seat_exempt: true`); a shared seat it uses stays occupied. Any other
+`sideagent` item is a counted worker (`evidence.seat_note`). On recovery of a live session, the
 entry does not start again and does not change that session's
 `session_role`. When a requested `sideagent` is not the persisted role, the
 item gains `evidence.role_note` and keeps the status it already had. Legacy
