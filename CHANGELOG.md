@@ -165,9 +165,14 @@ bridge at the unpinned content stage (`saveable: false`).
 - **Verified live on Codex and ZCode fixtures:** a missing node checkpoint
   returning its input to the Host, an unconfirmed node stop starting no
   competing node, worker trees surviving a preserving Host stop and a
-  replacement Host's per-seat `rebind-host` while the worker's tool still ran.
-- **Not yet verified live:** a native partial node checkpoint (tested with a
-  fake node only), per-platform process preservation beyond Codex and ZCode,
+  replacement Host's per-seat `rebind-host` while the worker's tool still ran,
+  and a model-driven Codex Host with a Codex node binding: two concurrent
+  workers judged from their originals and reclaimed, worker returns straight
+  to the Host, one node per ended Host turn, one Host wake for a node-written
+  decision and a quiet verified batch after it.
+- **Not yet verified live:** a checkpoint range below its batch (tested with
+  a fake node only), node mode beyond Codex and ZCode,
+  per-platform process preservation beyond Codex and ZCode,
   relay across holder death, native timer read-back on each outer platform,
   and state size on a real project. `rebind-host` moves only the carrier: each
   seat needs its own call, its `dispatcher` still names the old Host, and

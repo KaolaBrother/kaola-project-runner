@@ -205,7 +205,8 @@ This is a release/update requirement. For the lifecycle state of
   binding `replacing` (the Host view lists it) and leave the old Sideagent running, unsent,
   until that worker ends. Never adopt its work by restarting it.
 - Shown live in isolated fixtures (#255): fresh nodes on Codex and ZCode; preserve stop,
-  `rebind-host` and worker survival with Codex and ZCode Hosts. Not yet verified on a real
+  `rebind-host` and worker survival with Codex and ZCode Hosts; a model-driven Codex Host
+  with a Codex node binding running two workers and judging their originals. Not yet verified on a real
   project: the other platforms, relay across holder death, candidate native timer read-back,
   real state size and migration of a real project.
 

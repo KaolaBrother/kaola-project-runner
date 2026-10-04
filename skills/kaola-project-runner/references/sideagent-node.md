@@ -113,5 +113,6 @@ and re-sent when the Host is reachable; a newer one replaces it and a stop
 drops it.
 
 Shown live: fresh nodes on Codex and ZCode, worker survival through a Host
-preserve stop and rebind on both, and a model-driven Host with a node binding.
+preserve stop and rebind on both, and a model-driven Codex Host with a Codex
+node binding.
 Not shown live: node mode on the other runtimes.
