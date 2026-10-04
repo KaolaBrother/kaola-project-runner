@@ -218,6 +218,32 @@ class StateTool(StateProject):
         code, out = self.update("sideagent", "tasks", "t3", {"prior_verdict": None}, "--expect-rev", "4")
         self.assertEqual(out["reason"], "invalid-input")
 
+    def test_every_repeated_repair_result_is_new_attention(self) -> None:
+        self.init()
+        fingerprint = lambda: holder_module.attention_fingerprint(self.doc()["body"])
+        rev = lambda: str(self.doc()["state"]["tasks"]["t4"]["rev"])
+        self.update("host", "tasks", "t4", {"stage": "review", "goal": "g", "evidence": ["c1"]})
+        seen = [fingerprint()]
+        for round_no in (1, 2, 3):
+            # The Host's seen fingerprint is taken before its own review writes.
+            code, out = self.update("host", "tasks", "t4", {"verdict": {
+                "value": "repair", "why": "P1", "host_turn": f"review-round-{round_no}"}}, "--expect-rev", rev())
+            self.assertEqual(code, 0, out)
+            self.update("sideagent", "tasks", "t4", {"stage": "doing"}, "--expect-rev", rev())
+            code, out = self.update("sideagent", "tasks", "t4",
+                                    {"stage": "review", "evidence": [f"c{round_no + 1}"]}, "--expect-rev", rev())
+            self.assertEqual(code, 0, out)
+            rows = json.loads(self.doc()["body"])["attention"]
+            self.assertEqual([(r["why"], r.get("prior_verdict")) for r in rows], [("awaiting-verdict", "repair")])
+            self.assertNotIn(fingerprint(), seen, f"repair result {round_no} wakes the Host")
+            seen.append(fingerprint())
+        code, out = self.update("sideagent", "tasks", "t4", {"evidence": ["c4"]}, "--expect-rev", rev())
+        self.assertEqual(code, 0, out)
+        self.assertEqual(fingerprint(), seen[-1], "a rewrite of the same result is metadata only")
+        self.assertEqual(self.doc()["state"]["tasks"]["t4"]["rev"], 11)
+        code, out = self.update("sideagent", "tasks", "t4", {}, "--expect-rev", rev())
+        self.assertEqual((code, fingerprint()), (0, seen[-1]), "an empty update stays quiet")
+
     def test_section_sources_and_resolved_unknowns_are_kept(self) -> None:
         self.init()
         revision = self.doc()["revision"]
@@ -697,6 +723,45 @@ class Migration(StateProject):
         self.assertFalse([key for key in state["unverified"] if key.startswith("legacy-")],
                          "host and sideagent have a lifecycle home")
         self.assertTrue(Path(state["recovery"]["migration"]["raw"]).read_bytes() == raw)
+
+    def test_a_migrated_task_with_a_known_seat_retires_only_once_it_is_shown_stopped(self) -> None:
+        body = {"project": {"code": "KT"}, "authorization": AUTH,
+                "active": [{"ref": "#255", "session": "still-working", "holder_instance_id": "h",
+                            "next": "deliver work"}]}
+        self.write_legacy(body)
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 0, out)
+        task = self.doc()["state"]["tasks"]["#255"]
+        self.assertNotIn("dispatch", task, "no index associates the seat")
+        code, out = self.update("host", "tasks", "#255", {"stage": "done", "verdict": {"value": "accepted"}},
+                                "--expect-rev", "1")
+        self.assertEqual(code, 0, out)
+        live = self.repo / "live.json"
+        retire = lambda *extra: self.state("retire", "--file", str(self.file), "--writer", "sideagent",
+                                           "--source", "s", "--kind", "tasks", "--id", "#255",
+                                           "--expect-rev", "2", "--evidence", "host-review", *extra)
+        code, out = retire()
+        self.assertEqual(out["reason"], "retire-unmet", "acceptance does not prove the seat stopped")
+        self.assertIn("still-working needs --live", out["detail"])
+        cases = (([{"session": "still-working", "state": "ready", "holder_instance_id": "h"}], "still live"),
+                 ([], "not in the live rows"),
+                 ([{"session": "still-working", "state": "ready", "holder_instance_id": "h2"}],
+                  "association is unresolved"))
+        for rows, why in cases:
+            live.write_text(json.dumps({"rows": rows}), encoding="utf-8")
+            code, out = retire("--live", str(live))
+            self.assertEqual(out["reason"], "retire-unmet", why)
+            self.assertIn(why, out["detail"])
+            self.assertIn("#255", self.doc()["state"]["tasks"], "the cleanup duty stays current")
+            code, check = self.state("check", "--file", str(self.file), "--live", str(live))
+            self.assertIn("done-seat-open", [p["code"] for p in check["problems"]], why)
+        live.write_text(json.dumps({"rows": [{"session": "still-working", "state": "stopped",
+                                              "holder_instance_id": "h"}]}), encoding="utf-8")
+        code, out = self.state("check", "--file", str(self.file), "--live", str(live))
+        self.assertNotIn("done-seat-open", [p["code"] for p in out["problems"]])
+        code, out = retire("--live", str(live))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("#255", self.doc()["state"]["tasks"])
 
     def test_a_v1_binding_not_proven_live_stays_a_candidate(self) -> None:
         body = dict(LEGACY_BODY, sideagent={"session": "zcode-KT-sideagent", "holder_instance_id": "side-0",

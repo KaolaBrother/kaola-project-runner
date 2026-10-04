@@ -64,11 +64,15 @@ bridge at the unpinned content stage (`saveable: false`).
   keeps one task per v1 assignment with its fields, invents no stage, binds no
   Sideagent without proof, refuses unknown schemas and alerts on an overwritten
   raw copy. A later `repair`/`partial` verdict asks the Host again
-  (`prior_verdict`). Retirement needs an accepted or cancelled verdict and
-  closed, stopped dispatch items; a Sideagent decision settlement needs the
-  Host turn and evidence. Section writes keep their source, omitted text is
-  marked, a worker cannot write as Host or Sideagent, and a retired fault id
-  reopens only on a later observation.
+  (`prior_verdict`), and every later repair result changes the attention
+  digest while a metadata-only rewrite stays quiet. Retirement needs an
+  accepted or cancelled verdict, closed dispatch items, and every seat the
+  task names (migrated assignments included) shown stopped in the live rows;
+  a missing or differently-held live row keeps the duty (`done-seat-open`).
+  A Sideagent decision settlement needs the Host turn and evidence. Section
+  writes keep their source, omitted text is marked, a worker cannot write as
+  Host or Sideagent, and a retired fault id reopens only on a later
+  observation.
 - **Not yet verified live:** per-platform process preservation, carrier
   re-anchor across real platforms, relay across holder death, native timer
   read-back on each outer platform, and state size on a real project.

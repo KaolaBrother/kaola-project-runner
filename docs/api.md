@@ -461,7 +461,12 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   Host view until the Host writes that task. A caller other than the bound Sideagent session
   and holder is `binding-superseded` or `sideagent-unbound`; the bound Sideagent writing as
   `host` is `writer-mismatch`. `retire` needs `--evidence` and a done or cancelled task, a
-  settled decision, or any hold or alert; a later update of that id is `record-retired`.
+  settled decision, or any hold or alert; a later update of that id is `record-retired`. A
+  task's `dispatch` items must be closed in `--index`, and every seat it names (`assignments`,
+  `sessions`, `session`, including migrated ones with no index match) must show its session
+  `stopped` in `--live`; a missing row or a live row under a different holder is not proof of
+  stop, and `check --live` reports it as `done-seat-open`. A task in `review` without a
+  verdict is under `attention` with a `content` digest, so each new result is a new wake.
 - `view --role host|sideagent|delegator` reads only. The Delegator view lists the `AGENTS.md`
   user-requirements region, holds, alerts, pending decisions, `unverified`, then doing, todo,
   and outcomes.

@@ -2610,8 +2610,11 @@ def task_attention(task_id: str, task: dict[str, Any]) -> list[dict[str, Any]]:
     verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else None
     if task.get("stage") == "review" and not verdict:
         prior = task.get("prior_verdict") if isinstance(task.get("prior_verdict"), dict) else None
+        # A later repair round repeats the same prior value; its new result,
+        # evidence and prior Host turn are what make it a new judgment.
         found.append({"kind": "tasks", "id": task_id, "why": "awaiting-verdict",
-                      **({"prior_verdict": prior.get("value")} if prior else {})})
+                      **({"prior_verdict": prior.get("value")} if prior else {}),
+                      "content": judgment_digest(task)})
     if isinstance(task.get("transcribed"), dict):
         found.append({"kind": "tasks", "id": task_id, "why": "transcribed-check",
                       "host_turn": task["transcribed"].get("host_turn"),
@@ -3039,25 +3042,69 @@ def note_section_source(state: dict[str, Any], args: argparse.Namespace, section
     state["section_sources"] = sources
 
 
+def task_seats(task: dict[str, Any]) -> dict[str, str | None]:
+    """Worker seats a task itself names (migrated `assignments`, `sessions`
+    or a duty's `session`), each with its recorded holder when known."""
+    seats: dict[str, str | None] = {}
+    for row in task.get("assignments") or []:
+        if isinstance(row, dict) and isinstance(row.get("session"), str):
+            holder = row.get("holder_instance_id")
+            seats[row["session"]] = seats.get(row["session"]) or (holder if isinstance(holder, str) else None)
+    names = list(task.get("sessions") or []) + [task.get("session")]
+    for name in names:
+        name = name.get("session") if isinstance(name, dict) else name
+        if isinstance(name, str):
+            seats.setdefault(name, None)
+    return seats
+
+
+def open_seats(seats: dict[str, str | None], rows: list[dict[str, Any]]) -> list[str]:
+    """A named seat is shown stopped only by a live-row listing that has its
+    session stopped; a missing row or a live one under another holder leaves
+    the association unresolved rather than proving cleanup."""
+    problems = []
+    for session, holder in sorted(seats.items()):
+        matches = [row for row in rows if row.get("session") == session]
+        running = [row for row in matches if row.get("state") != "stopped"]
+        if not matches:
+            problems.append(f"{session} is not in the live rows; its stop is not shown")
+        elif any(not holder or row.get("holder_instance_id") == holder for row in running):
+            problems.append(f"{session} is still live")
+        elif running:
+            problems.append(f"{session} is live under holder {running[0].get('holder_instance_id')}, not "
+                            f"the recorded {holder}; the association is unresolved")
+    return problems
+
+
 def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     """Why a task's dispatched items are not shown closed: each needs an index
     row that is no longer in flight and, when the task names sessions, live
-    rows showing none of them still running."""
+    rows showing none of them still running. A task with no dispatch and no
+    named seat has dispatched nothing."""
     refs = task.get("dispatch")
     refs = [refs] if isinstance(refs, str) else [ref for ref in refs or [] if isinstance(ref, str)]
-    if not refs:
+    seats = task_seats(task)
+    if not refs and not seats:
         return []
-    if not getattr(args, "index", None) or not getattr(args, "live", None):
-        return [f"dispatch {', '.join(refs)} needs --index and --live to show it closed and stopped"]
-    rows = {row.get("item_id"): row for row in load_object(Path(args.index)).get("items") or []
-            if isinstance(row, dict)}
-    problems = [f"{ref} is {rows[ref].get('status')}" if ref in rows else f"{ref} is not in the index"
-                for ref in refs if ref not in rows or rows[ref].get("status") in ("in-flight", "unknown")]
-    sessions = {rows[ref].get("session") for ref in refs if ref in rows}
-    for row in live_rows_of(args.live) or []:
-        if row.get("state") != "stopped" and row.get("session") in sessions:
-            problems.append(f"{row.get('session')} is still live")
-    return problems
+    problems: list[str] = []
+    if refs and (not getattr(args, "index", None) or not getattr(args, "live", None)):
+        problems.append(f"dispatch {', '.join(refs)} needs --index and --live to show it closed and stopped")
+    if seats and not getattr(args, "live", None):
+        problems.append(f"seat {', '.join(sorted(seats))} needs --live to show it stopped; or clear the "
+                        "seat from the task with the evidence that ends it")
+    if problems:
+        return problems
+    live = live_rows_of(args.live) or []
+    if refs:
+        rows = {row.get("item_id"): row for row in load_object(Path(args.index)).get("items") or []
+                if isinstance(row, dict)}
+        problems = [f"{ref} is {rows[ref].get('status')}" if ref in rows else f"{ref} is not in the index"
+                    for ref in refs if ref not in rows or rows[ref].get("status") in ("in-flight", "unknown")]
+        sessions = {rows[ref].get("session") for ref in refs if ref in rows} - set(seats)
+        for row in live:
+            if row.get("state") != "stopped" and row.get("session") in sessions:
+                problems.append(f"{row.get('session')} is still live")
+    return problems + open_seats(seats, live)
 
 
 def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, Any]:
@@ -3247,6 +3294,10 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
         if task.get("stage") == "done":
             note("done-not-retired", "watch", "done; retire it with its evidence once close-out is "
                  "verified", "tasks", ident)
+            seats = task_seats(task)
+            if seats and rows is not None:
+                for detail in open_seats(seats, rows):
+                    note("done-seat-open", "warn", f"done while {detail}", "tasks", ident)
         if isinstance(task.get("transcribed"), dict):
             note("transcription-unechoed", "watch", "a Sideagent-recorded Host decision waits for the "
                  "Host's next view", "tasks", ident)

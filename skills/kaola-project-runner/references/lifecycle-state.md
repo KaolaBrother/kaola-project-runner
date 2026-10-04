@@ -45,8 +45,8 @@ pending decisions; technical evidence stays reachable by reference.
 - `$S update --section project|authorization|sideagent|recovery|unverified
   --expect-revision N --set PATCH`: the first three are Host-only.
 - `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
-  [--index I --live L]`: a task needs verdict `accepted` or `cancelled`, and
-  its dispatch items closed and stopped in `--index`/`--live`.
+  [--index I --live L]`: a task needs verdict `accepted` or `cancelled`, its
+  dispatch items closed and seats stopped (`--index`/`--live`).
 - `$S view --role host|sideagent|delegator [--repo ROOT]` (read-only).
 - `$S check [--index I] [--live L] [--repo R]`: read-only problems such as
   `doing-untraced`, `done-not-retired`, `transcription-unechoed`,
