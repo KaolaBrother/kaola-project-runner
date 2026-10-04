@@ -4,6 +4,37 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.8.2 — 2026-10-04 (OpenCode DeepSeek advertisement)
+
+Seats: restart required
+
+The operator diff from v0.8.1 to this release
+(`git diff v0.8.1..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is not empty. `platforms/opencode.yaml` records that OpenCode 2.0.22 publishes
+later providers after `session/new`, and that start waits, bounded, until the
+live option list advertises the requested model id and then sets it, with no
+substitution. The holder, ZCode bridge, quota catalog, and adapters are
+unchanged in that diff. A running seat keeps the platform and script bytes it
+started with, so restart a seat before this selection behavior applies. This
+content commit leaves the Grok Bot bridge at the unpinned content stage
+(`saveable: false`); the bridge is pinned in the release's follow-up pin
+commit.
+
+- **Set OpenCode DeepSeek V4.1 Flash after the provider is advertised (Issue #254).**
+  OpenCode 2.0.22 returns from `session/new` before provider discovery. The
+  first model list is only `opencode/*`; `opencode-go/deepseek-v4.1-flash`
+  appears on a later update. Setting that id before the advertisement returns
+  JSON-RPC -32602 and leaves `opencode/fledge-alpha-free`. When the platform is
+  OpenCode and the option is model, start waits at most 8 seconds until the
+  live option list contains the requested id, then sets it once. A value that
+  never appears is still sent once at the deadline. No other model is
+  substituted. The default stays `opencode-go/deepseek-v4.1-flash`.
+- **Record the DSH version-probe catalog gap (Issue #254).** The dsh
+  `--version` catalog probe can report catalog-missing while the live ACP
+  catalog lists the model. That probe now records `catalog_probe.reporting_gap`
+  `version-probe-does-not-list-acp-models`. The resolution state and candidate
+  id are unchanged. The gap is not applied to OpenCode's catalog probe.
+
 ## 0.8.1 — 2026-10-04 (blocked_attempt stamp)
 
 Seats: restart not required
