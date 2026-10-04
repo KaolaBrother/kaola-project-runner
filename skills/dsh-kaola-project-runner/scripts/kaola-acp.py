@@ -563,6 +563,56 @@ def agent_environment(args: argparse.Namespace) -> dict[str, str]:
     return env
 
 
+def opencode_launch_policy(args: argparse.Namespace, repo: str, directory: Path,
+                           env: dict[str, str]) -> dict[str, Any]:
+    """Issue #256: native V2 build default, only in this launch environment.
+
+    Do not parse or merge operator configuration. Even a non-permission config
+    source defers the default: agent rules rank after root rules, and the native
+    explicit-file slot ranks above global config. Presence is enough to leave
+    all those policies and native config diagnostics authoritative.
+    """
+    fact: dict[str, Any] = {"selected": False, "agent": "build"}
+    if args.mode is not None or args.resume or args.use_continue or args.agent_command_given:
+        return {**fact, "reason": "explicit-mode-resume-or-command"}
+    if any(key in env for key in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT")):
+        return {**fact, "reason": "native-config-supplied"}
+    home = Path(env.get("HOME") or str(Path.home()))
+    config = Path(env.get("OPENCODE_CONFIG_DIR") or
+                  str(Path(env.get("XDG_CONFIG_HOME") or str(home / ".config")) / "opencode"))
+    # Global legacy agent sources also contribute native policies. Directory
+    # presence conservatively covers markdown, JSONC and unreadable sources.
+    legacy_home = Path(env.get("OPENCODE_TEST_HOME") or str(home))
+    names = ("opencode.json", "opencode.jsonc", "agent", "agents", "mode", "modes")
+    roots = [(root, names) for root in (config, legacy_home / ".claude", legacy_home / ".agents")]
+    project = Path(repo).resolve()
+    if (env.get("OPENCODE_CONFIG_PROJECT_DISABLE") or
+            env.get("OPENCODE_DISABLE_PROJECT_CONFIG") or "").lower() not in ("1", "true"):
+        for parent in (project, *project.parents):
+            roots.extend(((parent, names[:2]), (parent / ".opencode", names)))
+    try:
+        for root, candidates in roots:
+            for name in candidates:
+                source = root / name
+                # lstat also preserves broken links; don't treat an unreadable
+                # or invalid operator source as authorization to replace it.
+                try:
+                    source.lstat()
+                except FileNotFoundError:
+                    continue
+                return {**fact, "reason": "existing-config-source", "source": str(source)}
+    except OSError:
+        return {**fact, "reason": "config-source-unreadable"}
+    policy = {"agents": {"build": {"permissions": [
+        {"action": "*", "resource": "*", "effect": "allow"},
+    ]}}}
+    path = directory / "opencode-build-default.json"
+    path.write_text(json.dumps(policy) + "\n", encoding="utf-8")
+    env["OPENCODE_CONFIG"] = str(path)
+    return {**fact, "selected": True, "reason": "managed-build-default",
+            "via": "OPENCODE_CONFIG", "path": str(path), "policy": policy}
+
+
 def bridge_facts(args: argparse.Namespace, with_version: bool = False) -> dict[str, Any]:
     """Transport facts for a vendored bridge platform: the resolved bridge file
     and the exact runtime binary. Never a gate; never an environment value."""
@@ -4441,6 +4491,8 @@ def command_start(args: argparse.Namespace, repo: str,
     if init_meta:
         holder_argv += ["--init-meta", json.dumps(init_meta)]
     holder_env = agent_environment(args)
+    if args.platform == "opencode":
+        receipt["native_permission_policy"] = opencode_launch_policy(args, repo, directory, holder_env)
     # Issue #162: the accepted revision is holder argv, never an agent
     # environment variable, so nothing carries it into the holder's env.
     accepted = current_accepted_revision()

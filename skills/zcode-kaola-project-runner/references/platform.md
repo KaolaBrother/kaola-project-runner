@@ -21,5 +21,9 @@ catalog is still launched as the exact declared literal, and the catalog fact is
 
 ACP runs Skill-relative kaola-zcode-acp.py over the installed ZCode app-server --stdio, from explicit KAOLA_ZCODE_ENTRY and KAOLA_ZCODE_NODE (or ZCODE_BIN); ACP start sets mode=yolo after initialize. The adapter reads the desktop provider registry (~/.zcode/v2/config.json) read-only and selects the enabled GLM Coding Plan provider (Start Plan and pay-as-you-go refused). Because the shipped 3.12.x entry cannot locate its own bundled provider table, the adapter resolves that table next to the verified entry and injects both ZCODE_BUILTIN_PROVIDER_CONFIG_FILE and ZCODE_PERSONAL_PROVIDER_CONFIG_FILE (both or neither, never inherited). On 3.12+ it registers the plan through provider/updateAccountConfig, creates the session with no model channel, selects the model on the account:* provider through session/setModel with persistAsWorkspaceLastUsed false, and answers interaction/requestProviderRuntimeHeaders per model request; a pre-3.12 app-server keeps the in-memory runtimeModel overlay, chosen by that backend's own error rather than a version gate. It never writes ~/.zcode/cli/config.json, never injects auth env, and never logs the plan credential.
 
+Native launch policy, when this adapter supports it, is reported separately from ACP mode
+selection. Read the platform permission facts in [acp.md](acp.md); existing explicit policy
+and contrary modes take precedence over a managed default.
+
 The Agent decides every action; operate through `"$SKILL_DIR/scripts/runtime-tmux.sh"` as SKILL.md
 shows, and read [acp.md](acp.md) before any action that can change the runtime.

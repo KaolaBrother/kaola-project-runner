@@ -1,23 +1,9 @@
 #!/usr/bin/env python3
-"""Issue #24 contract: keep OpenCode ACP without skip; permit settles each request.
+"""OpenCode has no ACP skip flag/option; native V2 launch policy is separate.
 
-Measurement found no OpenCode ACP skip-all. The ACP command stays
-``opencode acp`` with no skip argv. Issue #130 retired the PTY transport, so
-the former PTY ``--auto`` bypass is gone: there is no skip-all on any path and
-every ``session/request_permission`` is settled by an explicit ``permit``. Do
-not invent process-time auto-permit or inject ``OPENCODE_PERMISSION`` /
-permission config as a fake skip.
-
-Issue #112 re-measured the no-skip fact on OpenCode V2 ``2.0.11`` instead of
-inheriting it: ``session/request_permission`` offers exactly ``allow_once``,
-``allow_always`` and ``reject_once``, and ``session/new`` advertises only the
-``model``/``effort``/``mode`` config options -- no skip-all in either place.
-The same upgrade removed the ``--mini`` flag ("Unrecognized flag: --mini in
-command opencode").
-
-The Agent-facing surface is ``acp_quirks`` (manifest, rendered into the
-generated ``references/acp.md``): it must state the no-skip-all fact and that
-permit settles each request. README/CHANGELOG notes are not this contract.
+Issue #256 replaces the old claim that no native full-access path exists.
+Keep the original no-invented-ACP-mode and no-auto-permit checks. Native policy
+selection, precedence and isolation are exercised below.
 """
 
 from __future__ import annotations
@@ -28,6 +14,8 @@ import importlib.util
 import os
 import re
 import subprocess
+import tempfile
+import json
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -435,6 +423,83 @@ class Issue112LoopbackProxyBypass(unittest.TestCase):
                     env=env, capture_output=True, text=True, check=True,
                 ).stdout.strip()
                 self.assertEqual(out, state)
+
+
+class Issue256NativeLaunchPolicy(unittest.TestCase):
+    def setUp(self):
+        self.acp = load_acp()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.repo = self.root / "project"
+        self.repo.mkdir()
+        self.record = self.root / "record"
+        self.record.mkdir()
+        self.env = {"HOME": str(self.root / "home"),
+                    "OPENCODE_CONFIG_DIR": str(self.root / "config"),
+                    "MODEL_SENTINEL": "provider/model#effort"}
+        self.args = argparse.Namespace(mode=None, resume=None, use_continue=False,
+                                       agent_command_given=False)
+
+    def launch(self):
+        return self.acp.opencode_launch_policy(self.args, str(self.repo), self.record, self.env)
+
+    def test_default_file_is_process_scoped_and_contains_only_build_permissions(self):
+        original = dict(os.environ)
+        result = self.launch()
+        self.assertTrue(result["selected"])
+        config = Path(self.env["OPENCODE_CONFIG"])
+        self.assertEqual(config.parent, self.record)
+        self.assertEqual(json.loads(config.read_text()), {"agents": {"build": {"permissions": [
+            {"action": "*", "resource": "*", "effect": "allow"}]}}})
+        self.assertEqual(dict(os.environ), original)
+        self.assertNotIn("OPENCODE_CONFIG_CONTENT", self.env)
+        self.assertEqual(self.env["MODEL_SENTINEL"], "provider/model#effort")
+        another = self.acp.agent_environment(argparse.Namespace(platform="opencode", manifest={}))
+        self.assertEqual(another.get("OPENCODE_CONFIG"), original.get("OPENCODE_CONFIG"))
+
+    def test_supplied_native_config_even_empty_is_unchanged(self):
+        for key in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT"):
+            for value in ("", "operator-owned-value"):
+                with self.subTest(key=key, value=value):
+                    self.env[key] = value
+                    before = dict(self.env)
+                    self.assertEqual(self.launch()["reason"], "native-config-supplied")
+                    self.assertEqual(self.env, before)
+                    self.env.pop(key)
+        self.assertEqual(list(self.record.iterdir()), [])
+
+    def test_native_sources_preserved_without_parsing_or_rewriting(self):
+        for source in (self.repo / "opencode.jsonc", self.repo.parent / "opencode.json",
+                       self.repo / ".opencode" / "opencode.json",
+                       Path(self.env["OPENCODE_CONFIG_DIR"]) / "opencode.jsonc",
+                       Path(self.env["HOME"]) / ".agents" / "agents",
+                       self.repo / ".opencode" / "agent"):
+            with self.subTest(source=source):
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_text("explicit policy, even invalid JSONC")
+                before = dict(self.env)
+                self.assertEqual(self.launch()["reason"], "existing-config-source")
+                self.assertEqual(source.read_text(), "explicit policy, even invalid JSONC")
+                self.assertEqual(self.env, before)
+                source.unlink()
+        self.assertEqual(list(self.record.iterdir()), [])
+
+    def test_unreadable_source_defers_default_without_blocking_transport(self):
+        with mock.patch.object(Path, "lstat", side_effect=PermissionError("fixture")):
+            self.assertEqual(self.launch()["reason"], "config-source-unreadable")
+        self.assertNotIn("OPENCODE_CONFIG", self.env)
+
+    def test_contrary_modes_native_recovery_and_custom_commands_defer_default(self):
+        for key, value in (("mode", "plan"), ("mode", "build"), ("mode", "manual"), ("mode", ""),
+                           ("resume", "native-id"), ("use_continue", True),
+                           ("agent_command_given", True)):
+            with self.subTest(key=key):
+                setattr(self.args, key, value)
+                self.assertFalse(self.launch()["selected"])
+                setattr(self.args, key, None if key in ("mode", "resume") else False)
+        self.assertNotIn("OPENCODE_CONFIG", self.env)
+        self.assertEqual(parse_manifest(MANIFEST)["acp_mode_config_id"], "mode")
 
 
 if __name__ == "__main__":

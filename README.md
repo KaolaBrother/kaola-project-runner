@@ -536,7 +536,12 @@ docking is a lifecycle fact, not a QA PASS. Required project checks stay require
 across all ten. Claude Code, Codex, Devin, Droid, Kimi and ZCode apply an
 advertised ACP skip-all option at start (`mode`, or `autonomy_level` for Droid).
 Cursor and Grok carry only a launch flag (`--yolo`, `--always-approve`) and
-advertise no ACP option; OpenCode's default ACP path has none at all. On a platform
+advertise no ACP option. OpenCode has no ACP skip-all option, but fresh managed
+V2 launches select a process-only native build allow policy when no config source
+or explicit mode is supplied. Existing global/project/native configuration,
+resume/continue and custom commands suppress that default; even non-permission
+config is preserved. `start.native_permission_policy` reports the choice. Explicit
+`--permission-mode plan` selects the native plan agent. On a platform
 with no verified ACP skip-all, a permission request may still arise: it surfaces as
 a `permission_required` event and is settled with `permit` (delivery and wake
 semantics in the [command reference](docs/api.md)). Use `--permission-mode` where

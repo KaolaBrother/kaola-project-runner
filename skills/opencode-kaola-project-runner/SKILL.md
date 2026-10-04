@@ -110,7 +110,7 @@ or editor replacement. Settle a pending permission `request_id` with
 `permit [--request-id ID] --option OPTION_ID` (an option the request offers); omitting `--option`
 answers `cancelled`, which denies. Read the resulting output before choosing another action.
 
-Permission default: no full-access default: ACP has no skip-all, so `start` sets no mode and `permit` settles each request; `--permission-mode` has no ACP option to set and reports `config-option-unavailable`.
+Permission default: Native V2 build full-access default only for fresh managed launches without existing config sources; existing global/project/native config is left intact (including non-permission config). Explicit --permission-mode selects the native build/plan agent via mode and suppresses the default. No auto-permit; remaining requests require an Agent decision..
 
 When the Agent decides the exact session is finished, end only that owned session:
 

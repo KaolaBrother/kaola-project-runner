@@ -8,8 +8,8 @@ Two release-review defects on the frozen ``f39d940`` line, both prompt-level:
    bypass start". Six platforms do apply an advertised ACP skip-all option
    (claude-code/codex/devin ``mode``, droid ``autonomy_level``, kimi-cli/zcode
    ``mode``), but cursor-cli and grok only carry a launch flag with
-   ``acp_mode_config_id`` empty, and OpenCode's ACP surface has no skip-all of
-   any kind. Issue #98 added a fourth member with the opposite safety posture:
+   ``acp_mode_config_id`` empty, and OpenCode's ACP surface has no skip-all config option. Issue #256
+   supplies the distinct native V2 build launch policy with explicit config precedence. Issue #98 added a fourth member with the opposite safety posture:
    dsh advertises no skip-all option and its ACP composition sends no permission
    request at all; its skip-all is the launch variable ``DSH_PERMISSION_MODE``
    (Issue #120) -- see ``DshSkipAllIsTheLaunchVariable`` below. A host reading that row as an all-platform guarantee stops
@@ -88,7 +88,7 @@ def runtime_names_without_verified_skip_all() -> set[str]:
     names = set()
     for path in sorted(PLATFORMS.glob("*.yaml")):
         values = manifest_values(path)
-        if not values.get("acp_mode_config_id"):
+        if not values.get("acp_mode_config_id") or "no ACP skip-all" in values.get("acp_quirks", ""):
             names.add(values["runtime_name"])
     return names
 
@@ -238,7 +238,7 @@ class ReadmeCarriesThePerPlatformSplit(unittest.TestCase):
             "README must keep Cursor and Grok as launch-flag-only, not as 'no bypass'",
         )
         self.assertIn(
-            "OpenCode's default ACP path has none at all",
+            "OpenCode has no ACP skip-all option",
             text,
             "README must keep OpenCode as the platform with no ACP skip-all",
         )
@@ -276,7 +276,7 @@ class PlatformFactsStayTheSingleSource(unittest.TestCase):
         derived = set()
         for path in sorted(PLATFORMS.glob("*.yaml")):
             values = manifest_values(path)
-            if not values.get("acp_mode_config_id"):
+            if not values.get("acp_mode_config_id") or "no ACP skip-all" in values.get("acp_quirks", ""):
                 derived.add(values["id"])
         self.assertEqual(
             derived,
@@ -297,7 +297,7 @@ class PlatformFactsStayTheSingleSource(unittest.TestCase):
         values = manifest_values(OPENCODE_MANIFEST)
         quirks = values["acp_quirks"]
         self.assertIn("2.0.11", quirks)
-        self.assertIn("cli=2.0.15", values["acp_verified_versions"])
+        self.assertIn("cli=2.0.22", values["acp_verified_versions"])
         for choice in ("allow_once", "allow_always", "reject_once"):
             self.assertIn(
                 choice,
@@ -316,8 +316,8 @@ class PlatformFactsStayTheSingleSource(unittest.TestCase):
 
 
 class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
-    """1.18.17 is history; neither verified build (2.0.11, or 2.0.15 since
-    the 2026-09-24 record) was probed for steering and must read as unknown."""
+    """1.18.17 is history; 2.0.11 initialize, recorded 2.0.15 and permission-
+    tested 2.0.22 do not establish native steering support."""
 
     def test_summary_marks_the_probe_as_historical(self) -> None:
         summary = manifest_values(OPENCODE_MANIFEST)["steering_summary"]
@@ -332,7 +332,7 @@ class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
         values = manifest_values(OPENCODE_MANIFEST)
         summary = values["steering_summary"]
         self.assertIn(
-            "2.0.15",
+            "2.0.22",
             summary,
             "the summary must name the currently verified version it does NOT cover",
         )
@@ -341,7 +341,7 @@ class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
             summary,
             "the summary must keep the 2.0.11 initialize observation versioned",
         )
-        self.assertIn("cli=2.0.15", values["acp_verified_versions"])
+        self.assertIn("cli=2.0.22", values["acp_verified_versions"])
         self.assertRegex(
             summary,
             r"not a measurement of",

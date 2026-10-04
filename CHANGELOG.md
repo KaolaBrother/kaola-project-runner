@@ -8,7 +8,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart required
 
-The holder diff is not empty. `scripts/kaola-acp-holder.py` advertises
+The holder and platform diffs are not empty: `platforms/opencode.yaml`
+changes the OpenCode launch policy (below), and `scripts/kaola-acp-holder.py` advertises
 `holder_features` (`heartbeat-state/2`, `sideagent-relay/1`, `sideagent-node/1`,
 `preserve-dispatched/1`), reads a lifecycle
 state file up to 1 MiB, relays worker events to a bound Sideagent, and keeps
@@ -146,14 +147,28 @@ bridge at the unpinned content stage (`saveable: false`).
   `terminated` event had started running with no carrier: no spawn line or
   agent sweep reaches a holder-started node, and a preserving stop spared it
   as a dispatched worker.
-- **Not yet verified live:** native partial or missing node checkpoints
-  (`maintenance-returned`), an unconfirmed node stop, process survival through a real preserving Host
-  replacement, per-platform process preservation (a ZCode
-  Sideagent stop during a dispatch included), carrier re-anchor across real
-  platforms, relay across holder death, native timer read-back on each outer
-  platform, and state size on a real project. `rebind-host` moves only the
-  carrier: each seat needs its own call, its `dispatcher` still names the old
-  Host, and events staged in a dead Host need the adoption pass.
+- **Verified live on Codex and ZCode fixtures:** a missing node checkpoint
+  returning its input to the Host, an unconfirmed node stop starting no
+  competing node, worker trees surviving a preserving Host stop and a
+  replacement Host's per-seat `rebind-host` while the worker's tool still ran.
+- **Not yet verified live:** a native partial node checkpoint (tested with a
+  fake node only), per-platform process preservation beyond Codex and ZCode,
+  relay across holder death, native timer read-back on each outer platform,
+  and state size on a real project. `rebind-host` moves only the carrier: each
+  seat needs its own call, its `dispatcher` still names the old Host, and
+  events staged in a dead Host need the adoption pass. A default stop of a
+  ZCode Host does not sweep the workers it started (the bridge forwards no
+  spawn-record variable); stop them exactly.
+- **OpenCode managed native policy (Issue #256).** Fresh managed OpenCode V2
+  launches select a process-only native build full-access policy through
+  `OPENCODE_CONFIG` when no existing config source or explicit mode is
+  supplied. Existing global/project configuration (including non-permission
+  config), supplied native config, resume/continue and custom commands
+  suppress the default. Explicit `--permission-mode plan` selects the native
+  plan agent. Model/provider/effort selection and explicit permission
+  decisions are unchanged. No shared configuration is edited; this applies to
+  newly started processes only. Verified CLI 2.0.22 uses ACP protocol 1; V1
+  compatibility is not claimed.
 
 ## 0.8.2 — 2026-10-04 (OpenCode DeepSeek advertisement)
 

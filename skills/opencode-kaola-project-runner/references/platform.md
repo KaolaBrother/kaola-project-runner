@@ -19,7 +19,11 @@ catalog is still launched as the exact declared literal, and the catalog fact is
 
 ## Launch
 
-ACP runs opencode acp. ACP has no skip-all, so ACP start sets no mode and permit settles each request; configOptions.mode is agent identity (build/plan), not skip-all.
+ACP runs opencode acp. Ordinary fresh managed launches select a process-only native V2 build allow policy through OPENCODE_CONFIG when no config source or explicit mode is supplied; existing native config, explicit mode, resume/continue and custom command retain precedence. start reports native_permission_policy. ACP has no skip-all config option; permit settles each request that still arises.
+
+Native launch policy, when this adapter supports it, is reported separately from ACP mode
+selection. Read the platform permission facts in [acp.md](acp.md); existing explicit policy
+and contrary modes take precedence over a managed default.
 
 The Agent decides every action; operate through `"$SKILL_DIR/scripts/runtime-tmux.sh"` as SKILL.md
 shows, and read [acp.md](acp.md) before any action that can change the runtime.

@@ -22,5 +22,9 @@ catalog is still launched as the exact declared literal, and the catalog fact is
 
 ACP runs cursor-agent --yolo acp, initialized with _meta.parameterizedModelPicker=true; configOptions.mode has no skip-all value, so ACP start sets no mode.
 
+Native launch policy, when this adapter supports it, is reported separately from ACP mode
+selection. Read the platform permission facts in [acp.md](acp.md); existing explicit policy
+and contrary modes take precedence over a managed default.
+
 The Agent decides every action; operate through `"$SKILL_DIR/scripts/runtime-tmux.sh"` as SKILL.md
 shows, and read [acp.md](acp.md) before any action that can change the runtime.
