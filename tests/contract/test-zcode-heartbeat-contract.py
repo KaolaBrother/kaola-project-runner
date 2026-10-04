@@ -1481,7 +1481,7 @@ def test_issue_104_dispatcher_refusals_open_nothing() -> None:
     whose Host holder cannot be bound is refused before anything exists."""
     sandbox = Sandbox("i104-refuse")
     try:
-        host_a = sandbox.session()
+        host_a = host_session_name(uuid.uuid4().hex[:8])
         host_b = sandbox.session()
         sandbox.start(host_a, "basic")
         sandbox.start(host_b, "basic")
@@ -1573,7 +1573,7 @@ def test_issue_104_explicit_and_no_carrier_rows() -> None:
     reused live holder keeps its binding and exact stop/start binds."""
     sandbox = Sandbox("i104-rows")
     try:
-        host = sandbox.session()
+        host = host_session_name(uuid.uuid4().hex[:8])
         sandbox.start(host, "basic")
         dispatcher = dispatcher_of(sandbox, host)
 
@@ -1628,6 +1628,22 @@ def test_issue_104_explicit_and_no_carrier_rows() -> None:
               and rebound.get("heartbeat_host") == expected_fact(sandbox, host),
               f"P7: the new start binds by itself ({rebound.get('error')})")
         sandbox.cli("stop", session=worker)
+
+        # Issue #255: a session started by a worker (an established non-Host
+        # role) is unbound, not bound to that worker and not refused.
+        helper = sandbox.session()
+        sandbox.start(helper, "basic")
+        role = host_record(sandbox, helper).get("session_role")
+        nested = sandbox.session()
+        receipt = sandbox.cli("start", "--mode", "yolo", session=nested, scenario="basic",
+                              **{DISPATCHER_ENV: json.dumps(dispatcher_of(sandbox, helper))})
+        check(role not in (None, "host") and receipt.get("state") == "ready"
+              and receipt.get("heartbeat_host") is None
+              and receipt.get("heartbeat_host_source") == "dispatcher-not-host"
+              and (receipt.get("dispatcher") or {}).get("session") == helper,
+              f"#255: a {role} dispatcher starts its session unbound ({receipt.get('heartbeat_host_source')})")
+        sandbox.cli("stop", session=nested)
+        sandbox.cli("stop", session=helper)
         host_stop = sandbox.cli("stop", "--force", session=host)
         check(host_stop.get("residual_pids") == [], "host stops cleanly")
     finally:
@@ -1666,7 +1682,7 @@ def test_issue_104_start_inside_host_agent_binds_mechanically() -> None:
     is the documented residual (§d.2): unbound, not refused."""
     sandbox = Sandbox("i104-nested")
     try:
-        host = sandbox.session()
+        host = host_session_name(uuid.uuid4().hex[:8])
         worker = f"claude-hb-{uuid.uuid4().hex[:8]}"
         worker_zc = sandbox.session()
         worker_unset = f"claude-hb-{uuid.uuid4().hex[:8]}"

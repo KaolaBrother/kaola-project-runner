@@ -123,6 +123,15 @@ bridge at the unpinned content stage (`saveable: false`).
   fresh Sideagent nodes reconcile meaningful batches without authoring or
   allocating work. An existing persistent Sideagent binding keeps its recorded
   workers and relay behavior.
+- **A worker is not its own sessions' Host (Issue #255).** A session that a
+  worker (any established role other than `host`) starts is no longer bound to
+  that worker as its heartbeat carrier (`heartbeat_host_source:
+  "dispatcher-not-host"`, `dispatcher` still recorded); the worker supervises
+  by waiting. Before, the worker received full Host heartbeat passes, loaded
+  Project Runner, accepted and stopped its own child and started a
+  maintenance node. Such a holder also never relays to a Sideagent or starts a
+  node at its own turn ends. Explicit `KAOLA_ACP_HEARTBEAT_HOST` bindings and
+  unknown-role dispatchers are unchanged.
 - **Not yet verified live:** native partial or missing node checkpoints
   (`maintenance-returned`), an unconfirmed node stop, process survival through a real preserving Host
   replacement, per-platform process preservation (a ZCode

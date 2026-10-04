@@ -2939,6 +2939,11 @@ class Holder:
             meta["overflow_full_check"] = True
         return "\n".join(lines), meta
 
+    def _established_non_host(self) -> bool:
+        """A recorded role other than Host. An unknown role keeps the Host
+        carrier behaviour every earlier carrier had."""
+        return getattr(self, "session_role", None) in SESSION_ROLES - {"host"}
+
     # -- bound Sideagent relay (Issue #255) -------------------------------------
 
     def _sideagent_relay_target(self) -> dict[str, Any] | None:
@@ -3098,6 +3103,10 @@ class Holder:
         view's attention changed since it last saw it. Without a provable live
         binding every event goes to the Host as before.
         """
+        if self._established_non_host():
+            # Every holder reaches here at its turn ends; a session known not
+            # to be the Host never relays to a Sideagent or starts nodes.
+            return {}
         binding = self._node_binding()
         if binding is not None:
             return self._node_relay_pass(binding)

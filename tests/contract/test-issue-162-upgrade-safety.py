@@ -532,7 +532,7 @@ class UpgradeSafetyTests(unittest.TestCase):
         replaced by one that accepts the notification and never answers, which
         holds that window open for the whole drain-restart.
         """
-        host = "codex-KPR-i184-host"
+        host = "codex-KPR-orchestrator-i184"
         session = "codex-KPR-i184-window"
         host_started = self.run_cli("codex", "start", session=host)[1]
         self.assertEqual(host_started.get("state"), "ready", host_started)

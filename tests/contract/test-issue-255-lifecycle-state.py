@@ -1791,6 +1791,34 @@ class CarrierAnchor(unittest.TestCase):
         (self.side_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
         self.assertIsNone(acp_module.sideagent_host_anchor(self.args, self.repo_text, self.dispatcher))
 
+    def resolve(self, dispatcher: dict) -> dict:
+        previous = {key: os.environ.pop(key, None)
+                    for key in ("KAOLA_ACP_DISPATCHER", "KAOLA_ACP_HEARTBEAT_HOST")}
+        os.environ["KAOLA_ACP_DISPATCHER"] = json.dumps(dispatcher)
+        try:
+            return acp_module.resolve_heartbeat_host(self.args, self.repo_text)
+        finally:
+            os.environ.pop("KAOLA_ACP_DISPATCHER", None)
+            os.environ.update({key: value for key, value in previous.items() if value is not None})
+
+    def test_a_worker_is_not_the_carrier_of_the_sessions_it_starts(self) -> None:
+        digest = hashlib.sha256(self.repo_text.encode()).hexdigest()[:16]
+        worker_dir = Path(self.args.record_root) / "codex" / "codex-KT-i255-research" / digest
+        worker_dir.mkdir(parents=True)
+        worker = {"holder_instance_id": "worker-1", "platform": "codex", "repo": self.repo_text,
+                  "session": "codex-KT-i255-research"}
+        (worker_dir / "record.json").write_text(json.dumps(dict(
+            worker, session_role="worker", holder_pid=os.getpid())), encoding="utf-8")
+        resolved = self.resolve(worker)
+        self.assertEqual((resolved["target"], resolved["source"], resolved["refusal"]),
+                         (None, "dispatcher-not-host", None),
+                         "a worker's own session is started unbound, never refused")
+        self.assertEqual(resolved["dispatcher"], worker, "who dispatched it stays recorded")
+        host = dict(self.dispatcher, session="zcode-KT-orchestrator-main", holder_instance_id="host-2")
+        resolved = self.resolve(host)
+        self.assertEqual((resolved["source"], resolved["target"]["session"]),
+                         ("dispatcher", "zcode-KT-orchestrator-main"), "a Host still carries its workers")
+
     def rebind(self, dispatcher: dict) -> tuple[dict, list]:
         calls: list = []
         original = acp_module.op_or_holder_lost
@@ -2366,6 +2394,18 @@ class HolderNodeMode(HolderFixture):
             self.holder._relay_pass()
         time.sleep(0.2)
         self.assertEqual(len(self.fake.prompts), 1, "the same Host revision is sent once")
+
+    def test_a_holder_known_not_to_be_the_host_never_starts_a_node(self) -> None:
+        self.holder.session_role = "elite"
+        self.write_node_state(host_revision=4)
+        with self.holder.worker_events_lock:
+            self.assertEqual(self.holder._relay_pass(), {}, "its own turn end relays nothing")
+        self.event("codex-KT-i1-a", "idle", 5)
+        time.sleep(0.3)
+        self.assertFalse((Path(self.tmp.name) / "count").exists(), "no node is started")
+        self.assertEqual(self.fake.prompts, [])
+        self.assertNotIn("sideagent_node_started", self.log_kinds())
+        self.assertEqual(len(self.agent.prompts()), 1, "the event still reaches the session it names")
 
 
 class HostPreserveStop(WorkerTree):

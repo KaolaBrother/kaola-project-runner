@@ -2978,7 +2978,8 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
     """Resolve the notification target of this start (design #99 §a.2).
 
     Returns ``target`` (validated, socket-resolved, or None), ``source`` (``none``,
-    ``explicit``, ``dispatcher``, ``dispatcher-no-carrier``), ``dispatcher`` (the parsed identity fact when
+    ``explicit``, ``dispatcher``, ``dispatcher-no-carrier``, ``sideagent-host``,
+    ``dispatcher-not-host``), ``dispatcher`` (the parsed identity fact when
     present), and ``refusal`` ({"reason", "detail"}) when this start must
     refuse before anything exists - Issue #122: ``host-entry-unsupported``
     when the dispatcher or the explicit target has no measured Host entry.
@@ -3038,6 +3039,16 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
                 "dispatcher": dispatcher, "requested": explicit,
                 "refusal": {"reason": "heartbeat-host-unresolved",
                             "detail": f"dispatcher repo {dispatcher['repo']} {problem}"}}
+    if explicit is None:
+        digest = hashlib.sha256(resolve_repo(dispatcher["repo"]).encode("utf-8")).hexdigest()[:16]
+        record = read_record(record_root(args) / dispatcher["platform"] / dispatcher["session"] / digest)
+        role = record.get("session_role") if isinstance(record, dict) else None
+        if role in SESSION_ROLES - {"host"}:
+            # Issue #255: a worker's own sessions are its business. Deriving
+            # the worker as their carrier sent it full Host heartbeat passes,
+            # and it acted as a second Host. It supervises them by waiting.
+            return {"target": None, "source": "dispatcher-not-host", "dispatcher": dispatcher,
+                    "refusal": None}
     derived = validate_heartbeat_target(
         {"platform": dispatcher["platform"], "session": dispatcher["session"],
          "repo": dispatcher["repo"]},
