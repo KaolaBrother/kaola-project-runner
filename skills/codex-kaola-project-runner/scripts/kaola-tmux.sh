@@ -28,6 +28,7 @@ usage() {
   kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME [--decision-id ID] [--if-snapshot ID] --replace-editor [--text TEXT]
   kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force]
   kaola-tmux.sh PLATFORM drain-restart --repo ABS_PATH --session NAME (--continue | --resume ID) [--timeout SECONDS]
+  kaola-tmux.sh PLATFORM rebind-host --repo ABS_PATH --session NAME [--expected-holder-instance-id ID]
 Transport is ACP only (Issue #130); a request for the pty transport is refused (transport-pty-retired).'
 }
 
@@ -71,7 +72,7 @@ if [[ "$command_name" == follow ]]; then
   printf '%s\n' '{"error":{"code":"follow-unsupported","message":"follow is not a Runner command; use kaola-acp"},"kind":"error"}'
   exit 1
 fi
-case "$command_name" in preflight|start|observe|status|capture|send|steer|wait|permit|cancel|key|answer|stop|drain-restart) ;; *) die "unknown command: $command_name" ;; esac
+case "$command_name" in preflight|start|observe|status|capture|send|steer|wait|permit|cancel|key|answer|stop|drain-restart|rebind-host) ;; *) die "unknown command: $command_name" ;; esac
 repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_value="" text_given=false
 if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
 model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false

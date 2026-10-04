@@ -620,6 +620,17 @@ no session at all stays silent. `start` keeps what it asked for separately in
 `heartbeat_host_requested`, and a `session-exists` start reports the reused holder's binding,
 so a later environment change or a repeated `start` can never look like a rebinding.
 
+`rebind-host` (Issue #255) is the one in-place carrier change. Run from inside a live Host
+session against an existing seat, it derives the target from that Host's own
+`KAOLA_ACP_DISPATCHER`, checks the record is a Host-role, live, same-instance holder with its
+socket, and sends the holder op `rebind_heartbeat_host`. The receipt carries `rebound`,
+`previous_heartbeat_host`, `heartbeat_host`, and the unchanged `holder_instance_id`; the seat
+logs `heartbeat_host_rebound`. Refusals are `{"result":"refused","reason":"rebind-host-unresolved"}`
+exit 1 before the seat is touched, and holder errors `no-heartbeat-host` (seat started unbound),
+`heartbeat-host-foreign-repo`, or `holder-instance-mismatch`. A holder that predates the op
+answers `unknown-op`; that seat recovers through `drain-restart` as before. A Sideagent whose
+own record names no Host now dispatches through the ordinary dispatcher rows.
+
 A `start` receipt also says where its request came from (Issue #104): `heartbeat_host_source` is
 `none` (no dispatching holder, no variable), `explicit` (`KAOLA_ACP_HEARTBEAT_HOST` given),
 `dispatcher` (derived from the holder-set `KAOLA_ACP_DISPATCHER` identity fact: `holder_instance_id`,

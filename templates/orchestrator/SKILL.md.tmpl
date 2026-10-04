@@ -15,10 +15,10 @@ One Host owns the plan, acceptance and QA.
 Helpers do bounded planning, research, QA, synthesis, explicitly scoped light work
 or an assignment. They never scale, control workers, run another scheduling loop,
 grant permission or accept the project.
-One bound Sideagent maintains dispatch and state: [lifecycle-state.md](references/lifecycle-state.md).
-Without explicit permission to self-execute, read evidence and direct workers:
-do not implement, test, edit project documentation, create worktrees, or mutate
-the repository yourself.
+One bound Sideagent runs dispatch and state: [lifecycle-state.md](references/lifecycle-state.md).
+Read, search, analyze and do simple authorized work directly; not every action
+goes through the Sideagent. Larger code, test or doc work goes to workers
+unless the human allows self-execution.
 
 Authorized release/install mechanics may stay Host-owned without an issue or
 worker solely for them; honor owner allocation and project lifecycle.

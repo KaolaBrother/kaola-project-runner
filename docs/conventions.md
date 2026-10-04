@@ -165,18 +165,25 @@ This is a release/update requirement. For the lifecycle state of
 - Migration runs at the first load of the updated Skill, at a safe handoff point, through
   `kaola-dispatch.py state migrate --file <project>/.kaola/heartbeat-prompt.json --index <index>
   --live <list>`. Without `--write` it is a read-only plan; with `--write` it keeps the raw v1
-  file once as `heartbeat-prompt.v1-<sha12>.json`, maps `active` to `doing` tasks and `pending`
-  to review/closeout duties, keeps `recovery`, lists unknown keys and unassociated index rows as
-  `unverified`, and binds one live Sideagent row. A repeat reports `current`; a conflicting raw
-  copy or an unreadable file is left unchanged and reported.
+  file once as `heartbeat-prompt.v1-<sha12>.json`, maps each `active` row to one `doing` task
+  that keeps its assignment locator and fields, keeps each `pending` row with its stated stage
+  (else `todo`, with the unknown stage listed), keeps `recovery` and the v1 host under
+  `recovery`, and lists unknown keys, unassociated index rows and any v1 Sideagent binding not
+  proven by `authorization_source` plus its exact live holder as `unverified` for the Host to
+  bind. A repeat reports `current`; an unreadable file is left unchanged and reported, a raw
+  copy whose digest differs raises the severe alert `state-overwritten`, and any schema other
+  than v1 or v2 is refused (`schema-unsupported`) rather than read as v1.
 - Holder: the v2 file may exceed 64 KiB only after the live Host holder advertises
   `heartbeat-state/2` and migration recorded it as `carrier`. An older Host holder keeps the
   64 KiB whole-file limit (`carrier-limit`). Adoption path: restart the Host holder on the new
   build at a safe point, then run `state migrate --write --live <list>` to record the carrier.
   Healthy workers are not restarted for migration; they get the new holder behavior at
   their next normal start.
-- Not yet verified on a real project: per-platform process preservation, cross-platform carrier
-  re-anchor, relay across holder death, native timer read-back, and real state size.
+- Host replacement: the new Host runs `rebind-host` on each existing seat from its own session;
+  the carrier moves in place and the worker is not restarted. A holder older than that op
+  answers `unknown-op` and keeps the previous recovery (`drain-restart` at idle).
+- Not yet verified on a real project: per-platform process preservation, carrier re-anchor
+  across real platforms, relay across holder death, native timer read-back, and real state size.
 
 ### Release labels and running seats
 

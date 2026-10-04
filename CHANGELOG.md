@@ -48,9 +48,30 @@ bridge at the unpinned content stage (`saveable: false`).
   Kaola-Delegator gains `references/inquiry-report.md` (the delegator view,
   the exact native timer sentence and its `timer` check, and the five-part
   report).
-- **Not yet verified live:** per-platform process preservation, cross-platform
-  carrier re-anchor, relay across holder death, native timer read-back on each
-  outer platform, and state size on a real project.
+- **Host carrier re-anchor (Issue #255).** New Runner command `rebind-host`,
+  run from inside the live replacement Host, moves an existing seat's carrier
+  to that Host through the holder op `rebind_heartbeat_host`. The seat's
+  holder, agent process and native session stay; held permission wakes follow.
+  It refuses a caller that is not the live Host holder, a seat with no carrier,
+  and another repo. A Sideagent whose record names no Host dispatches through
+  the ordinary dispatcher rows again instead of being refused.
+- **Repairs from joint review (Issue #255).** A Sideagent stop spares every
+  worker holder's process tree it dispatched, nested or not, also when its
+  holder is already dead. Relay is confirmed only by the matching Sideagent
+  holder's completed turn; a failed or cancelled turn, a replaced Sideagent or
+  a dead one returns its events to the Host, and relay socket I/O is bounded.
+  The bound Sideagent never takes or waits for a worker shared seat. Migration
+  keeps one task per v1 assignment with its fields, invents no stage, binds no
+  Sideagent without proof, refuses unknown schemas and alerts on an overwritten
+  raw copy. A later `repair`/`partial` verdict asks the Host again
+  (`prior_verdict`). Retirement needs an accepted or cancelled verdict and
+  closed, stopped dispatch items; a Sideagent decision settlement needs the
+  Host turn and evidence. Section writes keep their source, omitted text is
+  marked, a worker cannot write as Host or Sideagent, and a retired fault id
+  reopens only on a later observation.
+- **Not yet verified live:** per-platform process preservation, carrier
+  re-anchor across real platforms, relay across holder death, native timer
+  read-back on each outer platform, and state size on a real project.
 
 ## 0.8.2 — 2026-10-04 (OpenCode DeepSeek advertisement)
 

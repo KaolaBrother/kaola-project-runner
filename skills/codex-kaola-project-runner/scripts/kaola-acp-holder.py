@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import queue
+import re
 import secrets
 import select
 import shlex
@@ -220,6 +221,12 @@ HEARTBEAT_EVENT_CAP = 32
 CARRIER_UNDELIVERED_CODES = ("host-unreachable", "host-closed", "host-reply-invalid",
                             "unknown-op")
 HEARTBEAT_NOTIFY_TIMEOUT = 5.0
+# Issue #255: the relay send runs under ``worker_events_lock``, which a worker's
+# own carrier send waits on before its event is staged. A non-waiting prompt
+# admission answers at once; bounding the relay well under the worker's 5 s
+# carrier timeout keeps a slow Sideagent from timing out a worker idle (an
+# unreachable Sideagent falls back to the Host).
+RELAY_SEND_TIMEOUT = 1.0
 HEARTBEAT_NOTIFY_GRACE = 6.0
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
 WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
@@ -456,24 +463,69 @@ def compact_spawn_record(path: Path) -> None:
         pass
 
 
-def runner_holder_groups(path: Path, live: dict[int, list[int]]) -> set[int]:
-    """Live child groups led by a Runner holder: in the spawn record (only a
-    Runner `start` writes it), or whose leader runs the holder script when the
-    spawn line was lost."""
-    found = {entry["pgid"] for entry, _ in live_spawn_entries(path) if entry["pgid"] in live}
-    unknown = [pgid for pgid in live if pgid not in found]
-    if unknown:
+HOLDER_RECORD_DIR_ARG = re.compile(r" --record-dir (.+?) --socket ")
+
+
+def own_holder_record(pid: int) -> dict[str, Any] | None:
+    """The record a live Runner holder ``pid`` writes under its own
+    ``--record-dir``, only when that record names ``pid`` as its holder."""
+    try:
+        output = run_ps(["pid", "command"]).stdout
+    except KeyError:
+        return None
+    for line in output.splitlines():
+        fields = line.strip().split(None, 1)
+        if len(fields) != 2 or fields[0] != str(pid):
+            continue
+        match = HOLDER_RECORD_DIR_ARG.search(f" {fields[1]} ")
+        if match is None:
+            return None
         try:
-            output = run_ps(["pid", "command"]).stdout
-        except KeyError:
-            # The libproc fallback has no command column: the spawn record decides.
-            output = ""
-        for line in output.splitlines():
-            fields = line.strip().split(None, 1)
-            if (len(fields) == 2 and fields[0].isdigit() and int(fields[0]) in unknown
-                    and "kaola-acp-holder.py" in fields[1]):
-                found.add(int(fields[0]))
+            record = json.loads((Path(match.group(1)) / "record.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return record if isinstance(record, dict) and record.get("holder_pid") == pid else None
+    return None
+
+
+def worker_tree_groups(holder_pid: int, holder_pgid: int,
+                       table: list[tuple[int, int, int, str]]) -> set[int]:
+    """Every process group of one live Runner worker: the holder's own group,
+    each group a live descendant runs in (the native agent leads its own
+    session, its tools may too), and the agent and child groups the worker's
+    own record attests while a recorded member identity still holds (a tool
+    whose parent already exited is no longer a descendant)."""
+    by_pid = {pid: (pgid, started) for pid, _, pgid, started in table}
+    found = {holder_pgid, *child_groups(holder_pid, holder_pgid, table)}
+    record = own_holder_record(holder_pid)
+    if record is None:
+        return found
+    agent_pgid, agent_started = record.get("agent_pgid"), record.get("agent_started")
+    leader = by_pid.get(agent_pgid) if isinstance(agent_pgid, int) else None
+    if (leader is not None and leader[0] == agent_pgid
+            and isinstance(agent_started, (int, float)) and not isinstance(agent_started, bool)):
+        started = start_epoch(leader[1])
+        if started is not None and abs(started - agent_started) <= SPAWN_RECORD_SLACK:
+            found.add(agent_pgid)
+    for child, members in (record.get("agent_child_groups") or {}).items():
+        if str(child).isdigit() and any(
+                str(pid).isdigit() and by_pid.get(int(pid)) == (int(child), started)
+                for pid, started in (members or {}).items()):
+            found.add(int(child))
     return found
+
+
+def dispatched_worker_groups(path: Path, live: dict[int, list[int]],
+                             table: list[tuple[int, int, int, str]] | None = None) -> set[int]:
+    """Issue #255: the groups of ``live`` that belong to a Runner worker this
+    agent started. A worker counts only by its exact spawn-record identity
+    (only a Runner `start` writes that record; pid, pgid and spawn time must
+    still hold); its whole process tree is kept, never only the holder."""
+    table = table if table is not None else process_table()
+    found: set[int] = set()
+    for entry, _ in live_spawn_entries(path, table):
+        found |= worker_tree_groups(entry["pid"], entry["pgid"], table)
+    return found & set(live)
 
 
 def live_child_groups(groups: dict[int, dict[int, str]]) -> dict[int, list[int]]:
@@ -2137,11 +2189,19 @@ class Holder:
         self.events.append({"kind": "turn_ended", "outcome": outcome,
                             "stop_reason": turn.get("stop_reason"),
                             "prompt_fingerprint": turn.get("fingerprint")})
-        if outcome in ("turn_completed", "turn_failed") and not self.agent.exited.is_set():
+        sideagent = self.session_role in SIDEAGENT_ROLES
+        if ((outcome in ("turn_completed", "turn_failed") or (sideagent and outcome == "turn_canceled"))
+                and not self.agent.exited.is_set()):
             # One business idle episode per ended turn with the agent alive;
             # the 600s idle_watcher stays a non-business exit timer.
+            # Issue #255: a Sideagent's turn end (cancelled too) names its
+            # holder, the turn and its outcome, so the Host holder settles
+            # only the relay that turn carried, and only when it completed.
+            extra = ({"holder_instance_id": self.holder_instance_id,
+                      "turn_fingerprint": turn.get("fingerprint"), "turn_outcome": outcome}
+                     if sideagent else None)
             self._notify_heartbeat_host_now(
-                "idle", f"outcome={outcome} stop_reason={turn.get('stop_reason')}")
+                "idle", f"outcome={outcome} stop_reason={turn.get('stop_reason')}", extra)
         self.last_prompt = {
             "fingerprint": turn["fingerprint"],
             "written_at": turn["written_at"],
@@ -2833,6 +2893,7 @@ class Holder:
                 or record.get("repo") != self.args.repo or record.get("state") != "ready"
                 or not isinstance(holder, str) or not holder
                 or (binding.get("holder_instance_id") and binding["holder_instance_id"] != holder)
+                or "sideagent-relay/1" not in (record.get("holder_features") or [])
                 or not isinstance(record.get("holder_pid"), int)
                 or not process_alive(record["holder_pid"])):
             return None
@@ -2864,7 +2925,7 @@ class Holder:
         try:
             connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             try:
-                connection.settimeout(HEARTBEAT_NOTIFY_TIMEOUT)
+                connection.settimeout(RELAY_SEND_TIMEOUT)
                 connection.connect(target["socket"])
                 connection.sendall(canonical(
                     {"op": "prompt", "request_id": secrets.token_hex(8),
@@ -2898,10 +2959,14 @@ class Holder:
         """Route routine worker events to the bound Sideagent, at least once.
 
         Caller holds ``worker_events_lock``. Events from other sessions go to
-        the Sideagent; the Sideagent's own events stay with the Host. Its own
-        turn end confirms what it was relayed, and wakes the Host only when the
-        Host view's attention changed since the Host last saw it. Without a
-        provable live binding every event goes to the Host as before.
+        the Sideagent; the Sideagent's own events stay with the Host. A relay
+        is confirmed only by the end of the very turn that carried it: an idle
+        event naming the same Sideagent holder and that turn's prompt
+        fingerprint. Any other idle confirms nothing. A relay to a holder that
+        is no longer the bound one moves to the current binding at once, so a
+        direct replacement strands nothing. The Host is woken only when its
+        view's attention changed since it last saw it. Without a provable live
+        binding every event goes to the Host as before.
         """
         if not self.pending_worker_events:
             return {}
@@ -2910,27 +2975,61 @@ class Holder:
             for item in self.pending_worker_events:
                 item.pop("relayed", None)
             return {}
+        ended = {(item.get("holder_instance_id"), item.get("turn_fingerprint")): item.get("turn_outcome")
+                 for item in self.pending_worker_events
+                 if item.get("kind") == "idle" and item.get("holder_instance_id")
+                 and item.get("turn_fingerprint")}
+
+        def turn_of(item: dict[str, Any]) -> tuple[Any, Any]:
+            mark = item.get("relayed") or {}
+            return mark.get("holder"), mark.get("fingerprint")
+
+        self._confirm_events([item for item in self.pending_worker_events
+                              if ended.get(turn_of(item), "") == "turn_completed"], "sideagent-relay")
+        returned = [item for item in self.pending_worker_events
+                    if turn_of(item) in ended and ended[turn_of(item)] != "turn_completed"]
+        if returned:
+            # A failed or cancelled maintenance turn did not do the duty: the
+            # Host takes these events back instead of losing them.
+            self.events.append({"kind": "worker_event_relay_returned",
+                                "event_ids": [item["event_id"] for item in returned],
+                                "outcomes": sorted({str(ended[turn_of(item)]) for item in returned})})
+            for item in returned:
+                item.pop("relayed", None)
+                item["host_owned"] = True
+        moved = [item for item in self.pending_worker_events
+                 if (item.get("relayed") or {}).get("holder") not in (None, target["holder_instance_id"])]
+        if moved:
+            self.events.append({"kind": "worker_event_relay_transferred",
+                                "event_ids": [item["event_id"] for item in moved],
+                                "from_holders": sorted({item["relayed"]["holder"] for item in moved}),
+                                "to_holder": target["holder_instance_id"],
+                                "target_session": target["session"]})
+            for item in moved:
+                item.pop("relayed", None)
         own = [item for item in self.pending_worker_events if item.get("session") == target["session"]]
-        if any(item.get("kind") == "idle" for item in own):
-            self._confirm_events([item for item in self.pending_worker_events
-                                  if (item.get("relayed") or {}).get("holder")
-                                  == target["holder_instance_id"]], "sideagent-relay")
-            if target["attention"] is not None and target["attention"] == self.host_attention_seen:
-                self._confirm_events([item for item in own if item.get("kind") == "idle"
-                                      and "prompt_fingerprint" not in item], "sideagent-quiet")
+        if (any(item.get("kind") == "idle" for item in own)
+                and target["attention"] is not None and target["attention"] == self.host_attention_seen):
+            # Only a completed maintenance turn is quiet; a failed or
+            # cancelled one reaches the Host.
+            self._confirm_events([item for item in own if item.get("kind") == "idle"
+                                  and item.get("turn_outcome") == "turn_completed"
+                                  and "prompt_fingerprint" not in item], "sideagent-quiet")
         waiting = [item for item in self.pending_worker_events
                    if item.get("session") != target["session"] and "relayed" not in item
-                   and "prompt_fingerprint" not in item]
+                   and "prompt_fingerprint" not in item and not item.get("host_owned")]
         result: dict[str, Any] = {"live": True, "session": target["session"]}
         if not waiting:
             return result
         receipt = self._relay_send(target, self._relay_prompt(waiting))
         error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
-        if error is None and receipt.get("outcome") == "in_progress":
+        if (error is None and receipt.get("outcome") == "in_progress"
+                and isinstance(receipt.get("prompt_fingerprint"), str)):
             for item in waiting:
                 item["relayed"] = {"holder": target["holder_instance_id"],
                                    "fingerprint": receipt.get("prompt_fingerprint")}
             self.events.append({"kind": "worker_event_relayed", "target_session": target["session"],
+                                "target_holder": target["holder_instance_id"],
                                 "event_ids": [item["event_id"] for item in waiting],
                                 "prompt_fingerprint": receipt.get("prompt_fingerprint")})
             result["receipt"] = {"relayed": len(waiting), "target_session": target["session"]}
@@ -2967,7 +3066,8 @@ class Holder:
             relay = self._relay_pass()
             staged = [item for item in self.pending_worker_events
                       if "prompt_fingerprint" not in item and "relayed" not in item
-                      and not (relay.get("live") and item.get("session") != relay.get("session"))]
+                      and (item.get("host_owned") or not (
+                          relay.get("live") and item.get("session") != relay.get("session")))]
             overflow_ready = (
                 self.overflow_generation > self.overflow_confirmed_generation
                 and self.overflow_inflight_generation is None)
@@ -3140,6 +3240,9 @@ class Holder:
                  "staged_at": round(time.time(), 3)}
         if request_id is not None:
             event["request_id"] = request_id
+        for key in ("holder_instance_id", "turn_fingerprint", "turn_outcome"):
+            if isinstance(params.get(key), str) and params[key]:
+                event[key] = params[key]
         with self.worker_events_lock:
             if self._was_worker_event_confirmed(event["event_id"]):
                 # Issue #90: a completed Host turn already confirmed this exact
@@ -4230,8 +4333,9 @@ class Holder:
         if self.session_role in SIDEAGENT_ROLES:
             # Issue #255: a Sideagent's dispatched workers are their own Runner
             # sessions with their own exact stop; replacing the Sideagent must
-            # not end them. Only its other leftovers are swept.
-            spared = runner_holder_groups(self.record_dir / CHILD_RECORD_NAME, live)
+            # not end them (holder, native agent, or its tools). Only its other
+            # leftovers are swept.
+            spared = dispatched_worker_groups(self.record_dir / CHILD_RECORD_NAME, live)
             self.spared_child_pgids = sorted(spared)
             live = {pgid: members for pgid, members in live.items() if pgid not in spared}
         self.swept_child_pgids = sorted(live)
@@ -4327,6 +4431,43 @@ class Holder:
         self.write_record()
         return {"recorded": True}
 
+    def op_rebind_heartbeat_host(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Issue #255: move this seat's carrier to a replacement Host in place.
+
+        The CLI already proved the new target is the live Host holder of the
+        same repo. The agent, its native session, and this holder instance
+        stay; only where events go changes, and held wakes follow on the next
+        watchdog tick. A seat started with no carrier stays without one.
+        """
+        expected = params.get("expected_holder_instance_id")
+        if expected is not None and expected != self.holder_instance_id:
+            with self.lock:
+                return self._holder_instance_mismatch("rebind_heartbeat_host", expected)
+        target = params.get("target")
+        if (not isinstance(target, dict)
+                or not all(isinstance(target.get(key), str) and target[key]
+                           for key in ("platform", "session", "repo", "socket"))
+                or not os.path.isabs(target["socket"])):
+            return {"error": {"code": "invalid-heartbeat-host"}}
+        previous = self.heartbeat_host
+        if previous is None:
+            return {"error": {"code": "no-heartbeat-host",
+                              "message": "this seat was started with no Host carrier"}}
+        if target["repo"] != previous["repo"]:
+            return {"error": {"code": "heartbeat-host-foreign-repo",
+                              "message": f"{target['repo']} is not {previous['repo']}"}}
+        new = {key: target[key] for key in ("platform", "session", "repo", "socket")}
+        with self.heartbeat_notify_lock:
+            self.heartbeat_host = new
+        self.events.append({"kind": "heartbeat_host_rebound",
+                            "previous": {key: previous[key]
+                                         for key in ("platform", "session", "repo")},
+                            "target": {key: new[key] for key in ("platform", "session", "repo")},
+                            "host_holder_instance_id": params.get("host_holder_instance_id")})
+        self.write_record()
+        return {"rebound": True, "previous_heartbeat_host": previous,
+                "heartbeat_host": new, "holder_instance_id": self.holder_instance_id}
+
     # -- socket server ------------------------------------------------------------
 
     def handle_request(self, message: dict[str, Any]) -> dict[str, Any]:
@@ -4356,6 +4497,8 @@ class Holder:
             return self.op_set_config_option(params)
         if op == "record_start_evidence":
             return self.op_record_start_evidence(params)
+        if op == "rebind_heartbeat_host":
+            return self.op_rebind_heartbeat_host(params)
         if op == "stop":
             return self.op_stop(params)
         return {"error": {"code": "unknown-op", "message": f"unsupported op {op}"}}

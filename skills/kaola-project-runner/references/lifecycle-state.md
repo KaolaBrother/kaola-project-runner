@@ -44,7 +44,9 @@ pending decisions; technical evidence stays reachable by reference.
   rewrite the file. `--coalesce` counts a repeated alert.
 - `$S update --section project|authorization|sideagent|recovery|unverified
   --expect-revision N --set PATCH`: the first three are Host-only.
-- `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]`.
+- `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
+  [--index I --live L]`: a task needs verdict `accepted` or `cancelled`, and
+  its dispatch items closed and stopped in `--index`/`--live`.
 - `$S view --role host|sideagent|delegator [--repo ROOT]` (read-only).
 - `$S check [--index I] [--live L] [--repo R]`: read-only problems such as
   `doing-untraced`, `done-not-retired`, `transcription-unechoed`,
@@ -87,7 +89,9 @@ fields (`goal`, `scope`, `acceptance`, `needs`, `depends`, `source`,
 `--host-turn <the Host turn it copies>`; the next Host view lists it under
 `attention` until the Host writes that task. The Host corrects a wrong
 transcription with its own `update`, which is also the bootstrap and degraded
-path. Partial acceptance keeps the unfinished scope open.
+path. Partial acceptance keeps the unfinished scope open; moving a `repair` or
+`partial` task back to `review` keeps that verdict as `prior_verdict` and asks
+again. A Sideagent settles a decision only with `--host-turn` and evidence.
 
 ## Sideagent binding
 
@@ -108,10 +112,12 @@ recovers the Host first.
 notify target. Workers the bound Sideagent starts report to its live Host
 holder (`sideagent-host`). A Host holder advertising `sideagent-relay/1` relays
 them to the live bound Sideagent, which confirms at turn end and wakes the
-Host only when attention changed; a busy Sideagent keeps them, a dead one
-falls back to the Host. Delivery is at-least-once and only a wake hint:
-rebuild from index and receipts. A notify-target change never restarts a
-healthy worker.
+Host only when attention changed; a busy Sideagent keeps them; a dead one, or
+a failed or cancelled Sideagent turn, returns them to the Host. Delivery is
+at-least-once and only a wake hint: rebuild from index and receipts. After a
+Host replacement, the new Host runs the seat's Runner `rebind-host` from its
+own session: the carrier moves in place; the worker runs on. An `unknown-op`
+holder predates it: `drain-restart` at idle.
 
 ## Size
 
@@ -126,17 +132,18 @@ and migration recorded it as `carrier`, else 64 KiB (`carrier-limit`).
 
 At the first load of an updated Skill, at a safe point, run `$S migrate` with
 `--index` and `--live`; without `--write` it is a read-only plan. With
-`--write`, v1 `active` becomes `doing` tasks keyed by `ref`, `pending` becomes
-closeout/review duties, `recovery` is kept, unknown keys and unassociated
-index rows become `unverified`, one live Sideagent row becomes the binding,
-and the live Host holder's features become `carrier`. The raw v1 file is kept
-once as `heartbeat-prompt.v1-<sha12>.json`; a conflicting raw copy or an
-unreadable file is left untouched. A repeat reports `current`; after a Host
-holder upgrade, `migrate --write --live` records the carrier. Migration resets
+`--write`, each v1 `active` row becomes a `doing` task with its assignment
+and fields kept, `pending` keeps its stated stage or stays `todo`, `recovery`
+and the v1 host are kept, and unknown keys, unassociated index rows and an
+unproven Sideagent binding become `unverified`. The live Host holder's
+features become `carrier`. The raw v1 file is kept once as
+`heartbeat-prompt.v1-<sha12>.json`; a different copy alerts
+`state-overwritten`. An unknown schema is refused. A repeat reports
+`current`; after a Host holder upgrade, `migrate --write --live` records the carrier. Migration resets
 no task, replays no dispatch, re-plans nothing, re-asks no confirmed user
 requirement and restarts no healthy session. Unknown or conflicting items
 stay `unverified`, never a new grant.
 
-Unproven until live runs: per-platform process preservation, cross-platform
-carrier re-anchor, relay across holder death, native timer read-back and
+Unproven until live runs: per-platform process preservation, re-anchor across
+real platforms, relay across holder death, native timer read-back and
 real-project state size.

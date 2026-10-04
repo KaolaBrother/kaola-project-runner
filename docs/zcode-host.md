@@ -193,8 +193,14 @@ worker agent terminated / worker turn ended (one idle episode)
   separately in `heartbeat_host_requested`. A live holder's binding is fixed at
   its start: a later environment change, a `send`, or a repeat `start` (which
   returns `session-exists` together with the binding in force) cannot alter it,
-  and there is no rebind operation — recovery is the existing exact
-  `stop`/`start` at a safe idle point. `drain-restart` is that recovery as one
+  and there is no rebind operation for those — recovery from a missed or wrong
+  binding is the existing exact `stop`/`start` at a safe idle point. One scoped
+  exception (Issue #255): after a Host replacement, `rebind-host` run from
+  inside the live replacement Host moves an existing seat's carrier to that
+  Host in place. It refuses any caller that is not the live Host holder named
+  by its own `KAOLA_ACP_DISPATCHER`, a seat with no carrier, and another repo;
+  the seat's holder, agent process, and native session are unchanged, and held
+  permission wakes go to the new Host on the next tick. `drain-restart` is that recovery as one
   command: it refuses `drain-not-idle` at once when the seat is busy (nothing
   is stopped, and the caller owns the retry), otherwise one exact-stop of the
   idle holder (`require_idle`), proves the old process is gone, then

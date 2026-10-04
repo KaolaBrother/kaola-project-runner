@@ -1942,14 +1942,76 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None,
         delta = spawned_at / 1000.0 - started
         if -SPAWN_RECORD_SLACK <= delta <= SPAWN_RECORD_TOLERANCE:
             groups.append(child)
-    # Only this script's `start` appends to the spawn record, so each entry
-    # is a Runner holder the agent started.
-    holder_groups = {entry.get("pgid") for entry in spawned}
-    if record.get("session_role") in ("sideagent", "sidekick") and holder_groups:
+    if record.get("session_role") in ("sideagent", "sidekick") and spawned:
         # Issue #255: workers a Sideagent dispatched keep running when it is
-        # replaced; each has its own exact stop.
-        groups = [group for group in groups if group not in holder_groups]
+        # replaced; each has its own exact stop. Only this script's `start`
+        # appends to the spawn record, so a verified entry is a Runner holder
+        # this agent started, and its whole process tree is kept.
+        kept = dispatched_worker_groups(spawned)
+        groups = [group for group in groups if group not in kept]
     return groups
+
+
+def dispatched_worker_groups(spawned: list[dict[str, Any]]) -> set[int]:
+    """Issue #255: every process group of each Runner worker in ``spawned``
+    whose spawn identity (pid, pgid, spawn time) still holds: the holder's
+    group, each group a live descendant runs in (the native agent leads its
+    own session, its tools may too), and the agent and child groups that
+    worker's own record attests while a recorded member identity holds."""
+    rows: list[tuple[int, int, int, str]] = []
+    for line in run_ps(["pid", "ppid", "pgid", "state", "lstart"], env=PS_ENV).stdout.splitlines():
+        fields = line.split(None, 4)
+        if (len(fields) == 5 and all(field.isdigit() for field in fields[:3])
+                and not fields[3].upper().startswith("Z")):
+            rows.append((int(fields[0]), int(fields[1]), int(fields[2]), fields[4].strip()))
+    by_pid = {pid: (pgid, started) for pid, _, pgid, started in rows}
+    children: dict[int, list[tuple[int, int]]] = {}
+    for pid, ppid, pgid, _ in rows:
+        children.setdefault(ppid, []).append((pid, pgid))
+
+    def epoch(text: str) -> float | None:
+        try:
+            return time.mktime(time.strptime(text, "%a %b %d %H:%M:%S %Y"))
+        except ValueError:
+            return None
+
+    kept: set[int] = set()
+    for entry in spawned:
+        pid, pgid, spawned_at = entry.get("pid"), entry.get("pgid"), entry.get("spawned_at")
+        if not (isinstance(pid, int) and isinstance(pgid, int) and isinstance(spawned_at, (int, float))):
+            continue
+        live = by_pid.get(pid)
+        started = epoch(live[1]) if live and live[0] == pgid else None
+        if started is None or not -SPAWN_RECORD_SLACK <= spawned_at / 1000.0 - started <= SPAWN_RECORD_TOLERANCE:
+            continue
+        kept.add(pgid)
+        stack, seen = [pid], {pid}
+        while stack:
+            for child, group in children.get(stack.pop(), []):
+                if child not in seen:
+                    seen.add(child)
+                    stack.append(child)
+                    kept.add(group)
+        paths = holder_argv_paths(pid)
+        try:
+            worker = json.loads((Path(paths[0]) / "record.json").read_text(encoding="utf-8")) if paths else None
+        except (OSError, ValueError):
+            worker = None
+        if not isinstance(worker, dict) or worker.get("holder_pid") != pid:
+            continue
+        agent_pgid, agent_started = worker.get("agent_pgid"), worker.get("agent_started")
+        leader = by_pid.get(agent_pgid) if isinstance(agent_pgid, int) else None
+        if (leader is not None and leader[0] == agent_pgid
+                and isinstance(agent_started, (int, float)) and not isinstance(agent_started, bool)):
+            leader_started = epoch(leader[1])
+            if leader_started is not None and abs(leader_started - agent_started) <= SPAWN_RECORD_SLACK:
+                kept.add(agent_pgid)
+        for child, members in (worker.get("agent_child_groups") or {}).items():
+            if str(child).isdigit() and any(
+                    str(member).isdigit() and by_pid.get(int(member)) == (int(child), started_text)
+                    for member, started_text in (members or {}).items()):
+                kept.add(int(child))
+    return kept
 
 
 def live_group_members(groups: list[int]) -> list[int]:
@@ -2784,7 +2846,8 @@ def sideagent_host_anchor(args: argparse.Namespace, repo: str, dispatcher: dict[
     bound = record.get("heartbeat_host")
     if not isinstance(bound, dict) or not all(isinstance(bound.get(key), str) and bound[key]
                                               for key in ("platform", "session", "repo")):
-        return None, "the dispatching Sideagent is bound to no Host"
+        # An unbound Sideagent dispatches like any other session.
+        return None
     if not host_capable(bound["platform"]):
         return None, f"the Sideagent's Host platform {bound['platform']} has no measured Host entry"
     target = validate_heartbeat_target(
@@ -2799,6 +2862,51 @@ def sideagent_host_anchor(args: argparse.Namespace, repo: str, dispatcher: dict[
     if not Path(target["socket"]).exists():
         return None, f"the Sideagent's Host admin socket is missing at {target['socket']}"
     return target, None
+
+
+def command_rebind_host(args: argparse.Namespace, repo: str, directory: Path) -> dict[str, Any]:
+    """Issue #255: a replacement Host takes an existing seat's carrier in place.
+
+    Run from inside the live Host session: the target is that Host itself,
+    proven by the same checks a dispatched start uses, so a Host can only
+    re-anchor a seat to itself. The seat's agent and holder are unchanged."""
+    def refused(detail: str) -> dict[str, Any]:
+        receipt = base_receipt(args, repo)
+        receipt.pop("git", None)
+        receipt.update({"result": "refused", "reason": "rebind-host-unresolved",
+                        "action": "rebind-host", "detail": detail,
+                        "mutation_performed": False, "mutation_status": "not_started"})
+        return receipt
+
+    dispatcher, problem = dispatcher_identity()
+    if problem:
+        return refused(problem)
+    if dispatcher is None:
+        return refused(f"run rebind-host inside the Host session; {DISPATCHER_ENV} is not set")
+    if not host_capable(dispatcher.get("platform")):
+        return refused(f"{dispatcher.get('platform')} has no measured Host entry")
+    problem = repo_problem(dispatcher["repo"])
+    if problem:
+        return refused(f"dispatcher repo {dispatcher['repo']} {problem}")
+    target = validate_heartbeat_target(
+        {key: dispatcher[key] for key in ("platform", "session", "repo")}, args, repo, DISPATCHER_ENV)
+    digest = hashlib.sha256(target["repo"].encode("utf-8")).hexdigest()[:16]
+    host = read_record(record_root(args) / target["platform"] / target["session"] / digest) or {}
+    role = host.get("session_role")
+    if role is None and host_session(target["platform"], host.get("session")):
+        role = "host"
+    if role != "host":
+        return refused(f"{target['session']} is a {role or 'worker'} session, not a Host")
+    failed = verify_dispatcher_host_live(args, dispatcher, target)
+    if failed:
+        return refused(failed)
+    params: dict[str, Any] = {"target": target,
+                              "host_holder_instance_id": dispatcher["holder_instance_id"]}
+    if args.expected_holder_instance_id is not None:
+        params["expected_holder_instance_id"] = args.expected_holder_instance_id
+    receipt = op_or_holder_lost(args, repo, directory, "rebind_heartbeat_host", params, 10.0)
+    receipt["action"] = "rebind-host"
+    return receipt
 
 
 def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any]:
@@ -4914,7 +5022,7 @@ def main() -> int:
     parser.add_argument("command", choices=[
         "preflight", "start", "send", "steer", "wait", "observe", "capture",
         "permit", "key", "answer", "cancel", "stop", "status", "view",
-        "follow", "drain-restart",
+        "follow", "drain-restart", "rebind-host",
     ])
     parser.add_argument("--repo", required=True)
     parser.add_argument("--session")
@@ -4995,6 +5103,10 @@ def main() -> int:
         return 1 if receipt.get("result") == "refused" else 0
     if args.command == "drain-restart":
         receipt = command_drain_restart(args, repo)
+        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        return 1 if receipt.get("result") == "refused" else 0
+    if args.command == "rebind-host":
+        receipt = command_rebind_host(args, repo, directory)
         print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
         return 1 if receipt.get("result") == "refused" else 0
     if args.command == "view":
