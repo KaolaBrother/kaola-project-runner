@@ -109,7 +109,7 @@ New items call `status`, `start` only for absent (`no-session`), then
 is absent is `not-run`, not started. Duplicate session names are
 `not-run`. Admission is `in-flight` / `admitted`, `acceptance: pending`, not
 a result. Timeout or an unreadable receipt is `unknown`, not `failed`. Send-time holder mismatch or unknown mutation/outcome stays unknown
-even at exit 0. Index updates per item; hashes are `sha256:` hex.
+even at exit 0. Index updates per item, locked and merged by field; hashes are `sha256:` hex.
 
 Applied selection uses `config_application` (also nested `start_evidence`),
 never `resolved_*`. Explicit `applied: false` or `model_verified: false` does

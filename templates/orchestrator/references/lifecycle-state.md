@@ -115,7 +115,7 @@ them to the live bound Sideagent, which confirms at turn end and wakes the Host
 only when attention changed; a busy Sideagent keeps them; a dead one, or a
 failed or cancelled Sideagent turn, returns them to the Host. Delivery is
 at-least-once, a wake hint: rebuild from index and receipts. `"mode": "node"`
-runs a fresh node per batch instead ([sideagent-node.md](sideagent-node.md)).
+keeps events with the Host; a node takes a turn's Host changes ([sideagent-node.md](sideagent-node.md)).
 After a Host replacement (`--preserve-dispatched-workers`), the new Host runs
 the seat's `rebind-host` from its own session: only that seat's carrier moves;
 the worker runs on, its `dispatcher` still the old Host. Each seat (Sideagent
@@ -145,5 +145,5 @@ and still records an upgraded carrier. Migration resets no task, replays no
 dispatch, re-plans nothing, re-asks no confirmed requirement, restarts no
 healthy session, grants nothing.
 
-Unproven until live runs: per-platform process preservation, re-anchor across
-platforms, relay across holder death, native timer read-back, state size.
+Live on Codex and ZCode only: preserve stop, `rebind-host`. Unproven: relay
+across holder death, timer read-back, real state size.

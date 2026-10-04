@@ -1386,6 +1386,8 @@ def command_execute(args: argparse.Namespace) -> int:
     dispatcher = caller_dispatcher()
     if dispatcher is not None:
         index["dispatcher"] = dispatcher
+    base = ({"items": json.loads(json.dumps(prior.get("items") or []))}
+            if prior is not None and prior_path == args.index else None)
 
     def publish() -> None:
         ordered = []
@@ -1416,7 +1418,7 @@ def command_execute(args: argparse.Namespace) -> int:
                         chosen["reason"] = prior["reason"]
             ordered.append(dispatch_links(chosen, item, seat_marks.get(item_id)))
         index["items"] = ordered
-        finish_index(index, args.index, emit_stdout=False, write=not args.dry_run)
+        finish_index(index, args.index, emit_stdout=False, write=not args.dry_run, base=base)
 
     publish()
     if ready:
@@ -1444,7 +1446,7 @@ def command_execute(args: argparse.Namespace) -> int:
                     f"task {row['task_id']} is not a current task in {args.state}")
         if not args.dry_run:
             index["task_links"] = link_dispatch_to_tasks(Path(args.state), index, args.index)
-    return finish_index(index, args.index, write=not args.dry_run)
+    return finish_index(index, args.index, write=not args.dry_run, base=base)
 
 
 def assemble_prompts(plan: dict[str, Any], items: list[Any]) -> None:
@@ -2106,14 +2108,97 @@ def coverage(items: list[dict[str, Any]]) -> dict[str, list[str]]:
     return grouped
 
 
+class IndexLock:
+    """Exclusive lock on an existing dispatch index for one read-modify-write,
+    across threads and processes. The index is replaced by rename, so the
+    lock counts only once it is held on the file the path still names."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.fd: int | None = None
+
+    def __enter__(self) -> "IndexLock":
+        INDEX_LOCK.acquire()
+        try:
+            while True:
+                try:
+                    fd = os.open(self.path, os.O_RDONLY)
+                except FileNotFoundError:
+                    return self
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                try:
+                    current = os.stat(self.path).st_ino == os.fstat(fd).st_ino
+                except FileNotFoundError:
+                    current = False
+                if current:
+                    self.fd = fd
+                    return self
+                os.close(fd)
+        except BaseException:
+            INDEX_LOCK.release()
+            raise
+
+    def __exit__(self, *exc: Any) -> None:
+        if self.fd is not None:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
+            os.close(self.fd)
+        INDEX_LOCK.release()
+
+
+_ABSENT = object()
+
+
+def merge_index_rows(disk: list[Any], base: list[Any], mine: list[Any]) -> list[Any]:
+    """Three-way merge by item and field: a field this writer changed since
+    it read ``base`` is its own; every other field keeps what another writer
+    put on disk meanwhile (a Host disposition mirrored during a collect),
+    and a row another writer added stays."""
+    def rows(items: list[Any]) -> dict[str, dict[str, Any]]:
+        return {row["item_id"]: row for row in items
+                if isinstance(row, dict) and isinstance(row.get("item_id"), str)}
+    on_disk, before = rows(disk), rows(base)
+    merged: list[Any] = []
+    seen: set[Any] = set()
+    for row in mine:
+        ident = row.get("item_id") if isinstance(row, dict) else None
+        seen.add(ident)
+        theirs, prior = on_disk.get(ident), before.get(ident)
+        if theirs is None or prior is None or theirs == prior:
+            merged.append(row)
+            continue
+        out = dict(theirs)
+        for key in set(row) | set(prior):
+            if row.get(key, _ABSENT) != prior.get(key, _ABSENT):
+                if key in row:
+                    out[key] = row[key]
+                else:
+                    out.pop(key, None)
+        merged.append(out)
+    merged.extend(row for ident, row in on_disk.items() if ident not in seen and ident not in before)
+    return merged
+
+
 def finish_index(index: dict[str, Any], path: str | None, emit_stdout: bool = True,
-                 write: bool = True) -> int:
+                 write: bool = True, base: dict[str, Any] | None = None) -> int:
+    """Write the index. With ``base`` (this writer's rows as it read them,
+    then as it last meant them), rows are merged with what is on disk and
+    ``base`` takes this write's own rows for the next write."""
     index["coverage"] = coverage(index["items"])
     payload = index
     if path and write:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        with INDEX_LOCK:
+        with IndexLock(target):
+            if base is not None:
+                intent = json.loads(json.dumps(index["items"]))
+                try:
+                    disk = load_object(target) if target.exists() else None
+                except ValueError:
+                    disk = None
+                if isinstance(disk, dict) and isinstance(disk.get("items"), list):
+                    index["items"] = merge_index_rows(disk["items"], base.get("items") or [], index["items"])
+                    index["coverage"] = coverage(index["items"])
+                base["items"] = intent
             atomic_write(target, json.dumps(index, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
         payload = dict(index)
         payload["index_path"] = str(target)
@@ -2167,16 +2252,52 @@ def result_text(receipt: dict[str, Any] | None) -> str | None:
     return "\n".join(parts)
 
 
-def output_facts(output: Any, repo: str) -> dict[str, Any] | None:
-    """A declared output's locator and, for a local path, whether it exists.
-    Absence is a gap for the Host to judge, never a transport failure."""
+OUTPUT_KINDS = ("file", "capture", "remote", "description")
+
+
+def output_kind(output: Any) -> str:
+    """What a declared output names: a local file (checked), the reply
+    capture itself, a remote locator, or a description of the deliverable.
+    An explicit `kind` wins; a bare string is a file only when it reads as
+    a path, so a sentence describing the reply is never reported absent."""
+    if isinstance(output, dict):
+        if output.get("kind") in OUTPUT_KINDS:
+            return output["kind"]
+        path = output.get("path")
+        if isinstance(path, str) and path.strip():
+            return "remote" if "://" in path else "file"
+        output = output.get("locator")
+    if not isinstance(output, str) or not output.strip():
+        return "description"
+    text = output.strip()
+    if "://" in text:
+        return "remote"
+    if text.lower() in ("capture", "reply"):
+        return "capture"
+    if (text.startswith(("/", "~/")) or text.split("/", 1)[0] in (".", "..")
+            or not any(char.isspace() for char in text)):
+        return "file"
+    return "description"
+
+
+def output_facts(output: Any, repo: str, reply_present: bool | None = None) -> dict[str, Any] | None:
+    """A declared output's kind and locator; a local file is checked for
+    existence, the capture kind by the reply text. Absence is a gap for the
+    Host to judge, never a transport failure."""
     if output is None:
         return None
-    path = output.get("path") if isinstance(output, dict) else output if isinstance(output, str) else None
-    if not isinstance(path, str) or not path or "://" in path:
-        return {"declared": output, "checked": False}
+    kind = output_kind(output)
+    if kind == "capture":
+        return {"declared": output, "kind": kind, "checked": reply_present is not None,
+                **({"present": reply_present} if reply_present is not None else {})}
+    if kind != "file":
+        return {"declared": output, "kind": kind, "checked": False}
+    path = output.get("path") if isinstance(output, dict) else output
+    if not isinstance(path, str) or not path.strip():
+        return {"declared": output, "kind": kind, "checked": False}
+    path = os.path.expanduser(path.strip())
     target = Path(path) if Path(path).is_absolute() else Path(repo) / path
-    return {"declared": output, "path": str(target), "checked": True, "present": target.exists()}
+    return {"declared": output, "kind": kind, "path": str(target), "checked": True, "present": target.exists()}
 
 
 def turn_facts(receipt: dict[str, Any]) -> tuple[Any, Any, Any]:
@@ -2280,8 +2401,8 @@ def collect_one(item: dict[str, Any], repo: str, skills_root: Path) -> dict[str,
         gaps.append("reply-text-absent")
     if isinstance(capture, dict) and capture.get("truncated"):
         gaps.append("capture-truncated")
-    output = output_facts(item.get("output"), repo)
-    if output and output.get("present") is False:
+    output = output_facts(item.get("output"), repo, reply_present=text is not None)
+    if output and output.get("kind") == "file" and output.get("present") is False:
         gaps.append("output-absent")
     # A new return is a new candidate: any earlier disposition answered the
     # earlier result only.
@@ -2326,17 +2447,17 @@ def command_collect(args: argparse.Namespace) -> int:
     skills_root = Path(args.skills_root)
     pending = [item for item in index["items"] if isinstance(item, dict) and item.get("status") == "in-flight"]
     updated: dict[str, dict[str, Any]] = {}
+    own = list(index["items"])
+    base = {"items": json.loads(json.dumps(own))}
+
+    def rows() -> list[Any]:
+        return [updated[item["item_id"]] if isinstance(item, dict) and item.get("item_id") in updated else item
+                for item in own]
 
     def publish() -> None:
-        rows = []
-        for item in index["items"]:
-            if isinstance(item, dict) and item.get("item_id") in updated:
-                rows.append(updated[item["item_id"]])
-            else:
-                rows.append(item)
-        index["items"] = rows
+        index["items"] = rows()
         index["phase"] = "collection"
-        finish_index(index, args.index, emit_stdout=False)
+        finish_index(index, args.index, emit_stdout=False, base=base)
 
     if pending:
         with ThreadPoolExecutor(max_workers=len(pending)) as pool:
@@ -2353,9 +2474,9 @@ def command_collect(args: argparse.Namespace) -> int:
                     failed.update(status="unknown", reason="collection-error", detail=str(exc))
                     updated[item["item_id"]] = failed
                 publish()
-    else:
-        index["phase"] = "collection"
-    return finish_index(index, args.index)
+    index["items"] = rows()
+    index["phase"] = "collection"
+    return finish_index(index, args.index, base=base)
 
 
 def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: str) -> int:
@@ -3493,7 +3614,7 @@ def mirror_dispositions(args: argparse.Namespace, doc: dict[str, Any], path: Pat
 
 
 def mirror_task(args: argparse.Namespace, task: dict[str, Any], path: Path, index_path: str) -> dict[str, Any]:
-    with INDEX_LOCK:
+    with IndexLock(Path(index_path)):
         index = load_object(Path(index_path))
         refs = task.get("dispatch")
         refs = {refs} if isinstance(refs, str) else {ref for ref in refs or [] if isinstance(ref, str)}

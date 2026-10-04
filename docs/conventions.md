@@ -196,10 +196,18 @@ This is a release/update requirement. For the lifecycle state of
   (an older live holder refuses it with `preserve-unsupported` and stops nothing). Adopt both
   by `drain-restart` of the Host holder at idle; an older reader of the index ignores
   `prompt_source`, `acceptance_source` and the new `collect` result keys.
-- Not yet verified on a real project: per-platform process preservation, carrier re-anchor
-  across real platforms, relay across holder death, native timer read-back, real state size,
-  consecutive native Sideagent nodes on two runtimes, and process survival through a real
-  Host replacement with the preserve intent.
+- A continuing Sideagent started on a pre-#255 holder sweeps the child process groups it
+  tracked when it stops, so `stop` or `drain-restart` of it also ends any worker it started.
+  Retire it only once no such worker runs: list `kaola-acp.py list --repo` rows whose record
+  `dispatcher` names its holder (or whose holder descends from its agent), let each finish,
+  `collect` it and exact-stop it after the Host's disposition, then stop the Sideagent and bind
+  node mode or a successor under a new name. While such a worker must keep running, mark the
+  binding `replacing` (the Host view lists it) and leave the old Sideagent running, unsent,
+  until that worker ends. Never adopt its work by restarting it.
+- Shown live in isolated fixtures (#255): fresh nodes on Codex and ZCode; preserve stop,
+  `rebind-host` and worker survival with Codex and ZCode Hosts. Not yet verified on a real
+  project: the other platforms, relay across holder death, candidate native timer read-back,
+  real state size and migration of a real project.
 
 ### Release labels and running seats
 

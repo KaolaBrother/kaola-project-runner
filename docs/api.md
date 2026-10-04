@@ -487,9 +487,15 @@ is an item `evidence.task_note`). A `collect` result carries `excerpt` (480 char
 `excerpt_truncated`, `reply_chars`, `stop_reason`, `cursor`, `turn`
 (`holder_instance_id`, `prompt_fingerprint`), `locator` (platform, session, the Runner
 `capture` argv with `--since <dispatch cursor> --full --inline`, `event_log_path`), `output`
-(`path`, `present` for a local path; a URL is not checked) and `gaps` (`reply-text-absent`,
-`capture-truncated`, `output-absent`). A new return of an item whose acceptance was decided
-resets it to `pending` and keeps the earlier value as `prior_acceptance`.
+(`declared`, `kind`, `checked`; `kind` is `file` for a path-like string or `{"path": ...}`,
+with `path` and `present`; `capture` for the reply itself, `present` from the reply text;
+`remote` for a URL and `description` for text with spaces, neither checked; an explicit
+`{"kind": ...}` wins) and `gaps` (`reply-text-absent`, `capture-truncated`, and
+`output-absent` for an absent file only). A new return of an item whose acceptance was decided
+resets it to `pending` and keeps the earlier value as `prior_acceptance`. `execute`, `collect`
+and the `update --index` mirror write the index under one exclusive file lock, re-read it and
+merge by item and field: a field this writer changed since its own read is its own, every
+other field and every row another writer added stay as on disk.
 
 Plan items may carry `task_id`, `output`, and `requires` (`{"class": ..., "presets": [...]}`, a
 requirement the Host stated for that item). All three are copied onto the index row. An
@@ -540,7 +546,7 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `acceptance_note`. The mirror result is `index_mirror`; a mirror error does not fail the
   state write.
 - `checkpoint --writer sideagent --batch B --through-host-revision R --entries JSON
-  [--events JSON]` is written by a node-mode Sideagent (`sideagent.mode: "node"`) from inside
+  [--events JSON]` (`--events` is accepted for older carriers) is written by a node-mode Sideagent (`sideagent.mode: "node"`) from inside
   its own session. Each entry names an `input` (a Host change id `host:<kind>/<id>@<rev>`,
   `host:section/<name>@<rev>`, `host:retired/<kind>/<id>@<rev>`, or a worker event id) and
   either `applied` (current records or `retired:<kind>/<id>` this node's holder wrote) or
@@ -550,16 +556,26 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   open in the `maintenance-returned` alert, which receives each unsettled input once. A
   caller that is not the session's current node holder is `binding-superseded`; no caller
   identity is `node-identity-required`.
-- With node mode, a Host holder advertising `sideagent-node/1` starts one fresh node per batch
-  from `sideagent.recipe` (`runner`, an absolute file, and `argv` starting with `start`, or with the bound platform then `start` for the checkout
+- With node mode, worker events are not node inputs: they reach the Host at its next idle
+  boundary as without a binding. A Host holder advertising `sideagent-node/1` starts one fresh
+  node per batch of Host business changes past `handled_host_revision`, selected only while the
+  Host turn is not active (at a Host turn end or the idle tick), from `sideagent.recipe` (`runner`, an absolute file, and `argv` starting with `start`, or with the bound platform then `start` for the checkout
   `kaola-tmux.sh`, bound
   `--session` and `--repo`, `--role sideagent`, never `--continue`/`--resume`; an optional absolute `state_tool`), sends it
-  one batch prompt naming the exact `state checkpoint` command and state file, settles the batch from that node's checkpoint at its turn end, returns the
-  rest to the Host once, and exact-stops the node. A failed start starts no further node
-  until the binding changes. A stop is confirmed when the node's holder process is gone,
-  not by its `stopped` record; while it still runs (`sideagent_node_stop_unconfirmed`) the
-  Host keeps new events, and once it is gone (`sideagent_node_stop_confirmed_late`) the
-  next input starts a fresh node. A holder whose stop reply cannot be delivered still exits.
+  one batch prompt naming the Host revision range, the exact `state checkpoint` command and
+  state file, and the node's role limits (source pointers only, no restated result, no
+  dispatch, session control, task authoring or Host decision). At that node's turn end it
+  settles the batch from the node's checkpoint: verified, the node's turn end reaches the Host
+  once (`verified; Host attention changed`) only when the Host view's attention fingerprint
+  differs both from what the Host last saw and from the batch's start, and is quiet
+  otherwise; partial, missing, or a checkpoint `through` below the sent range reaches the Host
+  once naming the unhandled range, and that range is not sent again. A batch the node does not
+  admit, a failed start and a lost node are staged for the Host once as a `node` item naming
+  the unhandled range; the first two start no further node until the binding changes. The
+  carrier then exact-stops the node. A stop is confirmed when the node's holder process is
+  gone, not by its `stopped` record; while it still runs (`sideagent_node_stop_unconfirmed`)
+  no node starts, and once it is gone (`sideagent_node_stop_confirmed_late`) the next Host
+  change starts a fresh node. A holder whose stop reply cannot be delivered still exits.
   A node is the carrier's own session, not a dispatched worker: a Host `stop` in every mode
   (default, `--force`, `--preserve-dispatched-workers`) starts no new node, waits up to 8 s
   for a node start in flight, and exact-stops the running node, found by its record's

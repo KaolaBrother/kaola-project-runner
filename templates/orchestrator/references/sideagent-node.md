@@ -23,8 +23,10 @@ again. An exactly reconciled prior item stays reconciled.
 A `collect` result has `excerpt` (480 characters) with `excerpt_truncated`
 and `reply_chars`; `turn` (holder, prompt fingerprint); `locator` (the Runner
 `capture` argv `--since <dispatch cursor> --full --inline` and the event log);
-`output` (a local path is checked for presence, a URL is not); and `gaps`:
-`reply-text-absent`, `capture-truncated`, `output-absent`. A gap is evidence,
+`output` with its `kind`: `file` (a path, or `{"path": ...}`; checked for
+presence), `capture` (the reply itself), `remote` (a URL) or `description`
+(text with spaces); an explicit `{"kind": ...}` wins; and `gaps`:
+`reply-text-absent`, `capture-truncated`, `output-absent` (a file only). A gap is evidence,
 not a transport failure. Read the full reply through `locator` before a
 verdict. A new return resets `acceptance` to `pending` and keeps the earlier
 value as `prior_acceptance`.
@@ -52,18 +54,22 @@ Bind `--section sideagent` with `"mode": "node"` and
 "<root>", "--session", "<bound name>", "--role", "sideagent", ...]}` (the
 checkout `kaola-tmux.sh` takes the platform before `start`), without
 `--continue` or `--resume` (an optional absolute `state_tool` names
-`kaola-dispatch.py` when it is not beside the holder or in the sibling Skill). A Host holder advertising `sideagent-node/1` then
-starts one fresh node per batch from that argv (no shell), sends it one prompt
-with the batch id, its worker events and Host revision range, and reads the
-node's checkpoint at that node's turn end. A turn end alone acknowledges
-nothing. A refused recipe is logged once and the Host keeps the events.
+`kaola-dispatch.py` when it is not beside the holder or in the sibling Skill). Worker
+returns and terminations are not node inputs: they reach the Host at its next
+idle boundary as without a binding, and the Host reads the original. A Host
+holder advertising `sideagent-node/1` starts a node only for Host business
+changes past the handled revision, selected when the Host turn has ended, so
+one turn's writes are one batch. It starts one fresh node from that argv (no
+shell), sends one prompt with the batch id, the Host revision range and the
+node's role limits (source pointers only, no restated result, no dispatch or
+judgment, exact-stop only a Host-recorded reclaim), and reads the node's checkpoint at its turn end. A turn end alone
+acknowledges nothing. A refused recipe is logged once.
 
 The node writes once:
 
 ```bash
 $S checkpoint --writer sideagent --source B --batch B --through-host-revision R \
-  --entries '[{"input":"<id>","applied":["tasks/t1"]},{"input":"<id>","retained":"tasks/t2"}]' \
-  [--events '["<event id>", ...]']
+  --entries '[{"input":"<id>","applied":["tasks/t1"]},{"input":"<id>","retained":"tasks/t2"}]'
 ```
 
 `applied` names current records, or `retired:<kind>/<id>`, that this node's
@@ -74,14 +80,18 @@ input settled. `acked_host_revision` never passes an unsettled change; a later
 Host write stays pending. Unsettled inputs go to the Host once, in one
 `maintenance-returned` alert, and are never sent to another node.
 
-The carrier stays quiet after a verified batch and hands the rest to the Host
-once after a partial or missing one, then exact-stops the node by holder. A
-failed start starts no further node. After `sideagent_node_stop_unconfirmed`
-the Host keeps new events while that node's holder process still runs; once it
-is gone, the next input starts a fresh node. A Host stop in any mode also
-stops its own node, a start in flight included. A replaced node's late
-write is `binding-superseded`. There is no timer: the next eligible input
-starts the next node through the existing event and idle tick.
+After a verified batch the carrier wakes the Host once, at its next idle
+boundary, only when the Host view's attention differs both from what the Host
+last saw and from the batch's start; otherwise it stays quiet. A partial or
+missing checkpoint, one whose `through` is below the batch's range, a refused
+batch, a failed start or a lost node reaches the Host once with the unhandled
+range; the carrier then exact-stops the node by holder and starts no node for
+that range again. A failed start or refused batch starts no further node until
+the binding changes. After `sideagent_node_stop_unconfirmed` no node starts
+while that holder process still runs. A Host stop in any mode also stops its
+own node, a start in flight included. A replaced node's late write is
+`binding-superseded`. There is no timer: the next Host change starts the next
+node at a Host turn end or the existing idle tick.
 
 ## Host continuity stop
 
@@ -100,5 +110,6 @@ A worker's undelivered `idle` wake to its Host is kept like a permission wake
 and re-sent when the Host is reachable; a newer one replaces it and a stop
 drops it.
 
-Unproven until live runs: node mode across ZCode and another runtime, process
-survival through a real Host replacement, and the OpenCode permission path.
+Shown live: fresh nodes on Codex and ZCode, worker survival through a Host
+preserve stop and rebind on both, and a model-driven Host with a node binding.
+Not shown live: node mode on the other runtimes.

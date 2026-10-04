@@ -2043,6 +2043,73 @@ class ConsolidatedDispatch(StateProject):
         self.assertEqual((result["excerpt"], result["excerpt_truncated"], result["gaps"]), ("short", False, []))
         self.assertTrue(result["output"]["present"])
 
+    def returned_spec(self, sessions: dict[str, dict]) -> None:
+        """Completed turns for several sessions; extra keys (``wait_for``)
+        go on the session row of the fake Runner."""
+        repo = str(self.repo)
+        self.spec.write_text(json.dumps({"sessions": {session: {
+            "status": {"repo": repo, "session": session, "holder_instance_id": "holder-a",
+                       "turn_active": False, "turn_outcome": "turn_completed", "stop_reason": "end_turn",
+                       "mutation_status": "completed",
+                       "last_prompt": {"fingerprint": "fp-a", "stop_reason": "end_turn",
+                                       "mutation_status": "completed"}},
+            "capture": {"repo": repo, "session": session, "events": [
+                {"cursor": 12, "kind": "session_update", "update": {
+                    "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "done"}}}]},
+            **extra} for session, extra in sessions.items()}}), encoding="utf-8")
+
+    def test_only_a_declared_file_can_be_reported_absent(self) -> None:
+        declared = {"w1": "Original final reply with command, line count, integer sum, and SHA-256.",
+                    "w2": "https://example.invalid/pr/7", "w3": {"kind": "capture"}, "w4": "docs/missing.md",
+                    "w5": {"path": "docs/also missing.md"}}
+        self.returned_spec({f"zcode-KT-i1-{key}": {} for key in declared})
+        self.index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo), "items": [
+            self.index_row(key, f"zcode-KT-i1-{key}", output=value) for key, value in declared.items()]}),
+            encoding="utf-8")
+        code, out = run(["collect", "--index", str(self.index), "--skills-root", str(self.skills)], self.env)
+        self.assertEqual(code, 0, out)
+        facts = {row["item_id"]: (row["result"]["output"]["kind"], row["result"]["output"].get("present"),
+                                  row["result"]["gaps"]) for row in out["items"]}
+        self.assertEqual(facts, {"w1": ("description", None, []), "w2": ("remote", None, []),
+                                 "w3": ("capture", True, []), "w4": ("file", False, ["output-absent"]),
+                                 "w5": ("file", False, ["output-absent"])})
+
+    def test_a_disposition_mirrored_during_a_collect_survives_it(self) -> None:
+        self.init()
+        self.update("host", "tasks", "t1", {"stage": "review", "goal": "g", "dispatch": ["w1", "w2"]})
+        gate = Path(self.tmp.name) / "gate"
+        self.returned_spec({"zcode-KT-i1-a": {}, "zcode-KT-i1-b": {"wait_for": str(gate)}})
+        self.index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo), "items": [
+            self.index_row("w1", "zcode-KT-i1-a"), self.index_row("w2", "zcode-KT-i1-b")]}), encoding="utf-8")
+        collect = subprocess.Popen([sys.executable, str(SCRIPT), "collect", "--index", str(self.index),
+                                    "--skills-root", str(self.skills)], env=self.env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                try:
+                    rows = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
+                except (OSError, ValueError):
+                    rows = {}
+                if rows.get("w1", {}).get("status") == "returned":
+                    break
+                time.sleep(0.02)
+            self.assertEqual(rows["w1"]["status"], "returned", "the collect published its first return")
+            self.assertIsNone(collect.poll(), "the collect is still waiting on w2")
+            code, out = self.update("host", "tasks", "t1", {"dispositions": {"w1": "accepted"}},
+                                    "--expect-rev", "1", "--index", str(self.index))
+            self.assertEqual((code, out["index_mirror"]["changed"]), (0, {"w1": "accepted"}), out)
+        finally:
+            gate.write_text("go", encoding="utf-8")
+            stdout, stderr = collect.communicate(timeout=30)
+        self.assertEqual(collect.returncode, 0, stderr)
+        rows = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
+        self.assertEqual((rows["w1"]["acceptance"], rows["w1"]["acceptance_source"]["task_id"]), ("accepted", "t1"),
+                         "the Host's disposition is not overwritten by the collect's earlier read")
+        self.assertEqual((rows["w2"]["status"], rows["w2"]["acceptance"]), ("returned", "pending"))
+        self.assertEqual({row["item_id"]: row["acceptance"] for row in json.loads(stdout)["items"]},
+                         {"w1": "accepted", "w2": "pending"})
+
     def test_per_assignment_dispositions_are_mirrored_never_left_pending(self) -> None:
         self.init()
         self.update("host", "tasks", "t1", {"stage": "review", "goal": "g", "dispatch": ["w1", "w2"]})
@@ -2222,6 +2289,7 @@ class FakeNode(FakeSideagent):
         self.record = record
         self.ignore_stop = False
         self.linger = False
+        self.refuse = False
         reaped = subprocess.Popen(["true"])
         reaped.wait()
         self.dead_pid = reaped.pid
@@ -2253,7 +2321,8 @@ class FakeNode(FakeSideagent):
                     connection.sendall(json.dumps({"stopped": not self.ignore_stop}).encode() + b"\n")
                     continue
                 self.prompts.append(message)
-                reply = {"outcome": "in_progress", "prompt_fingerprint": f"sha256:{len(self.prompts)}"}
+                reply = ({"error": {"code": "prompt-refused"}} if self.refuse else
+                         {"outcome": "in_progress", "prompt_fingerprint": f"sha256:{len(self.prompts)}"})
                 connection.sendall(json.dumps(reply).encode() + b"\n")
 
 
@@ -2290,15 +2359,29 @@ class HolderNodeMode(HolderFixture):
         super().tearDown()
 
     def write_node_state(self, maintenance: dict | None = None, argv: list | None = None,
-                         host_revision: int = 0) -> None:
+                         host_revision: int | None = None, attention: list | None = None) -> None:
         argv = argv or ["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent",
                         "--role", "sideagent"]
+        self.rev = getattr(self, "rev", 0) if host_revision is None else host_revision
+        self.attention = getattr(self, "attention", []) if attention is None else attention
         (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps({
-            "schema": "kaola-heartbeat-prompt/2", "host_revision": host_revision,
-            "body": json.dumps({"view": "host", "attention": [], "tasks": []}),
+            "schema": "kaola-heartbeat-prompt/2", "host_revision": self.rev,
+            "body": json.dumps({"view": "host", "attention": self.attention, "tasks": []}),
             "state": {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active",
                                     "mode": "node", "recipe": {"runner": str(self.runner), "argv": argv}},
                       "maintenance": maintenance or {}}}), encoding="utf-8")
+
+    def boundary(self) -> None:
+        """A Host turn boundary or the holder tick."""
+        with self.holder.worker_events_lock:
+            self.holder._relay_pass()
+
+    def host_change(self, revision: int, attention: list | None = None) -> None:
+        handled = getattr(self, "handled", 0)
+        self.write_node_state({"handled_host_revision": handled}, host_revision=revision, attention=attention)
+
+    def batch_of(self, index: int) -> str:
+        return self.fake.prompts[index]["params"]["text"].split("batch ", 1)[1].split()[0]
 
     def wait_for(self, check, what: str, timeout: float = 10.0) -> None:
         deadline = time.monotonic() + timeout
@@ -2312,97 +2395,205 @@ class HolderNodeMode(HolderFixture):
         log = Path(self.holder.args.record_dir) / "events.jsonl"
         return [json.loads(line)["kind"] for line in log.read_text().splitlines()] if log.exists() else []
 
-    def checkpoint(self, batch: str, holder: str, settled: list, verified: bool) -> None:
+    def checkpoint(self, batch: str, holder: str, through: int | None = None, verified: bool = True,
+                   attention: list | None = None) -> None:
+        """The node's own checkpoint as `state checkpoint` records it; an
+        omitted `--through-host-revision` records the handled revision."""
+        handled = getattr(self, "handled", 0)
+        through = handled if through is None else through
         self.write_node_state({"last_checkpoint": {"batch": batch, "node": {"holder_instance_id": holder},
-                                                   "settled": settled, "verified": verified}})
+                                                   "host_revision": {"from": handled, "through": through,
+                                                                     "current": self.rev},
+                                                   "verified": verified},
+                               "handled_host_revision": through}, attention=attention)
+        self.handled = through
 
-    def test_two_consecutive_fresh_nodes_settle_by_checkpoint_and_are_stopped(self) -> None:
+    def node_count(self) -> int:
+        counter = Path(self.tmp.name) / "count"
+        return int(counter.read_text()) if counter.exists() else 0
+
+    def first_node(self, revision: int = 4) -> str:
+        """One Host change at an idle boundary: one fresh node and its batch."""
+        self.host_change(revision)
+        self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the first node's batch")
+        return self.batch_of(0)
+
+    def test_ordinary_worker_returns_reach_the_host_and_start_no_node(self) -> None:
         self.write_node_state()
         self.event("codex-KT-i1-a", "idle", 5)
-        self.wait_for(lambda: len(self.fake.prompts) == 1, "the first node's batch")
+        prompts = self.agent.prompts()
+        self.assertEqual(len(prompts), 1, "a worker return reaches the Host at its boundary")
+        self.assertIn("codex/codex-KT-i1-a/idle/5", prompts[0])
+        self.finish_host_turn()
+        self.event("codex-KT-i1-b", "terminated", 6)
+        self.assertEqual(len(self.agent.prompts()), 2)
+        self.finish_host_turn()
+        time.sleep(0.3)
+        self.assertEqual(self.node_count(), 0, "an ordinary return or termination starts no node")
+        self.assertEqual(self.fake.prompts, [])
+        self.assertEqual(sorted(self.confirmed_ids()), ["codex/codex-KT-i1-a/idle/5",
+                                                        "codex/codex-KT-i1-b/terminated/6"])
+
+    def test_one_host_turn_makes_one_batch_at_its_end(self) -> None:
+        self.write_node_state()
+        self.holder.turn["active"] = True
+        self.host_change(3)
+        self.boundary()
+        self.host_change(4)
+        self.boundary()
+        time.sleep(0.3)
+        self.assertEqual(self.node_count(), 0, "no node while the Host turn may still write")
+        self.finish_host_turn()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the batch at the Host turn end")
+        text = self.fake.prompts[0]["params"]["text"]
+        self.assertIn("host revision 1..4", text, "both writes are one batch")
+        self.assertNotIn("--events", text, "worker events are not node inputs")
+        self.assertIn("Role limits", text)
+        self.assertIn("never a restated, summarized or judged worker result", text)
+        self.assertIn("exact-stop only a finished worker whose reclaim the Host recorded", text)
+        self.boundary()
+        time.sleep(0.2)
+        self.assertEqual(len(self.fake.prompts), 1, "the same Host revision is sent once")
+        self.assertEqual(self.node_count(), 1)
+
+    def test_a_verified_batch_wakes_the_host_only_for_changed_attention(self) -> None:
+        self.write_node_state()
+        batch = self.first_node()
         argv = json.loads((Path(self.tmp.name) / "argv").read_text())
         self.assertEqual(argv[:1] + argv[argv.index("--role"):], ["start", "--role", "sideagent"],
                          "the recipe argv is run as given, no shell")
         text = self.fake.prompts[0]["params"]["text"]
         self.assertEqual(self.fake.prompts[0]["params"]["expected_holder_instance_id"], "node-1")
-        batch = text.split("batch ", 1)[1].split()[0]
-        self.assertIn("codex/codex-KT-i1-a/idle/5", text)
-        self.assertIn("state checkpoint", text)
         self.assertIn(f"python3 {REPO / 'scripts' / 'kaola-dispatch.py'} state checkpoint --file "
                       f"{self.repo / '.kaola' / 'heartbeat-prompt.json'} --writer sideagent --source {batch}", text,
                       "the fresh node gets the exact command, without needing the Skill loaded")
-        self.assertEqual(self.agent.prompts(), [], "a routine event does not wake the Host")
-        self.checkpoint(batch, "node-1", ["codex/codex-KT-i1-a/idle/5"], True)
+        self.checkpoint(batch, "node-1", through=4)
         self.sideagent_end(9, 1, holder="node-1")
         self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the exact node stop")
         self.assertEqual(self.fake.stops[0]["params"]["expected_holder_instance_id"], "node-1")
-        self.assertIn("codex/codex-KT-i1-a/idle/5", self.confirmed_ids())
-        self.assertEqual(self.agent.prompts(), [], "a verified batch stays quiet")
+        self.assertEqual(self.agent.prompts(), [], "a verified batch with unchanged attention stays quiet")
+        self.assertEqual(self.holder.pending_worker_events, [])
 
-        # The next input starts a second fresh node; it ends without a checkpoint.
-        self.event("codex-KT-i1-b", "idle", 6)
+        # The next Host change: a second fresh node whose checkpoint adds Host attention.
+        self.host_change(5)
+        self.boundary()
         self.wait_for(lambda: len(self.fake.prompts) == 2, "the second node's batch")
         self.assertEqual(self.fake.prompts[1]["params"]["expected_holder_instance_id"], "node-2")
-        self.assertNotIn("codex-KT-i1-a", self.fake.prompts[1]["params"]["text"], "settled input is not re-sent")
+        self.assertIn("host revision 5..5", self.fake.prompts[1]["params"]["text"])
+        self.checkpoint(self.batch_of(1), "node-2", through=5,
+                        attention=[{"kind": "alerts", "id": "w1-gap", "why": "warn"}])
+        self.holder.turn["active"] = True
+        self.sideagent_end(12, 2, holder="node-2")
+        self.wait_for(lambda: self.log_kinds().count("sideagent_node_stopped") == 2, "the second stop")
+        self.assertEqual(self.agent.prompts(), [], "a busy Host is not interrupted")
+        self.finish_host_turn()
+        prompts = self.agent.prompts()
+        self.assertEqual(len(prompts), 1, "changed attention wakes the Host exactly once")
+        self.assertIn("verified; Host attention changed", prompts[0])
+        self.assertIn("w1-gap", prompts[0], "the Host reads the changed view")
+        self.finish_host_turn()
+        self.boundary()
+        time.sleep(0.2)
+        self.assertEqual(len(self.agent.prompts()), 1)
+        self.assertEqual(len(self.fake.prompts), 2)
+        self.assertEqual(self.holder.pending_worker_events, [])
+        settled = [json.loads(line) for line in
+                   (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()
+                   if json.loads(line).get("kind") == "sideagent_node_settled"]
+        self.assertEqual([(entry["checkpoint"], entry["host_woken"]) for entry in settled],
+                         [("verified", False), ("verified", True)])
+
+    def test_a_checkpoint_short_of_its_batch_is_partial_and_reaches_the_host_once(self) -> None:
+        self.write_node_state()
+        batch = self.first_node()
+        self.checkpoint(batch, "node-1")  # --through-host-revision omitted
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stop")
+        prompts = self.agent.prompts()
+        self.assertEqual(len(prompts), 1, "an omitted range is partial, not quiet")
+        self.assertIn("checkpoint partial: host revision 1..4 not handled", prompts[0])
+        self.finish_host_turn()
+        self.boundary()
+        time.sleep(0.2)
+        self.assertEqual(self.node_count(), 1, "no node restarts for the same range")
+
+        self.host_change(6)
+        self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 2, "a later Host change")
+        self.checkpoint(self.batch_of(1), "node-2", through=2)  # lowered
         self.sideagent_end(12, 2, holder="node-2")
         self.wait_for(lambda: self.log_kinds().count("sideagent_node_stopped") == 2, "the second stop")
         prompts = self.agent.prompts()
-        self.assertEqual(len(prompts), 1, "the unaccounted input is handed to the Host once")
-        self.assertIn("codex-KT-i1-b", prompts[0])
-        self.assertIn("checkpoint missing", prompts[0])
+        self.assertEqual(len(prompts), 2)
+        self.assertIn("checkpoint partial: host revision 3..6 not handled", prompts[1])
         self.finish_host_turn()
-        self.assertEqual(len(self.fake.prompts), 2, "and is never sent to another node")
+        self.boundary()
+        time.sleep(0.2)
+        self.assertEqual(self.node_count(), 2, "no restart storm")
         self.assertEqual(self.holder.pending_worker_events, [])
 
-    def test_a_partial_checkpoint_settles_its_share_and_returns_the_rest_once(self) -> None:
+    def test_a_partial_checkpoint_returns_its_batch_to_the_host_once(self) -> None:
         self.write_node_state()
-        os.environ["FAKE_NODE_DELAY"] = "0.6"
-        self.event("codex-KT-i1-a", "idle", 5)
-        self.event("codex-KT-i1-b", "idle", 6)
-        self.wait_for(lambda: len(self.fake.prompts) == 1, "one batch for both events")
-        text = self.fake.prompts[0]["params"]["text"]
-        self.assertIn("codex/codex-KT-i1-a/idle/5", text)
-        self.assertIn("codex/codex-KT-i1-b/idle/6", text)
-        batch = text.split("batch ", 1)[1].split()[0]
-        self.checkpoint(batch, "node-1", ["codex/codex-KT-i1-a/idle/5"], False)
+        batch = self.first_node()
+        self.checkpoint(batch, "node-1", through=4, verified=False)
         self.sideagent_end(9, 1, holder="node-1")
         self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stop")
-        log = [json.loads(line) for line in
-               (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()]
-        settled = [entry for entry in log if entry.get("kind") == "sideagent_node_settled"]
-        self.assertEqual([(entry["checkpoint"], entry["settled"], entry["returned"]) for entry in settled],
-                         [("partial", ["codex/codex-KT-i1-a/idle/5"], ["codex/codex-KT-i1-b/idle/6"])])
-        self.assertIn("codex/codex-KT-i1-a/idle/5", self.confirmed_ids())
         prompts = self.agent.prompts()
-        self.assertEqual(len(prompts), 1, "the unsettled share reaches the Host once")
-        self.assertIn("codex-KT-i1-b", prompts[0])
+        self.assertEqual(len(prompts), 1, "the unsettled batch reaches the Host once")
         self.assertIn("checkpoint partial", prompts[0])
         self.finish_host_turn()
+        self.boundary()
+        time.sleep(0.2)
         self.assertEqual(len(self.fake.prompts), 1, "and no node is started for it")
+        self.assertEqual(self.holder.pending_worker_events, [])
+
+    def test_a_missing_checkpoint_reaches_the_host_once(self) -> None:
+        self.write_node_state()
+        self.first_node()
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stop")
+        prompts = self.agent.prompts()
+        self.assertEqual(len(prompts), 1)
+        self.assertIn("checkpoint missing", prompts[0])
+        self.finish_host_turn()
+        self.assertEqual(self.node_count(), 1)
+
+    def test_a_batch_the_node_does_not_admit_is_returned_once_and_not_resent(self) -> None:
+        self.write_node_state()
+        self.fake.refuse = True
+        self.host_change(4)
+        self.boundary()
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the refused node's stop")
+        self.assertEqual(len(self.fake.prompts), 1)
+        prompts = self.agent.prompts()
+        self.assertEqual(len(prompts), 1, "the Host is told once")
+        self.assertIn("did not admit", prompts[0])
+        self.assertIn("host revision 1..4 not handled", prompts[0])
+        self.finish_host_turn()
+        self.host_change(5)
+        self.boundary()
+        time.sleep(0.3)
+        self.assertEqual((len(self.fake.prompts), self.node_count()), (1, 1), "no resend, no restart")
         self.assertEqual(self.holder.pending_worker_events, [])
 
     def test_an_unconfirmed_stop_blocks_a_competing_node(self) -> None:
         self.write_node_state()
         self.fake.ignore_stop = True
-        self.event("codex-KT-i1-a", "idle", 5)
-        self.wait_for(lambda: len(self.fake.prompts) == 1, "the batch")
-        batch = self.fake.prompts[0]["params"]["text"].split("batch ", 1)[1].split()[0]
-        self.checkpoint(batch, "node-1", ["codex/codex-KT-i1-a/idle/5"], True)
+        batch = self.first_node()
+        self.checkpoint(batch, "node-1", through=4)
         self.sideagent_end(9, 1, holder="node-1")
         self.wait_for(lambda: "sideagent_node_stop_unconfirmed" in self.log_kinds(), "the unconfirmed stop")
-        self.event("codex-KT-i1-b", "idle", 6)
+        self.host_change(5)
+        self.boundary()
         time.sleep(0.3)
-        self.assertEqual(int((Path(self.tmp.name) / "count").read_text()), 1, "no second node starts")
-        self.assertTrue(any("codex-KT-i1-b" in prompt for prompt in self.agent.prompts()),
-                        "the Host keeps the new input meanwhile")
+        self.assertEqual(self.node_count(), 1, "no second node starts")
 
     def test_a_stopped_record_is_not_a_stopped_node_until_its_holder_is_gone(self) -> None:
         self.write_node_state()
         self.fake.linger = True
-        self.event("codex-KT-i1-a", "idle", 5)
-        self.wait_for(lambda: len(self.fake.prompts) == 1, "the batch")
-        batch = self.fake.prompts[0]["params"]["text"].split("batch ", 1)[1].split()[0]
-        self.checkpoint(batch, "node-1", ["codex/codex-KT-i1-a/idle/5"], True)
+        batch = self.first_node()
+        self.checkpoint(batch, "node-1", through=4)
         self.sideagent_end(9, 1, holder="node-1")
         self.wait_for(lambda: "sideagent_node_stop_unconfirmed" in self.log_kinds(),
                       "a stop whose holder still runs")
@@ -2410,7 +2601,8 @@ class HolderNodeMode(HolderFixture):
         record = json.loads((self.side_dir / "record.json").read_text())
         record["holder_pid"] = self.fake.dead_pid
         (self.side_dir / "record.json").write_text(json.dumps(record))
-        self.event("codex-KT-i1-b", "idle", 6)
+        self.host_change(5)
+        self.boundary()
         self.wait_for(lambda: len(self.fake.prompts) == 2, "a fresh node once the old holder is gone")
         self.assertEqual(self.fake.prompts[1]["params"]["expected_holder_instance_id"], "node-2")
         self.assertIn("sideagent_node_stop_confirmed_late", self.log_kinds())
@@ -2440,27 +2632,24 @@ class HolderNodeMode(HolderFixture):
             self.holder.handle_request = saved_handle
         self.assertEqual(exits, [0], "the reply cannot be sent, the holder still exits")
 
-    def node_count(self) -> int:
-        counter = Path(self.tmp.name) / "count"
-        return int(counter.read_text()) if counter.exists() else 0
-
     def test_a_stopping_carrier_ends_its_running_node_and_starts_none(self) -> None:
         self.write_node_state()
-        self.event("codex-KT-i1-a", "idle", 5)
-        self.wait_for(lambda: len(self.fake.prompts) == 1, "the batch")
+        self.first_node()
         self.holder.stop_requested = True
         self.holder._reclaim_node()
         self.assertEqual([stop["params"]["expected_holder_instance_id"] for stop in self.fake.stops],
                          ["node-1"], "the carrier's own node is not a dispatched worker")
         self.assertIn("sideagent_node_stopped", self.log_kinds())
-        self.event("codex-KT-i1-b", "idle", 6)
+        self.host_change(5)
+        self.boundary()
         time.sleep(0.3)
         self.assertEqual(self.node_count(), 1, "a stopping carrier starts no node")
 
     def test_a_node_start_in_flight_ends_with_the_stopping_carrier(self) -> None:
         self.write_node_state()
         os.environ["FAKE_NODE_DELAY"] = "0.6"
-        self.event("codex-KT-i1-a", "idle", 5)
+        self.host_change(4)
+        self.boundary()
         self.wait_for(lambda: self.node_count() == 1, "the start in flight")
         self.holder.stop_requested = True
         self.holder._reclaim_node()
@@ -2472,7 +2661,8 @@ class HolderNodeMode(HolderFixture):
         self.write_node_state()
         holder_module.NODE_RECLAIM_SECONDS = 0.3
         os.environ["FAKE_NODE_DELAY"] = "3"
-        self.event("codex-KT-i1-a", "idle", 5)
+        self.host_change(4)
+        self.boundary()
         self.wait_for(lambda: (self.side_dir / "record.json").exists(), "the node's early record")
         self.holder.stop_requested = True
         self.holder._reclaim_node()
@@ -2482,22 +2672,23 @@ class HolderNodeMode(HolderFixture):
 
     def test_a_resume_recipe_or_failed_start_is_not_retried(self) -> None:
         self.write_node_state(argv=["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent",
-                                    "--role", "sideagent", "--continue"])
-        self.event("codex-KT-i1-a", "idle", 5)
+                                    "--role", "sideagent", "--continue"], host_revision=2)
+        self.boundary()
         self.assertIn("sideagent_node_recipe_refused", self.log_kinds())
-        self.assertEqual(len(self.agent.prompts()), 1, "without a usable node the Host has the event")
-        self.finish_host_turn()
-        self.write_node_state()
+        self.assertEqual(self.node_count(), 0)
         os.environ["FAKE_NODE_RECORD"] = str(Path(self.tmp.name) / "missing" / "record.json")
-        self.event("codex-KT-i1-b", "idle", 6)
+        self.host_change(4)
+        self.boundary()
         self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "the failed start")
-        self.wait_for(lambda: any("codex-KT-i1-b" in prompt for prompt in self.agent.prompts()),
-                      "the Host taking the event")
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host told of the failure")
+        self.assertIn("sideagent node start failed", self.agent.prompts()[0])
+        self.assertIn("host revision 1..4 not handled", self.agent.prompts()[0])
         self.finish_host_turn()
-        self.event("codex-KT-i1-c", "idle", 7)
+        self.host_change(5)
+        self.boundary()
         time.sleep(0.3)
-        self.assertEqual(int((Path(self.tmp.name) / "count").read_text()), 1,
-                         "one recorded failure, no retry storm")
+        self.assertEqual(self.node_count(), 1, "one recorded failure, no retry storm")
+        self.assertEqual(len(self.agent.prompts()), 1)
 
     def test_the_checkout_entrypoint_recipe_names_the_bound_platform_first(self) -> None:
         tail = ["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent", "--role", "sideagent"]
@@ -2506,17 +2697,6 @@ class HolderNodeMode(HolderFixture):
         self.write_node_state(argv=["codex", *tail])
         self.assertIsNone(self.holder._node_binding(), "another platform's start is not this binding")
         self.assertIn("sideagent_node_recipe_refused", self.log_kinds())
-
-    def test_a_host_business_change_alone_starts_one_node(self) -> None:
-        self.write_node_state(host_revision=4)
-        with self.holder.worker_events_lock:
-            self.holder._relay_pass()
-        self.wait_for(lambda: len(self.fake.prompts) == 1, "the Host-change batch")
-        self.assertIn("host revision 1..4", self.fake.prompts[0]["params"]["text"])
-        with self.holder.worker_events_lock:
-            self.holder._relay_pass()
-        time.sleep(0.2)
-        self.assertEqual(len(self.fake.prompts), 1, "the same Host revision is sent once")
 
     def test_a_holder_known_not_to_be_the_host_never_starts_a_node(self) -> None:
         self.holder.session_role = "elite"

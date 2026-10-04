@@ -3237,12 +3237,15 @@ class Holder:
     def _node_relay_pass(self, binding: dict[str, Any]) -> dict[str, Any]:
         """Node mode of the relay. Caller holds ``worker_events_lock``.
 
-        One fixed batch per node: the carrier starts a fresh node, sends it
-        the waiting events and the selected Host revision once, settles the
-        batch from that node's own verified checkpoint at its turn end, and
-        exact-stops it. Inputs arriving meanwhile wait for the next node. A
-        failed start or an unconfirmed stop hands events to the Host and
-        starts nothing further until the binding or the old holder changes.
+        Worker events are not node inputs: an ordinary return or termination
+        reaches the Host at its next safe boundary, as with no binding, and
+        the Host reads the original. A node batch is the Host business
+        changes past the last handled checkpoint, selected only while the
+        Host turn is not active, so one Host turn's writes make one batch.
+        The carrier starts a fresh node, sends that range once, settles it
+        from the node's own checkpoint at its turn end, and exact-stops it.
+        A failed start or an unconfirmed stop starts nothing further until
+        the binding or the old holder changes.
         """
         if self.stop_requested:
             # A stopping carrier starts and feeds no node it could not reclaim.
@@ -3256,7 +3259,8 @@ class Holder:
                 node.pop("stop_unconfirmed", None)
         own = [item for item in self.pending_worker_events if item.get("session") == session]
         quiet = [item for item in own if item.get("node_quiet")
-                 or (item.get("kind") == "terminated" and node.get("phase") in ("stopping", "stopped"))
+                 or (item.get("kind") == "terminated" and not item.get("host_owned")
+                     and node.get("phase") in ("stopping", "stopped"))
                  or (is_turn_end(item) and item.get("holder_instance_id") in node.get("holders", [])
                      and not item.get("host_owned") and item.get("turn_fingerprint") != node.get("fingerprint"))]
         self._confirm_events([item for item in quiet if "prompt_fingerprint" not in item], "sideagent-node")
@@ -3267,13 +3271,10 @@ class Holder:
                 if not (is_turn_end(item) and item.get("turn_fingerprint") == node.get("fingerprint")):
                     item["host_owned"] = True
         if node.get("phase") == "running" and node.get("batch") and self._sideagent_relay_target() is None:
-            lost = [item for item in self.pending_worker_events
-                    if (item.get("relayed") or {}).get("batch") == node["batch"]]
             self.events.append({"kind": "sideagent_node_lost", "holder": node.get("holder"),
-                                "batch": node["batch"], "event_ids": [item["event_id"] for item in lost]})
-            for item in lost:
-                item.pop("relayed", None)
-                item["host_owned"] = True
+                                "batch": node["batch"]})
+            self._node_to_host(binding, f"sideagent node {node.get('holder')} was lost during batch "
+                                        f"{node['batch']}; {self._unhandled(node.get('sent_through'))}")
             node.update(phase="stopped", batch=None, fingerprint=None)
         failed = node.get("failed")
         fingerprint = json.dumps({key: binding.get(key) for key in ("session", "recipe", "since")},
@@ -3281,65 +3282,79 @@ class Holder:
         if failed and failed.get("binding") != fingerprint:
             node.pop("failed", None)
             failed = None
+        result: dict[str, Any] = {"session": session}
         if failed or node.get("stop_unconfirmed"):
-            # No competing writer and no retry storm: the Host keeps these.
-            return {}
-        waiting = [item for item in self.pending_worker_events
-                   if item.get("session") != session and "relayed" not in item
-                   and "prompt_fingerprint" not in item and not item.get("host_owned")]
-        doc = self._lifecycle_state()
-        through = self._node_host_pending(doc)
-        result: dict[str, Any] = {"live": True, "session": session}
+            # No competing writer and no retry storm.
+            return result
         if node.get("phase") in ("starting", "stopping") or node.get("batch"):
             return result
-        if not waiting and through is None:
+        doc = self._lifecycle_state()
+        through = self._node_host_pending(doc)
+        if through is None:
             return result
         target = self._sideagent_relay_target()
         if target is None:
+            if self.turn["active"]:
+                # The Host may still be writing; its turn end is the boundary.
+                return result
             node.update(phase="starting", binding=fingerprint)
             self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint),
                                                daemon=True)
             self.node_start.start()
-            result["receipt"] = {"relayed": 0, "waiting": len(waiting), "reason": "node-starting"}
+            result["receipt"] = {"relayed": 0, "reason": "node-starting"}
             return result
         maintenance = ((doc or {}).get("state") or {}).get("maintenance") or {}
         handled = maintenance.get("handled_host_revision") or 0
-        through = through if through is not None else (handled if isinstance(handled, int) else 0)
-        ids = [item["event_id"] for item in waiting]
-        batch = "b-" + hashlib.sha256(json.dumps([target["holder_instance_id"], ids, through])
+        batch = "b-" + hashlib.sha256(json.dumps([target["holder_instance_id"], through])
                                       .encode("utf-8")).hexdigest()[:12]
-        receipt = self._relay_send(target, self._node_prompt(batch, waiting, handled, through))
+        receipt = self._relay_send(target, self._node_prompt(batch, handled, through))
         error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
         if (error is None and receipt.get("outcome") == "in_progress"
                 and isinstance(receipt.get("prompt_fingerprint"), str)):
-            for item in waiting:
-                item["relayed"] = {"holder": target["holder_instance_id"],
-                                   "fingerprint": receipt["prompt_fingerprint"], "batch": batch}
             node.update(batch=batch, fingerprint=receipt["prompt_fingerprint"], sent_through=through,
-                        event_ids=ids)
+                        attention_sent=target["attention"])
             self.events.append({"kind": "sideagent_node_batch", "batch": batch,
-                                "target_holder": target["holder_instance_id"], "event_ids": ids,
+                                "target_holder": target["holder_instance_id"],
                                 "host_revision_through": through,
                                 "prompt_fingerprint": receipt["prompt_fingerprint"]})
-            result["receipt"] = {"relayed": len(waiting), "batch": batch, "target_session": session}
+            result["receipt"] = {"batch": batch, "target_session": session}
         else:
+            reason = (error or {}).get("code") or "relay-unadmitted"
             self.events.append({"kind": "worker_event_relay_failed", "target_session": session,
                                 "receipt": receipt})
-            return {"receipt": {"relayed": 0, "fallback": "host",
-                                "reason": (error or {}).get("code") or "relay-unadmitted"}}
+            # Recorded once and not resent: the node is stopped and no other
+            # starts until the binding changes.
+            node.update(failed={"binding": fingerprint, "code": reason})
+            self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
+                                        f"batch {batch} ({reason}); {self._unhandled(through)}")
+            holder = target["holder_instance_id"]
+            node.update(phase="stopping", batch=None, fingerprint=None)
+            threading.Thread(target=self._stop_node, args=(holder,), daemon=True).start()
+            result["receipt"] = {"relayed": 0, "reason": reason}
         return result
 
-    def _node_prompt(self, batch: str, events: list[dict[str, Any]], handled: Any, through: int) -> str:
-        ids = [event["event_id"] for event in events]
+    def _unhandled(self, through: Any) -> str:
+        maintenance = (((self._lifecycle_state() or {}).get("state") or {}).get("maintenance") or {})
+        handled = maintenance.get("handled_host_revision") or 0
+        handled = handled if isinstance(handled, int) else 0
+        if isinstance(through, int) and through > handled:
+            return f"host revision {handled + 1}..{through} not handled"
+        return "no Host change left unhandled"
+
+    def _node_to_host(self, binding: dict[str, Any], reason: str) -> None:
+        """Stage a node failure for the Host like a worker event: there is
+        no node turn end to carry it, and an unknown outcome is the Host's to
+        see. Caller holds ``worker_events_lock``."""
+        cursor = self.events.append({"kind": "sideagent_node_returned", "reason": reason})
+        self.pending_worker_events.append({
+            "schema": WORKER_EVENT_SCHEMA, "event_id": f"{binding['platform']}/{binding['session']}/node/{cursor}",
+            "kind": "node", "platform": binding["platform"], "session": binding["session"],
+            "repo": self.args.repo, "reason": reason, "event_cursor": cursor,
+            "staged_at": round(time.time(), 3), "host_owned": True})
+
+    def _node_prompt(self, batch: str, handled: Any, through: int) -> str:
         lines = [f"{RELAY_SCHEMA}: maintenance node batch {batch} from the {self.host_name} Host holder "
-                 f"{self.args.session}",
-                 "worker events (structured, one JSON object per line):"]
-        for event in events:
-            lines.append(json.dumps(
-                {key: event[key] for key in
-                 ("event_id", "kind", "platform", "session", "repo", "reason",
-                  "event_cursor", "request_id") if event.get(key) is not None},
-                ensure_ascii=False, sort_keys=True))
+                 f"{self.args.session}"]
         if isinstance(handled, int) and through > handled:
             lines.append(f"Host business changes: host revision {handled + 1}..{through}; "
                          "`state view --role sideagent` lists them as pending_host_changes. "
@@ -3355,10 +3370,16 @@ class Holder:
                      "its next reader, then record one checkpoint naming every input: "
                      f"`{state} checkpoint --file {shlex.quote(str(state_file))} --writer sideagent "
                      f"--source {batch} --batch {batch} --through-host-revision {through} "
-                     f"--events {shlex.quote(json.dumps(ids))} --entries '[{{\"input\": ID, \"applied\": "
-                     f"[\"tasks/ID\"]}} or {{\"input\": ID, \"retained\": \"tasks/ID\" or \"section/NAME\"}}, ...]'`. "
-                     "Do not wait for workers or the Host and do not author tasks. End the turn after the "
-                     "checkpoint; the carrier stops this node.")
+                     f"--entries '[{{\"input\": ID, \"applied\": "
+                     f"[\"tasks/ID\"]}} or {{\"input\": ID, \"retained\": \"tasks/ID\" or \"section/NAME\"}}, ...]'`.")
+        lines.append("Role limits: you are a maintenance node, not the Host or a worker. Records you write "
+                     "carry source pointers (record ids, receipt or log paths, event ids), never a restated, "
+                     "summarized or judged worker result; the Host reads originals. Do not dispatch, start "
+                     "or send to any session; exact-stop only a finished worker whose reclaim the Host "
+                     "recorded. Do not author or allocate tasks, and grant, accept, "
+                     "retire or decide nothing the Host has not recorded. Put anything that needs a Host "
+                     "judgment in a decision or alert owned by the Host. Do not wait for workers or the "
+                     "Host. End the turn after the checkpoint; the carrier stops this node.")
         return "\n".join(lines)
 
     def _state_tool(self) -> str | None:
@@ -3376,7 +3397,12 @@ class Holder:
 
     def _settle_node_batch(self, ends: list[dict[str, Any]]) -> None:
         """At the turn end that carried a node batch, settle the batch from
-        that node's own checkpoint. Caller holds ``worker_events_lock``."""
+        that node's own checkpoint. Caller holds ``worker_events_lock``.
+
+        The node's turn end reaches the Host (once, at its safe boundary)
+        when the checkpoint is missing or partial, or when the node changed
+        the Host view's attention to something the Host has not seen. A
+        verified batch that changed no attention stays quiet."""
         node = self.node
         if not node.get("batch"):
             return
@@ -3384,32 +3410,41 @@ class Holder:
             if (end.get("holder_instance_id") != node.get("holder")
                     or end.get("turn_fingerprint") != node.get("fingerprint")):
                 continue
-            doc = self._lifecycle_state()
+            doc, body, _ = read_heartbeat_file(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json")
+            doc = doc if isinstance(doc, dict) and doc.get("schema") == HEARTBEAT_STATE_SCHEMA else None
             last = (((doc or {}).get("state") or {}).get("maintenance") or {}).get("last_checkpoint")
             ours = (isinstance(last, dict) and last.get("batch") == node["batch"]
                     and (last.get("node") or {}).get("holder_instance_id") == node["holder"])
-            settled = set(last.get("settled") or []) if ours else set()
-            batch_items = [item for item in self.pending_worker_events
-                           if (item.get("relayed") or {}).get("batch") == node["batch"]]
-            self._confirm_events([item for item in batch_items if item["event_id"] in settled],
-                                 "sideagent-node-checkpoint")
-            returned = [item for item in batch_items if item["event_id"] not in settled]
-            for item in returned:
-                # Handed to the Host once; never relayed to another node.
-                item.pop("relayed", None)
-                item["host_owned"] = True
-            verified = bool(ours and last.get("verified") and end.get("turn_outcome") == "turn_completed")
-            if verified:
+            covered = ((last.get("host_revision") or {}).get("through") if ours else None)
+            sent = node.get("sent_through") or 0
+            # The range comes from the node's own flag; the batch it was sent
+            # is the carrier's fact. An omitted or lowered range left Host
+            # changes unhandled, which the next batch would not re-select.
+            short_range = ours and not (isinstance(covered, int) and covered >= sent)
+            verified = bool(ours and last.get("verified") and not short_range
+                            and end.get("turn_outcome") == "turn_completed")
+            attention = attention_fingerprint(body) if doc else None
+            changed = (verified and attention is not None and attention != node.get("attention_sent")
+                       and attention != self.host_attention_seen)
+            if verified and not changed:
                 end["node_quiet"] = True
             else:
                 end["host_owned"] = True
-                end["reason"] = (f"{end.get('reason')} maintenance batch {node['batch']} "
-                                 + ("checkpoint partial" if ours else "checkpoint missing"))
+                if changed:
+                    detail = "verified; Host attention changed"
+                elif short_range:
+                    detail = (f"checkpoint partial: host revision "
+                              f"{(covered if isinstance(covered, int) else 0) + 1}..{sent} not handled")
+                else:
+                    detail = "checkpoint partial" if ours else "checkpoint missing"
+                end["reason"] = f"{end.get('reason')} maintenance batch {node['batch']} {detail}"
             self.events.append({"kind": "sideagent_node_settled", "batch": node["batch"],
                                 "holder": node["holder"], "checkpoint": "verified" if verified
                                 else "partial" if ours else "missing",
-                                "settled": sorted(settled & {item["event_id"] for item in batch_items}),
-                                "returned": [item["event_id"] for item in returned]})
+                                "host_revision_through": sent,
+                                **({"checkpoint_through": covered} if ours else {}),
+                                "host_woken": bool(end.get("host_owned")),
+                                **({"attention_changed": True} if changed else {})})
             holder = node["holder"]
             node.update(phase="stopping", batch=None, fingerprint=None)
             threading.Thread(target=self._stop_node, args=(holder,), daemon=True).start()
@@ -3466,6 +3501,9 @@ class Holder:
                 self.node.update(phase="stopped", failed={"binding": fingerprint, "code": code})
                 self.events.append({"kind": "sideagent_node_start_failed", "session": binding["session"],
                                     "code": code, "receipt": receipt if isinstance(receipt, dict) else None})
+                self._node_to_host(binding, f"sideagent node start failed (exit {code}); "
+                                            f"{self._unhandled(self._node_host_pending(self._lifecycle_state()))}; "
+                                            "no node starts until the binding or recipe changes")
         self._kick_worker_events()
 
     def _stop_node(self, holder: str, wait: float | None = None) -> None:

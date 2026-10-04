@@ -17,7 +17,9 @@ the whole process tree (holder, native agent, tools) of each worker a
 Sideagent dispatched when that Sideagent stops. A running seat keeps the holder it
 started with. Restart the Host holder at a safe point, then run
 `state migrate --write --live` to record it as the carrier. Healthy workers
-are not restarted for migration. This content commit leaves the Grok Bot
+are not restarted for migration. Retire a Sideagent started on an older holder
+only after the workers it started have ended, because its stop still sweeps
+them (`docs/conventions.md#state-format-updates-and-migration`). This content commit leaves the Grok Bot
 bridge at the unpinned content stage (`saveable: false`).
 
 - **Lifecycle state tool (Issue #255).** `kaola-dispatch.py state`
@@ -95,21 +97,33 @@ bridge at the unpinned content stage (`saveable: false`).
   row's `prompt_source` records the hashes. `--state` links each item to its
   task's `dispatch` as a tool write and skips any preset under a recorded hold
   (`not-run` / `on-hold`, no Runner call). `collect` results name the exact
-  turn, a full-capture locator, output presence and explicit gaps, and mark the
+  turn, a full-capture locator, the declared output's kind (`file`, checked for
+  presence; `capture`, `remote` or `description`, so a sentence describing the
+  reply is never `output-absent`) and explicit gaps, and mark the
   480-character excerpt as truncated with the full reply length; a new return
-  keeps the earlier acceptance as `prior_acceptance`.
+  keeps the earlier acceptance as `prior_acceptance`. `execute`, `collect` and
+  the disposition mirror write the index under one file lock and merge by item
+  and field, so a Host disposition recorded during a running `collect` stands.
 - **Per-assignment dispositions and Host revision (Issue #255).** Task
   `dispositions` record the Host's decision per item; `update --index` mirrors
   them onto the index, and an item left without one after a task verdict is
   `undecided`. Only Host business writes raise `host_revision`; other writes
   stamp `writer_holder`.
 - **Sideagent nodes (Issue #255).** With `sideagent.mode: "node"` and a
-  recorded Runner `recipe`, the Host holder starts one fresh node per batch,
-  settles the batch only from that node's `state checkpoint` (input-by-input
-  accounting against records it wrote or duties still owned), hands unsettled
-  inputs to the Host once (`maintenance-returned`) and exact-stops the node. A
-  failed start or unconfirmed stop starts no further node. The last verified
-  checkpoint shows in the Host and Delegator views.
+  recorded Runner `recipe`, worker returns and terminations still reach the
+  Host at its next idle boundary, and the Host holder starts one fresh node
+  only for the Host business changes of an ended Host turn (one turn's writes
+  are one batch; tool and Sideagent writes start none). It settles the batch
+  only from that node's `state checkpoint` (input-by-input accounting against
+  records it wrote or duties still owned) and exact-stops the node. A verified
+  batch wakes the Host once when it changed the Host view's attention, and
+  stays quiet otherwise; a partial or missing checkpoint, a checkpoint range
+  below the sent batch, a refused batch, a failed start or a lost node reaches
+  the Host once naming the unhandled range (`maintenance-returned` for
+  unsettled inputs) and is not re-sent. A failed start or unconfirmed stop
+  starts no further node. The node prompt states its role limits: source
+  pointers only, no restated result, no dispatch or Host decision. The last
+  verified checkpoint shows in the Host and Delegator views.
 - **Host continuity stop (Issue #255).** `stop` and `drain-restart` accept
   `--preserve-dispatched-workers` for a Host: its proven dispatched worker
   trees survive, cooperatively and after holder death; an older live holder
