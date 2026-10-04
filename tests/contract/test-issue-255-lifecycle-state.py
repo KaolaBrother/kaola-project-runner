@@ -311,6 +311,82 @@ class StateTool(StateProject):
         code, out = self.state("view", "--file", str(self.file), "--role", "delegator")
         self.assertIn("missing", out["user_requirements"], "a missing source is named")
 
+    def test_scoped_requirement_headings_are_all_reported(self) -> None:
+        self.init()
+        (self.repo / "AGENTS.md").write_text(
+            "# Project\n\n## Commands\n\n- make\n\n## User special requirements — release (#9)\n\n"
+            "Source: owner, 2026-10-04.\n\n1. **Fidelity.** Keep templates exact.\n2. **Upgrade.** Migrate.\n\n"
+            "## Notes\n\n- not a requirement\n\n## User requirements: style\n\n- Plain words.\n",
+            encoding="utf-8")
+        code, out = self.state("view", "--file", str(self.file), "--role", "delegator", "--repo", str(self.repo))
+        items = out["user_requirements"]["items"]
+        self.assertEqual(items, ["## User special requirements — release (#9)", "Source: owner, 2026-10-04.",
+                                 "1. **Fidelity.** Keep templates exact.", "2. **Upgrade.** Migrate.",
+                                 "## User requirements: style", "- Plain words."])
+        self.assertNotIn("missing", out["user_requirements"])
+
+    def test_repeated_cycles_keep_current_records_not_history(self) -> None:
+        self.init()
+        sizes = []
+        for cycle in range(40):
+            task = f"t{cycle}"
+            self.update("host", "tasks", task, {"stage": "doing", "goal": f"work {cycle}"})
+            self.update("sideagent", "alerts", "conn-wait", {"level": "watch", "summary": "slow ACP"},
+                        "--coalesce")
+            self.update("sideagent", "tasks", task, {"next": "collect", "evidence": [f"index:{task}"]},
+                        "--expect-rev", "1")
+            self.update("host", "tasks", task, {"stage": "done", "verdict": {"value": "accepted"}},
+                        "--expect-rev", "2")
+            code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent",
+                                   "--source", "closeout", "--kind", "tasks", "--id", task,
+                                   "--expect-rev", "3", "--evidence", f"commit c{cycle}")
+            self.assertEqual(code, 0, out)
+            sizes.append(len(self.file.read_bytes()))
+        doc = self.doc()
+        self.assertEqual(doc["state"]["tasks"], {}, "finished work left the current set")
+        self.assertEqual(list(doc["state"]["alerts"]), ["conn-wait"], "a repeat updates one alert")
+        self.assertEqual(doc["state"]["alerts"]["conn-wait"]["count"], 40)
+        self.assertEqual(len(doc["state"]["retired"]), 40)
+        self.assertLess(sizes[-1] - sizes[20], (sizes[20] - sizes[0]) + 4096,
+                        "growth is the bounded tombstone list, not history")
+        self.assertNotIn("index:t0", doc["body"], "evidence stays out of the Host view")
+
+    def test_a_repair_keeps_its_failure_evidence_for_the_next_decision(self) -> None:
+        self.init()
+        self.update("host", "tasks", "t1", {"stage": "doing", "goal": "parser", "dispatch": ["i1"]})
+        self.update("sideagent", "holds", "codex-quota", {"scope": "codex/default", "reason": "limit",
+                                                         "evidence": "receipt r1", "resume_when": "owner"})
+        self.update("sideagent", "tasks", "t1",
+                    {"stage": "review", "verdict": {"value": "repair", "why": "edge case e2 fails"},
+                     "evidence": ["qa:e2 failed on codex/default"]},
+                    "--expect-rev", "1", "--host-turn", "host-turn-7")
+        code, side = self.state("view", "--file", str(self.file), "--role", "sideagent")
+        task = side["state"]["tasks"]["t1"]
+        self.assertEqual(task["verdict"]["value"], "repair")
+        self.assertEqual(task["evidence"], ["qa:e2 failed on codex/default"])
+        self.assertIn("codex-quota", side["state"]["holds"], "the failed runtime stays held")
+        code, host = self.state("view", "--file", str(self.file), "--role", "host")
+        self.assertIn({"kind": "tasks", "id": "t1", "why": "transcribed-check", "host_turn": "host-turn-7",
+                       "fields": ["verdict"]}, host["attention"])
+        self.update("sideagent", "tasks", "t1", {"stage": "doing", "dispatch": ["i1", "i2"]},
+                    "--expect-rev", "2")
+        task = self.doc()["state"]["tasks"]["t1"]
+        self.assertEqual((task["dispatch"], task["verdict"]["value"]), (["i1", "i2"], "repair"),
+                         "the repair stays the same task with its earlier evidence")
+
+    def test_timer_body_is_the_same_at_every_cadence(self) -> None:
+        bodies = set()
+        for minutes in (30, 60, 120, 240):
+            (self.repo / ".kaola" / "delegator-heartbeat.json").write_text(json.dumps(
+                {"cadence": {"timezone": "Asia/Shanghai", "start_local": "08:00", "end_local": "22:00",
+                             "interval_minutes": minutes}}), encoding="utf-8")
+            code, out = self.state("timer", "--repo", str(self.repo), "--target", "local",
+                                   "--entry", "/kaola-delegator", "--body", "")
+            self.assertEqual(code, 1)
+            bodies.add(out["expected"])
+        self.assertEqual(len(bodies), 1, "cadence lives in the Delegator file, not in the timer text")
+        self.assertNotRegex(bodies.pop(), r"\d+ ?min|interval|08:00")
+
     def test_check_finds_untraced_and_unassociated_work(self) -> None:
         self.init()
         self.update("host", "tasks", "t1", {"stage": "doing", "goal": "g"})

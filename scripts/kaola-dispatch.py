@@ -2668,6 +2668,14 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
     return view
 
 
+def requirement_heading(title: str) -> bool:
+    title = title.strip().lower()
+    for name in USER_REQUIREMENT_HEADINGS:
+        if title == name or (title.startswith(name) and not title[len(name)].isalnum()):
+            return True
+    return False
+
+
 def requirement_lines(repo: Path) -> dict[str, Any]:
     """User special requirements, read from their one source: AGENTS.md."""
     source = repo / "AGENTS.md"
@@ -2684,15 +2692,17 @@ def requirement_lines(repo: Path) -> dict[str, Any]:
     if picked is None:
         for number, line in enumerate(lines):
             match = re.match(r"^(#+)\s+(.*?)\s*$", line)
-            if match and match.group(2).strip().lower() in USER_REQUIREMENT_HEADINGS:
+            if match and requirement_heading(match.group(2)):
+                # A scoped heading such as "User special requirements — X (#N)"
+                # counts too; every such section is reported, in file order.
                 depth = len(match.group(1))
-                picked = []
+                picked = picked if picked is not None else []
+                picked.append(line.strip())
                 for follow in lines[number + 1:]:
                     heading = re.match(r"^(#+)\s", follow)
                     if heading and len(heading.group(1)) <= depth:
                         break
                     picked.append(follow)
-                break
     if picked is None:
         return {"source": str(source), "missing": "no user requirements region in AGENTS.md", "items": []}
     items = [line.strip() for line in picked if line.strip()]
