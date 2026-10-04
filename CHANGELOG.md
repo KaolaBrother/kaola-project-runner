@@ -4,6 +4,25 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## 0.8.1 — 2026-10-04 (blocked_attempt stamp)
+
+Seats: restart not required
+
+The operator diff from v0.8.0 to this release
+(`git diff v0.8.0..<this release> -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`)
+is empty: the holder, ZCode bridge, quota catalog, adapters, and platform
+manifests are unchanged. Running seats keep the bytes they started with and may
+stay up. This content commit leaves the Grok Bot bridge at the unpinned content
+stage (`saveable: false`); the bridge is pinned in the release's follow-up pin
+commit.
+
+- **Stamp blocked_attempt only for a real block (Issue #253).** `execute`
+  `publish()` writes `evidence.blocked_attempt` only when a blocked row exists.
+  It no longer stamps placeholder reason `missing` because publish runs before
+  the executor. A regression fixture reads the dispatch index after that first
+  publish. An uninterrupted admission still clears a real earlier stamp.
+  `collect` `publish()` does not write the stamp.
+
 ## 0.8.0 — 2026-10-04 (breadth work, standing Expert grants)
 
 Seats: restart required
