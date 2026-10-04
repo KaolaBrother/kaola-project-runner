@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -43,6 +44,13 @@ FAKE_RUNNER = textwrap.dedent(
         handle.flush()
         fcntl.flock(handle, fcntl.LOCK_UN)
     if command == "status":
+        gate = row.get("wait_for")
+        if isinstance(gate, str) and gate:
+            deadline = time.time() + 30
+            while not Path(gate).exists():
+                if time.time() >= deadline:
+                    break
+                time.sleep(0.02)
         calls = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
         if sum(c["command"] == "status" and c["session"] == session for c in calls) >= 2:
             if row.get("second_status_hang"):
@@ -3008,6 +3016,151 @@ class DispatchEntry(unittest.TestCase):
             {"id": "codex/astra", "state": "granted", "lifetime": "standing",
              "expires": "2000-01-01T00:00:00+00:00"}], elite_cap=1), avail)
         self.assertEqual(payload["items"][0]["reason"], "expired")
+
+    def test_first_publish_does_not_stamp_missing_before_the_executor(self) -> None:
+        """The index written before the executor must not invent reason missing.
+
+        A kept ready item has no blocked row yet. A failed retry that is free
+        to run still carries its earlier real stamp until that run finishes.
+        An uninterrupted admission clears the real stamp.
+        """
+        install_fake(self.skills, ["zcode"])
+        repo = str(self.repo)
+        kept_prompt = "stay-ready"
+        retry_prompt = "try-again"
+        kept_sha = "sha256:" + hashlib.sha256(kept_prompt.encode("utf-8")).hexdigest()
+        retry_sha = "sha256:" + hashlib.sha256(retry_prompt.encode("utf-8")).hexdigest()
+        kept_session = "zcode-KPR-i253-kept"
+        retry_session = "zcode-KPR-i253-retry"
+        gate = self.root / "release-status"
+        self.use_spec({
+            kept_session: {
+                "wait_for": str(gate),
+                "status": {
+                    "repo": repo,
+                    "holder_instance_id": "holder-kept",
+                    "mutation_status": "in_progress",
+                    "outcome": "in_progress",
+                    "prompt_fingerprint": kept_sha,
+                },
+            },
+            retry_session: {
+                "wait_for": str(gate),
+                "status": absent(repo),
+                "start": started(repo, "GLM-5.3", "max", holder="holder-retry"),
+                "send": sent("fp-retry"),
+            },
+        })
+        index = write_json(self.root, "first-publish.json", {
+            "schema": "kaola-dispatch-index/1",
+            "correlation_only": True,
+            "repo": repo,
+            "items": [
+                {
+                    "item_id": "kept",
+                    "preset": "zcode/default",
+                    "platform": "zcode",
+                    "session": kept_session,
+                    "repo": repo,
+                    "holder_instance_id": "holder-kept",
+                    "prompt_sha256": kept_sha,
+                    "prompt_fingerprint": kept_sha,
+                    "status": "in-flight",
+                    "reason": "admitted",
+                    "acceptance": "pending",
+                    "dispatch_event_cursor": 12,
+                    "evidence": {"start": {"marker": "kept-start"}},
+                },
+                {
+                    "item_id": "retry",
+                    "preset": "zcode/default",
+                    "platform": "zcode",
+                    "session": retry_session,
+                    "repo": repo,
+                    "holder_instance_id": "holder-old",
+                    "prompt_sha256": retry_sha,
+                    "prompt_fingerprint": retry_sha,
+                    "status": "failed",
+                    "reason": "selection-mismatch",
+                    "acceptance": "pending",
+                    "evidence": {
+                        "send": {"marker": "old-send"},
+                        "blocked_attempt": {"reason": "seat-cap"},
+                    },
+                },
+            ],
+        })
+        live = write_json(self.root, "first-publish-live.json", {"rows": []})
+        plan = self.plan([
+            {"item_id": "kept", "preset": "zcode/default", "session": kept_session, "prompt": kept_prompt},
+            {"item_id": "retry", "preset": "zcode/default", "session": retry_session, "prompt": retry_prompt},
+        ])
+        auth = self.authorization()
+        proc = subprocess.Popen(
+            [
+                sys.executable, str(SCRIPT), "execute",
+                "--plan", str(plan), "--authorization", str(auth),
+                "--availability", str(self.availability(["zcode/default"])),
+                "--platforms", str(PLATFORMS), "--skills-root", str(self.skills),
+                "--index", str(index), "--live", str(live),
+            ],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=self.env,
+        )
+        seen = None
+        try:
+            deadline = time.time() + 15
+            while time.time() < deadline and proc.poll() is None:
+                try:
+                    disk = json.loads(index.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    time.sleep(0.02)
+                    continue
+                rows = {row["item_id"]: row for row in disk.get("items") or [] if isinstance(row, dict)}
+                kept = rows.get("kept")
+                retry = rows.get("retry")
+                if (
+                    disk.get("phase") == "admission"
+                    and isinstance(kept, dict) and kept.get("reason") == "admitted"
+                    and "status" not in (kept.get("evidence") or {})
+                    and isinstance(retry, dict) and retry.get("reason") == "selection-mismatch"
+                ):
+                    seen = rows
+                    break
+                time.sleep(0.02)
+            self.assertIsNotNone(seen, "execute did not leave a first-publish index to read")
+            self.assertIsNone(proc.poll(), "execute finished before the first-publish read")
+            kept = seen["kept"]
+            retry = seen["retry"]
+            self.assertEqual(kept["status"], "in-flight")
+            self.assertEqual(kept["reason"], "admitted")
+            self.assertEqual(kept["holder_instance_id"], "holder-kept")
+            self.assertEqual(kept["dispatch_event_cursor"], 12)
+            self.assertEqual(kept["evidence"]["start"]["marker"], "kept-start")
+            self.assertNotIn("blocked_attempt", kept["evidence"])
+            self.assertEqual(retry["status"], "failed")
+            self.assertEqual(retry["reason"], "selection-mismatch")
+            self.assertEqual(retry["evidence"]["blocked_attempt"], {"reason": "seat-cap"})
+        finally:
+            gate.write_text("go", encoding="utf-8")
+        stdout, stderr = proc.communicate(timeout=20)
+        self.assertEqual(proc.returncode, 0, stderr + stdout)
+        payload = json.loads(stdout)
+        final = {row["item_id"]: row for row in payload["items"]}
+        self.assertEqual(final["kept"]["status"], "in-flight", payload)
+        self.assertEqual(final["kept"]["reason"], "already-admitted")
+        self.assertEqual(final["kept"]["holder_instance_id"], "holder-kept")
+        self.assertNotIn("blocked_attempt", final["kept"].get("evidence") or {})
+        self.assertEqual(final["retry"]["status"], "in-flight", payload)
+        self.assertEqual(final["retry"]["reason"], "admitted")
+        self.assertNotIn("blocked_attempt", final["retry"].get("evidence") or {})
+        stored = {row["item_id"]: row for row in json.loads(index.read_text(encoding="utf-8"))["items"]}
+        self.assertNotIn("blocked_attempt", stored["kept"].get("evidence") or {})
+        self.assertNotIn("blocked_attempt", stored["retry"].get("evidence") or {})
+        self.assertEqual(stored["retry"]["reason"], "admitted")
+        kept_cmds = [row["command"] for row in commands(self.log) if row["session"] == kept_session]
+        retry_cmds = [row["command"] for row in commands(self.log) if row["session"] == retry_session]
+        self.assertEqual(kept_cmds, ["status"])
+        self.assertEqual(retry_cmds, ["status", "start", "send"])
 
 
 class RenderedGuidance(unittest.TestCase):

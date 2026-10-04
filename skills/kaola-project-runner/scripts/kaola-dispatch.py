@@ -1226,9 +1226,12 @@ def command_execute(args: argparse.Namespace) -> int:
                 if attempt not in ("reconciled", "dry-run") and prior.get("status") in (
                     "unknown", "failed", "in-flight", "returned",
                 ):
-                    evidence = dict(chosen.get("evidence") or {})
-                    evidence["blocked_attempt"] = {"reason": attempt}
-                    chosen["evidence"] = evidence
+                    # publish() runs before the executor. An empty match is the
+                    # placeholder reason "missing", not a refusal.
+                    if match:
+                        evidence = dict(chosen.get("evidence") or {})
+                        evidence["blocked_attempt"] = {"reason": attempt}
+                        chosen["evidence"] = evidence
                     chosen["status"] = prior["status"]
                     if isinstance(prior.get("reason"), str) and prior["reason"]:
                         chosen["reason"] = prior["reason"]
