@@ -114,6 +114,8 @@ class MockAgent:
         self.child_proc: subprocess.Popen | None = None
         self.configured: dict[str, Any] = {}
         self.config_fixture = self._load_config_fixture()
+        self.deferred_model_ready = False
+        self.deferred_ready_options: list[dict[str, Any]] | None = None
         self.list_pages = self._load_list_pages()
         if self.list_pages:
             for page in self.list_pages:
@@ -135,6 +137,10 @@ class MockAgent:
         - ``set_drop``: truthy -> never respond (client timeout path)
         - ``set_notify``: configOptions list emitted as a config_option_update
           shortly after a successful set response
+        - ``defer_model``: ``{value, delay_ms, ready, provider_id}``. session/new
+          keeps ``new``. Until ``delay_ms`` elapses, setting ``value`` returns
+          the OpenCode -32602 model-not-found error. Then the mock advertises
+          ``ready`` and accepts that value. Issue #254.
         """
         raw = os.environ.get("MOCK_ACP_CONFIG", "")
         if not raw:
@@ -302,6 +308,32 @@ class MockAgent:
             else:
                 result["configOptions"] = self.config_fixture["new"]
         respond(request_id, result)
+        self._arm_deferred_model(session_id)
+
+    def _arm_deferred_model(self, session_id: str) -> None:
+        """Issue #254: publish a model id only after session/new has returned."""
+        spec = self.config_fixture.get("defer_model")
+        if not isinstance(spec, dict):
+            return
+        delay_ms = int(spec.get("delay_ms") or 0)
+        ready = spec.get("ready")
+
+        def publish() -> None:
+            if delay_ms > 0:
+                time.sleep(delay_ms / 1000.0)
+            self.deferred_model_ready = True
+            if isinstance(ready, list):
+                self.deferred_ready_options = ready
+            # Log before the notification so a client that sets on receipt
+            # cannot land its set ahead of this event in the mock log.
+            log_event({"event": "model_advertised", "sessionId": session_id})
+            if isinstance(ready, list):
+                session_update(session_id, {
+                    "sessionUpdate": "config_option_update",
+                    "configOptions": ready,
+                })
+
+        threading.Thread(target=publish, daemon=True).start()
 
     def on_session_list(self, request_id: Any, params: dict[str, Any]) -> None:
         if "list" not in self.caps:
@@ -512,6 +544,19 @@ class MockAgent:
         if error is not None:
             respond(request_id, error=error)
             return
+        spec = fixture.get("defer_model") if isinstance(fixture.get("defer_model"), dict) else None
+        if (spec is not None and config_id == "model"
+                and params.get("value") == spec.get("value")
+                and not self.deferred_model_ready):
+            respond(request_id, error={
+                "code": -32602,
+                "message": f"Invalid params: model not found: {params.get('value')}",
+                "data": {
+                    "providerId": str(spec.get("provider_id") or "opencode-go"),
+                    "modelId": params.get("value"),
+                },
+            })
+            return
         if "reject-effort" in self.caps and config_id in (
                 "reasoning_effort", "effort", "thought", "thoughtLevel"):
             respond(
@@ -544,6 +589,14 @@ class MockAgent:
                 respond(request_id, error={"code": -32602, "message": message})
                 return
         if config_id is not None:
+            if spec is not None and isinstance(self.deferred_ready_options, list):
+                options = json.loads(json.dumps(self.deferred_ready_options))
+                for option in options:
+                    if isinstance(option, dict) and option.get("id") == config_id:
+                        option["currentValue"] = params.get("value")
+                self.configured[str(config_id)] = params.get("value")
+                respond(request_id, {"configOptions": options})
+                return
             if config_id == "model" and "cursor-params" in self.caps:
                 # A model switch replaces the model-scoped option set.
                 for scoped in {o["id"] for opts in self.CURSOR_MODEL_OPTIONS.values()

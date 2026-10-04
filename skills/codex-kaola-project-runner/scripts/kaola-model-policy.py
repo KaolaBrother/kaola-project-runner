@@ -144,6 +144,10 @@ def probes_for(platform: str) -> list[list[str]]:
         "droid": [["--version"]],
         # dsh has no read-only catalog command: the model catalog is an ACP
         # config option declared in the session/new result, not a CLI dump.
+        # Issue #254: this --version probe still yields
+        # catalog-missing-declared-candidate when the candidate is absent from
+        # the probe text. That state is a reporting gap, not evidence the
+        # model is absent; the live ACP catalog is the authority.
         "dsh": [["--version"]],
     }[platform]
 
@@ -291,6 +295,14 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         },
         "fast": fast_block,
     }
+    # Issue #254: dsh's probe is --version only. Keep the resolution state
+    # (callers already treat catalog-missing as non-gating evidence) and
+    # record the gap on the probe itself so a missing CLI catalog is not
+    # read as service denial.
+    if args.platform == "dsh":
+        provenance["catalog_probe"]["reporting_gap"] = (
+            "version-probe-does-not-list-acp-models"
+        )
     if resolved != candidate:
         provenance["resolution"]["fast_variant_applied"] = resolved
     return {

@@ -1474,6 +1474,75 @@ def socket_request(sock_path: Path, op: str, params: dict[str, Any],
         connection.close()
 
 
+# Issue #254, measured on OpenCode 2.0.22. session/new returns before provider
+# discovery finishes: the first model list is only opencode/* (current value
+# opencode/fledge-alpha-free). About two seconds later config_option_update
+# advertises opencode-go/deepseek-v4.1-flash. session/set_config_option of that
+# id before the advertisement returns JSON-RPC -32602 "model not found" with
+# providerId opencode-go and modelId equal to the full requested string. The
+# same call after the advertisement applies it. The bound covers that delay.
+# A value that never appears is still sent once, and the agent's rejection
+# stays the receipt. No other model is substituted.
+OPENCODE_MODEL_ADVERTISE_WAIT = 8.0
+
+
+def advertised_config_values(state: Any, config_id: str) -> set[str]:
+    """Selectable values of one config option on a holder state reply."""
+    if not isinstance(state, dict) or state.get("error"):
+        return set()
+    meta = state.get("session_meta")
+    options = meta.get("configOptions") if isinstance(meta, dict) else None
+    found: set[str] = set()
+    if not isinstance(options, list):
+        return found
+    for option in options:
+        if not isinstance(option, dict) or option.get("id") != config_id:
+            continue
+        for entry in option.get("options") or []:
+            if not isinstance(entry, dict):
+                continue
+            nested = entry.get("options")
+            if isinstance(nested, list):
+                for member in nested:
+                    if isinstance(member, dict) and isinstance(member.get("value"), str):
+                        found.add(member["value"])
+            elif isinstance(entry.get("value"), str):
+                found.add(entry["value"])
+    return found
+
+
+def opencode_model_not_found(result: Any) -> bool:
+    """OpenCode's -32602 for an id its catalog has not published yet."""
+    if not isinstance(result, dict):
+        return False
+    error = result.get("error")
+    if not isinstance(error, dict):
+        return False
+    detail = error.get("detail")
+    if not isinstance(detail, dict):
+        return False
+    message = str(detail.get("message") or "")
+    return detail.get("code") == -32602 and "model not found" in message
+
+
+def set_opencode_model_when_advertised(sock_path: Path, config_id: str,
+                                       value: str) -> dict[str, Any]:
+    """Set the OpenCode model once the live option list contains ``value``."""
+    deadline = time.monotonic() + OPENCODE_MODEL_ADVERTISE_WAIT
+    while True:
+        state = socket_request(sock_path, "state", {}, 5.0)
+        advertised = value in advertised_config_values(state, config_id)
+        if advertised or time.monotonic() >= deadline:
+            result = socket_request(
+                sock_path, "set_config_option",
+                {"config_id": config_id, "value": value}, 20.0,
+            )
+            if (advertised or not opencode_model_not_found(result)
+                    or time.monotonic() >= deadline):
+                return result
+        time.sleep(0.05)
+
+
 # Issue #132: a live PID is necessary, never sufficient. A holder is "live"
 # only when its record exists, its PID is alive, its admin socket answers,
 # and the socket reports the record's own holder_instance_id; a record left
@@ -4272,7 +4341,10 @@ def command_start(args: argparse.Namespace, repo: str,
                     "value": value,
                 }
                 continue
-            result = socket_request(sock, "set_config_option", {"config_id": config_id, "value": value}, 20.0)
+            if args.platform == "opencode" and label == "model":
+                result = set_opencode_model_when_advertised(sock, config_id, value)
+            else:
+                result = socket_request(sock, "set_config_option", {"config_id": config_id, "value": value}, 20.0)
             record: dict[str, Any] = {"applied": not result.get("error"),
                                       "config_id": config_id, "value": value}
             if label == "model":
