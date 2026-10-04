@@ -116,8 +116,15 @@ bridge at the unpinned content stage (`saveable: false`).
 - **Idle wake retention (Issue #255).** A worker's undelivered `idle` wake to
   its Host is kept and re-sent when the Host is reachable, as permission wakes
   already were; a newer one replaces it.
-- **Not yet verified live:** consecutive native Sideagent nodes on ZCode and a
-  second runtime, process survival through a real preserving Host
+- **Dispatch ownership guidance (Issue #255).** The main Skill, its
+  lifecycle and dispatch references, the Host heartbeat skeleton and the design
+  record now say the Host picks presets, writes assignments, runs
+  `execute`/`collect` and judges original results; tools record the facts and
+  fresh Sideagent nodes reconcile meaningful batches without authoring or
+  allocating work. An existing persistent Sideagent binding keeps its recorded
+  workers and relay behavior.
+- **Not yet verified live:** native partial or missing node checkpoints
+  (`maintenance-returned`), an unconfirmed node stop, process survival through a real preserving Host
   replacement, per-platform process preservation (a ZCode
   Sideagent stop during a dispatch included), carrier re-anchor across real
   platforms, relay across holder death, native timer read-back on each outer

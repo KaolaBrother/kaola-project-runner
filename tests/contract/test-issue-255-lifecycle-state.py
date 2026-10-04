@@ -2515,6 +2515,25 @@ class RenderedGuidance(unittest.TestCase):
         report = (self.DELEGATOR / "references/inquiry-report.md").read_text(encoding="utf-8")
         self.assertIn("maintenance.last_verified", report)
 
+    def test_host_owns_dispatch_and_the_sideagent_allocates_nothing(self) -> None:
+        skill = (self.ORCH / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("You pick presets, write assignments, dispatch, judge originals", skill)
+        self.assertNotIn("Sideagent runs dispatch", skill)
+        lifecycle = (self.ORCH / "references/lifecycle-state.md").read_text(encoding="utf-8")
+        self.assertIn("preset choice", lifecycle)
+        self.assertIn("It assigns, grants\n  and accepts nothing", lifecycle)
+        self.assertNotIn("it selects presets", lifecycle)
+        dispatch = (self.ORCH / "references/dispatch-collect.md").read_text(encoding="utf-8")
+        self.assertIn("## Who dispatches", dispatch)
+        self.assertIn("writes and allocates no assignment", dispatch)
+        self.assertNotIn("runs routine dispatch", dispatch)
+        skeleton = (self.ORCH / "references/heartbeat-skeleton.md").read_text(encoding="utf-8")
+        self.assertIn("Host 记决定与派发", skeleton)
+        self.assertNotIn("Sideagent 记派发", skeleton)
+        design = (REPO / "docs/designs/lifecycle-state-2026-10-04/design.md").read_text(encoding="utf-8")
+        self.assertNotIn("Sideagent 执行派发", design)
+        self.assertNotIn("Sideagent 在当前授权、profile 和真实容量内选配", design)
+
     def test_delegator_timer_sentence_matches_the_tool(self) -> None:
         report = (self.DELEGATOR / "references/inquiry-report.md").read_text(encoding="utf-8")
         locator = dispatch_module.TIMER_LOCATOR.format(repo="<repo>", target="<target>")

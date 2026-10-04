@@ -11,17 +11,16 @@ copied backlog, ledger or history.
 
 ## Roles
 
-- Host: goal, task split, needed abilities, dependencies, acceptance and
-  closeout decisions; bootstrap, failure and urgent recovery. It may read,
-  search, analyze and do simple authorized work itself; not every action goes
-  through the Sideagent.
-- Sideagent: one bound maintenance seat per project, outside every Class seat.
-  Inside current authorization, profiles and real capacity it selects presets,
-  runs `execute`/`collect`, records results, holds and alerts, and exact-stops
-  finished workers. It creates no grant or requirement and accepts nothing. It
-  settles an ordinary confirmation only inside the exact assignment and tool
-  policy; anything absent, ambiguous or needing the user stays a pending
-  `decisions` record.
+- Host: goal, task split, needed abilities, dependencies, preset choice,
+  assignment text, `execute`/`collect`, reading original results, acceptance
+  and closeout decisions; bootstrap, failure and urgent recovery. It may read,
+  search, analyze and do simple authorized work itself.
+- Tools record dispatch, result and holder facts; no node restates them.
+- Sideagent: one maintenance role per project, outside every Class seat; a
+  fresh node per meaningful batch. It reconciles duties, holds, alerts,
+  conflicts and reclaim, and exact-stops finished workers. It assigns, grants
+  and accepts nothing. Launches use bypass permissions; a residual prompt is an
+  exception, and anything needing the user stays a pending `decisions` record.
 - Research, QA or implementation helpers are counted, authorized items.
 - Workers never write state (`writer-refused`).
 

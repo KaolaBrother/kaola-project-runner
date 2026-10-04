@@ -31,22 +31,19 @@ Input: `grants[]` (`id`, `state`, `count`, `shared_seat`,
 `paused`, `revoked` or `excluded`. Historical `N live` is granted; any other
 state is `state-unreadable`. Elite and Expert need `granted`.
 
-## Sideagent
+## Who dispatches
 
-One bound Sideagent (default `zcode/default`, or an
-owner-selected authorized available alternative) runs routine dispatch,
-collection, reclaim and state: [lifecycle-state.md](lifecycle-state.md).
-Host gives outcome, abilities, constraints, expected artifacts and known
-facts. Sideagent reuses them, queries only missing or stale evidence (unknown
+The Host reuses known facts, queries only missing or stale evidence (unknown
 is not absent; PATH is not adapter availability), and picks count, exact
-presets, assignments and ownership by profile and task fit within
-current grants and pending changes. Host keeps plan and acceptance and may
-dispatch directly.
+presets, assignment text and ownership by profile and task fit within current
+grants and pending changes. Split at independent context/resource
+boundaries; keep coupled code with its tests. No fixed reviewer count.
 
-It may reconcile conflicts, check omissions, synthesize or do
-explicitly scoped light work. It grants and accepts nothing and runs no
-scheduler. A parallel helper is a counted worker item; it does
-not start other workers. Exact-stop a Sideagent whose mandate ended.
+The Sideagent (default `zcode/default`, or an owner-selected authorized available
+alternative) reconciles state in batches ([lifecycle-state.md](lifecycle-state.md)):
+conflicts, omissions, or explicitly scoped light work the Host assigned. It
+writes and allocates no assignment, grants and accepts nothing and runs no
+scheduler. A parallel helper is a counted worker item; it does not start other workers.
 
 ## Commands and compact reads
 
