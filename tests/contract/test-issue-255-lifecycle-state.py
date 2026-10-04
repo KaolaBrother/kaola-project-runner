@@ -2354,6 +2354,33 @@ class HolderNodeMode(HolderFixture):
         self.assertEqual(len(self.fake.prompts), 2, "and is never sent to another node")
         self.assertEqual(self.holder.pending_worker_events, [])
 
+    def test_a_partial_checkpoint_settles_its_share_and_returns_the_rest_once(self) -> None:
+        self.write_node_state()
+        os.environ["FAKE_NODE_DELAY"] = "0.6"
+        self.event("codex-KT-i1-a", "idle", 5)
+        self.event("codex-KT-i1-b", "idle", 6)
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "one batch for both events")
+        text = self.fake.prompts[0]["params"]["text"]
+        self.assertIn("codex/codex-KT-i1-a/idle/5", text)
+        self.assertIn("codex/codex-KT-i1-b/idle/6", text)
+        batch = text.split("batch ", 1)[1].split()[0]
+        self.checkpoint(batch, "node-1", ["codex/codex-KT-i1-a/idle/5"], False)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stop")
+        log = [json.loads(line) for line in
+               (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()]
+        settled = [entry for entry in log if entry.get("kind") == "sideagent_node_settled"]
+        self.assertEqual([(entry["checkpoint"], entry["settled"], entry["returned"]) for entry in settled],
+                         [("partial", ["codex/codex-KT-i1-a/idle/5"], ["codex/codex-KT-i1-b/idle/6"])])
+        self.assertIn("codex/codex-KT-i1-a/idle/5", self.confirmed_ids())
+        prompts = self.agent.prompts()
+        self.assertEqual(len(prompts), 1, "the unsettled share reaches the Host once")
+        self.assertIn("codex-KT-i1-b", prompts[0])
+        self.assertIn("checkpoint partial", prompts[0])
+        self.finish_host_turn()
+        self.assertEqual(len(self.fake.prompts), 1, "and no node is started for it")
+        self.assertEqual(self.holder.pending_worker_events, [])
+
     def test_an_unconfirmed_stop_blocks_a_competing_node(self) -> None:
         self.write_node_state()
         self.fake.ignore_stop = True
