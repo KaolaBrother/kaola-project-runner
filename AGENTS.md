@@ -81,6 +81,12 @@ Codex and generic do not.
 - Project Runner Skills only identify, start, capture, send, read, and stop an exact owned ACP CLI
   session. The controlling Agent owns prompts, native keys, semantic judgments, orchestration, and
   recovery; there is no default Workflow command, heartbeat, cadence, lifecycle, or completion policy.
+- Scoped exception (#255, Host carrier and Sideagent nodes only): when a Project Runner Host binds
+  its Sideagent with `"mode": "node"`, that Host's holder starts one fresh node per event batch from
+  the recorded Runner argument list (never a shell), sends it one batch prompt, reads its state
+  checkpoint and exact-stops it by holder. An explicit `--preserve-dispatched-workers` Host stop keeps
+  that Host's proven worker trees. Standalone Platform Runner transport, default stop and every
+  session not bound this way are unchanged.
 - The generated Skill `kaola-project-runner` (display name Project Runner) is the main control-plane
   Skill: it owns intake recovery, heartbeat, dispatch, acceptance-before-finalize, and close-out
   ownership. The ten platform Skills remain transport-only.

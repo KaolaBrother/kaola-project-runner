@@ -28,8 +28,9 @@ What this file pins:
   ordinary turn-end ``idle`` still follows;
 * a Host that is busy when the wake recovers stages it and flushes at its next
   completed turn boundary;
-* ordinary ``idle``/``terminated`` carrier sends stay one-shot, and an unbound
-  worker still sends nothing.
+* a turn-end ``idle`` whose host is away is held the same way (Issue #255) and
+  re-offered with its original cursor when the host returns; ``terminated``
+  stays one-shot, and an unbound worker still sends nothing.
 
 No real ZCode install, no login, no network, no auto-approval.
 """
@@ -790,8 +791,9 @@ def test_busy_host_stages_the_recovered_wake() -> None:
 
 
 def test_idle_and_unbound_paths_are_unchanged() -> None:
-    """Scope guard: an ordinary turn-end ``idle`` whose host is away stays a
-    one-shot send, and an unbound worker still sends nothing at all."""
+    """Issue #255: a turn-end ``idle`` whose host is away is retained and
+    re-offered when the same host returns, without re-sending the worker's
+    task; an unbound worker still sends nothing at all."""
     sandbox = Sandbox("scope")
     try:
         host = sandbox.session()
@@ -808,10 +810,27 @@ def test_idle_and_unbound_paths_are_unchanged() -> None:
         bound_dir = sandbox.record_dir(bound)
         wait_until(lambda: failed_carrier(bound_dir, "idle"), 20,
                    "the ordinary idle records the absent host")
-        check(not events_of_kind(bound_dir, "heartbeat_carrier_undelivered"),
-              "an ordinary idle is not retained for recovery")
-        check(not (sandbox.cli("status", session=bound).get("undelivered_worker_events")),
-              "an ordinary idle owes the host nothing")
+        undelivered = events_of_kind(bound_dir, "heartbeat_carrier_undelivered")
+        check(len(undelivered) == 1 and undelivered[0].get("event_kind") == "idle",
+              f"the returned result's wake is retained for recovery ({undelivered})")
+        held = sandbox.cli("status", session=bound).get("undelivered_worker_events") or []
+        check(len(held) == 1 and held[0].get("kind") == "idle"
+              and held[0].get("event_cursor") == undelivered[0].get("event_cursor"),
+              f"the bound worker still owes the host its turn end ({held})")
+        sends_before = len(rpc_sends(sandbox.rpcs[bound]))
+        sandbox.start(host, "basic")
+        host_dir = sandbox.record_dir(host)
+        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"),
+                   RECOVERY_TIMEOUT, "the returned host receives the held idle wake")
+        staged = worker_event_entries(host_dir)
+        check(len(staged) == 1 and staged[0]["kind"] == "idle"
+              and staged[0]["session"] == bound,
+              f"exactly one idle event is staged for the bound worker ({staged})")
+        wait_until(lambda: not (sandbox.cli("status", session=bound)
+                                .get("undelivered_worker_events")), 20,
+                   "the delivered idle is no longer owed")
+        check(len(rpc_sends(sandbox.rpcs[bound])) == sends_before,
+              "retaining the wake never re-sends the worker's task")
 
         sandbox.start(unbound, "permission")
         sandbox.cli("send", "--no-wait", "--text", "do work", session=unbound)
@@ -825,7 +844,7 @@ def test_idle_and_unbound_paths_are_unchanged() -> None:
         check(not (sandbox.cli("status", session=unbound).get("undelivered_worker_events")),
               "an unbound worker owes nothing")
 
-        for session in (bound, unbound):
+        for session in (bound, unbound, host):
             stop = sandbox.cli("stop", "--force", session=session)
             check(stop.get("residual_pids") == [], f"{session} stop leaves no residue")
     finally:

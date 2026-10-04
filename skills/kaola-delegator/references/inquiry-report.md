@@ -39,7 +39,10 @@ report has these five parts, in order. An empty part says
    requirement; a received message is not proof it was adopted.
 2. Special situations: holds, alerts (`watch`, `warn`, `severe`), major
    pending decisions and `unverified` items. Every unresolved one is reported
-   again each time, coalesced, never escalated by elapsed time alone.
+   again each time, coalesced, never escalated by elapsed time alone. With a
+   node-mode Sideagent, `maintenance.last_verified` (batch, node, time) beside
+   open duties shows whether maintenance still progresses; a
+   `maintenance-returned` alert is the Host's to resolve.
 3. Tasks in progress (`doing`).
 4. Tasks to do (`todo`).
 5. This round's outcomes and next steps.

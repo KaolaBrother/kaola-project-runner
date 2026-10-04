@@ -438,6 +438,24 @@ lifecycle state (`state-managed`). The index is not a mission ledger, and the en
 plan, grant a seat, accept a result, or stop a session. Detail:
 `templates/orchestrator/references/dispatch-collect.md`.
 
+`scope` is `research`, `qa`, `report` or `implementation`; only `implementation` admits
+`mutation: true`, and `execute` still claims nothing, creates no worktree and calls no forge.
+An item sends its own `prompt`, or the plan's `core` (with `core_revision`) plus the item's
+`worker_scope` joined by one blank line; giving both, or a core without its revision, is
+`invalid-input`. The row's `prompt_source` records `kind` (`full` or `core+scope`),
+`core_revision`, and the `sha256:` of core, scope and sent prompt. `execute --state FILE`
+reads lifecycle state (holds are also read when `--authorization` is the v2 state file): a hold whose `preset` or `presets` names the item's preset makes a new
+item `not-run` / `on-hold` (with `holds`) before any Runner call, and each admitted,
+returned or unknown item with a `task_id` is added to that task's `dispatch` by writer
+`tool:execute` without raising `host_revision` (`task_links` in the receipt; an unknown task
+is an item `evidence.task_note`). A `collect` result carries `excerpt` (480 characters),
+`excerpt_truncated`, `reply_chars`, `stop_reason`, `cursor`, `turn`
+(`holder_instance_id`, `prompt_fingerprint`), `locator` (platform, session, the Runner
+`capture` argv with `--since <dispatch cursor> --full --inline`, `event_log_path`), `output`
+(`path`, `present` for a local path; a URL is not checked) and `gaps` (`reply-text-absent`,
+`capture-truncated`, `output-absent`). A new return of an item whose acceptance was decided
+resets it to `pending` and keeps the earlier value as `prior_acceptance`.
+
 Plan items may carry `task_id`, `output`, and `requires` (`{"class": ..., "presets": [...]}`, a
 requirement the Host stated for that item). All three are copied onto the index row. An
 unmet `requires` is `not-run` / `requirement-unmet` before any Runner call; an item without
@@ -478,7 +496,35 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   caller whose own record names no role reads `host:<session> (role unverified)`, because the
   writer flag is a trace, not an identity proof. On migration a v1 `pending` key with no v1
   meaning is kept under the task's `legacy` and never acts as a v2 field of the same name.
-- `view --role host|sideagent|delegator` reads only. The Delegator view lists the `AGENTS.md`
+- Each Host business write raises the file's `host_revision` and stamps the record (or
+  section source, or tombstone) with it; tool and Sideagent writes do not raise it and stamp
+  the caller's holder as `writer_holder`. Task `dispositions` maps item ids to `accepted`,
+  `repair`, `cancelled`, `superseded` or `handed-off` (Host-owned); `update --kind tasks
+  --index I` mirrors them onto the index `acceptance` with `acceptance_source`, and after a
+  task `verdict` an item of that task with no disposition becomes `undecided` with an
+  `acceptance_note`. The mirror result is `index_mirror`; a mirror error does not fail the
+  state write.
+- `checkpoint --writer sideagent --batch B --through-host-revision R --entries JSON
+  [--events JSON]` is written by a node-mode Sideagent (`sideagent.mode: "node"`) from inside
+  its own session. Each entry names an `input` (a Host change id `host:<kind>/<id>@<rev>`,
+  `host:section/<name>@<rev>`, `host:retired/<kind>/<id>@<rev>`, or a worker event id) and
+  either `applied` (current records or `retired:<kind>/<id>` this node's holder wrote) or
+  `retained` (a current record with `next`, `owner` or `wait`, or a Host `section/<name>`).
+  The checkpoint lands in `maintenance.last_checkpoint`; `last_verified` moves only when every
+  selected input settled; `acked_host_revision` never passes an unsettled change or one still
+  open in the `maintenance-returned` alert, which receives each unsettled input once. A
+  caller that is not the session's current node holder is `binding-superseded`; no caller
+  identity is `node-identity-required`.
+- With node mode, a Host holder advertising `sideagent-node/1` starts one fresh node per batch
+  from `sideagent.recipe` (`runner`, an absolute file, and `argv` starting with `start`, or with the bound platform then `start` for the checkout
+  `kaola-tmux.sh`, bound
+  `--session` and `--repo`, `--role sideagent`, never `--continue`/`--resume`; an optional absolute `state_tool`), sends it
+  one batch prompt naming the exact `state checkpoint` command and state file, settles the batch from that node's checkpoint at its turn end, returns the
+  rest to the Host once, and exact-stops the node. A failed start or an unconfirmed stop
+  starts no further node until reconciled.
+- `view --role host|sideagent|delegator` reads only. The Host view adds `host_revision`,
+  `dispositions` and a `maintenance` brief; the Sideagent view adds `host_revision` and
+  `pending_host_changes`; the Delegator view adds `maintenance`. The Delegator view lists the `AGENTS.md`
   user-requirements region, holds, alerts, pending decisions, `unverified`, then doing, todo,
   and outcomes.
 - `check [--index] [--live] [--repo]` reports problems without writing.
@@ -509,8 +555,17 @@ scripts/kaola-tmux.sh PLATFORM key       --repo ABS_PATH --session NAME \
 scripts/kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME \
   [--decision-id ID] [--if-snapshot ID] --replace-editor [--text TEXT]
 scripts/kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME \
-  [--if-snapshot ID] [--force]
+  [--if-snapshot ID] [--force] [--preserve-dispatched-workers]
 ```
+
+`--preserve-dispatched-workers` (also on `drain-restart`) is an explicit Host continuity
+intent: the stop keeps the complete process tree (holder, native agent, tools) of each worker
+this Host dispatched, proven by its spawn line or a live worker record naming this exact
+holder as `dispatcher`, on a cooperative stop and on dead-holder cleanup; other recorded
+children are still swept. A live holder that does not advertise `preserve-dispatched/1`
+returns `{"result":"refused","reason":"preserve-unsupported"}` with `mutation_status:
+not_started`. Without the flag a Host stop is unchanged. The successor Host then runs
+`rebind-host` per seat; a start still in flight is not covered and needs reconciliation.
 
 `--repo` must resolve to the exact Git top-level. A linked worktree is a valid Git top-level and
 is not a transport refusal; preferring the consuming project's canonical

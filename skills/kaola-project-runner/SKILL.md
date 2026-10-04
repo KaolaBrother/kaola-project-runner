@@ -15,13 +15,13 @@ One Host owns the plan, acceptance and QA.
 Helpers do bounded planning, research, QA, synthesis, explicitly scoped light work
 or an assignment. They never scale, control workers, run another scheduling loop,
 grant permission or accept the project.
-One bound Sideagent runs dispatch and state: [lifecycle-state.md](references/lifecycle-state.md).
+One bound Sideagent runs dispatch and state: [lifecycle-state.md](references/lifecycle-state.md), [node](references/sideagent-node.md).
 Read, search, analyze and do simple authorized work directly; not every action
 goes through the Sideagent. Larger code, test or doc work goes to workers
 unless the human allows self-execution.
 
 Authorized release/install mechanics may stay Host-owned without an issue or
-worker solely for them; honor owner allocation and project lifecycle.
+worker just for them; honor owner allocation and project lifecycle.
 
 ## Two entry points
 
@@ -43,7 +43,7 @@ Routine, cron, or sleep loop. Its first prompt names its
 Every Host assignment uses `--no-wait`, then ends the turn, including direct
 Runner/Workflow, continuation, repair and finalize. Beat mechanics - ending the turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
 Each inner worker is its own session and process group: an inner stop never
-reaches the Host, and the Host's stop sweeps only recorded inner sessions.
+reaches the Host; the Host's stop sweeps only recorded inner sessions.
 Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
 which starts one Host of any platform that loads this Skill. `--platform grok` is the
 Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
@@ -122,7 +122,7 @@ Bind the consuming project's canonical project root once at setup with
 Runner fills it and refuses a drifted root at start. Ask each worker to invoke its installed
 workflow-next. Without that binding, linked-worktree starts and existing-run
 recovery are Agent decisions, not transport gates. See
-[references/workflow-worktree.md](references/workflow-worktree.md).
+[workflow-worktree.md](references/workflow-worktree.md).
 
 Model mismatches are evidence, not automatic start gates. Bypass is not broader authorization. With no verified ACP skip-all,
 permission may still arise: `permit` settles it; never add a gate.
@@ -132,7 +132,7 @@ permission may still arise: `permit` settles it; never add a gate.
 The heartbeat is the working prompt itself: a Host (any platform with a
 `host_skill_entry`) runs it on each worker event; Codex's own timer serves only
 a non-Host Codex supervisor; host-native carriers. Its `body` is one JSON object per
-[references/heartbeat-skeleton.md](references/heartbeat-skeleton.md), written
+[heartbeat-skeleton.md](references/heartbeat-skeleton.md), written
 only by `state`. It is the effective-now snapshot, not a
 log: update changed facts/duties, replacing superseded quota, priority and
 plans, keeping in-flight locators and unfinished duties. A confirmed change
@@ -198,7 +198,7 @@ sink, and write ownership.
    heartbeat's declared project short code, verify it in the start receipt, and
    keep the rule on later dispatches and restarts. Hosts, diagnostics and
    issue-less tasks carry no issue number and never an invented one. Detail:
-   [references/issue-dispatch.md](references/issue-dispatch.md).
+   [issue-dispatch.md](references/issue-dispatch.md).
 3. **Accept the delivery.** Mission-frontier done triggers review, not automatic finalize. When a worker
    claims completion, judge its actual diff, checks, docs and run records
    against that assignment under the effective global Workflow rules. Reuse

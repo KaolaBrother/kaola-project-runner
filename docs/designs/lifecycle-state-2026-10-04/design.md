@@ -1,6 +1,6 @@
 # KPR 生命周期与状态维护设计
 
-2026-10-04 · 外层与 Claude Code Opus Extra High 已达成设计共识；用户已授权实施，由 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 承担。候选实现待联合验收，真实运行与正式迁移尚未验证
+2026-10-04 · 外层与 Claude Code Opus Extra High 已达成设计共识；用户已授权实施，由 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 承担。合并定稿（实现派工、结果定位、逐项处置、Sideagent 节点、Host 接续停止）已并入本文第 7、9、15 节。候选实现待联合验收，真实运行与正式迁移尚未全部验证
 
 ## 1. 目标
 
@@ -73,6 +73,8 @@ Sideagent 是独立角色，不占任何 worker Class 席位。用户指定其 r
 
 Host 启动 → 读取共享当前状态 → 持续执行维护委托 → 必要时安全更换 → 委托结束回收。
 
+也可绑定为节点模式（`"mode": "node"`）：Host 载体按固定批次（worker 事件与 Host 业务修订区间）从记录的 Runner 参数列表启动一个全新节点，节点写一次检查点核对每个输入，载体随后按 holder 精确停止它。下一批输入通过既有事件与空闲节拍触发下一个节点，不新增定时器。见第 15 节。
+
 单次回复结束不等于维护职责结束。更换时保住在途 worker，替代者从现有状态和回执接续；不反复重派，也不无限依赖旧上下文。故障由 Host 的直接工具路径处理，不能要求失败的 Sideagent 先修改自身状态。
 
 ### Host / Delegator
@@ -89,6 +91,8 @@ Delegator 核实授权与唯一 Host 后启动或附加；Host 故障时按既�
 - 符合要求的席位全部忙：记录容量等待，不降级、不扩席；释放后重新评估并推进。
 - 确需 Expert 而无适用授权：Host 主动提出需求，Delegator 向用户请求。已有常设授权则在范围内使用；已有授权但忙则等待。
 - 用户暂停授权、缺授权、容量占满和 on hold 分开处理，不把用户暂停自动变成反复请求恢复的理由。
+- 已记录的 on hold 覆盖某 preset 时，派发直接标为 `not-run` / `on-hold`，不再调用 Runner 重新探测。
+- 实现类工作通过同一 `execute` 入口（`scope: implementation`，仅此范围允许 `mutation: true`）派给 worker；认领、worktree 和 forge 仍归 worker 的 Workflow。发送文本是 Host 原文，或 Host 的公共核心（带修订号）加逐个 worker 范围，索引记录各自哈希。
 
 对派发项明确承担的 Host 能力要求，可在计划执行前核对选择是否匹配；这仅约束该派发项，不是底层 Runner 的新通信门禁，也不是对所有分支机械比较 Class。未声明要求不等于已证明适配，候选汇总仍须说明各要求由哪些执行项满足。
 
@@ -119,7 +123,7 @@ Delegator 核实授权与唯一 Host 后启动或附加；Host 故障时按既�
 
 Sideagent 更换不能连带终止健康 worker。清理必须依据精确身份保护 holder、原生 agent 及其关联进程；旧 Sideagent 的迟到清理不得解除新绑定。
 
-Host 更换后的通知目标需要安全接续，不能只为改变通知地址而重启健康 worker。通知只是唤醒线索，执行事实仍从原回执和派发索引恢复。实现必须验证跨平台、部分失败、重复事件及通知丢失后的重建路径。
+Host 更换后的通知目标需要安全接续，不能只为改变通知地址而重启健康 worker。Host 的 `stop`/`drain-restart` 只有显式带 `--preserve-dispatched-workers` 时才保留其派出的完整 worker 进程树，随后由继任 Host 对每个席位执行 `rebind-host`；默认停止与最终收尾语义不变。通知只是唤醒线索，执行事实仍从原回执和派发索引恢复。实现必须验证跨平台、部分失败、重复事件及通知丢失后的重建路径。
 
 ## 10. Host 的有限全局视图
 
@@ -149,7 +153,7 @@ Host 更换后的通知目标需要安全接续，不能只为改变通知地址
 
 重点验收：正常/无 issue/keep-open 任务、混合能力 fan-out、容量等待与 Expert 上报、错误实际配置、发送未知、并发状态更新、返修与回收、授权变化、各类 hold 恢复、Sideagent/Host 故障、跨平台接续、迟到事件、大状态投影、模板核对及多轮自主纠错。
 
-实现由 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 负责：状态工具为 `kaola-dispatch.py state`，规则见生成的 Project Runner 参考 `references/lifecycle-state.md`。候选实现通过前，真实运行验证和正式迁移不得宣称已完成，更不能据设计宣称绝对不会出错。
+实现由 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 负责：状态工具为 `kaola-dispatch.py state`，规则见生成的 Project Runner 参考 `references/lifecycle-state.md` 与 `references/sideagent-node.md`。候选实现通过前，真实运行验证和正式迁移不得宣称已完成，更不能据设计宣称绝对不会出错。
 
 ### 已知限制
 
@@ -187,3 +191,36 @@ Host 更换后的通知目标需要安全接续，不能只为改变通知地址
 ## 14. 共识记录
 
 外层完成亲审，Opus 明确同意五项最终协调结论，并确认本文无实质冲突。详见同目录 [联合审阅记录](review.md)。这构成设计共识。之后用户已明确授权 [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255) 实施并联合验收；历史审阅记录中的“仅设计”说明不撤销该授权。
+
+## 15. 合并定稿补充
+
+本节对应 #255 合并定稿正文，替换前文中与之冲突的旧说法。研究依据保存在同目录 [research/](research/README.md)。
+
+### 派工与结果
+
+- **一个入口**：研究、QA、报告与实现都走 `execute`。实现项是普通 worker 派工，不在工具内认领、建 worktree 或操作 forge。
+- **原文发送**：每项要么发送 Host 的完整 `prompt`，要么发送计划 `core`（带 `core_revision`）加该项 `worker_scope`；索引的 `prompt_source` 记录种类、核心修订和各段 `sha256`。
+- **任务关联**：带 `--state` 时，派发项 id 由工具写入任务 `dispatch`（写入者 `tool:execute`，不增加 Host 修订号）。
+- **结果可定位**：`collect` 结果给出精确回合（holder、提示指纹）、Runner `capture --since <游标> --full --inline` 参数、事件日志、输出位置是否存在，以及显式缺口（`reply-text-absent`、`capture-truncated`、`output-absent`）。480 字摘录标明是否截断与原长。新的返回把验收重置为 `pending` 并保留之前的值。
+
+### 逐项处置
+
+任务的 `dispositions` 按派发项记录 Host 决定（`accepted`、`repair`、`cancelled`、`superseded`、`handed-off`），任务级 `verdict` 仍是整体判断。`update --index` 把处置镜像到索引 `acceptance`；有任务结论但某项没有处置时，该项标为 `undecided`，不会继续显示为 `pending`。
+
+### Host 修订号与节点检查点
+
+- 只有 Host 业务写入增加文件 `host_revision`；工具和 Sideagent 写入只记录 `writer_holder`。
+- 节点用 `state checkpoint` 逐项核对本批输入：`applied` 必须是本节点 holder 写下的当前记录或退休记录；`retained` 必须是仍有 `next`/`owner`/`wait` 的当前记录或 Host 段落。旧证据或他人证据不能结清新输入。
+- 全部结清才更新 `maintenance.last_verified`；`acked_host_revision` 不越过任何未结清的修订；之后的 Host 写入保持待处理。
+- 未结清的输入一次性写入 `maintenance-returned` 告警交给 Host，不再发给其他节点，也不计为已应用。
+- 载体在节点回合结束后核对检查点：已核实则保持安静，部分或缺失则把剩余事件交给 Host 一次；随后精确停止节点。启动失败或停止未确认时不启动新节点，Host 暂时承接新事件，直到核对该节点。旧节点的迟到写入返回 `binding-superseded`。
+- 最近一次已核实检查点与当前责任并列显示在 Host 与 Delegator 视图，供 Delegator 发现维护停滞；不在心跳中累积检查点历史。
+
+### 唤醒与停止
+
+- 发往 Host 的 worker `idle` 唤醒在未送达时与权限唤醒一样保留，Host 可达后重发；新唤醒替换旧唤醒，停止时丢弃。不新增定时器。
+- 旧 holder 不支持保留意图时返回 `preserve-unsupported` 且什么都不停止，需先在空闲时 `drain-restart`。启动中途被打断的席位不在保留承诺之内，必须核对。
+
+### 仍未验证
+
+ZCode 与另一运行时上连续两个真实节点、真实 Host 更换中的进程存活、OpenCode 权限绕过调查（独立跟踪项）都需要原生证据；在取得之前不宣称已可靠运行。

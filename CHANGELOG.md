@@ -9,7 +9,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 Seats: restart required
 
 The holder diff is not empty. `scripts/kaola-acp-holder.py` advertises
-`holder_features` (`heartbeat-state/2`, `sideagent-relay/1`), reads a lifecycle
+`holder_features` (`heartbeat-state/2`, `sideagent-relay/1`, `sideagent-node/1`,
+`preserve-dispatched/1`), reads a lifecycle
 state file up to 1 MiB, relays worker events to a bound Sideagent, and keeps
 the whole process tree (holder, native agent, tools) of each worker a
 Sideagent dispatched when that Sideagent stops. A running seat keeps the holder it
@@ -86,7 +87,38 @@ bridge at the unpinned content stage (`saveable: false`).
   writes keep their source, omitted text is marked, a worker cannot write as
   Host or Sideagent, and a retired fault id reopens only on a later
   observation.
-- **Not yet verified live:** per-platform process preservation (a ZCode
+- **Implementation dispatch and exact results (Issue #255).** `execute` accepts
+  `scope: implementation`, the only scope that admits `mutation: true`; it still
+  claims nothing and calls no forge. An item sends its own `prompt` or the
+  plan's `core` (with `core_revision`) plus its `worker_scope`, and the index
+  row's `prompt_source` records the hashes. `--state` links each item to its
+  task's `dispatch` as a tool write and skips any preset under a recorded hold
+  (`not-run` / `on-hold`, no Runner call). `collect` results name the exact
+  turn, a full-capture locator, output presence and explicit gaps, and mark the
+  480-character excerpt as truncated with the full reply length; a new return
+  keeps the earlier acceptance as `prior_acceptance`.
+- **Per-assignment dispositions and Host revision (Issue #255).** Task
+  `dispositions` record the Host's decision per item; `update --index` mirrors
+  them onto the index, and an item left without one after a task verdict is
+  `undecided`. Only Host business writes raise `host_revision`; other writes
+  stamp `writer_holder`.
+- **Sideagent nodes (Issue #255).** With `sideagent.mode: "node"` and a
+  recorded Runner `recipe`, the Host holder starts one fresh node per batch,
+  settles the batch only from that node's `state checkpoint` (input-by-input
+  accounting against records it wrote or duties still owned), hands unsettled
+  inputs to the Host once (`maintenance-returned`) and exact-stops the node. A
+  failed start or unconfirmed stop starts no further node. The last verified
+  checkpoint shows in the Host and Delegator views.
+- **Host continuity stop (Issue #255).** `stop` and `drain-restart` accept
+  `--preserve-dispatched-workers` for a Host: its proven dispatched worker
+  trees survive, cooperatively and after holder death; an older live holder
+  refuses with `preserve-unsupported`. The default stop is unchanged.
+- **Idle wake retention (Issue #255).** A worker's undelivered `idle` wake to
+  its Host is kept and re-sent when the Host is reachable, as permission wakes
+  already were; a newer one replaces it.
+- **Not yet verified live:** consecutive native Sideagent nodes on ZCode and a
+  second runtime, process survival through a real preserving Host
+  replacement, per-platform process preservation (a ZCode
   Sideagent stop during a dispatch included), carrier re-anchor across real
   platforms, relay across holder death, native timer read-back on each outer
   platform, and state size on a real project. `rebind-host` moves only the

@@ -1795,6 +1795,7 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
 
 
 SPAWN_RECORD_TOLERANCE = 5.0
+PRESERVE_FEATURE = "preserve-dispatched/1"
 SPAWN_RECORD_SLACK = 1.0
 PS_ENV = {**os.environ, "LC_ALL": "C"}
 
@@ -1855,7 +1856,7 @@ def run_ps(columns: list[str], env: dict[str, str] | None = None) -> subprocess.
 
 
 def recorded_groups(record: dict[str, Any], directory: Path | None = None,
-                    verified_only: bool = False) -> list[int]:
+                    verified_only: bool = False, preserve_dispatched: bool = False) -> list[int]:
     """The agent's own process group plus the out-of-group child groups the
     holder noted while the agent was alive (detached CLI children), plus the
     children the agent itself recorded at spawn in ``children.jsonl`` under
@@ -1942,7 +1943,7 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None,
         delta = spawned_at / 1000.0 - started
         if -SPAWN_RECORD_SLACK <= delta <= SPAWN_RECORD_TOLERANCE:
             groups.append(child)
-    if record.get("session_role") in ("sideagent", "sidekick") and groups:
+    if (record.get("session_role") in ("sideagent", "sidekick") or preserve_dispatched) and groups:
         # Issue #255: workers a Sideagent dispatched keep running when it is
         # replaced; each has its own exact stop. Only this script's `start`
         # appends to the spawn record, so a verified entry is a Runner holder
@@ -2092,10 +2093,35 @@ def retire_record(directory: Path, record: dict[str, Any], reason: str) -> Path 
     return retired
 
 
+def preserving(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "preserve_dispatched_workers", False))
+
+
+def preserve_refusal(args: argparse.Namespace, repo: str, directory: Path) -> dict[str, Any] | None:
+    """Issue #255: a live holder that predates the preserve intent would
+    ignore it and sweep the workers it dispatched, so the request is refused
+    before anything is signalled. A dead holder is swept by this script, which
+    honours the intent itself."""
+    if not preserving(args):
+        return None
+    record = read_record(directory) or {}
+    if not pid_alive(record.get("holder_pid")):
+        return None
+    if PRESERVE_FEATURE in (record.get("holder_features") or []):
+        return None
+    receipt = base_receipt(args, repo)
+    receipt.update({"result": "refused", "reason": "preserve-unsupported",
+                    "detail": f"the live holder does not advertise {PRESERVE_FEATURE}; "
+                              "a stop now would end the workers it dispatched",
+                    "mutation_status": "not_started", "mutation_performed": False})
+    return receipt
+
+
 def force_kill_from_record(args: argparse.Namespace, repo: str,
                            record: dict[str, Any]) -> dict[str, Any]:
     """stop --force path when the holder is already gone."""
-    groups = recorded_groups(record, spawn_record_dir(args, repo), verified_only=True)
+    groups = recorded_groups(record, spawn_record_dir(args, repo), verified_only=True,
+                             preserve_dispatched=preserving(args))
     unverified = unverified_agent_group(record, groups)
     receipt = base_receipt(args, repo)
     killed: list[int] = []
@@ -2183,7 +2209,8 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
         # PID gets no signal. The holder's identity-checked groups are swept as
         # for any dead holder, and the record is retired only once nothing of
         # them is left, so a survivor stays visible to the next sweep.
-        groups = recorded_groups(record, directory, verified_only=True)
+        groups = recorded_groups(record, directory, verified_only=True,
+                                 preserve_dispatched=preserving(args))
         unverified = unverified_agent_group(record, groups)
         killed: list[int] = []
         for pid in live_group_members(groups):
@@ -4957,9 +4984,14 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
     stop: dict[str, Any] | None = None
     did_stop = False
     if pid_alive(old_pid):
+        refused = preserve_refusal(args, repo, directory)
+        if refused is not None:
+            refused["action"] = "drain-restart"
+            return refused
         stop = op_or_holder_lost(
             args, repo, directory, "stop",
-            {"expected_holder_instance_id": old_id, "require_idle": True}, 30.0,
+            {"expected_holder_instance_id": old_id, "require_idle": True,
+             **({"preserve_dispatched_workers": True} if preserving(args) else {})}, 30.0,
         )
         if stop.get("idle") is False or stop.get("stopped") is False:
             receipt = base_receipt(args, repo)
@@ -5079,6 +5111,8 @@ def main() -> int:
     parser.add_argument("--expected-holder-instance-id")
     parser.add_argument("--key")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--preserve-dispatched-workers", action="store_true",
+                        help="stop or drain-restart this holder but keep each worker it dispatched")
     parser.add_argument("--lines", type=int)
     parser.add_argument("--tools", action="store_true")
     parser.add_argument("--since", type=int)
@@ -5366,9 +5400,15 @@ def main() -> int:
         params = {"force": args.force}
         if args.expected_holder_instance_id is not None:
             params["expected_holder_instance_id"] = args.expected_holder_instance_id
-        receipt = op_or_holder_lost(
-            args, repo, directory, "stop", params, 30.0
-        )
+        refused = preserve_refusal(args, repo, directory)
+        if refused is not None:
+            receipt = refused
+        else:
+            if preserving(args):
+                params["preserve_dispatched_workers"] = True
+            receipt = op_or_holder_lost(
+                args, repo, directory, "stop", params, 30.0
+            )
     else:
         die(f"unhandled command {args.command}")
     print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))

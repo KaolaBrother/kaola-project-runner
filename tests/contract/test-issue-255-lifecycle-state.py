@@ -17,6 +17,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import time
 import unittest
@@ -1145,7 +1146,7 @@ class FakeSideagent:
             pass
 
 
-class HolderRelay(unittest.TestCase):
+class HolderFixture(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i255-holder-")
         root = Path(self.tmp.name)
@@ -1205,6 +1206,16 @@ class HolderRelay(unittest.TestCase):
         self.holder.turn["active"] = False
         self.holder._worker_event_turn_end(fingerprint, "turn_completed")
 
+    def pending_ids(self) -> list[str]:
+        return [item["event_id"] for item in self.holder.pending_worker_events]
+
+    def confirmed_ids(self) -> list[str]:
+        log = (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()
+        return [event_id for line in log for entry in [json.loads(line)]
+                if entry.get("kind") == "worker_event_confirmed" for event_id in entry["event_ids"]]
+
+
+class HolderRelay(HolderFixture):
     def test_rebind_moves_the_carrier_in_place_and_keeps_the_seat(self) -> None:
         old = {"platform": "codex", "session": "codex-KT-orchestrator-old", "repo": str(self.repo),
                "socket": str(Path(self.tmp.name) / "old-host.sock")}
@@ -1407,14 +1418,6 @@ class HolderRelay(unittest.TestCase):
         self.sideagent_end(15, 52)
         self.assertEqual(len(self.agent.prompts()), 2, "an unchanged round 3 stays quiet")
 
-    def pending_ids(self) -> list[str]:
-        return [item["event_id"] for item in self.holder.pending_worker_events]
-
-    def confirmed_ids(self) -> list[str]:
-        log = (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()
-        return [event_id for line in log for entry in [json.loads(line)]
-                if entry.get("kind") == "worker_event_confirmed" for event_id in entry["event_ids"]]
-
     def test_a_lost_turn_end_returns_the_relay_to_the_host_once(self) -> None:
         self.write_state([])
         self.live_sideagent()
@@ -1561,7 +1564,7 @@ class RealAgent(StubAgent):
         threading.Thread(target=lambda: (self.proc.wait(), self.exited.set()), daemon=True).start()
 
 
-class NestedWorkerTopology(unittest.TestCase):
+class WorkerTree(unittest.TestCase):
     """A worker a Sideagent dispatched is a holder, its native agent in its
     own session, and that agent's tool in another: the whole tree survives
     the Sideagent's stop, cooperative or after its holder died, while the
@@ -1623,6 +1626,11 @@ class NestedWorkerTopology(unittest.TestCase):
 
     def alive(self, pid: int) -> bool:
         return holder_module.process_alive(pid)
+
+
+
+class NestedWorkerTopology(WorkerTree):
+    """The Sideagent's stop keeps the dispatched worker tree."""
 
     def test_dead_holder_cleanup_keeps_the_whole_worker_tree(self) -> None:
         record = {"session_role": "sideagent",
@@ -1864,6 +1872,593 @@ class HostReanchorLive(unittest.TestCase):
             sandbox.cleanup()
 
 
+# -- consolidated #255: dispatch linkage, results, dispositions, nodes, preserve -
+
+dispatch_fixtures = load("kaola_dispatch_fixtures_255", REPO / "tests" / "contract" / "test-issue-244-dispatch.py")
+
+
+class ConsolidatedDispatch(StateProject):
+    """One `execute` entry for implementation work: the Host's exact text,
+    task linkage, holds that are not re-probed, explicit result gaps and the
+    Host's per-assignment disposition mirrored onto the index."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.skills = Path(self.tmp.name) / "skills"
+        dispatch_fixtures.install_fake(self.skills, ["zcode"])
+        self.log = Path(self.tmp.name) / "runner.log"
+        self.spec = Path(self.tmp.name) / "spec.json"
+        self.env = {k: v for k, v in os.environ.items() if k not in CALLER_ENV}
+        self.env.update(FAKE_LOG=str(self.log), FAKE_SPEC=str(self.spec))
+        self.index = self.repo / "index.json"
+
+    def sessions(self, names: list[str]) -> None:
+        repo = str(self.repo)
+        self.spec.write_text(json.dumps({"sessions": {name: {
+            "status": dispatch_fixtures.absent(repo),
+            "start": dispatch_fixtures.started(repo, "GLM-5.3", "max", holder=f"holder-{name[-1]}"),
+            "send": dispatch_fixtures.sent(f"fp-{name[-1]}")} for name in names}}), encoding="utf-8")
+
+    def execute(self, plan: dict, *extra: str) -> tuple[int, dict]:
+        path = self.repo / "plan.json"
+        path.write_text(json.dumps({"repo": str(self.repo), **plan}), encoding="utf-8")
+        live = self.repo / "live.json"
+        live.write_text(json.dumps({"rows": []}), encoding="utf-8")
+        return run(["execute", "--plan", str(path), "--authorization", str(self.file),
+                    "--platforms", str(PLATFORMS), "--skills-root", str(self.skills),
+                    "--live", str(live), "--index", str(self.index), *extra], self.env)
+
+    def test_implementation_sends_the_hosts_core_and_scope_and_links_the_task(self) -> None:
+        self.init()
+        self.update("host", "tasks", "t1", {"stage": "doing", "goal": "parser", "keep_open": True})
+        host_revision = self.doc()["host_revision"]
+        self.sessions(["zcode-KT-i1-a", "zcode-KT-i1-b"])
+        core = "Implement the parser per the design.\n"
+        code, out = self.execute({
+            "scope": "implementation", "mutation": True, "core": core, "core_revision": "r3",
+            "items": [{"item_id": "w1", "preset": "zcode/default", "session": "zcode-KT-i1-a",
+                       "worker_scope": "Scope A: lexer only.", "task_id": "t1"},
+                      {"item_id": "w2", "preset": "zcode/default", "session": "zcode-KT-i1-b",
+                       "worker_scope": "Scope B: tests only.", "task_id": "t1"}]}, "--state", str(self.file))
+        self.assertEqual(code, 0, out)
+        rows = {row["item_id"]: row for row in out["items"]}
+        self.assertEqual({row["status"] for row in rows.values()}, {"in-flight"}, rows)
+        sends = [row for row in dispatch_fixtures.commands(self.log) if row["command"] == "send"]
+        texts = sorted(row["argv"][row["argv"].index("--text") + 1] for row in sends)
+        self.assertEqual(texts, [core.rstrip("\n") + "\n\nScope A: lexer only.",
+                                 core.rstrip("\n") + "\n\nScope B: tests only."],
+                         "the Host's core and per-worker scope are sent unchanged")
+        for row in rows.values():
+            source = row["prompt_source"]
+            self.assertEqual((source["kind"], source["core_revision"]), ("core+scope", "r3"))
+            self.assertEqual(source["core_sha256"], dispatch_module.prompt_sha(core))
+            self.assertEqual(source["prompt_sha256"], row["prompt_sha256"])
+        task = self.doc()["state"]["tasks"]["t1"]
+        self.assertEqual(task["dispatch"], ["w1", "w2"], "the task names its items")
+        self.assertEqual(task["writer"], "tool:execute")
+        self.assertEqual(self.doc()["host_revision"], host_revision,
+                         "tool-only linkage is not a Host business write")
+        self.assertEqual(out["task_links"]["linked"], {"t1": ["w1", "w2"]})
+
+    def test_mutation_stays_refused_outside_implementation_and_prompts_are_exact(self) -> None:
+        self.init()
+        self.sessions(["zcode-KT-i1-a"])
+        item = {"item_id": "w1", "preset": "zcode/default", "session": "zcode-KT-i1-a", "prompt": "edit"}
+        code, out = self.execute({"scope": "research", "mutation": True, "items": [item]})
+        self.assertEqual(out["items"][0]["reason"], "scope-outside-bounded")
+        code, out = self.execute({"scope": "implementation", "items": [dict(item, worker_scope="x")]})
+        self.assertEqual((code, out["reason"]), (2, "invalid-input"), "one prompt source per item")
+        code, out = self.execute({"scope": "implementation", "core": "c",
+                                  "items": [{**item, "prompt": None, "worker_scope": "x"}]})
+        self.assertEqual((code, out["reason"]), (2, "invalid-input"), "a core needs its revision")
+        self.assertEqual(dispatch_fixtures.commands(self.log), [])
+
+    def test_a_recorded_hold_is_not_re_probed(self) -> None:
+        self.init()
+        self.update("host", "holds", "h-zcode", {"scope": "account", "reason": "quota",
+                                                 "preset": "zcode/default", "owner": "user"})
+        self.sessions(["zcode-KT-i1-a"])
+        code, out = self.execute({"scope": "research", "items": [
+            {"item_id": "w1", "preset": "zcode/default", "session": "zcode-KT-i1-a", "prompt": "p"}]})
+        self.assertEqual(code, 0, out)
+        self.assertEqual((out["items"][0]["status"], out["items"][0]["reason"]), ("not-run", "on-hold"))
+        self.assertEqual(out["items"][0]["holds"], ["h-zcode"])
+        self.assertEqual(dispatch_fixtures.commands(self.log), [], "no status, start or send reaches it")
+
+    def collect_spec(self, session: str, reply: str) -> None:
+        repo = str(self.repo)
+        self.spec.write_text(json.dumps({"sessions": {session: {
+            "status": {"repo": repo, "session": session, "holder_instance_id": "holder-a",
+                       "turn_active": False, "turn_outcome": "turn_completed", "stop_reason": "end_turn",
+                       "mutation_status": "completed",
+                       "last_prompt": {"fingerprint": "fp-a", "stop_reason": "end_turn",
+                                       "mutation_status": "completed"}},
+            "capture": {"repo": repo, "session": session, "event_log_path": "/x/events.jsonl", "events": [
+                {"cursor": 12, "kind": "session_update", "update": {
+                    "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": reply}}}]}}}}),
+            encoding="utf-8")
+
+    def index_row(self, item_id: str, session: str, **extra) -> dict:
+        return {"item_id": item_id, "preset": "zcode/default", "platform": "zcode", "session": session,
+                "repo": str(self.repo), "holder_instance_id": "holder-a", "prompt_fingerprint": "fp-a",
+                "prompt_sha256": "fp-a", "status": "in-flight", "acceptance": "pending",
+                "dispatch_event_cursor": 11, "task_id": "t1", **extra}
+
+    def test_collect_names_the_turn_locators_truncation_and_an_absent_output(self) -> None:
+        self.collect_spec("zcode-KT-i1-a", "r" * 600)
+        self.index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "correlation_only": True,
+                                          "repo": str(self.repo), "items": [
+                                              self.index_row("w1", "zcode-KT-i1-a", output="docs/a.md",
+                                                             acceptance="repair")]}), encoding="utf-8")
+        code, out = run(["collect", "--index", str(self.index), "--skills-root", str(self.skills)], self.env)
+        self.assertEqual(code, 0, out)
+        row = out["items"][0]
+        result = row["result"]
+        self.assertEqual((row["status"], row["acceptance"], row["prior_acceptance"]),
+                         ("returned", "pending", "repair"), "a new return is a new candidate")
+        self.assertTrue(result["excerpt_truncated"])
+        self.assertEqual((len(result["excerpt"]), result["reply_chars"]), (480, 600))
+        self.assertEqual(result["locator"]["argv"][-2:], ["--full", "--inline"])
+        self.assertEqual((result["locator"]["since"], result["locator"]["event_log_path"]), (11, "/x/events.jsonl"))
+        self.assertEqual(result["turn"], {"holder_instance_id": "holder-a", "prompt_fingerprint": "fp-a"})
+        self.assertEqual(result["output"]["present"], False)
+        self.assertEqual(result["gaps"], ["output-absent"], "absence is a gap, not a transport failure")
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs" / "a.md").write_text("report", encoding="utf-8")
+        self.collect_spec("zcode-KT-i1-a", "short")
+        self.index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "correlation_only": True,
+                                          "repo": str(self.repo), "items": [
+                                              self.index_row("w1", "zcode-KT-i1-a", output="docs/a.md")]}),
+                              encoding="utf-8")
+        code, out = run(["collect", "--index", str(self.index), "--skills-root", str(self.skills)], self.env)
+        result = out["items"][0]["result"]
+        self.assertEqual((result["excerpt"], result["excerpt_truncated"], result["gaps"]), ("short", False, []))
+        self.assertTrue(result["output"]["present"])
+
+    def test_per_assignment_dispositions_are_mirrored_never_left_pending(self) -> None:
+        self.init()
+        self.update("host", "tasks", "t1", {"stage": "review", "goal": "g", "dispatch": ["w1", "w2"]})
+        rows = [dict(self.index_row("w1", "zcode-KT-i1-a"), status="returned"),
+                dict(self.index_row("w2", "zcode-KT-i1-b"), status="returned"),
+                dict(self.index_row("w3", "zcode-KT-i1-c"), task_id="t9", status="returned")]
+        self.index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                                          "items": rows}), encoding="utf-8")
+        code, out = self.update("host", "tasks", "t1", {"verdict": {"value": "partial"},
+                                                        "dispositions": {"w1": "accepted"}},
+                                "--expect-rev", "1", "--index", str(self.index))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["index_mirror"]["changed"], {"w1": "accepted", "w2": "undecided"})
+        index = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
+        self.assertEqual(index["w1"]["acceptance"], "accepted")
+        self.assertEqual(index["w1"]["acceptance_source"]["task_id"], "t1")
+        self.assertEqual(index["w2"]["acceptance"], "undecided")
+        self.assertIn("without a disposition", index["w2"]["acceptance_note"])
+        self.assertEqual(index["w3"]["acceptance"], "pending", "another task's item is untouched")
+        code, out = self.update("host", "tasks", "t1", {"dispositions": {"w2": "cancelled"}},
+                                "--expect-rev", "2", "--index", str(self.index))
+        index = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
+        self.assertEqual(index["w2"]["acceptance"], "cancelled")
+        self.assertNotIn("acceptance_note", index["w2"])
+        code, out = self.update("host", "tasks", "t1", {"dispositions": {"w2": "maybe"}},
+                                "--expect-rev", "3")
+        self.assertEqual(out["reason"], "invalid-input")
+        view = json.loads(self.doc()["body"])
+        self.assertEqual(view["tasks"][0]["dispositions"], {"w1": "accepted", "w2": "cancelled"})
+
+
+class MaintenanceCheckpoint(StateProject):
+    """Fixed input accounting for fresh Sideagent nodes."""
+
+    SESSION = "zcode-KT-sideagent"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.records = Path(self.tmp.name) / "records"
+        self.saved_root = os.environ.get("KAOLA_ACP_RECORD_ROOT")
+        os.environ["KAOLA_ACP_RECORD_ROOT"] = str(self.records)
+
+    def tearDown(self) -> None:
+        if self.saved_root is None:
+            os.environ.pop("KAOLA_ACP_RECORD_ROOT", None)
+        else:
+            os.environ["KAOLA_ACP_RECORD_ROOT"] = self.saved_root
+        super().tearDown()
+
+    def node(self, holder: str) -> dict[str, str]:
+        """The bound session now runs this fresh holder: its own record says so."""
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        directory = self.records / "zcode" / self.SESSION / digest
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder,
+                                                           "session_role": "sideagent"}), encoding="utf-8")
+        return self.caller_env(self.SESSION, holder)
+
+    def bind(self) -> None:
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "bind",
+                               "--section", "sideagent", "--expect-revision", str(self.doc()["revision"]),
+                               "--set", json.dumps({"platform": "zcode", "session": self.SESSION,
+                                                    "state": "active", "mode": "node"}))
+        self.assertEqual(code, 0, out)
+
+    def checkpoint(self, env: dict | None, batch: str, through: int, entries: list,
+                   events: list | None = None) -> tuple[int, dict]:
+        return self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", batch,
+                          "--batch", batch, "--through-host-revision", str(through),
+                          "--entries", json.dumps(entries), *(["--events", json.dumps(events)] if events else []),
+                          env=env)
+
+    def sideagent_view(self) -> dict:
+        code, out = self.state("view", "--file", str(self.file), "--role", "sideagent")
+        self.assertEqual(code, 0, out)
+        return out
+
+    def test_two_consecutive_nodes_account_for_their_fixed_inputs(self) -> None:
+        self.init()
+        self.bind()
+        self.update("host", "tasks", "t1", {"stage": "doing", "goal": "a"})
+        self.update("host", "tasks", "t2", {"stage": "todo", "goal": "b", "next": "host plans"})
+        first = self.doc()["host_revision"]
+        pending = self.sideagent_view()["pending_host_changes"]
+        self.assertIn(f"host:tasks/t1@{first - 1}", pending)
+        self.assertIn(f"host:tasks/t2@{first}", pending)
+        node1 = self.node("node-1")
+        code, out = self.update("sideagent", "tasks", "t1", {"wait": "worker running"}, "--expect-rev", "1",
+                                env=node1)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["host_revision"], first, "a node's write is no new business input")
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["writer_holder"], "node-1")
+        entries = [{"input": f"host:section/{name}@{revision}", "retained": f"section/{name}"}
+                   for name, revision in (("authorization", 1), ("project", 1), ("sideagent", first - 2))]
+        entries += [
+                    {"input": f"host:tasks/t1@{first - 1}", "applied": ["tasks/t1"]},
+                    {"input": f"host:tasks/t2@{first}", "retained": "tasks/t2"}]
+        code, out = self.checkpoint(node1, "b-1", first, entries)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"], out)
+        maintenance = self.doc()["state"]["maintenance"]
+        self.assertEqual(maintenance["last_verified"]["node"]["holder_instance_id"], "node-1")
+        self.assertEqual((maintenance["acked_host_revision"], maintenance["handled_host_revision"]),
+                         (first, first))
+        self.assertEqual(self.sideagent_view()["pending_host_changes"], [])
+        view = json.loads(self.doc()["body"])
+        self.assertEqual(view["maintenance"]["last_verified"]["batch"], "b-1",
+                         "the last verified checkpoint sits beside current obligations")
+
+        # A later Host change and a worker event make the next batch.
+        self.update("host", "tasks", "t3", {"stage": "todo", "goal": "c"})
+        later = self.doc()["host_revision"]
+        node2 = self.node("node-2")
+        code, out = self.update("sideagent", "tasks", "t1", {"wait": "late"}, "--expect-rev", "2", env=node1)
+        self.assertEqual(out["reason"], "binding-superseded", "the old node is no longer a writer")
+        code, out = self.checkpoint(node2, "b-2", later,
+                                    [{"input": "codex/codex-KT-i1-a/idle/5", "applied": ["tasks/t1"]}],
+                                    events=["codex/codex-KT-i1-a/idle/5"])
+        self.assertEqual(code, 0, out)
+        record = out["value"]
+        self.assertFalse(record["verified"], "a partial checkpoint is never verified")
+        self.assertIn("not a current record this node wrote",
+                      record["returned_to_host"]["codex/codex-KT-i1-a/idle/5"],
+                      "older evidence cannot settle a new input")
+        self.assertEqual(record["returned_to_host"][f"host:tasks/t3@{later}"], "unaccounted")
+        maintenance = self.doc()["state"]["maintenance"]
+        self.assertEqual(maintenance["acked_host_revision"], later - 1,
+                         "the acknowledgment does not pass an unaccounted change")
+        self.assertEqual(maintenance["handled_host_revision"], later)
+        self.assertEqual(maintenance["last_verified"]["batch"], "b-1")
+        alert = self.doc()["state"]["alerts"]["maintenance-returned"]
+        self.assertEqual(alert["owner"], "host")
+        self.assertEqual(sorted(alert["inputs"]), sorted(record["returned_to_host"]))
+        self.assertEqual(self.sideagent_view()["pending_host_changes"], [],
+                         "returned inputs are the Host's, never re-sent to another node")
+        attention = json.loads(self.doc()["body"])["attention"]
+        self.assertIn("maintenance-returned", [row["id"] for row in attention])
+
+    def test_a_checkpoint_needs_the_nodes_own_identity_and_a_valid_range(self) -> None:
+        self.init()
+        self.bind()
+        code, out = self.checkpoint(None, "b-1", 0, [])
+        self.assertEqual(out["reason"], "node-identity-required")
+        node = self.node("node-1")
+        code, out = self.checkpoint(node, "b-1", self.doc()["host_revision"] + 5, [])
+        self.assertEqual(out["reason"], "invalid-input")
+        stray = self.caller_env("zcode-KT-i1-helper", "h-1")
+        code, out = self.checkpoint(stray, "b-1", 0, [])
+        self.assertEqual(out["reason"], "binding-superseded")
+
+
+FAKE_NODE_RUNNER = textwrap.dedent("""\
+    #!/usr/bin/env python3
+    import json, os, sys
+    from pathlib import Path
+    counter = Path(os.environ["FAKE_NODE_COUNTER"])
+    n = int(counter.read_text()) + 1 if counter.exists() else 1
+    counter.write_text(str(n))
+    Path(os.environ["FAKE_NODE_ARGV"]).write_text(json.dumps(sys.argv[1:]))
+    holder = f"node-{n}"
+    Path(os.environ["FAKE_NODE_RECORD"]).write_text(json.dumps({
+        "session_role": "sideagent", "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
+        "holder_instance_id": holder, "holder_pid": int(os.environ["FAKE_NODE_PID"]),
+        "holder_features": ["heartbeat-state/2", "sideagent-relay/1", "sideagent-node/1"]}))
+    print(json.dumps({"holder_instance_id": holder, "session": "zcode-KT-sideagent"}))
+""")
+
+
+class FakeNode(FakeSideagent):
+    """A node holder socket: prompts are admitted; an exact stop marks the
+    record stopped unless the test holds it."""
+
+    def __init__(self, path: Path, record: Path) -> None:
+        self.record = record
+        self.ignore_stop = False
+        self.stops: list[dict] = []
+        super().__init__(path)
+
+    def serve(self) -> None:
+        while True:
+            try:
+                connection, _ = self.server.accept()
+            except OSError:
+                return
+            with connection:
+                data = b""
+                while b"\n" not in data:
+                    chunk = connection.recv(65536)
+                    if not chunk:
+                        break
+                    data += chunk
+                message = json.loads(data.decode())
+                if message.get("op") == "stop":
+                    self.stops.append(message)
+                    if not self.ignore_stop:
+                        record = json.loads(self.record.read_text())
+                        record["state"] = "stopped"
+                        self.record.write_text(json.dumps(record))
+                    connection.sendall(json.dumps({"stopped": not self.ignore_stop}).encode() + b"\n")
+                    continue
+                self.prompts.append(message)
+                reply = {"outcome": "in_progress", "prompt_fingerprint": f"sha256:{len(self.prompts)}"}
+                connection.sendall(json.dumps(reply).encode() + b"\n")
+
+
+class HolderNodeMode(HolderFixture):
+    """The Host carrier starts a fresh node per batch from the recipe argv,
+    settles the batch from that node's checkpoint, and exact-stops it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        root = Path(self.tmp.name)
+        self.runner = root / "runtime-tmux.sh"
+        self.runner.write_text(FAKE_NODE_RUNNER, encoding="utf-8")
+        self.runner.chmod(0o755)
+        self.saved_env = {key: os.environ.get(key) for key in
+                          ("FAKE_NODE_COUNTER", "FAKE_NODE_ARGV", "FAKE_NODE_RECORD", "FAKE_NODE_REPO",
+                           "FAKE_NODE_PID")}
+        os.environ.update(FAKE_NODE_COUNTER=str(root / "count"), FAKE_NODE_ARGV=str(root / "argv"),
+                          FAKE_NODE_RECORD=str(self.side_dir / "record.json"),
+                          FAKE_NODE_REPO=str(self.repo), FAKE_NODE_PID=str(os.getpid()))
+        self.fake = FakeNode(self.side_sock, self.side_dir / "record.json")
+        self.saved_confirm = holder_module.NODE_STOP_CONFIRM_SECONDS
+        holder_module.NODE_STOP_CONFIRM_SECONDS = 1.5
+
+    def tearDown(self) -> None:
+        holder_module.NODE_STOP_CONFIRM_SECONDS = self.saved_confirm
+        for key, value in self.saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        super().tearDown()
+
+    def write_node_state(self, maintenance: dict | None = None, argv: list | None = None,
+                         host_revision: int = 0) -> None:
+        argv = argv or ["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent",
+                        "--role", "sideagent"]
+        (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps({
+            "schema": "kaola-heartbeat-prompt/2", "host_revision": host_revision,
+            "body": json.dumps({"view": "host", "attention": [], "tasks": []}),
+            "state": {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active",
+                                    "mode": "node", "recipe": {"runner": str(self.runner), "argv": argv}},
+                      "maintenance": maintenance or {}}}), encoding="utf-8")
+
+    def wait_for(self, check, what: str, timeout: float = 10.0) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if check():
+                return
+            time.sleep(0.05)
+        self.fail(f"timed out waiting for {what}")
+
+    def log_kinds(self) -> list[str]:
+        log = Path(self.holder.args.record_dir) / "events.jsonl"
+        return [json.loads(line)["kind"] for line in log.read_text().splitlines()] if log.exists() else []
+
+    def checkpoint(self, batch: str, holder: str, settled: list, verified: bool) -> None:
+        self.write_node_state({"last_checkpoint": {"batch": batch, "node": {"holder_instance_id": holder},
+                                                   "settled": settled, "verified": verified}})
+
+    def test_two_consecutive_fresh_nodes_settle_by_checkpoint_and_are_stopped(self) -> None:
+        self.write_node_state()
+        self.event("codex-KT-i1-a", "idle", 5)
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the first node's batch")
+        argv = json.loads((Path(self.tmp.name) / "argv").read_text())
+        self.assertEqual(argv[:1] + argv[argv.index("--role"):], ["start", "--role", "sideagent"],
+                         "the recipe argv is run as given, no shell")
+        text = self.fake.prompts[0]["params"]["text"]
+        self.assertEqual(self.fake.prompts[0]["params"]["expected_holder_instance_id"], "node-1")
+        batch = text.split("batch ", 1)[1].split()[0]
+        self.assertIn("codex/codex-KT-i1-a/idle/5", text)
+        self.assertIn("state checkpoint", text)
+        self.assertIn(f"python3 {REPO / 'scripts' / 'kaola-dispatch.py'} state checkpoint --file "
+                      f"{self.repo / '.kaola' / 'heartbeat-prompt.json'} --writer sideagent --source {batch}", text,
+                      "the fresh node gets the exact command, without needing the Skill loaded")
+        self.assertEqual(self.agent.prompts(), [], "a routine event does not wake the Host")
+        self.checkpoint(batch, "node-1", ["codex/codex-KT-i1-a/idle/5"], True)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the exact node stop")
+        self.assertEqual(self.fake.stops[0]["params"]["expected_holder_instance_id"], "node-1")
+        self.assertIn("codex/codex-KT-i1-a/idle/5", self.confirmed_ids())
+        self.assertEqual(self.agent.prompts(), [], "a verified batch stays quiet")
+
+        # The next input starts a second fresh node; it ends without a checkpoint.
+        self.event("codex-KT-i1-b", "idle", 6)
+        self.wait_for(lambda: len(self.fake.prompts) == 2, "the second node's batch")
+        self.assertEqual(self.fake.prompts[1]["params"]["expected_holder_instance_id"], "node-2")
+        self.assertNotIn("codex-KT-i1-a", self.fake.prompts[1]["params"]["text"], "settled input is not re-sent")
+        self.sideagent_end(12, 2, holder="node-2")
+        self.wait_for(lambda: self.log_kinds().count("sideagent_node_stopped") == 2, "the second stop")
+        prompts = self.agent.prompts()
+        self.assertEqual(len(prompts), 1, "the unaccounted input is handed to the Host once")
+        self.assertIn("codex-KT-i1-b", prompts[0])
+        self.assertIn("checkpoint missing", prompts[0])
+        self.finish_host_turn()
+        self.assertEqual(len(self.fake.prompts), 2, "and is never sent to another node")
+        self.assertEqual(self.holder.pending_worker_events, [])
+
+    def test_an_unconfirmed_stop_blocks_a_competing_node(self) -> None:
+        self.write_node_state()
+        self.fake.ignore_stop = True
+        self.event("codex-KT-i1-a", "idle", 5)
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the batch")
+        batch = self.fake.prompts[0]["params"]["text"].split("batch ", 1)[1].split()[0]
+        self.checkpoint(batch, "node-1", ["codex/codex-KT-i1-a/idle/5"], True)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stop_unconfirmed" in self.log_kinds(), "the unconfirmed stop")
+        self.event("codex-KT-i1-b", "idle", 6)
+        time.sleep(0.3)
+        self.assertEqual(int((Path(self.tmp.name) / "count").read_text()), 1, "no second node starts")
+        self.assertTrue(any("codex-KT-i1-b" in prompt for prompt in self.agent.prompts()),
+                        "the Host keeps the new input meanwhile")
+
+    def test_a_resume_recipe_or_failed_start_is_not_retried(self) -> None:
+        self.write_node_state(argv=["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent",
+                                    "--role", "sideagent", "--continue"])
+        self.event("codex-KT-i1-a", "idle", 5)
+        self.assertIn("sideagent_node_recipe_refused", self.log_kinds())
+        self.assertEqual(len(self.agent.prompts()), 1, "without a usable node the Host has the event")
+        self.finish_host_turn()
+        self.write_node_state()
+        os.environ["FAKE_NODE_RECORD"] = str(Path(self.tmp.name) / "missing" / "record.json")
+        self.event("codex-KT-i1-b", "idle", 6)
+        self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "the failed start")
+        self.wait_for(lambda: any("codex-KT-i1-b" in prompt for prompt in self.agent.prompts()),
+                      "the Host taking the event")
+        self.finish_host_turn()
+        self.event("codex-KT-i1-c", "idle", 7)
+        time.sleep(0.3)
+        self.assertEqual(int((Path(self.tmp.name) / "count").read_text()), 1,
+                         "one recorded failure, no retry storm")
+
+    def test_the_checkout_entrypoint_recipe_names_the_bound_platform_first(self) -> None:
+        tail = ["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent", "--role", "sideagent"]
+        self.write_node_state(argv=["zcode", *tail])
+        self.assertIsNotNone(self.holder._node_binding())
+        self.write_node_state(argv=["codex", *tail])
+        self.assertIsNone(self.holder._node_binding(), "another platform's start is not this binding")
+        self.assertIn("sideagent_node_recipe_refused", self.log_kinds())
+
+    def test_a_host_business_change_alone_starts_one_node(self) -> None:
+        self.write_node_state(host_revision=4)
+        with self.holder.worker_events_lock:
+            self.holder._relay_pass()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the Host-change batch")
+        self.assertIn("host revision 1..4", self.fake.prompts[0]["params"]["text"])
+        with self.holder.worker_events_lock:
+            self.holder._relay_pass()
+        time.sleep(0.2)
+        self.assertEqual(len(self.fake.prompts), 1, "the same Host revision is sent once")
+
+
+class HostPreserveStop(WorkerTree):
+    """An explicit preserve intent keeps a Host's dispatched worker trees
+    across its stop; the default Host stop is unchanged."""
+
+    def host(self, preserve: bool):
+        args = argparse.Namespace(record_dir=str(self.side_dir), socket=str(self.side_dir / "h.sock"),
+                                  platform="zcode", session="zcode-KT-orchestrator-main", repo=self.tmp.name,
+                                  init_meta="", command="stub")
+        holder = holder_module.Holder(args)
+        holder.agent = RealAgent()
+        holder.session_role = "host"
+        holder.preserve_dispatched = preserve
+        holder.agent_child_groups = {pgid: dict(members) for pgid, members in self.noted.items()}
+        return holder
+
+    def test_preserve_keeps_the_complete_worker_tree_on_cooperative_stop(self) -> None:
+        holder = self.host(True)
+        holder._terminate_group(False)
+        self.groups.append(holder.agent.proc.pid)
+        self.assertEqual(holder.swept_child_pgids, [self.unrelated.pid])
+        for pid in (self.holder.pid, self.native, self.tool, self.orphan.pid):
+            self.assertTrue(self.alive(pid), f"worker process {pid} survived the Host stop")
+
+    def test_preserve_on_dead_holder_cleanup_and_default_stop_unchanged(self) -> None:
+        record = {"session_role": "host",
+                  "agent_child_groups": {str(g): {str(p): s for p, s in m.items()} for g, m in self.noted.items()}}
+        self.assertEqual(acp_module.recorded_groups(record, self.side_dir, verified_only=True,
+                                                    preserve_dispatched=True), [self.unrelated.pid])
+        self.assertEqual(sorted(acp_module.recorded_groups(record, self.side_dir, verified_only=True)),
+                         sorted(self.groups), "without the intent a Host stop sweeps as before")
+        holder = self.host(False)
+        holder._terminate_group(False)
+        self.groups.append(holder.agent.proc.pid)
+        self.assertIn(self.holder.pid, holder.swept_child_pgids, "the default stop still ends its workers")
+
+    def test_a_live_holder_without_the_feature_refuses_the_preserve_intent(self) -> None:
+        directory = Path(self.tmp.name) / "host-record"
+        directory.mkdir()
+        args = argparse.Namespace(platform="zcode", session="zcode-KT-orchestrator-main",
+                                  preserve_dispatched_workers=True)
+        (directory / "record.json").write_text(json.dumps({"holder_pid": os.getpid(),
+                                                           "holder_features": ["heartbeat-state/2"]}))
+        refused = acp_module.preserve_refusal(args, self.tmp.name, directory)
+        self.assertEqual((refused["result"], refused["reason"], refused["mutation_status"]),
+                         ("refused", "preserve-unsupported", "not_started"))
+        (directory / "record.json").write_text(json.dumps({"holder_pid": os.getpid(),
+                                                           "holder_features": list(holder_module.HOLDER_FEATURES)}))
+        self.assertIsNone(acp_module.preserve_refusal(args, self.tmp.name, directory))
+        (directory / "record.json").write_text(json.dumps({"holder_pid": 999999,
+                                                           "holder_features": ["heartbeat-state/2"]}))
+        self.assertIsNone(acp_module.preserve_refusal(args, self.tmp.name, directory),
+                          "a dead holder is swept by the Runner, which honours the intent")
+        self.assertIsNone(acp_module.preserve_refusal(
+            argparse.Namespace(platform="zcode", session="s", preserve_dispatched_workers=False),
+            self.tmp.name, directory))
+        self.assertIn("preserve-dispatched/1", holder_module.HOLDER_FEATURES)
+        self.assertEqual(acp_module.PRESERVE_FEATURE, "preserve-dispatched/1")
+
+
+class RunnerPreserveFlag(unittest.TestCase):
+    """The platform Runner forwards the explicit intent; without it the stop
+    argument list is unchanged."""
+
+    def test_stop_and_drain_restart_forward_the_intent_only_when_given(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kpr-i255-tmux-") as tmp:
+            root = Path(tmp)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            for entry in (REPO / "scripts").iterdir():
+                if entry.name != "kaola-acp.py":
+                    (scripts / entry.name).symlink_to(entry)
+            (scripts / "kaola-acp.py").write_text(
+                "import json, sys\nprint(json.dumps({'argv': sys.argv[1:]}))\n", encoding="utf-8")
+            repo = root / "repo"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            env = {k: v for k, v in os.environ.items() if k not in CALLER_ENV
+                   and k not in ("KPR_CANONICAL_REPO", "KAOLA_PROJECT_RUNNER_CANONICAL_REPO")}
+
+            def argv(*args: str) -> list[str]:
+                done = subprocess.run(["bash", str(scripts / "kaola-tmux.sh"), "zcode", *args, "--repo",
+                                       str(repo), "--session", "zcode-KT-orchestrator-main"],
+                                      capture_output=True, text=True, env=env, timeout=60)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                return json.loads(done.stdout.strip().splitlines()[-1])["argv"]
+
+            self.assertIn("--preserve-dispatched-workers", argv("stop", "--preserve-dispatched-workers"))
+            self.assertNotIn("--preserve-dispatched-workers", argv("stop"))
+            self.assertIn("--preserve-dispatched-workers",
+                          argv("drain-restart", "--continue", "--preserve-dispatched-workers"))
+
+
 class RenderedGuidance(unittest.TestCase):
     """The generated Skills carry the lifecycle roles and commands the tool
     implements, inside their byte budgets."""
@@ -1896,6 +2491,29 @@ class RenderedGuidance(unittest.TestCase):
         skeleton = (self.ORCH / "references/heartbeat-skeleton.md").read_text(encoding="utf-8")
         self.assertNotIn("Sideagent 仅提案", skeleton)
         self.assertIn("lifecycle-state.md", skeleton)
+
+    def test_node_reference_names_the_implemented_contract(self) -> None:
+        template = (REPO / "templates/orchestrator/references/sideagent-node.md").read_bytes()
+        generated = (self.ORCH / "references/sideagent-node.md").read_bytes()
+        self.assertEqual(template, generated)
+        self.assertLessEqual(len(generated), 8192)
+        text = generated.decode()
+        for term in ("scope: implementation", "core_revision", "worker_scope", "prompt_source", "on-hold",
+                     "excerpt_truncated", "output-absent", "prior_acceptance", "undecided", "host_revision",
+                     "writer_holder", "pending_host_changes", "sideagent-node/1", "maintenance-returned", "last_verified", "binding-superseded",
+                     "sideagent_node_stop_unconfirmed", "--preserve-dispatched-workers",
+                     acp_module.PRESERVE_FEATURE, "preserve-unsupported", "rebind-host"):
+            self.assertIn(term, text)
+        for disposition in dispatch_module.DISPOSITIONS:
+            self.assertIn(f"`{disposition}`", text)
+        self.assertIn("sideagent-node/1", holder_module.HOLDER_FEATURES)
+        skill = (self.ORCH / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("](references/sideagent-node.md)", skill)
+        for name in ("lifecycle-state.md", "dispatch-collect.md"):
+            self.assertIn("[sideagent-node.md](sideagent-node.md)",
+                          (self.ORCH / "references" / name).read_text(encoding="utf-8"))
+        report = (self.DELEGATOR / "references/inquiry-report.md").read_text(encoding="utf-8")
+        self.assertIn("maintenance.last_verified", report)
 
     def test_delegator_timer_sentence_matches_the_tool(self) -> None:
         report = (self.DELEGATOR / "references/inquiry-report.md").read_text(encoding="utf-8")

@@ -4,7 +4,7 @@
 grant, accept or stop seats. Host allocates within authorization. Index is
 correlation, not a ledger; trivial calls use no model.
 
-Gathering, independent research, counterexamples or critique, edge exploration,
+Gathering, research, counterexamples or critique, edge exploration,
 verification: spread useful parallel items as evenly as reasonably possible across
 fitting Worker-Class presets, not one habitual runtime. Fit, authority and real
 limits first; no invented work or fixed quota ([Choosing](worker-profiles.md)).
@@ -12,8 +12,8 @@ limits first; no invented work or fixed quota ([Choosing](worker-profiles.md)).
 ## Routine context
 
 Keep goals, progress, Class meanings and `capability_summary`.
-At a relevant claim, dispatch, adoption or acceptance decision, fetch only
-fresh facts that can affect it. Reuse state read this turn; a Runner return
+At a claim, dispatch, adoption or acceptance decision, fetch only fresh facts
+that can affect it. Reuse state read this turn; a Runner return
 uses its correlated receipt, not a heartbeat reload. Update changed
 Host facts/duties without write/read-back.
 
@@ -60,8 +60,8 @@ grants, count/cap/shared occupancy and unknown reasons. No authority verdict.
 [--availability "$AVAIL"] [--prior-index "$PRIOR"] [--index "$INDEX"] [--live "$LIVE"]`.
 - `collect --index "$INDEX" --skills-root "$SKILLS"`: update correlation.
 - Add `--item <exact item_id>` to `collect` for a read-only turn view.
-Identity/cursor-bound outcome, pending/historical permissions
-and structured failures survive the 480-character reply excerpt. Full native
+Identity/cursor-bound outcome, permissions and structured failures survive
+the 480-character excerpt. Full native
 capture reads rotated logs; source/as-of, raw event-log/Runner pointers and
 truncation/unknown reasons stay visible. Missing ranges are uncertainty.
 - `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`: atomically replaces
@@ -69,15 +69,15 @@ truncation/unknown reasons stay visible. Missing ranges are uncertainty.
 
 `$SKILLS` contains `<platform>-kaola-project-runner`. `$LIVE` is `{"rows":[...]}`
 from `kaola-acp.py list --repo`, or omitted for a fresh list. A supplied file is
-an observation, not proof of freshness. Compact reads store no state or
-acceptance verdict. If live facts a count/cap/shared seat needs cannot be
+an observation, not fresh proof. Compact reads store no state or
+verdict. If live facts a count/cap/shared seat needs cannot be
 read, execute reports `not-run` / `occupancy-unknown`.
 
 ## execute
 
-`scope` is `research`, `qa` or `report`. `repo` is absolute and realpathed
-before comparison. Each item has `item_id`, `preset`, `session` and
-`prompt`, plus optional `overrides`, `resources`, `expected_holder_instance_id`,
+`scope` is `research`, `qa`, `report` or `implementation`
+([sideagent-node.md](sideagent-node.md)). `repo` is absolute, realpathed.
+Each item has `item_id`, `preset`, `session` and `prompt`, plus optional `overrides`, `resources`, `expected_holder_instance_id`,
 `shared_seat`, `role`, `task_id`, `output` and `requires` (stated
 `class`/`presets`; unmet: `not-run` / `requirement-unmet`).
 
@@ -104,7 +104,7 @@ Reconcile an identity/holder-bound `in-flight`/`returned` item first
 Matching unknown with an absent record stays `reconciliation-needed`, no
 start/send. Same `--index` is prior. Capacity applies only to new starts.
 Rejected re-execution keeps correlation, adds `evidence.blocked_attempt`.
-`--dry-run` writes no index: admitted rows are `reconciled`, new ones `dry-run`.
+`--dry-run` writes no index (admitted: `reconciled`, new: `dry-run`).
 
 New items call `status`, `start` only for absent (`no-session`), then
 `send --no-wait`. Stopped records need a new name, even with no residual PIDs. The start holder is stored and sent as
@@ -126,8 +126,8 @@ hash; fingerprint alone is `assignment-unbound`. Bound active/completed work
 is never replayed. `not_started` may take its first send; matching unknown may not.
 
 Coverage (`in-flight`, `returned`, `failed`, `unknown`, `not-run`)
-is not acceptance. Another scope or `mutation: true` is `not-run`;
-no Runner call.
+is not acceptance. Another scope, or `mutation: true` outside
+`implementation`, is `not-run`; no Runner call.
 
 ## collect
 
@@ -135,9 +135,10 @@ For each in-flight item, status supplies active/outcome/stop (including
 `record.last_prompt`) and prompt fingerprint. `turn_failed`, `turn_canceled` and `process_exited` are
 `failed` before the in-progress check. `still-running` requires `turn_active`
 true; `mutation_status` `in_progress` alone does not. A completed match, even stopped, gets `capture --since` its dispatch cursor:
-`returned` / `collected`, acceptance pending. No completed idle result stays `in-flight` / `no-result`; identity mismatch is unknown.
+`returned` / `collected`, acceptance pending, plus `locator` and `gaps`. No
+completed idle result stays `in-flight` /
+`no-result`; identity mismatch is unknown.
 
 ## Outside this entry
 
-No production-mutation fan-out or pipeline.
-No second scheduler. Quota stays in [quota-packages.md](quota-packages.md).
+No production-release pipeline; no second scheduler. Quota stays in [quota-packages.md](quota-packages.md).

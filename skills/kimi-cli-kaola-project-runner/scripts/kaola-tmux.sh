@@ -26,8 +26,8 @@ usage() {
   kaola-tmux.sh PLATFORM steer     --repo ABS_PATH --session NAME --text TEXT [--steer-mode native|interrupt] [--cancel-timeout SECONDS]
   kaola-tmux.sh PLATFORM key       --repo ABS_PATH --session NAME [--if-snapshot ID] --key NAME
   kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME [--decision-id ID] [--if-snapshot ID] --replace-editor [--text TEXT]
-  kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force]
-  kaola-tmux.sh PLATFORM drain-restart --repo ABS_PATH --session NAME (--continue | --resume ID) [--timeout SECONDS]
+  kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force] [--preserve-dispatched-workers]
+  kaola-tmux.sh PLATFORM drain-restart --repo ABS_PATH --session NAME (--continue | --resume ID) [--timeout SECONDS] [--preserve-dispatched-workers]
   kaola-tmux.sh PLATFORM rebind-host --repo ABS_PATH --session NAME [--expected-holder-instance-id ID]
 Transport is ACP only (Issue #130); a request for the pty transport is refused (transport-pty-retired).'
 }
@@ -79,10 +79,12 @@ model_given=false effort_given=false permission_mode_given=false key_name="" tra
 tier="" tier_given=false fast="off" fast_given=false role="" role_given=false
 acp_wait="" timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
 expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" cancel_timeout=""
+preserve_dispatched=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;; --session) session="$2"; shift 2 ;; --resume) resume_id="$2"; shift 2 ;;
     --continue) continue_mode=true; shift ;; --force) force=true; shift ;; --lines) lines="$2"; shift 2 ;;
+    --preserve-dispatched-workers) preserve_dispatched=true; shift ;;
     --text) text_value="$2"; text_given=true; shift 2 ;; --if-snapshot) if_snapshot="$2"; shift 2 ;;
     --require-empty-editor) require_empty_editor=true; shift ;; --decision-id) decision_id="$2"; shift 2 ;;
     --replace-editor) replace_editor=true; shift ;; --model) model="$2"; model_given=true; shift 2 ;;
@@ -171,6 +173,7 @@ acp_args=("$PYTHON_BIN" "$ACP_CLI" "$platform" "$command_name" --repo "$repo")
 [[ -n "$resume_id" ]] && acp_args+=(--resume "$resume_id")
 [[ "$continue_mode" == true ]] && acp_args+=(--continue)
 [[ "$force" == true ]] && acp_args+=(--force)
+[[ "$preserve_dispatched" == true ]] && acp_args+=(--preserve-dispatched-workers)
 [[ "$text_given" == true ]] && acp_args+=(--text "$text_value")
 [[ ( "$command_name" == send || "$command_name" == steer ) && "$text_given" == false ]] && acp_args+=(--stdin)
 [[ "$acp_wait" == true ]] && acp_args+=(--wait)

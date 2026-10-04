@@ -36,7 +36,10 @@ from pathlib import Path
 from typing import Any
 
 
-SCOPES = frozenset({"research", "qa", "report"})
+SCOPES = frozenset({"research", "qa", "report", "implementation"})
+# Only an implementation plan may declare repository mutation; the worker's
+# own Workflow owns its claim, worktree, ledger and finalize.
+MUTATING_SCOPES = frozenset({"implementation"})
 LAUNCH_OVERRIDE_KEYS = frozenset({"model", "effort"})
 RECORDED_OVERRIDE_KEYS = LAUNCH_OVERRIDE_KEYS | frozenset({"task_scope"})
 SESSION_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
@@ -67,7 +70,9 @@ VERDICTS = ("accepted", "partial", "repair", "cancelled")
 BINDING_STATES = ("active", "replacing", "failed", "ended")
 DECISION_OWNERS = ("host", "delegator", "user")
 WRITER_ROLES = ("host", "sideagent")
-HOST_OWNED_TASK_FIELDS = ("goal", "scope", "acceptance", "needs", "depends", "source", "keep_open")
+HOST_OWNED_TASK_FIELDS = ("goal", "scope", "acceptance", "needs", "depends", "source", "keep_open",
+                          "dispositions")
+DISPOSITIONS = ("accepted", "repair", "cancelled", "superseded", "handed-off")
 TOMBSTONE_CAP = 64
 CHECK_PREFIX = "chk:"
 USER_REQUIREMENT_MARKERS = ("<!-- KPR-USER-REQUIREMENTS-START -->",
@@ -971,7 +976,7 @@ def dispatch_links(row: dict[str, Any], item: dict[str, Any],
                    mark: dict[str, Any] | None = None) -> dict[str, Any]:
     """Carry the plan's task association, output location and stated
     requirement onto the index row, whatever its admission result."""
-    for key in ("task_id", "output", "requires"):
+    for key in ("task_id", "output", "requires", "prompt_source"):
         if item.get(key) is not None and row.get(key) is None:
             row[key] = item[key]
     item = mark or {}
@@ -1081,10 +1086,17 @@ def command_execute(args: argparse.Namespace) -> int:
         # An out-of-scope attempt must not replace known priors.
         return finish_index(index, args.index, write=False)
 
-    if scope not in SCOPES or plan.get("mutation") is True or any(
+    if scope not in SCOPES or (scope not in MUTATING_SCOPES and (plan.get("mutation") is True or any(
         isinstance(item, dict) and item.get("mutation") is True for item in items
-    ):
+    ))):
         return refuse_all("scope-outside-bounded")
+    try:
+        assemble_prompts(plan, items)
+        lifecycle = load_object(Path(args.state)) if getattr(args, "state", None) else None
+    except ValueError as exc:
+        return fail("invalid-input", str(exc))
+    holds = preset_holds(lifecycle if lifecycle is not None else auth_doc)
+    known_tasks = state_task_ids(lifecycle)
 
     prepared: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
@@ -1098,6 +1110,12 @@ def command_execute(args: argparse.Namespace) -> int:
             return fail("invalid-input", f"{item.get('item_id')}: preset, session, and prompt must be strings")
         if not SESSION_OK.fullmatch(session):
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", "session-name"))
+            continue
+        if preset in holds and not exact_prior(prior_items.get(item["item_id"]), item, repo):
+            # A recorded account/service hold is not re-probed: no status,
+            # start or send reaches that preset until its hold is retired.
+            blocked.append(blank_item(item["item_id"], preset, session, "not-run", "on-hold",
+                                      {"holds": holds[preset]}))
             continue
         if session in duplicate_sessions:
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", "duplicate-session"))
@@ -1419,7 +1437,106 @@ def command_execute(args: argparse.Namespace) -> int:
                     )
                 results[result["item_id"]] = result
                 publish()
+    if known_tasks is not None:
+        for row in index["items"]:
+            if row.get("task_id") is not None and row["task_id"] not in known_tasks:
+                row.setdefault("evidence", {})["task_note"] = (
+                    f"task {row['task_id']} is not a current task in {args.state}")
+        if not args.dry_run:
+            index["task_links"] = link_dispatch_to_tasks(Path(args.state), index, args.index)
     return finish_index(index, args.index, write=not args.dry_run)
+
+
+def assemble_prompts(plan: dict[str, Any], items: list[Any]) -> None:
+    """Give each item the exact text it will be sent. A full `prompt` is sent
+    as written; otherwise the Host's unchanged task `core` at its recorded
+    `core_revision` (plan- or item-level) is joined with the item's
+    Host-authored `worker_scope`. Nothing here rewrites either part."""
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if isinstance(item.get("prompt"), str):
+            if item.get("worker_scope") is not None:
+                raise ValueError(f"{item.get('item_id')}: give either prompt or worker_scope")
+            item["prompt_source"] = {"kind": "full", "prompt_sha256": prompt_sha(item["prompt"])}
+            continue
+        if item.get("worker_scope") is None:
+            continue
+        core = item.get("core", plan.get("core"))
+        revision = item.get("core_revision", plan.get("core_revision"))
+        scope_text = item.get("worker_scope")
+        if not isinstance(core, str) or not core.strip() or not isinstance(scope_text, str):
+            raise ValueError(f"{item.get('item_id')}: worker_scope needs a string core")
+        if isinstance(revision, bool) or not isinstance(revision, (str, int)) or revision == "":
+            raise ValueError(f"{item.get('item_id')}: core needs its recorded core_revision")
+        item["prompt"] = core.rstrip("\n") + "\n\n" + scope_text
+        item["prompt_source"] = {"kind": "core+scope", "core_revision": revision,
+                                 "core_sha256": prompt_sha(core), "scope_sha256": prompt_sha(scope_text),
+                                 "prompt_sha256": prompt_sha(item["prompt"])}
+
+
+def preset_holds(doc: dict[str, Any] | None) -> dict[str, list[str]]:
+    """Current lifecycle holds that name a preset, by preset id."""
+    if not isinstance(doc, dict) or doc.get("schema") != STATE_SCHEMA:
+        return {}
+    state = doc.get("state")
+    holds = state.get("holds") if isinstance(state, dict) else None
+    found: dict[str, list[str]] = {}
+    for hold_id, hold in sorted((holds or {}).items()):
+        if not isinstance(hold, dict):
+            continue
+        named = hold.get("presets", hold.get("preset"))
+        named = [named] if isinstance(named, str) else named if isinstance(named, list) else []
+        for preset in named:
+            if isinstance(preset, str) and preset:
+                found.setdefault(preset, []).append(hold_id)
+    return found
+
+
+def state_task_ids(doc: dict[str, Any] | None) -> set[str] | None:
+    if not isinstance(doc, dict) or doc.get("schema") != STATE_SCHEMA:
+        return None
+    state = doc.get("state")
+    tasks = state.get("tasks") if isinstance(state, dict) else None
+    return set(tasks) if isinstance(tasks, dict) else set()
+
+
+def link_dispatch_to_tasks(path: Path, index: dict[str, Any], index_path: str | None) -> dict[str, Any]:
+    """Tool-only linkage: add each admitted or unknown item to its named
+    task's `dispatch` refs. Not a Host business write, so it moves no
+    `host_revision` and wakes no maintenance node."""
+    wanted: dict[str, list[str]] = {}
+    for row in index["items"]:
+        if row.get("status") in ("in-flight", "returned", "unknown") and isinstance(row.get("task_id"), str):
+            wanted.setdefault(row["task_id"], []).append(row["item_id"])
+    if not wanted:
+        return {"linked": {}}
+    try:
+        with StateLock(path):
+            doc, _ = read_state_file(path)
+            doc = require_current(doc, path)
+            tasks = doc["state"].get("tasks") or {}
+            linked: dict[str, list[str]] = {}
+            for task_id, refs in wanted.items():
+                task = tasks.get(task_id)
+                if not isinstance(task, dict):
+                    continue
+                mine = task.get("dispatch")
+                mine = [mine] if isinstance(mine, str) else list(mine or [])
+                added = [ref for ref in refs if ref not in mine]
+                if added:
+                    task["dispatch"] = mine + added
+                    task["rev"] = int(task.get("rev") or 0) + 1
+                    task["updated_at"] = observed_at()
+                    task["writer"] = "tool:execute"
+                    linked[task_id] = added
+            if linked:
+                write_state(path, doc)
+    except StateRefusal as refusal:
+        return {"unlinked": sorted(wanted), "refusal": refusal.payload}
+    except (OSError, ValueError) as exc:
+        return {"unlinked": sorted(wanted), "error": str(exc)}
+    return {"linked": linked, **({"index": index_path} if index_path else {})}
 
 
 def resource_conflict(left: dict[str, Any], right: dict[str, Any]) -> bool:
@@ -2005,7 +2122,16 @@ def finish_index(index: dict[str, Any], path: str | None, emit_stdout: bool = Tr
     return emit(payload)
 
 
+EXCERPT_CHARS = 480
+
+
 def result_excerpt(receipt: dict[str, Any] | None) -> str | None:
+    text = result_text(receipt)
+    return None if text is None else text[:EXCERPT_CHARS]
+
+
+def result_text(receipt: dict[str, Any] | None) -> str | None:
+    """The reply text a capture holds, uncut; callers mark any cut."""
     if not isinstance(receipt, dict):
         return None
     events = receipt.get("events")
@@ -2038,7 +2164,19 @@ def result_excerpt(receipt: dict[str, Any] | None) -> str | None:
         parts.append(receipt["text"].strip())
     if not parts:
         return None
-    return "\n".join(parts)[:480]
+    return "\n".join(parts)
+
+
+def output_facts(output: Any, repo: str) -> dict[str, Any] | None:
+    """A declared output's locator and, for a local path, whether it exists.
+    Absence is a gap for the Host to judge, never a transport failure."""
+    if output is None:
+        return None
+    path = output.get("path") if isinstance(output, dict) else output if isinstance(output, str) else None
+    if not isinstance(path, str) or not path or "://" in path:
+        return {"declared": output, "checked": False}
+    target = Path(path) if Path(path).is_absolute() else Path(repo) / path
+    return {"declared": output, "path": str(target), "checked": True, "present": target.exists()}
 
 
 def turn_facts(receipt: dict[str, Any]) -> tuple[Any, Any, Any]:
@@ -2136,12 +2274,35 @@ def collect_one(item: dict[str, Any], repo: str, skills_root: Path) -> dict[str,
     cursor = item.get("dispatch_event_cursor")
     if isinstance(cursor, bool) or not isinstance(cursor, int):
         cursor = None
+    text = result_text(capture)
+    gaps = []
+    if text is None:
+        gaps.append("reply-text-absent")
+    if isinstance(capture, dict) and capture.get("truncated"):
+        gaps.append("capture-truncated")
+    output = output_facts(item.get("output"), repo)
+    if output and output.get("present") is False:
+        gaps.append("output-absent")
+    # A new return is a new candidate: any earlier disposition answered the
+    # earlier result only.
+    if item.get("acceptance") not in (None, "pending"):
+        kept["prior_acceptance"] = item["acceptance"]
     kept.update(
         status="returned",
         reason="collected",
         acceptance="pending",
-        result={"excerpt": result_excerpt(capture), "stop_reason": stop,
-                "cursor": cursor},
+        result={"excerpt": None if text is None else text[:EXCERPT_CHARS],
+                "excerpt_truncated": text is not None and len(text) > EXCERPT_CHARS,
+                "reply_chars": None if text is None else len(text),
+                "stop_reason": stop, "cursor": cursor,
+                "turn": {"holder_instance_id": holder or item.get("holder_instance_id"),
+                         "prompt_fingerprint": item.get("prompt_fingerprint")},
+                "locator": {"platform": platform, "session": item.get("session"),
+                            "argv": ["capture", "--repo", repo, "--session", str(item.get("session")),
+                                     "--full", "--inline"],
+                            "since": cursor, "event_log_path": nested(capture, "event_log_path")},
+                **({"output": output} if output else {}),
+                "gaps": gaps},
     )
     return kept
 
@@ -2483,7 +2644,8 @@ REQUIRED_ON_CREATE = {
     "decisions": ("owner", "question"),
 }
 HOST_ONLY_SECTIONS = ("project", "authorization", "sideagent")
-RECORD_META = ("rev", "created_at", "updated_at", "source", "writer", "transcribed")
+RECORD_META = ("rev", "created_at", "updated_at", "source", "writer", "transcribed",
+               "host_revision", "writer_holder")
 ACTIVE_STAGES = ("doing", "review", "closeout")
 
 
@@ -2520,6 +2682,7 @@ def empty_state() -> dict[str, Any]:
     for kind in RECORD_KINDS:
         state[kind] = {}
     state["retired"] = []
+    state["maintenance"] = {}
     return state
 
 
@@ -2637,7 +2800,7 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
     tasks = []
     for task_id, task in sorted(state.get("tasks", {}).items()):
         entry = {"id": task_id, "stage": task.get("stage")}
-        for key in ("goal", "acceptance", "depends", "wait", "next", "keep_open"):
+        for key in ("goal", "acceptance", "depends", "wait", "next", "keep_open", "dispositions"):
             if task.get(key) not in (None, "", [], {}):
                 entry[key] = short(task[key]) if key == "goal" else task[key]
         for key in ("verdict", "prior_verdict"):
@@ -2690,6 +2853,7 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
     view: dict[str, Any] = {
         "view": "host",
         "revision": doc.get("revision"),
+        "host_revision": doc.get("host_revision"),
         "as_of": doc.get("updated_at"),
         "detail": f"{path.name} state; `state view --role sideagent` for evidence and dispatch rows",
         "project": state.get("project") or {},
@@ -2700,10 +2864,23 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
         "tasks": tasks,
     }
     for key, value in (("holds", holds), ("alerts", alerts), ("decisions", decisions),
-                       ("unverified", unverified), ("recovery", state.get("recovery") or {})):
+                       ("unverified", unverified), ("recovery", state.get("recovery") or {}),
+                       ("maintenance", maintenance_brief(state))):
         if value:
             view[key] = value
     return view
+
+
+def maintenance_brief(state: dict[str, Any]) -> dict[str, Any]:
+    """The last checkpoint identity and time beside current obligations, so
+    a reader can see whether maintenance is progressing. No history."""
+    maintenance = state.get("maintenance") or {}
+    brief = {key: maintenance[key] for key in ("last_verified", "acked_host_revision",
+                                               "handled_host_revision") if maintenance.get(key) is not None}
+    last = maintenance.get("last_checkpoint")
+    if isinstance(last, dict) and not last.get("verified"):
+        brief["last_checkpoint"] = {key: last.get(key) for key in ("batch", "at", "verified")}
+    return brief
 
 
 def requirement_heading(title: str) -> bool:
@@ -2774,6 +2951,7 @@ def delegator_view(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any
         "outcomes": [brief(key, value) for key, value in sorted(tasks.items()) if value.get("stage") == "done"]
                     + list(state.get("retired") or [])[-8:],
         "sideagent": state.get("sideagent"),
+        "maintenance": maintenance_brief(state),
     }
 
 
@@ -2846,6 +3024,16 @@ def check_writer(args: argparse.Namespace, state: dict[str, Any]) -> dict[str, s
         # write as the Host or the Sideagent.
         raise StateRefusal("writer-refused", f"caller {caller['session']} runs as {role}, not as "
                            f"{args.writer}")
+    if (args.writer == "sideagent" and caller and node_binding(binding)
+            and caller["session"] == binding.get("session") and caller_role(caller) in SIDEAGENT_ROLES):
+        # Node mode: each batch runs a fresh holder under the bound session
+        # name. The session's own live record naming this caller proves the
+        # previous node no longer holds it, so there is no competing writer.
+        return dict(caller, role=caller_role(caller))
+    if (args.writer == "sideagent" and caller and node_binding(binding)
+            and caller["session"] == binding.get("session")):
+        raise StateRefusal("binding-superseded", f"caller {caller['session']} ({caller['holder_instance_id']}) "
+                           "is not the node holder the bound session's record names now")
     if args.writer == "sideagent" and caller:
         if not isinstance(binding, dict) or binding.get("state") not in ("active", "replacing"):
             raise StateRefusal("sideagent-unbound", "no maintenance Sideagent is bound in this state")
@@ -2860,6 +3048,11 @@ def check_writer(args: argparse.Namespace, state: dict[str, Any]) -> dict[str, s
             and caller["session"] == binding.get("session")):
         raise StateRefusal("writer-mismatch", "the bound Sideagent writes as sideagent, never as host")
     return dict(caller, role=role) if caller else caller
+
+
+def node_binding(binding: Any) -> bool:
+    return (isinstance(binding, dict) and binding.get("mode") == "node"
+            and binding.get("state") == "active")
 
 
 def writer_trace(args: argparse.Namespace, caller: dict[str, Any] | None) -> str:
@@ -2903,6 +3096,10 @@ def validate_record(kind: str, record: dict[str, Any]) -> str | None:
         verdict = record.get("verdict")
         if verdict is not None and (not isinstance(verdict, dict) or verdict.get("value") not in VERDICTS):
             return f"verdict.value must be one of {', '.join(VERDICTS)}"
+        dispositions = record.get("dispositions")
+        if dispositions is not None and (not isinstance(dispositions, dict) or any(
+                value not in DISPOSITIONS for value in dispositions.values())):
+            return f"dispositions maps item ids to one of {', '.join(DISPOSITIONS)}"
     elif kind == "alerts":
         if record.get("level") not in ALERT_LEVELS:
             return f"level must be one of {', '.join(ALERT_LEVELS)}"
@@ -2999,8 +3196,22 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     merged["updated_at"] = observed_at()
     merged["source"] = args.source
     merged["writer"] = writer_trace(args, caller)
+    stamp_writer(doc, merged, args, caller)
     records[record_id] = merged
     return merged
+
+
+def stamp_writer(doc: dict[str, Any], target: dict[str, Any], args: argparse.Namespace,
+                 caller: dict[str, str] | None) -> None:
+    """A Host write carries the Host business revision it made; any write by
+    a known holder carries that holder, so a checkpoint can tell its own
+    applied evidence from older or unrelated records."""
+    if args.writer == "host":
+        target["host_revision"] = doc["host_revision"]
+    if caller and caller.get("holder_instance_id"):
+        target["writer_holder"] = caller["holder_instance_id"]
+    else:
+        target.pop("writer_holder", None)
 
 
 def apply_section_update(args: argparse.Namespace, doc: dict[str, Any], patch: Any,
@@ -3055,6 +3266,8 @@ def note_section_source(state: dict[str, Any], args: argparse.Namespace, section
     """The current source of each section, beside it: who changed it, from what."""
     sources = state.get("section_sources") if isinstance(state.get("section_sources"), dict) else {}
     sources[section] = {"source": args.source, "writer": args.writer, "at": observed_at()}
+    if args.writer == "host" and getattr(args, "_host_revision", None) is not None:
+        sources[section]["host_revision"] = args._host_revision
     state["section_sources"] = sources
 
 
@@ -3221,6 +3434,7 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
     stone = {"kind": kind, "id": record_id, "outcome": args.outcome or current.get("stage") or "resolved",
              "evidence": args.evidence, "at": observed_at(), "source": args.source,
              **({"handed_to": handoff, **handed} if handoff else {})}
+    stamp_writer(doc, stone, args, caller_dispatcher())
     del state[kind][record_id]
     stones = list(state.get("retired") or []) + [stone]
     state["retired"] = stones[-TOMBSTONE_CAP:]
@@ -3243,15 +3457,68 @@ def state_mutation(args: argparse.Namespace, change) -> int:
             doc = require_current(doc, path)
             before = doc.get("revision")
             caller = check_writer(args, doc["state"])
+            if args.writer == "host":
+                # Only a Host business write moves the Host revision; tool and
+                # Sideagent writes never wake another maintenance node.
+                doc["host_revision"] = int(doc.get("host_revision") or 0) + 1
+                args._host_revision = doc["host_revision"]
             changed = change(doc, caller)
             sizes = write_state(path, doc)
+            mirrored = mirror_dispositions(args, doc, path)
     except StateRefusal as refusal:
         code = STATE_EXIT_CONFLICT if refusal.payload["reason"] == "conflict" else 2
         return emit(refusal.payload, code)
     except (OSError, ValueError) as exc:
         return fail("invalid-input", str(exc))
     return emit({"result": "written", "revision": doc["revision"], "previous_revision": before,
-                 "value": changed, **sizes})
+                 **({"host_revision": doc["host_revision"]} if doc.get("host_revision") else {}),
+                 "value": changed, **({"index_mirror": mirrored} if mirrored else {}), **sizes})
+
+
+def mirror_dispositions(args: argparse.Namespace, doc: dict[str, Any], path: Path) -> dict[str, Any] | None:
+    """Copy one task's Host-recorded per-assignment dispositions onto the
+    existing index rows. A linked row the Host gave no disposition after a
+    verdict reads `undecided`, never a misleading `pending`."""
+    index_path = getattr(args, "index", None)
+    if not index_path or getattr(args, "kind", None) != "tasks" or getattr(args, "command", "") != "state":
+        return None
+    task = doc["state"].get("tasks", {}).get(args.id)
+    if not isinstance(task, dict):
+        return None
+    try:
+        return mirror_task(args, task, path, index_path)
+    except (OSError, ValueError) as exc:
+        # The state write already landed; the index stays as it was and says so.
+        return {"index": index_path, "error": str(exc), "changed": {}}
+
+
+def mirror_task(args: argparse.Namespace, task: dict[str, Any], path: Path, index_path: str) -> dict[str, Any]:
+    with INDEX_LOCK:
+        index = load_object(Path(index_path))
+        refs = task.get("dispatch")
+        refs = {refs} if isinstance(refs, str) else {ref for ref in refs or [] if isinstance(ref, str)}
+        dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else {}
+        verdict = (task.get("verdict") or {}).get("value") if isinstance(task.get("verdict"), dict) else None
+        changed: dict[str, str] = {}
+        for row in index.get("items") or []:
+            if not isinstance(row, dict) or not (row.get("item_id") in refs or row.get("task_id") == args.id):
+                continue
+            value = dispositions.get(row.get("item_id"))
+            if value is None and verdict is not None and row.get("acceptance") in (None, "pending"):
+                value = "undecided"
+                row["acceptance_note"] = (f"task verdict {verdict} recorded without a disposition "
+                                          "for this item; the Host records one")
+            if value is None or row.get("acceptance") == value:
+                continue
+            row["acceptance"] = value
+            row["acceptance_source"] = {"state": str(path), "task_id": args.id, "task_rev": task.get("rev"),
+                                        "host_revision": task.get("host_revision")}
+            if value != "undecided":
+                row.pop("acceptance_note", None)
+            changed[row["item_id"]] = value
+        if changed:
+            atomic_write(Path(index_path), json.dumps(index, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
+    return {"index": index_path, "changed": changed}
 
 
 def command_state_init(args: argparse.Namespace) -> int:
@@ -3275,8 +3542,10 @@ def command_state_init(args: argparse.Namespace) -> int:
             state["authorization"] = authorization
             note_section_source(state, args, "project")
             note_section_source(state, args, "authorization")
-            doc = {"schema": STATE_SCHEMA, "revision": 0, "state": state,
+            doc = {"schema": STATE_SCHEMA, "revision": 0, "host_revision": 1, "state": state,
                    "created_from": args.source}
+            for section in ("project", "authorization"):
+                state["section_sources"][section]["host_revision"] = 1
             sizes = write_state(path, doc)
     except StateRefusal as refusal:
         return emit(refusal.payload, 2)
@@ -3303,6 +3572,156 @@ def command_state_retire(args: argparse.Namespace) -> int:
     return state_mutation(args, lambda doc, caller: retire_record(args, doc))
 
 
+def host_changes(doc: dict[str, Any], after: int, through: int) -> dict[str, int]:
+    """Each Host business change in (after, through], by its input id. A
+    record the Host rewrote later shows only its latest change."""
+    state = doc["state"]
+    found: dict[str, int] = {}
+
+    def take(ident: str, value: Any) -> None:
+        if isinstance(value, int) and not isinstance(value, bool) and after < value <= through:
+            found[ident] = value
+
+    for kind in RECORD_KINDS:
+        for record_id, record in (state.get(kind) or {}).items():
+            if isinstance(record, dict):
+                take(f"host:{kind}/{record_id}@{record.get('host_revision')}", record.get("host_revision"))
+    for section, source in (state.get("section_sources") or {}).items():
+        if isinstance(source, dict):
+            take(f"host:section/{section}@{source.get('host_revision')}", source.get("host_revision"))
+    for stone in state.get("retired") or []:
+        if isinstance(stone, dict):
+            take(f"host:retired/{stone.get('kind')}/{stone.get('id')}@{stone.get('host_revision')}",
+                 stone.get("host_revision"))
+    return found
+
+
+def revision_of(ident: str) -> int | None:
+    head, _, tail = ident.rpartition("@")
+    return int(tail) if head.startswith("host:") and tail.isdigit() else None
+
+
+def checkpoint_entry(state: dict[str, Any], entry: Any, holder: str) -> tuple[str | None, str | None]:
+    """(input id, why it is not settled) for one checkpoint entry. Applied
+    evidence must be a current record or tombstone this node wrote; a
+    retained duty must be a current record with a responsible next reader."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("input"), str) or not entry["input"]:
+        return None, "entry-unreadable"
+    applied, retained = entry.get("applied"), entry.get("retained")
+    if (applied is None) == (retained is None):
+        return entry["input"], "entry-needs-applied-or-retained"
+    if applied is not None:
+        refs = [applied] if isinstance(applied, str) else applied
+        if not isinstance(refs, list) or not refs:
+            return entry["input"], "applied-empty"
+        for ref in refs:
+            if not isinstance(ref, str):
+                return entry["input"], "applied-unreadable"
+            if ref.startswith("retired:"):
+                kind, _, record_id = ref[len("retired:"):].partition("/")
+                stones = [stone for stone in state.get("retired") or []
+                          if stone.get("kind") == kind and stone.get("id") == record_id]
+                if not stones or stones[-1].get("writer_holder") != holder:
+                    return entry["input"], f"{ref} is not a retirement by this node"
+                continue
+            kind, _, record_id = ref.partition("/")
+            record = (state.get(kind) or {}).get(record_id) if kind in RECORD_KINDS else None
+            if not isinstance(record, dict) or record.get("writer_holder") != holder:
+                return entry["input"], f"{ref} is not a current record this node wrote"
+        return entry["input"], None
+    kind, _, record_id = retained.partition("/") if isinstance(retained, str) else ("", "", "")
+    if kind == "section":
+        # A section is a Host-owned current fact the node reads; the Host
+        # stays its responsible reader.
+        if record_id not in (state.get("section_sources") or {}):
+            return entry["input"], f"retained {retained} is not a current section"
+        return entry["input"], None
+    record = (state.get(kind) or {}).get(record_id) if kind in RECORD_KINDS else None
+    if not isinstance(record, dict):
+        return entry["input"], f"retained {retained} is not a current record"
+    if all(record.get(key) in (None, "", [], {}) for key in ("next", "owner", "wait")):
+        return entry["input"], f"retained {retained} names no next reader"
+    return entry["input"], None
+
+
+def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
+                     caller: dict[str, str] | None) -> dict[str, Any]:
+    state = doc["state"]
+    if args.writer != "sideagent" or not caller or not caller.get("holder_instance_id"):
+        raise StateRefusal("node-identity-required", "a checkpoint is written by the bound Sideagent "
+                           "node from inside its own session, so its holder is known")
+    holder = caller["holder_instance_id"]
+    try:
+        entries = json_arg(args.entries)
+        events = json_arg(args.events) if args.events else []
+    except (OSError, ValueError) as exc:
+        raise StateRefusal("invalid-input", str(exc))
+    if not isinstance(entries, list) or not isinstance(events, list) or not all(
+            isinstance(event, str) for event in events):
+        raise StateRefusal("invalid-input", "--entries is a JSON array; --events a JSON array of ids")
+    maintenance = state.setdefault("maintenance", {})
+    handled = int(maintenance.get("handled_host_revision") or 0)
+    current = int(doc.get("host_revision") or 0)
+    through = args.through_host_revision if args.through_host_revision is not None else handled
+    if through < handled or through > current:
+        raise StateRefusal("invalid-input", f"--through-host-revision must be within {handled}..{current}")
+    selected = host_changes(doc, handled, through)
+    settled: list[str] = []
+    returned: dict[str, str] = {}
+    seen: set[str] = set()
+    for entry in entries:
+        ident, problem = checkpoint_entry(state, entry, holder)
+        if ident is None:
+            raise StateRefusal("invalid-input", "each entry names its `input`")
+        seen.add(ident)
+        if problem:
+            returned[ident] = problem
+        elif ident in selected or ident in events:
+            settled.append(ident)
+        else:
+            returned[ident] = "not-in-batch"
+    for ident in [*selected, *events]:
+        if ident not in seen:
+            returned[ident] = "unaccounted"
+    # The acknowledgment never passes an unaccounted Host change: neither
+    # one of this batch nor one still in the Host's open returned alert.
+    still_returned = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+    open_revisions = [revision for ident, revision in selected.items() if ident not in settled]
+    open_revisions += [revision_of(ident) for ident in still_returned if revision_of(ident) is not None]
+    new_acked = min([through] + [revision - 1 for revision in open_revisions])
+    verified = not returned
+    record = {"batch": args.batch, "node": {"session": caller.get("session"), "holder_instance_id": holder},
+              "at": observed_at(), "source": args.source, "verified": verified,
+              "host_revision": {"from": handled, "through": through, "current": current},
+              "settled": sorted(settled), "returned_to_host": dict(sorted(returned.items()))}
+    maintenance["last_checkpoint"] = record
+    if verified:
+        maintenance["last_verified"] = {key: record[key] for key in ("batch", "node", "at")}
+    maintenance["acked_host_revision"] = new_acked
+    maintenance["handled_host_revision"] = through
+    if returned:
+        # Handed to the Host once, as one durable alert: never re-sent to
+        # another node, never counted as applied.
+        alerts = state.setdefault("alerts", {})
+        alert_id = "maintenance-returned"
+        prior = alerts.get(alert_id) if isinstance(alerts.get(alert_id), dict) else {}
+        inputs = dict(prior.get("inputs") or {})
+        inputs.update({ident: {"why": why, "batch": args.batch} for ident, why in returned.items()})
+        alerts[alert_id] = {**prior, "level": "warn", "owner": "host",
+                            "summary": f"{len(inputs)} maintenance input(s) not applied by a node; "
+                                       "judge or re-dispatch them from their sources",
+                            "inputs": inputs, "evidence": [f"checkpoint:{args.batch}"],
+                            "rev": int(prior.get("rev") or 0) + 1,
+                            "created_at": prior.get("created_at") or observed_at(),
+                            "updated_at": observed_at(), "source": args.source,
+                            "writer": writer_trace(args, caller), "writer_holder": holder}
+    return record
+
+
+def command_state_checkpoint(args: argparse.Namespace) -> int:
+    return state_mutation(args, lambda doc, caller: apply_checkpoint(args, doc, caller))
+
+
 def command_state_view(args: argparse.Namespace) -> int:
     path = Path(args.file)
     try:
@@ -3316,7 +3735,12 @@ def command_state_view(args: argparse.Namespace) -> int:
     if args.role == "delegator":
         repo = Path(args.repo).resolve() if args.repo else repo_of_state_file(path)
         return emit(delegator_view(doc, path, repo))
+    maintenance = doc["state"].get("maintenance") or {}
+    handled = int(maintenance.get("handled_host_revision") or 0)
+    current = int(doc.get("host_revision") or 0)
     return emit({"view": "sideagent", "revision": doc.get("revision"), "as_of": doc.get("updated_at"),
+                 "host_revision": current,
+                 "pending_host_changes": sorted(host_changes(doc, handled, current)),
                  "carrier": doc.get("carrier"), "state": doc["state"]})
 
 
@@ -3409,7 +3833,7 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
     binding = state.get("sideagent")
     if rows is not None:
         live = [row for row in rows if row.get("state") != "stopped" and same_repo(row.get("repo"), str(repo))]
-        if isinstance(binding, dict) and binding.get("state") == "active":
+        if isinstance(binding, dict) and binding.get("state") == "active" and not node_binding(binding):
             matched = [row for row in live if binding_row(binding, row)]
             if not matched:
                 note("sideagent-not-live", "warn", f"bound Sideagent {binding.get('session')} has no live "
@@ -3741,6 +4165,7 @@ def build_parser() -> argparse.ArgumentParser:
     execute.add_argument("--index")
     execute.add_argument("--live")
     execute.add_argument("--dry-run", action="store_true")
+    execute.add_argument("--state", help="lifecycle state: preset holds and task links")
     execute.set_defaults(func=command_execute)
 
     collect = commands.add_parser("collect")
@@ -3791,6 +4216,19 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--live", help="Runner rows showing its sessions stopped")
     retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
     retire.set_defaults(func=command_state_retire)
+
+    update.add_argument("--index", help="dispatch index to mirror this task's dispositions onto")
+
+    checkpoint = actions.add_parser("checkpoint", help="a maintenance node's input accounting")
+    writer_args(checkpoint)
+    checkpoint.add_argument("--batch", required=True, help="the batch id the carrier sent")
+    checkpoint.add_argument("--events", help="JSON array of the batch's worker event ids, or @path")
+    checkpoint.add_argument("--through-host-revision", type=int,
+                            help="the Host revision this batch selected; later changes stay pending")
+    checkpoint.add_argument("--entries", required=True,
+                            help='JSON array of {"input": ID, "applied": [REF...]} or '
+                                 '{"input": ID, "retained": "kind/id"}, or @path')
+    checkpoint.set_defaults(func=command_state_checkpoint)
 
     view = actions.add_parser("view")
     view.add_argument("--file", required=True)

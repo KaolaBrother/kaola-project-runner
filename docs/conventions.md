@@ -188,8 +188,18 @@ This is a release/update requirement. For the lifecycle state of
 - A v1 `pending` key with no v1 meaning is kept under the task's `legacy`, inert, and listed
   as `unverified`, so a key that shares a v2 field name (`verdict`, `dispatch`, `keep_open`,
   ...) never takes effect.
+- Consolidated #255 fields are additive and need no `--write` migration: a file without
+  `host_revision`, `maintenance`, `dispositions` or `writer_holder` reads as revision 0 with
+  no checkpoint, and the first Host business write starts the count. A Sideagent binding
+  without `"mode": "node"` keeps the relay path; node mode needs a Host holder advertising
+  `sideagent-node/1`, and `--preserve-dispatched-workers` needs `preserve-dispatched/1`
+  (an older live holder refuses it with `preserve-unsupported` and stops nothing). Adopt both
+  by `drain-restart` of the Host holder at idle; an older reader of the index ignores
+  `prompt_source`, `acceptance_source` and the new `collect` result keys.
 - Not yet verified on a real project: per-platform process preservation, carrier re-anchor
-  across real platforms, relay across holder death, native timer read-back, and real state size.
+  across real platforms, relay across holder death, native timer read-back, real state size,
+  consecutive native Sideagent nodes on two runtimes, and process survival through a real
+  Host replacement with the preserve intent.
 
 ### Release labels and running seats
 
