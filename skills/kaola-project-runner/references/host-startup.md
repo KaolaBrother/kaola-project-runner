@@ -94,7 +94,7 @@ model/effort, applied then verified against the holder's advertised config and
 reported in the receipt's `host_selection`; a `host-model-mismatch` /
 `host-model-unverified` refusal is the outer Agent's evidence.
 
-The beat itself - starting workers here, non-blocking dispatch, the
+The beat itself - `execute` dispatch, direct-start fallback, the
 `dispatch_event_cursor` reading anchor, ending the turn as the wait, reading the
 real reply when an event wakes you - is written once in
 [zcode-host-dispatch.md](zcode-host-dispatch.md).

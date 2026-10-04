@@ -58,12 +58,21 @@ only when a grant, profile, or availability fact changes.
 
 ## 2. Admit an adopted plan
 
-`scope` is `research`, `qa`, or `report`. `repo` is `$REPO`. Each item has
+`scope` is `research`, `qa`, `report`, or `implementation`. `repo` is `$REPO`. Each item has
 one `item_id`, exact `preset`, `session`, and `prompt`. Pass `--live` from a
 fresh Runner list when a cap or shared seat matters. A list row whose
 `host_class` is true is the project's Host and is not a worker seat. Omitting
 `seat_cap` does not erase `elite_cap`. A stopped session name is not absent
-and needs a new name.
+and needs a new name. A fresh item whose named session is already live, with
+the same repo, platform and preset, `identity: verified`, a status receipt
+naming that session and holder, and nothing sent yet (`mutation_status:
+not_started`) holds that seat: `count`, `elite_cap` and its shared seat are
+judged against the other live rows only, `execute` does not start it again
+and sends the first prompt to that holder (`evidence.seat_note`). Any other
+live row of the preset still counts against the item, and a refused attempt
+(`not-run`, no holder) binds no assignment for a later retry. Planned Host
+dispatch runs through `execute`; a direct Runner `start`/`send` is the
+standalone, degraded, or same-assignment recovery path.
 
 ```bash
 python3 "$RUNNER" list --repo "$REPO" > "$LIVE"

@@ -99,12 +99,12 @@ Assignment identity is repo, preset, session and prompt; admission is separate.
 Reconcile an identity/holder-bound `in-flight`/`returned` item first
 (no second seat/send). Missing session stays `session-gone` with its binding.
 Matching unknown with an absent record stays `reconciliation-needed`, no
-start/send. Same `--index` is prior. Capacity applies only to new starts.
+start/send. Same `--index` is prior.
 Rejected re-execution keeps correlation, adds `evidence.blocked_attempt`.
 `--dry-run` writes no index (admitted: `reconciled`, new: `dry-run`).
 
 New items call `status`, `start` only for absent (`no-session`), then
-`send --no-wait`. Stopped records need a new name, even with no residual PIDs. The start holder is stored and sent as
+`send --no-wait`. An item's own verified, unprompted live seat is its count, not a new start. Stopped records need a new name, even with no residual PIDs. The start holder is stored and sent as
 `--expected-holder-instance-id` when known. An expected holder whose session
 is absent is `not-run`, not started. Duplicate session names are
 `not-run`. Admission is `in-flight` / `admitted`, `acceptance: pending`, not

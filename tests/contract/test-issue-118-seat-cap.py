@@ -132,7 +132,7 @@ class ZCodeHostDispatch(unittest.TestCase):
         self.text = flat(REFS / "zcode-host-dispatch.md")
 
     def test_count_before_start(self) -> None:
-        self.assertIn("Count before every `start`", self.text)
+        self.assertIn("Count before every direct `start`", self.text)
         # Issue #157 (§1.2): stop-before-start is stated once, in main Skill step 2.
         self.assertIn("At the hard cap: stop-before-start (main Skill step 2)", self.text)
 

@@ -153,6 +153,10 @@ def started(repo: str, model, effort=None, advertised=None, holder: str = "holde
     return receipt
 
 
+def plan_item(name: str, preset: str = "codex/luna") -> dict:
+    return {"item_id": name, "preset": preset, "session": f"codex-KPR-i255-{name}", "prompt": name}
+
+
 def sent(fingerprint: str = "fp-1", cursor: int = 7) -> dict:
     return {
         "outcome": "in_progress",
@@ -1536,6 +1540,148 @@ class DispatchEntry(unittest.TestCase):
         payload = self.execute(one, shared, self.availability(["codex/default"]), live=host)
         self.assertEqual(payload["items"][0]["status"], "in-flight")
         self.assertNotEqual(payload["items"][0]["reason"], "shared-occupied")
+
+    def prestarted(self, session: str, model: str, effort: str, holder: str,
+                   mutation: str = "not_started") -> tuple[dict, dict]:
+        """A live list row and its matching status receipt: started, unprompted."""
+        repo = str(self.repo)
+        status = {**started(repo, model, effort, holder=holder), "session": session,
+                  "mutation_status": mutation}
+        row = {"platform": session.split("-KPR-")[0], "session": session, "repo": repo,
+               "state": "ready", "identity": "verified", "holder_instance_id": holder,
+               "mutation_status": mutation}
+        return row, status
+
+    def test_a_prestarted_unprompted_named_seat_is_the_items_own_occupancy(self) -> None:
+        install_fake(self.skills, ["codex"])
+        repo = str(self.repo)
+        row_a, status_a = self.prestarted("codex-KPR-i255-a", "gpt-6-luna", "max", "h-a")
+        row_b, status_b = self.prestarted("codex-KPR-i255-b", "gpt-6-luna", "max", "h-b")
+        self.use_spec({
+            "codex-KPR-i255-a": {"status": status_a, "send": sent("fp-a")},
+            "codex-KPR-i255-b": {"status": status_b, "send": sent("fp-b")},
+            "codex-KPR-i255-c": {"status": absent(repo), "start": started(repo, "gpt-6-luna", "max"),
+                                 "send": sent("fp-c")},
+        })
+        live = write_json(self.root, "prestarted.json", {"rows": [row_a, row_b]})
+        auth = self.authorization([{"id": "codex/luna", "state": "granted", "count": 2}])
+        plan = self.plan([
+            {"item_id": item, "preset": "codex/luna", "session": f"codex-KPR-i255-{item}", "prompt": item}
+            for item in ("a", "b", "c")
+        ])
+        index = self.root / "held-index.json"
+        payload = self.execute(plan, auth, self.availability(["codex/luna"]), live=live, index=index)
+        by_id = {item["item_id"]: item for item in payload["items"]}
+        for item, holder in (("a", "h-a"), ("b", "h-b")):
+            self.assertEqual((by_id[item]["status"], by_id[item]["reason"]), ("in-flight", "admitted"), payload)
+            self.assertEqual(by_id[item]["holder_instance_id"], holder)
+            self.assertIn("seat_note", by_id[item]["evidence"])
+        self.assertEqual((by_id["c"]["status"], by_id["c"]["reason"]), ("not-run", "count"))
+        calls = [(row["command"], row["session"][-1]) for row in commands(self.log)]
+        self.assertNotIn("start", {command for command, _ in calls})
+        self.assertEqual(sorted(s for c, s in calls if c == "send"), ["a", "b"])
+        self.assertNotIn("c", {s for _, s in calls}, "a refused absent item reaches no Runner command")
+        holders = {row["session"][-1]: row["argv"][row["argv"].index("--expected-holder-instance-id") + 1]
+                   for row in commands(self.log) if row["command"] == "send"}
+        self.assertEqual(holders, {"a": "h-a", "b": "h-b"})
+        stored = {row["item_id"]: row for row in json.loads(index.read_text())["items"]}
+        self.assertEqual(stored["a"]["holder_instance_id"], "h-a")
+        self.assertEqual(stored["c"]["reason"], "count")
+
+        # With the count at one, the other live seat fills it; it is not subtracted.
+        one = self.authorization([{"id": "codex/luna", "state": "granted", "count": 1}])
+        self.log.write_text("", encoding="utf-8")
+        payload = self.execute(self.plan([plan_item("a")]), one, self.availability(["codex/luna"]), live=live)
+        self.assertEqual(payload["items"][0]["reason"], "count", payload)
+        self.assertNotIn("send", {row["command"] for row in commands(self.log)})
+
+    def test_a_held_seat_still_meets_the_global_cap_and_shared_seat(self) -> None:
+        install_fake(self.skills, ["codex"])
+        repo = str(self.repo)
+        row_a, status_a = self.prestarted("codex-KPR-i255-a", "gpt-6.1-sol", "high", "h-a")
+        self.use_spec({
+            "codex-KPR-i255-a": {"status": status_a, "send": sent("fp-a")},
+            "codex-KPR-i255-c": {"status": absent(repo), "start": started(repo, "gpt-6.1-sol", "high"),
+                                 "send": sent("fp-c")},
+        })
+        live = write_json(self.root, "prestarted.json", {"rows": [row_a]})
+        items = [{"item_id": item, "preset": "codex/default", "session": f"codex-KPR-i255-{item}", "prompt": item}
+                 for item in ("a", "c")]
+        capped = self.authorization([{"id": "codex/default", "state": "granted"}], elite_cap=1)
+        capped = capped.rename(self.root / "capped.json")
+        payload = self.execute(self.plan(items), capped, self.availability(["codex/default"]), live=live)
+        by_id = {item["item_id"]: item for item in payload["items"]}
+        self.assertEqual(by_id["a"]["reason"], "admitted", payload)
+        self.assertEqual(by_id["c"]["reason"], "seat-cap")
+        self.assertNotIn("start", {row["command"] for row in commands(self.log)})
+
+        shared = self.authorization([{"id": "codex/default", "state": "granted", "shared_seat": "codex"}])
+        shared = shared.rename(self.root / "shared.json")
+        self.log.write_text("", encoding="utf-8")
+        payload = self.execute(self.plan(items[:1]), shared, self.availability(["codex/default"]), live=live)
+        self.assertEqual(payload["items"][0]["reason"], "admitted", payload)
+        payload = self.execute(self.plan(items[1:]), shared, self.availability(["codex/default"]), live=live)
+        self.assertEqual(payload["items"][0]["reason"], "shared-occupied", payload)
+
+        other, _ = self.prestarted("codex-KPR-i255-other", "gpt-6.1-sol", "high", "h-o")
+        other["preset"] = "codex/default"
+        crowded = write_json(self.root, "crowded.json", {"rows": [row_a, other]})
+        payload = self.execute(self.plan(items[:1]), capped, self.availability(["codex/default"]), live=crowded)
+        self.assertEqual(payload["items"][0]["reason"], "seat-cap", "another live seat is not subtracted")
+        payload = self.execute(self.plan(items[:1]), shared, self.availability(["codex/default"]), live=crowded)
+        self.assertEqual(payload["items"][0]["reason"], "shared-occupied")
+
+        # That refusal recorded nothing sent: once the other seat is gone the
+        # retry sends the first prompt instead of calling the seat unbound.
+        index = self.root / "retry-index.json"
+        self.execute(self.plan(items[:1]), capped, self.availability(["codex/default"]), live=crowded, index=index)
+        self.assertEqual(json.loads(index.read_text())["items"][0]["reason"], "seat-cap")
+        self.log.write_text("", encoding="utf-8")
+        payload = self.execute(self.plan(items[:1]), capped, self.availability(["codex/default"]), live=live,
+                               prior_index=index, index=index)
+        self.assertEqual((payload["items"][0]["status"], payload["items"][0]["reason"]),
+                         ("in-flight", "admitted"), payload)
+        self.assertEqual([row["command"] for row in commands(self.log) if row["command"] != "status"], ["send"])
+
+    def test_only_an_exact_verified_unprompted_seat_is_held(self) -> None:
+        install_fake(self.skills, ["codex"])
+        auth = self.authorization([{"id": "codex/luna", "state": "granted", "count": 1}])
+        avail = self.availability(["codex/luna"])
+        cases = {
+            "identity": ({"identity": "unknown"}, {}, {}),
+            "prompted": ({"mutation_status": "completed"}, {"mutation_status": "completed"}, {}),
+            "holder": ({}, {}, {"expected_holder_instance_id": "h-other"}),
+            "foreign": ({"repo": "/elsewhere"}, {"repo": "/elsewhere"}, {}),
+            "preset": ({}, {"config_application": {"model": {"applied": True, "value": "gpt-6.1-sol"},
+                                                   "effort": {"applied": True, "value": "high"}}}, {}),
+            "status-holder": ({}, {"holder_instance_id": "h-swapped"}, {}),
+        }
+        for name, (row_change, status_change, item_change) in cases.items():
+            with self.subTest(name):
+                session = "codex-KPR-i255-a"
+                row, status = self.prestarted(session, "gpt-6-luna", "max", "h-a")
+                row.update(row_change)
+                status.update(status_change)
+                self.use_spec({session: {"status": status, "send": sent("fp-a")}})
+                self.log.write_text("", encoding="utf-8")
+                live = write_json(self.root, "edge.json", {"rows": [row]})
+                plan = self.plan([{**plan_item("a"), **item_change}])
+                payload = self.execute(plan, auth, avail, live=live)
+                self.assertNotEqual(payload["items"][0]["status"], "in-flight", payload)
+                self.assertNotIn("seat_note", payload["items"][0]["evidence"])
+                self.assertNotIn("send", {row["command"] for row in commands(self.log)})
+                self.assertNotIn("start", {row["command"] for row in commands(self.log)})
+
+        # Prompted between the list and the send: the first-send path sends nothing.
+        session = "codex-KPR-i255-a"
+        row, status = self.prestarted(session, "gpt-6-luna", "max", "h-a")
+        raced = {**status, "mutation_status": "in_progress", "last_prompt": {"fingerprint": "fp-host"}}
+        self.use_spec({session: {"status": status, "status_second": raced, "send": sent("fp-a")}})
+        self.log.write_text("", encoding="utf-8")
+        live = write_json(self.root, "raced.json", {"rows": [row]})
+        payload = self.execute(self.plan([plan_item("a")]), auth, avail, live=live)
+        self.assertEqual(payload["items"][0]["status"], "unknown", payload)
+        self.assertNotIn("send", {row["command"] for row in commands(self.log)})
 
     def test_skeleton_example_sets_effective_cap(self) -> None:
         text = (REPO / "templates/orchestrator/references/heartbeat-skeleton.txt").read_text(encoding="utf-8")
@@ -3177,6 +3323,29 @@ class RenderedGuidance(unittest.TestCase):
         self.assertIn("advertised differences stay unknown and do not block send", text)
         self.assertNotIn("Host chooses, grants", text)
         self.assertNotIn("Explicit unapplied/unverified", text)
+
+    def test_planned_dispatch_of_every_scope_routes_through_execute(self) -> None:
+        def flat(name: str) -> str:
+            return re.sub(r"\s+", " ", (ORCHESTRATOR / name).read_text(encoding="utf-8"))
+        skill = flat("SKILL.md")
+        self.assertIn("Planned dispatch (research, QA, report or implementation) uses `execute`", skill)
+        self.assertIn("it starts absent seats at the preset `--tier`", skill)
+        self.assertIn("Direct Runner `start`/`send` is standalone, degraded or same-assignment recovery", skill)
+        self.assertNotIn("Pass the selected authorized `--tier`", skill)
+        self.assertNotIn("An adopted research, QA, or report plan", skill)
+        host = flat("references/zcode-host-dispatch.md")
+        self.assertIn("### Execute first; direct start as fallback", host)
+        self.assertNotIn("Start a worker from this Host", host)
+        self.assertIn("Direct Host sends (continuation, repair, finalize, degraded dispatch)", host)
+        collect = flat("references/dispatch-collect.md")
+        self.assertNotIn("Capacity applies only to new starts", collect)
+        self.assertIn("own verified, unprompted live seat is its count, not a new start", collect)
+        startup = flat("references/host-startup.md")
+        self.assertNotIn("starting workers here", startup)
+        worktree = flat("references/workflow-worktree.md")
+        self.assertIn("through `execute` (`scope: implementation`", worktree)
+        issue = flat("references/issue-dispatch.md")
+        self.assertIn("`evidence.start`", issue)
 
     def test_entry_prefers_spread_breadth_without_a_quota_and_states_b1(self) -> None:
         text = (ORCHESTRATOR / "references/dispatch-collect.md").read_text(encoding="utf-8")

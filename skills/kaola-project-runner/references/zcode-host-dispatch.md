@@ -13,7 +13,11 @@ Platform-pinned wrappers take **no** platform argument.
 
 ## One Host beat
 
-### Start a worker from this Host
+### Execute first; direct start as fallback
+
+Planned dispatch: `execute` ([dispatch-collect.md](dispatch-collect.md)) from
+this Host counts, starts absent seats, sends and records facts. Direct calls:
+standalone, degraded or same-assignment recovery.
 
 ```bash
 W="/abs/path/to/codex-kaola-project-runner/scripts/runtime-tmux.sh"
@@ -28,10 +32,9 @@ unbound. The binding derives from `KAOLA_ACP_DISPATCHER`; an explicit
 is refused (`transport-pty-retired`): ACP-only. Worker names
 are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
-Count before every `start`: live owned sessions, ACP holders included -
-identity-verified (`list --repo` rows with `identity: verified`, the holder
-answering with its recorded `holder_instance_id`); a PID alone is not a seat.
-Worker-class pool seats (worker-profiles.md) are outside the count. At
+Count before every direct `start`: identity-verified live owned sessions
+(`list --repo` rows with `identity: verified`), ACP holders included;
+a PID alone is not a seat. Worker-class pool seats are outside the count. At
 the hard cap: stop-before-start (main Skill step 2).
 
 ### Read the binding in force, new worker or reused
@@ -49,11 +52,10 @@ is only the request; `observe` reports it any time.
 - `"error": {"code": "session-exists"}` — you reused a live holder, which keeps
   its binding.
 
-Before the first send, match `model_selection`/`config_application`/
-`effective_selection` against the selected preset, not the command's default;
-aliases read through this platform's evidence, and `applied: true` isn't
-proof. Outside grant: exact-stop an unused seat and start the intended
-`--tier`; a working seat uses drain-restart below, correcting explicitly.
+Before a direct first send, match `config_application`/`effective_selection`
+to the selected preset, not the command default; aliases read through this
+platform's evidence; `applied: true` isn't proof. Outside grant: exact-stop an
+unused seat and start the intended `--tier`; a working seat uses drain-restart.
 
 ### A stale seat is not a dispatch target
 
@@ -72,8 +74,8 @@ Host so the new start adopts your instance. Nothing scans other seats: the
 
 ### Dispatch without blocking
 
-Host sends use `--no-wait`: direct Runner/Workflow, outside dispatch/collect,
-continuation, repair and finalize. Omission is nonblocking only for proven live
+Direct Host sends (continuation, repair, finalize, degraded dispatch) use
+`--no-wait`. Omission is nonblocking only for proven live
 Host ownership; `wait_selection` reports why. Flags win; standalone blocks.
 
 ```bash
@@ -114,8 +116,8 @@ then `kaola-host-notify/1`, one JSON object per event —
 
 **The notification is not the worker's reply and is not a success verdict.** Read
 what happened with the event's own `platform`/`session`/`repo` using the
-`observe`/`capture` commands below. Open that platform's Runner Skill again
-only when its procedure is no longer in context, or for `permit` syntax.
+`observe`/`capture` commands below. Reopen that platform's Runner Skill only
+when its procedure left context, or for `permit` syntax.
 
 **`event_cursor` is the end of the turn, not the start** — `19` is where that
 turn ended, so `capture --since <event_cursor>` sees only carrier and title

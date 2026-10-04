@@ -104,6 +104,15 @@ bridge at the unpinned content stage (`saveable: false`).
   keeps the earlier acceptance as `prior_acceptance`. `execute`, `collect` and
   the disposition mirror write the index under one file lock and merge by item
   and field, so a Host disposition recorded during a running `collect` stands.
+- **Pre-started seats and dispatch guidance (Issue #255).** `execute` admits a
+  fresh item whose named session is already live and unprompted (same repo,
+  platform and preset, identity verified by its status receipt) as that seat
+  instead of refusing it `count`: caps and shared seats are judged against the
+  other live rows, nothing starts again and the first prompt goes to that
+  holder. A refused attempt with no holder no longer makes the retry
+  `assignment-unbound`. The main Skill and Host dispatch reference now route
+  every planned dispatch of all four scopes through `execute`; direct Runner
+  `start`/`send` is the standalone, degraded or same-assignment recovery path.
 - **Per-assignment dispositions and Host revision (Issue #255).** Task
   `dispositions` record the Host's decision per item; `update --index` mirrors
   them onto the index, and an item left without one after a task verdict is

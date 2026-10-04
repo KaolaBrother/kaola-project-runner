@@ -39,9 +39,11 @@ rather than stopped. Without the binding exported, none of this section applies.
 
 ## Normal path
 
-1. Start the worker at the bound canonical project root.
-2. From that runtime's main conversation, ask it to invoke its installed
-   `workflow-next`.
+1. Start the worker at the bound canonical project root: a Host dispatches it
+   through `execute` (`scope: implementation`, plan `repo` that root); a
+   direct Runner `start` is the standalone or degraded path.
+2. In that runtime's main conversation (the dispatch prompt), ask it to invoke
+   its installed `workflow-next`.
 3. Let that runtime and its Workflow create, resume, recover, or otherwise
    reconcile the run, branch, mission ledger, and child worktree.
 4. Keep Runner responsible only for exact-session transport, model selection,

@@ -986,6 +986,10 @@ def dispatch_links(row: dict[str, Any], item: dict[str, Any],
         row["evidence"] = evidence
     elif item.get("_exempt"):
         row["seat_exempt"] = True
+    elif item.get("_held_row") and row.get("status") != "not-run":
+        evidence = dict(row.get("evidence") or {})
+        evidence["seat_note"] = "already-live unprompted named seat counted as this item's seat"
+        row["evidence"] = evidence
     return row
 
 
@@ -1299,9 +1303,14 @@ def command_execute(args: argparse.Namespace) -> int:
     )
     resolved: dict[str, str] = {}
     if needs_live and occupancy == "known":
-        resolved = resolve_live_presets(
-            [row for row in live_rows if not binding_row(binding, row)],
-            repo, catalog, prior_items, skills_root)
+        unbound = [row for row in live_rows if not binding_row(binding, row)]
+        verified: set[str] = set()
+        resolved = resolve_live_presets(unbound, repo, catalog, prior_items, skills_root,
+                                        verified=verified)
+        for item in fresh_open:
+            row = held_seat(item, unbound, repo, resolved, verified)
+            if row is not None:
+                item["_held_row"] = row
     used_count, used_seats, occupied_shared, unnamed_platforms = live_occupancy(
         live_rows, repo, catalog, grants, resolved, exempt=binding,
     )
@@ -1316,10 +1325,25 @@ def command_execute(args: argparse.Namespace) -> int:
         else:
             item["_helper_counted"] = True
     seat_marks = {item["item_id"]: item for item in fresh_open
-                  if item.get("_exempt") or item.get("_helper_counted")}
+                  if item.get("_exempt") or item.get("_helper_counted") or item.get("_held_row")}
     ready = list(kept_items)
     for item in fresh_open:
         if item.get("_exempt"):
+            ready.append(item)
+            continue
+        held = item.get("_held_row")
+        if held is not None:
+            # This item's own live, unprompted seat is already in the totals
+            # every other item is admitted against. Judge it against the other
+            # live rows only and do not count it a second time.
+            others = [row for row in live_rows if row is not held]
+            o_count, o_seats, o_shared, o_unnamed = live_occupancy(
+                others, repo, catalog, grants, resolved, exempt=binding)
+            reason = held_refusal(item, o_count, o_seats, o_shared, o_unnamed,
+                                  effective_cap, grants, catalog)
+            if reason:
+                blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", reason))
+                continue
             ready.append(item)
             continue
         if occupancy != "known" and needs_live and (not item["_pool"] or item.get("_shared_seat") or isinstance(item.get("_count"), int)):
@@ -1737,8 +1761,12 @@ def preset_from_bound_index(items: dict[str, dict[str, Any]], row: dict[str, Any
 
 def resolve_live_presets(rows: list[dict[str, Any]], repo: str, catalog: dict[str, dict[str, Any]],
                          prior_items: dict[str, dict[str, Any]],
-                         skills_root: Path | None, *, require_identity: bool = False) -> dict[str, str]:
-    """Preset for a list row that does not carry one. Platform name is not a Class."""
+                         skills_root: Path | None, *, require_identity: bool = False,
+                         verified: set[str] | None = None) -> dict[str, str]:
+    """Preset for a list row that does not carry one. Platform name is not a Class.
+
+    ``verified`` collects sessions whose status receipt also named this repo,
+    session and the row's holder."""
     resolved: dict[str, str] = {}
     for row in rows:
         if row.get("state") == "stopped" or row.get("host_class") is True:
@@ -1766,13 +1794,16 @@ def resolve_live_presets(rows: list[dict[str, Any]], repo: str, catalog: dict[st
         code, receipt, note = run_runner(script, ["status", "--repo", repo, "--session", session])
         if receipt_unreadable(code, receipt, note) or not isinstance(receipt, dict):
             continue
-        if require_identity and (not same_repo(repo_of(receipt), repo)
-                                 or receipt.get("session") != session
-                                 or holder_of(receipt) != row.get("holder_instance_id")):
+        same = (same_repo(repo_of(receipt), repo)
+                and receipt.get("session") == session
+                and holder_of(receipt) == row.get("holder_instance_id"))
+        if require_identity and not same:
             continue
         applied = preset_from_applied(catalog, platform, receipt)
         if applied:
             resolved[session] = applied
+            if verified is not None and same and isinstance(repo_of(receipt), str):
+                verified.add(session)
     return resolved
 
 
@@ -1831,6 +1862,58 @@ def live_occupancy(rows: list[dict[str, Any]], repo: str, catalog: dict[str, dic
         if klass in ("Elite", "Expert"):
             used_seats += 1
     return used_count, used_seats, occupied, unnamed
+
+
+def held_seat(item: dict[str, Any], rows: list[dict[str, Any]], repo: str,
+              resolved: dict[str, str], verified: set[str]) -> dict[str, Any] | None:
+    """The one verified live row that already is this fresh item's seat.
+
+    Same repo, platform, session and preset, identity verified, nothing sent
+    yet. Anything else stays an ordinary occupant counted against the item.
+    """
+    session = item.get("session")
+    if item.get("_exempt") or not isinstance(session, str):
+        return None
+    mine = [row for row in rows
+            if row.get("session") == session and row.get("state") != "stopped"]
+    if len(mine) != 1:
+        return None
+    row = mine[0]
+    preset = row.get("preset") if isinstance(row.get("preset"), str) else (
+        resolved.get(session) if session in verified else None)
+    expected = item.get("expected_holder_instance_id")
+    if (row.get("host_class") is True or row.get("identity") != "verified"
+            or not isinstance(row.get("repo"), str) or not same_repo(row["repo"], repo)
+            or row.get("platform") != item.get("_platform")
+            or preset != item.get("preset")
+            or row.get("mutation_status") != "not_started"
+            or not isinstance(row.get("holder_instance_id"), str) or not row["holder_instance_id"]
+            or (isinstance(expected, str) and expected and expected != row["holder_instance_id"])):
+        return None
+    return row
+
+
+def held_refusal(item: dict[str, Any], used_count: dict[str, int], used_seats: int,
+                 occupied: set[str], unnamed: set[str], cap: int | None,
+                 grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]]) -> str | None:
+    """The admission checks for a held seat, against every other live row."""
+    seat = item.get("_shared_seat")
+    if isinstance(seat, str) and seat and seat in occupied:
+        return "shared-occupied"
+    if isinstance(seat, str) and seat and shared_seat_unknown(seat, grants, catalog, unnamed):
+        return "occupancy-unknown"
+    limit = item.get("_count")
+    if isinstance(limit, int):
+        if used_count.get(item["preset"], 0) >= limit:
+            return "count"
+        if item.get("_platform") in unnamed:
+            return "occupancy-unknown"
+    if not item["_pool"] and cap is not None:
+        if used_seats >= cap:
+            return "seat-cap"
+        if unnamed:
+            return "occupancy-unknown"
+    return None
 
 
 def launch_argv(item: dict[str, Any], repo: str, command: str) -> list[str]:
@@ -2022,7 +2105,11 @@ def recover_or_send(item: dict[str, Any], repo: str, script: Path, base: dict[st
     mutation = mutation_of(receipt)
     outcome = receipt.get("outcome") if isinstance(receipt.get("outcome"), str) else None
     bound = assignment_bound(prior, item, receipt, repo, base["prompt_sha256"])
-    if isinstance(prior, dict) and not bound:
+    # A refused admission row records that nothing was started or sent; it
+    # binds no assignment that a first send could replay.
+    never_ran = (isinstance(prior, dict) and prior.get("status") == "not-run"
+                 and not prior.get("holder_instance_id") and not prior.get("prompt_fingerprint"))
+    if isinstance(prior, dict) and not bound and not never_ran:
         base.update(status="unknown", reason="assignment-unbound", prompt_fingerprint=finger,
                     holder_instance_id=holder)
         return base

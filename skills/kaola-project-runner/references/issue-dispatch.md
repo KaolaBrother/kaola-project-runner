@@ -25,7 +25,9 @@ already enforces; this contract adds no second validator. Keep the literal `i` d
 the field order, and never infer an issue from an arbitrary substring or from the purpose
 token.
 
-Record the constructed name and verify it in the start receipt. The same rule applies on
+Record the constructed name as the item's `session` and verify it in the start receipt
+(`execute` keeps it under the index row's `evidence.start`; a direct fallback start returns
+it). The same rule applies on
 later heartbeat dispatches and when restarting a stopped worker for the same issue. A worker
 reassigned to a different issue is exact-stopped and a new-named session is started - never
 a live rename and never a chained prompt. **Otherwise existing active session names are left

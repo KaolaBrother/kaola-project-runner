@@ -173,14 +173,17 @@ sink, and write ownership.
    first. A seat whose `status` says `stale: true` is not a dispatch target;
    an operator-confirmed exception on that one `send`/`steer` is the
    orchestrator's own call; replace it with `drain-restart` at idle
-   (see zcode-host-dispatch.md).
+   (zcode-host-dispatch.md).
    Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session, chosen from the current eligible-candidate projection by owner direction, class responsibility, profile/task fit and capacity; past dispatch or success informs that choice, never replaces it. Split or parallelize when independent parts gain real time or coverage. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
    Before planning, assigning or judging QA, read
    [qa-evidence.md](references/qa-evidence.md) unless the current version is
-   already in context. Call `<id>-kaola-project-runner`. Pass the selected authorized `--tier`,
-   default included; read its receipt before the first send
-   (zcode-host-dispatch.md). Do not pass a permission-mode override unless the
-   human wrote one. One dispatch prompt per ready session. External knowledge gap behind a route, obstacle, failure or QA question: [public-research.md](references/public-research.md). An adopted research, QA, or report plan — one item or a bounded fan-out — runs through [dispatch-collect.md](references/dispatch-collect.md). You still accept and exact-stop. State the task,
+   already in context. Planned dispatch (research, QA, report or
+   implementation) uses `execute`
+   ([dispatch-collect.md](references/dispatch-collect.md)): it starts absent
+   seats at the preset `--tier` and records their facts. Direct Runner
+   `start`/`send` is standalone, degraded or same-assignment recovery
+   (zcode-host-dispatch.md). No permission-mode override unless the human
+   wrote one. One dispatch prompt per ready session. External knowledge gap behind a route, obstacle, failure or QA question: [public-research.md](references/public-research.md). You still accept and exact-stop. State the task,
    working location, write ownership, constraints, delivery requirements, and
    the doc-impact call in its prompt, plus whether Workflow is on. That prompt
    carries the assignment only: never orchestration policy or the seat roster.
