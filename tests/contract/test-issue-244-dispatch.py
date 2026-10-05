@@ -224,6 +224,20 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(code, 0, payload)
         return payload
 
+    def execute_dry_run(self, plan: Path, auth: Path, avail: Path | None = None,
+                        live: Path | None = None) -> dict:
+        args = [
+            "execute", "--plan", str(plan), "--authorization", str(auth),
+            "--platforms", str(PLATFORMS), "--skills-root", str(self.skills), "--dry-run",
+        ]
+        if avail:
+            args.extend(["--availability", str(avail)])
+        if live:
+            args.extend(["--live", str(live)])
+        code, payload = run(args, self.env)
+        self.assertEqual(code, 0, payload)
+        return payload
+
     def collect(self, index: Path) -> dict:
         code, payload = run(
             ["collect", "--index", str(index), "--skills-root", str(self.skills)],
@@ -632,6 +646,57 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotIn("droid-KPR-i244-a", sessions)
         self.assertNotIn("droid-KPR-i244-b", sessions)
         self.assertIn("zcode-KPR-i244-free", sessions)
+
+    def test_shared_droid_pool_admits_two_items_and_refuses_a_third(self) -> None:
+        presets = ["droid/default", "droid/opus", "droid/core"]
+        auth = self.authorization([
+            {"id": preset, "state": "granted", "shared_seat": "droid", "count": 2}
+            for preset in presets
+        ], elite_cap=4)
+        plan = self.plan([
+            {"item_id": preset, "preset": preset,
+             "session": f"droid-KPR-i261-{preset.split('/')[-1]}", "prompt": preset}
+            for preset in presets
+        ])
+        available = self.availability(presets)
+        live = write_json(self.root, "live-empty.json", {"rows": []})
+
+        payload = self.execute_dry_run(plan, auth, available, live)
+
+        by_id = {item["item_id"]: item for item in payload["items"]}
+        self.assertEqual(payload["effective_cap"], 4, payload)
+        self.assertEqual(by_id["droid/default"]["reason"], "dry-run", payload)
+        self.assertEqual(by_id["droid/opus"]["reason"], "dry-run", payload)
+        self.assertEqual(by_id["droid/core"]["reason"], "shared-occupied", payload)
+        self.assertFalse(self.log.exists(), "dry-run must not call a Runner")
+
+    def test_one_live_droid_uses_one_slot_of_the_shared_pool(self) -> None:
+        repo = str(self.repo)
+        presets = ["droid/default", "droid/opus", "droid/core"]
+        auth = self.authorization([
+            {"id": preset, "state": "granted", "shared_seat": "droid", "count": 2}
+            for preset in presets
+        ], elite_cap=4)
+        plan = self.plan([
+            {"item_id": "default", "preset": "droid/default",
+             "session": "droid-KPR-i261-live-combined-default", "prompt": "default"},
+            {"item_id": "core", "preset": "droid/core",
+             "session": "droid-KPR-i261-live-combined-core", "prompt": "core"},
+        ])
+        available = self.availability(presets)
+        live = write_json(self.root, "live-droid.json", {"rows": [{
+            "platform": "droid", "preset": "droid/opus", "shared_seat": "droid",
+            "session": "droid-KPR-i261-live-opus", "repo": repo, "state": "ready",
+            "holder_instance_id": "holder-live", "identity": "verified",
+        }]})
+
+        payload = self.execute_dry_run(plan, auth, available, live)
+
+        by_id = {item["item_id"]: item for item in payload["items"]}
+        self.assertEqual(payload["effective_cap"], 4, payload)
+        self.assertEqual(by_id["default"]["reason"], "dry-run", payload)
+        self.assertEqual(by_id["core"]["reason"], "shared-occupied", payload)
+        self.assertFalse(self.log.exists(), "dry-run must not call a Runner")
 
     def test_write_overlap_is_a_conflict_and_pool_ignores_the_seat_cap(self) -> None:
         install_fake(self.skills, ["codex", "cursor-cli", "zcode"])

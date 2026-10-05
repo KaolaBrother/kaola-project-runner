@@ -323,6 +323,19 @@ def grant_index(grants: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {item["id"]: item for item in grants}
 
 
+def shared_seat_capacities(grants: list[dict[str, Any]]) -> dict[str, int]:
+    """One capacity per shared label, without adding the same pool per grant."""
+    capacities: dict[str, int] = {}
+    for grant in grants:
+        seat = grant.get("shared_seat")
+        if grant.get("state") != "granted" or not isinstance(seat, str) or not seat:
+            continue
+        count = grant.get("count")
+        capacity = count if isinstance(count, int) and not isinstance(count, bool) else 1
+        capacities[seat] = max(capacities.get(seat, capacity), capacity)
+    return capacities
+
+
 def eligibility(
     catalog: dict[str, dict[str, Any]],
     auth: dict[str, Any],
@@ -1019,6 +1032,7 @@ def command_execute(args: argparse.Namespace) -> int:
         auth = authorization_object(auth_doc)
         binding = bound_sideagent(auth_doc)
         grants = normalize_grants(auth)
+        shared_capacities = shared_seat_capacities(grants)
         available = availability_map(
             load_object(Path(args.availability)) if args.availability else None
         )
@@ -1239,6 +1253,7 @@ def command_execute(args: argparse.Namespace) -> int:
             **item,
             "resources": {"writes": writes, "ports": ports, "account": account, "desktop": desktop},
             "_shared_seat": item_seat or grant_seat,
+            "_shared_capacity": shared_capacities.get(item_seat or grant_seat, 1),
             "_count": candidate.get("count"),
             "_pool": candidate["pool"],
             "_platform": row["platform"],
@@ -1314,6 +1329,18 @@ def command_execute(args: argparse.Namespace) -> int:
     used_count, used_seats, occupied_shared, unnamed_platforms = live_occupancy(
         live_rows, repo, catalog, grants, resolved, exempt=binding,
     )
+    live_sessions = {
+        row.get("session") for row in live_rows
+        if row.get("state") != "stopped" and row.get("host_class") is not True
+        and not binding_row(binding, row)
+        and not (isinstance(row.get("repo"), str) and row.get("repo")
+                 and not same_repo(row["repo"], repo))
+    }
+    for item in kept_items:
+        seat_name = item.get("_shared_seat")
+        if (isinstance(seat_name, str) and seat_name and not item.get("_exempt")
+                and item.get("session") not in live_sessions):
+            occupied_shared[seat_name] = occupied_shared.get(seat_name, 0) + 1
     # Only the one bound maintenance Sideagent (named in the lifecycle state
     # before its start) is exempt from worker seats; any other Sideagent-role
     # item is a helper and counts as a worker.
@@ -1352,7 +1379,8 @@ def command_execute(args: argparse.Namespace) -> int:
             ))
             continue
         seat_name = item.get("_shared_seat")
-        if isinstance(seat_name, str) and seat_name in occupied_shared:
+        if (isinstance(seat_name, str) and seat_name
+                and occupied_shared.get(seat_name, 0) >= item.get("_shared_capacity", 1)):
             blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", "shared-occupied"))
             continue
         if isinstance(seat_name, str) and seat_name and shared_seat_unknown(seat_name, grants, catalog, unnamed_platforms):
@@ -1380,7 +1408,7 @@ def command_execute(args: argparse.Namespace) -> int:
         if isinstance(limit, int):
             used_count[item["preset"]] = used_count.get(item["preset"], 0) + 1
         if isinstance(seat_name, str) and seat_name:
-            occupied_shared.add(seat_name)
+            occupied_shared[seat_name] = occupied_shared.get(seat_name, 0) + 1
         if not item["_pool"] and effective_cap is not None:
             used_seats += 1
         ready.append(item)
@@ -1567,8 +1595,9 @@ def link_dispatch_to_tasks(path: Path, index: dict[str, Any], index_path: str | 
 
 def resource_conflict(left: dict[str, Any], right: dict[str, Any]) -> bool:
     if (left.get("_shared_seat") and left.get("_shared_seat") == right.get("_shared_seat")
-            and not left.get("_exempt") and not right.get("_exempt")):
-        # The bound maintenance Sideagent is independent of worker seats.
+            and not left.get("_exempt") and not right.get("_exempt")
+            and min(left.get("_shared_capacity", 1), right.get("_shared_capacity", 1)) <= 1):
+        # One-slot pools remain exclusive. Larger pools are checked by capacity.
         return True
     left_res = left.get("resources") or {}
     right_res = right.get("resources") or {}
@@ -1821,10 +1850,10 @@ def shared_seat_unknown(seat: str, grants: list[dict[str, Any]], catalog: dict[s
 def live_occupancy(rows: list[dict[str, Any]], repo: str, catalog: dict[str, dict[str, Any]],
                    grants: list[dict[str, Any]], resolved: dict[str, str] | None = None,
                    exempt: dict[str, Any] | None = None,
-                   ) -> tuple[dict[str, int], int, set[str], set[str]]:
+                   ) -> tuple[dict[str, int], int, dict[str, int], set[str]]:
     used_count: dict[str, int] = {}
     used_seats = 0
-    occupied: set[str] = set()
+    occupied: dict[str, int] = {}
     unnamed: set[str] = set()
     grants_by_id = grant_index(grants)
     known = resolved or {}
@@ -1853,7 +1882,7 @@ def live_occupancy(rows: list[dict[str, Any]], repo: str, catalog: dict[str, dic
         if not seat and grant and isinstance(grant.get("shared_seat"), str):
             seat = grant["shared_seat"]
         if seat:
-            occupied.add(seat)
+            occupied[seat] = occupied.get(seat, 0) + 1
         klass = catalog[preset]["class"] if preset else None
         if preset:
             used_count[preset] = used_count.get(preset, 0) + 1
@@ -1894,11 +1923,12 @@ def held_seat(item: dict[str, Any], rows: list[dict[str, Any]], repo: str,
 
 
 def held_refusal(item: dict[str, Any], used_count: dict[str, int], used_seats: int,
-                 occupied: set[str], unnamed: set[str], cap: int | None,
+                 occupied: dict[str, int], unnamed: set[str], cap: int | None,
                  grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]]) -> str | None:
     """The admission checks for a held seat, against every other live row."""
     seat = item.get("_shared_seat")
-    if isinstance(seat, str) and seat and seat in occupied:
+    if (isinstance(seat, str) and seat
+            and occupied.get(seat, 0) >= item.get("_shared_capacity", 1)):
         return "shared-occupied"
     if isinstance(seat, str) and seat and shared_seat_unknown(seat, grants, catalog, unnamed):
         return "occupancy-unknown"

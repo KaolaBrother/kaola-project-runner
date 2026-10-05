@@ -28,6 +28,11 @@ written by `snapshot`; a lifecycle-state file (`kaola-heartbeat-prompt/2`, writt
 by exact preset id, optional `elite_cap` (an integer covering Elite and
 Expert; the Worker pool is excluded), per-grant `model_switch`, top-level
 `model_switches`, `count`, `shared_seat`, and owner `special_requirements`.
+Granted rows with the same `shared_seat` label use one pool. Its capacity is
+the greatest count on those rows, or one when no row states a count. The count
+on each preset still limits that preset, and each live or admitted session
+uses one seat in the shared pool. The tool does not add repeated pool counts
+across grant rows.
 An Expert grant may also carry `lifetime` (`task`, the default when absent, or
 `standing`) and `expires` (an ISO-8601 instant with an offset, `Z` accepted).
 Both are read for Expert presets only; Elite and Worker rows ignore them. A
