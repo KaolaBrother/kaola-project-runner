@@ -286,6 +286,19 @@ class TrackerTests(unittest.TestCase):
         tracker.mark_delivered_occurrence(None, tracker.pending_seq)
         self.assertFalse(tracker.pending)
 
+    def test_duplicate_pending_occurrence_during_admission_is_coalesced(self) -> None:
+        # A repeated completion with the SAME non-null id as the current
+        # pending obligation must not advance the sequence. If it did,
+        # settlement would keep it and deliver the same occurrence twice.
+        tracker = self.cr.CompactReloadTracker()
+        self.assertTrue(tracker.observe(self.cr.CompactSignal("a", "s1", "c1")))
+        seq = tracker.pending_seq
+        self.assertFalse(tracker.observe(self.cr.CompactSignal("a", "s1", "c1")))
+        self.assertEqual(tracker.pending_seq, seq)
+        tracker.mark_delivered_occurrence("c1", seq)
+        self.assertFalse(tracker.pending)
+        self.assertEqual(tracker.last_delivered_id, "c1")
+
     def test_matching_occurrence_clears_pending(self) -> None:
         tracker = self.cr.CompactReloadTracker()
         tracker.observe(self.cr.CompactSignal("a", "s1", "c1"))
