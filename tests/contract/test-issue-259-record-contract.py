@@ -8,6 +8,7 @@ result; it does not change that admission.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -734,23 +735,90 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(self.doc()["state"]["tasks"]["t3"]["goal"], "close the selected issues")
 
-    def test_node_running_follows_the_live_record(self) -> None:
-        self.init()
+    def _bind_node(self) -> str:
         self.state("update", "--file", str(self.file), "--writer", "host", "--source", "bind",
                    "--section", "sideagent", "--expect-revision", "1",
                    "--set", json.dumps({"platform": "zcode", "session": "zcode-KT-node", "state": "active",
                                         "mode": "node"}))
+        doc = self.doc()
+        doc["carrier"] = {
+            "capability": "heartbeat-state/2",
+            "holder_instance_id": "host-1",
+            "platform": "codex",
+            "session": "codex-KT-host",
+        }
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        return hashlib.sha256(str(self.file.resolve().parent.parent).encode("utf-8")).hexdigest()[:16]
+
+    def _node_record(self, *, pid: int, repo: str | None = None, host: str = "host-1",
+                     role: str = "sideagent") -> dict:
+        bound = repo if repo is not None else str(self.file.resolve().parent.parent)
+        return {
+            "session_role": role,
+            "state": "ready",
+            "platform": "zcode",
+            "session": "zcode-KT-node",
+            "repo": bound,
+            "holder_pid": pid,
+            "dispatcher": {
+                "holder_instance_id": host,
+                "platform": "codex",
+                "session": "codex-KT-host",
+                "repo": bound,
+            },
+        }
+
+    def test_node_running_follows_the_bound_record(self) -> None:
+        self.init()
+        digest = self._bind_node()
         root = self.repo / "records"
         env = {key: value for key, value in os.environ.items() if key not in CALLER_ENV}
         env["KAOLA_ACP_RECORD_ROOT"] = str(root)
         code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertEqual(code, 0, out)
         self.assertIn("no node is running", out["sideagent_maintenance"])
-        record = root / "zcode" / "zcode-KT-node" / "digest" / "record.json"
-        record.parent.mkdir(parents=True)
-        record.write_text(json.dumps({
-            "session_role": "sideagent", "state": "ready", "holder_pid": os.getpid(),
-        }), encoding="utf-8")
+        foreign = root / "zcode" / "zcode-KT-node" / "digest" / "record.json"
+        foreign.parent.mkdir(parents=True)
+        foreign.write_text(json.dumps(self._node_record(pid=os.getpid())), encoding="utf-8")
         code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertIn("no node is running", out["sideagent_maintenance"])
+        record = root / "zcode" / "zcode-KT-node" / digest / "record.json"
+        record.parent.mkdir(parents=True)
+        record.write_text(json.dumps(self._node_record(pid=os.getpid(), host="other-host")),
+                          encoding="utf-8")
+        code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertIn("no node is running", out["sideagent_maintenance"])
+        record.write_text(json.dumps(self._node_record(pid=os.getpid(), repo="/other/repo")),
+                          encoding="utf-8")
+        code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertIn("no node is running", out["sideagent_maintenance"])
+        dead = subprocess.Popen([PYTHON, "-c", "pass"])
+        dead.wait()
+        record.write_text(json.dumps(self._node_record(pid=dead.pid)), encoding="utf-8")
+        code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertIn("no node is running", out["sideagent_maintenance"])
+        record.write_text(json.dumps(self._node_record(pid=os.getpid())), encoding="utf-8")
+        code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertEqual(out["sideagent_maintenance"], "a node is running")
+        doc = self.doc()
+        doc.pop("carrier")
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertIn("no node is running", out["sideagent_maintenance"])
+
+    def test_node_running_uses_the_process_temp_dir(self) -> None:
+        self.init()
+        digest = self._bind_node()
+        scratch = Path(self.tmp.name) / "process-temp"
+        scratch.mkdir()
+        env = {key: value for key, value in os.environ.items()
+               if key not in CALLER_ENV and key not in ("KAOLA_ACP_RECORD_ROOT", "XDG_RUNTIME_DIR")}
+        env["TMPDIR"] = str(scratch)
+        record = (scratch / f"kaola-{os.getuid()}" / "zcode" / "zcode-KT-node" / digest / "record.json")
+        record.parent.mkdir(parents=True)
+        record.write_text(json.dumps(self._node_record(pid=os.getpid())), encoding="utf-8")
+        code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertEqual(code, 0, out)
         self.assertEqual(out["sideagent_maintenance"], "a node is running")
 
     def test_timer_without_a_body_is_unavailable(self) -> None:

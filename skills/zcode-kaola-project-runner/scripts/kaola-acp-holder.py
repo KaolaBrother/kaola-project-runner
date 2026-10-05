@@ -379,7 +379,7 @@ def read_heartbeat_file(source: Path) -> tuple[dict[str, Any] | None, str | None
             return data, None, (
                 "record contract is not loaded; the stored body was not injected"
             )[:HEARTBEAT_DEFECT_CHARS]
-        projected, defect = record.injection_body(data)
+        projected, defect = record.injection_body(data, source)
         if defect:
             return data, None, defect[:HEARTBEAT_DEFECT_CHARS]
         if isinstance(projected, str) and projected:

@@ -594,9 +594,14 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   Host view `capability.presets` starts from stored `capability_summary.presets`, drops paused,
   revoked, and excluded ids, and adds granted grant ids. Stored Class sentences stay.
   `delivery-open` content is the task `goal`, `next`, and verdict value.
-  For `mode: node`, `sideagent_maintenance` says `a node is running` only when that session's
-  record is `ready` and `holder_pid` is alive. No record, or a dead pid, says no node is running.
-  An unreadable record root says liveness was not read.
+  For `mode: node`, `sideagent_maintenance` says `a node is running` only when the
+  record for this canonical repo digest is `ready`, its `holder_pid` is alive, its
+  `repo` matches this state file, and its `dispatcher` matches this file's Host
+  carrier (`platform`, `session`, `holder_instance_id`, and `repo`). The record
+  root is `KAOLA_ACP_RECORD_ROOT`, else `XDG_RUNTIME_DIR`, else the process
+  temporary directory, then `kaola-<uid>`. A missing record or a dead pid says no
+  node is running. An unreadable record says liveness was not read. The sentence
+  reports the view. Transport stays on the existing start, send, and stop commands.
 - `check [--index] [--live] [--repo]` reports problems without writing.
 - `timer --repo --target --entry [--body|--body-file]` compares a supplied native timer body
   with the entry line plus the fixed locator sentence. Exit 1 on `mismatch`. No body returns

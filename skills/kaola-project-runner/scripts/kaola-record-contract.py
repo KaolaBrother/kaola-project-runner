@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -1115,48 +1116,94 @@ def task_attention(task_id: str, task: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _record_root() -> Path:
+    """Same root as the Runner: explicit root, else ``XDG_RUNTIME_DIR``, else the process temp dir."""
     root = os.environ.get("KAOLA_ACP_RECORD_ROOT")
     if root:
         return Path(root)
-    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
     return Path(base) / f"kaola-{os.getuid()}"
 
 
-def node_is_running(binding: Any) -> bool | None:
-    """True when a live Sideagent record matches this node binding. False when none does.
+def _repo_of_state_file(path: Path) -> Path:
+    resolved = path.resolve()
+    return resolved.parent.parent if resolved.parent.name == ".kaola" else resolved.parent
 
-    None means the record root could not be read. A binding alone is not a running node.
+
+def _same_repo(stored: Any, repo: str) -> bool:
+    if not isinstance(stored, str) or not stored:
+        return False
+    if os.path.normpath(stored) == os.path.normpath(repo):
+        return True
+    try:
+        return Path(stored).resolve() == Path(repo).resolve()
+    except OSError:
+        return False
+
+
+def _host_of(doc: dict[str, Any]) -> dict[str, str] | None:
+    """Host identity already stored on this file's carrier. No new registry."""
+    carrier = doc.get("carrier") if isinstance(doc.get("carrier"), dict) else None
+    if carrier is None:
+        return None
+    platform, session, holder = (
+        carrier.get("platform"), carrier.get("session"), carrier.get("holder_instance_id"))
+    if not all(isinstance(item, str) and item for item in (platform, session, holder)):
+        return None
+    return {"platform": platform, "session": session, "holder_instance_id": holder}
+
+
+def node_is_running(binding: Any, repo: Path | None, host: dict[str, str] | None) -> bool | None:
+    """True only for this repo's ready Sideagent record dispatched by this Host.
+
+    The path is ``<record root>/<platform>/<session>/<sha256(repo)[:16]>/record.json``.
+    ``repo`` on that record and ``dispatcher`` must match this state file and its
+    Host carrier. Another ready record that shares only the platform and session
+    name does not count. False means no such live record. None means the record
+    could not be read, or this file does not name a repo.
     """
     if not isinstance(binding, dict) or binding.get("mode") != "node":
         return None
     platform, session = binding.get("platform"), binding.get("session")
     if not isinstance(platform, str) or not isinstance(session, str):
         return False
-    root = _record_root() / platform / session
+    if repo is None:
+        return None
+    repo_text = str(repo)
+    digest = hashlib.sha256(repo_text.encode("utf-8")).hexdigest()[:16]
+    path = _record_root() / platform / session / digest / "record.json"
     try:
-        paths = list(root.glob("*/record.json")) if root.is_dir() else []
+        if not path.is_file():
+            return False
+        record = json.loads(path.read_text(encoding="utf-8"))
     except OSError:
         return None
-    for path in paths:
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if not isinstance(record, dict):
-            continue
-        if record.get("session_role") not in ("sideagent", "sidekick"):
-            continue
-        if record.get("state") != "ready":
-            continue
-        pid = record.get("holder_pid")
-        if not isinstance(pid, int) or pid <= 0:
-            continue
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            continue
-        return True
-    return False
+    except ValueError:
+        return False
+    if not isinstance(record, dict):
+        return False
+    if record.get("session_role") not in ("sideagent", "sidekick"):
+        return False
+    if record.get("platform") != platform or record.get("session") != session:
+        return False
+    if record.get("state") != "ready":
+        return False
+    if not _same_repo(record.get("repo"), repo_text):
+        return False
+    dispatcher = record.get("dispatcher")
+    if (not isinstance(host, dict) or not isinstance(dispatcher, dict)
+            or dispatcher.get("holder_instance_id") != host.get("holder_instance_id")
+            or dispatcher.get("platform") != host.get("platform")
+            or dispatcher.get("session") != host.get("session")
+            or not _same_repo(dispatcher.get("repo"), repo_text)):
+        return False
+    pid = record.get("holder_pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
 
 
 def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
@@ -1292,7 +1339,8 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
     }
     if isinstance(binding, dict):
         if binding.get("mode") == "node":
-            running = node_is_running(binding)
+            repo = _repo_of_state_file(path) if isinstance(path, Path) else None
+            running = node_is_running(binding, repo, _host_of(doc))
             if running is True:
                 view["sideagent_maintenance"] = "a node is running"
             elif running is False:
@@ -1318,11 +1366,11 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
     return view
 
 
-def injection_body(doc: dict[str, Any]) -> tuple[str | None, str | None]:
+def injection_body(doc: dict[str, Any], path: Path | None = None) -> tuple[str | None, str | None]:
     """Projected Host view for a current state file. None means the caller keeps a legacy body."""
     if not isinstance(doc, dict) or doc.get("schema") != HOST_SCHEMA or not isinstance(doc.get("state"), dict):
         return None, None
-    view = host_view(doc, None)
+    view = host_view(doc, path)
     body = json.dumps(view, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     if len(body.encode("utf-8")) > HOST_VIEW_MAX_BYTES:
         return None, (
