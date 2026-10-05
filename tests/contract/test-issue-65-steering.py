@@ -39,7 +39,7 @@ MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 PLATFORMS = PROJECT / "platforms"
 SKILLS = PROJECT / "skills"
 
-# Cursor has no native entry; Codex declares `_session/steering`.
+# A test-only unsupported manifest covers pre-write refusal; Codex declares the extension.
 UNSUPPORTED_PLATFORM = "cursor-cli"
 SUPPORTED_PLATFORM = "codex"
 STEER_TEXT = "STOP the loop and reply with exactly STEERED-OK-65"
@@ -97,7 +97,19 @@ class SteeringContract(unittest.TestCase):
     def cli(self, platform: str, command: str, *args: str, session: str | None = None,
             steering: str = "none", turn_ms: int = 0, scenario: str = "slow",
             ignore_cancel: bool = False, check: bool = True, timeout: float = 45) -> dict:
-        argv = [sys.executable, str(CLI), platform, command,
+        cli = CLI
+        if platform == UNSUPPORTED_PLATFORM:
+            import shutil
+            fixture = self.root / "unsupported-fixture"
+            if not fixture.exists():
+                shutil.copytree(PROJECT / "scripts", fixture / "scripts")
+                shutil.copytree(PLATFORMS, fixture / "platforms")
+                path = fixture / f"platforms/{platform}.yaml"
+                source = path.read_text().replace('native_steering: "supported"', 'native_steering: "unsupported"')
+                source = source.replace('acp_steer_method: "session/prompt"', 'acp_steer_method: ""')
+                path.write_text(source)
+            cli = fixture / "scripts/kaola-acp.py"
+        argv = [sys.executable, str(cli), platform, command,
                 "--repo", str(self.repo), "--session", session or self.session,
                 "--command", self.mock_command(steering, turn_ms, scenario, ignore_cancel),
                 *args]
@@ -234,13 +246,15 @@ class SteeringContract(unittest.TestCase):
         self.assertEqual(receipt["error"]["code"], "steer-prompt-required")
         self.assertIs(receipt["mutation_performed"], False)
 
-    def test_started_new_turn_is_not_called_injection(self) -> None:
+    def test_started_new_turn_confirms_later_delivery_only(self) -> None:
         self.start_running_turn(SUPPORTED_PLATFORM, "startedNewTurn")
         receipt = self.cli(SUPPORTED_PLATFORM, "steer", "--text", STEER_TEXT,
                            steering="startedNewTurn", turn_ms=9000, check=False)
         self.assertEqual(receipt["steer_outcome"], "started_new_turn")
         self.assertNotEqual(receipt["steer_outcome"], "injected")
-        self.assertEqual(receipt["error"]["code"], "steer-started-new-turn")
+        self.assertIsNone(receipt["steer_consumed"])
+        self.assertNotIn("error", receipt)
+        self.assertTrue(receipt["mutation_performed"])
         self.assertIs(receipt["turn_request_id_preserved"], True)
 
     def test_agent_refusal_is_rejected_not_unknown(self) -> None:

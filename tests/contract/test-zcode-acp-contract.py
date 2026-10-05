@@ -2072,20 +2072,20 @@ class ZcodeAcpSteerHolderTests(unittest.TestCase):
         self.assertTrue(result.get("injectedMessageIds"))
         self.assertTrue(result.get("targetTurnId"))
 
-    def test_queue_receipt_is_not_consumed(self) -> None:
+    def test_queue_receipt_confirms_admission_only(self) -> None:
         turn, receipt = self._steer_receipt("steer_queue")
-        self.assertEqual(receipt.get("steer_outcome"), "not_consumed")
-        self.assertIs(receipt.get("steer_consumed"), False)
+        self.assertEqual(receipt.get("steer_outcome"), "written")
+        self.assertIsNone(receipt.get("steer_consumed"))
         self.assertEqual(receipt.get("steer_native_outcome"), "queued")
         self.assertEqual((receipt.get("error") or {}).get("code"), "steer-queued")
         # The queue admission is durable — it will surface on a later turn.
         self.assertIs(receipt.get("mutation_performed"), True)
 
-    def test_turn_end_race_receipt_is_not_consumed(self) -> None:
+    def test_turn_end_race_receipt_confirms_admission_only(self) -> None:
         turn, receipt = self._steer_receipt("steer_turnend")
-        self.assertEqual(receipt.get("steer_outcome"), "not_consumed")
+        self.assertEqual(receipt.get("steer_outcome"), "written")
         self.assertEqual(receipt.get("steer_native_outcome"), "queued")
-        self.assertIs(receipt.get("steer_consumed"), False)
+        self.assertIsNone(receipt.get("steer_consumed"))
 
     def test_reject_receipt(self) -> None:
         turn, receipt = self._steer_receipt("steer_reject")

@@ -369,15 +369,16 @@ class SteeringCapabilityWording(unittest.TestCase):
         env = {k: v for k, v in os.environ.items()
                if k != "KAOLA_PROJECT_RUNNER_CANONICAL_REPO"}
         target = TMUX
-        if platform == "opencode":
+        if platform in ("opencode", "cursor-cli"):
             import shutil
-            fixture = Path(self._tmp.name) / "unknown-fixture"
+            fixture = Path(self._tmp.name) / (platform + "-fixture")
             if not fixture.exists():
                 shutil.copytree(PROJECT / "scripts", fixture / "scripts")
                 shutil.copytree(PROJECT / "platforms", fixture / "platforms")
-                path = fixture / "platforms/opencode.yaml"
-                text = path.read_text().replace('native_steering: "supported"', 'native_steering: "unknown"')
-                text = text.replace('acp_steer_method: "_session/steering"', 'acp_steer_method: ""')
+                path = fixture / ("platforms/" + platform + ".yaml")
+                value = 'unknown' if platform == 'opencode' else 'unsupported'
+                text = path.read_text().replace('native_steering: "supported"', 'native_steering: '+json.dumps(value))
+                text = text.replace('acp_steer_method: "_session/steering"', 'acp_steer_method: ""').replace('acp_steer_method: "session/prompt"', 'acp_steer_method: ""')
                 path.write_text(text)
             target = fixture / "scripts/kaola-tmux.sh"
         result = subprocess.run(

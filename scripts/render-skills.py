@@ -84,6 +84,9 @@ REQUIRED = {
 # ``acp_command_<w>`` for a named tier) for a preset the agent's ACP model
 # option does not offer; absent keys keep the base ``acp_command``.
 OPTIONAL = {"acp_command_default",
+            # Issue #263: supported standard prompt delivery after completion
+            # when native ACP rejects or cancels concurrent input.
+            "steering_delivery",
             # Issue #146: seconds the holder waits for the `session/new`
             # response; absent keeps the shared 15 s. A measured per-platform
             # latency fact, never a gate.
@@ -200,6 +203,8 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: acp_steer_method requires native_steering supported")
     if not result["steering_summary"]:
         raise ValueError(f"{path}: empty steering_summary")
+    if result.get("steering_delivery", "native") not in {"native", "after-turn"}:
+        raise ValueError(f"{path}: invalid steering_delivery")
     if not result["acp_command"]:
         raise ValueError(f"{path}: empty acp_command")
     commands = {key for key in declared if key.startswith("acp_command_")}
@@ -258,17 +263,17 @@ def quota_api():
 
 STEERING_SUPPORTED = """## Steering a running turn
 
-{runtime}'s ACP surface steers natively, so `steer` is an Agent choice for a
-turn already running — not a Runner policy:
+{runtime}'s ACP route supports noninterrupting input. `steer` is an Agent choice
+for this exact session. Processing can occur in a later step or turn:
 
 ```bash
 "$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" --text '<redirection>'
 ```
 
 Read `steer_outcome` with `steer_confirmation`: only `injected` means the agent
-acknowledged consumption, `written` means flushed but unacknowledged (read the
-turn's own output), and `not_consumed`/`unknown` mean do not resend
-blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
+acknowledged consumption. `written` confirms a write or native admission.
+`queued` with `holder-queued` confirms process-local pending input only. Read
+session output to judge processing. Never resend an unknown write blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
 cancels the turn first. See [references/steering.md](references/steering.md).
 """
 

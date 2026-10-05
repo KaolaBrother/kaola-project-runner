@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Grok native request/reply mapping and OpenCode original-turn adapter guards."""
+"""Noninterrupting request mapping, separate replies and OpenCode adapter guards."""
 import importlib.util
 import io
 import json
@@ -39,7 +39,7 @@ class Mapping(unittest.TestCase):
         self.assertEqual(result['turn_request_id'], first['turn_request_id'])
         self.assertTrue(result['turn_request_id_preserved'])
         self.assertTrue(turn['active'])
-        self.assertEqual(len(self.agent.prompts_sent()), 1)
+        self.assertEqual(len(self.agent.prompts_sent()), 2 if method == 'session/prompt' else 1)
         self.assertFalse(self.agent.cancels_sent())
         return result, self.agent.sent[-1]['params']
 
@@ -86,6 +86,138 @@ class Mapping(unittest.TestCase):
         self.assertEqual(params['_meta']['steering']['expectedTurnId'], result['turn_request_id'])
         self.assertIsNone(result['steer_consumed'])
         self.assertEqual(result['steer_confirmation'], 'native-admitted')
+
+    def test_standard_prompt_completion_is_not_model_adoption(self):
+        for platform in ('devin', 'droid'):
+            self.holder.args.platform = platform
+            self.agent.wait_response = lambda request, timeout: {'result': {'stopReason': 'end_turn'}}
+            if not self.holder.turn['active']:
+                self.start_turn('original')
+            original = self.holder.turn.copy()
+            result = self.holder.op_steer({'method': 'session/prompt', 'text': 'new'})
+            self.assertEqual(self.agent.sent[-1]['params'], {'sessionId': 'ses-race',
+                'prompt': [{'type': 'text', 'text': 'new'}]})
+            self.assertEqual(result['steer_outcome'], 'written')
+            self.assertIsNone(result['steer_consumed'])
+            self.assertEqual(result['steer_confirmation'], 'prompt-completed')
+            self.assertEqual(result['steer_stop_reason'], 'end_turn')
+            self.assertEqual(self.holder.turn, original)
+            self.assertFalse(self.agent.cancels_sent())
+
+    def test_standard_prompt_late_reply_survives_timeout_and_later_turn(self):
+        self.holder.args.platform = 'devin'
+        first, _ = self.start_turn('original')
+        release, logged = threading.Event(), threading.Event()
+        raw = {'id': 2, 'result': {'stopReason': 'end_turn', '_meta': {'userMessageId': 'owned'}}}
+        def late(request, timeout):
+            release.wait(3)
+            return raw
+        self.agent.wait_response = late
+        append = self.holder.events.append
+        def record(event, **kwargs):
+            cursor = append(event, **kwargs)
+            if event['kind'] == 'steer_reply': logged.set()
+            return cursor
+        self.holder.events.append = record
+        result = self.holder.op_steer({'method': 'session/prompt', 'text': 'new', 'timeout': .01})
+        self.assertEqual(result['steer_outcome'], 'written')
+        self.assertEqual(result['steer_confirmation'], 'write-only')
+        self.assertEqual(result['error']['code'], 'steer-reply-pending')
+        self.settle(first['turn_request_id'])
+        second, _ = self.start_turn('later')
+        release.set()
+        self.assertTrue(logged.wait(3))
+        self.assertEqual(self.holder.turn['request_id'], second['turn_request_id'])
+        self.assertTrue(self.holder.turn['active'])
+        events = [json.loads(line) for line in self.holder.events.path.read_text().splitlines()]
+        reply = next(event for event in events if event['kind'] == 'steer_reply')
+        self.assertEqual(reply['response'], raw)
+        self.assertEqual(reply['request_id'], result['steer_request_id'])
+        self.assertEqual(reply['turn_request_id'], first['turn_request_id'])
+        self.assertEqual(len(self.agent.prompts_sent()), 3)
+        self.assertFalse(self.agent.cancels_sent())
+
+    def test_later_turn_queue_is_admission_not_rejection_or_processing(self):
+        result, _ = self.response({'result': {'outcome': 'queued'}}, 'zcode', '_session/steering')
+        self.assertEqual(result['steer_outcome'], 'written')
+        self.assertIsNone(result['steer_consumed'])
+        self.assertEqual(result['steer_native_outcome'], 'queued')
+        self.assertTrue(result['mutation_performed'])
+
+    def test_standard_prompt_refusal_does_not_trigger_cancel_or_replay(self):
+        result, _ = self.response({'error': {'code': -32600, 'message': 'refused'}},
+                                  'droid', 'session/prompt')
+        self.assertEqual(result['steer_outcome'], 'rejected')
+        self.assertFalse(result['mutation_performed'])
+        self.assertEqual(len(self.agent.prompts_sent()), 2)
+
+    def test_standard_prompt_execution_error_does_not_claim_no_effect(self):
+        result, _ = self.response({'error': {'code': -32000, 'message': 'agent exited'}},
+                                  'devin', 'session/prompt')
+        self.assertEqual(result['steer_outcome'], 'unknown')
+        self.assertIsNone(result['steer_consumed'])
+        self.assertIsNone(result['mutation_performed'])
+
+    def queued(self):
+        first, turn = self.start_turn('original')
+        logged = threading.Event()
+        append = self.holder.events.append
+        def record(event, **kwargs):
+            cursor = append(event, **kwargs)
+            if event['kind'] == 'steer_followup': logged.set()
+            return cursor
+        self.holder.events.append = record
+        result = self.holder.op_steer({'method': 'session/prompt', 'text': 'later',
+                                      'delivery': 'after-turn'})
+        return first, turn, result, logged
+
+    def test_after_turn_delivery_waits_then_uses_owned_prompt_lifecycle(self):
+        first, original, result, logged = self.queued()
+        self.assertEqual(result['steer_outcome'], 'queued')
+        self.assertEqual(result['steer_confirmation'], 'holder-queued')
+        self.assertFalse(result['steer_native_written'])
+        self.assertEqual(len(self.agent.prompts_sent()), 1)
+        self.settle(first['turn_request_id'])
+        self.assertTrue(logged.wait(3))
+        self.assertEqual(original['outcome'], 'turn_completed')
+        self.assertEqual(original['stop_reason'], 'end_turn')
+        self.assertNotEqual(self.holder.turn['request_id'], first['turn_request_id'])
+        self.assertEqual(self.agent.prompts_sent()[-1]['params'],
+            {'sessionId': 'ses-race', 'prompt': [{'type': 'text', 'text': 'later'}]})
+        self.assertFalse(self.agent.cancels_sent())
+
+    def test_after_turn_competing_prompt_refuses_without_cancel_or_replay(self):
+        admitted, release = threading.Event(), threading.Event()
+        op_prompt = self.holder.op_prompt
+        def delay(params):
+            if params.get('text') == 'later':
+                admitted.set(); release.wait(3)
+            return op_prompt(params)
+        self.holder.op_prompt = delay
+        first, _, result, logged = self.queued()
+        self.settle(first['turn_request_id'])
+        self.assertTrue(admitted.wait(3))
+        second, _ = self.start_turn('competing')
+        release.set()
+        self.assertTrue(logged.wait(3))
+        event = next(json.loads(line) for line in self.holder.events.path.read_text().splitlines()
+                     if json.loads(line)['kind'] == 'steer_followup')
+        self.assertFalse(event['receipt']['mutation_performed'])
+        self.assertEqual(event['receipt']['active_turn_request_id'], second['turn_request_id'])
+        self.assertEqual(len(self.agent.prompts_sent()), 2)
+        self.assertFalse(self.agent.cancels_sent())
+
+    def test_after_turn_stop_does_not_send_or_restart(self):
+        first, _, result, logged = self.queued()
+        self.holder.stop_requested = True
+        self.settle(first['turn_request_id'])
+        self.assertTrue(logged.wait(3))
+        event = next(json.loads(line) for line in self.holder.events.path.read_text().splitlines()
+                     if json.loads(line)['kind'] == 'steer_followup')
+        self.assertEqual(event['receipt']['outcome'], 'stopping')
+        self.assertFalse(event['receipt']['mutation_performed'])
+        self.assertEqual(len(self.agent.prompts_sent()), 1)
+        self.assertFalse(self.agent.cancels_sent())
 
 class OpenCodeAdapter(unittest.TestCase):
     def setUp(self):

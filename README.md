@@ -591,7 +591,7 @@ was investigated and does not, and `unknown` means no probe has settled it. No r
 is pinned here, because that answer changes as surfaces are investigated:
 
 ```bash
-# Native mid-turn entry, on a platform whose manifest says native_steering: supported.
+# Noninterrupting input, on a platform whose manifest says native_steering: supported.
 ./scripts/kaola-tmux.sh codex steer --repo "$REPO" --session "$SESSION" \
   --text 'Stop the current approach and do X instead.'
 

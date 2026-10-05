@@ -5418,7 +5418,8 @@ def main() -> int:
         else:
             receipt = op_or_holder_lost(
                 args, repo, directory, "steer",
-                {"text": text, "method": method, "timeout": timeout},
+                {"text": text, "method": method, "timeout": timeout,
+                 "delivery": args.manifest.get("steering_delivery", "native")},
                 sock_timeout,
             )
             receipt.setdefault("native_steering", native_steering)

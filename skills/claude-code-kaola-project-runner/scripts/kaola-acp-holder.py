@@ -41,8 +41,8 @@ STDERR_RING = 64 * 1024
 EVENT_LOG_MAX = 10 * 1024 * 1024
 EVENT_LOG_KEEP = 3
 CANCEL_GRACE = 5.0
-# Issue #65: a native steering call answers inside the running turn; it never
-# waits for the turn itself, so this bounds only the extension round trip.
+# Bounds the receipt wait. A standard prompt can answer after a later step or
+# turn. Its late reply remains in the existing event log; never resend on timeout.
 STEER_TIMEOUT = 30.0
 EXIT_GRACE = 5.0
 TERM_GRACE = 3.0
@@ -4120,16 +4120,15 @@ class Holder:
                     "pending_permissions": list(pending.values())}
 
     def op_steer(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Issue #65: one native mid-turn steering request for this exact session.
+        """One noninterrupting input request for this exact session.
 
-        Steering is a transport operation the controlling Agent chooses, never a
-        Runner policy. It reuses the running turn: it starts no second turn, adds
-        no scheduler, and never becomes a second stdin writer. The receipt states
-        one fact — whether this agent consumed the text into the running turn —
-        and keeps that separate from whether the model actually followed it.
+        Keep the original prompt owner. Native delivery can be processed in a
+        later step or turn. Write, admission, completion and model adoption are
+        separate facts. This operation never sends cancel or replays input.
         """
         method = (params.get("method") or "").strip()
         text = params.get("text") or ""
+        standard_prompt = method == "session/prompt" and self.args.platform in ("devin", "droid")
         base: dict[str, Any] = {
             "steer_method": method or None,
             "steer_text_chars": len(text),
@@ -4173,6 +4172,41 @@ class Holder:
                         "mutation_performed": False}
             turn_request_id_before = self.turn["request_id"]
             turn_fingerprint = self.turn["fingerprint"]
+            if params.get("delivery") == "after-turn":
+                # The native ACP entry rejects or cancels concurrent prompts.
+                # Wait on the existing completion condition, then use ordinary
+                # prompt admission once. This is process-local pending input,
+                # not native admission, a timer, or a restart/replay mechanism.
+                original = self.turn
+                session_id = self.acp_session_id
+                queue_cursor = self.events.append({"kind": "steer_queued",
+                    "confirmation": "holder-queued", "turn_request_id": turn_request_id_before,
+                    "fingerprint": base["steer_fingerprint"]})
+                def after_turn() -> None:
+                    with self.turn_cond:
+                        while original["active"] and not self.agent.exited.is_set():
+                            self.turn_cond.wait()
+                    if self.acp_session_id != session_id:
+                        sent = {"outcome": "session_changed", "mutation_performed": False}
+                    else:
+                        # op_prompt refuses before writing if another prompt
+                        # owns the slot or the holder is stopping. Preserve that
+                        # receipt; never cancel that prompt or retry the write.
+                        sent = self.op_prompt({"text": text, "wait": False,
+                            "expected_holder_instance_id": self.holder_instance_id})
+                    self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
+                        "turn_request_id": turn_request_id_before,
+                        "fingerprint": base["steer_fingerprint"], "receipt": sent})
+                threading.Thread(target=after_turn, daemon=True).start()
+                return {**base, "steer_outcome": "queued", "steer_consumed": None,
+                    "steer_confirmation": "holder-queued", "steer_queue_cursor": queue_cursor,
+                    "steer_native_written": False, "turn_request_id": turn_request_id_before,
+                    "turn_request_id_after": turn_request_id_before, "turn_request_id_preserved": True,
+                    "turn_prompt_fingerprint": turn_fingerprint, "outcome": "steer_queued",
+                    "mutation_status": original.get("mutation_status"), "mutation_performed": True,
+                    "steer_reason": "pending input waits for prompt completion; read steer_followup "
+                                    "for native write and session output for processing. A stopped "
+                                    "holder loses pending input. No cancel or replay is sent"}
             request_params = {
                 "sessionId": self.acp_session_id,
                 "prompt": [{"type": "text", "text": text}],
@@ -4183,10 +4217,20 @@ class Holder:
                 request_params = {"sessionId": self.acp_session_id, "text": text}
             elif self.args.platform == "opencode":
                 request_params["_meta"]["steering"]["expectedTurnId"] = turn_request_id_before
+            elif standard_prompt:
+                # These installed ACP servers accept a second standard prompt
+                # without transport cancellation. Do not invent an extension.
+                request_params.pop("_meta")
             steer_request_id = self.agent.send_request(
                 method,
                 request_params,
             )
+            if normalize_id(steer_request_id) not in self.agent.pending_out:
+                return {**base, "steer_request_id": steer_request_id,
+                        "steer_outcome": "not_consumed", "steer_consumed": False,
+                        "steer_confirmation": "none", "outcome": "steer_write_failed",
+                        "mutation_performed": False,
+                        "error": {"code": "acp-write-failed", "message": "steer frame was not written"}}
             self.events.append({"kind": "steer_sent", "method": method,
                                 "request_id": steer_request_id,
                                 "turn_request_id": turn_request_id_before,
@@ -4197,13 +4241,39 @@ class Holder:
         timeout = params.get("timeout")
         if timeout is None:
             timeout = STEER_TIMEOUT
-        response = self.agent.wait_response(steer_request_id, timeout)
+        if standard_prompt:
+            # Keep the pending reply after the caller's bounded wait. It must
+            # not settle or replace the original prompt, including coalesced
+            # replies or a reply that arrives after the original prompt ended.
+            reply: dict[str, Any] = {}
+            ready = threading.Event()
+
+            def await_reply() -> None:
+                response = self.agent.wait_response(steer_request_id, None)
+                self.events.append({"kind": "steer_reply", "request_id": steer_request_id,
+                                    "turn_request_id": turn_request_id_before,
+                                    "fingerprint": base["steer_fingerprint"],
+                                    "response": response})
+                reply["response"] = response
+                ready.set()
+
+            threading.Thread(target=await_reply, daemon=True).start()
+            ready.wait(timeout)
+            response = reply.get("response")
+        else:
+            response = self.agent.wait_response(steer_request_id, timeout)
 
         if response is None:
             outcome, consumed, confirmation, error = "unknown", None, "none", {
                 "code": "steer-no-response",
                 "message": "no reply to the steering request before the timeout; "
                            "consumption is unknown — do not resend blindly"}
+            if standard_prompt:
+                outcome, confirmation = "written", "write-only"
+                error = {"code": "steer-reply-pending",
+                         "message": "the prompt frame was flushed; admission and processing are "
+                                    "unconfirmed. Read capture events for its late steer_reply "
+                                    "and session output. Do not resend blindly"}
         elif "error" in response:
             detail = response.get("error") or {}
             confirmation = "none"
@@ -4211,6 +4281,11 @@ class Holder:
                 outcome, consumed = "unsupported", False
                 error = {"code": "steer-unsupported",
                          "message": f"agent does not implement {method}", "detail": detail}
+            elif standard_prompt and detail.get("code") not in (-32600, -32602):
+                outcome, consumed = "unknown", None
+                error = {"code": "steer-prompt-failed", "detail": detail,
+                         "message": "the additional prompt ended with an error; its effects "
+                                    "are unconfirmed. Read session output and do not resend blindly"}
             else:
                 outcome, consumed = "rejected", False
                 error = {"code": "steer-rejected", "message": str(detail.get("message", "")),
@@ -4219,6 +4294,10 @@ class Holder:
             result = response.get("result") or {}
             if not isinstance(result, dict):
                 result = {}
+            if standard_prompt and isinstance(result.get("stopReason"), str):
+                base["steer_stop_reason"] = result["stopReason"]
+                result = {"outcome": "written", "confirmation": "prompt-completed",
+                          "reason": "the additional prompt returned; read session output to judge processing"}
             if self.args.platform == "grok" and method == "_x.ai/interject":
                 envelope = result.get("result") if isinstance(result, dict) else None
                 if isinstance(envelope, dict) and envelope.get("status") == "queued" and not result.get("error"):
@@ -4246,28 +4325,26 @@ class Holder:
                                     "the write was flushed without error, but this platform "
                                     "acknowledges no consumption - read the turn's own output "
                                     "to judge, and do not resend blindly"}
-                if confirmation in ("native-queued", "native-admitted"):
-                    error["message"] = ("the native entry acknowledged the request; running-turn "
-                                        "consumption and model adoption are unconfirmed; read the "
-                                        "original turn output and do not resend blindly")
+                if confirmation in ("native-queued", "native-admitted", "prompt-completed"):
+                    error["message"] = ("the native entry answered the request; model processing "
+                                        "and adoption need session output evidence. Processing may "
+                                        "occur in a later step or turn. Do not resend blindly")
             elif native == "queued":
-                # Issue #81: the platform admitted the text to its follow-up
-                # queue - it surfaces on a LATER turn. The running turn did not
-                # consume it, but the admission is durable (a real mutation),
-                # so this is neither `injected` nor a clean nothing-happened.
-                outcome, consumed = "not_consumed", False
+                # A later-turn queue is noninterrupting delivery. Admission
+                # alone does not prove that the model processed its content.
+                outcome, consumed = "written", None
                 confirmation = confirmation or "agent-confirmed"
                 error = {"code": "steer-queued",
                          "message": "the text was admitted to the session's follow-up "
-                                    "queue and will surface on a later turn; the running "
-                                    "turn did not consume it"}
+                                    "queue; later processing is unconfirmed. Read session "
+                                    "output and do not resend blindly"}
             elif native == "startedNewTurn":
-                # Honest naming: this is NOT injection into the running turn.
-                outcome, consumed = "started_new_turn", True
+                # Later-turn delivery is valid without cancellation. The
+                # native reply confirms a separate turn, not model processing.
+                outcome, consumed = "started_new_turn", None
                 confirmation = confirmation or "agent-confirmed"
-                error = {"code": "steer-started-new-turn",
-                         "message": "the agent started a separate turn this holder does not "
-                                    "track; the running turn did not absorb the text"}
+                base["steer_reason"] = ("the agent started a separate turn on this session; "
+                    "this holder does not track that turn. Read session output for processing")
             elif native == "promptRequired":
                 outcome, consumed = "not_consumed", False
                 confirmation = confirmation or "none"

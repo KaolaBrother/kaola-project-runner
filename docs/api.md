@@ -933,7 +933,7 @@ writer, and no second lifecycle. It works over ACP, the only channel; the former
 
 Every platform has a usable path inside ACP, and the Agent picks which one:
 
-- `--steer-mode native` uses the platform's own mid-turn entry and exists only where that entry
+- `--steer-mode native` uses the platform's supported noninterrupting input entry and exists only where that entry
   really does. The manifest is the single source of truth: `native_steering` is `supported`,
   `unsupported` or `unknown` (an uninvestigated surface stays `unknown` and never masquerades as
   `unsupported`), `acp_steer_method` carries the entry and may be non-empty only when
@@ -949,8 +949,8 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
   maps to `written`, `steer_consumed:null`, and `native-queued`. This is an interject request
   acknowledgment. It does not mean admission to the holder's later-turn follow-up queue.
   Grok has no native expected-turn guard: a turn-end race can start a detached fallback turn.
-  Read the original turn output before you judge adoption. Never replay an unknown write.
-  The OpenCode adapter and the Grok mapping require a new holder at a safe boundary. A running
+  Read the original and subsequent session output before you judge processing and adoption. Never replay an unknown write.
+  The new adapters and mappings require a new holder at a safe boundary. A running
   holder retains its old code. No consumer is restarted by this change. A custom `opencode acp`
   command has no adapter entry. V1 and other V2 builds are unverified.
 - `--steer-mode interrupt` is the composite and works on every platform: cancel the running turn,
@@ -975,19 +975,38 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
 | `steer_outcome` | `steer_consumed` | `steer_confirmation` | Meaning |
 |---|---|---|---|
 | `injected` | `true` | `agent-confirmed` | the agent acknowledged that the running turn took it |
-| `written` | `null` | `write-only`, `native-queued` or `native-admitted` | write or native admission confirmed; running-turn consumption and adoption are unconfirmed |
+| `queued` | `null` | `holder-queued` | process-local input pending until the current prompt ends; no native write yet |
+| `written` | `null` | `write-only`, `native-queued` or `native-admitted` | write or native admission confirmed; processing and adoption are unconfirmed |
 | `interrupted_and_resent` | `true` | `cancel-confirmed` | composite: the turn was cancelled and confirmed stopped, then this text ran as the next turn |
 | `resent_without_interrupt` | `true` | `no-turn-to-interrupt` | composite: the turn had already ended on its own, so nothing was interrupted |
-| `started_new_turn` | `true` | `agent-confirmed` | the agent opened a separate turn this holder does not track — not injection |
+| `started_new_turn` | `null` | `agent-confirmed` | the agent opened a separate turn on the same session; this holder does not track that turn |
 | `not_consumed` | `false` | `none` | nothing was written |
 | `unsupported` | `false` | `none` | no native entry on this platform or transport |
 | `rejected` | `false` | `none` | the agent refused; `error.detail` carries its reason |
 | `unknown` | `null` | `none` | undecided — the Runner never resends blindly |
 
-A `not_consumed` receipt can still carry `steer_confirmation: agent-confirmed` with
-`error.code: steer-queued` and `mutation_performed: true` when the platform admitted the
-text to its own follow-up queue — durable for a later turn, but not consumed by the
-running one (Issue #81).
+A native follow-up queue maps to `written`, `steer_consumed:null`,
+`steer_native_outcome:queued`, and `mutation_performed:true`. Later processing needs session
+output evidence. Processing can occur in the current step, a later step or a later turn.
+A turn-end race alone does not make noninterrupting delivery fail. The exact session and
+ongoing work must remain, with no transport cancel, stop or restart.
+
+Devin CLI 3000.11.3 and Droid 0.233.0 use the registered `session/prompt` path.
+The holder sends one additional prompt without replacing the original prompt owner.
+`prompt-completed` and `steer_stop_reason` retain the additional reply. They do not
+prove model adoption. A flushed frame with a pending reply maps to `written` and
+`write-only`; the late `steer_reply` remains in the existing capture event log under
+its own request id and the original prompt id. No timeout triggers cancel or replay.
+
+For a native ACP route that rejects or cancels a concurrent prompt,
+`steering_delivery: after-turn` holds the input in the live holder until the current
+prompt ends. One operation waits on the existing completion condition. It then uses
+ordinary prompt admission once. There is no timer or new scheduler. The original
+prompt keeps its ended state, and the follow-up uses the normal owned prompt lifecycle.
+`steer_queue_cursor` binds the queue receipt to the later `steer_followup` event and
+its native write receipt. A competing prompt can refuse that write. A stopped holder
+loses this process-local pending input. Read the existing events before any recovery;
+never replay an unknown effect. This route cannot process input until the current prompt ends.
 
 `mutation_performed` describes the steer itself, while `mutation_status` stays the running turn's.
 The interrupted or steered turn keeps its own request id, output and terminal state: the native path
