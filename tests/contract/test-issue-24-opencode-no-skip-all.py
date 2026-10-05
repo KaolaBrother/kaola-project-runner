@@ -384,11 +384,13 @@ class Issue112LoopbackProxyBypass(unittest.TestCase):
         self.assertNotIn("NO_PROXY", env)
         self.assertNotIn("no_proxy", env)
 
-    def test_no_forward_proxy_leaves_the_acp_child_untouched(self) -> None:
+    def test_no_forward_proxy_preserves_exclusions_and_binds_the_native_binary(self) -> None:
         module = load_acp()
-        with mock.patch.dict(os.environ, {"NO_PROXY": "corp.example"}, clear=True):
+        with mock.patch.dict(os.environ, {"NO_PROXY": "corp.example"}, clear=True), \
+                mock.patch.object(module, "runtime_binary", return_value="/fixture/opencode"):
             env = module.agent_environment(argparse.Namespace(platform="opencode", manifest={}))
-        self.assertEqual(env, {"NO_PROXY": "corp.example"})
+            self.assertEqual(dict(os.environ), {"NO_PROXY": "corp.example"})
+        self.assertEqual(env, {"NO_PROXY": "corp.example", "OPENCODE_BIN": "/fixture/opencode"})
 
     def test_pty_child_env_carries_it_with_and_without_a_model(self) -> None:
         script = (
