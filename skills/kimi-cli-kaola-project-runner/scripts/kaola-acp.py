@@ -2839,6 +2839,29 @@ def holder_predates_steer(method: str, error: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def steer_after_turn_refusal(args: argparse.Namespace, directory: Path) -> dict[str, Any] | None:
+    """An older holder ignores delivery and would write a concurrent prompt.
+
+    Apply only to this new delivery route, never to accepted native entries.
+    This is a missing operation, not a version or ordinary drift restriction.
+    """
+    if args.manifest.get("steering_delivery") != "after-turn":
+        return None
+    record = read_record(directory) or {}
+    if not pid_alive(record.get("holder_pid")):
+        return None
+    if "steer-after-turn/1" in (record.get("holder_features") or []):
+        return None
+    return {"outcome": "steer_delivery_unavailable", "steer_outcome": "not_consumed",
+            "steer_consumed": False, "steer_confirmation": "none",
+            "mutation_status": (record.get("last_prompt") or {}).get("mutation_status"),
+            "mutation_performed": False,
+            "error": {"code": "steer-holder-outdated",
+                      "message": "this live holder has no delivery-after-turn operation; it would "
+                                 "write a concurrent prompt. Nothing was written. Keep ongoing work; "
+                                 "adopt a new holder only at a safe restart boundary"}}
+
+
 def validate_heartbeat_target(target: Any, args: argparse.Namespace, repo: str,
                               origin: str) -> dict[str, Any]:
     """Validate one heartbeat host target (a platform with a measured Host
@@ -5416,7 +5439,8 @@ def main() -> int:
                 },
             })
         else:
-            receipt = op_or_holder_lost(
+            refusal = steer_after_turn_refusal(args, directory)
+            receipt = refusal if refusal is not None else op_or_holder_lost(
                 args, repo, directory, "steer",
                 {"text": text, "method": method, "timeout": timeout,
                  "delivery": args.manifest.get("steering_delivery", "native")},

@@ -245,7 +245,7 @@ HEARTBEAT_PROMPT_MAX_BYTES = 65536
 # holder that can read it.
 HEARTBEAT_STATE_FILE_MAX_BYTES = 1048576
 HEARTBEAT_STATE_SCHEMA = "kaola-heartbeat-prompt/2"
-HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatched/1",
+HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatched/1", "steer-after-turn/1",
                    "sideagent-node/1")
 # Issue #255 node mode: the Host carrier starts one fresh maintenance node per
 # batch from the binding's exact Runner argv (never a shell string), and
@@ -4186,6 +4186,11 @@ class Holder:
                     with self.turn_cond:
                         while original["active"] and not self.agent.exited.is_set():
                             self.turn_cond.wait()
+                    original_result = {"request_id": original.get("request_id"),
+                        "fingerprint": original.get("fingerprint"),
+                        "outcome": original.get("outcome"),
+                        "stop_reason": original.get("stop_reason"),
+                        "final_text": original.get("final_text")}
                     if self.acp_session_id != session_id:
                         sent = {"outcome": "session_changed", "mutation_performed": False}
                     else:
@@ -4196,12 +4201,12 @@ class Holder:
                             "expected_holder_instance_id": self.holder_instance_id})
                     self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
                         "turn_request_id": turn_request_id_before,
+                        "original_turn": original_result,
                         "fingerprint": base["steer_fingerprint"], "receipt": sent})
                 threading.Thread(target=after_turn, daemon=True).start()
                 return {**base, "steer_outcome": "queued", "steer_consumed": None,
                     "steer_confirmation": "holder-queued", "steer_queue_cursor": queue_cursor,
                     "steer_native_written": False, "turn_request_id": turn_request_id_before,
-                    "turn_request_id_after": turn_request_id_before, "turn_request_id_preserved": True,
                     "turn_prompt_fingerprint": turn_fingerprint, "outcome": "steer_queued",
                     "mutation_status": original.get("mutation_status"), "mutation_performed": True,
                     "steer_reason": "pending input waits for prompt completion; read steer_followup "

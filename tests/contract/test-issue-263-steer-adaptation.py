@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,6 +24,7 @@ def module(name, path):
 
 race = module('race263', ROOT / 'tests/contract/test-issue-65-steer-race.py')
 bridge = module('oc263', ROOT / 'scripts/kaola-opencode-acp.py')
+cli = module('cli263', ROOT / 'scripts/kaola-acp.py')
 
 class Mapping(unittest.TestCase):
     def setUp(self):
@@ -176,12 +179,19 @@ class Mapping(unittest.TestCase):
         self.assertEqual(result['steer_outcome'], 'queued')
         self.assertEqual(result['steer_confirmation'], 'holder-queued')
         self.assertFalse(result['steer_native_written'])
+        self.assertNotIn('turn_request_id_preserved', result)
+        self.assertNotIn('turn_request_id_after', result)
         self.assertEqual(len(self.agent.prompts_sent()), 1)
         self.settle(first['turn_request_id'])
         self.assertTrue(logged.wait(3))
         self.assertEqual(original['outcome'], 'turn_completed')
         self.assertEqual(original['stop_reason'], 'end_turn')
         self.assertNotEqual(self.holder.turn['request_id'], first['turn_request_id'])
+        event = next(json.loads(line) for line in self.holder.events.path.read_text().splitlines()
+                     if json.loads(line)['kind'] == 'steer_followup')
+        self.assertEqual(event['original_turn']['request_id'], first['turn_request_id'])
+        self.assertEqual(event['original_turn']['stop_reason'], 'end_turn')
+        self.assertNotEqual(event['receipt']['turn_request_id'], first['turn_request_id'])
         self.assertEqual(self.agent.prompts_sent()[-1]['params'],
             {'sessionId': 'ses-race', 'prompt': [{'type': 'text', 'text': 'later'}]})
         self.assertFalse(self.agent.cancels_sent())
@@ -218,6 +228,31 @@ class Mapping(unittest.TestCase):
         self.assertFalse(event['receipt']['mutation_performed'])
         self.assertEqual(len(self.agent.prompts_sent()), 1)
         self.assertFalse(self.agent.cancels_sent())
+
+class DeliveryCompatibility(unittest.TestCase):
+    def test_old_live_holder_refuses_only_missing_after_turn_operation(self):
+        record = {'holder_pid': 123, 'holder_features': ['heartbeat-state/2'],
+                  'last_prompt': {'mutation_status': 'in_progress'}}
+        args = SimpleNamespace(manifest={'steering_delivery': 'after-turn'})
+        with patch.object(cli, 'read_record', return_value=record), \
+             patch.object(cli, 'pid_alive', return_value=True):
+            result = cli.steer_after_turn_refusal(args, Path('/unused'))
+            self.assertEqual(result['error']['code'], 'steer-holder-outdated')
+            self.assertFalse(result['mutation_performed'])
+            self.assertFalse(result['steer_consumed'])
+            for platform in ('codex', 'claude-code', 'zcode', 'grok', 'opencode', 'devin', 'droid'):
+                args.manifest = {'id': platform}
+                self.assertIsNone(cli.steer_after_turn_refusal(args, Path('/unused')))
+
+    def test_current_operation_and_dead_holder_keep_existing_routes(self):
+        args = SimpleNamespace(manifest={'steering_delivery': 'after-turn'})
+        with patch.object(cli, 'read_record', return_value={
+                'holder_pid': 123, 'holder_features': ['steer-after-turn/1']}), \
+             patch.object(cli, 'pid_alive', return_value=True):
+            self.assertIsNone(cli.steer_after_turn_refusal(args, Path('/unused')))
+        with patch.object(cli, 'read_record', return_value={'holder_pid': 123}), \
+             patch.object(cli, 'pid_alive', return_value=False):
+            self.assertIsNone(cli.steer_after_turn_refusal(args, Path('/unused')))
 
 class OpenCodeAdapter(unittest.TestCase):
     def setUp(self):

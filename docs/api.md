@@ -1004,7 +1004,10 @@ prompt ends. One operation waits on the existing completion condition. It then u
 ordinary prompt admission once. There is no timer or new scheduler. The original
 prompt keeps its ended state, and the follow-up uses the normal owned prompt lifecycle.
 `steer_queue_cursor` binds the queue receipt to the later `steer_followup` event and
-its native write receipt. A competing prompt can refuse that write. A stopped holder
+its native write receipt. It records `original_turn` with the original id, final text and
+terminal state, and a distinct follow-up id. Queue admission does not return
+`turn_request_id_after` or `turn_request_id_preserved` before the native operation.
+A competing prompt can refuse that write. A stopped holder
 loses this process-local pending input. Read the existing events before any recovery;
 never replay an unknown effect. This route cannot process input until the current prompt ends.
 

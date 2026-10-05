@@ -14,8 +14,9 @@ or timeout.
 `steer` delivers one Agent-chosen message without cancellation on this exact session.
 Processing can occur in the current step, a later step, or a later turn. Delivery alone does not
 prove processing. It uses the same routing as `send`: no scheduler, no second writer, no second lifecycle. The original
-prompt keeps its request id, output, and terminal state, and the receipt's `turn_request_id`,
-`turn_request_id_after`, and `turn_request_id_preserved` make that checkable. Content is literal
+prompt keeps its request id, output, and terminal state. Direct native receipts carry
+`turn_request_id_after` and `turn_request_id_preserved`. A local queue receipt carries only the
+original `turn_request_id`; its later `steer_followup` records `original_turn` and a new prompt id. Content is literal
 transport under the same identity, redaction, and bounded-receipt rules as `send`.
 
 `steer_outcome` and `steer_consumed` are the only consumption claims:
@@ -51,7 +52,6 @@ it loses process-local pending input. Read the existing events before recovery. 
 no-write receipt permits an Agent-chosen new send; an unknown effect does not.
 A running old holder retains old code. Adopt new mappings at a safe restart boundary;
 this change does not restart a consumer.
-The platform summary above states the applicable mapping.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is
