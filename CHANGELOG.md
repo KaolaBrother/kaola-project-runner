@@ -20,6 +20,7 @@ manifest changes only its explanatory text.
   nonzero. The rejected call reports `not_started` and `mutation_performed:
   false`; earlier calls keep their original mutation state. Prompt files can
   be sent through stdin. `--text-file` remains unsupported (Issue #260, item 8).
+- Allow two Droid sessions across `droid/default`, `droid/opus`, and `droid/core` to use the shared two-seat pool.
 
 ## 0.9.0 — 2026-10-05 (lifecycle state and OpenCode managed permissions)
 
