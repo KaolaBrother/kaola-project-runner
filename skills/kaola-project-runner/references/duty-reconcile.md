@@ -60,6 +60,8 @@ check helper is a counted worker item
 idle permanent assistant. Findings use
 existing QA/Workflow boundaries, not a new approval or completion gate.
 
+Write in accordance with ASD-STE100.
+
 ## Independent Delegator inquiry and scheduling
 
 The Delegator may initiate a request during its existing inquiry even when the

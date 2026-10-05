@@ -89,6 +89,8 @@ evidenced-redundancy simplification goes to an implementation owner, who may
 edit the affected tests/guidance within scope. Do not self-finalize;
 `HUMAN_DECISION_REQUIRED` for value/authority gaps.
 
+Write in accordance with ASD-STE100.
+
 ## Return
 
 A factual record, not a verdict: the build actually tested; per check what ran
@@ -97,6 +99,8 @@ interpretive findings, with uncertainty stated in a phrase; anything not
 executed or explored and why. No record means unverified or insufficient evidence, not
 necessarily unexecuted — distinguish "no record", "recorded as not run", and
 "recorded as run with a result"; only the third supports acceptance.
+
+Write in accordance with ASD-STE100.
 
 ## Reading a failure
 
