@@ -122,6 +122,18 @@ Use `--force` only when the Agent explicitly chooses forced containment for this
 session. Never use broad session/process cleanup, and never reconstruct ownership from process
 names or fuzzy session matches.
 
+## Context recovery
+
+After a supported completed compaction signal for this exact session, the holder can send a
+Skill reread reminder when the turn ends. Completely read the current installed platform Skill
+and the active role/task Skills, then continue the task from its current records. The known
+Codex native recovery path remains unchanged; the holder adds no second prompt for it.
+
+`compact_reload_delivered` records prompt admission. Confirm the full read and task continuation
+from actual output. A running holder keeps its loaded code. Its pending reminder is held only
+in memory and is lost when it stops; an older holder gains this behavior only on a later
+Agent-selected start.
+
 ## Ending, releasing, and resuming
 
 The controlling Agent owns every completion judgment; the Runner executes the chosen operation

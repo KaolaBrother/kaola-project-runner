@@ -731,6 +731,30 @@ A platform with several packages:
 {"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "droid:standard", "name": "Standard", "windows": ["5h", "weekly", "monthly"]}, {"binds_models": true, "id": "droid:core", "name": "Core", "windows": ["weekly", "monthly"]}, {"binds_models": true, "id": "droid:extra_usage", "name": "Extra usage", "windows": []}], "platform": "droid"}], "schema": "kaola-acp-packages/1"}
 ```
 
+## Post-compaction Skill reread
+
+The holder reads completed compaction signals for its exact ACP session through the pinned
+`kaola-compact-recovery.py` helper. Supported carriers are `compaction_update`, OpenCode's
+completed `_meta["opencode/compaction"]`, Devin and Grok native notifications, and Kimi's exact
+four-line completed text. The Claude bridge forwards a native `compact_boundary` with object
+metadata; the ZCode bridge maps its native completed compact events. Start, failure, cancel,
+foreign-session and startup history signals do not trigger a reminder. Kimi's wire does not
+mark the text as runtime-local; identical model text can cause a harmless reminder.
+
+The holder uses its existing prompt path at a turn boundary. A Host uses its measured entry;
+a worker reads its current installed platform Skill and active role/task Skills, then continues
+its task. The current Codex native recovery path owns that behavior, so the holder sends no
+second prompt and adds no compaction capability to initialize. This does not establish native
+automatic recovery for every runtime.
+
+`compact_reload_detected` records recognition. `compact_reload_delivered` records admission of
+the reminder prompt, not a full Skill read or task use. Confirm those actions from the actual
+model output and tool evidence. A boolean guards admission. Settlement and release of that
+guard share the existing lock; the pending sequence preserves a newer signal even when both
+events have no occurrence id. One pending reminder is kept in memory, with no history or queue.
+It is lost on stop. Running holders keep their loaded code; older holders need a later
+Agent-selected start to use the new behavior. No session restart is performed by this mechanism.
+
 ## Observation schema
 
 `observe` returns evidence for the controlling agent. ACP `observe`/`status` receipts are bounded by `bound_state_receipt`

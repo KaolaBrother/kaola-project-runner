@@ -1090,12 +1090,52 @@ def quota_module():
     return _QUOTA
 
 
-# The one sibling this holder imports. ``install-local`` replaces the Skill
+def compact_module():
+    """Sibling compact-recovery module, or None when this copy lacks it.
+
+    Issue #264. The module object is cached at startup by
+    ``load_sibling_modules`` so the bytes are the ones this process began
+    with. ``False`` means the sibling is absent, not that no signal arrived.
+    """
+    global _COMPACT
+    if _COMPACT is False:
+        return None
+    if _COMPACT is None:
+        path = Path(__file__).resolve().parent / COMPACT_MODULE
+        if not path.is_file():
+            _COMPACT = False
+            return None
+        spec = importlib.util.spec_from_file_location("kaola_compact_recovery_holder", path)
+        if spec is None or spec.loader is None:
+            _COMPACT = False
+            return None
+        module = importlib.util.module_from_spec(spec)
+        previous = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = previous
+        _COMPACT = module
+    return _COMPACT
+
+
+# The sibling modules this holder imports. ``install-local`` replaces the Skill
 # directory with ``os.replace``; a later import would execute the replacement
 # and mix two builds in one holder, so the bytes are pinned at startup.
 QUOTA_MODULE = "kaola-quota.py"
+# Issue #264: recognize a completed context compaction and owe one Skill
+# reread. The module is optional at load time so an older install still runs;
+# the behavior needs it present beside the holder.
+COMPACT_MODULE = "kaola-compact-recovery.py"
+# Issue #264 review: these platforms already inject their own compact recovery
+# into the session, so the ACP link must not add a second reload prompt for
+# them. The current Codex ACP Host receives the KPR-USER-COMPACT-RECOVERY-V1
+# marker and fully rereads its installed main Skill on that path. Preserve it.
+NATIVE_COMPACT_RECOVERY_PLATFORMS = frozenset({"codex"})
 RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
+    "kaola-compact-recovery.py",
     "kaola-zcode-acp.py",
     "kaola-opencode-acp.py",
     "kaola-dsh-acp.py",
@@ -1107,6 +1147,7 @@ RUNNER_BUILD_FILES = (
     "platform.yaml",
 )
 _RUNNER_IDENTITY: dict[str, Any] | None = None
+_COMPACT: Any = None
 
 
 def _hex_revision(value: str) -> str | None:
@@ -1173,9 +1214,11 @@ def load_sibling_modules() -> None:
     after ``install-local`` has swapped the directory. ``runner_build`` is the
     holder file this process executes, not the per-call CLI.
     """
-    global _QUOTA, _RUNNER_IDENTITY
+    global _QUOTA, _COMPACT, _RUNNER_IDENTITY
     module = _import_sibling(QUOTA_MODULE)
     _QUOTA = module if module is not None else False
+    compact = _import_sibling(COMPACT_MODULE)
+    _COMPACT = compact if compact is not None else False
     paths = capture_script_paths()
     primary = paths.get("kaola-acp-holder.py") or {}
     digest = primary.get("sha256") or ""
@@ -1808,6 +1851,20 @@ class Holder:
         # to this Host, so a bound Sideagent's routine turn end that changed
         # nothing needing a Host judgment does not wake the Host.
         self.host_attention_seen: str | None = None
+        # Issue #264: one pending post-compaction reload and one scalar for the
+        # last delivered occurrence. Not a queue, not a history store. The
+        # inflight flag is a boolean, so an occurrence-less signal (Devin, Grok,
+        # Kimi) still holds the slot; the id is evidence only.
+        self.compact_reload = None
+        self.compact_reload_inflight = False
+        self.compact_reload_inflight_id: str | None = None
+        # Issue #264: the exact installed Skill file that this holder belongs to
+        # (the platform worker Skill). A worker reload names this file, never
+        # the Host control-plane entry.
+        holder_script = Path(__file__).resolve()
+        skill_root = holder_script.parent.parent
+        skill_file = skill_root / "SKILL.md"
+        self.installed_skill_path = str(skill_file if skill_file.is_file() else skill_root)
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
         # Issue #92: the one worker event that cannot be re-derived later. A
@@ -2202,6 +2259,9 @@ class Holder:
                 self.events.append({"kind": "cancel_request_unknown", "id": cancelled})
         else:
             self.events.append({"kind": "notification", "method": method, "params": params})
+            # Issue #264: Devin `_cognition.ai/compaction` and Grok
+            # `_x.ai/session_notification` arrive as plain notifications.
+            self._observe_compact_signal(message)
 
     def on_agent_request(self, message: dict[str, Any]) -> None:
         method = message["method"]
@@ -2301,6 +2361,8 @@ class Holder:
                                      "update": update}, ts=received_at)
         self.write_record()
         self.fanout_follow_delta()
+        # Issue #264: recognize a completed compaction after it is durable.
+        self._observe_compact_signal({"method": "session/update", "params": params})
 
     def on_prompt_response(self, request_id: int, response: dict[str, Any] | None) -> None:
         turn = self.turn
@@ -3698,6 +3760,126 @@ class Holder:
         if isinstance(holder, str) and holder:
             self._stop_node(holder, NODE_RECLAIM_SECONDS)
 
+    # -- Issue #264: post-compaction Skill reread ---------------------------
+
+    def _observe_compact_signal(self, message: dict[str, Any]) -> None:
+        """Recognize one completed compaction and owe one installed-Skill reread.
+
+        Only a real, session-bound, completed signal counts. A start, a
+        failure, a token drop, or assistant prose never counts. A compact record
+        that streams while this holder is still starting is resume/history
+        replay, not a fresh completion, and is ignored. The pending flag
+        coalesces repeats; the occurrence scalar suppresses an adjacent
+        duplicate. Delivery waits for a safe boundary and never interrupts.
+        """
+        module = compact_module()
+        if module is None:
+            return
+        if self.state != "ready":
+            # ``session/load`` and ``session/resume`` may replay a completed
+            # compaction record. Never turn history into a fresh reload.
+            signal = module.classify(message, self.args.platform)
+            if signal is not None:
+                self.events.append({"kind": "compact_reload_replay_ignored",
+                                    "source": signal.source, "state": self.state})
+            return
+        signal = module.classify(message, self.args.platform)
+        if signal is None:
+            return
+        if not module.is_same_session(signal, self.acp_session_id):
+            self.events.append({"kind": "compact_reload_foreign_session",
+                                "source": signal.source,
+                                "signal_session": signal.session_id})
+            return
+        with self.worker_events_lock:
+            if self.compact_reload is None:
+                self.compact_reload = module.CompactReloadTracker()
+            if not self.compact_reload.observe(signal):
+                return
+        self.events.append({"kind": "compact_reload_detected",
+                            "source": signal.source,
+                            "occurrence_id": signal.occurrence_id,
+                            "session_id": signal.session_id})
+        self.write_record()
+        self._deliver_compact_reload()
+
+    def _deliver_compact_reload(self) -> dict[str, Any]:
+        """Deliver the one pending reread prompt at a safe boundary.
+
+        This reuses ``op_prompt`` and the session's own applicable Skill. A Host
+        opens Project Runner through its measured ``host_entry``. Every other
+        role names its own installed platform Skill and requires the active
+        role/task Skill too, so a worker never opens the Host control-plane
+        Skill. It never cancels, restarts, or replays. A busy turn or a dead
+        agent keeps the flag for the next boundary.
+
+        The existing ``worker_events_lock`` serializes the tracker. The inflight
+        slot is a boolean because an occurrence-less signal must still hold it.
+        One lock hold settles the obligation and clears the slot, so no later
+        admission can slip into the gap.
+        """
+        module = compact_module()
+        if module is None:
+            return {"delivered": False, "reason": "no-compact-module"}
+        with self.worker_events_lock:
+            tracker = self.compact_reload
+            if tracker is None or not tracker.pending:
+                return {"delivered": False, "reason": "no-pending-reload"}
+            if self.compact_reload_inflight:
+                return {"delivered": False, "reason": "reload-inflight"}
+            self.compact_reload_inflight = True
+            occurrence = tracker.pending_id
+            pending_seq = tracker.pending_seq
+            self.compact_reload_inflight_id = occurrence
+        result: dict[str, Any] = {"delivered": False, "reason": "not-attempted"}
+        settled = False
+        try:
+            result = self._attempt_compact_reload(module)
+            settled = bool(result.get("delivered")
+                           or result.get("reason") in
+                           ("host-entry-absent", "native-route-owned"))
+        finally:
+            with self.worker_events_lock:
+                if settled:
+                    # The sequence keeps a newer occurrence-less obligation
+                    # pending even though its id is also None.
+                    tracker.mark_delivered_occurrence(occurrence, pending_seq)
+                self.compact_reload_inflight = False
+                self.compact_reload_inflight_id = None
+        return result
+
+    def _attempt_compact_reload(self, module: Any) -> dict[str, Any]:
+        """One bounded reload admission attempt. Caller holds the inflight slot."""
+        if self.args.platform in NATIVE_COMPACT_RECOVERY_PLATFORMS:
+            # This runtime already injects its own compact recovery. A second
+            # ACP-driven reload would duplicate the working native path. Record
+            # the fact and let the native path own the reread.
+            self.events.append({"kind": "compact_reload_native_owned",
+                                "platform": self.args.platform})
+            return {"delivered": False, "reason": "native-route-owned"}
+        if self.turn["active"]:
+            return {"delivered": False, "reason": "prompt-in-progress"}
+        if self.stop_requested or self.agent.proc is None or self.agent.exited.is_set():
+            return {"delivered": False, "reason": "agent-not-running"}
+        if self.session_role == "host":
+            if not self.host_entry:
+                # A Host with no measured entry has no automatic wake.
+                self.events.append({"kind": "compact_reload_entry_absent"})
+                return {"delivered": False, "reason": "host-entry-absent"}
+            text = module.host_reload_prompt(self.host_entry)
+        else:
+            text = module.worker_reload_prompt(self.installed_skill_path)
+        prompt = self.op_prompt({"text": text, "wait": False})
+        if prompt.get("error") or prompt.get("outcome") != "in_progress":
+            return {"delivered": False, "error": prompt.get("error") or prompt}
+        self.events.append({"kind": "compact_reload_delivered",
+                            "session_role": self.session_role,
+                            "skill_path": (None if self.session_role == "host"
+                                           else self.installed_skill_path),
+                            "prompt_fingerprint": prompt.get("prompt_fingerprint")})
+        return {"delivered": True,
+                "prompt_fingerprint": prompt.get("prompt_fingerprint")}
+
     def _kick_worker_events(self) -> None:
         """Offer what is waiting at this new boundary: a node to the relay,
         anything the Host owns to an idle Host."""
@@ -3711,6 +3893,7 @@ class Holder:
                     self._relay_pass()
         except Exception as exc:  # a node boundary must not take the holder down
             self.events.append({"kind": "sideagent_node_kick_failed", "error": str(exc)})
+        self._deliver_compact_reload()
 
     def _deliver_worker_events(self) -> dict[str, Any]:
         """Deliver every staged event as one ordinary prompt through the
@@ -3872,6 +4055,9 @@ class Holder:
         if not was_notification or outcome == "turn_completed":
             if self.agent.proc is not None and not self.agent.exited.is_set():
                 self._deliver_worker_events()
+        # Issue #264: a compact completion that landed mid-turn is delivered
+        # only now, at the turn boundary, and never inside the turn.
+        self._deliver_compact_reload()
 
     def op_worker_event(self, params: dict[str, Any]) -> dict[str, Any]:
         """Carrier op on a Host holder: stage one worker event, then
