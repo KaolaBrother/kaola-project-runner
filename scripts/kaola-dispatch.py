@@ -2291,11 +2291,40 @@ class IndexLock:
 _ABSENT = object()
 
 
+def pending_correlation(row: Any) -> bool:
+    """True when omission from this plan must not drop the assignment.
+
+    ``in-flight`` stays, including a disposition already mirrored onto it.
+    ``unknown`` stays until a later fact changes that status. A mirrored
+    acceptance does not drop it. ``returned`` and ``failed`` stay while
+    acceptance is absent, ``pending``, ``undecided``, or ``repair``.
+    ``repair`` is an open repair reference, not settlement of the duty.
+    ``not-run`` is not an assignment. ``accepted``, ``cancelled``,
+    ``superseded``, and ``handed-off`` on ``returned`` or ``failed`` do
+    not stay.
+    """
+    if not isinstance(row, dict):
+        return False
+    status = row.get("status")
+    if status in ("in-flight", "unknown"):
+        return True
+    if status not in ("returned", "failed"):
+        return False
+    return row.get("acceptance") in (None, "pending", "undecided", "repair")
+
+
 def merge_index_rows(disk: list[Any], base: list[Any], mine: list[Any]) -> list[Any]:
-    """Three-way merge by item and field: a field this writer changed since
-    it read ``base`` is its own; every other field keeps what another writer
-    put on disk meanwhile (a Host disposition mirrored during a collect),
-    and a row another writer added stays."""
+    """Three-way merge by item and field.
+
+    A field this writer changed since it read ``base`` is its own. Every
+    other field on a row this writer still emits keeps the disk value.
+    A row another writer added stays. A row this writer read but did not
+    emit stays when it is still pending correlation, and the kept bytes are
+    the disk row. A ``not-run`` row does not stay. A ``returned`` or
+    ``failed`` row stays for an open acceptance or ``repair``, and does not
+    stay for ``accepted``, ``cancelled``, ``superseded``, or ``handed-off``.
+    A per-result disposition is not settlement of every duty.
+    """
     def rows(items: list[Any]) -> dict[str, dict[str, Any]]:
         return {row["item_id"]: row for row in items
                 if isinstance(row, dict) and isinstance(row.get("item_id"), str)}
@@ -2317,7 +2346,11 @@ def merge_index_rows(disk: list[Any], base: list[Any], mine: list[Any]) -> list[
                 else:
                     out.pop(key, None)
         merged.append(out)
-    merged.extend(row for ident, row in on_disk.items() if ident not in seen and ident not in before)
+    for ident, row in on_disk.items():
+        if ident in seen:
+            continue
+        if ident not in before or pending_correlation(before.get(ident)) or pending_correlation(row):
+            merged.append(row)
     return merged
 
 

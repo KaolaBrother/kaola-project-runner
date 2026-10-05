@@ -118,6 +118,17 @@ status and records `evidence.blocked_attempt`. Holder, cursor, evidence, and
 result stay only when the assignment matches. `--dry-run` does not write
 `--index`. A matching already-admitted item is a plan row `reconciled`; a
 new item is `dry-run`. Neither replaces the live index.
+A later actual `execute` on the same index keeps an unrelated pending row.
+`in-flight` stays, including a disposition already on that row.
+`unknown` stays until its status changes. A mirrored acceptance does not drop it.
+`returned` and `failed` stay while acceptance is absent, `pending`, `undecided`, or `repair`.
+`repair` on those rows is an open repair reference. It is not duty settlement.
+The kept bytes are the row on disk, so a collect update stays.
+A `not-run` row does not stay.
+A `returned` or `failed` row whose acceptance is `accepted`, `cancelled`, `superseded`, or `handed-off` does not stay.
+A per-result disposition does not settle every duty.
+That write does not store history and does not retire a row.
+It does not decide live close-out or task retirement.
 
 ## 3. Collect finished work
 

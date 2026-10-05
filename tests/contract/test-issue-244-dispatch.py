@@ -3377,6 +3377,243 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(retry_cmds, ["status", "start", "send"])
 
 
+
+    def test_later_plan_keeps_an_unresolved_index_row(self) -> None:
+        """Another plan must not drop a pending row from the same index."""
+        install_fake(self.skills, ["codex"])
+        repo = str(self.repo)
+        for key in list(self.env):
+            if key.startswith("KAOLA_"):
+                del self.env[key]
+        flight_prompt = "sha256:" + hashlib.sha256(b"prior-flight").hexdigest()
+        returned_prompt = "sha256:" + hashlib.sha256(b"prior-returned").hexdigest()
+        flight = {
+            "item_id": "prior-flight",
+            "preset": "devin/default",
+            "platform": "devin",
+            "session": "devin-KPR-i259-preserve",
+            "repo": repo,
+            "holder_instance_id": "cae5-fixture",
+            "prompt_sha256": flight_prompt,
+            "prompt_fingerprint": flight_prompt,
+            "status": "in-flight",
+            "reason": "admitted",
+            "acceptance": "repair",
+            "acceptance_source": {"state": "fixture", "task_id": "i259-impl", "task_rev": 2},
+            "dispatch_event_cursor": 15,
+            "evidence": {"start": {"marker": "flight-start"}, "send": {"marker": "flight-send"}},
+        }
+        returned = {
+            "item_id": "prior-returned",
+            "preset": "devin/default",
+            "platform": "devin",
+            "session": "devin-KPR-i259-returned",
+            "repo": repo,
+            "holder_instance_id": "holder-returned",
+            "prompt_sha256": returned_prompt,
+            "prompt_fingerprint": returned_prompt,
+            "status": "returned",
+            "reason": "collected",
+            "acceptance": "pending",
+            "dispatch_event_cursor": 9,
+            "result": {"excerpt": "collect-update"},
+            "evidence": {"capture": {"marker": "collected"}},
+        }
+        closed = {
+            "item_id": "closed-accepted",
+            "preset": "devin/default",
+            "session": "devin-KPR-i259-closed",
+            "repo": repo,
+            "holder_instance_id": "holder-closed",
+            "prompt_sha256": "sha256:closed",
+            "status": "returned",
+            "reason": "collected",
+            "acceptance": "accepted",
+        }
+        refused = {
+            "item_id": "refused-once",
+            "preset": "codex/default",
+            "session": "codex-KPR-i259-refused",
+            "repo": repo,
+            "status": "not-run",
+            "reason": "count",
+        }
+        index = write_json(self.root, "overlap-index.json", {
+            "schema": "kaola-dispatch-index/1",
+            "correlation_only": True,
+            "repo": repo,
+            "items": [flight, returned, closed, refused],
+        })
+        original = index.read_bytes()
+        session = "codex-KPR-i259-next"
+        self.use_spec({
+            session: {
+                "status": absent(repo),
+                "start": started(repo, "gpt-6.1-sol", "high", holder="holder-next"),
+                "send": sent("fp-next", 4),
+            },
+        })
+        auth = self.authorization([{"id": "codex/default", "state": "granted"}])
+        avail = self.availability(["codex/default"])
+        plan = self.plan([{
+            "item_id": "next-plan",
+            "preset": "codex/default",
+            "session": session,
+            "prompt": "next batch",
+        }])
+        live = write_json(self.root, "overlap-live.json", {"rows": []})
+        code, dry = run([
+            "execute", "--plan", str(plan), "--authorization", str(auth),
+            "--availability", str(avail), "--platforms", str(PLATFORMS),
+            "--skills-root", str(self.skills), "--index", str(index),
+            "--live", str(live), "--dry-run",
+        ], self.env)
+        self.assertEqual(code, 0, dry)
+        self.assertEqual(index.read_bytes(), original)
+        self.assertEqual(commands(self.log), [])
+        code, payload = run([
+            "execute", "--plan", str(plan), "--authorization", str(auth),
+            "--availability", str(avail), "--platforms", str(PLATFORMS),
+            "--skills-root", str(self.skills), "--index", str(index),
+            "--live", str(live),
+        ], self.env)
+        self.assertEqual(code, 0, payload)
+        by_id = {item["item_id"]: item for item in payload["items"]}
+        self.assertEqual(by_id["next-plan"]["status"], "in-flight", payload)
+        self.assertEqual(by_id["next-plan"]["reason"], "admitted")
+        self.assertIn("prior-flight", by_id)
+        self.assertIn("prior-returned", by_id)
+        self.assertEqual(by_id["prior-flight"], flight)
+        self.assertEqual(by_id["prior-returned"], returned)
+        self.assertNotIn("closed-accepted", by_id)
+        self.assertNotIn("refused-once", by_id)
+        disk = {item["item_id"]: item for item in json.loads(index.read_text(encoding="utf-8"))["items"]}
+        self.assertEqual(disk["prior-flight"], flight)
+        self.assertEqual(disk["prior-returned"], returned)
+        self.assertEqual(disk["next-plan"]["status"], "in-flight")
+        self.assertNotIn("closed-accepted", disk)
+        self.assertNotIn("refused-once", disk)
+        self.assertIn("prior-flight", json.loads(index.read_text(encoding="utf-8"))["coverage"]["in-flight"])
+        seen = {row["session"] for row in commands(self.log)}
+        self.assertIn(session, seen)
+        self.assertNotIn("devin-KPR-i259-preserve", seen)
+        self.assertNotIn("devin-KPR-i259-returned", seen)
+        self.assertNotIn("devin-KPR-i259-closed", seen)
+
+    def test_unknown_and_repair_rows_stay_when_another_plan_publishes(self) -> None:
+        """Unknown correlation and an open repair stay. Closed dispositions do not."""
+        install_fake(self.skills, ["codex"])
+        repo = str(self.repo)
+        for key in list(self.env):
+            if key.startswith("KAOLA_"):
+                del self.env[key]
+        unknown_prompt = "sha256:" + hashlib.sha256(b"unknown-verdict").hexdigest()
+        repair_prompt = "sha256:" + hashlib.sha256(b"returned-repair").hexdigest()
+        failed_prompt = "sha256:" + hashlib.sha256(b"failed-repair").hexdigest()
+        unknown = {
+            "item_id": "unknown-accepted",
+            "preset": "devin/default",
+            "platform": "devin",
+            "session": "devin-KPR-i259-unknown",
+            "repo": repo,
+            "holder_instance_id": "holder-unknown",
+            "prompt_sha256": unknown_prompt,
+            "prompt_fingerprint": unknown_prompt,
+            "status": "unknown",
+            "reason": "mutation-unknown",
+            "acceptance": "accepted",
+            "acceptance_source": {"state": "fixture", "task_id": "i259-impl", "task_rev": 4},
+            "dispatch_event_cursor": 11,
+        }
+        returned_repair = {
+            "item_id": "returned-repair",
+            "preset": "devin/default",
+            "platform": "devin",
+            "session": "devin-KPR-i259-repair",
+            "repo": repo,
+            "holder_instance_id": "holder-repair",
+            "prompt_sha256": repair_prompt,
+            "prompt_fingerprint": repair_prompt,
+            "status": "returned",
+            "reason": "collected",
+            "acceptance": "repair",
+            "result": {"excerpt": "needs-repair"},
+        }
+        failed_repair = {
+            "item_id": "failed-repair",
+            "preset": "devin/default",
+            "platform": "devin",
+            "session": "devin-KPR-i259-failed-repair",
+            "repo": repo,
+            "holder_instance_id": "holder-failed-repair",
+            "prompt_sha256": failed_prompt,
+            "prompt_fingerprint": failed_prompt,
+            "status": "failed",
+            "reason": "turn-failed",
+            "acceptance": "repair",
+        }
+        omitted = [
+            ("returned-cancelled", "returned", "cancelled"),
+            ("failed-superseded", "failed", "superseded"),
+            ("returned-handed", "returned", "handed-off"),
+            ("failed-accepted", "failed", "accepted"),
+            ("not-run-again", "not-run", "pending"),
+        ]
+        extras = []
+        for item_id, status, acceptance in omitted:
+            extras.append({
+                "item_id": item_id,
+                "preset": "devin/default",
+                "session": f"devin-KPR-i259-{item_id}",
+                "repo": repo,
+                "holder_instance_id": f"holder-{item_id}",
+                "status": status,
+                "acceptance": acceptance,
+            })
+        index = write_json(self.root, "repair-index.json", {
+            "schema": "kaola-dispatch-index/1",
+            "correlation_only": True,
+            "repo": repo,
+            "items": [unknown, returned_repair, failed_repair, *extras],
+        })
+        session = "codex-KPR-i259-next2"
+        self.use_spec({
+            session: {
+                "status": absent(repo),
+                "start": started(repo, "gpt-6.1-sol", "high", holder="holder-next2"),
+                "send": sent("fp-next2", 5),
+            },
+        })
+        auth = self.authorization([{"id": "codex/default", "state": "granted"}])
+        plan = self.plan([{
+            "item_id": "next-plan",
+            "preset": "codex/default",
+            "session": session,
+            "prompt": "second batch",
+        }])
+        live = write_json(self.root, "repair-live.json", {"rows": []})
+        code, payload = run([
+            "execute", "--plan", str(plan), "--authorization", str(auth),
+            "--availability", str(self.availability(["codex/default"])),
+            "--platforms", str(PLATFORMS), "--skills-root", str(self.skills),
+            "--index", str(index), "--live", str(live),
+        ], self.env)
+        self.assertEqual(code, 0, payload)
+        disk = {item["item_id"]: item for item in json.loads(index.read_text(encoding="utf-8"))["items"]}
+        self.assertEqual(disk["unknown-accepted"], unknown)
+        self.assertEqual(disk["returned-repair"], returned_repair)
+        self.assertEqual(disk["failed-repair"], failed_repair)
+        self.assertEqual(disk["next-plan"]["status"], "in-flight")
+        self.assertEqual(disk["next-plan"]["reason"], "admitted")
+        for item_id, _status, _acceptance in omitted:
+            self.assertNotIn(item_id, disk)
+        seen = {row["session"] for row in commands(self.log)}
+        self.assertIn(session, seen)
+        self.assertNotIn("devin-KPR-i259-unknown", seen)
+        self.assertNotIn("devin-KPR-i259-repair", seen)
+        self.assertNotIn("devin-KPR-i259-failed-repair", seen)
+
+
 class RenderedGuidance(unittest.TestCase):
     def test_dispatch_guidance_preserves_authorization_and_unknown_selection(self) -> None:
         template = (REPO / "templates/orchestrator/references/dispatch-collect.md").read_bytes()
