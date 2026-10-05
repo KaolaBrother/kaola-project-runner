@@ -238,6 +238,13 @@ class ClassifyTests(unittest.TestCase):
         self.assertTrue(prompt.startswith("/kaola-project-runner\n"))
         self.assertIn("completely re-read", prompt.lower())
 
+    def test_host_prompt_preserves_kimi_entry_delimiter(self) -> None:
+        # The measured Kimi entry is "/skill:kaola-project-runner " and the
+        # trailing space is a required delimiter. Only emptiness may strip.
+        entry = "/skill:kaola-project-runner "
+        prompt = self.cr.host_reload_prompt(entry)
+        self.assertEqual(prompt.split("\n", 1)[0], entry)
+
     def test_host_prompt_without_entry_is_still_usable(self) -> None:
         self.assertIn("completely re-read",
                       self.cr.host_reload_prompt("").lower())

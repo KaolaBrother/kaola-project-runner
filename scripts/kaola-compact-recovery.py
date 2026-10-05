@@ -310,9 +310,10 @@ def host_reload_prompt(host_entry: str) -> str:
     The first line is the session's own measured native Skill entry, so the
     runtime opens the Skill the same way it does on any other turn.
     """
-    entry = (host_entry or "").strip()
+    # The measured entry can contain a required trailing delimiter (Kimi).
+    entry = host_entry or ""
     body = reload_instruction()
-    if not entry:
+    if not entry.strip():
         return body
     return f"{entry}\n{body}"
 
