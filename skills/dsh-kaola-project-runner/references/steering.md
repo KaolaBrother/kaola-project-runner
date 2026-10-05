@@ -1,7 +1,7 @@
 # dsh steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unsupported**. No steering entry on the ACP surface: `_session/steering`, `session/steering`, `session/steer` and `_session/steer` all answer JSON-RPC -32601 on dsh 0.1.5-rc.2 (agent deepseek-harness-acp/0.0.1) and `initialize` advertises no steering `_meta`. The composite `--steer-mode interrupt` is the usable path and needs no raised timeout: `session/cancel` is accepted as a notification and the running turn settles in about 0.01 s with stopReason `cancelled`, measured live.
+**supported** (entry `session/prompt`). DSH 0.2.0-rc.2 has native agent.steer, but installed dsh-acp rejects a concurrent session/prompt (-32602) and exposes followup only. KPR holds input until the current prompt ends, then sends one standard session/prompt on that exact session. This preserves ongoing work and supports later-turn processing without cancel, stop or restart. holder-queued is process-local admission only; read steer_followup for the native write and later session output for processing. This route does not expose native next-step agent.steer. A competing prompt can refuse the write; a stopped holder loses pending input. No unknown mutation is replayed.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
