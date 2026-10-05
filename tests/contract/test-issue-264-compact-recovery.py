@@ -94,6 +94,42 @@ class ClassifyTests(unittest.TestCase):
             self.assertEqual(signal, self.cr.CompactSignal(
                 "grok-auto-compact-completed", "s1", None))
 
+    def test_kimi_completed_chunk_on_kimi_platform(self) -> None:
+        text = ("Compaction completed.\n"
+                "- Messages compacted: 1,234\n"
+                "- Tokens before: 95,000\n"
+                "- Tokens after: 31,000")
+        message = session_update(
+            "s1", sessionUpdate="agent_message_chunk",
+            content={"type": "text", "text": text})
+        self.assertEqual(self.cr.classify(message, "kimi-cli"),
+                         self.cr.CompactSignal("kimi-compaction-chunk", "s1", None))
+        # Offline controller with no platform still recognizes the exact shape.
+        self.assertEqual(self.cr.classify(message).source,
+                         "kimi-compaction-chunk")
+
+    def test_kimi_completed_chunk_record_shape(self) -> None:
+        record = {"kind": "session_update", "sessionId": "s1",
+                  "update": {"sessionUpdate": "agent_message_chunk",
+                             "content": {"type": "text",
+                                         "text": "Compaction completed.\n"
+                                                 "- Messages compacted: 10\n"
+                                                 "- Tokens before: 9,000\n"
+                                                 "- Tokens after: 3,000"}}}
+        self.assertEqual(self.cr.classify(record, "kimi-cli").source,
+                         "kimi-compaction-chunk")
+
+    def test_kimi_marker_is_rejected_on_another_platform(self) -> None:
+        # A model could echo the identical four lines. The platform gate keeps
+        # a non-Kimi session from waking on it.
+        text = ("Compaction completed.\n- Messages compacted: 10\n"
+                "- Tokens before: 9,000\n- Tokens after: 3,000")
+        message = session_update(
+            "s1", sessionUpdate="agent_message_chunk",
+            content={"type": "text", "text": text})
+        self.assertIsNone(self.cr.classify(message, "codex"))
+        self.assertIsNone(self.cr.classify(message, "opencode"))
+
     def test_recorded_event_log_shape(self) -> None:
         record = {"kind": "session_update", "sessionId": "s1",
                   "update": {"sessionUpdate": "compaction_update",
