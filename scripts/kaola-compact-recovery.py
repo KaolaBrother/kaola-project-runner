@@ -332,11 +332,15 @@ class CompactReloadTracker:
     reload. The scalar suppresses an adjacent duplicate that carries the same
     occurrence id. It does not keep a set and does not keep history. A signal
     without an occurrence id never suppresses a later real completion.
+    ``pending_seq`` is a bounded counter that names the current pending
+    obligation. It lets settlement keep a newer occurrence-less obligation
+    instead of matching two ``None`` ids.
     """
 
     def __init__(self) -> None:
         self.pending = False
         self.pending_id: Optional[str] = None
+        self.pending_seq = 0
         self.last_delivered_id: Optional[str] = None
 
     def observe(self, signal: Optional[CompactSignal]) -> bool:
@@ -344,7 +348,7 @@ class CompactReloadTracker:
 
         A duplicate occurrence returns False while a reload is still pending
         or already delivered. A new occurrence or an unknown occurrence
-        returns True.
+        returns True and advances ``pending_seq``.
         """
         if signal is None:
             return False
@@ -353,6 +357,7 @@ class CompactReloadTracker:
             return False
         self.pending = True
         self.pending_id = occurrence
+        self.pending_seq += 1
         return True
 
     def take_pending(self) -> bool:
@@ -372,16 +377,21 @@ class CompactReloadTracker:
         self.pending = False
         self.pending_id = None
 
-    def mark_delivered_occurrence(self, occurrence: Optional[str]) -> None:
+    def mark_delivered_occurrence(self, occurrence: Optional[str],
+                                  pending_seq: Optional[int] = None) -> None:
         """Record one delivery that may race a newer pending signal.
 
-        ``occurrence`` is the id that was actually delivered. If it is still the
-        newest pending id, clear the pending flag. If a newer signal arrived
-        during admission, keep that newer obligation pending so it gets its own
-        later delivery instead of being lost.
+        ``occurrence`` is the id that was actually delivered. ``pending_seq`` is
+        the sequence snapshotted before admission. Clear the pending flag only
+        when no newer obligation arrived meanwhile. A newer occurrence-less
+        signal has the same ``None`` id as the delivered one, so the sequence is
+        what keeps it pending instead of losing it. Without a sequence, fall
+        back to the id comparison.
         """
         if occurrence is not None:
             self.last_delivered_id = occurrence
-        if self.pending_id == occurrence:
+        newer = (self.pending_seq != pending_seq
+                 if pending_seq is not None else self.pending_id != occurrence)
+        if not newer:
             self.pending = False
             self.pending_id = None

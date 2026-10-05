@@ -262,17 +262,34 @@ class TrackerTests(unittest.TestCase):
         tracker = self.cr.CompactReloadTracker()
         tracker.observe(self.cr.CompactSignal("a", "s1", "c1"))
         older = tracker.pending_id
+        older_seq = tracker.pending_seq
         # A newer signal lands while the older one is being admitted.
         tracker.observe(self.cr.CompactSignal("a", "s1", "c2"))
-        tracker.mark_delivered_occurrence(older)
+        tracker.mark_delivered_occurrence(older, older_seq)
         self.assertEqual(tracker.last_delivered_id, "c1")
         self.assertTrue(tracker.pending)
         self.assertEqual(tracker.pending_id, "c2")
 
+    def test_newer_occurrence_less_pending_survives_older_settlement(self) -> None:
+        # Both ids are None. Only the pending sequence can tell the newer
+        # obligation from the delivered one; without it the newer is lost.
+        tracker = self.cr.CompactReloadTracker()
+        tracker.observe(self.cr.CompactSignal("d", "s1", None))
+        older_seq = tracker.pending_seq
+        tracker.observe(self.cr.CompactSignal("d", "s1", None))
+        self.assertGreater(tracker.pending_seq, older_seq)
+        tracker.mark_delivered_occurrence(None, older_seq)
+        self.assertTrue(tracker.pending)
+        self.assertIsNone(tracker.pending_id)
+        self.assertEqual(tracker.pending_seq, older_seq + 1)
+        # The surviving obligation settles on its own later delivery.
+        tracker.mark_delivered_occurrence(None, tracker.pending_seq)
+        self.assertFalse(tracker.pending)
+
     def test_matching_occurrence_clears_pending(self) -> None:
         tracker = self.cr.CompactReloadTracker()
         tracker.observe(self.cr.CompactSignal("a", "s1", "c1"))
-        tracker.mark_delivered_occurrence("c1")
+        tracker.mark_delivered_occurrence("c1", tracker.pending_seq)
         self.assertFalse(tracker.pending)
         self.assertEqual(tracker.last_delivered_id, "c1")
 
