@@ -452,6 +452,8 @@ def eligibility(
             "model_switch": bool(grant.get("model_switch")) if grant else False,
             **expert,
         }
+        if grant and grant.get("switch_authorization") is False:
+            candidate["switch_authorization"] = False
         if special:
             candidate["special_requirements"] = special
             candidate["restrictions"] = [special]
@@ -643,6 +645,8 @@ def switch_authorized(preset: str, model: str, special: dict[str, Any],
     """An item model override is not a grant. Owner structure is."""
     if isinstance(special, dict) and special.get("model") == model:
         return True
+    if grant.get("switch_authorization") is False:
+        return False
     if grant.get("model_switch") is True:
         return True
     switches = auth.get("model_switches")
@@ -1104,30 +1108,19 @@ def delegator_ceiling(repo: str) -> tuple[dict[str, Any] | None, str | None]:
     else:
         return None, "ceiling-unreadable"
     elite: dict[str, int | None] | None = None
+    by_id: dict[str, dict[str, Any]] = {}
+    groups: list[dict[str, Any]] = []
+    problems: dict[str, str] = {}
+    problem_evidence: dict[str, dict[str, Any]] = {}
     raw_elite = auth.get("elite_grants")
     if raw_elite is not None:
         if not isinstance(raw_elite, list):
             return None, "ceiling-unreadable"
         elite = {}
-        for grant in raw_elite:
-            if not isinstance(grant, dict):
-                return None, "ceiling-unreadable"
-            ids: list[str] = []
-            if isinstance(grant.get("preset_id"), str):
-                ids.append(grant["preset_id"])
-            many = grant.get("preset_ids")
-            if isinstance(many, list) and all(isinstance(item, str) for item in many):
-                ids.extend(many)
-            elif many is not None:
-                return None, "ceiling-unreadable"
-            count = grant.get("count")
-            if count is not None and not _count_ok(count):
-                return None, "ceiling-unreadable"
-            for ident in ids:
-                prior = elite.get(ident, count if _count_ok(count) else None)
-                if ident in elite and prior != (count if _count_ok(count) else None):
-                    return None, "ceiling-unreadable"
-                elite[ident] = count if _count_ok(count) else None
+        parsed = _parse_elite_grants(raw_elite)
+        if isinstance(parsed, str):
+            return None, parsed
+        elite, by_id, groups, problems, problem_evidence = parsed
     cap = auth.get("elite_cap")
     if cap is not None and not _count_ok(cap):
         return None, "ceiling-unreadable"
@@ -1140,10 +1133,133 @@ def delegator_ceiling(repo: str) -> tuple[dict[str, Any] | None, str | None]:
         "elite_ids": elite,
         "elite_cap": cap if _count_ok(cap) else None,
         "worker_pool_cap": pool_cap if _count_ok(pool_cap) else None,
+        "by_id": by_id,
+        "groups": groups,
+        "problems": problems,
+        "problem_evidence": problem_evidence,
     }, None
 
 
+def _parse_elite_grants(raw_elite: list[Any]) -> tuple[
+    dict[str, int | None], dict[str, dict[str, Any]], list[dict[str, Any]],
+    dict[str, str], dict[str, dict[str, Any]],
+] | str:
+    """One grant entry with several presets and one count is one shared pool."""
+    elite: dict[str, int | None] = {}
+    by_id: dict[str, dict[str, Any]] = {}
+    groups: list[dict[str, Any]] = []
+    problems: dict[str, str] = {}
+    problem_evidence: dict[str, dict[str, Any]] = {}
+
+    def problem(ident: str, reason: str, evidence: dict[str, Any] | None = None) -> None:
+        problems.setdefault(ident, reason)
+        if evidence:
+            problem_evidence.setdefault(ident, evidence)
+
+    for grant in raw_elite:
+        if not isinstance(grant, dict):
+            return "ceiling-unreadable"
+        ids: list[str] = []
+        if isinstance(grant.get("preset_id"), str):
+            ids.append(grant["preset_id"])
+        many = grant.get("preset_ids")
+        if isinstance(many, list) and all(isinstance(item, str) for item in many):
+            ids.extend(item for item in many if item not in ids)
+        elif many is not None:
+            return "ceiling-unreadable"
+        count = grant.get("count")
+        if count is not None and not _count_ok(count):
+            return "ceiling-unreadable"
+        stated = count if _count_ok(count) else None
+        switch = grant.get("switch_authorization")
+        if switch is not None and not isinstance(switch, bool):
+            for ident in ids:
+                problem(ident, "ceiling-unreadable", {"switch_authorization": switch})
+            switch = None
+        lifetime = grant.get("lifetime")
+        if lifetime is not None and not isinstance(lifetime, str):
+            for ident in ids:
+                problem(ident, "ceiling-unreadable")
+            lifetime = None
+        elif isinstance(lifetime, str) and lifetime not in GRANT_LIFETIMES:
+            for ident in ids:
+                problem(ident, "ceiling-incomplete", {"lifetime": lifetime})
+            lifetime = None
+        special = grant.get("special_requirements")
+        if special is not None and not isinstance(special, (str, dict)):
+            for ident in ids:
+                problem(ident, "ceiling-unreadable")
+            special = None
+        elif isinstance(special, str):
+            for ident in ids:
+                problem(ident, "ceiling-incomplete", {"special_requirements": special})
+            special = None
+        elif isinstance(special, dict) and (
+            set(special) - {"effort", "model", "task_scope"}
+            or any(value is not None and not isinstance(value, str) for value in special.values())
+        ):
+            for ident in ids:
+                problem(ident, "ceiling-incomplete", {"special_requirements": special})
+            special = None
+        if len(ids) > 1:
+            if stated is None:
+                for ident in ids:
+                    problem(ident, "ceiling-incomplete")
+            else:
+                groups.append({"ids": set(ids), "count": stated})
+        for ident in ids:
+            if ident in elite and elite[ident] != stated:
+                problem(ident, "ceiling-unreadable")
+                elite[ident] = None
+            else:
+                elite[ident] = stated
+            fact = by_id.setdefault(ident, {
+                "count": elite[ident], "switch": None, "lifetime": None, "special": None,
+            })
+            fact["count"] = elite[ident]
+            for key, value in (("switch", switch), ("lifetime", lifetime), ("special", special)):
+                if value is None:
+                    continue
+                if fact[key] is None:
+                    fact[key] = value
+                elif fact[key] != value:
+                    problem(ident, "ceiling-incomplete")
+    return elite, by_id, groups, problems, problem_evidence
+
+
+def ceiling_group(ceiling: dict[str, Any] | None, preset: str) -> dict[str, Any] | None:
+    if not ceiling:
+        return None
+    for group in ceiling.get("groups") or []:
+        if preset in group["ids"]:
+            return group
+    return None
+
+
+def worker_pool_occupancy(used_count: dict[str, int], unnamed: set[str],
+                          catalog: dict[str, dict[str, Any]], kept_items: list[dict[str, Any]],
+                          live_sessions: set[Any]) -> tuple[int, bool]:
+    """Live Worker seats count toward worker_pool_cap. An unnamed Worker platform stays unknown."""
+    worker_platforms = {
+        row["platform"] for row in catalog.values()
+        if row.get("class") == "Worker" and isinstance(row.get("platform"), str)
+    }
+    if unnamed & worker_platforms:
+        return 0, False
+    total = 0
+    for preset, count in used_count.items():
+        row = catalog.get(preset)
+        if row and row.get("class") == "Worker":
+            total += count
+    for item in kept_items:
+        if item.get("_pool") and not item.get("_exempt") and item.get("session") not in live_sessions:
+            total += 1
+    return total, True
+
+
 def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str) -> str | None:
+    if preset in (ceiling.get("problems") or {}):
+        return ceiling["problems"][preset]
     if preset in ceiling["blocked"]:
         return ceiling["blocked"][preset]
     if class_name == "Worker":
@@ -1163,18 +1279,62 @@ def ceiling_count(ceiling: dict[str, Any], preset: str, class_name: str) -> int 
     return count if _count_ok(count) else None
 
 
-def narrow_grant_counts(grants: list[dict[str, Any]], ceiling: dict[str, Any]) -> list[dict[str, Any]]:
-    """Host counts may fall to the Delegator count. They do not rise."""
+def tighten_count(host_count: Any, shared: Any, limit: Any) -> Any:
+    """Use a stated Delegator count when the Host omitted one.
+
+    A stated Host count may fall. It does not rise. An omitted count on a
+    shared label stays omitted, so the shared pool does not grow.
+    """
+    if not _count_ok(limit):
+        return host_count
+    if _count_ok(host_count):
+        return min(host_count, limit)
+    if isinstance(shared, str) and shared:
+        return 0 if limit == 0 else host_count
+    return limit
+
+
+def apply_ceiling_to_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any]) -> list[dict[str, Any]]:
+    """Copy current Delegator limits onto the Host grants used for this decision."""
+    by_id = ceiling.get("by_id") or {}
     narrowed = []
     for grant in grants:
         grant = dict(grant)
-        limit = ceiling_count(ceiling, grant["id"], "Elite")
-        if limit is not None and grant["id"] in (ceiling.get("elite_ids") or {}):
-            host_count = grant.get("count")
-            if _count_ok(host_count):
-                grant["count"] = min(host_count, limit)
-            elif limit == 0:
-                grant["count"] = 0
+        fact = by_id.get(grant["id"])
+        if not fact or grant["id"] in (ceiling.get("problems") or {}):
+            narrowed.append(grant)
+            continue
+        new_count = tighten_count(grant.get("count"), grant.get("shared_seat"), fact.get("count"))
+        if new_count is not None:
+            grant["count"] = new_count
+        if fact.get("switch") is False:
+            grant["model_switch"] = False
+            grant["switch_authorization"] = False
+        life = fact.get("lifetime")
+        if life in GRANT_LIFETIMES:
+            host_life = grant.get("lifetime")
+            if life == "task" and host_life in (None, "standing"):
+                grant["lifetime"] = "task"
+        special = fact.get("special")
+        if isinstance(special, dict):
+            host_special = grant.get("special_requirements")
+            if not isinstance(host_special, dict):
+                grant["special_requirements"] = dict(special)
+            else:
+                merged = dict(host_special)
+                conflict = False
+                for key, value in special.items():
+                    if key in merged and merged[key] != value:
+                        conflict = True
+                        break
+                    merged[key] = value
+                if conflict:
+                    ceiling.setdefault("problems", {})[grant["id"]] = "ceiling-incomplete"
+                    ceiling.setdefault("problem_evidence", {})[grant["id"]] = {
+                        "special_requirements": {"host": host_special, "delegator": special},
+                    }
+                else:
+                    grant["special_requirements"] = merged
         narrowed.append(grant)
     return narrowed
 
@@ -1274,7 +1434,7 @@ def command_execute(args: argparse.Namespace) -> int:
         if _count_ok(ceiling.get("elite_cap")):
             elite_cap = ceiling["elite_cap"] if elite_cap is None else min(elite_cap, ceiling["elite_cap"])
             effective_cap = elite_cap if seat_cap is None else min(elite_cap, seat_cap)
-        grants = narrow_grant_counts(grants, ceiling)
+        grants = apply_ceiling_to_grants(grants, ceiling)
         shared_capacities = shared_seat_capacities(grants)
         candidates, withheld = eligibility(catalog, auth, grants, available)
         kept_candidates = []
@@ -1286,13 +1446,11 @@ def command_execute(args: argparse.Namespace) -> int:
                 continue
             limit = ceiling_count(ceiling, candidate["id"], class_name)
             if limit is not None:
-                host_count = candidate.get("count")
-                if _count_ok(host_count):
+                new_count = tighten_count(candidate.get("count"), candidate.get("shared_seat"), limit)
+                if new_count != candidate.get("count"):
                     candidate = dict(candidate)
-                    candidate["count"] = min(host_count, limit)
-                elif limit == 0:
-                    candidate = dict(candidate)
-                    candidate["count"] = 0
+                    if new_count is not None:
+                        candidate["count"] = new_count
             kept_candidates.append(candidate)
         candidates = kept_candidates
         by_candidate = {item["id"]: item for item in candidates}
@@ -1347,7 +1505,9 @@ def command_execute(args: argparse.Namespace) -> int:
                 reason = "state-unreadable"
             elif withheld_reason.get(preset) in EXPERT_WITHHELD_REASONS:
                 reason = withheld_reason[preset]
-            blocked.append(blank_item(item["item_id"], preset, session, "not-run", reason))
+            detail = (ceiling or {}).get("problem_evidence", {}).get(preset) if ceiling else None
+            extra = {"evidence": detail} if isinstance(detail, dict) else None
+            blocked.append(blank_item(item["item_id"], preset, session, "not-run", reason, extra))
             continue
         if item.get("requires") is not None:
             problem = requirement_problem(item["requires"], preset, row)
@@ -1448,6 +1608,13 @@ def command_execute(args: argparse.Namespace) -> int:
             "_model": model if isinstance(model, str) else None,
             "_effort": effort if isinstance(effort, str) else None,
             "_task_scope": task_scope,
+            "_owner_lifetime": (
+                candidate.get("lifetime")
+                if ceiling is not None
+                and ((ceiling.get("by_id") or {}).get(preset) or {}).get("lifetime") in GRANT_LIFETIMES
+                and isinstance(candidate.get("lifetime"), str)
+                else None
+            ),
             "_prompt_sha256": prompt_sha(prompt),
             "_requested": {
                 "preset": preset,
@@ -1541,7 +1708,14 @@ def command_execute(args: argparse.Namespace) -> int:
     seat_marks = {item["item_id"]: item for item in fresh_open
                   if item.get("_exempt") or item.get("_helper_counted") or item.get("_held_row")}
     ready = list(kept_items)
-    worker_admitted = 0
+    pool_cap_now = (ceiling or {}).get("worker_pool_cap") if ceiling is not None else None
+    if _count_ok(pool_cap_now) and occupancy == "known":
+        worker_admitted, worker_known = worker_pool_occupancy(
+            used_count, unnamed_platforms, catalog, kept_items, live_sessions)
+    elif _count_ok(pool_cap_now):
+        worker_admitted, worker_known = 0, False
+    else:
+        worker_admitted, worker_known = 0, True
     for item in fresh_open:
         if item.get("_exempt"):
             ready.append(item)
@@ -1576,6 +1750,23 @@ def command_execute(args: argparse.Namespace) -> int:
                 item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
             ))
             continue
+        group = ceiling_group(ceiling, item["preset"])
+        if group is not None:
+            platforms = {
+                catalog[ident]["platform"] for ident in group["ids"]
+                if ident in catalog and isinstance(catalog[ident].get("platform"), str)
+            }
+            if occupancy != "known" or unnamed_platforms & platforms:
+                blocked.append(blank_item(
+                    item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
+                ))
+                continue
+            occupied = sum(used_count.get(ident, 0) for ident in group["ids"])
+            if occupied >= group["count"]:
+                blocked.append(blank_item(
+                    item["item_id"], item["preset"], item["session"], "not-run", "shared-occupied",
+                ))
+                continue
         limit = item.get("_count")
         if isinstance(limit, int) and item.get("_platform") in unnamed_platforms and used_count.get(item["preset"], 0) < limit:
             blocked.append(blank_item(
@@ -1594,9 +1785,15 @@ def command_execute(args: argparse.Namespace) -> int:
             ))
             continue
         pool_cap = (ceiling or {}).get("worker_pool_cap") if ceiling is not None else None
-        if item["_pool"] and _count_ok(pool_cap) and worker_admitted >= pool_cap:
-            blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", "seat-cap"))
-            continue
+        if item["_pool"] and _count_ok(pool_cap):
+            if not worker_known:
+                blocked.append(blank_item(
+                    item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
+                ))
+                continue
+            if worker_admitted >= pool_cap:
+                blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", "seat-cap"))
+                continue
         if isinstance(limit, int):
             used_count[item["preset"]] = used_count.get(item["preset"], 0) + 1
         if isinstance(seat_name, str) and seat_name:
@@ -2170,17 +2367,17 @@ def launch_argv(item: dict[str, Any], repo: str, command: str) -> list[str]:
 
 
 def launch_plan(item: dict[str, Any], repo: str, dry_run: bool, reason: str = "dry-run") -> dict[str, Any]:
-    return blank_item(
-        item["item_id"], item["preset"], item["session"], "not-run", reason,
-        {
-            "argv": {
-                "status": launch_argv(item, repo, "status"),
-                "start": launch_argv(item, repo, "start"),
-                "send": launch_argv(item, repo, "send"),
-            },
-            "dry_run": dry_run,
+    extra: dict[str, Any] = {
+        "argv": {
+            "status": launch_argv(item, repo, "status"),
+            "start": launch_argv(item, repo, "start"),
+            "send": launch_argv(item, repo, "send"),
         },
-    )
+        "dry_run": dry_run,
+    }
+    if isinstance(item.get("_owner_lifetime"), str):
+        extra["evidence"] = {"lifetime": item["_owner_lifetime"]}
+    return blank_item(item["item_id"], item["preset"], item["session"], "not-run", reason, extra)
 
 
 def remember_holder(item: dict[str, Any], base: dict[str, Any], receipt: dict[str, Any] | None) -> None:

@@ -86,6 +86,11 @@ An in-flight or returned row with the same identity stays.
 Its evidence names the pending duty: `stop`, `handoff`, `finalize`, or `reclaim`.
 A missing Delegator file leaves standalone Host authorization unchanged.
 An unreadable ceiling blocks new dispatch and leaves running work in place.
+`worker_pool_cap` counts live Worker seats and new admissions in that pool.
+A stated Delegator `count` applies when the Host grant omits `count`.
+One `elite_grants` entry with several `preset_ids` and one `count` is one shared pool.
+`lifetime`, `switch_authorization`, and structured `special_requirements` stay on that decision.
+A string `special_requirements`, or a `lifetime` outside `task` and `standing`, blocks only those presets.
 `keep_open` and nonempty `wait` or `next` do not keep or finish a task.
 
 ```bash

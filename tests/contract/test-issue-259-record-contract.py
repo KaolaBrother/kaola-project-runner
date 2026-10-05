@@ -468,6 +468,120 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(rows["live-codex"]["evidence"]["pending_duty"], "stop")
         self.assertEqual(index.read_text(encoding="utf-8").count("live-codex"), 1)
 
+    def test_ceiling_respects_live_pool_group_count_and_owner_limits(self) -> None:
+        def rows(auth: dict, delegator_auth: dict, live_rows: list, items: list) -> dict:
+            self.file.unlink(missing_ok=True)
+            self.init(auth)
+            (self.repo / ".kaola" / "delegator-heartbeat.json").write_text(json.dumps({
+                "schema": "kaola-delegator-heartbeat/1",
+                "authorization": delegator_auth,
+            }), encoding="utf-8")
+            plan = self.repo / "ceiling-plan.json"
+            plan.write_text(json.dumps({
+                "scope": "research", "repo": str(self.repo.resolve()), "items": items,
+            }), encoding="utf-8")
+            live = self.repo / "live.json"
+            live.write_text(json.dumps({"rows": live_rows}), encoding="utf-8")
+            code, out = run_dispatch([
+                "execute", "--plan", str(plan), "--authorization", str(self.file),
+                "--platforms", str(PLATFORMS), "--live", str(live), "--dry-run"])
+            self.assertEqual(code, 0, out)
+            return {row["item_id"]: row for row in out["items"]}
+
+        classes = dict(CLASS_SENTENCES)
+        pool = rows(
+            {"classes": classes, "grants": [], "elite_cap": 4},
+            {"worker_pool": ["dsh/default", "zcode/default"], "worker_pool_cap": 1,
+             "elite_grants": [], "elite_cap": 4},
+            [{"preset": "dsh/default", "platform": "dsh", "session": "dsh-existing",
+              "repo": str(self.repo.resolve()), "state": "running"}],
+            [{"item_id": "zcode-new", "preset": "zcode/default", "session": "zcode-new",
+              "prompt": "new worker"}],
+        )
+        with self.subTest("worker-cap"):
+            self.assertEqual(pool["zcode-new"]["status"], "not-run")
+            self.assertEqual(pool["zcode-new"]["reason"], "seat-cap")
+            self.assertNotIn("argv", pool["zcode-new"])
+
+        counted = rows(
+            {"classes": classes, "elite_cap": 4, "grants": [
+                {"id": "codex/default", "state": "granted"}]},
+            {"worker_pool": [], "elite_cap": 4, "elite_grants": [
+                {"preset_id": "codex/default", "count": 1}]},
+            [],
+            [{"item_id": "codex-a", "preset": "codex/default", "session": "codex-a", "prompt": "one"},
+             {"item_id": "codex-b", "preset": "codex/default", "session": "codex-b", "prompt": "two"}],
+        )
+        with self.subTest("missing-host-count"):
+            self.assertEqual([counted["codex-a"]["reason"], counted["codex-b"]["reason"]], ["dry-run", "count"])
+
+        grouped = rows(
+            {"classes": classes, "elite_cap": 4, "grants": [
+                {"id": "droid/default", "state": "granted", "count": 4},
+                {"id": "droid/opus", "state": "granted", "count": 4},
+                {"id": "droid/core", "state": "granted", "count": 4}]},
+            {"worker_pool": [], "elite_cap": 4, "elite_grants": [{
+                "preset_ids": ["droid/default", "droid/opus", "droid/core"],
+                "count": 2, "switch_authorization": True}]},
+            [{"preset": "droid/default", "platform": "droid", "session": "droid-existing-a",
+              "repo": str(self.repo.resolve()), "state": "running"},
+             {"preset": "droid/opus", "platform": "droid", "session": "droid-existing-b",
+              "repo": str(self.repo.resolve()), "state": "running"}],
+            [{"item_id": "droid-new", "preset": "droid/core", "session": "droid-new", "prompt": "third"}],
+        )
+        with self.subTest("grouped-count"):
+            self.assertEqual(grouped["droid-new"]["status"], "not-run")
+            self.assertEqual(grouped["droid-new"]["reason"], "shared-occupied")
+            self.assertNotIn("argv", grouped["droid-new"])
+
+        switched = rows(
+            {"classes": classes, "elite_cap": 4, "model_switches": ["codex/default"], "grants": [
+                {"id": "codex/default", "state": "granted", "count": 1, "model_switch": True}]},
+            {"elite_grants": [{"preset_id": "codex/default", "count": 1, "switch_authorization": False}]},
+            [],
+            [{"item_id": "codex-switch", "preset": "codex/default", "session": "codex-switch",
+              "prompt": "switch", "overrides": {"model": "gpt-other"}}],
+        )
+        with self.subTest("switch"):
+            self.assertEqual(switched["codex-switch"]["reason"], "model-switch-unauthorized")
+
+        limited = rows(
+            {"classes": classes, "elite_cap": 4, "grants": [
+                {"id": "codex/default", "state": "granted", "count": 1},
+                {"id": "claude-code/default", "state": "granted", "count": 1}]},
+            {"elite_grants": [
+                {"preset_id": "codex/default", "count": 1, "special_requirements": {"effort": "max"}},
+                {"preset_id": "claude-code/default", "count": 1, "special_requirements": "owner limit"},
+            ]},
+            [],
+            [{"item_id": "codex-effort", "preset": "codex/default", "session": "codex-effort",
+              "prompt": "effort", "overrides": {"effort": "low"}},
+             {"item_id": "claude-text", "preset": "claude-code/default", "session": "claude-text",
+              "prompt": "text"}],
+        )
+        with self.subTest("owner-limits"):
+            self.assertEqual(limited["codex-effort"]["reason"], "override-conflicts-owner")
+            self.assertEqual(limited["claude-text"]["reason"], "ceiling-incomplete")
+            self.assertEqual(limited["claude-text"]["evidence"]["special_requirements"], "owner limit")
+
+        lifetime = rows(
+            {"classes": classes, "elite_cap": 4, "grants": [
+                {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"},
+                {"id": "codex/default", "state": "granted", "count": 1}]},
+            {"elite_grants": [
+                {"preset_id": "codex/astra", "count": 1, "lifetime": "task"},
+                {"preset_id": "codex/default", "count": 1, "lifetime": "until Friday"},
+            ]},
+            [],
+            [{"item_id": "astra-task", "preset": "codex/astra", "session": "codex-astra", "prompt": "task"},
+             {"item_id": "codex-prose", "preset": "codex/default", "session": "codex-prose", "prompt": "prose"}],
+        )
+        with self.subTest("lifetime"):
+            self.assertEqual(lifetime["astra-task"]["reason"], "dry-run")
+            self.assertEqual(lifetime["astra-task"]["evidence"]["lifetime"], "task")
+            self.assertEqual(lifetime["codex-prose"]["reason"], "ceiling-incomplete")
+            self.assertEqual(lifetime["codex-prose"]["evidence"]["lifetime"], "until Friday")
+
     def execute(self, script: Path, plan: Path, authorization: Path, state: Path | None) -> dict:
         argv = [PYTHON, str(script), "execute", "--plan", str(plan), "--authorization", str(authorization),
                 "--platforms", str(PLATFORMS), "--dry-run"]
