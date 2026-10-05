@@ -38,3 +38,16 @@ CLI-side history. `start --resume <session-id>` uses `session/resume` or `sessio
 advertised capability; `start --continue` selects the latest `session/list` entry for the
 repository's canonical cwd. Neither is universal: where resume is unavailable, the Agent starts a
 fresh session from existing work records.
+
+## Optional project precompact notice
+
+An exact owned binding can call `scripts/kaola-project-compact-notice.py`. This
+KPR local socket operation keeps completion unconfirmed and uses the same
+holder's standard prompt after the targeted request ends successfully. No hook
+is installed automatically. Native policy/trust and current Codex automatic
+recovery stay unchanged. Full installed Skill reads and task continuation need
+actual tool/output evidence. See the checkout's `docs/api.md` section for the
+opt-in project precompact notice. That section has the binding fields, the
+verified config roots, failed or unknown admission, and old-holder recovery.
+Do not use a Stop hook as completed-compaction proof. Do not replay an unknown
+write.

@@ -1513,19 +1513,75 @@ class ZCodeAcpAgent:
     # -- backend -> ACP ---------------------------------------------------
 
     def on_backend_event(self, msg: dict[str, Any]) -> None:
-        if msg.get("method") != "session/event":
-            return
+        method = msg.get("method")
         params = msg.get("params") or {}
+        if method not in ("session/event", "state.updated"):
+            return
         with self.lock:
             session = self.by_backend.get(params.get("sessionId"))
         if session is None:
             return
-        etype = params.get("type")
-        payload = params.get("payload") or {}
         try:
-            self.translate_event(session, etype, payload, params.get("turnId"))
+            if method == "state.updated":
+                self.translate_state_updated(session, params)
+            else:
+                etype = params.get("type")
+                payload = params.get("payload") or {}
+                self.translate_event(session, etype, payload, params.get("turnId"))
         except Exception as exc:  # never let one event kill the stream
-            log(f"event translation failed ({etype}): {exc}")
+            log(f"event translation failed ({method}): {exc}")
+
+    # Issue #264: the engine reports background compaction on two channels.
+    # Exact source locators in the installed engine bundle
+    # `/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs`:
+    #   * `RRn` emits `{method:"state.updated", params:{patch, reason, revision,
+    #     scope:"session", sessionId, type:"state.updated", workspace}}`
+    #     (constructor `afterStateMutation`/`emitStateUpdated` region).
+    #   * `session/compact` (`JKo`) sets `{status:"running"}` through
+    #     `RRn(..., "compact_started", ...)`; `cXa` then calls
+    #     `tD(e, t, s)` with `s = "session_compacted"`, `"session_compact_failed"`,
+    #     or `"session_compact_cancelled"`.
+    #   * The compact orchestrator appends `compact_started`,
+    #     `compact_completed`, and `compact_failed` session events through
+    #     `k6e` -> `createEvent`/`appendEvent`; `compact_completed` carries
+    #     `operationId` (`cmp_<uuid>`) and `boundaryId`.
+    # A real app-server wire capture confirmed `state.updated` on this stdio
+    # channel with keys patch/reason/revision/scope/sessionId/type/workspace.
+    # Map only those exact names onto the ACP `compaction_update` variant. Emit
+    # only facts the engine sent; never invent a completion.
+    STATE_COMPACT_REASONS = {
+        "compact_started": "in_progress",
+        "session_compacted": "completed",
+        "session_compact_failed": "failed",
+        "session_compact_cancelled": "cancelled",
+    }
+    EVENT_COMPACT_TYPES = {
+        "compact_started": "in_progress",
+        "compact_completed": "completed",
+        "compact_failed": "failed",
+    }
+
+    def translate_state_updated(self, session: Session, params: dict[str, Any]) -> None:
+        # The captured frame always carries a session id and scope "session".
+        # A different scope is not this session's compact state.
+        if params.get("scope") != "session":
+            return
+        if not params.get("sessionId"):
+            return
+        status = self.STATE_COMPACT_REASONS.get(params.get("reason"))
+        if status is None:
+            return
+        revision = params.get("revision")
+        occurrence = f"zcode-state-{revision}" if revision is not None else None
+        self.emit_compaction(session, status, occurrence)
+
+    def emit_compaction(self, session: Session, status: str,
+                        occurrence: str | None) -> None:
+        update: dict[str, Any] = {"sessionUpdate": "compaction_update",
+                                  "status": status}
+        if occurrence:
+            update["compactionId"] = occurrence
+        self.update(session, update)
 
     def translate_event(self, session: Session, etype: str, payload: dict[str, Any],
                         params_turn_id: str | None = None) -> None:
@@ -1561,6 +1617,15 @@ class ZCodeAcpAgent:
             usage = payload.get("usage")
             if usage:
                 self.update(session, {"sessionUpdate": "usage_update", "usage": usage})
+            return
+
+        # Issue #264: project the engine's compact timeline events onto ACP.
+        compact_status = self.EVENT_COMPACT_TYPES.get(etype)
+        if compact_status is not None:
+            occurrence = (payload.get("operationId") or payload.get("boundaryId")
+                          or payload.get("compactId"))
+            self.emit_compaction(session, compact_status,
+                                 str(occurrence) if occurrence else None)
             return
 
         # Issue #81: bind the running turn's backend id for the steer ledger.
@@ -2376,14 +2441,65 @@ class ZCodeAcpAgent:
                 return
             session.turn_request_id = rid
             session.cancelled = False
+        instructions = self._compact_command(text)
         try:
-            self.ensure_backend().call(
-                "session/send", {"sessionId": backend_id, "content": text}
-            )
+            if instructions is None:
+                self.ensure_backend().call(
+                    "session/send",
+                    {"sessionId": backend_id, "content": self._deliver_prompt(text)},
+                )
+            else:
+                # Issue #264: `session/send` delivers `/compact` to the model
+                # as plain text and never compacts (live). The engine's own
+                # `session/compact` runs one compact turn whose terminal event
+                # settles this prompt through finish_turn.
+                compact_params: dict[str, Any] = {"sessionId": backend_id}
+                if instructions:
+                    compact_params["instructions"] = instructions
+                self.ensure_backend().call("session/compact", compact_params)
         except RuntimeError_ as exc:
             with self.lock:
                 session.turn_request_id = None
             self.respond(rid, error={"code": -32000, "message": str(exc)})
+
+    # The helper owns the reload sentence. This clause names only the ZCode
+    # engine fact the helper cannot see: buildPostCompactReadStateReminderEntries
+    # inserts synthetic "Called the Read tool" messages that carry the
+    # pre-compact file body. A live GLM-5.3 turn treated those messages as the
+    # required fresh read (session sess_b12ca9eb, issue #264).
+    _RELOAD_MARK = (
+        "The runtime context was compacted, so any remembered Skill content "
+        "is stale"
+    )
+    _READ_BOUNDARY = (
+        " A message that says \"Called the Read tool\" and shows a file body "
+        "is restored read state from before this message. It is not a current "
+        "file read. Issue a new Read tool call after this message for each "
+        "required Skill file. Use only the result that arrives after this "
+        "message. Do not write task files before that result arrives."
+    )
+
+    @classmethod
+    def _deliver_prompt(cls, text: str) -> str:
+        """Append the ZCode read boundary to a compact-reload prompt.
+
+        Ordinary prompts, including ``/compact``, stay byte-for-byte.
+        """
+        if cls._RELOAD_MARK not in text:
+            return text
+        if "restored read state from before this message" in text:
+            return text
+        return text.rstrip() + cls._READ_BOUNDARY
+
+    @staticmethod
+    def _compact_command(text: str) -> str | None:
+        """Instructions of a `/compact [instructions]` prompt, else None."""
+        stripped = text.strip()
+        if stripped == "/compact":
+            return ""
+        if stripped.startswith("/compact") and stripped[len("/compact")].isspace():
+            return stripped[len("/compact"):].strip()
+        return None
 
     @staticmethod
     def _prompt_text(prompt: Any) -> str:

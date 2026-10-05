@@ -756,6 +756,76 @@ A platform with several packages:
 {"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "droid:standard", "name": "Standard", "windows": ["5h", "weekly", "monthly"]}, {"binds_models": true, "id": "droid:core", "name": "Core", "windows": ["weekly", "monthly"]}, {"binds_models": true, "id": "droid:extra_usage", "name": "Extra usage", "windows": []}], "platform": "droid"}], "schema": "kaola-acp-packages/1"}
 ```
 
+## Post-compaction Skill reread
+
+The holder reads completed compaction signals for its exact ACP session through the pinned
+`kaola-compact-recovery.py` helper. Supported carriers are `compaction_update`, OpenCode's
+completed `_meta["opencode/compaction"]`, Devin and Grok native notifications, and Kimi's exact
+four-line completed text. The Claude bridge forwards a native `compact_boundary` with object
+metadata; the ZCode bridge maps its native completed compact events. Start, failure, cancel,
+foreign-session and startup history signals do not trigger a reminder. Kimi's wire does not
+mark the text as runtime-local; identical model text can cause a harmless reminder.
+
+The holder uses its existing prompt path at a turn boundary. A Host uses its measured entry;
+a worker reads its current installed platform Skill and active role/task Skills, then continues
+its task. The current Codex native recovery path owns that behavior, so the holder sends no
+second prompt and adds no compaction capability to initialize. This does not establish native
+automatic recovery for every runtime.
+
+`compact_reload_detected` records recognition. `compact_reload_delivered` records admission of
+the reminder prompt, not a full Skill read or task use. Confirm those actions from the actual
+model output and tool evidence. A duplicate of the current pending occurrence id coalesces
+without advancing its sequence. A boolean guards admission. Settlement and release of that
+guard share the existing lock; the pending sequence preserves a newer signal even when both
+events have no occurrence id. One pending reminder is kept in memory, with no history or queue.
+It is lost on stop. Running holders keep their loaded code; older holders need a later
+Agent-selected start to use the new behavior. No session restart is performed by this mechanism.
+
+
+### Opt-in Droid/Cursor project precompact notice
+
+`scripts/kaola-project-compact-notice.py --binding ABS_FILE` is an optional native project
+hook command. It reads the native hook input on stdin. It sends a KPR `compact_notice`
+operation to the existing holder socket. This is a KPR local extension, not a vendor ACP
+method. Project configuration and the binding are Agent-selected; no hook is installed by
+start, render or the helper. Default transport and native Codex recovery stay unchanged.
+
+For Droid 0.233.0, use only the supported project `PreCompact` command hook. The native
+session id equals the ACP id. A standalone root uses `ROOT/.factory/hooks.json`; a Git root
+can change this lookup. Do not set `FACTORY_HOME_OVERRIDE`, move auth or bypass trust. Stop
+can follow errors and is not a success signal. For Cursor 2026.09.28-64d2043, use project
+`preCompact` under the ACP data project `G/.cursor/hooks.json`. Its hook resource puts the
+ACP id in `conversation_id` and normalizes `session_id`. Bind the exact `workspace_roots:[G]`.
+General `CURSOR_CONFIG_DIR` does not move native user hooks; effective native policy still applies.
+
+The binding names `platform`, `socket_path`, `holder_instance_id`, `acp_session_id`,
+`project_root`, `platform_skill_path` and nonempty `task_skill_paths`. Cursor also needs
+`hook_project_root`. All Skill files must exist at full absolute paths. The owner must select
+current installed applicable files; file existence alone does not prove applicability or reading.
+The helper forwards only selected identity fields. It rejects conflicting native session ids,
+foreign roots, missing identities and unsupported events. It reads the holder's current request
+id, then the holder checks it under its existing lock. No shared unknown-session fallback is used.
+
+A valid notice stages one obligation in the existing compact tracker during the exact active
+request. Duplicate notices for that request coalesce. It does not call compaction completed or
+send another prompt while the original request is active. The original request must end with
+`turn_completed`, `end_turn` and no observed error. Standard prompt admission checks the same
+holder, session, prior request and successful outcome under its normal admission lock. An
+intervening request, refusal, failure, cancel, stop or dead agent leaves the obligation pending.
+A newer request's notice cannot replace an unresolved prior notice. The owner reconciles such a
+result from the existing record/events; it is not a new notice admission.
+
+The reminder says completion is unconfirmed, requires full current applicable installed Skill
+reads through the file read tool, then task continuation. Hosts retain their measured entry;
+workers receive no Host entry. `compact_project_notice` records the notice;
+`compact_project_notice_admitted` records a later standard ACP prompt admission with read/use
+unverified. `state.compact_project_notice` exposes a pending target and unknown-write fact.
+Unknown/partial writes are retained without automatic replay. The hook client does not retry a
+lost socket reply and does not block native compaction. Reconcile original effects before any
+retry. One in-memory obligation is lost on holder stop; existing receipts remain the recovery
+source. This route adds no file watcher, polling service, scheduler, history or exactly-once gate.
+Actual hook invocation, full file reads and resumed-task results require separate live evidence.
+
 ## Observation schema
 
 `observe` returns evidence for the controlling agent. ACP `observe`/`status` receipts are bounded by `bound_state_receipt`
@@ -958,20 +1028,26 @@ writer, and no second lifecycle. It works over ACP, the only channel; the former
 
 Every platform has a usable path inside ACP, and the Agent picks which one:
 
-- `--steer-mode native` uses the platform's own mid-turn entry and exists only where that entry
+- `--steer-mode native` uses the platform's supported noninterrupting input entry and exists only where that entry
   really does. The manifest is the single source of truth: `native_steering` is `supported`,
   `unsupported` or `unknown` (an uninvestigated surface stays `unknown` and never masquerades as
   `unsupported`), `acp_steer_method` carries the entry and may be non-empty only when
   `native_steering` is `supported`, and `steering_summary` records the versioned evidence. Read the
   current roster out of `platforms/*.yaml` rather than from this page: which platforms qualify
-  changes as surfaces are investigated, so no count or list is pinned here. One case worth knowing is
-  `opencode`, whose `-32601` probe ran on 1.18.17 and whose 2.0.11 `initialize` advertised no
-  steering `_meta`, while `acp_verified_versions` names 2.0.22 (permission QA only;
-  2.0.15 was record-only since the 2026-09-24 Pink batch). No steering method was
-  re-probed on any newer build: it is `unknown`, and the
-  Runner reports an unverified capability (`steer_outcome: unknown`, `steer-capability-unknown`)
-  instead of a proven absence. The refusal, the explicit composite and
-  the no-auto-degrade rule are identical for `unsupported` and `unknown` alike.
+  changes as surfaces are investigated, so no count or list is pinned here. The OpenCode `1.18.17` -32601 probe and `2.0.11`
+  initialize observation remain historical. The V2 local adapter adds the entry for CLI 2.0.22;
+  native ACP keeps the original prompt and stream. It checks the exact active ACP request id,
+  then uses the installed plugin `session.prompt` API with `delivery:"steer", resume:false`.
+  `native-admitted` confirms inbox admission. It does not confirm consumption or adoption.
+  A turn-end race can leave input pending without starting a new turn.
+  Grok CLI 1.0.46 uses `_x.ai/interject` with top-level `text`. Its nested `queued` reply
+  maps to `written`, `steer_consumed:null`, and `native-queued`. This is an interject request
+  acknowledgment. It does not mean admission to the holder's later-turn follow-up queue.
+  Grok has no native expected-turn guard: a turn-end race can start a detached fallback turn.
+  Read the original and subsequent session output before you judge processing and adoption. Never replay an unknown write.
+  The new adapters and mappings require a new holder at a safe boundary. A running
+  holder retains its old code. No consumer is restarted by this change. A custom `opencode acp`
+  command has no adapter entry. V1 and other V2 builds are unverified.
 - `--steer-mode interrupt` is the composite and works on every platform: cancel the running turn,
   confirm it actually stopped, then send the text **once** as the next prompt on the same ACP
   session, so the conversation keeps its context. It is interrupted-then-continued, never injection —
@@ -994,19 +1070,41 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
 | `steer_outcome` | `steer_consumed` | `steer_confirmation` | Meaning |
 |---|---|---|---|
 | `injected` | `true` | `agent-confirmed` | the agent acknowledged that the running turn took it |
-| `written` | `null` | `write-only` | flushed into the running turn's input, which this platform acknowledges in no way |
+| `queued` | `null` | `holder-queued` | process-local input pending until the current prompt ends; no native write yet |
+| `written` | `null` | `write-only`, `native-queued` or `native-admitted` | write or native admission confirmed; processing and adoption are unconfirmed |
 | `interrupted_and_resent` | `true` | `cancel-confirmed` | composite: the turn was cancelled and confirmed stopped, then this text ran as the next turn |
 | `resent_without_interrupt` | `true` | `no-turn-to-interrupt` | composite: the turn had already ended on its own, so nothing was interrupted |
-| `started_new_turn` | `true` | `agent-confirmed` | the agent opened a separate turn this holder does not track — not injection |
+| `started_new_turn` | `null` | `agent-confirmed` | the agent opened a separate turn on the same session; this holder does not track that turn |
 | `not_consumed` | `false` | `none` | nothing was written |
 | `unsupported` | `false` | `none` | no native entry on this platform or transport |
 | `rejected` | `false` | `none` | the agent refused; `error.detail` carries its reason |
 | `unknown` | `null` | `none` | undecided — the Runner never resends blindly |
 
-A `not_consumed` receipt can still carry `steer_confirmation: agent-confirmed` with
-`error.code: steer-queued` and `mutation_performed: true` when the platform admitted the
-text to its own follow-up queue — durable for a later turn, but not consumed by the
-running one (Issue #81).
+A native follow-up queue maps to `written`, `steer_consumed:null`,
+`steer_native_outcome:queued`, and `mutation_performed:true`. Later processing needs session
+output evidence. Processing can occur in the current step, a later step or a later turn.
+A turn-end race alone does not make noninterrupting delivery fail. The exact session and
+ongoing work must remain, with no transport cancel, stop or restart.
+
+Devin CLI 3000.11.3 and Droid 0.233.0 use the registered `session/prompt` path.
+The holder sends one additional prompt without replacing the original prompt owner.
+`prompt-completed` and `steer_stop_reason` retain the additional reply. They do not
+prove model adoption. A flushed frame with a pending reply maps to `written` and
+`write-only`; the late `steer_reply` remains in the existing capture event log under
+its own request id and the original prompt id. No timeout triggers cancel or replay.
+
+For a native ACP route that rejects or cancels a concurrent prompt,
+`steering_delivery: after-turn` holds the input in the live holder until the current
+prompt ends. One operation waits on the existing completion condition. It then uses
+ordinary prompt admission once. There is no timer or new scheduler. The original
+prompt keeps its ended state, and the follow-up uses the normal owned prompt lifecycle.
+`steer_queue_cursor` binds the queue receipt to the later `steer_followup` event and
+its native write receipt. It records `original_turn` with the original id, final text and
+terminal state, and a distinct follow-up id. Queue admission does not return
+`turn_request_id_after` or `turn_request_id_preserved` before the native operation.
+A competing prompt can refuse that write. A stopped holder
+loses this process-local pending input. Read the existing events before any recovery;
+never replay an unknown effect. This route cannot process input until the current prompt ends.
 
 `mutation_performed` describes the steer itself, while `mutation_status` stays the running turn's.
 The interrupted or steered turn keeps its own request id, output and terminal state: the native path
@@ -1365,3 +1463,22 @@ bash /absolute/path/to/scripts/kaola-tmux.sh codex send \
 If Python itself is unavailable, the shell reports that error on stderr; it
 cannot create a JSON receipt. Parser errors omit supplied values because a
 value can contain prompt text or a secret.
+
+DSH next-step steering (#263): the local ACP adapter loads one in-process Cordis plugin
+through the documented `dsh --profile acp --patch` overlay. The existing `_session/steering`
+KPR-owned contract checks the owned ACP session and original prompt request before one private-socket
+write. It is an adapter extension, not a vendor ACP method. The plugin calls supported `agent.steer`, the same operation used by the shipped session
+controller. `native-admitted` confirms its next-step inbox admission, with consumption null.
+The native operation can route to next-turn after an independent abort; the socket reply does
+not claim an exact inbox target or processing. Processing needs session output. Native ACP still owns the original request and stream. An idle
+local guard writes nothing; a native turn-end race can admit a detached later turn. That result
+is reported as `started_new_turn`. No cancel or retry occurs. The adapter uses the exact DSH_BIN
+and a process-local overlay; it changes no profile or global configuration. A custom direct ACP
+command omits the adapter. Its local plugin and socket are removed when the adapter ends.
+
+A missing measured Host Skill entry keeps the compact reload pending. Recover the
+applicable installed Host Skill entry from the current authorized records; do not
+clear the duty or guess an entry. A holder run from source does not name the checkout
+directory as an installed platform Skill file. Its reminder names the platform
+Skill and asks the worker to locate and read the full installed file through its
+Skill catalog or active task records. Reminder admission does not prove that read.

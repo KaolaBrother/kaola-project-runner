@@ -1,7 +1,7 @@
 # OpenCode steering (`steer`)
 
-Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unknown**. Historical evidence, OpenCode 1.18.17: all four candidate steering methods answered JSON-RPC -32601 and `initialize` advertised no steering `_meta`. That is not a measurement of the verified 2.0.x builds: 2.0.11 `initialize` also advertised no steering `_meta`, but no steering method was re-probed on 2.0.11 or on the recorded 2.0.15 or permission-tested 2.0.22, so native steering is unknown until a live probe settles it. The composite `--steer-mode interrupt` was exercised live on 1.18.31.
+Scope: the ACP channel only. Noninterrupting input on this platform's ACP route:
+**supported** (entry `_session/steering`). Historical evidence: 1.18.17 candidate methods returned -32601; 2.0.11 initialize alone did not measure steer. CLI 2.0.22 uses the local V2 integration. The local V2 adapter exposes _session/steering over the existing ACP contract. It guards the original active ACP request id and calls the installed plugin session.prompt API with delivery steer and resume false. Native ACP retains its stream and original prompt. written with native-admitted confirms inbox admission only. A turn-end race can leave input pending; it cannot resume an idle turn. No cancel fallback. Old holders and custom opencode acp commands have no adapter entry; a controlled restart is needed to use this path.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
@@ -11,21 +11,23 @@ platform uses `native` and a platform without an entry **refuses**
 worker on its own, and never degrades from native to composite after a failure
 or timeout.
 
-`steer` delivers one Agent-chosen message to the turn **already running** on this exact session,
-over the same routing as `send`: no scheduler, no second writer, no second lifecycle. The original
-prompt keeps its request id, output, and terminal state, and the receipt's `turn_request_id`,
-`turn_request_id_after`, and `turn_request_id_preserved` make that checkable. Content is literal
-transport under the same identity, redaction, and bounded-receipt rules as `send`.
+`steer` delivers one Agent-chosen message without cancellation on this exact session.
+Processing can occur in the current step, a later step, or a later turn. Delivery alone does not
+prove processing. It uses the same routing as `send`: no scheduler, no second writer, no second lifecycle. The original
+prompt keeps its request id, output, and terminal state. Direct native receipts carry
+`turn_request_id_after` and `turn_request_id_preserved`. A local queue receipt carries only the
+original `turn_request_id`; its later `steer_followup` records `original_turn` and a new prompt id. Text uses the same identity, redaction, and receipt bounds as `send`.
 
 `steer_outcome` and `steer_consumed` are the only consumption claims:
 
 | `steer_outcome` | `steer_consumed` | Meaning |
 |---|---|---|
 | `injected` | `true` | the agent acknowledged that the running turn took the text; adoption by the model is a separate question |
-| `written` | `null` | the text was flushed into the running turn's input, but this platform acknowledges no consumption — read the turn's own output to judge |
+| `queued` | `null` | `holder-queued`: input is pending in this holder; no native write yet. Read `steer_followup` for its write receipt and later session output for processing |
+| `written` | `null` | the entry confirmed a write or native admission; processing is unconfirmed. Read session output to judge processing and adoption |
 | `interrupted_and_resent` | `true` | composite: the running turn was cancelled and confirmed stopped, then this text ran as the next turn |
 | `resent_without_interrupt` | `true` | composite: the turn had already ended, so nothing was interrupted and this text ran as the next turn |
-| `started_new_turn` | `true` | the agent opened a separate turn instead — not injection, and this holder does not track it |
+| `started_new_turn` | `null` | the agent opened a separate turn on the same session; this holder does not track that turn |
 | `not_consumed` | `false` | nothing was written (no active turn, or the turn had already settled); `send` a normal prompt if you still want it |
 | `unsupported` | `false` | no native entry on this platform; nothing was written |
 | `rejected` | `false` | the agent refused the request; `error.detail` carries its reason |
@@ -34,13 +36,29 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
 `cancel-confirmed` (the composite saw the old turn stop), or `none`.
+`native-queued` means the native entry acknowledged a request. `native-admitted`
+means the native entry admitted input. Neither confirms model adoption. A request acknowledgment does not mean processing. A native follow-up queue also maps to
+`written` with `steer_native_outcome: queued`; later processing is unconfirmed.
+`prompt-completed` means an additional standard prompt returned. Its `steer_stop_reason`
+is verbatim. Neither its completion nor its coalesced reply proves adoption. A standard prompt
+that has no reply before the bounded wait returns `written` with `write-only`. The existing
+capture event log retains its late `steer_reply` with its own request id and original prompt id.
+For delivery after the current prompt, the existing prompt completion signal wakes
+one pending operation. It calls ordinary `send` admission once on the same session.
+The original prompt keeps its own ended state; the follow-up has an owned new request id.
+Admission checks the prior turn and session under its own lock. A replaced, cancelled, or failed prior turn gets no write. If a holder stops,
+it loses process-local pending input. Read the existing events before recovery. A known
+no-write receipt permits an Agent-chosen new send; an unknown effect does not.
+A running old holder retains old code. Adopt new mappings at a safe restart boundary;
+this change does not restart a consumer.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is
 decided by what the agent actually answers, not by a blanket rule: `not_consumed` when the holder
 still held the turn and refused before writing, `started_new_turn` when the agent says it opened a
-separate turn instead, and `unknown` when it answers nothing, answers something unrecognized, or the
-turn settles while the text is being written. Nothing is ever silently resent.
+separate turn instead, and `unknown` when its effect is not known. A turn-end race with later processing is
+valid when the session and ongoing work are preserved and no cancel, stop, or restart occurs.
+Read subsequent session output for processing evidence. Nothing is ever silently resent.
 
 ### The composite (`--steer-mode interrupt`)
 

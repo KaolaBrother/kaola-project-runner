@@ -41,8 +41,8 @@ STDERR_RING = 64 * 1024
 EVENT_LOG_MAX = 10 * 1024 * 1024
 EVENT_LOG_KEEP = 3
 CANCEL_GRACE = 5.0
-# Issue #65: a native steering call answers inside the running turn; it never
-# waits for the turn itself, so this bounds only the extension round trip.
+# Bounds the receipt wait. A standard prompt can answer after a later step or
+# turn. Its late reply remains in the existing event log; never resend on timeout.
 STEER_TIMEOUT = 30.0
 EXIT_GRACE = 5.0
 TERM_GRACE = 3.0
@@ -245,8 +245,8 @@ HEARTBEAT_PROMPT_MAX_BYTES = 65536
 # holder that can read it.
 HEARTBEAT_STATE_FILE_MAX_BYTES = 1048576
 HEARTBEAT_STATE_SCHEMA = "kaola-heartbeat-prompt/2"
-HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatched/1",
-                   "sideagent-node/1")
+HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatched/1", "steer-after-turn/1",
+                   "sideagent-node/1", "project-compact-notice/1")
 # Issue #255 node mode: the Host carrier starts one fresh maintenance node per
 # batch from the binding's exact Runner argv (never a shell string), and
 # exact-stops it after its turn end. Bounds on that one start and stop only.
@@ -1105,14 +1105,58 @@ def quota_module():
     return _QUOTA
 
 
-# The one sibling this holder imports. ``install-local`` replaces the Skill
+def compact_module():
+    """Sibling compact-recovery module, or None when this copy lacks it.
+
+    Issue #264. The module object is cached at startup by
+    ``load_sibling_modules`` so the bytes are the ones this process began
+    with. ``False`` means the sibling is absent, not that no signal arrived.
+    """
+    global _COMPACT
+    if _COMPACT is False:
+        return None
+    if _COMPACT is None:
+        path = Path(__file__).resolve().parent / COMPACT_MODULE
+        if not path.is_file():
+            _COMPACT = False
+            return None
+        spec = importlib.util.spec_from_file_location("kaola_compact_recovery_holder", path)
+        if spec is None or spec.loader is None:
+            _COMPACT = False
+            return None
+        module = importlib.util.module_from_spec(spec)
+        previous = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = previous
+        _COMPACT = module
+    return _COMPACT
+
+
+# The sibling modules this holder imports. ``install-local`` replaces the Skill
 # directory with ``os.replace``; a later import would execute the replacement
 # and mix two builds in one holder, so the bytes are pinned at startup.
 QUOTA_MODULE = "kaola-quota.py"
 RECORD_MODULE = "kaola-record-contract.py"
+# Issue #264: recognize a completed context compaction and owe one Skill
+# reread. The module is optional at load time so an older install still runs;
+# the behavior needs it present beside the holder.
+COMPACT_MODULE = "kaola-compact-recovery.py"
+# Issue #264 review: these platforms already inject their own compact recovery
+# into the session, so the ACP link must not add a second reload prompt for
+# them. The current Codex ACP Host receives the KPR-USER-COMPACT-RECOVERY-V1
+# marker and fully rereads its installed main Skill on that path. Preserve it.
+NATIVE_COMPACT_RECOVERY_PLATFORMS = frozenset({"codex"})
 RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
+    "kaola-compact-recovery.py",
     "kaola-zcode-acp.py",
+    "kaola-opencode-acp.py",
+    "kaola-dsh-acp.py",
+    "kaola-dsh-steer.mjs",
+    "kaola-opencode-steer.mjs",
     "kaola-acp.py",
     "kaola-quota.py",
     "kaola-record-contract.py",
@@ -1120,6 +1164,7 @@ RUNNER_BUILD_FILES = (
     "platform.yaml",
 )
 _RUNNER_IDENTITY: dict[str, Any] | None = None
+_COMPACT: Any = None
 
 
 def _hex_revision(value: str) -> str | None:
@@ -1186,11 +1231,13 @@ def load_sibling_modules() -> None:
     after ``install-local`` has swapped the directory. ``runner_build`` is the
     holder file this process executes, not the per-call CLI.
     """
-    global _QUOTA, _RECORD, _RUNNER_IDENTITY
+    global _QUOTA, _RECORD, _COMPACT, _RUNNER_IDENTITY
     module = _import_sibling(QUOTA_MODULE)
     _QUOTA = module if module is not None else False
     record = _import_sibling(RECORD_MODULE)
     _RECORD = record if record is not None else False
+    compact = _import_sibling(COMPACT_MODULE)
+    _COMPACT = compact if compact is not None else False
     paths = capture_script_paths()
     primary = paths.get("kaola-acp-holder.py") or {}
     digest = primary.get("sha256") or ""
@@ -1823,6 +1870,22 @@ class Holder:
         # to this Host, so a bound Sideagent's routine turn end that changed
         # nothing needing a Host judgment does not wake the Host.
         self.host_attention_seen: str | None = None
+        # Issue #264: one pending post-compaction reload and one scalar for the
+        # last delivered occurrence. Not a queue, not a history store. The
+        # inflight flag is a boolean, so an occurrence-less signal (Devin, Grok,
+        # Kimi) still holds the slot; the id is evidence only.
+        self.compact_reload = None
+        # Opt-in project PreCompact notice; completion remains unconfirmed.
+        self.compact_notice_pending: dict[str, Any] | None = None
+        self.compact_reload_inflight = False
+        self.compact_reload_inflight_id: str | None = None
+        # Issue #264: the exact installed Skill file that this holder belongs to
+        # (the platform worker Skill). A worker reload names this file, never
+        # the Host control-plane entry.
+        holder_script = Path(__file__).resolve()
+        skill_root = holder_script.parent.parent
+        skill_file = skill_root / "SKILL.md"
+        self.installed_skill_path = str(skill_file) if skill_file.is_file() else None
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
         # Issue #92: the one worker event that cannot be re-derived later. A
@@ -2217,6 +2280,9 @@ class Holder:
                 self.events.append({"kind": "cancel_request_unknown", "id": cancelled})
         else:
             self.events.append({"kind": "notification", "method": method, "params": params})
+            # Issue #264: Devin `_cognition.ai/compaction` and Grok
+            # `_x.ai/session_notification` arrive as plain notifications.
+            self._observe_compact_signal(message)
 
     def on_agent_request(self, message: dict[str, Any]) -> None:
         method = message["method"]
@@ -2316,6 +2382,8 @@ class Holder:
                                      "update": update}, ts=received_at)
         self.write_record()
         self.fanout_follow_delta()
+        # Issue #264: recognize a completed compaction after it is durable.
+        self._observe_compact_signal({"method": "session/update", "params": params})
 
     def on_prompt_response(self, request_id: int, response: dict[str, Any] | None) -> None:
         turn = self.turn
@@ -2478,6 +2546,11 @@ class Holder:
             "undelivered_worker_events": self._undelivered_wake_facts(),
             "activity_hint": activity,
             "last_prompt": self.last_prompt,
+            "turn_request_id": turn.get("request_id"),
+            "compact_project_notice": (None if self.compact_notice_pending is None else {
+                "prior_turn_request_id": self.compact_notice_pending["prior_turn_request_id"],
+                "completion": "unconfirmed",
+                "write_unknown": self.compact_notice_pending["write_unknown"]}),
             "turn_active": turn["active"],
             "turn_outcome": turn.get("outcome"),
             "stop_reason": turn.get("stop_reason"),
@@ -2587,6 +2660,23 @@ class Holder:
                         "mutation_performed": False,
                         "error": {"code": "stopping",
                                   "message": "this holder is stopping; the prompt was not started"}}
+            if "expected_prior_turn_request_id" in params and (
+                    self.turn.get("request_id") != params["expected_prior_turn_request_id"]
+                    or self.acp_session_id != params.get("expected_acp_session_id")):
+                return {"outcome": "prior_turn_changed", "mutation_status": "not_started",
+                        "mutation_performed": False,
+                        "active_turn_request_id": self.turn.get("request_id"),
+                        "error": {"code": "steer-turn-changed",
+                                  "message": "another turn or session replaced the targeted prior "
+                                             "turn; nothing was written"}}
+            if params.get("require_successful_prior_turn") and (
+                    self.turn.get("outcome") != "turn_completed"
+                    or self.turn.get("stop_reason") != "end_turn"
+                    or self.turn.get("error")):
+                return {"outcome": "prior_turn_unsuccessful", "mutation_status": "not_started",
+                        "mutation_performed": False,
+                        "error": {"code": "prior-turn-unsuccessful",
+                                  "message": "the targeted turn did not end successfully"}}
             if self.turn["active"]:
                 return {"error": {"code": "prompt-in-progress",
                                   "message": "a prompt turn is already active"},
@@ -3710,6 +3800,256 @@ class Holder:
         if isinstance(holder, str) and holder:
             self._stop_node(holder, NODE_RECLAIM_SECONDS)
 
+    # -- Issue #264: post-compaction Skill reread ---------------------------
+
+    def op_compact_notice(self, params: dict[str, Any]) -> dict[str, Any]:
+        """KPR local hook operation, never a vendor ACP method.
+
+        The installed Droid and Cursor ACP paths put the ACP id in the
+        native hook input. Only an exact project precompact hook can stage
+        this conservative notice. It is not a completed-compaction signal.
+        """
+        def refuse(reason: str) -> dict[str, Any]:
+            return {"notice_pending": False, "completion": "unconfirmed",
+                    "mutation_performed": False, "reason": reason}
+
+        event = {"droid": "PreCompact", "cursor-cli": "preCompact"}.get(self.args.platform)
+        if event is None or params.get("hook_event_name") != event:
+            return refuse("unsupported-project-hook")
+        repo = str(Path(self.args.repo).resolve())
+        if self.args.platform == "cursor-cli":
+            data_root = Path(os.environ.get("CURSOR_DATA_DIR") or Path.home() / ".cursor")
+            key = re.sub(r"[^a-zA-Z0-9]+", "-", repo).strip("-")
+            hook_root = str(data_root / "projects" / key)
+            root_matches = params.get("hook_workspace_roots") == [hook_root]
+        else:
+            root_matches = params.get("hook_cwd") == repo
+        paths = params.get("task_skill_paths")
+        platform_path = params.get("platform_skill_path")
+        if (not isinstance(paths, list) or not paths or not isinstance(platform_path, str)
+                or any(not isinstance(p, str) or not Path(p).is_absolute()
+                       or not Path(p).is_file() for p in [platform_path, *paths])):
+            return refuse("full-skill-paths-required")
+        module = compact_module()
+        if module is None:
+            return refuse("no-compact-module")
+        with self.worker_events_lock:
+            with self.lock:
+                if (self.state != "ready" or self.stop_requested
+                        or self.agent.proc is None or self.agent.exited.is_set()):
+                    return refuse("holder-not-ready")
+                if (params.get("expected_holder_instance_id") != self.holder_instance_id
+                        or not self.acp_session_id
+                        or params.get("expected_acp_session_id") != self.acp_session_id
+                        or params.get("hook_session_id") != self.acp_session_id
+                        or params.get("project_root") != repo or not root_matches):
+                    return refuse("hook-target-mismatch")
+                prior = self.turn.get("request_id")
+                if (not self.turn["active"] or prior is None
+                        or params.get("expected_prior_turn_request_id") != prior):
+                    return refuse("active-hook-turn-required")
+                pending = self.compact_notice_pending
+                if pending is not None:
+                    # One current obligation. Never replace unknown admission
+                    # or failed original work with a new hook's target.
+                    same = pending["prior_turn_request_id"] == prior
+                    return {"notice_pending": True, "completion": "unconfirmed",
+                            "mutation_performed": False,
+                            "new_notice_accepted": same,
+                            "reason": "coalesced" if same else "prior-notice-unresolved"}
+                if self.compact_reload is None:
+                    self.compact_reload = module.CompactReloadTracker()
+                self.compact_reload.observe(module.CompactSignal(
+                    "project-precompact-notice", self.acp_session_id, None))
+                self.compact_notice_pending = {
+                    "prior_turn_request_id": prior,
+                    "holder_instance_id": self.holder_instance_id,
+                    "acp_session_id": self.acp_session_id,
+                    "platform_skill_path": platform_path,
+                    "task_skill_paths": list(paths), "write_unknown": False}
+                # Record staging before a response can admit the reminder.
+                self.events.append({"kind": "compact_project_notice", "completion": "unconfirmed",
+                                    "session_id": self.acp_session_id, "turn_request_id": prior})
+        return {"notice_pending": True, "notice_recorded": True,
+                "completion": "unconfirmed", "acp_mutation_performed": False,
+                "prior_turn_request_id": prior}
+
+    def _attempt_compact_notice(self, notice: dict[str, Any]) -> dict[str, Any]:
+        if notice["write_unknown"]:
+            return {"delivered": False, "reason": "notice-write-unknown"}
+        with self.lock:
+            if (self.turn["active"] or self.turn.get("request_id") != notice["prior_turn_request_id"]
+                    or self.turn.get("outcome") != "turn_completed"
+                    or self.turn.get("stop_reason") != "end_turn" or self.turn.get("error")):
+                return {"delivered": False, "reason": "notice-original-work-not-successful"}
+        files = [notice["platform_skill_path"], *notice["task_skill_paths"]]
+        text = ("A native PreCompact notice occurred during the prior work. "
+                "Compaction completion is unconfirmed. Before you answer, call the available "
+                "file read tool and read the full current installed applicable Skill files: "
+                + json.dumps(files) + ". Do not use remembered or cached Skill content. "
+                "Then continue the current task from its durable records. "
+                "Do not restart completed work.")
+        if self.session_role == "host":
+            if not self.host_entry:
+                return {"delivered": False, "reason": "notice-host-entry-absent"}
+            text = self.host_entry + "\n" + text
+        try:
+            prompt = self.op_prompt({"text": text, "wait": False,
+                                     "expected_holder_instance_id": notice["holder_instance_id"],
+                                     "expected_acp_session_id": notice["acp_session_id"],
+                                     "expected_prior_turn_request_id": notice["prior_turn_request_id"],
+                                     "require_successful_prior_turn": True})
+        except Exception:
+            notice["write_unknown"] = True
+            return {"delivered": False, "reason": "notice-write-unknown"}
+        if (prompt.get("error") or prompt.get("outcome") != "in_progress"
+                or prompt.get("mutation_performed") is not True):
+            if (prompt.get("mutation_performed") is not False
+                    or (prompt.get("error") or {}).get("code") == "acp-write-failed"):
+                # A partial stdio write or lost admission response cannot be
+                # replayed from a later boundary.
+                notice["write_unknown"] = True
+            return {"delivered": False, "reason": "notice-admission-unconfirmed",
+                    "receipt": prompt}
+        self.events.append({"kind": "compact_project_notice_admitted",
+                            "completion": "unconfirmed", "read_use": "unverified",
+                            "original_turn_request_id": notice["prior_turn_request_id"],
+                            "turn_request_id": prompt.get("turn_request_id"),
+                            "prompt_fingerprint": prompt.get("prompt_fingerprint")})
+        return {"delivered": True, "prompt_fingerprint": prompt.get("prompt_fingerprint")}
+
+    def _observe_compact_signal(self, message: dict[str, Any]) -> None:
+        """Recognize one completed compaction and owe one installed-Skill reread.
+
+        Only a real, session-bound, completed signal counts. A start, a
+        failure, a token drop, or assistant prose never counts. A compact record
+        that streams while this holder is still starting is resume/history
+        replay, not a fresh completion, and is ignored. The pending flag
+        coalesces repeats; the occurrence scalar suppresses an adjacent
+        duplicate. Delivery waits for a safe boundary and never interrupts.
+        """
+        module = compact_module()
+        if module is None:
+            return
+        if self.state != "ready":
+            # ``session/load`` and ``session/resume`` may replay a completed
+            # compaction record. Never turn history into a fresh reload.
+            signal = module.classify(message, self.args.platform)
+            if signal is not None:
+                self.events.append({"kind": "compact_reload_replay_ignored",
+                                    "source": signal.source, "state": self.state})
+            return
+        signal = module.classify(message, self.args.platform)
+        if signal is None:
+            return
+        if not module.is_same_session(signal, self.acp_session_id):
+            self.events.append({"kind": "compact_reload_foreign_session",
+                                "source": signal.source,
+                                "signal_session": signal.session_id})
+            return
+        with self.worker_events_lock:
+            if self.compact_reload is None:
+                self.compact_reload = module.CompactReloadTracker()
+            if not self.compact_reload.observe(signal):
+                return
+        self.events.append({"kind": "compact_reload_detected",
+                            "source": signal.source,
+                            "occurrence_id": signal.occurrence_id,
+                            "session_id": signal.session_id})
+        self.write_record()
+        self._deliver_compact_reload()
+
+    def _deliver_compact_reload(self) -> dict[str, Any]:
+        """Deliver the one pending reread prompt at a safe boundary.
+
+        This reuses ``op_prompt`` and the session's own applicable Skill. A Host
+        opens Project Runner through its measured ``host_entry``. Every other
+        role names its own installed platform Skill and requires the active
+        role/task Skill too, so a worker never opens the Host control-plane
+        Skill. It never cancels, restarts, or replays. A busy turn or a dead
+        agent keeps the flag for the next boundary.
+
+        The existing ``worker_events_lock`` serializes the tracker. The inflight
+        slot is a boolean because an occurrence-less signal must still hold it.
+        One lock hold settles the obligation and clears the slot, so no later
+        admission can slip into the gap.
+        """
+        module = compact_module()
+        if module is None:
+            return {"delivered": False, "reason": "no-compact-module"}
+        with self.worker_events_lock:
+            tracker = self.compact_reload
+            if tracker is None or not tracker.pending:
+                return {"delivered": False, "reason": "no-pending-reload"}
+            if self.compact_reload_inflight:
+                return {"delivered": False, "reason": "reload-inflight"}
+            self.compact_reload_inflight = True
+            occurrence = tracker.pending_id
+            pending_seq = tracker.pending_seq
+            self.compact_reload_inflight_id = occurrence
+            notice = getattr(self, "compact_notice_pending", None)
+        result: dict[str, Any] = {"delivered": False, "reason": "not-attempted"}
+        settled = False
+        try:
+            result = self._attempt_compact_reload(module)
+            settled = bool(result.get("delivered")
+                           or result.get("reason") in
+                           ("native-route-owned",))
+        finally:
+            with self.worker_events_lock:
+                if settled:
+                    # The sequence keeps a newer occurrence-less obligation
+                    # pending even though its id is also None.
+                    tracker.mark_delivered_occurrence(occurrence, pending_seq)
+                    if (result.get("delivered")
+                            and getattr(self, "compact_notice_pending", None) is notice):
+                        self.compact_notice_pending = None
+                self.compact_reload_inflight = False
+                self.compact_reload_inflight_id = None
+        return result
+
+    def _attempt_compact_reload(self, module: Any) -> dict[str, Any]:
+        """One bounded reload admission attempt. Caller holds the inflight slot."""
+        if self.args.platform in NATIVE_COMPACT_RECOVERY_PLATFORMS:
+            # This runtime already injects its own compact recovery. A second
+            # ACP-driven reload would duplicate the working native path. Record
+            # the fact and let the native path own the reread.
+            self.events.append({"kind": "compact_reload_native_owned",
+                                "platform": self.args.platform})
+            return {"delivered": False, "reason": "native-route-owned"}
+        notice = getattr(self, "compact_notice_pending", None)
+        if notice is not None:
+            return self._attempt_compact_notice(notice)
+        if self.turn["active"]:
+            return {"delivered": False, "reason": "prompt-in-progress"}
+        if self.stop_requested or self.agent.proc is None or self.agent.exited.is_set():
+            return {"delivered": False, "reason": "agent-not-running"}
+        if self.session_role == "host":
+            if not self.host_entry:
+                # A Host with no measured entry has no automatic wake.
+                self.events.append({"kind": "compact_reload_entry_absent"})
+                return {"delivered": False, "reason": "host-entry-absent"}
+            text = module.host_reload_prompt(self.host_entry)
+        else:
+            text = module.worker_reload_prompt(self.installed_skill_path)
+            if self.installed_skill_path is None:
+                text += (" The holder runs from source; the installed platform Skill file "
+                         "location is not known here. Locate the current installed "
+                         + self.args.platform + "-kaola-project-runner Skill through your "
+                         "available Skill catalog or the active task records, then read "
+                         "its full SKILL.md. Do not treat the source checkout directory "
+                         "as an installed Skill file.")
+        prompt = self.op_prompt({"text": text, "wait": False})
+        if prompt.get("error") or prompt.get("outcome") != "in_progress":
+            return {"delivered": False, "error": prompt.get("error") or prompt}
+        self.events.append({"kind": "compact_reload_delivered",
+                            "session_role": self.session_role,
+                            "skill_path": (None if self.session_role == "host"
+                                           else self.installed_skill_path),
+                            "prompt_fingerprint": prompt.get("prompt_fingerprint")})
+        return {"delivered": True,
+                "prompt_fingerprint": prompt.get("prompt_fingerprint")}
+
     def _kick_worker_events(self) -> None:
         """Offer what is waiting at this new boundary: a node to the relay,
         anything the Host owns to an idle Host."""
@@ -3723,6 +4063,7 @@ class Holder:
                     self._relay_pass()
         except Exception as exc:  # a node boundary must not take the holder down
             self.events.append({"kind": "sideagent_node_kick_failed", "error": str(exc)})
+        self._deliver_compact_reload()
 
     def _deliver_worker_events(self) -> dict[str, Any]:
         """Deliver every staged event as one ordinary prompt through the
@@ -3884,6 +4225,9 @@ class Holder:
         if not was_notification or outcome == "turn_completed":
             if self.agent.proc is not None and not self.agent.exited.is_set():
                 self._deliver_worker_events()
+        # Issue #264: a compact completion that landed mid-turn is delivered
+        # only now, at the turn boundary, and never inside the turn.
+        self._deliver_compact_reload()
 
     def op_worker_event(self, params: dict[str, Any]) -> dict[str, Any]:
         """Carrier op on a Host holder: stage one worker event, then
@@ -4143,16 +4487,15 @@ class Holder:
                     "pending_permissions": list(pending.values())}
 
     def op_steer(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Issue #65: one native mid-turn steering request for this exact session.
+        """One noninterrupting input request for this exact session.
 
-        Steering is a transport operation the controlling Agent chooses, never a
-        Runner policy. It reuses the running turn: it starts no second turn, adds
-        no scheduler, and never becomes a second stdin writer. The receipt states
-        one fact — whether this agent consumed the text into the running turn —
-        and keeps that separate from whether the model actually followed it.
+        Keep the original prompt owner. Native delivery can be processed in a
+        later step or turn. Write, admission, completion and model adoption are
+        separate facts. This operation never sends cancel or replays input.
         """
         method = (params.get("method") or "").strip()
         text = params.get("text") or ""
+        standard_prompt = method == "session/prompt" and self.args.platform in ("devin", "droid")
         base: dict[str, Any] = {
             "steer_method": method or None,
             "steer_text_chars": len(text),
@@ -4196,16 +4539,73 @@ class Holder:
                         "mutation_performed": False}
             turn_request_id_before = self.turn["request_id"]
             turn_fingerprint = self.turn["fingerprint"]
+            if params.get("delivery") == "after-turn":
+                # The native ACP entry rejects or cancels concurrent prompts.
+                # Wait on the existing completion condition, then use ordinary
+                # prompt admission once. This is process-local pending input,
+                # not native admission, a timer, or a restart/replay mechanism.
+                original = self.turn
+                session_id = self.acp_session_id
+                queue_cursor = self.events.append({"kind": "steer_queued",
+                    "confirmation": "holder-queued", "turn_request_id": turn_request_id_before,
+                    "fingerprint": base["steer_fingerprint"]})
+                def after_turn() -> None:
+                    with self.turn_cond:
+                        while original["active"] and not self.agent.exited.is_set():
+                            self.turn_cond.wait()
+                    original_result = {"request_id": original.get("request_id"),
+                        "fingerprint": original.get("fingerprint"),
+                        "outcome": original.get("outcome"),
+                        "stop_reason": original.get("stop_reason"),
+                        "final_text": original.get("final_text")}
+                    if original.get("outcome") != "turn_completed":
+                        sent = {"outcome": "prior_turn_not_completed",
+                                "mutation_status": "not_started", "mutation_performed": False}
+                    else:
+                        # op_prompt refuses before writing if another prompt
+                        # owns the slot or the holder is stopping. Preserve that
+                        # receipt; never cancel that prompt or retry the write.
+                        sent = self.op_prompt({"text": text, "wait": False,
+                            "expected_holder_instance_id": self.holder_instance_id,
+                            "expected_prior_turn_request_id": turn_request_id_before,
+                            "expected_acp_session_id": session_id})
+                    self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
+                        "turn_request_id": turn_request_id_before,
+                        "original_turn": original_result,
+                        "fingerprint": base["steer_fingerprint"], "receipt": sent})
+                threading.Thread(target=after_turn, daemon=True).start()
+                return {**base, "steer_outcome": "queued", "steer_consumed": None,
+                    "steer_confirmation": "holder-queued", "steer_queue_cursor": queue_cursor,
+                    "steer_native_written": False, "turn_request_id": turn_request_id_before,
+                    "turn_prompt_fingerprint": turn_fingerprint, "outcome": "steer_queued",
+                    "mutation_status": original.get("mutation_status"), "mutation_performed": True,
+                    "steer_reason": "pending input waits for prompt completion; read steer_followup "
+                                    "for native write and session output for processing. A stopped "
+                                    "holder loses pending input. No cancel or replay is sent"}
+            request_params = {
+                "sessionId": self.acp_session_id,
+                "prompt": [{"type": "text", "text": text}],
+                "_meta": {"steering": {"idleBehavior": "promptRequired"}},
+            }
+            if self.args.platform == "grok" and method == "_x.ai/interject":
+                # Grok ignores idleBehavior and requires top-level text.
+                request_params = {"sessionId": self.acp_session_id, "text": text}
+            elif self.args.platform in ("opencode", "dsh"):
+                request_params["_meta"]["steering"]["expectedTurnId"] = turn_request_id_before
+            elif standard_prompt:
+                # These installed ACP servers accept a second standard prompt
+                # without transport cancellation. Do not invent an extension.
+                request_params.pop("_meta")
             steer_request_id = self.agent.send_request(
                 method,
-                {
-                    "sessionId": self.acp_session_id,
-                    "prompt": [{"type": "text", "text": text}],
-                    # A compliant agent must not manufacture a detached turn when
-                    # the turn settles between our check and its handler.
-                    "_meta": {"steering": {"idleBehavior": "promptRequired"}},
-                },
+                request_params,
             )
+            if normalize_id(steer_request_id) not in self.agent.pending_out:
+                return {**base, "steer_request_id": steer_request_id,
+                        "steer_outcome": "not_consumed", "steer_consumed": False,
+                        "steer_confirmation": "none", "outcome": "steer_write_failed",
+                        "mutation_performed": False,
+                        "error": {"code": "acp-write-failed", "message": "steer frame was not written"}}
             self.events.append({"kind": "steer_sent", "method": method,
                                 "request_id": steer_request_id,
                                 "turn_request_id": turn_request_id_before,
@@ -4216,13 +4616,39 @@ class Holder:
         timeout = params.get("timeout")
         if timeout is None:
             timeout = STEER_TIMEOUT
-        response = self.agent.wait_response(steer_request_id, timeout)
+        if standard_prompt:
+            # Keep the pending reply after the caller's bounded wait. It must
+            # not settle or replace the original prompt, including coalesced
+            # replies or a reply that arrives after the original prompt ended.
+            reply: dict[str, Any] = {}
+            ready = threading.Event()
+
+            def await_reply() -> None:
+                response = self.agent.wait_response(steer_request_id, None)
+                self.events.append({"kind": "steer_reply", "request_id": steer_request_id,
+                                    "turn_request_id": turn_request_id_before,
+                                    "fingerprint": base["steer_fingerprint"],
+                                    "response": response})
+                reply["response"] = response
+                ready.set()
+
+            threading.Thread(target=await_reply, daemon=True).start()
+            ready.wait(timeout)
+            response = reply.get("response")
+        else:
+            response = self.agent.wait_response(steer_request_id, timeout)
 
         if response is None:
             outcome, consumed, confirmation, error = "unknown", None, "none", {
                 "code": "steer-no-response",
                 "message": "no reply to the steering request before the timeout; "
                            "consumption is unknown — do not resend blindly"}
+            if standard_prompt:
+                outcome, confirmation = "written", "write-only"
+                error = {"code": "steer-reply-pending",
+                         "message": "the prompt frame was flushed; admission and processing are "
+                                    "unconfirmed. Read capture events for its late steer_reply "
+                                    "and session output. Do not resend blindly"}
         elif "error" in response:
             detail = response.get("error") or {}
             confirmation = "none"
@@ -4230,12 +4656,29 @@ class Holder:
                 outcome, consumed = "unsupported", False
                 error = {"code": "steer-unsupported",
                          "message": f"agent does not implement {method}", "detail": detail}
+            elif standard_prompt and detail.get("code") not in (-32600, -32602):
+                outcome, consumed = "unknown", None
+                error = {"code": "steer-prompt-failed", "detail": detail,
+                         "message": "the additional prompt ended with an error; its effects "
+                                    "are unconfirmed. Read session output and do not resend blindly"}
             else:
                 outcome, consumed = "rejected", False
                 error = {"code": "steer-rejected", "message": str(detail.get("message", "")),
                          "detail": detail}
         else:
             result = response.get("result") or {}
+            if not isinstance(result, dict):
+                result = {}
+            if standard_prompt and isinstance(result.get("stopReason"), str):
+                base["steer_stop_reason"] = result["stopReason"]
+                result = {"outcome": "written", "confirmation": "prompt-completed",
+                          "reason": "the additional prompt returned; read session output to judge processing"}
+            if self.args.platform == "grok" and method == "_x.ai/interject":
+                envelope = result.get("result") if isinstance(result, dict) else None
+                if isinstance(envelope, dict) and envelope.get("status") == "queued" and not result.get("error"):
+                    base["steer_native_status"] = "queued"
+                    result = {"outcome": "written", "confirmation": "native-queued",
+                              "reason": "Grok acknowledged the interject request; delivery and adoption are unconfirmed"}
             native = result.get("outcome")
             base["steer_native_outcome"] = native
             # What actually backs the claim. An agent that acknowledges
@@ -4257,24 +4700,26 @@ class Holder:
                                     "the write was flushed without error, but this platform "
                                     "acknowledges no consumption - read the turn's own output "
                                     "to judge, and do not resend blindly"}
+                if confirmation in ("native-queued", "native-admitted", "prompt-completed"):
+                    error["message"] = ("the native entry answered the request; model processing "
+                                        "and adoption need session output evidence. Processing may "
+                                        "occur in a later step or turn. Do not resend blindly")
             elif native == "queued":
-                # Issue #81: the platform admitted the text to its follow-up
-                # queue - it surfaces on a LATER turn. The running turn did not
-                # consume it, but the admission is durable (a real mutation),
-                # so this is neither `injected` nor a clean nothing-happened.
-                outcome, consumed = "not_consumed", False
+                # A later-turn queue is noninterrupting delivery. Admission
+                # alone does not prove that the model processed its content.
+                outcome, consumed = "written", None
                 confirmation = confirmation or "agent-confirmed"
                 error = {"code": "steer-queued",
                          "message": "the text was admitted to the session's follow-up "
-                                    "queue and will surface on a later turn; the running "
-                                    "turn did not consume it"}
+                                    "queue; later processing is unconfirmed. Read session "
+                                    "output and do not resend blindly"}
             elif native == "startedNewTurn":
-                # Honest naming: this is NOT injection into the running turn.
-                outcome, consumed = "started_new_turn", True
+                # Later-turn delivery is valid without cancellation. The
+                # native reply confirms a separate turn, not model processing.
+                outcome, consumed = "started_new_turn", None
                 confirmation = confirmation or "agent-confirmed"
-                error = {"code": "steer-started-new-turn",
-                         "message": "the agent started a separate turn this holder does not "
-                                    "track; the running turn did not absorb the text"}
+                base["steer_reason"] = ("the agent started a separate turn on this session; "
+                    "this holder does not track that turn. Read session output for processing")
             elif native == "promptRequired":
                 outcome, consumed = "not_consumed", False
                 confirmation = confirmation or "none"
@@ -5168,6 +5613,8 @@ class Holder:
         params = message.get("params") or {}
         if op == "state":
             return self.op_state()
+        if op == "compact_notice":
+            return self.op_compact_notice(params)
         if op == "prompt":
             return self.op_prompt(params)
         if op == "steer":

@@ -89,20 +89,18 @@ After reading current evidence, the controlling Agent chooses what to send:
 
 ## Steering a running turn
 
-Devin CLI's ACP surface exposes no native mid-turn entry, so a bare `steer`
-refuses and writes nothing. The available path is the composite, which you
-choose explicitly:
+Devin CLI's ACP route supports noninterrupting input. `steer` is an Agent choice
+for this exact session. Processing can occur in a later step or turn:
 
 ```bash
-"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" \
-  --steer-mode interrupt --text '<redirection>'
+"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" --text '<redirection>'
 ```
 
-It **cancels** the running turn, confirms it stopped, then sends your text as the
-next turn on the same session, which keeps the conversation's context. That is
-interrupted-then-continued, never injection: work in progress stops and may have
-left partial side effects (`side_effects_possible`). An unconfirmed cancel sends
-nothing and reports `unknown`. See [references/steering.md](references/steering.md).
+Read `steer_outcome` with `steer_confirmation`: only `injected` means the agent
+acknowledged consumption. `written` confirms a write or native admission.
+`queued` with `holder-queued` confirms process-local pending input only. Read
+session output to judge processing. Never resend an unknown write blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
+cancels the turn first. See [references/steering.md](references/steering.md).
 
 ## Cancel and permissions
 
@@ -123,6 +121,18 @@ When the Agent decides the exact session is finished, end only that owned sessio
 Use `--force` only when the Agent explicitly chooses forced containment for this exact owned
 session. Never use broad session/process cleanup, and never reconstruct ownership from process
 names or fuzzy session matches.
+
+## Context recovery
+
+After a supported completed compaction signal for this exact session, the holder can send a
+Skill reread reminder when the turn ends. Completely read the current installed platform Skill
+and the active role/task Skills, then continue the task from its current records. The known
+Codex native recovery path remains unchanged; the holder adds no second prompt for it.
+
+`compact_reload_delivered` records prompt admission. Confirm the full read and task continuation
+from actual output. A running holder keeps its loaded code. Its pending reminder is held only
+in memory and is lost when it stops; an older holder gains this behavior only on a later
+Agent-selected start.
 
 ## Ending, releasing, and resuming
 

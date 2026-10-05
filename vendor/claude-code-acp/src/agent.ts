@@ -646,6 +646,33 @@ export function createClaudeCodeAgent(
             });
 
           permissionPromises.push(permPromise);
+        } else if (event.type === "compact_boundary") {
+          // Kaola fork (Issue #264): forward the native completed event
+          // with its metadata. This notification does not confirm a Skill
+          // reread, and does not add or replace a native compact hook.
+          connection.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: "compaction_update",
+              status: "completed",
+              ...(event.compactUuid
+                ? { compactionId: event.compactUuid }
+                : {}),
+              _meta: {
+                "claude-code/compact_boundary": {
+                  ...(event.compactTrigger
+                    ? { trigger: event.compactTrigger }
+                    : {}),
+                  ...(event.compactPreTokens !== undefined
+                    ? { preTokens: event.compactPreTokens }
+                    : {}),
+                  ...(event.compactPostTokens !== undefined
+                    ? { postTokens: event.compactPostTokens }
+                    : {}),
+                },
+              },
+            } as any,
+          });
         }
       };
 
