@@ -215,6 +215,7 @@ python_suites_b=(
   "test-issue-24-opencode-no-skip-all.py"
   "test-issue-64-receipt-bound.py"
   "test-issue-65-steer-race.py"
+  "test-project-compact-notice.py"
   "test-issue-65-host-contract.py"
   "test-issue-70-binding-fact.py"
   "test-issue-73-canonical-root.py"

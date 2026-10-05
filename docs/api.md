@@ -538,7 +538,9 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   under `attention` as `verdict-missing`. Each write records `writer`; a `host` write from a
   caller whose own record names no role reads `host:<session> (role unverified)`, because the
   writer flag is a trace, not an identity proof. An accepted task also needs `--cite`
-  `{commit, path}` (shape only; Git is not invoked). Holds, alerts, cancellations, and relays
+  with a required path. A commit is optional. When a commit is present,
+  `git cat-file -e commit:path` must succeed. When a commit is absent, the path
+  must be a file in the repository. Holds, alerts, cancellations, and relays
   still retire with `--evidence`. The tombstone keeps machine fields only. On migration a v1
   `pending` key with no v1 meaning is not copied and never acts as a v2 field of the same name.
 - Each Host business write raises the file's `host_revision` and stamps the record (or
