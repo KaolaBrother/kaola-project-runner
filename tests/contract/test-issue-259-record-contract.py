@@ -745,7 +745,7 @@ class RecordContract(unittest.TestCase):
             "watch": {"relay-1": {
                 "kind": "relay", "status": "pending", "summary": "owner constraint",
                 "detail": "pending relay text", "evidence": "owner msg 3", "next": "host adopts",
-                "report": {"old": True},
+                "report": {},
             }},
         }), encoding="utf-8")
         code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
@@ -814,6 +814,187 @@ class RecordContract(unittest.TestCase):
         self.assertNotIn("secret_grant", json.dumps(view["authorization"]))
         self.assertTrue(any(item["path"] == "authorization.secret_grant" for item in view["unknown"]))
         self.assertTrue(any(item["path"] == "journal" for item in view["unknown"]))
+
+    def test_delegator_authorization_shapes_agree_and_refuse_without_writes(self) -> None:
+        dispatch = load_module(DISPATCH, "kpr_repair_shapes")
+        base = {"schema": "kaola-delegator-heartbeat/1", "revision": 0,
+                "authorization": {"worker_pool": ["zcode/default"], "worker_pool_cap": 2,
+                                  "elite_cap": 3, "elite_grants": [
+                                      {"preset_id": "codex/default", "count": 1},
+                                      {"preset_id": "claude-code/default", "count": 1}]},
+                "watch": {"relay": {"kind": "relay", "status": "pending", "detail": "owner condition", "next": "deliver"}}}
+        cases = [({"worker_pool_cap": "owner condition"}, "authorization.worker_pool_cap", "Worker"),
+                 ({"elite_cap": True}, "authorization.elite_cap", "Elite"),
+                 ({"revoked": "codex/default"}, "authorization.revoked", "all"),
+                 ({"paused": {}}, "authorization.paused", "all"),
+                 ({"exclusions": [True]}, "authorization.exclusions", "all"),
+                 ({"elite_grants": [None]}, "authorization.elite_grants[0]", "Elite")]
+        for field, value in (("count", True), ("count", -1), ("switch_authorization", "only at owner boundary"),
+                             ("preset_ids", "codex/default")):
+            grant = {"preset_id": "codex/default", "count": 1, field: value}
+            cases.append(({"elite_grants": [grant, {"preset_id": "claude-code/default", "count": 1}]},
+                          f"authorization.elite_grants[0].{field}", "codex"))
+        for patch, path, scope in cases:
+            with self.subTest(path=path):
+                self.delegator.write_text(json.dumps(base), encoding="utf-8")
+                before = self.delegator.read_bytes()
+                code, out = run_dispatch(["delegator", "update", "--file", str(self.delegator),
+                                          "--writer", "delegator", "--source", "owner", "--expect-revision", "0",
+                                          "--set", json.dumps({"authorization": patch})])
+                self.assertEqual(code, 2, out)
+                self.assertEqual(self.delegator.read_bytes(), before)
+                self.assertIn(path, [error["path"] for error in out["blockers"]])
+                doc = json.loads(json.dumps(base))
+                doc["authorization"].update(patch)
+                self.delegator.write_text(json.dumps(doc), encoding="utf-8")
+                before = self.delegator.read_bytes()
+                code, migration = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+                self.assertEqual(code, 2, migration)
+                self.assertEqual(self.delegator.read_bytes(), before)
+                self.assertIn(path, [error["path"] for error in migration["blockers"]])
+                ceiling, error = dispatch.delegator_ceiling(str(self.repo))
+                if scope == "all":
+                    self.assertEqual(error["path"], path)
+                else:
+                    self.assertIsNone(error)
+                    preset = "zcode/default" if scope == "Worker" else "codex/default"
+                    self.assertEqual(dispatch.ceiling_block(ceiling, preset, "Worker" if scope == "Worker" else "Elite"),
+                                     "ceiling-unreadable")
+                    evidence = (ceiling["problem_evidence"].get(preset)
+                                or ceiling.get("worker_problem" if scope == "Worker" else "elite_problem"))
+                    self.assertEqual(evidence["path"], path)
+                    self.assertIn("allowed", evidence)
+                    self.assertIn("recovery", evidence)
+                    unaffected = ("zcode/default", "Worker") if scope == "Elite" else ("claude-code/default", "Elite")
+                    self.assertIsNone(dispatch.ceiling_block(ceiling, *unaffected))
+                self.assertEqual(json.loads(self.delegator.read_text())["watch"]["relay"]["detail"], "owner condition")
+
+    def test_bad_grant_keeps_inflight_duty_and_unrelated_dispatch(self) -> None:
+        self.init({"classes": CLASS_SENTENCES, "elite_cap": 3, "grants": [
+            {"id": "codex/default", "state": "granted", "count": 1},
+            {"id": "claude-code/default", "state": "granted", "count": 1}]})
+        prompt = "continue assigned work"
+        index = self.repo / "index.json"
+        index.write_text(json.dumps({"items": [{"item_id": "live", "preset": "codex/default", "session": "codex-live",
+                                                "status": "in-flight", "holder_instance_id": "own-holder",
+                                                "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+                                                "repo": str(self.repo)}]}), encoding="utf-8")
+        plan = self.repo / "plan.json"
+        plan.write_text(json.dumps({"repo": str(self.repo), "scope": "qa", "mutation": False, "items": [
+            {"item_id": "live", "preset": "codex/default", "session": "codex-live", "prompt": prompt},
+            {"item_id": "new", "preset": "claude-code/default", "session": "claude-new", "prompt": "inspect"}]}), encoding="utf-8")
+        live = self.repo / "live.json"
+        live.write_text('{"rows": []}', encoding="utf-8")
+        args = ["execute", "--plan", str(plan), "--authorization", str(self.file), "--platforms", str(PLATFORMS),
+                "--index", str(index), "--live", str(live), "--dry-run"]
+        # The untyped file reports migration without a new legacy transport gate.
+        self.delegator.write_text('{"authorization": {}}', encoding="utf-8")
+        code, old = run_dispatch(args)
+        self.assertEqual(code, 0, old)
+        self.assertEqual(old["observations"][0]["code"], "delegator-migration-needed")
+        self.delegator.write_text(json.dumps({"schema": "kaola-delegator-heartbeat/1", "authorization": {
+            "elite_grants": [{"preset_id": "codex/default", "count": 1, "switch_authorization": "owner condition"},
+                             {"preset_id": "claude-code/default", "count": 1}]}}), encoding="utf-8")
+        code, out = run_dispatch(args)
+        self.assertEqual(code, 0, out)
+        rows = {row["item_id"]: row for row in out["items"]}
+        self.assertEqual(rows["live"]["status"], "in-flight")
+        self.assertEqual(rows["live"]["holder_instance_id"], "own-holder")
+        self.assertEqual(rows["live"]["evidence"]["pending_duty"], "reclaim")
+        self.assertEqual(rows["new"]["reason"], "dry-run")
+        self.assertIn("argv", rows["new"])
+
+    def test_pending_legacy_text_requires_rehome_and_normal_update_removes_settled_bags(self) -> None:
+        for field in ("latest_owner_change", "latest", "report"):
+            with self.subTest(field=field):
+                doc = {"schema": "kaola-delegator-heartbeat/1", "revision": 0,
+                       "watch": {"r": {"kind": "relay", "status": "pending", "next": "deliver", field: "unique owner text"}}}
+                self.delegator.write_text(json.dumps(doc), encoding="utf-8")
+                before = self.delegator.read_bytes()
+                for args in (["migrate", "--write"], ["update", "--writer", "delegator", "--source", "owner",
+                                                     "--expect-revision", "0", "--set", '{"project":{"goal":"ship"}}']):
+                    code, out = run_dispatch(["delegator", *args, "--file", str(self.delegator)])
+                    self.assertEqual(code, 2, out)
+                    self.assertEqual(self.delegator.read_bytes(), before)
+                    self.assertIn(f"watch.r.{field}", [item["path"] for item in out["blockers"]])
+                code, out = run_dispatch(["delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+                                          "--source", "owner", "--expect-revision", "0", "--set",
+                                          json.dumps({"watch": {"r": {field: None, "detail": "unique owner text"}}})])
+                self.assertEqual(code, 0, out)
+                self.assertEqual(json.loads(self.delegator.read_text())["watch"]["r"]["detail"], "unique owner text")
+        self.delegator.write_text(json.dumps({"schema": "kaola-delegator-heartbeat/1", "revision": 0,
+                                               "watch": {"latest": {"status": "adopted", "report": "unique owner text"}}}),
+                                  encoding="utf-8")
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch(["delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+                                  "--source", "owner", "--expect-revision", "0", "--set", '{"project":{"goal":"ship"}}'])
+        self.assertEqual(code, 2, out)
+        self.assertEqual(self.delegator.read_bytes(), before)
+        doc = {"schema": "kaola-delegator-heartbeat/1", "revision": 0, "watch": {
+            "r": {"status": "adopted", "evidence": "host:tasks/current", "report": {"past": True}},
+            "latest": {"status": "settled", "report": "past text"}}}
+        self.delegator.write_text(json.dumps(doc), encoding="utf-8")
+        code, view = run_dispatch(["delegator", "view", "--file", str(self.delegator)])
+        self.assertNotIn("past text", json.dumps(view))
+        self.assertNotIn("latest", [item["id"] for item in view["watch"]])
+        code, out = run_dispatch(["delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+                                  "--source", "owner", "--expect-revision", "0", "--set", '{"project":{"goal":"ship"}}'])
+        self.assertEqual(code, 0, out)
+        doc = json.loads(self.delegator.read_text())
+        self.assertNotIn("report", doc["watch"]["r"])
+        self.assertNotIn("latest", doc["watch"])
+        self.assertEqual(doc["watch"]["r"]["status"], "adopted")
+        before = self.delegator.read_bytes()
+        for _ in range(2):
+            code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+            self.assertEqual(code, 0, out)
+            self.assertEqual(self.delegator.read_bytes(), before)
+
+    def test_delegator_open_nested_bags_refuse_without_writes(self) -> None:
+        for patch, path in [({"entry": {"report": {"past": True}}}, "entry.report"),
+                            ({"timer_owner": {"raw": []}}, "timer_owner.raw"),
+                            ({"source": {"history": "past"}}, "source"),
+                            ({"authorization": {"sideagent": {"report": "past"}}}, "authorization.sideagent.report")]:
+            with self.subTest(path=path):
+                self.delegator.write_text('{"schema":"kaola-delegator-heartbeat/1","revision":0}', encoding="utf-8")
+                before = self.delegator.read_bytes()
+                code, out = run_dispatch(["delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+                                          "--source", "owner", "--expect-revision", "0", "--set", json.dumps(patch)])
+                self.assertEqual(code, 2, out)
+                self.assertEqual(self.delegator.read_bytes(), before)
+                self.assertIn(path, [item["path"] for item in out["blockers"]])
+
+    def test_retire_mirrors_original_verdict_without_hiding_open_dispatch(self) -> None:
+        self.init()
+        index = self.repo / "index.json"
+        live = self.repo / "live.json"
+        live.write_text('{"rows": []}', encoding="utf-8")
+        rows = [{"item_id": "closed", "task_id": "done", "status": "returned", "acceptance": "pending"},
+                {"item_id": "open", "task_id": "done", "status": "in-flight", "acceptance": "accepted"},
+                {"item_id": "unknown", "task_id": "done", "status": "unknown"},
+                {"item_id": "unaccepted", "task_id": "missing", "status": "returned", "acceptance": "pending"},
+                {"item_id": "bad-acceptance", "task_id": "missing", "status": "returned", "acceptance": "unreadable"}]
+        index.write_text(json.dumps({"items": rows}), encoding="utf-8")
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "accepted",
+                               "--kind", "tasks", "--id", "done", "--set",
+                               json.dumps({"stage": "done", "goal": "deliver the accepted result",
+                                           "verdict": {"value": "accepted"}, "dispatch": ["closed"]}))
+        self.assertEqual(code, 0, out)
+        original = self.doc()["state"]["tasks"]["done"]
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "accepted",
+                               "--kind", "tasks", "--id", "done", "--expect-rev", "1", "--evidence", "stopped and accepted",
+                               "--cite", CITE, "--index", str(index), "--live", str(live))
+        self.assertEqual(code, 0, out)
+        after = {row["item_id"]: row for row in json.loads(index.read_text())["items"]}
+        self.assertEqual(after["closed"]["acceptance"], "accepted")
+        self.assertEqual(after["closed"]["acceptance_source"]["task_rev"], original["rev"])
+        self.assertEqual(after["closed"]["acceptance_source"]["host_revision"], original["host_revision"])
+        for row in rows[1:]:
+            self.assertEqual(after[row["item_id"]], row)
+        self.assertFalse(self.doc()["state"].get("retired"))
+        code, out = self.state("check", "--file", str(self.file), "--index", str(index))
+        missing = {row["id"] for row in out["problems"] if row["code"] == "dispatch-task-missing"}
+        self.assertEqual(missing, {"open", "unknown", "unaccepted", "bad-acceptance"})
 
     def test_capability_keeps_worker_pool_presets_and_stored_classes(self) -> None:
         self.init({

@@ -1,7 +1,7 @@
 # Changelog
 
 Every release section states whether running seats must restart. The operator
-test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
+test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
 ## Unreleased

@@ -507,8 +507,7 @@ apart from each row's `notify_target` (the start receipt's `heartbeat_host`).
 
 `state` maintains `<project>/.kaola/heartbeat-prompt.json` at schema
 `kaola-heartbeat-prompt/2`: a structured `state` (`project`, `authorization`, `sideagent`,
-`recovery`, `unverified`, keyed `tasks`/`holds`/`alerts`/`decisions`, capped `retired`
-tombstones), a file `revision`, an optional `carrier`, and a generated `body` that is the
+`recovery`, `unverified`, keyed `tasks`/`holds`/`alerts`/`decisions`), a file `revision`, an optional `carrier`, and a generated `body` that is the
 projected Host view. Old readers keep receiving a string `body`. Subcommands:
 
 - `init`, `update`, `retire` write under a directory lock with `--writer host|sideagent` and
@@ -520,7 +519,9 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   Host view until the Host writes that task. A caller other than the bound Sideagent session
   and holder is `binding-superseded` or `sideagent-unbound`; the bound Sideagent writing as
   `host` is `writer-mismatch`. `retire` needs `--evidence` and a done or cancelled task, a
-  settled decision, or any hold or alert; a later update of that id is `record-retired`. A
+  settled decision, or any hold or alert. The record leaves the file. An update
+  with its old revision is `record-retired`; a new sourced record uses the normal
+  creation path. No settled tombstone is stored. A
   task's `dispatch` items must be closed in `--index`, and every seat it names (`assignments`,
   `sessions`, `session`, including migrated ones with no index match) must show its session
   `stopped` in `--live` under the holder the task recorded. A string that is not a session
@@ -531,8 +532,9 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   is not proof of stop, and `check --live` reports it as `done-seat-open`. `retire --handoff
   TASK` instead moves the dispatch refs, `sessions` and `assignments` (each object marked
   `handed_from`, keeping its holder and evidence; the task's own `session` becomes such a
-  `sessions` object) to another current task, which then owns their stop; the tombstone
-  records `handed_to`, `seats` and `dispatch`. A task in `review` without
+  `sessions` object) to another current task, which then owns their stop.
+  The command result names `handed_to`, `seats` and `dispatch`; the file stores
+  no settled retirement row. A task in `review` without
   a verdict is under `attention` with a `content` digest, so each new result is a new wake; a
   task at `closeout` or `done` without an `accepted`, `partial` or `cancelled` verdict stays
   under `attention` as `verdict-missing`. Each write records `writer`; a `host` write from a
@@ -541,21 +543,25 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   with a required path. A commit is optional. When a commit is present,
   `git cat-file -e commit:path` must succeed. When a commit is absent, the path
   must be a file in the repository. Holds, alerts, cancellations, and relays
-  still retire with `--evidence`. The tombstone keeps machine fields only. On migration a v1
+  still retire with `--evidence`. The command result carries the cite.
+  Legacy retirement rows remain only while they name unresolved seats or dispatch. On migration a v1
   `pending` key with no v1 meaning is not copied and never acts as a v2 field of the same name.
 - Each Host business write raises the file's `host_revision` and stamps the record (or
-  section source, or tombstone) with it; tool and Sideagent writes do not raise it and stamp
+  section source) with it; a retirement returns that revision but stores no stone; tool and Sideagent writes do not raise it and stamp
   the caller's holder as `writer_holder`. Task `dispositions` maps item ids to `accepted`,
   `repair`, `cancelled`, `superseded` or `handed-off` (Host-owned); `update --kind tasks
   --index I` mirrors them onto the index `acceptance` with `acceptance_source`, and after a
   task `verdict` an item of that task with no disposition becomes `undecided` with an
   `acceptance_note`. The mirror result is `index_mirror`; a mirror error does not fail the
-  state write.
+  state write. `retire --index I` uses the original task verdict to settle
+  matching terminal rows. In-flight and unknown rows stay unresolved. `check`
+  recognizes settled index acceptance without a retired registry.
 - `checkpoint --writer sideagent --batch B --through-host-revision R --entries JSON
   [--events JSON]` (`--events` is accepted for older carriers) is written by a node-mode Sideagent (`sideagent.mode: "node"`) from inside
   its own session. Each entry names an `input` (a Host change id `host:<kind>/<id>@<rev>`,
-  `host:section/<name>@<rev>`, `host:retired/<kind>/<id>@<rev>`, or a worker event id) and
-  either `applied` (current records or `retired:<kind>/<id>` this node's holder wrote) or
+  `host:section/<name>@<rev>`, or a worker event id) and
+  either `applied` (current records this node's holder wrote, or
+  `retired:<kind>/<id>` for a removed input record, without a stored stone) or
   `retained` (a current record with `next`, `owner` or `wait`, or a Host `section/<name>`).
   The checkpoint lands in `maintenance.last_checkpoint`; `last_verified` moves only when every
   selected input settled; an entry for a batch change the Host rewrote after `R` is listed
@@ -614,6 +620,15 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
 - `delegator view|update|migrate --file .kaola/delegator-heartbeat.json` is the Delegator file tool.
   `project.user_language` is an optional string. It is the language for Delegator replies to the user.
   A missing key stores no language. The tool does not choose one.
+  Plan migration before `--write`. Blocked paths name the allowed form and
+  recovery; refusal leaves the bytes unchanged. Updates write the normalized
+  closed form. Pending text in legacy bags must move to typed watch duties
+  before those bags can leave. Views omit historical bags. One authorization
+  shape check serves writes, migration, and the dispatch ceiling. A malformed
+  grant with known preset ids refuses those ids; malformed pool or Elite caps
+  refuse their affected class. Owner conditions remain literal until mapped
+  from original authority. An untyped old file produces an actionable
+  migration observation from `execute`; legacy Host authorization continues.
   `adopted` needs a string `evidence` or `locator` that names the Host record or path. `sent` does not.
 - An accepted task `--cite` needs a retrievable path. A commit is optional. When a commit is present,
   `git cat-file -e commit:path` must succeed. Holds, alerts, cancellations, and relays use `--evidence` only.

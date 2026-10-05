@@ -1466,7 +1466,7 @@ class HolderRelay(HolderFixture):
         def review(round_no: int) -> list:
             task = {"stage": "review", "goal": "g", "evidence": [f"c{round_no}"],
                     "prior_verdict": {"value": "repair", "by": "host", "host_turn": f"review-{round_no - 1}"}}
-            return dispatch_module.task_attention("t", task)
+            return dispatch_module.RECORD.task_attention("t", task)
 
         self.live_sideagent()
         self.write_state(review(2))

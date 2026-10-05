@@ -45,7 +45,8 @@ that task without a disposition becomes `undecided` with a note, never left
 Each Host business write raises the file's `host_revision` and stamps the
 record. Tool and Sideagent writes raise nothing and stamp `writer_holder`. The
 Sideagent view lists `pending_host_changes`: `host:<kind>/<id>@<rev>`,
-`host:section/<name>@<rev>` and `host:retired/<kind>/<id>@<rev>`.
+`host:section/<name>@<rev>`. A settled record leaves the file. It creates
+no retirement input or stored tombstone.
 
 ## Node mode
 
@@ -72,8 +73,9 @@ $S checkpoint --writer sideagent --source B --batch B --through-host-revision R 
   --entries '[{"input":"<id>","applied":["tasks/t1"]},{"input":"<id>","retained":"tasks/t2"}]'
 ```
 
-`applied` names current records, or `retired:<kind>/<id>`, that this node's
-holder wrote. `retained` names a current record with `next`, `owner` or `wait`,
+`applied` names current records this node's holder wrote.
+For an input whose record was removed, `retired:<kind>/<id>` names that
+absence; it creates no stored retirement record. `retained` names a current record with `next`, `owner` or `wait`,
 or a Host `section/<name>`. Older or foreign evidence settles nothing. The
 result is `maintenance.last_checkpoint`; `last_verified` moves only when every
 input settled. `acked_host_revision` never passes an unsettled change; a later

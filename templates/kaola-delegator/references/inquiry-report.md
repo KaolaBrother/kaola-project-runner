@@ -15,6 +15,28 @@ $STATE timer --repo "$PROJECT" --target local|cloud --entry '<this Skill entry l
 A v1 file (`kaola-heartbeat-prompt/1`) has no Delegator view: audit its
 `body` as before and ask the Host for `state migrate` at a safe point.
 
+You own the Delegator file. Use its tool for reads and writes:
+
+```bash
+TOOL="<skills>/kaola-project-runner/scripts/kaola-dispatch.py"
+FILE="$PROJECT/.kaola/delegator-heartbeat.json"
+python3 "$TOOL" delegator view --file "$FILE"
+python3 "$TOOL" delegator migrate --file "$FILE"
+# After you reconcile all blocked grants and pending duties from their sources:
+python3 "$TOOL" delegator migrate --file "$FILE" --write
+python3 "$TOOL" delegator update --file "$FILE" --writer delegator --source '<source>' \
+  --expect-revision <current revision> --set '<typed current change>'
+```
+
+For an old untyped file, plan the upgrade before `--write`. Keep unresolved
+owner text in typed `watch` duties (`summary`, `detail`, `source`, `next`).
+Use exact preset ids and integer counts. Do not infer counts or switch
+permission from a condition. The plan gives each blocked path, its allowed
+form, and recovery. A refusal leaves the file unchanged. Normal updates write
+the same closed `kaola-delegator-heartbeat/1` form. `execute` reports an old
+schema as a migration observation. Existing Host work and legacy transport
+continue. Installation and live migration need their own authorization.
+
 ## User-facing writing
 
 Ordinary user questions, progress replies and inquiry reports use the recorded
@@ -59,7 +81,7 @@ report has these five parts, in order. An empty part says
 
 You confirm user decisions, relay changes to the Host, and recover the Host by
 the existing handoff rules. You do not record Host verdicts, choose workers or
-edit records. A missing Expert grant the Host asks for is a decision for the
+edit Host records. A missing Expert grant the Host asks for is a decision for the
 user; a busy granted seat is a capacity wait, not a request. If the Host and
 its Sideagent both fail, recover the Host first; the Host replaces its
 Sideagent. A request from the Host reaches you only at your next read; there

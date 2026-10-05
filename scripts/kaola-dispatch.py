@@ -105,7 +105,6 @@ WRITER_ROLES = ("host", "sideagent")
 HOST_OWNED_TASK_FIELDS = ("goal", "scope", "acceptance", "needs", "depends", "source", "keep_open",
                           "dispositions")
 DISPOSITIONS = ("accepted", "repair", "cancelled", "superseded", "handed-off")
-TOMBSTONE_CAP = 64
 CHECK_PREFIX = "chk:"
 USER_REQUIREMENT_MARKERS = ("<!-- KPR-USER-REQUIREMENTS-START -->",
                             "<!-- KPR-USER-REQUIREMENTS-END -->")
@@ -1068,16 +1067,14 @@ def binding_row(binding: dict[str, Any] | None, row: dict[str, Any]) -> bool:
     return not holder or row.get("holder_instance_id") == holder
 
 
-def _count_ok(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+_count_ok = RECORD.count_ok
 
 
-def delegator_ceiling(repo: str) -> tuple[dict[str, Any] | None, str | None]:
-    """Current Delegator grants, or no ceiling when that file is absent.
+def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Read current grants with the writer's shape check. Scope bad grants by id.
 
-    A file with another schema is not a Delegator record. Standalone Host
-    authorization stays in force. A matching schema with a bad body blocks
-    new dispatch and does not widen it.
+    An untyped old file keeps legacy Host authorization. Report its migration
+    duty without changing supported transport or already-running assignments.
     """
     path = Path(repo) / ".kaola" / "delegator-heartbeat.json"
     if not path.is_file():
@@ -1085,66 +1082,81 @@ def delegator_ceiling(repo: str) -> tuple[dict[str, Any] | None, str | None]:
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None, "ceiling-unreadable"
+        return None, RECORD.refusal(str(path), "readable JSON object",
+                                    "recover this file from its owner and original evidence; in-flight work stays current")
     if not isinstance(doc, dict) or doc.get("schema") != RECORD.DELEGATOR_SCHEMA:
+        if observations is not None:
+            observations.append({"code": "delegator-migration-needed", "path": str(path),
+                                 "allowed": RECORD.DELEGATOR_SCHEMA,
+                                 "recovery": "Delegator: run delegator view and migrate without --write; reconcile grants and pending duties before --write. Legacy Host authorization continues."})
         return None, None
     auth = doc.get("authorization")
     if not isinstance(auth, dict):
-        return None, "ceiling-incomplete"
+        return None, RECORD.refusal("authorization", "object of current grants and limits",
+                                    "Delegator: recover current authorization from its source; do not create grants")
+    errors = RECORD.delegator_authorization_blockers(auth)
+    problems: dict[str, str] = {}
+    evidence: dict[str, dict[str, Any]] = {}
+    bad_grants: set[int] = set()
+    worker_problem = elite_problem = None
+    for error in errors:
+        field = error["path"]
+        grant_match = re.match(r"authorization.elite_grants\[(\d+)\]", field)
+        if grant_match:
+            index = int(grant_match[1])
+            grant = auth["elite_grants"][index]
+            bad_grants.add(index)
+            ids = []
+            if isinstance(grant, dict):
+                if isinstance(grant.get("preset_id"), str) and grant["preset_id"]:
+                    ids.append(grant["preset_id"])
+                if isinstance(grant.get("preset_ids"), list):
+                    ids.extend(ident for ident in grant["preset_ids"] if isinstance(ident, str) and ident)
+            if ids:
+                for ident in ids:
+                    problems[ident] = "ceiling-unreadable"
+                    evidence.setdefault(ident, error)
+            else:
+                elite_problem = elite_problem or error
+        elif field in ("authorization.worker_pool", "authorization.worker_pool_cap"):
+            worker_problem = worker_problem or error
+        elif field in ("authorization.elite_cap", "authorization.elite_grants"):
+            elite_problem = elite_problem or error
+        elif field in ("authorization.revoked", "authorization.paused", "authorization.exclusions"):
+            return None, error
+        # Non-dispatch fields have no new authority. Their shape errors are
+        # current migration observations, not an unrelated dispatch stop.
+        elif observations is not None:
+            observations.append({"code": "delegator-field-invalid", **error})
     blocked: dict[str, str] = {}
     for key, reason in (("revoked", "revoked"), ("paused", "paused"), ("exclusions", "excluded")):
-        value = auth.get(key)
-        if value is None:
-            continue
-        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-            return None, "ceiling-unreadable"
-        for item in value:
-            blocked.setdefault(item, reason)
-    workers = auth.get("worker_pool")
-    if workers is None:
-        worker_ids = None
-    elif isinstance(workers, list) and all(isinstance(item, str) for item in workers):
-        worker_ids = set(workers)
-    else:
-        return None, "ceiling-unreadable"
-    elite: dict[str, int | None] | None = None
-    by_id: dict[str, dict[str, Any]] = {}
-    groups: list[dict[str, Any]] = []
-    problems: dict[str, str] = {}
-    problem_evidence: dict[str, dict[str, Any]] = {}
-    raw_elite = auth.get("elite_grants")
-    if raw_elite is not None:
-        if not isinstance(raw_elite, list):
-            return None, "ceiling-unreadable"
-        elite = {}
-        parsed = _parse_elite_grants(raw_elite)
-        if isinstance(parsed, str):
-            return None, parsed
-        elite, by_id, groups, problems, problem_evidence = parsed
-    cap = auth.get("elite_cap")
-    if cap is not None and not _count_ok(cap):
-        return None, "ceiling-unreadable"
-    pool_cap = auth.get("worker_pool_cap")
-    if pool_cap is not None and not _count_ok(pool_cap):
-        return None, "ceiling-unreadable"
+        for ident in auth.get(key) or []:
+            blocked.setdefault(ident, reason)
+    raw = auth.get("elite_grants")
+    elite = by_id = groups = None
+    if isinstance(raw, list):
+        elite, by_id, groups, semantic, semantic_evidence = _parse_elite_grants(
+            [grant for index, grant in enumerate(raw) if index not in bad_grants],
+            [index for index in range(len(raw)) if index not in bad_grants])
+        problems.update({ident: reason for ident, reason in semantic.items() if ident not in problems})
+        evidence.update({ident: item for ident, item in semantic_evidence.items() if ident not in evidence})
     return {
         "blocked": blocked,
-        "worker_ids": worker_ids,
+        "worker_ids": set(auth["worker_pool"]) if isinstance(auth.get("worker_pool"), list) and worker_problem is None else None,
         "elite_ids": elite,
-        "elite_cap": cap if _count_ok(cap) else None,
-        "worker_pool_cap": pool_cap if _count_ok(pool_cap) else None,
-        "by_id": by_id,
-        "groups": groups,
-        "problems": problems,
-        "problem_evidence": problem_evidence,
+        "elite_cap": auth.get("elite_cap") if _count_ok(auth.get("elite_cap")) else None,
+        "worker_pool_cap": auth.get("worker_pool_cap") if _count_ok(auth.get("worker_pool_cap")) else None,
+        "by_id": by_id or {}, "groups": groups or [],
+        "problems": problems, "problem_evidence": evidence,
+        "worker_problem": worker_problem, "elite_problem": elite_problem,
     }, None
 
 
-def _parse_elite_grants(raw_elite: list[Any]) -> tuple[
+def _parse_elite_grants(raw_elite: list[dict[str, Any]], source_indices: list[int]) -> tuple[
     dict[str, int | None], dict[str, dict[str, Any]], list[dict[str, Any]],
     dict[str, str], dict[str, dict[str, Any]],
-] | str:
-    """One grant entry with several presets and one count is one shared pool."""
+]:
+    """Interpret shape-checked grants; preserve literal owner conditions as affected duties."""
     elite: dict[str, int | None] = {}
     by_id: dict[str, dict[str, Any]] = {}
     groups: list[dict[str, Any]] = []
@@ -1162,52 +1174,30 @@ def _parse_elite_grants(raw_elite: list[Any]) -> tuple[
             "presets": list(ident_list),
             "source": ".kaola/delegator-heartbeat.json",
             "field": field,
+            "path": field,
+            "allowed": "typed grant supported by original owner authority",
+            "recovery": "Delegator and Host: reconcile this literal condition from its source for the affected grant; keep it current until resolved",
             "role": "host",
         }
         for ident in ident_list:
             problem(ident, "ceiling-incomplete", evidence)
 
-    for index, grant in enumerate(raw_elite):
-        if not isinstance(grant, dict):
-            return "ceiling-unreadable"
+    for index, grant in zip(source_indices, raw_elite):
         ids: list[str] = []
         if isinstance(grant.get("preset_id"), str):
             ids.append(grant["preset_id"])
         many = grant.get("preset_ids")
         if isinstance(many, list) and all(isinstance(item, str) for item in many):
             ids.extend(item for item in many if item not in ids)
-        elif many is not None:
-            return "ceiling-unreadable"
         count = grant.get("count")
-        if count is not None and not _count_ok(count):
-            return "ceiling-unreadable"
         stated = count if _count_ok(count) else None
         switch = grant.get("switch_authorization")
-        if switch is not None and not isinstance(switch, bool):
-            for ident in ids:
-                problem(ident, "ceiling-unreadable", {"switch_authorization": switch})
-            switch = None
         lifetime = grant.get("lifetime")
-        if lifetime is not None and not isinstance(lifetime, str):
-            for ident in ids:
-                problem(ident, "ceiling-unreadable")
-            lifetime = None
-        elif isinstance(lifetime, str) and lifetime not in GRANT_LIFETIMES:
+        if isinstance(lifetime, str) and lifetime not in GRANT_LIFETIMES:
             literal(ids, f"authorization.elite_grants[{index}].lifetime", "lifetime", lifetime)
             lifetime = None
         special = grant.get("special_requirements")
-        if special is not None and not isinstance(special, (str, dict)):
-            for ident in ids:
-                problem(ident, "ceiling-unreadable")
-            special = None
-        elif isinstance(special, str):
-            literal(ids, f"authorization.elite_grants[{index}].special_requirements",
-                    "special_requirements", special)
-            special = None
-        elif isinstance(special, dict) and (
-            set(special) - {"effort", "model", "task_scope"}
-            or any(value is not None and not isinstance(value, str) for value in special.values())
-        ):
+        if isinstance(special, str):
             literal(ids, f"authorization.elite_grants[{index}].special_requirements",
                     "special_requirements", special)
             special = None
@@ -1268,6 +1258,9 @@ def worker_pool_occupancy(used_count: dict[str, int], unnamed: set[str],
 
 
 def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str) -> str | None:
+    field_problem = ceiling.get("worker_problem" if class_name == "Worker" else "elite_problem")
+    if field_problem:
+        return "ceiling-unreadable"
     if preset in (ceiling.get("problems") or {}):
         return ceiling["problems"][preset]
     if preset in ceiling["blocked"]:
@@ -1439,7 +1432,8 @@ def command_execute(args: argparse.Namespace) -> int:
         return fail("invalid-input", str(exc))
     holds = preset_holds(lifecycle if lifecycle is not None else auth_doc)
     known_tasks = state_task_ids(lifecycle)
-    ceiling, ceiling_error = delegator_ceiling(repo)
+    observations: list[dict[str, Any]] = []
+    ceiling, ceiling_error = delegator_ceiling(repo, observations)
     if ceiling is not None:
         if _count_ok(ceiling.get("elite_cap")):
             elite_cap = ceiling["elite_cap"] if elite_cap is None else min(elite_cap, ceiling["elite_cap"])
@@ -1493,7 +1487,8 @@ def command_execute(args: argparse.Namespace) -> int:
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", "preset-unresolved"))
             continue
         if ceiling_error:
-            blocked.append(blank_item(item["item_id"], preset, session, "not-run", ceiling_error))
+            blocked.append(blank_item(item["item_id"], preset, session, "not-run", "ceiling-unreadable",
+                                      {"evidence": ceiling_error}))
             continue
         candidate = by_candidate.get(preset)
         if candidate is None:
@@ -1515,7 +1510,8 @@ def command_execute(args: argparse.Namespace) -> int:
                 reason = "state-unreadable"
             elif withheld_reason.get(preset) in EXPERT_WITHHELD_REASONS:
                 reason = withheld_reason[preset]
-            detail = (ceiling or {}).get("problem_evidence", {}).get(preset) if ceiling else None
+            detail = ((ceiling or {}).get("problem_evidence", {}).get(preset)
+                      or (ceiling or {}).get("worker_problem" if row["class"] == "Worker" else "elite_problem"))
             extra = {"evidence": detail} if isinstance(detail, dict) else None
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", reason, extra))
             continue
@@ -1836,6 +1832,8 @@ def command_execute(args: argparse.Namespace) -> int:
         "effective_cap": effective_cap,
         "items": [],
     }
+    if observations:
+        index["observations"] = observations
     dispatcher = caller_dispatcher()
     if dispatcher is not None:
         index["dispatcher"] = dispatcher
@@ -3434,42 +3432,6 @@ def short(value: Any, limit: int = 240) -> Any:
     return value
 
 
-# Write metadata and alert coalescing change on every repeat without
-# changing what the Host is asked to judge.
-DIGEST_SKIP = (*RECORD_META, "count", "last_seen", "ack")
-
-
-def judgment_digest(record: dict[str, Any]) -> str:
-    """Short digest of what a Host judgment record asks, so the same id with a
-    changed question, options, evidence or owner is new attention."""
-    text = json.dumps({key: value for key, value in record.items() if key not in DIGEST_SKIP},
-                      ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-
-
-def task_attention(task_id: str, task: dict[str, Any]) -> list[dict[str, Any]]:
-    found = []
-    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else None
-    if task.get("stage") == "review" and not verdict:
-        prior = task.get("prior_verdict") if isinstance(task.get("prior_verdict"), dict) else None
-        # A later repair round repeats the same prior value; its new result,
-        # evidence and prior Host turn are what make it a new judgment.
-        found.append({"kind": "tasks", "id": task_id, "why": "awaiting-verdict",
-                      **({"prior_verdict": prior.get("value")} if prior else {}),
-                      "content": judgment_digest(task)})
-    elif (task.get("stage") in ("closeout", "done")
-          and (verdict or {}).get("value") not in ("accepted", "partial", "cancelled")):
-        # Moving past review is a stage change, not a judgment: the Host is
-        # still asked until it records one.
-        found.append({"kind": "tasks", "id": task_id, "why": "verdict-missing", "stage": task["stage"],
-                      "content": judgment_digest(task)})
-    if isinstance(task.get("transcribed"), dict):
-        found.append({"kind": "tasks", "id": task_id, "why": "transcribed-check",
-                      "host_turn": task["transcribed"].get("host_turn"),
-                      "fields": task["transcribed"].get("fields")})
-    return found
-
-
 def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
     """Projected Host view from the shared contract, field by field."""
     return RECORD.host_view(doc, path)
@@ -3711,13 +3673,6 @@ def caller_role(caller: dict[str, str] | None) -> str | None:
         return None
     role = record.get("session_role")
     return role if isinstance(role, str) and role else None
-
-
-def observed_after(observed: Any, retired: Any) -> bool:
-    try:
-        return datetime.fromisoformat(str(observed)) > datetime.fromisoformat(str(retired))
-    except (TypeError, ValueError):
-        return False
 
 
 def validate_record(kind: str, record: dict[str, Any]) -> str | None:
@@ -4164,6 +4119,10 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
              **({"cite": cite} if cite else {}),
              **({"handed_to": handoff, **handed} if handoff else {})}
     stamp_writer(doc, stone, args, caller_dispatcher())
+    if kind == "tasks":
+        # Keep the original Host verdict for this operation's index mirror.
+        # This is transient command data, never a retired registry.
+        args._retired_task = json.loads(json.dumps(current))
     del state[kind][record_id]
     # The command result carries the cite. The file does not keep a settled row.
     # Seats handed to another task stay on that task. A stone stays only when
@@ -4224,7 +4183,7 @@ def mirror_dispositions(args: argparse.Namespace, doc: dict[str, Any], path: Pat
     index_path = getattr(args, "index", None)
     if not index_path or getattr(args, "kind", None) != "tasks" or getattr(args, "command", "") != "state":
         return None
-    task = doc["state"].get("tasks", {}).get(args.id)
+    task = getattr(args, "_retired_task", None) or doc["state"].get("tasks", {}).get(args.id)
     if not isinstance(task, dict):
         return None
     try:
@@ -4246,6 +4205,13 @@ def mirror_task(args: argparse.Namespace, task: dict[str, Any], path: Path, inde
             if not isinstance(row, dict) or not (row.get("item_id") in refs or row.get("task_id") == args.id):
                 continue
             value = dispositions.get(row.get("item_id"))
+            if getattr(args, "_retired_task", None) is not None:
+                # An in-flight, unknown, or unreadable status is still a duty,
+                # including after a handoff. Never settle it from retirement.
+                if row.get("status") not in ("returned", "failed", "not-run"):
+                    continue
+                if value is None and verdict in ("accepted", "cancelled"):
+                    value = verdict
             if value is None and verdict is not None and row.get("acceptance") in (None, "pending"):
                 value = "undecided"
                 row["acceptance_note"] = (f"task verdict {verdict} recorded without a disposition "
@@ -4644,16 +4610,18 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
         if isinstance(task.get("transcribed"), dict):
             note("transcription-unechoed", "watch", "a Sideagent-recorded Host decision waits for the "
                  "Host's next view", "tasks", ident)
-    retired = {(stone.get("kind"), stone.get("id")) for stone in state.get("retired") or []}
     if index is not None:
         rows_by_id = {row.get("item_id"): row for row in index.get("items") or [] if isinstance(row, dict)}
         for item_id, row in rows_by_id.items():
             if row.get("status") not in ("in-flight", "returned", "unknown"):
                 continue
+            if (row.get("status") == "returned"
+                    and row.get("acceptance") in ("accepted", "cancelled", "superseded", "handed-off")):
+                continue
             task_id = row.get("task_id")
             if not task_id:
                 note("dispatch-unassociated", "warn", f"index item {item_id} names no task", "index", item_id)
-            elif task_id not in (state.get("tasks") or {}) and ("tasks", task_id) not in retired:
+            elif task_id not in (state.get("tasks") or {}):
                 note("dispatch-task-missing", "warn", f"index item {item_id} names unknown task {task_id}",
                      "index", item_id)
         for ident, task in (state.get("tasks") or {}).items():
@@ -5216,11 +5184,11 @@ def command_delegator_update(args: argparse.Namespace) -> int:
             merged["schema"] = RECORD.DELEGATOR_SCHEMA
             merged["revision"] = actual + 1
             merged["updated_at"] = observed_at()
-            blockers, _dropped = RECORD.delegator_blockers(merged)
-            if blockers:
+            normalized, blockers, _dropped = RECORD.delegator_migrated(merged)
+            if blockers or normalized is None:
                 return emit({"result": "refused", "reason": "invalid-input", "blockers": blockers,
                              "detail": blockers[0]["detail"]}, 2)
-            atomic_write(path, json.dumps(merged, ensure_ascii=False, sort_keys=True, indent=1) + "\n")
+            atomic_write(path, json.dumps(normalized, ensure_ascii=False, sort_keys=True, indent=1) + "\n")
     except StateRefusal as refusal:
         return emit(refusal.payload, 2)
     except (OSError, ValueError) as exc:
