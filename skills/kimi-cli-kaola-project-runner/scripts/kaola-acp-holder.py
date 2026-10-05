@@ -246,7 +246,7 @@ HEARTBEAT_PROMPT_MAX_BYTES = 65536
 HEARTBEAT_STATE_FILE_MAX_BYTES = 1048576
 HEARTBEAT_STATE_SCHEMA = "kaola-heartbeat-prompt/2"
 HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatched/1", "steer-after-turn/1",
-                   "sideagent-node/1")
+                   "sideagent-node/1", "project-compact-notice/1")
 # Issue #255 node mode: the Host carrier starts one fresh maintenance node per
 # batch from the binding's exact Runner argv (never a shell string), and
 # exact-stops it after its turn end. Bounds on that one start and stop only.
@@ -1856,6 +1856,8 @@ class Holder:
         # inflight flag is a boolean, so an occurrence-less signal (Devin, Grok,
         # Kimi) still holds the slot; the id is evidence only.
         self.compact_reload = None
+        # Opt-in project PreCompact notice; completion remains unconfirmed.
+        self.compact_notice_pending: dict[str, Any] | None = None
         self.compact_reload_inflight = False
         self.compact_reload_inflight_id: str | None = None
         # Issue #264: the exact installed Skill file that this holder belongs to
@@ -2525,6 +2527,11 @@ class Holder:
             "undelivered_worker_events": self._undelivered_wake_facts(),
             "activity_hint": activity,
             "last_prompt": self.last_prompt,
+            "turn_request_id": turn.get("request_id"),
+            "compact_project_notice": (None if self.compact_notice_pending is None else {
+                "prior_turn_request_id": self.compact_notice_pending["prior_turn_request_id"],
+                "completion": "unconfirmed",
+                "write_unknown": self.compact_notice_pending["write_unknown"]}),
             "turn_active": turn["active"],
             "turn_outcome": turn.get("outcome"),
             "stop_reason": turn.get("stop_reason"),
@@ -2643,6 +2650,14 @@ class Holder:
                         "error": {"code": "steer-turn-changed",
                                   "message": "another turn or session replaced the targeted prior "
                                              "turn; nothing was written"}}
+            if params.get("require_successful_prior_turn") and (
+                    self.turn.get("outcome") != "turn_completed"
+                    or self.turn.get("stop_reason") != "end_turn"
+                    or self.turn.get("error")):
+                return {"outcome": "prior_turn_unsuccessful", "mutation_status": "not_started",
+                        "mutation_performed": False,
+                        "error": {"code": "prior-turn-unsuccessful",
+                                  "message": "the targeted turn did not end successfully"}}
             if self.turn["active"]:
                 return {"error": {"code": "prompt-in-progress",
                                   "message": "a prompt turn is already active"},
@@ -3762,6 +3777,121 @@ class Holder:
 
     # -- Issue #264: post-compaction Skill reread ---------------------------
 
+    def op_compact_notice(self, params: dict[str, Any]) -> dict[str, Any]:
+        """KPR local hook operation, never a vendor ACP method.
+
+        The installed Droid and Cursor ACP paths put the ACP id in the
+        native hook input. Only an exact project precompact hook can stage
+        this conservative notice. It is not a completed-compaction signal.
+        """
+        def refuse(reason: str) -> dict[str, Any]:
+            return {"notice_pending": False, "completion": "unconfirmed",
+                    "mutation_performed": False, "reason": reason}
+
+        event = {"droid": "PreCompact", "cursor-cli": "preCompact"}.get(self.args.platform)
+        if event is None or params.get("hook_event_name") != event:
+            return refuse("unsupported-project-hook")
+        repo = str(Path(self.args.repo).resolve())
+        if self.args.platform == "cursor-cli":
+            data_root = Path(os.environ.get("CURSOR_DATA_DIR") or Path.home() / ".cursor")
+            key = re.sub(r"[^a-zA-Z0-9]+", "-", repo).strip("-")
+            hook_root = str(data_root / "projects" / key)
+            root_matches = params.get("hook_workspace_roots") == [hook_root]
+        else:
+            root_matches = params.get("hook_cwd") == repo
+        paths = params.get("task_skill_paths")
+        platform_path = params.get("platform_skill_path")
+        if (not isinstance(paths, list) or not paths or not isinstance(platform_path, str)
+                or any(not isinstance(p, str) or not Path(p).is_absolute()
+                       or not Path(p).is_file() for p in [platform_path, *paths])):
+            return refuse("full-skill-paths-required")
+        module = compact_module()
+        if module is None:
+            return refuse("no-compact-module")
+        with self.worker_events_lock:
+            with self.lock:
+                if (self.state != "ready" or self.stop_requested
+                        or self.agent.proc is None or self.agent.exited.is_set()):
+                    return refuse("holder-not-ready")
+                if (params.get("expected_holder_instance_id") != self.holder_instance_id
+                        or not self.acp_session_id
+                        or params.get("expected_acp_session_id") != self.acp_session_id
+                        or params.get("hook_session_id") != self.acp_session_id
+                        or params.get("project_root") != repo or not root_matches):
+                    return refuse("hook-target-mismatch")
+                prior = self.turn.get("request_id")
+                if (not self.turn["active"] or prior is None
+                        or params.get("expected_prior_turn_request_id") != prior):
+                    return refuse("active-hook-turn-required")
+                pending = self.compact_notice_pending
+                if pending is not None:
+                    # One current obligation. Never replace unknown admission
+                    # or failed original work with a new hook's target.
+                    same = pending["prior_turn_request_id"] == prior
+                    return {"notice_pending": True, "completion": "unconfirmed",
+                            "mutation_performed": False,
+                            "new_notice_accepted": same,
+                            "reason": "coalesced" if same else "prior-notice-unresolved"}
+                if self.compact_reload is None:
+                    self.compact_reload = module.CompactReloadTracker()
+                self.compact_reload.observe(module.CompactSignal(
+                    "project-precompact-notice", self.acp_session_id, None))
+                self.compact_notice_pending = {
+                    "prior_turn_request_id": prior,
+                    "holder_instance_id": self.holder_instance_id,
+                    "acp_session_id": self.acp_session_id,
+                    "platform_skill_path": platform_path,
+                    "task_skill_paths": list(paths), "write_unknown": False}
+        self.events.append({"kind": "compact_project_notice", "completion": "unconfirmed",
+                            "session_id": self.acp_session_id, "turn_request_id": prior})
+        return {"notice_pending": True, "notice_recorded": True,
+                "completion": "unconfirmed", "acp_mutation_performed": False,
+                "prior_turn_request_id": prior}
+
+    def _attempt_compact_notice(self, notice: dict[str, Any]) -> dict[str, Any]:
+        if notice["write_unknown"]:
+            return {"delivered": False, "reason": "notice-write-unknown"}
+        with self.lock:
+            if (self.turn["active"] or self.turn.get("request_id") != notice["prior_turn_request_id"]
+                    or self.turn.get("outcome") != "turn_completed"
+                    or self.turn.get("stop_reason") != "end_turn" or self.turn.get("error")):
+                return {"delivered": False, "reason": "notice-original-work-not-successful"}
+        files = [notice["platform_skill_path"], *notice["task_skill_paths"]]
+        text = ("A native PreCompact notice occurred during the prior work. "
+                "Compaction completion is unconfirmed. Before you answer, call the available "
+                "file read tool and read the full current installed applicable Skill files: "
+                + json.dumps(files) + ". Do not use remembered or cached Skill content. "
+                "Then continue the current task from its durable records. "
+                "Do not restart completed work.")
+        if self.session_role == "host":
+            if not self.host_entry:
+                return {"delivered": False, "reason": "notice-host-entry-absent"}
+            text = self.host_entry + "\n" + text
+        try:
+            prompt = self.op_prompt({"text": text, "wait": False,
+                                     "expected_holder_instance_id": notice["holder_instance_id"],
+                                     "expected_acp_session_id": notice["acp_session_id"],
+                                     "expected_prior_turn_request_id": notice["prior_turn_request_id"],
+                                     "require_successful_prior_turn": True})
+        except Exception:
+            notice["write_unknown"] = True
+            return {"delivered": False, "reason": "notice-write-unknown"}
+        if (prompt.get("error") or prompt.get("outcome") != "in_progress"
+                or prompt.get("mutation_performed") is not True):
+            if (prompt.get("mutation_performed") is not False
+                    or (prompt.get("error") or {}).get("code") == "acp-write-failed"):
+                # A partial stdio write or lost admission response cannot be
+                # replayed from a later boundary.
+                notice["write_unknown"] = True
+            return {"delivered": False, "reason": "notice-admission-unconfirmed",
+                    "receipt": prompt}
+        self.events.append({"kind": "compact_project_notice_admitted",
+                            "completion": "unconfirmed", "read_use": "unverified",
+                            "original_turn_request_id": notice["prior_turn_request_id"],
+                            "turn_request_id": prompt.get("turn_request_id"),
+                            "prompt_fingerprint": prompt.get("prompt_fingerprint")})
+        return {"delivered": True, "prompt_fingerprint": prompt.get("prompt_fingerprint")}
+
     def _observe_compact_signal(self, message: dict[str, Any]) -> None:
         """Recognize one completed compaction and owe one installed-Skill reread.
 
@@ -3831,6 +3961,7 @@ class Holder:
             occurrence = tracker.pending_id
             pending_seq = tracker.pending_seq
             self.compact_reload_inflight_id = occurrence
+            notice = getattr(self, "compact_notice_pending", None)
         result: dict[str, Any] = {"delivered": False, "reason": "not-attempted"}
         settled = False
         try:
@@ -3844,6 +3975,9 @@ class Holder:
                     # The sequence keeps a newer occurrence-less obligation
                     # pending even though its id is also None.
                     tracker.mark_delivered_occurrence(occurrence, pending_seq)
+                    if (result.get("delivered")
+                            and getattr(self, "compact_notice_pending", None) is notice):
+                        self.compact_notice_pending = None
                 self.compact_reload_inflight = False
                 self.compact_reload_inflight_id = None
         return result
@@ -3857,6 +3991,9 @@ class Holder:
             self.events.append({"kind": "compact_reload_native_owned",
                                 "platform": self.args.platform})
             return {"delivered": False, "reason": "native-route-owned"}
+        notice = getattr(self, "compact_notice_pending", None)
+        if notice is not None:
+            return self._attempt_compact_notice(notice)
         if self.turn["active"]:
             return {"delivered": False, "reason": "prompt-in-progress"}
         if self.stop_requested or self.agent.proc is None or self.agent.exited.is_set():
@@ -5443,6 +5580,8 @@ class Holder:
         params = message.get("params") or {}
         if op == "state":
             return self.op_state()
+        if op == "compact_notice":
+            return self.op_compact_notice(params)
         if op == "prompt":
             return self.op_prompt(params)
         if op == "steer":

@@ -120,6 +120,7 @@ python_suites_all=(
   "test-issue-263-steer-adaptation.py"
   "test-issue-65-steering.py"
   "test-issue-65-steer-race.py"
+  "test-project-compact-notice.py"
   "test-issue-65-host-contract.py"
   "test-issue-70-binding-fact.py"
   "test-issue-76-permission-wake.py"

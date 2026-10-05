@@ -756,6 +756,51 @@ events have no occurrence id. One pending reminder is kept in memory, with no hi
 It is lost on stop. Running holders keep their loaded code; older holders need a later
 Agent-selected start to use the new behavior. No session restart is performed by this mechanism.
 
+
+### Opt-in Droid/Cursor project precompact notice
+
+`scripts/kaola-project-compact-notice.py --binding ABS_FILE` is an optional native project
+hook command. It reads the native hook input on stdin. It sends a KPR `compact_notice`
+operation to the existing holder socket. This is a KPR local extension, not a vendor ACP
+method. Project configuration and the binding are Agent-selected; no hook is installed by
+start, render or the helper. Default transport and native Codex recovery stay unchanged.
+
+For Droid 0.233.0, use only the supported project `PreCompact` command hook. The native
+session id equals the ACP id. A standalone root uses `ROOT/.factory/hooks.json`; a Git root
+can change this lookup. Do not set `FACTORY_HOME_OVERRIDE`, move auth or bypass trust. Stop
+can follow errors and is not a success signal. For Cursor 2026.09.28-64d2043, use project
+`preCompact` under the ACP data project `G/.cursor/hooks.json`. Its hook resource puts the
+ACP id in `conversation_id` and normalizes `session_id`. Bind the exact `workspace_roots:[G]`.
+General `CURSOR_CONFIG_DIR` does not move native user hooks; effective native policy still applies.
+
+The binding names `platform`, `socket_path`, `holder_instance_id`, `acp_session_id`,
+`project_root`, `platform_skill_path` and nonempty `task_skill_paths`. Cursor also needs
+`hook_project_root`. All Skill files must exist at full absolute paths. The owner must select
+current installed applicable files; file existence alone does not prove applicability or reading.
+The helper forwards only selected identity fields. It rejects conflicting native session ids,
+foreign roots, missing identities and unsupported events. It reads the holder's current request
+id, then the holder checks it under its existing lock. No shared unknown-session fallback is used.
+
+A valid notice stages one obligation in the existing compact tracker during the exact active
+request. Duplicate notices for that request coalesce. It does not call compaction completed or
+send another prompt while the original request is active. The original request must end with
+`turn_completed`, `end_turn` and no observed error. Standard prompt admission checks the same
+holder, session, prior request and successful outcome under its normal admission lock. An
+intervening request, refusal, failure, cancel, stop or dead agent leaves the obligation pending.
+A newer request's notice cannot replace an unresolved prior notice. The owner reconciles such a
+result from the existing record/events; it is not a new notice admission.
+
+The reminder says completion is unconfirmed, requires full current applicable installed Skill
+reads through the file read tool, then task continuation. Hosts retain their measured entry;
+workers receive no Host entry. `compact_project_notice` records the notice;
+`compact_project_notice_admitted` records a later standard ACP prompt admission with read/use
+unverified. `state.compact_project_notice` exposes a pending target and unknown-write fact.
+Unknown/partial writes are retained without automatic replay. The hook client does not retry a
+lost socket reply and does not block native compaction. Reconcile original effects before any
+retry. One in-memory obligation is lost on holder stop; existing receipts remain the recovery
+source. This route adds no file watcher, polling service, scheduler, history or exactly-once gate.
+Actual hook invocation, full file reads and resumed-task results require separate live evidence.
+
 ## Observation schema
 
 `observe` returns evidence for the controlling agent. ACP `observe`/`status` receipts are bounded by `bound_state_receipt`
