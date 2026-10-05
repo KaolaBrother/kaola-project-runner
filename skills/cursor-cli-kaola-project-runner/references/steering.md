@@ -34,9 +34,10 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
 `cancel-confirmed` (the composite saw the old turn stop), or `none`.
-`native-queued` means Grok acknowledged an interject request. `native-admitted`
-means OpenCode admitted steer input. Neither confirms model adoption. Grok
-`queued` does not mean the holder's separate follow-up-queue outcome.
+`native-queued` means the native entry acknowledged a request. `native-admitted`
+means the native entry admitted input. Neither confirms model adoption. A native
+request acknowledgment does not mean the holder's separate follow-up-queue outcome.
+The platform summary above states the applicable mapping.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is
