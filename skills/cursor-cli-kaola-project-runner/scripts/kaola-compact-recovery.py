@@ -330,11 +330,12 @@ class CompactReloadTracker:
 
     The flag coalesces several completed signals into at most one pending
     reload. The scalar suppresses an adjacent duplicate that carries the same
-    occurrence id. It does not keep a set and does not keep history. A signal
-    without an occurrence id never suppresses a later real completion.
+    occurrence id, including a duplicate of the current pending occurrence
+    during admission. It does not keep a set and does not keep history. A
+    signal without an occurrence id never suppresses a later real completion.
     ``pending_seq`` is a bounded counter that names the current pending
-    obligation. It lets settlement keep a newer occurrence-less obligation
-    instead of matching two ``None`` ids.
+    obligation. It lets settlement keep a genuinely newer or occurrence-less
+    obligation instead of matching two ``None`` ids.
     """
 
     def __init__(self) -> None:
@@ -348,13 +349,21 @@ class CompactReloadTracker:
 
         A duplicate occurrence returns False while a reload is still pending
         or already delivered. A new occurrence or an unknown occurrence
-        returns True and advances ``pending_seq``.
+        returns True and advances ``pending_seq``. An occurrence-less signal
+        never coalesces, because it has no identity.
         """
         if signal is None:
             return False
         occurrence = signal.occurrence_id
-        if occurrence is not None and occurrence == self.last_delivered_id:
-            return False
+        if occurrence is not None:
+            if occurrence == self.last_delivered_id:
+                return False
+            if self.pending and occurrence == self.pending_id:
+                # The current pending obligation is already this exact
+                # occurrence. Coalesce it instead of advancing the sequence,
+                # or settlement would keep a same-id duplicate and deliver it
+                # a second time.
+                return False
         self.pending = True
         self.pending_id = occurrence
         self.pending_seq += 1

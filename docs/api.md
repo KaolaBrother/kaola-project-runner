@@ -749,7 +749,8 @@ automatic recovery for every runtime.
 
 `compact_reload_detected` records recognition. `compact_reload_delivered` records admission of
 the reminder prompt, not a full Skill read or task use. Confirm those actions from the actual
-model output and tool evidence. A boolean guards admission. Settlement and release of that
+model output and tool evidence. A duplicate of the current pending occurrence id coalesces
+without advancing its sequence. A boolean guards admission. Settlement and release of that
 guard share the existing lock; the pending sequence preserves a newer signal even when both
 events have no occurrence id. One pending reminder is kept in memory, with no history or queue.
 It is lost on stop. Running holders keep their loaded code; older holders need a later
