@@ -373,6 +373,20 @@ def read_heartbeat_file(source: Path) -> tuple[dict[str, Any] | None, str | None
         return None, None, f"not valid JSON: {exc}"[:HEARTBEAT_DEFECT_CHARS]
     if not isinstance(data, dict):
         return None, None, f'JSON {type(data).__name__}, not an object with a "body" field'
+    if (data.get("schema") == HEARTBEAT_STATE_SCHEMA and isinstance(data.get("state"), dict)):
+        record = _RECORD if _RECORD not in (None, False) else None
+        if record is None or not hasattr(record, "injection_body"):
+            return data, None, (
+                "record contract is not loaded; the stored body was not injected"
+            )[:HEARTBEAT_DEFECT_CHARS]
+        projected, defect = record.injection_body(data)
+        if defect:
+            return data, None, defect[:HEARTBEAT_DEFECT_CHARS]
+        if isinstance(projected, str) and projected:
+            return data, projected, None
+        return data, None, (
+            "projected Host view is empty; the stored body was not injected"
+        )[:HEARTBEAT_DEFECT_CHARS]
     if "body" not in data:
         present = ", ".join(sorted(key for key in data if isinstance(key, str))[:8])
         return data, None, (f'no "body" field (top-level fields present: {present or "none"})'
@@ -1056,6 +1070,7 @@ VIEW_BYTES = 256 * 1024
 TIMELINE_MAX = 200
 VIEW_SCHEMA = "kaola-acp-view/1"
 _QUOTA = None
+_RECORD = None
 
 
 def quota_module():
@@ -1094,11 +1109,13 @@ def quota_module():
 # directory with ``os.replace``; a later import would execute the replacement
 # and mix two builds in one holder, so the bytes are pinned at startup.
 QUOTA_MODULE = "kaola-quota.py"
+RECORD_MODULE = "kaola-record-contract.py"
 RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
     "kaola-zcode-acp.py",
     "kaola-acp.py",
     "kaola-quota.py",
+    "kaola-record-contract.py",
     "kaola-tmux.sh",
     "platform.yaml",
 )
@@ -1169,9 +1186,11 @@ def load_sibling_modules() -> None:
     after ``install-local`` has swapped the directory. ``runner_build`` is the
     holder file this process executes, not the per-call CLI.
     """
-    global _QUOTA, _RUNNER_IDENTITY
+    global _QUOTA, _RECORD, _RUNNER_IDENTITY
     module = _import_sibling(QUOTA_MODULE)
     _QUOTA = module if module is not None else False
+    record = _import_sibling(RECORD_MODULE)
+    _RECORD = record if record is not None else False
     paths = capture_script_paths()
     primary = paths.get("kaola-acp-holder.py") or {}
     digest = primary.get("sha256") or ""

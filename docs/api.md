@@ -523,7 +523,9 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   settled decision, or any hold or alert; a later update of that id is `record-retired`. A
   task's `dispatch` items must be closed in `--index`, and every seat it names (`assignments`,
   `sessions`, `session`, including migrated ones with no index match) must show its session
-  `stopped` in `--live` under the holder the task recorded (`holder_instance_id` on an
+  `stopped` in `--live` under the holder the task recorded. A string that is not a session
+  name, such as a migrated note, stays on the task and is not a seat, so it does not require
+  `--live`. A session name uses the recorded holder (`holder_instance_id` on an
   assignment, on a `sessions` object, or beside the task's own `session`); a missing row, a
   live or stopped row of a different holder, or two different recorded holders for one seat
   is not proof of stop, and `check --live` reports it as `done-seat-open`. `retire --handoff
@@ -535,8 +537,10 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   task at `closeout` or `done` without an `accepted`, `partial` or `cancelled` verdict stays
   under `attention` as `verdict-missing`. Each write records `writer`; a `host` write from a
   caller whose own record names no role reads `host:<session> (role unverified)`, because the
-  writer flag is a trace, not an identity proof. On migration a v1 `pending` key with no v1
-  meaning is kept under the task's `legacy` and never acts as a v2 field of the same name.
+  writer flag is a trace, not an identity proof. An accepted task also needs `--cite`
+  `{commit, path}` (shape only; Git is not invoked). Holds, alerts, cancellations, and relays
+  still retire with `--evidence`. The tombstone keeps machine fields only. On migration a v1
+  `pending` key with no v1 meaning is not copied and never acts as a v2 field of the same name.
 - Each Host business write raises the file's `host_revision` and stamps the record (or
   section source, or tombstone) with it; tool and Sideagent writes do not raise it and stamp
   the caller's holder as `writer_holder`. Task `dispositions` maps item ids to `accepted`,
@@ -595,7 +599,9 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
 
 The Host view is bounded at 64 KiB (`host-view-too-large`). The whole file is bounded at
 1 MiB when `carrier.capability` is `heartbeat-state/2`, else at the 64 KiB legacy reader
-limit (`carrier-limit`). The tool refuses rather than truncating a record.
+limit (`carrier-limit`). `state migrate` without `--live` uses the 1 MiB bound: missing
+live rows are not an old holder. `carrier-limit` applies when `--live` is supplied and that
+holder does not advertise `heartbeat-state/2`. The tool refuses rather than truncating a record.
 
 ## Runner entrypoint (`kaola-tmux.sh`)
 

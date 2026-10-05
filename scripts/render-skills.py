@@ -579,6 +579,10 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
     if not dispatch_script.is_file():
         raise ValueError(f"missing dispatch entry: {dispatch_script}")
     result["scripts/kaola-dispatch.py"] = dispatch_script.read_bytes()
+    contract_script = ROOT / "scripts" / "kaola-record-contract.py"
+    if not contract_script.is_file():
+        raise ValueError(f"missing record contract: {contract_script}")
+    result["scripts/kaola-record-contract.py"] = contract_script.read_bytes()
     return result
 
 
@@ -692,6 +696,7 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         (PLATFORMS / f"{manifest['id']}.yaml", "scripts/platform.yaml"),
         (shared_root / "kaola-model-policy.py", "scripts/kaola-model-policy.py"),
         (shared_root / "kaola-quota.py", "scripts/kaola-quota.py"),
+        (shared_root / "kaola-record-contract.py", "scripts/kaola-record-contract.py"),
         (adapter, f"scripts/adapters/{adapter.name}"),
     )
     for source, target in shared_sources:

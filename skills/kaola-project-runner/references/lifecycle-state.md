@@ -79,7 +79,9 @@ facts. A stopped process deletes no task.
 Update at existing events only: dispatch (task `doing`; plan items carry
 `task_id`, `output`, optional `requires`), result and verdict, a material
 goal, grant or fault change, recovery or adoption, and closeout. The inquiry
-and `check` catch omissions.
+and `check` catch omissions. At a result or verdict, relate it to the task
+goal and set the next authorized action or a sourced blocker. Confirming a
+stop does not finish that goal. No goal score and no per-dispatch approval.
 
 ## Host verdicts
 
@@ -134,16 +136,13 @@ recorded `carrier` advertising `heartbeat-state/2`, else 64 KiB
 
 After a Skill update, at a safe point, run `$S migrate --index I --live L`;
 without `--write` it only plans. With `--write`, each v1 `active` row becomes
-a `doing` task with its assignment and fields kept, `pending` keeps its stated
-stage or stays `todo`, `recovery` and the v1 host are kept, a pending row's
-unknown keys stay inert under `legacy`, and other unknown keys, unassociated
-index rows and an unproven Sideagent binding become `unverified`. The live
-Host holder's features become `carrier`. The raw v1 file is kept once as
-`heartbeat-prompt.v1-<sha12>.json`; a different copy alerts
-`state-overwritten`. An unknown schema is refused. A repeat reports `current`
-and still records an upgraded carrier. Migration resets no task, replays no
-dispatch, re-plans nothing, re-asks no confirmed requirement, restarts no
-healthy session, grants nothing.
+a `doing` task, `pending` keeps its stated stage or stays `todo`, and
+`recovery.protected_untracked` stays when it is a list of strings. Other
+legacy names leave and are not copied. Unknown keys become `unverified`
+locators. A critical mapping writes nothing. Do not write
+`heartbeat-prompt.v1-<sha12>.json`. `state-overwritten` is not raised from
+those copies. Hash-named copies are not deleted or trusted. An unknown schema
+is refused. A clean repeat reports `current`. Migration grants nothing.
 
 Live on Codex and ZCode only: preserve stop, `rebind-host`. Unproven: relay
 across holder death, timer read-back, real state size.

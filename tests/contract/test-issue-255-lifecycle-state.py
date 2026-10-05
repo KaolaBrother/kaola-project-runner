@@ -58,6 +58,7 @@ AUTH = {"classes": {"Expert": "e", "Elite": "l", "Worker": "w"},
         "grants": [{"id": "codex/default", "state": "granted", "count": 1},
                    {"id": "zcode/default", "state": "granted"}],
         "elite_cap": 2}
+CITE = '{"commit":"abcdef1","path":"README.md"}'
 
 
 class StateProject(unittest.TestCase):
@@ -142,11 +143,14 @@ class StateTool(StateProject):
         self.assertEqual(out["reason"], "retire-unmet", "a partial verdict does not retire")
         self.update("host", "tasks", "t1", {"verdict": {"value": "accepted"}}, "--expect-rev", "3")
         code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
-                               "--kind", "tasks", "--id", "t1", "--expect-rev", "4", "--evidence", "commit c1")
+                               "--kind", "tasks", "--id", "t1", "--expect-rev", "4", "--evidence", "commit c1",
+                               "--cite", CITE)
         self.assertEqual(code, 0, out)
         doc = self.doc()
         self.assertNotIn("t1", doc["state"]["tasks"])
-        self.assertEqual(doc["state"]["retired"][-1]["evidence"], "commit c1")
+        stone = doc["state"]["retired"][-1]
+        self.assertEqual(stone["cite"], {"commit": "abcdef1", "path": "README.md"})
+        self.assertNotIn("evidence", stone)
         code, out = self.update("sideagent", "tasks", "t1", {"stage": "doing"})
         self.assertEqual(out["reason"], "record-retired", "a late event does not reopen a retired task")
         self.update("host", "decisions", "d1", {"owner": "user", "question": "Expert?"})
@@ -162,7 +166,7 @@ class StateTool(StateProject):
         live = self.repo / "live.json"
         retire = lambda *extra: self.state("retire", "--file", str(self.file), "--writer", "sideagent",
                                            "--source", "s", "--kind", "tasks", "--id", "t2",
-                                           "--expect-rev", "1", "--evidence", "merged c2", *extra)
+                                           "--expect-rev", "1", "--evidence", "merged c2", "--cite", CITE, *extra)
         code, out = retire()
         self.assertEqual(out["reason"], "retire-unmet")
         self.assertIn("--index and --live", out["detail"])
@@ -195,7 +199,8 @@ class StateTool(StateProject):
                         encoding="utf-8")
         retire = lambda *extra: self.state("retire", "--file", str(self.file), "--writer", "sideagent",
                                            "--source", "s", "--kind", "tasks", "--id", "t5",
-                                           "--expect-rev", "1", "--evidence", "seat reused for t6", *extra)
+                                           "--expect-rev", "1", "--evidence", "seat reused for t6", "--cite", CITE,
+                                           *extra)
         code, out = retire("--index", str(index), "--live", str(live))
         self.assertEqual(out["reason"], "retire-unmet", "a live seat is not a stop")
         self.assertIn("--handoff", out["detail"])
@@ -207,8 +212,9 @@ class StateTool(StateProject):
         doc = self.doc()
         self.assertNotIn("t5", doc["state"]["tasks"])
         stone = doc["state"]["retired"][-1]
-        self.assertEqual((stone["handed_to"], stone["seats"], stone["dispatch"], stone["evidence"]),
-                         ("t6", ["codex-KT-i7-a"], ["i7"], "seat reused for t6"))
+        self.assertEqual((stone["handed_to"], stone["seats"], stone["dispatch"], stone["cite"]["commit"]),
+                         ("t6", ["codex-KT-i7-a"], ["i7"], "abcdef1"))
+        self.assertNotIn("evidence", stone)
         receiver = doc["state"]["tasks"]["t6"]
         self.assertEqual((receiver["dispatch"], receiver["sessions"], receiver["rev"]),
                          (["i8", "i7"], ["codex-KT-i7-a"], 2), "the receiver owns the seat now")
@@ -233,7 +239,7 @@ class StateTool(StateProject):
         self.update("host", "tasks", "next", {"stage": "doing", "goal": "continue"})
         retire = lambda ident, rev, *extra: self.state(
             "retire", "--file", str(self.file), "--writer", "host", "--source", "s", "--kind", "tasks",
-            "--id", ident, "--expect-rev", rev, "--evidence", "e", *extra)
+            "--id", ident, "--expect-rev", rev, "--evidence", "e", "--cite", CITE, *extra)
         rows("foreign")
         for ident in ("direct", "object"):
             code, out = retire(ident, "1", "--live", str(live))
@@ -278,7 +284,8 @@ class StateTool(StateProject):
             self.assertEqual(code, 0, out)
             self.assertEqual(why(), [("t7", "verdict-missing")], stage)
         self.update("host", "tasks", "t7", {"verdict": {"value": "repair"}}, "--expect-rev", rev())
-        self.assertEqual(why(), [("t7", "verdict-missing")], "repair does not close a done task")
+        self.assertEqual(why(), [("t7", "verdict-missing"), ("t7", "delivery-open")],
+                         "repair does not close a done task, and the goal stays open")
         for value, stage in (("partial", "closeout"), ("cancelled", "done"), ("accepted", "done")):
             self.update("host", "tasks", "t7", {"stage": stage, "verdict": {"value": value}},
                         "--expect-rev", rev())
@@ -298,7 +305,7 @@ class StateTool(StateProject):
         code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--kind", "decisions", "--id", "d1", "--expect-rev", "2", "--evidence", "x")
         self.assertEqual(out["reason"], "retire-unmet", "the Host sees the settlement first")
-        self.update("host", "decisions", "d1", {"seen": True}, "--expect-rev", "2")
+        self.update("host", "decisions", "d1", {"answer": "yes"}, "--expect-rev", "2")
         body = json.loads(self.doc()["body"])
         self.assertEqual([row for row in body["attention"] if row["id"] == "d1"], [])
 
@@ -307,7 +314,8 @@ class StateTool(StateProject):
         fingerprint = lambda: holder_module.attention_fingerprint(self.doc()["body"])
         self.update("host", "tasks", "t3", {"stage": "review", "goal": "g"})
         self.update("host", "tasks", "t3", {"verdict": {"value": "repair", "why": "P1"}}, "--expect-rev", "1")
-        self.assertEqual(json.loads(self.doc()["body"])["attention"], [])
+        self.assertEqual([(row["id"], row["why"]) for row in json.loads(self.doc()["body"])["attention"]],
+                         [("t3", "delivery-open")])
         quiet = fingerprint()
         self.update("sideagent", "tasks", "t3", {"stage": "doing"}, "--expect-rev", "2")
         code, out = self.update("sideagent", "tasks", "t3", {"stage": "review"}, "--expect-rev", "3")
@@ -366,8 +374,10 @@ class StateTool(StateProject):
                                "--expect-revision", str(revision), "--set", '{"index-lost": null}')
         self.assertEqual(code, 0, out)
         stone = self.doc()["state"]["retired"][-1]
-        self.assertEqual((stone["kind"], stone["id"], stone["evidence"]),
-                         ("unverified", "index-lost", "associated to #12 by index row i3"))
+        self.assertEqual((stone["kind"], stone["id"], stone["outcome"]),
+                         ("unverified", "index-lost", "resolved"))
+        self.assertNotIn("evidence", stone)
+        self.assertNotIn("source", stone)
 
     def test_a_stable_fault_id_recurs_but_a_stale_event_does_not(self) -> None:
         self.init()
@@ -649,7 +659,7 @@ class StateTool(StateProject):
                         "--expect-rev", "2")
             code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent",
                                    "--source", "closeout", "--kind", "tasks", "--id", task,
-                                   "--expect-rev", "3", "--evidence", f"commit c{cycle}")
+                                   "--expect-rev", "3", "--evidence", f"commit c{cycle}", "--cite", CITE)
             self.assertEqual(code, 0, out)
             sizes.append(len(self.file.read_bytes()))
         doc = self.doc()
@@ -772,10 +782,14 @@ class Migration(StateProject):
         self.assertIsNone(state["sideagent"], "a live Sideagent-role row alone is never bound")
         self.assertEqual(state["unverified"]["sideagent-candidate"]["live"][0]["session"], "zcode-KT-sideagent")
         self.assertEqual(doc["carrier"]["holder_instance_id"], "host-1")
-        raw_copy = Path(state["recovery"]["migration"]["raw"])
-        self.assertEqual(raw_copy.read_bytes(), raw, "the one raw migration evidence is kept")
-        self.assertEqual(state["recovery"]["legacy"], {"old_repo": "/abs/old"})
+        self.assertNotIn("migration", state["recovery"])
+        self.assertNotIn("legacy", state["recovery"])
+        self.assertNotIn("/abs/old", json.dumps(state))
+        self.assertEqual(state["unverified"]["recovery-fields"]["locator"], ["recovery.old_repo"])
+        self.assertFalse(list(self.file.parent.glob("heartbeat-prompt.v1-*.json")))
+        self.assertFalse(out["report"]["overwrite_detection"]["raised"])
         body = json.loads(doc["body"])
+        self.assertEqual(body["authorization"]["classes"], AUTH["classes"])
         self.assertEqual(body["authorization"], AUTH, "old readers of body still find authorization")
         code, again = self.state(*args, "--write")
         self.assertEqual(again["result"], "current", "a repeated migration changes nothing")
@@ -815,6 +829,9 @@ class Migration(StateProject):
         self.assertEqual([row["locator"] for row in task["assignments"]], ["active[0]", "active[1]"])
         first = task["assignments"][0]
         for key, value in body["active"][0].items():
+            if key == "custom_duty":
+                self.assertNotIn(key, first)
+                continue
             self.assertEqual(first[key], value, f"active[0].{key} is kept with its assignment")
         self.assertEqual(state["unverified"]["active-0-fields"]["locator"], ["active[0].custom_duty"])
         self.assertNotIn("active-1-fields", state["unverified"])
@@ -822,17 +839,22 @@ class Migration(StateProject):
         self.assertEqual(duty["stage"], "todo", "'continue implementation' is not closeout")
         for key in ("next", "wait", "resume_when", "holder", "platform", "boundary"):
             self.assertEqual(duty[key], body["pending"][0][key])
-        self.assertEqual(duty["legacy"], {"follow_up": "doc check"}, "an unknown key is kept inert")
+        self.assertNotIn("legacy", duty)
+        self.assertNotIn("follow_up", duty)
         self.assertEqual(state["unverified"]["pending-0-fields"]["locator"], ["pending[0].follow_up"])
         self.assertEqual(state["tasks"]["duty-2"]["stage"], "closeout", "an explicit stage is kept")
         self.assertNotIn("duty-2-stage", state["unverified"])
         self.assertEqual(state["sideagent"]["holder_instance_id"], "side-1",
                          "the authorized v1 binding proven by its live holder carries over")
         self.assertEqual(state["sideagent"]["authorization_source"], "owner msg 2")
-        self.assertEqual(state["recovery"]["v1_host"]["holder_instance_id"], "host-0")
+        self.assertNotIn("v1_host", state["recovery"])
+        self.assertNotIn("migration", state["recovery"])
+        self.assertIn("host.holder_instance_id", state["unverified"]["host-fields"]["locator"])
+        self.assertNotIn("host-0", json.dumps(state["recovery"]))
         self.assertFalse([key for key in state["unverified"] if key.startswith("legacy-")],
                          "host and sideagent have a lifecycle home")
-        self.assertTrue(Path(state["recovery"]["migration"]["raw"]).read_bytes() == raw)
+        self.assertFalse(list(self.file.parent.glob("heartbeat-prompt.v1-*.json")))
+        self.assertNotEqual(self.file.read_bytes(), raw)
 
     def test_a_v1_key_named_like_a_v2_field_does_not_take_effect(self) -> None:
         body = {"project": {"code": "KT"}, "authorization": AUTH,
@@ -845,7 +867,7 @@ class Migration(StateProject):
         task = state["tasks"]["duty-1"]
         for key in ("verdict", "dispatch", "keep_open"):
             self.assertNotIn(key, task, f"v1 {key} is not a v2 decision")
-            self.assertEqual(task["legacy"][key], body["pending"][0][key])
+        self.assertNotIn("legacy", task)
         self.assertEqual(sorted(state["unverified"]["pending-0-fields"]["locator"]),
                          ["pending[0].dispatch", "pending[0].keep_open", "pending[0].verdict"])
         attention = json.loads(self.doc()["body"])["attention"]
@@ -870,7 +892,7 @@ class Migration(StateProject):
         live = self.repo / "live.json"
         retire = lambda *extra: self.state("retire", "--file", str(self.file), "--writer", "sideagent",
                                            "--source", "s", "--kind", "tasks", "--id", "#255",
-                                           "--expect-rev", "2", "--evidence", "host-review", *extra)
+                                           "--expect-rev", "2", "--evidence", "host-review", "--cite", CITE, *extra)
         code, out = retire()
         self.assertEqual(out["reason"], "retire-unmet", "acceptance does not prove the seat stopped")
         self.assertIn("still-working needs --live", out["detail"])
@@ -912,14 +934,14 @@ class Migration(StateProject):
     def test_a_v1_file_after_an_earlier_migration_is_flagged_as_overwritten(self) -> None:
         self.write_legacy()
         self.state("migrate", "--file", str(self.file), "--write")
+        before = set(self.file.parent.glob("heartbeat-prompt.v1-*.json"))
         body = dict(LEGACY_BODY, project={"code": "KT", "goal": "older writer"})
         self.write_legacy(body)
         code, out = self.state("migrate", "--file", str(self.file), "--write")
-        self.assertEqual(code, 0, out)
-        doc = self.doc()
-        alert = doc["state"]["alerts"]["state-overwritten"]
-        self.assertEqual(alert["level"], "severe")
-        self.assertIn("state-overwritten", [row["id"] for row in json.loads(doc["body"])["attention"]])
+        self.assertEqual((code, out["result"]), (0, "migrated"), out)
+        self.assertFalse(out["report"]["overwrite_detection"]["raised"])
+        self.assertNotIn("state-overwritten", self.doc()["state"]["alerts"])
+        self.assertEqual(set(self.file.parent.glob("heartbeat-prompt.v1-*.json")), before)
 
     def test_interrupted_migration_resumes_from_the_same_raw_evidence(self) -> None:
         raw = self.write_legacy()
@@ -929,10 +951,15 @@ class Migration(StateProject):
         code, out = self.state("migrate", "--file", str(self.file), "--write")
         self.assertEqual((code, out["result"]), (0, "migrated"), out)
         self.assertIn("live", out["unchecked"], "unchecked sources are named")
+        named = [row for row in out["report"]["backups"]["backups"] if row["name"] == stale.name]
+        self.assertEqual(named[0]["trusted"], False)
+        self.assertEqual(named[0]["deleted"], False)
+        self.assertEqual(stale.read_bytes(), raw)
         stale.write_text("other", encoding="utf-8")
         self.write_legacy()
         code, out = self.state("migrate", "--file", str(self.file), "--write")
-        self.assertEqual(out["reason"], "raw-evidence-conflict")
+        self.assertEqual((code, out["result"]), (0, "migrated"), out)
+        self.assertEqual(stale.read_text(encoding="utf-8"), "other")
 
     def test_unreadable_legacy_body_is_left_unchanged(self) -> None:
         raw = self.write_legacy("not json at all")
@@ -970,8 +997,22 @@ class Migration(StateProject):
         body["active"] = [{"ref": f"#{n}", "session": f"codex-KT-i{n}-x", "evidence": "e" * 900}
                           for n in range(80)]
         raw = self.write_legacy(body)
+        code, out = self.state("migrate", "--file", str(self.file))
+        self.assertEqual(out["result"], "planned", out)
+        self.assertGreater(out["report"]["file_bytes"], 65536)
+        self.assertEqual(self.file.read_bytes(), raw, "a plan does not write")
         code, out = self.state("migrate", "--file", str(self.file), "--write")
-        self.assertEqual(out["reason"], "carrier-limit")
+        self.assertEqual((code, out["result"]), (0, "migrated"), out)
+        self.assertGreater(out["file_bytes"], 65536)
+        self.assertIsNone(self.doc().get("carrier"))
+        raw = self.write_legacy(body)
+        live = self.repo / "live.json"
+        live.write_text(json.dumps({"rows": [{
+            "platform": "zcode", "session": "zcode-KT-orchestrator-main", "session_role": "host",
+            "repo": str(self.repo), "state": "ready", "holder_instance_id": "host-old",
+            "holder_features": []}]}), encoding="utf-8")
+        code, out = self.state("migrate", "--file", str(self.file), "--write", "--live", str(live))
+        self.assertEqual(out["reason"], "carrier-limit", out)
         self.assertEqual(self.file.read_bytes(), raw)
 
 
@@ -1177,11 +1218,31 @@ class HolderFixture(unittest.TestCase):
         self.tmp.cleanup()
 
     def write_state(self, attention: list) -> None:
+        """Attention the holder injects comes from structured records. The stored
+        body is the old hand-written list and is not what a current holder reads."""
+        state: dict = {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent",
+                                    "holder_instance_id": "side-1", "state": "active"}}
+        for row in attention:
+            kind, item_id = row.get("kind"), row.get("id")
+            if not isinstance(kind, str) or not isinstance(item_id, str):
+                continue
+            if kind == "tasks":
+                task = {"stage": "review", "goal": "g",
+                        "evidence": [row.get("content") or item_id]}
+                if row.get("prior_verdict"):
+                    task["prior_verdict"] = {"value": row["prior_verdict"], "by": "host",
+                                             "host_turn": str(row.get("content") or item_id)}
+                state.setdefault("tasks", {})[item_id] = task
+            elif kind == "decisions":
+                state.setdefault("decisions", {})[item_id] = {
+                    "owner": "host", "question": row.get("why") or item_id, "status": "open",
+                    "evidence": [row.get("content") or item_id]}
+            elif kind == "alerts":
+                state.setdefault("alerts", {})[item_id] = {
+                    "owner": "host", "summary": row.get("why") or item_id}
         body = json.dumps({"view": "host", "attention": attention, "tasks": []})
         (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps({
-            "schema": "kaola-heartbeat-prompt/2", "body": body,
-            "state": {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent",
-                                    "holder_instance_id": "side-1", "state": "active"}}}), encoding="utf-8")
+            "schema": "kaola-heartbeat-prompt/2", "body": body, "state": state}), encoding="utf-8")
 
     def live_sideagent(self, busy: bool = False, holder: str = "side-1") -> None:
         (self.side_dir / "record.json").write_text(json.dumps({
@@ -1261,7 +1322,11 @@ class HolderRelay(HolderFixture):
         path = self.repo / ".kaola" / "heartbeat-prompt.json"
         path.write_text(json.dumps({"schema": "kaola-heartbeat-prompt/2", "body": "VIEW",
                                     "state": {"pad": "p" * 300000}}), encoding="utf-8")
-        self.assertEqual(holder_module.heartbeat_prompt_body(path), ("VIEW", None))
+        injected, defect = holder_module.heartbeat_prompt_body(path)
+        self.assertIsNone(defect)
+        self.assertNotEqual(injected, "VIEW")
+        self.assertNotIn("p" * 80, injected or "")
+        self.assertIn("state.pad", injected or "")
         path.write_text(json.dumps({"body": "x" * 70000}), encoding="utf-8")
         body, defect = holder_module.heartbeat_prompt_body(path)
         self.assertIsNone(body)
@@ -2397,9 +2462,17 @@ class HolderNodeMode(HolderFixture):
                                "mode": "node", "recipe": {"runner": str(self.runner), "argv": argv}},
                  "maintenance": maintenance or {}}
         for row in self.attention:
-            state.setdefault(row["kind"], {})[row["id"]] = {
+            record = {
                 "writer": "sideagent" if getattr(self, "author", None) else "host",
                 **({"writer_holder": self.author} if getattr(self, "author", None) else {})}
+            if row["kind"] == "alerts":
+                record["owner"] = "host"
+                record["summary"] = row.get("why") or row["id"]
+            elif row["kind"] == "decisions":
+                record.update(owner="host", status="open", question=row.get("why") or row["id"])
+            elif row["kind"] == "tasks":
+                record.update(stage="review", goal=row.get("why") or row["id"])
+            state.setdefault(row["kind"], {})[row["id"]] = record
         (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps({
             "schema": "kaola-heartbeat-prompt/2", "host_revision": self.rev,
             "body": json.dumps({"view": "host", "attention": self.attention, "tasks": []}),

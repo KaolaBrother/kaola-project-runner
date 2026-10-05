@@ -3879,7 +3879,7 @@ def _restart_required_name(name: str) -> bool:
     """
     return (
         name in ("kaola-acp-holder.py", "kaola-zcode-acp.py", "kaola-quota.py",
-                 "platform.yaml")
+                 "kaola-record-contract.py", "platform.yaml")
         or name.startswith("adapters/")
         or name.startswith("platforms/")
     )

@@ -32,8 +32,27 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import importlib.util
 from pathlib import Path
 from typing import Any
+
+
+def _load_record_contract():
+    path = Path(__file__).resolve().parent / "kaola-record-contract.py"
+    spec = importlib.util.spec_from_file_location("kaola_record_contract", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"missing record contract: {path}")
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    return module
+
+
+RECORD = _load_record_contract()
 
 
 SCOPES = frozenset({"research", "qa", "report", "implementation"})
@@ -3000,83 +3019,8 @@ def task_attention(task_id: str, task: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
-    """The projected Host view: current outcomes, capacity and pending
-    judgments. Evidence, dispatch rows and receipts stay in the state and the
-    index, reached through the Sideagent view."""
-    state = doc["state"]
-    attention: list[dict[str, Any]] = []
-    tasks = []
-    for task_id, task in sorted(state.get("tasks", {}).items()):
-        entry = {"id": task_id, "stage": task.get("stage")}
-        for key in ("goal", "acceptance", "depends", "wait", "next", "keep_open", "dispositions"):
-            if task.get(key) not in (None, "", [], {}):
-                entry[key] = short(task[key]) if key == "goal" else task[key]
-        for key in ("verdict", "prior_verdict"):
-            if isinstance(task.get(key), dict):
-                entry[key] = {name: task[key].get(name) for name in ("value", "by", "host_turn")
-                              if task[key].get(name) is not None}
-        if task.get("dispatch"):
-            entry["dispatch_count"] = len(task["dispatch"]) if isinstance(task["dispatch"], list) else 1
-        attention.extend(task_attention(task_id, task))
-        tasks.append(entry)
-    holds = []
-    for hold_id, hold in sorted(state.get("holds", {}).items()):
-        holds.append({"id": hold_id, **{key: hold.get(key) if key == "reason" else short(hold.get(key))
-                                        for key in ("scope", "reason", "owner", "resume_when", "next")
-                                        if hold.get(key) is not None}})
-        if hold.get("owner") == "host":
-            attention.append({"kind": "holds", "id": hold_id, "why": "host-owned",
-                              "content": judgment_digest(hold)})
-    alerts = []
-    for alert_id, alert in sorted(state.get("alerts", {}).items()):
-        alerts.append({"id": alert_id, **{key: short(alert.get(key)) for key in
-                                          ("level", "summary", "impact", "owner", "next", "count", "ack")
-                                          if alert.get(key) is not None}})
-        if alert.get("level") == "severe" or alert.get("owner") == "host":
-            attention.append({"kind": "alerts", "id": alert_id, "why": alert.get("level"),
-                              "content": judgment_digest(alert)})
-    decisions = []
-    for decision_id, decision in sorted(state.get("decisions", {}).items()):
-        if decision.get("status") == "settled":
-            if isinstance(decision.get("transcribed"), dict):
-                # A settlement the Sideagent recorded stays in view until the
-                # Host has seen it.
-                attention.append({"kind": "decisions", "id": decision_id, "why": "transcribed-check",
-                                  "host_turn": decision["transcribed"].get("host_turn"),
-                                  "content": judgment_digest(decision)})
-            continue
-        # The question and options are the judgment itself: never shortened.
-        decisions.append({"id": decision_id, **{key: decision.get(key) if key in ("question", "options")
-                                                else short(decision.get(key)) for key in
-                                                ("owner", "question", "options", "next")
-                                                if decision.get(key) is not None}})
-        if decision.get("owner") == "host":
-            attention.append({"kind": "decisions", "id": decision_id, "why": "host-decision",
-                              "content": judgment_digest(decision)})
-    binding = state.get("sideagent")
-    if isinstance(binding, dict) and binding.get("state") in ("replacing", "failed"):
-        attention.append({"kind": "sideagent", "id": binding.get("session"), "why": binding["state"]})
-    unverified = [{"id": key, "summary": short(value.get("summary") if isinstance(value, dict) else value)}
-                  for key, value in sorted((state.get("unverified") or {}).items())]
-    view: dict[str, Any] = {
-        "view": "host",
-        "revision": doc.get("revision"),
-        "host_revision": doc.get("host_revision"),
-        "as_of": doc.get("updated_at"),
-        "detail": f"{path.name} state; `state view --role sideagent` for evidence and dispatch rows",
-        "project": state.get("project") or {},
-        "authorization": state.get("authorization") or {},
-        "sideagent": ({key: binding.get(key) for key in ("platform", "session", "preset", "state")}
-                      if isinstance(binding, dict) else None),
-        "attention": attention,
-        "tasks": tasks,
-    }
-    for key, value in (("holds", holds), ("alerts", alerts), ("decisions", decisions),
-                       ("unverified", unverified), ("recovery", state.get("recovery") or {}),
-                       ("maintenance", maintenance_brief(state))):
-        if value:
-            view[key] = value
-    return view
+    """Projected Host view from the shared contract, field by field."""
+    return RECORD.host_view(doc, path)
 
 
 def maintenance_brief(state: dict[str, Any]) -> dict[str, Any]:
@@ -3156,24 +3100,29 @@ def delegator_view(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any
         "doing": [brief(key, value) for key, value in sorted(tasks.items())
                   if value.get("stage") in ACTIVE_STAGES],
         "todo": [brief(key, value) for key, value in sorted(tasks.items()) if value.get("stage") == "todo"],
-        "outcomes": [brief(key, value) for key, value in sorted(tasks.items()) if value.get("stage") == "done"]
-                    + list(state.get("retired") or [])[-8:],
+        "outcomes": [brief(key, value) for key, value in sorted(tasks.items()) if value.get("stage") == "done"],
         "sideagent": state.get("sideagent"),
         "maintenance": maintenance_brief(state),
     }
 
 
-def render_state(doc: dict[str, Any], path: Path) -> tuple[str, dict[str, int]]:
+def render_state(doc: dict[str, Any], path: Path, *, unchecked_live: bool = False) -> tuple[str, dict[str, int]]:
     """Serialize with the projected Host view as `body`; enforce the carrier
-    bounds instead of truncating any responsibility."""
+    bounds instead of truncating any responsibility.
+
+    ``unchecked_live`` is a migration that was not given ``--live``. Missing
+    live rows are not an old holder, so the current file bound applies.
+    ``carrier-limit`` remains when a supplied live holder does not prove
+    ``heartbeat-state/2``."""
     view = host_view(doc, path)
     body = json.dumps(view, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     doc["body"] = body
     text = json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1) + "\n"
     sizes = {"body_bytes": len(body.encode("utf-8")), "file_bytes": len(text.encode("utf-8"))}
     carrier = doc.get("carrier") if isinstance(doc.get("carrier"), dict) else {}
-    file_limit = (STATE_FILE_MAX_BYTES if carrier.get("capability") == STATE_CAPABILITY
-                  and not carrier_replaced_by_older(carrier, path) else LEGACY_READER_MAX_BYTES)
+    capable = (carrier.get("capability") == STATE_CAPABILITY
+               and not carrier_replaced_by_older(carrier, path))
+    file_limit = STATE_FILE_MAX_BYTES if capable or unchecked_live else LEGACY_READER_MAX_BYTES
     sizes["file_limit"] = file_limit
     if sizes["body_bytes"] > HOST_VIEW_MAX_BYTES:
         raise StateRefusal("host-view-too-large",
@@ -3298,6 +3247,9 @@ def observed_after(observed: Any, retired: Any) -> bool:
 
 
 def validate_record(kind: str, record: dict[str, Any]) -> str | None:
+    unknown = RECORD.unknown_record_keys(kind, record)
+    if unknown:
+        return "unknown " + ", ".join(unknown)
     if kind == "tasks":
         if record.get("stage") not in TASK_STAGES:
             return f"stage must be one of {', '.join(TASK_STAGES)}"
@@ -3332,6 +3284,11 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         raise StateRefusal("invalid-input", "id must be a stable short identifier")
     if any(key in patch for key in RECORD_META):
         raise StateRefusal("invalid-input", f"{', '.join(RECORD_META)} are kept by the tool")
+    rejected = RECORD.reject_record_patch(kind, patch)
+    if rejected:
+        raise StateRefusal("invalid-input", rejected["detail"], **{
+            key: rejected[key] for key in ("path", "allowed", "recovery")
+        }, unapplied=patch)
     records = state.setdefault(kind, {})
     current = records.get(record_id)
     stones = [stone for stone in state.get("retired") or []
@@ -3361,6 +3318,8 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
                                f"{', '.join(owned)} are Host decisions; name the Host turn transcribed",
                                unapplied=patch)
     merged = merge_patch(current or {}, patch)
+    if kind == "tasks" and isinstance(patch.get("dispatch"), list):
+        merged["dispatch"] = RECORD.union_dispatch((current or {}).get("dispatch"), patch.get("dispatch"))
     if current is None:
         missing = [key for key in REQUIRED_ON_CREATE[kind] if merged.get(key) in (None, "")]
         if missing:
@@ -3406,6 +3365,9 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     merged["writer"] = writer_trace(args, caller)
     stamp_writer(doc, merged, args, caller)
     records[record_id] = merged
+    if (kind == "tasks" and "stage" in patch and patch.get("stage") in TASK_STAGES
+            and (args.writer == "host" or (args.writer == "sideagent" and args.host_turn))):
+        RECORD.clear_stage_warning(state, record_id)
     return merged
 
 
@@ -3457,13 +3419,48 @@ def apply_section_update(args: argparse.Namespace, doc: dict[str, Any], patch: A
         return value
     if not isinstance(patch, dict):
         raise StateRefusal("invalid-input", f"state.{section} takes a JSON merge patch object")
+    if section in ("project", "authorization", "recovery", "unverified"):
+        merged_section = merge_patch(state.get(section) or {}, patch)
+        if section == "project":
+            blocked = RECORD.project_blockers(merged_section)
+        elif section == "authorization":
+            blocked = RECORD.authorization_blockers(merged_section)
+        elif section == "recovery":
+            blocked = []
+            if isinstance(merged_section, dict):
+                for key, value in merged_section.items():
+                    if key not in RECORD.RECOVERY_KEYS:
+                        blocked.append(RECORD.refusal(
+                            f"recovery.{key}",
+                            ", ".join(sorted(RECORD.RECOVERY_KEYS)),
+                            "remove this key from the patch and retry; the file was not changed",
+                        ))
+                    elif key == "protected_untracked":
+                        blocked.extend(RECORD.protected_blockers(value, "recovery.protected_untracked"))
+        else:
+            blocked = []
+            if isinstance(patch, dict):
+                for key, value in patch.items():
+                    if value is None or not isinstance(value, dict):
+                        continue
+                    for nested in value:
+                        if nested not in RECORD.UNVERIFIED_KEYS:
+                            blocked.append(RECORD.refusal(
+                                f"unverified.{key}.{nested}",
+                                ", ".join(sorted(RECORD.UNVERIFIED_KEYS)),
+                                "remove this key from the patch and retry; the file was not changed",
+                            ))
+        if blocked:
+            first = blocked[0]
+            raise StateRefusal("invalid-input", first["detail"], path=first["path"],
+                               allowed=first["allowed"], recovery=first["recovery"], unapplied=patch)
     if section == "unverified":
-        # A resolved unknown leaves a tombstone naming what resolved it.
+        # A resolved unknown leaves a machine tombstone. The source text is not copied.
         for key in sorted(key for key, value in patch.items()
                           if value is None and key in (state.get("unverified") or {})):
-            stones = list(state.get("retired") or []) + [{
-                "kind": "unverified", "id": key, "outcome": "resolved", "evidence": args.source,
-                "writer": args.writer, "at": observed_at(), "source": args.source}]
+            stones = list(state.get("retired") or []) + [RECORD.machine_stone({
+                "kind": "unverified", "id": key, "outcome": "resolved",
+                "writer": args.writer, "at": observed_at()})]
             state["retired"] = stones[-TOMBSTONE_CAP:]
     state[section] = merge_patch(state.get(section) or {}, patch)
     note_section_source(state, args, section)
@@ -3479,20 +3476,28 @@ def note_section_source(state: dict[str, Any], args: argparse.Namespace, section
     state["section_sources"] = sources
 
 
+def session_name(value: Any) -> str | None:
+    """A Runner session name. Migrated prose in `sessions` is a note, not a seat."""
+    return value if isinstance(value, str) and SESSION_OK.fullmatch(value) else None
+
+
 def seat_entries(task: dict[str, Any]) -> list[tuple[str, str | None]]:
     """Each seat a task itself names, with the holder instance recorded with
     it: migrated `assignments`, `sessions` (names or objects) and a duty's own
-    `session` with its `holder_instance_id`."""
+    `session` with its `holder_instance_id`. A string that is not a session
+    name stays on the task and is not a seat."""
     found: list[tuple[str, str | None]] = []
     rows = [row for row in task.get("assignments") or [] if isinstance(row, dict)]
     rows += [row for row in task.get("sessions") or [] if isinstance(row, dict)]
-    rows += [{"session": name} for name in task.get("sessions") or [] if isinstance(name, str)]
-    if task.get("session") is not None:
+    rows += [{"session": name} for name in task.get("sessions") or [] if session_name(name)]
+    if session_name(task.get("session")):
         rows.append({"session": task.get("session"), "holder_instance_id": task.get("holder_instance_id")})
     for row in rows:
+        name = session_name(row.get("session"))
+        if not name:
+            continue
         holder = row.get("holder_instance_id")
-        if isinstance(row.get("session"), str):
-            found.append((row["session"], holder if isinstance(holder, str) and holder else None))
+        found.append((name, holder if isinstance(holder, str) and holder else None))
     return found
 
 
@@ -3639,8 +3644,28 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
             and isinstance(current.get("transcribed"), dict)):
         raise StateRefusal("retire-unmet", "the Host has not yet seen this transcribed decision",
                            current=current)
+    cite = None
+    if kind == "tasks" and verdict.get("value") == "accepted":
+        raw_cite = getattr(args, "cite", None)
+        try:
+            cite = json.loads(raw_cite) if isinstance(raw_cite, str) else raw_cite
+        except ValueError as exc:
+            raise StateRefusal("invalid-input", f"cite is not JSON: {exc}") from exc
+        problem = RECORD.cite_problem(cite)
+        if problem:
+            raise StateRefusal(
+                "cite-required",
+                "a completed outcome that must survive cites commit and path before it leaves the "
+                f"current set: {problem}",
+                path="cite",
+                allowed="{commit: 7-40 lowercase hex, path: relative repository path, locator?: string}",
+                recovery="pass --cite with that object. This check does not run Git. "
+                         "Holds, alerts, cancellations, and relays still retire with --evidence.",
+                current=current,
+            )
     stone = {"kind": kind, "id": record_id, "outcome": args.outcome or current.get("stage") or "resolved",
-             "evidence": args.evidence, "at": observed_at(), "source": args.source,
+             "at": observed_at(),
+             **({"cite": cite} if cite else {}),
              **({"handed_to": handoff, **handed} if handoff else {})}
     stamp_writer(doc, stone, args, caller_dispatcher())
     del state[kind][record_id]
@@ -3649,10 +3674,10 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
     return stone
 
 
-def write_state(path: Path, doc: dict[str, Any]) -> dict[str, int]:
+def write_state(path: Path, doc: dict[str, Any], *, unchecked_live: bool = False) -> dict[str, int]:
     doc["revision"] = int(doc.get("revision") or 0) + 1
     doc["updated_at"] = observed_at()
-    text, sizes = render_state(doc, path)
+    text, sizes = render_state(doc, path, unchecked_live=unchecked_live)
     atomic_write(path, text)
     return sizes
 
@@ -3736,6 +3761,10 @@ def command_state_init(args: argparse.Namespace) -> int:
         authorization = json_arg(args.authorization_json) if args.authorization_json else {}
         if not isinstance(project, dict) or not isinstance(authorization, dict):
             return fail("invalid-input", "project and authorization are JSON objects")
+        blocked = RECORD.project_blockers(project) + RECORD.authorization_blockers(authorization)
+        if blocked:
+            first = blocked[0]
+            return emit({"result": "refused", "reason": "invalid-input", **first}, 2)
         with StateLock(path):
             doc, _ = read_state_file(path)
             if doc is not None:
@@ -3809,6 +3838,35 @@ def revision_of(ident: str) -> int | None:
     return int(tail) if head.startswith("host:") and tail.isdigit() else None
 
 
+def retirement_stones(state: dict[str, Any], kind: str, record_id: str) -> list[dict[str, Any]]:
+    return [stone for stone in state.get("retired") or []
+            if isinstance(stone, dict) and stone.get("kind") == kind and stone.get("id") == record_id]
+
+
+def task_is_settled(task: dict[str, Any]) -> bool:
+    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
+    return (verdict.get("value") == "cancelled"
+            or (task.get("stage") == "done" and verdict.get("value") == "accepted"))
+
+
+def already_settled_input(state: dict[str, Any], ident: str) -> bool:
+    """A Host task or retirement input whose duty is already accepted, cancelled,
+    or retired. A later node may acknowledge it; that is not a new return."""
+    if not ident.startswith("host:"):
+        return False
+    body = ident[len("host:"):].rpartition("@")[0]
+    if body.startswith("retired/"):
+        kind, _, record_id = body[len("retired/"):].partition("/")
+        return bool(record_id) and bool(retirement_stones(state, kind, record_id))
+    kind, _, record_id = body.partition("/")
+    if kind != "tasks" or not record_id:
+        return False
+    if retirement_stones(state, "tasks", record_id):
+        return True
+    task = (state.get("tasks") or {}).get(record_id)
+    return isinstance(task, dict) and task_is_settled(task)
+
+
 def checkpoint_entry(state: dict[str, Any], entry: Any, holder: str) -> tuple[str | None, str | None]:
     """(input id, why it is not settled) for one checkpoint entry. Applied
     evidence must be a current record or tombstone this node wrote; a
@@ -3827,14 +3885,16 @@ def checkpoint_entry(state: dict[str, Any], entry: Any, holder: str) -> tuple[st
                 return entry["input"], "applied-unreadable"
             if ref.startswith("retired:"):
                 kind, _, record_id = ref[len("retired:"):].partition("/")
-                stones = [stone for stone in state.get("retired") or []
-                          if stone.get("kind") == kind and stone.get("id") == record_id]
-                if not stones or stones[-1].get("writer_holder") != holder:
+                stones = retirement_stones(state, kind, record_id)
+                # An existing retirement is already settled. This node may
+                # acknowledge it; only a missing stone is unsettled.
+                if not stones:
                     return entry["input"], f"{ref} is not a retirement by this node"
                 continue
             kind, _, record_id = ref.partition("/")
             record = (state.get(kind) or {}).get(record_id) if kind in RECORD_KINDS else None
-            if not isinstance(record, dict) or record.get("writer_holder") != holder:
+            settled_task = kind == "tasks" and isinstance(record, dict) and task_is_settled(record)
+            if not isinstance(record, dict) or (record.get("writer_holder") != holder and not settled_task):
                 return entry["input"], f"{ref} is not a current record this node wrote"
         return entry["input"], None
     kind, _, record_id = retained.partition("/") if isinstance(retained, str) else ("", "", "")
@@ -3888,9 +3948,9 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
             raise StateRefusal("invalid-input", "each entry names its `input`")
         seen.add(ident)
         revision = revision_of(ident)
-        if problem:
+        if problem and not already_settled_input(state, ident):
             returned[ident] = problem
-        elif ident in selected or ident in events:
+        elif ident in selected or ident in events or already_settled_input(state, ident):
             settled.append(ident)
         elif (revision is not None and handled < revision <= through
               and ident.rpartition("@")[0] in later):
@@ -3899,7 +3959,10 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
             returned[ident] = "not-in-batch"
     for ident in [*selected, *events]:
         if ident not in seen:
-            returned[ident] = "unaccounted"
+            if already_settled_input(state, ident):
+                settled.append(ident)
+            else:
+                returned[ident] = "unaccounted"
     # The acknowledgment never passes an unaccounted Host change: neither
     # one of this batch nor one still in the Host's open returned alert.
     still_returned = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
@@ -3917,13 +3980,15 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         maintenance["last_verified"] = {key: record[key] for key in ("batch", "node", "at")}
     maintenance["acked_host_revision"] = new_acked
     maintenance["handled_host_revision"] = through
+    alerts = state.setdefault("alerts", {})
+    alert_id = "maintenance-returned"
+    prior = alerts.get(alert_id) if isinstance(alerts.get(alert_id), dict) else {}
+    inputs = dict(prior.get("inputs") or {})
+    for ident in settled:
+        inputs.pop(ident, None)
     if returned:
         # Handed to the Host once, as one durable alert: never re-sent to
-        # another node, never counted as applied.
-        alerts = state.setdefault("alerts", {})
-        alert_id = "maintenance-returned"
-        prior = alerts.get(alert_id) if isinstance(alerts.get(alert_id), dict) else {}
-        inputs = dict(prior.get("inputs") or {})
+        # another node, never counted as applied. Already-settled inputs leave.
         inputs.update({ident: {"why": why, "batch": args.batch} for ident, why in returned.items()})
         alerts[alert_id] = {**prior, "level": "warn", "owner": "host",
                             "summary": f"{len(inputs)} maintenance input(s) not applied by a node; "
@@ -3933,6 +3998,13 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
                             "created_at": prior.get("created_at") or observed_at(),
                             "updated_at": observed_at(), "source": args.source,
                             "writer": writer_trace(args, caller), "writer_holder": holder}
+    elif alert_id in alerts and not inputs:
+        alerts.pop(alert_id, None)
+    elif alert_id in alerts and inputs != (prior.get("inputs") or {}):
+        alerts[alert_id] = {**prior, "inputs": inputs,
+                            "summary": f"{len(inputs)} maintenance input(s) not applied by a node; "
+                                       "judge or re-dispatch them from their sources",
+                            "rev": int(prior.get("rev") or 0) + 1, "updated_at": observed_at()}
     return record
 
 
@@ -3959,7 +4031,8 @@ def command_state_view(args: argparse.Namespace) -> int:
     return emit({"view": "sideagent", "revision": doc.get("revision"), "as_of": doc.get("updated_at"),
                  "host_revision": current,
                  "pending_host_changes": sorted(host_changes(doc, handled, current)),
-                 "carrier": doc.get("carrier"), "state": doc["state"]})
+                 "carrier": doc.get("carrier"), "state": RECORD.projected_state(doc["state"]),
+                 "unknown": RECORD.unknown_paths(doc["state"])})
 
 
 def live_rows_of(path: str | None) -> list[dict[str, Any]] | None:
@@ -4122,12 +4195,7 @@ V1_PENDING_FIELDS = ("duty", "scope", "owner", "evidence", "boundary", "next", "
 def unmapped_fields(state: dict[str, Any], locator: str, entry: dict[str, Any],
                     known: tuple[str, ...]) -> None:
     extra = sorted(key for key in entry if key not in known)
-    if extra:
-        state["unverified"][f"{locator.replace('[', '-').rstrip(']')}-fields"] = {
-            "summary": f"legacy {locator} keys {', '.join(extra)} have no lifecycle meaning yet; "
-                       "kept inert on the migrated record (`legacy`, or its assignment), confirm "
-                       "before use",
-            "locator": [f"{locator}.{key}" for key in extra]}
+    RECORD.note_unmapped(state, locator, extra)
 
 
 def legacy_tasks(body: dict[str, Any], state: dict[str, Any]) -> None:
@@ -4140,7 +4208,7 @@ def legacy_tasks(body: dict[str, Any], state: dict[str, Any]) -> None:
         locator = f"active[{number}]"
         if not isinstance(entry, dict):
             state["unverified"][f"active-{number}"] = {"summary": "unreadable legacy active entry",
-                                                       "raw": entry, "locator": locator}
+                                                       "locator": locator}
             continue
         ref = entry.get("ref")
         ident = ref if isinstance(ref, str) and re.fullmatch(r"[A-Za-z0-9#][A-Za-z0-9_.:#/-]{0,79}", ref) \
@@ -4148,7 +4216,8 @@ def legacy_tasks(body: dict[str, Any], state: dict[str, Any]) -> None:
         # v1 `active` lists work in flight or ready to act on.
         task = tasks.setdefault(ident, {"stage": "doing", "goal": ref or f"legacy active entry {number}",
                                         "sessions": [], "assignments": [], "source": "migrated:active"})
-        task["assignments"].append({**entry, "locator": locator})
+        task["assignments"].append(
+            {key: entry[key] for key in V1_ACTIVE_FIELDS if key in entry} | {"locator": locator})
         if entry.get("session") is not None and entry["session"] not in task["sessions"]:
             task["sessions"].append(entry["session"])
         unmapped_fields(state, locator, entry, V1_ACTIVE_FIELDS)
@@ -4162,7 +4231,7 @@ def legacy_tasks(body: dict[str, Any], state: dict[str, Any]) -> None:
         ident = f"duty-{number + 1}"
         locator = f"pending[{number}]"
         if not isinstance(duty, dict):
-            state["unverified"][ident] = {"summary": "unreadable legacy pending entry", "raw": duty,
+            state["unverified"][ident] = {"summary": "unreadable legacy pending entry",
                                           "locator": locator}
             continue
         stage = duty.get("stage") if duty.get("stage") in TASK_STAGES else None
@@ -4173,11 +4242,10 @@ def legacy_tasks(body: dict[str, Any], state: dict[str, Any]) -> None:
                            "the Host sets its stage", "locator": locator}
         # A v1 key with no v1 meaning stays inert under `legacy`: one named
         # like a v2 field (`verdict`, `dispatch`, ...) must not take effect.
-        extra = {key: value for key, value in duty.items() if key not in V1_PENDING_FIELDS}
         tasks[ident] = {**{key: value for key, value in duty.items()
                            if key in V1_PENDING_FIELDS and key != "stage"},
                         "stage": stage, "goal": duty.get("duty") or "legacy pending duty",
-                        "source": f"migrated:{locator}", **({"legacy": extra} if extra else {})}
+                        "source": f"migrated:{locator}"}
         unmapped_fields(state, locator, duty, V1_PENDING_FIELDS)
     for ident, task in tasks.items():
         if isinstance(task.get("evidence"), dict):
@@ -4204,24 +4272,35 @@ def migrate_document(doc: dict[str, Any], raw: bytes, path: Path, index: dict[st
     if not isinstance(body, dict):
         raise StateRefusal("legacy-unreadable", "legacy body is not one object; left unchanged")
     state = empty_state()
-    state["project"] = body.get("project") if isinstance(body.get("project"), dict) else {}
+    blockers: list[dict[str, str]] = []
+    dropped: list[str] = []
+    project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    state["project"] = project
+    blockers.extend(RECORD.project_blockers(project))
     authorization = body.get("authorization")
     if isinstance(authorization, dict):
         state["authorization"] = authorization
+        blockers.extend(RECORD.authorization_blockers(authorization))
     elif authorization is not None:
-        state["unverified"]["authorization"] = {
-            "summary": "legacy authorization is not an object; no grant was inferred", "raw": authorization}
-    if isinstance(body.get("recovery"), (dict, list)) and body.get("recovery"):
-        state["recovery"]["legacy"] = body["recovery"]
+        blockers.append(RECORD.refusal(
+            "authorization", "object of grants, pauses, and caps",
+            "rehome authorization; the file was not written"))
+    kept, recovery_blockers, recovery_dropped = RECORD.recovery_from_v1(body.get("recovery"))
+    blockers.extend(recovery_blockers)
+    dropped.extend(recovery_dropped)
+    state["recovery"].update(kept)
+    if recovery_dropped:
+        RECORD.note_unmapped(state, "recovery", [key.removeprefix("recovery.") for key in recovery_dropped])
     if isinstance(body.get("host"), dict):
-        # The v1 Host identity is a recovery pointer, not a live fact.
-        state["recovery"]["v1_host"] = body["host"]
+        dropped.append("host")
+        RECORD.note_unmapped(state, "host", sorted(body["host"]))
     legacy_tasks(body, state)
     known = {"project", "authorization", "active", "pending", "recovery", "host", "sideagent"}
     for key in sorted(set(body) - known):
+        dropped.append(key)
         state["unverified"][f"legacy-{key}"] = {
-            "summary": f"legacy body key {key!r} has no lifecycle home; confirm before use",
-            "raw": body[key]}
+            "summary": f"unmapped body field {key}",
+            "locator": key}
     if isinstance(state["project"].get("rules"), (list, str, dict)):
         requirements = requirement_lines(repo)
         if requirements.get("missing"):
@@ -4266,43 +4345,32 @@ def migrate_document(doc: dict[str, Any], raw: bytes, path: Path, index: dict[st
                               "authorization_source": v1_side.get("authorization_source"),
                               "state": "active", "source": "migrated: v1 binding proven by its live holder",
                               "since": observed_at()}
+        RECORD.note_unmapped(state, "sideagent", sorted(
+            key for key in v1_side
+            if key not in ("platform", "session", "holder_instance_id", "preset",
+                           "authorization_source", "state")))
     elif v1_side or sideagents:
         state["unverified"]["sideagent-candidate"] = {
             "summary": "no authorized v1 binding is proven by a live holder; the Host binds the "
                        "maintenance Sideagent (a live Sideagent-role row alone is only a candidate)",
-            **({"v1": v1_side} if v1_side else {}),
+            **({"v1": RECORD.identity_only(v1_side)} if RECORD.identity_only(v1_side) else {}),
             "live": [{key: row.get(key) for key in ("platform", "session", "holder_instance_id")}
                      for row in sideagents],
             **({} if rows is not None else {"unchecked": "no live rows supplied"})}
-    digest = hashlib.sha256(raw).hexdigest()
-    earlier = sorted(str(other) for other in path.parent.glob(f"{path.stem}.v1-*.json")
-                     if other.name != f"{path.stem}.v1-{digest[:12]}.json")
-    if earlier:
-        # This file was migrated before and is v1 again: an older installed
-        # writer replaced the v2 records. That writer cannot be stopped from
-        # here; the loss is made the Host's first attention.
-        state["alerts"]["state-overwritten"] = {
-            "level": "severe", "owner": "host", "rev": 1, "writer": "migration",
-            "created_at": observed_at(), "updated_at": observed_at(), "source": "migrate",
-            "summary": "a raw copy from an earlier migration of other v1 bytes exists: a v1-only "
-                       "writer replaced the v2 state (records since then are lost), or that "
-                       "migration was interrupted and v1 changed after it",
-            "impact": "re-adopt current tasks from the index, receipts and Workflow before relying on "
-                      "this state; update every Runner checkout this project uses",
-            "evidence": earlier}
-    state["recovery"]["migration"] = {"from": doc.get("schema") or LEGACY_STATE_SCHEMA,
-                                      "raw_sha256": "sha256:" + digest,
-                                      "raw": str(path.with_name(f"{path.stem}.v1-{digest[:12]}.json")),
-                                      "at": observed_at()}
-    new_doc: dict[str, Any] = {"schema": STATE_SCHEMA, "revision": 0, "state": state}
+    new_doc: dict[str, Any] | None = None
     carrier, why = carrier_from_live(rows, repo)
-    if carrier:
-        new_doc["carrier"] = carrier
+    if not blockers:
+        new_doc = {"schema": STATE_SCHEMA, "revision": 0, "state": state}
+        if carrier:
+            new_doc["carrier"] = carrier
     report = {
         "tasks": sorted(state["tasks"]),
         "unverified": sorted(state["unverified"]),
         "sideagent": state["sideagent"],
         "authorization_kept": isinstance(authorization, dict),
+        "dropped": dropped,
+        "blockers": blockers,
+        "overwrite_detection": RECORD.OVERWRITE_DETECTION,
         "carrier": carrier or {"capability": None, "why": why,
                                "file_limit": LEGACY_READER_MAX_BYTES},
     }
@@ -4320,13 +4388,35 @@ def command_state_migrate(args: argparse.Namespace) -> int:
             if doc is None:
                 return emit({"result": "refused", "reason": "state-missing",
                              "detail": f"{path} does not exist; nothing to migrate"}, 2)
+            backups = RECORD.assess_backups(path.parent, raw.decode("utf-8", errors="replace"))
             if doc.get("schema") == STATE_SCHEMA:
-                report: dict[str, Any] = {"result": "current", "revision": doc.get("revision")}
+                blockers, cleaned, changed = RECORD.cleanup_current(doc["state"])
+                report: dict[str, Any] = {
+                    "result": "current", "revision": doc.get("revision"),
+                    "overwrite_detection": RECORD.OVERWRITE_DETECTION, "backups": backups,
+                }
+                if blockers:
+                    return emit({"result": "blocked", "writes": False, "blockers": blockers,
+                                 "overwrite_detection": RECORD.OVERWRITE_DETECTION,
+                                 "backups": backups,
+                                 "detail": "unresolved critical mapping; the file was not written"}, 2)
                 carrier, why = carrier_from_live(rows, repo)
-                if carrier and args.write and doc.get("carrier", {}).get(
-                        "holder_instance_id") != carrier["holder_instance_id"]:
+                if not args.write:
+                    report["carrier"] = doc.get("carrier") or {"capability": None, "why": why}
+                    if changed:
+                        return emit({"result": "planned", "writes": False, "cleanup": True,
+                                     "report": report})
+                    return emit(report)
+                if changed:
+                    doc["state"] = cleaned
+                if carrier and doc.get("carrier", {}).get("holder_instance_id") != carrier["holder_instance_id"]:
                     doc["carrier"] = carrier
-                    report.update(result="carrier-recorded", **write_state(path, doc))
+                    report["result"] = "carrier-recorded"
+                if changed:
+                    report["result"] = "migrated"
+                    report["cleanup"] = True
+                if changed or report["result"] == "carrier-recorded":
+                    report.update(write_state(path, doc, unchecked_live=rows is None))
                 report["carrier"] = doc.get("carrier") or {"capability": None, "why": why}
                 return emit(report)
             if doc.get("schema") not in (None, LEGACY_STATE_SCHEMA):
@@ -4335,21 +4425,20 @@ def command_state_migrate(args: argparse.Namespace) -> int:
                                        "Runner does not know; it is not read as v1 and is left "
                                        "unchanged (update the Runner)"}, 2)
             new_doc, report = migrate_document(doc, raw, path, index, rows, repo)
+            report["backups"] = backups
+            unchecked = [name for name, value in (("index", index), ("live", rows)) if value is None]
+            if new_doc is None:
+                return emit({"result": "blocked", "writes": False, "unchecked": unchecked,
+                             "report": report,
+                             "detail": "unresolved critical mapping; the file was not written"}, 2)
             preview = json.loads(json.dumps(new_doc))
             preview["revision"] = 1
-            text, sizes = render_state(preview, path)
+            _text, sizes = render_state(preview, path, unchecked_live=rows is None)
             report.update(sizes)
-            unchecked = [name for name, value in (("index", index), ("live", rows)) if value is None]
             if not args.write:
                 return emit({"result": "planned", "writes": False, "unchecked": unchecked,
                              "report": report, "state": new_doc["state"]})
-            raw_path = Path(new_doc["state"]["recovery"]["migration"]["raw"])
-            if not raw_path.exists():
-                atomic_write(raw_path, raw.decode("utf-8"))
-            elif raw_path.read_bytes() != raw:
-                return emit({"result": "refused", "reason": "raw-evidence-conflict",
-                             "detail": f"{raw_path} exists with other bytes"}, 2)
-            sizes = write_state(path, new_doc)
+            sizes = write_state(path, new_doc, unchecked_live=rows is None)
     except StateRefusal as refusal:
         return emit(refusal.payload, 2)
     except (OSError, ValueError) as exc:
@@ -4429,6 +4518,7 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--id", required=True)
     retire.add_argument("--expect-rev", type=int, required=True)
     retire.add_argument("--evidence", required=True)
+    retire.add_argument("--cite", help="JSON {commit, path} for a completed outcome that must survive")
     retire.add_argument("--outcome")
     retire.add_argument("--index", help="dispatch index showing the task's items closed")
     retire.add_argument("--live", help="Runner rows showing its sessions stopped")
@@ -4476,7 +4566,129 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--live")
     migrate.add_argument("--write", action="store_true", help="apply; default is a read-only plan")
     migrate.set_defaults(func=command_state_migrate)
+
+    backups = actions.add_parser("backups", help="list hash-named copies; never deletes them")
+    backups.add_argument("--file", required=True)
+    backups.set_defaults(func=command_state_backups)
+
+    delegator = commands.add_parser("delegator", help="closed current state in .kaola/delegator-heartbeat.json")
+    delegator_actions = delegator.add_subparsers(dest="action", required=True)
+    for name, func in (
+        ("view", command_delegator_view),
+        ("migrate", command_delegator_migrate),
+        ("update", command_delegator_update),
+    ):
+        sub = delegator_actions.add_parser(name)
+        sub.add_argument("--file", required=True)
+        if name == "migrate":
+            sub.add_argument("--write", action="store_true")
+        if name == "update":
+            sub.add_argument("--writer", required=True)
+            sub.add_argument("--source", required=True)
+            sub.add_argument("--expect-revision", type=int, required=True)
+            sub.add_argument("--set", required=True)
+        sub.set_defaults(func=func)
     return parser
+
+
+def command_state_backups(args: argparse.Namespace) -> int:
+    path = Path(args.file)
+    try:
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+    except OSError as exc:
+        return fail("invalid-input", str(exc))
+    return emit({"result": "assessed", **RECORD.assess_backups(path.parent, text)})
+
+
+def _delegator_read(path: Path) -> dict[str, Any]:
+    doc = load_object(path) if path.exists() else None
+    if not isinstance(doc, dict):
+        raise ValueError(f"{path} is missing or not an object")
+    return doc
+
+
+def command_delegator_view(args: argparse.Namespace) -> int:
+    try:
+        doc = _delegator_read(Path(args.file))
+    except (OSError, ValueError) as exc:
+        return fail("invalid-input", str(exc))
+    watch = doc.get("watch") if isinstance(doc.get("watch"), dict) else {}
+    duties = []
+    for ident, item in sorted(watch.items()):
+        if not isinstance(item, dict):
+            continue
+        duties.append({"id": ident, **{key: item.get(key) for key in RECORD.WATCH_KEYS if key in item}})
+    return emit({
+        "view": "delegator-file",
+        "schema": doc.get("schema"),
+        "revision": doc.get("revision"),
+        "project": doc.get("project") if isinstance(doc.get("project"), dict) else {},
+        "host": {key: (doc.get("host") or {}).get(key)
+                 for key in ("platform", "session", "preset_id", "holder_instance_id",
+                             "acp_session_id", "native_session_id", "state")
+                 if isinstance(doc.get("host"), dict) and (doc.get("host") or {}).get(key) is not None},
+        "authorization": doc.get("authorization") if isinstance(doc.get("authorization"), dict) else {},
+        "watch": duties,
+    })
+
+
+def command_delegator_migrate(args: argparse.Namespace) -> int:
+    path = Path(args.file)
+    try:
+        with StateLock(path):
+            doc = _delegator_read(path)
+            migrated, blockers, dropped = RECORD.delegator_migrated(doc)
+            if blockers or migrated is None:
+                return emit({"result": "blocked", "writes": False, "blockers": blockers,
+                             "dropped": dropped,
+                             "detail": "unresolved critical mapping; the file was not written"}, 2)
+            if not args.write:
+                return emit({"result": "planned", "writes": False, "dropped": dropped,
+                             "state": migrated})
+            text = json.dumps(migrated, ensure_ascii=False, sort_keys=True, indent=1) + "\n"
+            atomic_write(path, text)
+    except (OSError, ValueError) as exc:
+        return fail("invalid-input", str(exc))
+    return emit({"result": "migrated", "writes": True, "dropped": dropped, "revision": migrated["revision"]})
+
+
+def command_delegator_update(args: argparse.Namespace) -> int:
+    if args.writer != "delegator":
+        return emit({"result": "refused", "reason": "writer-refused",
+                     "detail": "the Delegator writes its own file"}, 2)
+    path = Path(args.file)
+    try:
+        patch = json_arg(args.set)
+        if not isinstance(patch, dict):
+            return fail("invalid-input", "a delegator update is a JSON object")
+        for key, value in patch.items():
+            if value is None:
+                continue
+            if key not in RECORD.DELEGATOR_TOP_KEYS - {"schema", "revision", "updated_at"}:
+                refused = RECORD.refusal(
+                    key, ", ".join(sorted(RECORD.DELEGATOR_TOP_KEYS)),
+                    "remove this key and retry; the file was not changed")
+                return emit({"result": "refused", "reason": "invalid-input", **refused}, 2)
+        with StateLock(path):
+            doc = _delegator_read(path)
+            actual = int(doc.get("revision") or 0)
+            if args.expect_revision != actual:
+                return emit({"result": "refused", "reason": "conflict",
+                             "detail": f"file is at revision {actual}", "current_revision": actual}, 3)
+            merged = merge_patch(doc, patch)
+            merged["schema"] = RECORD.DELEGATOR_SCHEMA
+            merged["revision"] = actual + 1
+            merged["updated_at"] = observed_at()
+            blockers, _dropped = RECORD.delegator_blockers(merged)
+            if blockers:
+                return emit({"result": "refused", "reason": "invalid-input", "blockers": blockers,
+                             "detail": blockers[0]["detail"]}, 2)
+            atomic_write(path, json.dumps(merged, ensure_ascii=False, sort_keys=True, indent=1) + "\n")
+    except StateRefusal as refusal:
+        return emit(refusal.payload, 2)
+    except (OSError, ValueError) as exc:
+        return fail("invalid-input", str(exc))
+    return emit({"result": "written", "revision": merged["revision"]})
 
 
 def main(argv: list[str] | None = None) -> int:

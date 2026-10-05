@@ -164,19 +164,25 @@ This is a release/update requirement. For the lifecycle state of
   generated Host-view `body`, so old readers still receive a string `body`).
 - Migration runs at the first load of the updated Skill, at a safe handoff point, through
   `kaola-dispatch.py state migrate --file <project>/.kaola/heartbeat-prompt.json --index <index>
-  --live <list>`. Without `--write` it is a read-only plan; with `--write` it keeps the raw v1
-  file once as `heartbeat-prompt.v1-<sha12>.json`, maps each `active` row to one `doing` task
-  that keeps its assignment locator and fields, keeps each `pending` row with its stated stage
-  (else `todo`, with the unknown stage listed), keeps `recovery` and the v1 host under
-  `recovery`, and lists unknown keys, unassociated index rows and any v1 Sideagent binding not
-  proven by `authorization_source` plus its exact live holder as `unverified` for the Host to
-  bind. A repeat reports `current`; an unreadable file is left unchanged and reported, a raw
-  copy whose digest differs raises the severe alert `state-overwritten`, and any schema other
-  than v1 or v2 is refused (`schema-unsupported`) rather than read as v1.
-- Holder: the v2 file may exceed 64 KiB only after the live Host holder advertises
-  `heartbeat-state/2` and migration recorded it as `carrier`. An older Host holder keeps the
-  64 KiB whole-file limit (`carrier-limit`). Adoption path: restart the Host holder on the new
-  build at a safe point, then run `state migrate --write --live <list>` to record the carrier.
+  --live <list>`. Without `--write` it is a read-only plan; with `--write` it maps each `active`
+  row to one `doing` task that keeps its assignment locator and known fields, keeps each
+  `pending` row with its stated stage (else `todo`, with the unknown stage listed), keeps
+  `recovery.protected_untracked` when it is a list of non-empty strings, and lists unknown keys,
+  unassociated index rows and any v1 Sideagent binding not proven by `authorization_source`
+  plus its exact live holder as `unverified` locators. Other legacy field names leave and are
+  not copied. An unresolved critical mapping writes nothing and leaves the original file
+  intact. Do not write `heartbeat-prompt.v1-<sha12>.json` or `recovery.migration.raw`.
+  `state-overwritten` is not raised from those copies; overwrite detection is reduced and
+  recovery uses project, Runner, and forge records. Existing hash-named copies are not
+  deleted or trusted (`state backups`). A clean repeat reports `current`; an unreadable file
+  is left unchanged and reported, and any schema other than v1 or v2 is refused
+  (`schema-unsupported`) rather than read as v1.
+- Holder: the v2 file may exceed 64 KiB after migration records a live Host holder that
+  advertises `heartbeat-state/2` as `carrier`. `state migrate` without `--live` uses the
+  1 MiB bound and does not treat the missing list as an old holder. An older holder named by
+  `--live` keeps the 64 KiB whole-file limit (`carrier-limit`). Adoption path: restart the
+  Host holder on the new build at a safe point, then run `state migrate --write --live <list>`
+  to record the carrier.
   Healthy workers are not restarted for migration; they get the new holder behavior at
   their next normal start.
 - Host replacement: the new Host runs `rebind-host` on each existing seat from its own session;
@@ -185,9 +191,9 @@ This is a release/update requirement. For the lifecycle state of
   call, and worker events staged in a Host holder that died stay there; the new Host adopts
   that work from the index and receipts. A holder older than that op answers `unknown-op` and
   keeps the previous recovery (`drain-restart` at idle).
-- A v1 `pending` key with no v1 meaning is kept under the task's `legacy`, inert, and listed
-  as `unverified`, so a key that shares a v2 field name (`verdict`, `dispatch`, `keep_open`,
-  ...) never takes effect.
+- A v1 `pending` key with no v1 meaning is not copied onto the task and does not take effect,
+  including a key that shares a v2 field name (`verdict`, `dispatch`, `keep_open`). Its name
+  is an `unverified` locator. It is not stored under `legacy`.
 - Consolidated #255 fields are additive and need no `--write` migration: a file without
   `host_revision`, `maintenance`, `dispositions` or `writer_holder` reads as revision 0 with
   no checkpoint, and the first Host business write starts the count. A Sideagent binding
@@ -217,7 +223,9 @@ as its own line: `Seats: restart required` or `Seats: restart not required`.
 Seats must restart when the holder, the ZCode bridge, or the ACP protocol
 changed, or when `kaola-quota.py` changed - the holder pins that catalog at
 startup (Issue #162), so a running seat only picks up its new bytes by
-restarting. The operator test is a non-empty diff:
+restarting. The holder also pins `scripts/kaola-record-contract.py` at startup
+(Issue #259). A running seat picks up a new projection only by restarting.
+That file is outside the operator diff. The operator test is a non-empty diff:
 
 ```bash
 git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms
