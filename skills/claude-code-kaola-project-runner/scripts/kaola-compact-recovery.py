@@ -281,23 +281,27 @@ def reload_instruction(skill_path: Optional[str] = None) -> str:
     """The one instruction that satisfies the behavior.
 
     It names no cached body. With ``skill_path`` it names the installed
-    platform Skill file. It never asks the model to restart, cancel, or replay.
+    platform Skill file. It requires the available file read tool before the
+    answer, because a model that trusts its compacted memory otherwise skips the
+    fresh read. It never asks the model to restart, cancel, or replay.
     """
     if skill_path:
-        reopen = (f"completely re-read the current installed Skill(s) that this "
-                  f"session is actively using - your role/task Skill (for "
-                  f"example Workflow Next when it is active) and the installed "
-                  f"platform Skill at {skill_path} - from their installed "
-                  f"directories, not from memory or a cached copy. ")
+        reopen = (f"call the available file read tool now, before you answer, "
+                  f"and completely re-read the full current content of the "
+                  f"installed platform Skill file at {skill_path} and of your "
+                  f"active role/task Skill, such as Workflow Next when it is "
+                  f"active. ")
     else:
-        reopen = ("completely re-read the current installed Skill(s) that this "
-                  "session is actively using - your role/task Skill (for "
-                  "example Workflow Next when it is active) and your installed "
-                  "platform Skill - from their installed directories, not from "
-                  "memory or a cached copy. ")
-    return ("The runtime context was compacted. Before you continue, " + reopen
-            + "Then continue the in-progress task from the durable project "
-            "records, exactly where it stopped. Do not restart completed work.")
+        reopen = ("call the available file read tool now, before you answer, "
+                  "and completely re-read the full current content of the "
+                  "installed Skill file(s) that this session is actively using "
+                  "- your role/task Skill (for example Workflow Next when it is "
+                  "active) and your installed platform Skill. ")
+    return ("The runtime context was compacted, so any remembered Skill content "
+            "is stale and must not be used. Before you continue, " + reopen
+            + "Do not answer from memory or a cached copy. Then continue the "
+            "in-progress task from the durable project records, exactly where "
+            "it stopped. Do not restart completed work.")
 
 
 def host_reload_prompt(host_entry: str) -> str:
@@ -306,9 +310,10 @@ def host_reload_prompt(host_entry: str) -> str:
     The first line is the session's own measured native Skill entry, so the
     runtime opens the Skill the same way it does on any other turn.
     """
-    entry = (host_entry or "").strip()
+    # The measured entry can contain a required trailing delimiter (Kimi).
+    entry = host_entry or ""
     body = reload_instruction()
-    if not entry:
+    if not entry.strip():
         return body
     return f"{entry}\n{body}"
 

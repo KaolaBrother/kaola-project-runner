@@ -219,13 +219,17 @@ class ClassifyTests(unittest.TestCase):
         text = self.cr.reload_instruction()
         self.assertIn("completely re-read", text.lower())
         self.assertIn("installed", text.lower())
-        self.assertIn("not from memory", text.lower())
+        self.assertIn("from memory", text.lower())
         self.assertIn("continue", text.lower())
+        # The instruction must require the file read tool before the answer.
+        self.assertIn("read tool", text.lower())
+        self.assertIn("stale", text.lower())
 
     def test_worker_instruction_names_exact_skill_path(self) -> None:
         text = self.cr.worker_reload_prompt("/skills/codex/SKILL.md")
         self.assertIn("/skills/codex/SKILL.md", text)
         self.assertIn("completely re-read", text.lower())
+        self.assertIn("read tool", text.lower())
         # A worker prompt does not open the Host control-plane entry.
         self.assertNotIn("$kaola-project-runner", text)
 
@@ -233,6 +237,13 @@ class ClassifyTests(unittest.TestCase):
         prompt = self.cr.host_reload_prompt("/kaola-project-runner")
         self.assertTrue(prompt.startswith("/kaola-project-runner\n"))
         self.assertIn("completely re-read", prompt.lower())
+
+    def test_host_prompt_preserves_kimi_entry_delimiter(self) -> None:
+        # The measured Kimi entry is "/skill:kaola-project-runner " and the
+        # trailing space is a required delimiter. Only emptiness may strip.
+        entry = "/skill:kaola-project-runner "
+        prompt = self.cr.host_reload_prompt(entry)
+        self.assertEqual(prompt.split("\n", 1)[0], entry)
 
     def test_host_prompt_without_entry_is_still_usable(self) -> None:
         self.assertIn("completely re-read",
