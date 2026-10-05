@@ -1204,6 +1204,30 @@ def delegator_migrated(doc: dict[str, Any]) -> tuple[dict[str, Any] | None, list
     return out, [], sorted(set(dropped))
 
 
+def host_changes(doc: dict[str, Any], after: int, through: int) -> dict[str, int]:
+    """Each Host business change in (after, through], by its input id. A
+    record the Host rewrote later shows only its latest change."""
+    state = doc["state"]
+    found: dict[str, int] = {}
+
+    def take(ident: str, value: Any) -> None:
+        if isinstance(value, int) and not isinstance(value, bool) and after < value <= through:
+            found[ident] = value
+
+    for kind in RECORD_KEYS:
+        for record_id, record in (state.get(kind) or {}).items():
+            if isinstance(record, dict):
+                take(f"host:{kind}/{record_id}@{record.get('host_revision')}", record.get("host_revision"))
+    for section, source in (state.get("section_sources") or {}).items():
+        if isinstance(source, dict):
+            take(f"host:section/{section}@{source.get('host_revision')}", source.get("host_revision"))
+    for stone in state.get("retired") or []:
+        if isinstance(stone, dict):
+            take(f"host:retired/{stone.get('kind')}/{stone.get('id')}@{stone.get('host_revision')}",
+                 stone.get("host_revision"))
+    return found
+
+
 def short(value: Any, limit: int = 240) -> Any:
     if isinstance(value, str) and len(value) > limit:
         return value[:limit] + f"… [+{len(value) - limit} chars omitted; full text on the record]"

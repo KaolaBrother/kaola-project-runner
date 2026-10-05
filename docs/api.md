@@ -590,6 +590,11 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   gone, not by its `stopped` record; while it still runs (`sideagent_node_stop_unconfirmed`)
   no node starts, and once it is gone (`sideagent_node_stop_confirmed_late`) the next Host
   change starts a fresh node. A holder whose stop reply cannot be delivered still exits.
+  The holder and state tool use the same current-input selector. A retirement with no
+  selectable input starts or sends no node and advances no checkpoint revision. If an
+  owned node finishes startup after its input disappears, the carrier waits for the Host
+  turn to end, then exact-stops that unassigned node. An assigned batch keeps its original
+  range and checkpoint. Older holder bundles without this selector keep revision-only selection.
   A node is the carrier's own session, not a dispatched worker: a Host `stop` in every mode
   (default, `--force`, `--preserve-dispatched-workers`) starts no new node, waits up to 8 s
   for a node start in flight, and exact-stops the running node, found by its record's

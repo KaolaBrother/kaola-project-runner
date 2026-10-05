@@ -2329,6 +2329,35 @@ class MaintenanceCheckpoint(StateProject):
         attention = json.loads(self.doc()["body"])["attention"]
         self.assertIn("maintenance-returned", [row["id"] for row in attention])
 
+    def test_host_retirement_preserves_an_earlier_sent_checkpoint_range(self) -> None:
+        self.init()
+        self.bind()
+        code, out = self.update("host", "tasks", "t1", {
+            "stage": "done", "goal": "a", "verdict": {"value": "accepted"}})
+        self.assertEqual(code, 0, out)
+        through = self.doc()["host_revision"]
+        node = self.node("node-1")
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "retire",
+                               "--kind", "tasks", "--id", "t1", "--expect-rev", "1",
+                               "--evidence", "README.md", "--cite", CITE)
+        self.assertEqual(code, 0, out)
+        raw = self.file.read_bytes()
+        carrier = holder_module.Holder.__new__(holder_module.Holder)
+        carrier.node = {"sent_through": through, "batch": "b-1"}
+        self.assertIsNone(carrier._node_host_pending(self.doc()))
+        self.assertEqual(self.file.read_bytes(), raw, "selection writes no checkpoint proof")
+        entries = [{"input": f"host:section/{name}@{revision}", "retained": f"section/{name}"}
+                   for name, revision in (("authorization", 1), ("project", 1), ("sideagent", through - 1))]
+        entries.append({"input": f"host:tasks/t1@{through}", "applied": ["retired:tasks/t1"]})
+        code, out = self.checkpoint(node, "b-1", through, entries)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"], out)
+        maintenance = self.doc()["state"]["maintenance"]
+        self.assertEqual(maintenance["handled_host_revision"], through)
+        self.assertEqual(maintenance["acked_host_revision"], through)
+        self.assertEqual(self.doc()["host_revision"], through + 1)
+        self.assertFalse(self.doc()["state"].get("retired"))
+
     def test_a_host_rewrite_during_the_batch_is_superseded_not_returned(self) -> None:
         """Native QA: the Host's next turn rewrote batch records while the
         node ran; the node's entries for the earlier changes were returned
@@ -2477,6 +2506,8 @@ class HolderNodeMode(HolderFixture):
         state = {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active",
                                "mode": "node", "recipe": {"runner": str(self.runner), "argv": argv}},
                  "maintenance": maintenance or {}}
+        if self.rev:
+            state["section_sources"] = {"project": {"writer": "host", "host_revision": self.rev}}
         for row in self.attention:
             record = {
                 "writer": "sideagent" if getattr(self, "author", None) else "host",
@@ -2544,6 +2575,124 @@ class HolderNodeMode(HolderFixture):
         self.boundary()
         self.wait_for(lambda: len(self.fake.prompts) == 1, "the first node's batch")
         return self.batch_of(0)
+
+    def retire_input(self, revision: int) -> bytes:
+        """Deletion raises the revision, but leaves no selectable current record."""
+        self.host_change(revision)
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        doc = json.loads(path.read_text())
+        doc["state"].pop("section_sources", None)
+        path.write_text(json.dumps(doc))
+        return path.read_bytes()
+
+    def test_retirement_only_starts_no_node_and_later_work_selects_the_full_range(self) -> None:
+        raw = self.retire_input(4)
+        self.boundary()
+        self.assertNotIn(self.holder.node.get("phase"), ("starting", "running"))
+        self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.fake.prompts, [])
+        self.assertEqual((self.repo / ".kaola" / "heartbeat-prompt.json").read_bytes(), raw)
+        self.host_change(5)
+        self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "useful work after retirement")
+        self.assertIn("host revision 1..5", self.fake.prompts[0]["params"]["text"])
+        self.assertEqual(self.holder.node["sent_through"], 5)
+        self.checkpoint(self.batch_of(0), "node-1", through=5)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stop")
+
+    def test_retirement_mixed_with_current_work_still_sends_one_useful_batch(self) -> None:
+        self.retire_input(4)
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        doc = json.loads(path.read_text())
+        doc["state"]["tasks"] = {"keep": {"stage": "todo", "goal": "next", "host_revision": 3}}
+        path.write_text(json.dumps(doc))
+        self.assertEqual(dispatch_module.host_changes(doc, 0, 4), {"host:tasks/keep@3": 3})
+        self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the mixed batch")
+        self.assertIn("host revision 1..4", self.fake.prompts[0]["params"]["text"])
+        self.assertEqual(self.holder.node["sent_through"], 4)
+        self.checkpoint(self.batch_of(0), "node-1", through=4)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stop")
+
+    def test_retirement_during_an_assigned_batch_preserves_its_checkpoint(self) -> None:
+        batch = self.first_node(3)
+        raw = self.retire_input(4)
+        self.boundary()
+        self.assertEqual(self.holder.node["batch"], batch)
+        self.assertEqual(self.holder.node["sent_through"], 3)
+        self.assertEqual(self.fake.stops, [])
+        self.assertEqual(len(self.fake.prompts), 1)
+        self.assertEqual((self.repo / ".kaola" / "heartbeat-prompt.json").read_bytes(), raw)
+        self.checkpoint(batch, "node-1", through=3)
+        # Keep the deleted input absent when recording the earlier checkpoint.
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        doc = json.loads(path.read_text())
+        doc["state"].pop("section_sources", None)
+        path.write_text(json.dumps(doc))
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the original node stop")
+        self.boundary()
+        self.assertEqual(self.node_count(), 1)
+        self.assertEqual(self.holder._lifecycle_state()["state"]["maintenance"]["handled_host_revision"], 3)
+
+    def test_startup_then_empty_exact_stops_only_the_owned_unassigned_node(self) -> None:
+        os.environ["FAKE_NODE_DELAY"] = "0.4"
+        self.host_change(3)
+        self.boundary()
+        self.wait_for(lambda: self.node_count() == 1, "the start in flight")
+        self.holder.turn["active"] = True
+        raw = self.retire_input(4)
+        self.holder.node_start.join(3)
+        self.assertEqual(self.holder.node["phase"], "running")
+        self.assertEqual(self.fake.prompts, [], "startup does not send during the newer Host turn")
+        self.assertEqual(self.fake.stops, [], "the Host can still add useful input")
+        # A foreign replacement is neither assigned nor stopped by this carrier.
+        path = self.side_dir / "record.json"
+        owned = path.read_bytes()
+        record = json.loads(owned)
+        record["holder_instance_id"] = "foreign"
+        path.write_text(json.dumps(record))
+        self.holder.turn["active"] = False
+        self.boundary()
+        self.assertEqual(self.fake.stops, [])
+        path.write_bytes(owned)
+        self.boundary()
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "unassigned node cleanup")
+        self.assertEqual([row["params"]["expected_holder_instance_id"] for row in self.fake.stops], ["node-1"])
+        self.assertEqual(self.fake.prompts, [])
+        self.assertEqual((self.repo / ".kaola" / "heartbeat-prompt.json").read_bytes(), raw)
+
+    def test_startup_coalesces_new_useful_work_until_the_host_turn_ends(self) -> None:
+        os.environ["FAKE_NODE_DELAY"] = "0.4"
+        self.host_change(3)
+        self.boundary()
+        self.wait_for(lambda: self.node_count() == 1, "the start in flight")
+        self.holder.turn["active"] = True
+        self.retire_input(4)
+        self.holder.node_start.join(3)
+        self.host_change(5)
+        self.boundary()
+        self.assertEqual(self.fake.prompts, [])
+        self.assertEqual(self.fake.stops, [])
+        self.finish_host_turn()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the useful batch after startup")
+        self.assertEqual(self.node_count(), 1)
+        self.assertIn("host revision 1..5", self.fake.prompts[0]["params"]["text"])
+        self.checkpoint(self.batch_of(0), "node-1", through=5)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stop")
+
+    def test_a_pinned_legacy_contract_keeps_revision_only_node_selection(self) -> None:
+        self.retire_input(4)
+        saved = holder_module._RECORD
+        holder_module._RECORD = False
+        try:
+            doc = json.loads((self.repo / ".kaola" / "heartbeat-prompt.json").read_text())
+            self.assertEqual(self.holder._node_host_pending(doc), 4)
+        finally:
+            holder_module._RECORD = saved
 
     def test_ordinary_worker_returns_reach_the_host_and_start_no_node(self) -> None:
         self.write_node_state()

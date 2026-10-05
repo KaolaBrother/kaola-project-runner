@@ -3433,9 +3433,15 @@ class Holder:
         current = doc.get("host_revision")
         maintenance = (doc.get("state") or {}).get("maintenance") or {}
         handled = maintenance.get("handled_host_revision") or 0
+        after = max(int(handled) if isinstance(handled, int) else 0,
+                    self.node.get("sent_through") or 0)
         if (isinstance(current, int) and not isinstance(current, bool)
-                and current > max(int(handled) if isinstance(handled, int) else 0,
-                                  self.node.get("sent_through") or 0)):
+                and current > after):
+            selector = getattr(_RECORD, "host_changes", None)
+            # Older holder bundles keep revision-only selection. No new
+            # transport gate when the pinned sibling has no shared selector.
+            if callable(selector) and not selector(doc, after, current):
+                return None
             return current
         return None
 
@@ -3493,15 +3499,27 @@ class Holder:
             return result
         if node.get("phase") in ("starting", "stopping") or node.get("batch"):
             return result
+        if self.turn["active"]:
+            # Startup can finish during a newer Host turn. Wait for its end
+            # before sending a batch or reclaiming an unassigned node.
+            return result
         doc = self._lifecycle_state()
         through = self._node_host_pending(doc)
-        if through is None:
-            return result
         target = self._sideagent_relay_target()
+        if through is None:
+            if (doc and isinstance(doc.get("host_revision"), int)
+                    and not isinstance(doc["host_revision"], bool)
+                    and callable(getattr(_RECORD, "host_changes", None))
+                    and node.get("phase") == "running" and node.get("binding") == fingerprint
+                    and not node.get("fingerprint") and target is not None):
+                # Our fresh node finished startup after its current input
+                # disappeared. No batch was sent. Exact-stop that holder;
+                # no handled/acked revision or checkpoint proof is written.
+                node.update(phase="stopping")
+                threading.Thread(target=self._stop_node,
+                                 args=(target["holder_instance_id"],), daemon=True).start()
+            return result
         if target is None:
-            if self.turn["active"]:
-                # The Host may still be writing; its turn end is the boundary.
-                return result
             node.update(phase="starting", binding=fingerprint)
             self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint),
                                                daemon=True)

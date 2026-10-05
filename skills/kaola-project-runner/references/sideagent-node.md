@@ -65,6 +65,11 @@ shell), sends one prompt with the batch id, the Host revision range and the
 node's role limits (source pointers only, no restated result, no dispatch or
 judgment, exact-stop only a Host-recorded reclaim), and reads the node's checkpoint at its turn end. A turn end alone
 acknowledges nothing. A refused recipe is logged once.
+With the shared current-input selector, retirement alone starts or sends no
+node when no input remains. It advances no checkpoint revision. If startup
+finishes after the input disappears, the carrier waits for the Host turn end
+and exact-stops its unassigned node. An assigned batch keeps its range and
+checkpoint. Older bundles without the selector keep revision-only selection.
 
 The node writes once:
 
