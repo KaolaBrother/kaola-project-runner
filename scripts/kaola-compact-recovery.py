@@ -287,22 +287,21 @@ def reload_instruction(skill_path: Optional[str] = None) -> str:
     """
     if skill_path:
         reopen = (f"call the available file read tool now, before you answer, "
-                  f"and completely re-read the current installed Skill(s) that "
-                  f"this session is actively using - your role/task Skill (for "
-                  f"example Workflow Next when it is active) and the installed "
-                  f"platform Skill at {skill_path} - from their installed "
-                  f"directories. Do not answer from memory or a cached copy. ")
+                  f"and completely re-read the full current content of the "
+                  f"installed platform Skill file at {skill_path} and of your "
+                  f"active role/task Skill, such as Workflow Next when it is "
+                  f"active. ")
     else:
         reopen = ("call the available file read tool now, before you answer, "
-                  "and completely re-read the current installed Skill(s) that "
-                  "this session is actively using - your role/task Skill (for "
-                  "example Workflow Next when it is active) and your installed "
-                  "platform Skill - from their installed directories. Do not "
-                  "answer from memory or a cached copy. ")
+                  "and completely re-read the full current content of the "
+                  "installed Skill file(s) that this session is actively using "
+                  "- your role/task Skill (for example Workflow Next when it is "
+                  "active) and your installed platform Skill. ")
     return ("The runtime context was compacted, so any remembered Skill content "
             "is stale and must not be used. Before you continue, " + reopen
-            + "Then continue the in-progress task from the durable project "
-            "records, exactly where it stopped. Do not restart completed work.")
+            + "Do not answer from memory or a cached copy. Then continue the "
+            "in-progress task from the durable project records, exactly where "
+            "it stopped. Do not restart completed work.")
 
 
 def host_reload_prompt(host_entry: str) -> str:
