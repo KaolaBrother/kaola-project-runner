@@ -126,8 +126,7 @@ too) needs its own call; events staged in a dead Host need adoption.
 
 ## Size
 
-Repeats update the same id. A retired record leaves a capped tombstone; a late
-event gets `record-retired`. Never drop an open duty to fit. The Host view is
+Repeats update the same id. A settled record leaves the file. An old revision gets `record-retired`. Never drop an open duty to fit. The Host view is
 bounded at 64 KiB (`host-view-too-large`). The file may reach 1 MiB only with a
 recorded `carrier` advertising `heartbeat-state/2`, else 64 KiB
 (`carrier-limit`).

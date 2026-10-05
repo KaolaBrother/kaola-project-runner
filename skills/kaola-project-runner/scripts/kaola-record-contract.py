@@ -187,6 +187,38 @@ def machine_stone(stone: dict[str, Any]) -> dict[str, Any]:
     return kept
 
 
+def drop_settled_history(state: dict[str, Any]) -> list[str]:
+    """Drop settled rows. Keep a stone only when it still names seats or dispatch.
+
+    A clear-time, cite, or outcome is not a current duty. ``keep_open`` and
+    prose are not read here.
+    """
+    removed: list[str] = []
+    stones = state.get("retired")
+    if not isinstance(stones, list):
+        return removed
+    kept: list[dict[str, Any]] = []
+    for stone in stones:
+        if not isinstance(stone, dict):
+            removed.append("retired.unreadable")
+            continue
+        kind, ident = stone.get("kind"), stone.get("id")
+        pending = bool(stone.get("seats") or stone.get("dispatch")) and not stone.get("handed_to")
+        if pending:
+            kept.append({
+                key: stone[key]
+                for key in ("kind", "id", "at", "host_revision", "seats", "dispatch")
+                if key in stone
+            })
+            continue
+        removed.append(f"retired.{kind}/{ident}")
+    if kept:
+        state["retired"] = kept
+    else:
+        state.pop("retired", None)
+    return removed
+
+
 def unknown_record_keys(kind: str, record: dict[str, Any]) -> list[str]:
     allowed = RECORD_KEYS[kind]
     found = [key for key in record if key not in allowed]
@@ -606,7 +638,14 @@ def projected_state(state: dict[str, Any]) -> dict[str, Any]:
                 for ident, record in records.items() if isinstance(record, dict)
             }
     if isinstance(state.get("retired"), list):
-        out["retired"] = [machine_stone(stone) for stone in state["retired"] if isinstance(stone, dict)]
+        pending = [
+            machine_stone(stone) for stone in state["retired"]
+            if isinstance(stone, dict)
+            and (stone.get("seats") or stone.get("dispatch"))
+            and not stone.get("handed_to")
+        ]
+        if pending:
+            out["retired"] = pending
     if isinstance(state.get("maintenance"), dict):
         out["maintenance"] = {
             key: state["maintenance"][key]
@@ -705,6 +744,10 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
         if narrowed != stones:
             cleaned["retired"] = narrowed
             changed = True
+    history = drop_settled_history(cleaned)
+    if history:
+        removed.extend(history)
+        changed = True
     return [], cleaned, changed, removed
 
 
@@ -889,17 +932,8 @@ def _delegator_nest_problems(doc: dict[str, Any], dropped: list[str]) -> list[di
                                      "remove this key; the file was not written"))
     elif stop is not None and not isinstance(stop, str):
         found.append(refusal("stop", "string or object", "rehome the stop boundary; the file was not written"))
-    retired = doc.get("retired")
-    if isinstance(retired, list):
-        for index, stone in enumerate(retired):
-            if not isinstance(stone, dict):
-                found.append(refusal(f"retired[{index}]", "machine stone",
-                                     "rehome this row; the file was not written"))
-                continue
-            for key in stone:
-                if key not in STONE_KEYS:
-                    found.append(refusal(f"retired[{index}].{key}", ", ".join(sorted(STONE_KEYS)),
-                                         "remove prose; the file was not written"))
+    if "retired" in doc:
+        dropped.append("retired")
     return found
 
 
@@ -909,6 +943,9 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
     auth = doc.get("authorization")
     if isinstance(auth, dict):
         for key in sorted(auth):
+            if key == "retired_pool_grants":
+                dropped.append("authorization.retired_pool_grants")
+                continue
             if key not in DELEGATOR_AUTH_KEYS:
                 blockers.append(refusal(
                     f"authorization.{key}",
@@ -1071,8 +1108,12 @@ def delegator_migrated(doc: dict[str, Any]) -> tuple[dict[str, Any] | None, list
         else:
             dropped.append(f"watch.{ident}")
     out["watch"] = watch_out
-    if isinstance(doc.get("retired"), list):
-        out["retired"] = [machine_stone(stone) for stone in doc["retired"] if isinstance(stone, dict)]
+    auth_out = out.get("authorization")
+    if isinstance(auth_out, dict) and "retired_pool_grants" in auth_out:
+        auth_out.pop("retired_pool_grants")
+        dropped.append("authorization.retired_pool_grants")
+    if "retired" in doc:
+        dropped.append("retired")
     return out, [], sorted(set(dropped))
 
 
@@ -1238,7 +1279,10 @@ def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
         "revision": doc.get("revision"),
         "project": {key: project[key] for key in DELEGATOR_PROJECT_KEYS if key in project},
         "host": {key: host[key] for key in DELEGATOR_HOST_KEYS if key in host},
-        "authorization": {key: auth[key] for key in DELEGATOR_AUTH_KEYS if key in auth},
+        "authorization": {
+            key: auth[key] for key in DELEGATOR_AUTH_KEYS
+            if key in auth and key != "retired_pool_grants"
+        },
         "watch": duties,
         "day_start": doc.get("day_start"),
         "day_end": doc.get("day_end"),

@@ -3668,6 +3668,7 @@ class RenderedGuidance(unittest.TestCase):
         text = generated.decode()
         self.assertIn("does not choose workers,\ngrant, accept or stop seats", text)
         self.assertIn("Host allocates within authorization", text)
+        self.assertIn("The Delegator file is the ceiling", text)
         self.assertIn("Explicit `applied: false` or `model_verified: false`", text)
         self.assertIn("Missing application, unknown observations", text)
         self.assertIn("advertised differences stay unknown and do not block send", text)

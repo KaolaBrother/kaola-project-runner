@@ -78,6 +78,15 @@ live row of the preset still counts against the item, and a refused attempt
 (`not-run`, no holder) binds no assignment for a later retry. Planned Host
 dispatch runs through `execute`; a direct Runner `start`/`send` is the
 standalone, degraded, or same-assignment recovery path.
+When `<repo>/.kaola/delegator-heartbeat.json` has schema `kaola-delegator-heartbeat/1`,
+that file is the eligibility ceiling for new dispatch.
+Host grants may be narrower. They cannot add a preset, a count, or a cap.
+A preset the Delegator revoked, paused, or omitted is `not-run`.
+An in-flight or returned row with the same identity stays.
+Its evidence names the pending duty: `stop`, `handoff`, `finalize`, or `reclaim`.
+A missing Delegator file leaves standalone Host authorization unchanged.
+An unreadable ceiling blocks new dispatch and leaves running work in place.
+`keep_open` and nonempty `wait` or `next` do not keep or finish a task.
 
 ```bash
 python3 "$RUNNER" list --repo "$REPO" > "$LIVE"

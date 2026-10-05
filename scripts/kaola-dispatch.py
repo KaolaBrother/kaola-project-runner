@@ -65,6 +65,19 @@ SESSION_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 GRANT_STATES = frozenset({"granted", "paused", "revoked", "excluded"})
 GRANT_LIFETIMES = frozenset({"task", "standing"})
 EXPERT_WITHHELD_REASONS = frozenset({"lifetime-unreadable", "expiry-unreadable", "expired"})
+CEILING_REASONS = frozenset({
+    "above-ceiling", "ceiling-incomplete", "ceiling-unreadable",
+    "revoked", "paused", "excluded", "expired",
+})
+CEILING_DUTY = {
+    "revoked": "stop",
+    "above-ceiling": "stop",
+    "expired": "stop",
+    "excluded": "stop",
+    "paused": "handoff",
+    "ceiling-incomplete": "reclaim",
+    "ceiling-unreadable": "reclaim",
+}
 LEGACY_LIVE_STATE = re.compile(r"^\d+\s+live$")
 COVERAGE = ("in-flight", "returned", "failed", "unknown", "not-run")
 RUNNER_TIMEOUT = float(os.environ.get("KAOLA_DISPATCH_RUNNER_TIMEOUT", "120"))
@@ -1051,6 +1064,121 @@ def binding_row(binding: dict[str, Any] | None, row: dict[str, Any]) -> bool:
     return not holder or row.get("holder_instance_id") == holder
 
 
+def _count_ok(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def delegator_ceiling(repo: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Current Delegator grants, or no ceiling when that file is absent.
+
+    A file with another schema is not a Delegator record. Standalone Host
+    authorization stays in force. A matching schema with a bad body blocks
+    new dispatch and does not widen it.
+    """
+    path = Path(repo) / ".kaola" / "delegator-heartbeat.json"
+    if not path.is_file():
+        return None, None
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, "ceiling-unreadable"
+    if not isinstance(doc, dict) or doc.get("schema") != RECORD.DELEGATOR_SCHEMA:
+        return None, None
+    auth = doc.get("authorization")
+    if not isinstance(auth, dict):
+        return None, "ceiling-incomplete"
+    blocked: dict[str, str] = {}
+    for key, reason in (("revoked", "revoked"), ("paused", "paused"), ("exclusions", "excluded")):
+        value = auth.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            return None, "ceiling-unreadable"
+        for item in value:
+            blocked.setdefault(item, reason)
+    workers = auth.get("worker_pool")
+    if workers is None:
+        worker_ids = None
+    elif isinstance(workers, list) and all(isinstance(item, str) for item in workers):
+        worker_ids = set(workers)
+    else:
+        return None, "ceiling-unreadable"
+    elite: dict[str, int | None] | None = None
+    raw_elite = auth.get("elite_grants")
+    if raw_elite is not None:
+        if not isinstance(raw_elite, list):
+            return None, "ceiling-unreadable"
+        elite = {}
+        for grant in raw_elite:
+            if not isinstance(grant, dict):
+                return None, "ceiling-unreadable"
+            ids: list[str] = []
+            if isinstance(grant.get("preset_id"), str):
+                ids.append(grant["preset_id"])
+            many = grant.get("preset_ids")
+            if isinstance(many, list) and all(isinstance(item, str) for item in many):
+                ids.extend(many)
+            elif many is not None:
+                return None, "ceiling-unreadable"
+            count = grant.get("count")
+            if count is not None and not _count_ok(count):
+                return None, "ceiling-unreadable"
+            for ident in ids:
+                prior = elite.get(ident, count if _count_ok(count) else None)
+                if ident in elite and prior != (count if _count_ok(count) else None):
+                    return None, "ceiling-unreadable"
+                elite[ident] = count if _count_ok(count) else None
+    cap = auth.get("elite_cap")
+    if cap is not None and not _count_ok(cap):
+        return None, "ceiling-unreadable"
+    pool_cap = auth.get("worker_pool_cap")
+    if pool_cap is not None and not _count_ok(pool_cap):
+        return None, "ceiling-unreadable"
+    return {
+        "blocked": blocked,
+        "worker_ids": worker_ids,
+        "elite_ids": elite,
+        "elite_cap": cap if _count_ok(cap) else None,
+        "worker_pool_cap": pool_cap if _count_ok(pool_cap) else None,
+    }, None
+
+
+def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str) -> str | None:
+    if preset in ceiling["blocked"]:
+        return ceiling["blocked"][preset]
+    if class_name == "Worker":
+        if ceiling["worker_ids"] is None:
+            return "ceiling-incomplete"
+        return None if preset in ceiling["worker_ids"] else "above-ceiling"
+    if ceiling["elite_ids"] is None:
+        return "ceiling-incomplete"
+    return None if preset in ceiling["elite_ids"] else "above-ceiling"
+
+
+def ceiling_count(ceiling: dict[str, Any], preset: str, class_name: str) -> int | None:
+    if class_name == "Worker":
+        return None
+    elite = ceiling.get("elite_ids") or {}
+    count = elite.get(preset)
+    return count if _count_ok(count) else None
+
+
+def narrow_grant_counts(grants: list[dict[str, Any]], ceiling: dict[str, Any]) -> list[dict[str, Any]]:
+    """Host counts may fall to the Delegator count. They do not rise."""
+    narrowed = []
+    for grant in grants:
+        grant = dict(grant)
+        limit = ceiling_count(ceiling, grant["id"], "Elite")
+        if limit is not None and grant["id"] in (ceiling.get("elite_ids") or {}):
+            host_count = grant.get("count")
+            if _count_ok(host_count):
+                grant["count"] = min(host_count, limit)
+            elif limit == 0:
+                grant["count"] = 0
+        narrowed.append(grant)
+    return narrowed
+
+
 def command_execute(args: argparse.Namespace) -> int:
     try:
         plan = load_object(Path(args.plan))
@@ -1141,6 +1269,34 @@ def command_execute(args: argparse.Namespace) -> int:
         return fail("invalid-input", str(exc))
     holds = preset_holds(lifecycle if lifecycle is not None else auth_doc)
     known_tasks = state_task_ids(lifecycle)
+    ceiling, ceiling_error = delegator_ceiling(repo)
+    if ceiling is not None:
+        if _count_ok(ceiling.get("elite_cap")):
+            elite_cap = ceiling["elite_cap"] if elite_cap is None else min(elite_cap, ceiling["elite_cap"])
+            effective_cap = elite_cap if seat_cap is None else min(elite_cap, seat_cap)
+        grants = narrow_grant_counts(grants, ceiling)
+        shared_capacities = shared_seat_capacities(grants)
+        candidates, withheld = eligibility(catalog, auth, grants, available)
+        kept_candidates = []
+        for candidate in candidates:
+            class_name = catalog[candidate["id"]]["class"]
+            reason = ceiling_block(ceiling, candidate["id"], class_name)
+            if reason:
+                withheld.append({"id": candidate["id"], "reason": reason})
+                continue
+            limit = ceiling_count(ceiling, candidate["id"], class_name)
+            if limit is not None:
+                host_count = candidate.get("count")
+                if _count_ok(host_count):
+                    candidate = dict(candidate)
+                    candidate["count"] = min(host_count, limit)
+                elif limit == 0:
+                    candidate = dict(candidate)
+                    candidate["count"] = 0
+            kept_candidates.append(candidate)
+        candidates = kept_candidates
+        by_candidate = {item["id"]: item for item in candidates}
+        withheld_reason = {item["id"]: item["reason"] for item in withheld}
 
     prepared: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
@@ -1168,11 +1324,16 @@ def command_execute(args: argparse.Namespace) -> int:
         if row is None:
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", "preset-unresolved"))
             continue
+        if ceiling_error:
+            blocked.append(blank_item(item["item_id"], preset, session, "not-run", ceiling_error))
+            continue
         candidate = by_candidate.get(preset)
         if candidate is None:
             reason = "not-authorized"
             auth_grant = grant_index(grants).get(preset)
-            if available.get(preset) == "absent":
+            if withheld_reason.get(preset) in CEILING_REASONS:
+                reason = withheld_reason[preset]
+            elif available.get(preset) == "absent":
                 reason = "absent"
             elif auth_grant and auth_grant["state"] in {"excluded", "revoked", "paused"}:
                 reason = auth_grant["state"]
@@ -1380,6 +1541,7 @@ def command_execute(args: argparse.Namespace) -> int:
     seat_marks = {item["item_id"]: item for item in fresh_open
                   if item.get("_exempt") or item.get("_helper_counted") or item.get("_held_row")}
     ready = list(kept_items)
+    worker_admitted = 0
     for item in fresh_open:
         if item.get("_exempt"):
             ready.append(item)
@@ -1431,10 +1593,16 @@ def command_execute(args: argparse.Namespace) -> int:
                 item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
             ))
             continue
+        pool_cap = (ceiling or {}).get("worker_pool_cap") if ceiling is not None else None
+        if item["_pool"] and _count_ok(pool_cap) and worker_admitted >= pool_cap:
+            blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", "seat-cap"))
+            continue
         if isinstance(limit, int):
             used_count[item["preset"]] = used_count.get(item["preset"], 0) + 1
         if isinstance(seat_name, str) and seat_name:
             occupied_shared[seat_name] = occupied_shared.get(seat_name, 0) + 1
+        if item["_pool"] and _count_ok(pool_cap):
+            worker_admitted += 1
         if not item["_pool"] and effective_cap is not None:
             used_seats += 1
         ready.append(item)
@@ -1487,9 +1655,15 @@ def command_execute(args: argparse.Namespace) -> int:
                 ):
                     # publish() runs before the executor. An empty match is the
                     # placeholder reason "missing", not a refusal.
+                    evidence = dict(chosen.get("evidence") or {})
                     if match:
-                        evidence = dict(chosen.get("evidence") or {})
                         evidence["blocked_attempt"] = {"reason": attempt}
+                    if attempt in CEILING_DUTY and prior.get("status") in ("in-flight", "returned"):
+                        if prior.get("status") == "returned" and prior.get("acceptance") == "accepted":
+                            evidence["pending_duty"] = "finalize"
+                        else:
+                            evidence["pending_duty"] = CEILING_DUTY[attempt]
+                    if evidence:
                         chosen["evidence"] = evidence
                     chosen["status"] = prior["status"]
                     if isinstance(prior.get("reason"), str) and prior["reason"]:
@@ -3385,13 +3559,22 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     records = state.setdefault(kind, {})
     current = records.get(record_id)
     stones = [stone for stone in state.get("retired") or []
-              if stone.get("kind") == kind and stone.get("id") == record_id]
+              if isinstance(stone, dict) and stone.get("kind") == kind and stone.get("id") == record_id
+              and (stone.get("seats") or stone.get("dispatch")) and not stone.get("handed_to")]
     if current is None and stones:
-        if not (kind in ("holds", "alerts") and observed_after(patch.get("observed_at"), stones[-1].get("at"))):
-            raise StateRefusal("record-retired", f"{kind}/{record_id} was retired; a late event does not "
-                               "reopen it. A new occurrence of a stable hold or alert id names its "
-                               "`observed_at`, later than the retirement; other work uses a new id",
-                               retired=stones[-1], unapplied=patch)
+        raise StateRefusal(
+            "record-retired",
+            f"{kind}/{record_id} still has a pending reclaim. A new duty uses a new id. "
+            "The file was not changed.",
+            unapplied=patch,
+        )
+    if current is None and args.expect_rev not in (None, 0):
+        raise StateRefusal(
+            "record-retired",
+            f"{kind}/{record_id} is not current. A new duty omits --expect-rev. "
+            "An old revision does not restore the settled record. The file was not changed.",
+            unapplied=patch,
+        )
     if "prior_verdict" in patch:
         raise StateRefusal("invalid-input", "prior_verdict is kept by the tool", unapplied=patch)
     coalesce = bool(getattr(args, "coalesce", False)) and kind == "alerts" and current is not None
@@ -3557,14 +3740,6 @@ def apply_section_update(args: argparse.Namespace, doc: dict[str, Any], patch: A
             first = blocked[0]
             raise StateRefusal("invalid-input", first["detail"], path=first["path"],
                                allowed=first["allowed"], recovery=first["recovery"], unapplied=patch)
-    if section == "unverified":
-        # A resolved unknown leaves a machine tombstone. The source text is not copied.
-        for key in sorted(key for key, value in patch.items()
-                          if value is None and key in (state.get("unverified") or {})):
-            stones = list(state.get("retired") or []) + [RECORD.machine_stone({
-                "kind": "unverified", "id": key, "outcome": "resolved",
-                "writer": args.writer, "at": observed_at()})]
-            state["retired"] = stones[-TOMBSTONE_CAP:]
     state[section] = merge_patch(state.get(section) or {}, patch)
     note_section_source(state, args, section)
     return state[section]
@@ -3783,8 +3958,21 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
              **({"handed_to": handoff, **handed} if handoff else {})}
     stamp_writer(doc, stone, args, caller_dispatcher())
     del state[kind][record_id]
-    stones = list(state.get("retired") or []) + [stone]
-    state["retired"] = stones[-TOMBSTONE_CAP:]
+    # The command result carries the cite. The file does not keep a settled row.
+    # Seats handed to another task stay on that task. A stone stays only when
+    # it still names seats or dispatch and names no receiver.
+    kept = []
+    for old in state.get("retired") or []:
+        if not isinstance(old, dict):
+            continue
+        if old.get("kind") == kind and old.get("id") == record_id:
+            continue
+        if (old.get("seats") or old.get("dispatch")) and not old.get("handed_to"):
+            kept.append(old)
+    if kept:
+        state["retired"] = kept
+    else:
+        state.pop("retired", None)
     return stone
 
 
@@ -3995,20 +4183,22 @@ def retirement_stones(state: dict[str, Any], kind: str, record_id: str) -> list[
 
 
 def already_settled_input(state: dict[str, Any], ident: str) -> bool:
-    """A Host input that already has a retirement stone. A later node may acknowledge it.
+    """A Host input whose record has left the current set.
 
-    A cancelled task with a live seat, and a keep_open task, stay open. They are not settled here.
+    A current record stays open. ``keep_open`` and prose do not settle it.
     """
     if not ident.startswith("host:"):
         return False
     body = ident[len("host:"):].rpartition("@")[0]
     if body.startswith("retired/"):
         kind, _, record_id = body[len("retired/"):].partition("/")
-        return bool(record_id) and bool(retirement_stones(state, kind, record_id))
-    kind, _, record_id = body.partition("/")
+    else:
+        kind, _, record_id = body.partition("/")
     if not record_id or kind not in RECORD_KINDS:
         return False
-    return bool(retirement_stones(state, kind, record_id))
+    if retirement_stones(state, kind, record_id):
+        return True
+    return (state.get(kind) or {}).get(record_id) is None
 
 
 def checkpoint_entry(state: dict[str, Any], entry: Any, holder: str) -> tuple[str | None, str | None]:
@@ -4029,11 +4219,11 @@ def checkpoint_entry(state: dict[str, Any], entry: Any, holder: str) -> tuple[st
                 return entry["input"], "applied-unreadable"
             if ref.startswith("retired:"):
                 kind, _, record_id = ref[len("retired:"):].partition("/")
-                stones = retirement_stones(state, kind, record_id)
-                # An existing retirement is already settled. This node may
-                # acknowledge it; only a missing stone is unsettled.
-                if not stones:
-                    return entry["input"], f"{ref} is not a retirement by this node"
+                record = (state.get(kind) or {}).get(record_id) if kind in RECORD_KINDS else None
+                if kind in RECORD_KINDS and record is None:
+                    continue
+                if not retirement_stones(state, kind, record_id):
+                    return entry["input"], f"{ref} is not a current retirement"
                 continue
             kind, _, record_id = ref.partition("/")
             record = (state.get(kind) or {}).get(record_id) if kind in RECORD_KINDS else None
@@ -4233,9 +4423,14 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
             note("doing-untraced", "warn", "doing with neither a dispatch reference nor a wait reason",
                  "tasks", ident)
         if task.get("stage") == "done":
-            note("done-not-retired", "watch", "done; retire it with its evidence once close-out is "
-                 "verified", "tasks", ident)
+            verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
             seats = task_seats(task)
+            close_open = not (
+                verdict.get("value") in ("accepted", "cancelled") and not seats and not task.get("dispatch")
+            )
+            if close_open:
+                note("done-not-retired", "watch", "done; retire it with its evidence once close-out is "
+                     "verified", "tasks", ident)
             if seats and rows is not None:
                 for detail in open_seats(seats, rows):
                     note("done-seat-open", "warn", f"done while {detail}", "tasks", ident)
@@ -4808,6 +5003,9 @@ def command_delegator_update(args: argparse.Namespace) -> int:
                 return emit({"result": "refused", "reason": "conflict",
                              "detail": f"file is at revision {actual}", "current_revision": actual}, 3)
             merged = merge_patch(doc, patch)
+            merged.pop("retired", None)
+            if isinstance(merged.get("authorization"), dict):
+                merged["authorization"].pop("retired_pool_grants", None)
             merged["schema"] = RECORD.DELEGATOR_SCHEMA
             merged["revision"] = actual + 1
             merged["updated_at"] = observed_at()

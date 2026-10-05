@@ -149,11 +149,11 @@ class StateTool(StateProject):
         self.assertEqual(code, 0, out)
         doc = self.doc()
         self.assertNotIn("t1", doc["state"]["tasks"])
-        stone = doc["state"]["retired"][-1]
-        self.assertEqual(stone["cite"], {"path": "README.md", "locator": "README.md"})
-        self.assertNotIn("evidence", stone)
-        code, out = self.update("sideagent", "tasks", "t1", {"stage": "doing"})
-        self.assertEqual(out["reason"], "record-retired", "a late event does not reopen a retired task")
+        self.assertEqual(out["value"]["cite"], {"path": "README.md", "locator": "README.md"})
+        self.assertNotIn("evidence", out["value"])
+        self.assertFalse(doc["state"].get("retired"))
+        code, out = self.update("sideagent", "tasks", "t1", {"stage": "doing"}, "--expect-rev", "4")
+        self.assertEqual(out["reason"], "record-retired", "an old revision does not restore the settled task")
         self.update("host", "decisions", "d1", {"owner": "user", "question": "Expert?"})
         code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
                                "--kind", "decisions", "--id", "d1", "--expect-rev", "1", "--evidence", "x")
@@ -212,10 +212,11 @@ class StateTool(StateProject):
         self.assertEqual(code, 0, out)
         doc = self.doc()
         self.assertNotIn("t5", doc["state"]["tasks"])
-        stone = doc["state"]["retired"][-1]
-        self.assertEqual((stone["handed_to"], stone["seats"], stone["dispatch"], stone["cite"]["path"]),
+        self.assertEqual((out["value"]["handed_to"], out["value"]["seats"], out["value"]["dispatch"],
+                          out["value"]["cite"]["path"]),
                          ("t6", ["codex-KT-i7-a"], ["i7"], "README.md"))
-        self.assertNotIn("evidence", stone)
+        self.assertNotIn("evidence", out["value"])
+        self.assertFalse(doc["state"].get("retired"))
         receiver = doc["state"]["tasks"]["t6"]
         self.assertEqual((receiver["dispatch"], receiver["sessions"], receiver["rev"]),
                          (["i8", "i7"], ["codex-KT-i7-a"], 2), "the receiver owns the seat now")
@@ -374,33 +375,31 @@ class StateTool(StateProject):
                                "--source", "associated to #12 by index row i3", "--section", "unverified",
                                "--expect-revision", str(revision), "--set", '{"index-lost": null}')
         self.assertEqual(code, 0, out)
-        stone = self.doc()["state"]["retired"][-1]
-        self.assertEqual((stone["kind"], stone["id"], stone["outcome"]),
-                         ("unverified", "index-lost", "resolved"))
-        self.assertNotIn("evidence", stone)
-        self.assertNotIn("source", stone)
+        self.assertNotIn("index-lost", self.doc()["state"].get("unverified") or {})
+        self.assertFalse(self.doc()["state"].get("retired"))
 
     def test_a_stable_fault_id_recurs_but_a_stale_event_does_not(self) -> None:
         self.init()
         self.update("sideagent", "alerts", "quota-codex", {"level": "warn", "summary": "limit"})
         self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                    "--kind", "alerts", "--id", "quota-codex", "--expect-rev", "1", "--evidence", "reset")
-        retired_at = self.doc()["state"]["retired"][-1]["at"]
-        code, out = self.update("sideagent", "alerts", "quota-codex", {"level": "warn", "summary": "limit"})
-        self.assertEqual(out["reason"], "record-retired", "a late event without its time does not reopen")
+        self.assertNotIn("quota-codex", self.doc()["state"]["alerts"])
+        self.assertFalse(self.doc()["state"].get("retired"))
+        code, out = self.update("sideagent", "alerts", "quota-codex", {"level": "warn", "summary": "limit"},
+                                "--expect-rev", "1")
+        self.assertEqual(out["reason"], "record-retired", "an old revision does not restore the cleared alert")
         code, out = self.update("sideagent", "alerts", "quota-codex",
-                                {"level": "warn", "summary": "limit", "observed_at": "2020-01-01T00:00:00+00:00"})
-        self.assertEqual(out["reason"], "record-retired", "an occurrence before the retirement is stale")
-        code, out = self.update("sideagent", "alerts", "quota-codex",
-                                {"level": "warn", "summary": "limit again", "observed_at": "2999-01-01T00:00:00+00:00"})
+                                {"level": "warn", "summary": "limit again"})
         self.assertEqual(code, 0, out)
-        self.assertGreater(out["value"]["observed_at"], retired_at)
+        self.assertEqual(self.doc()["state"]["alerts"]["quota-codex"]["summary"], "limit again")
         self.update("host", "tasks", "t1", {"stage": "todo", "goal": "g", "verdict": {"value": "cancelled"}})
         self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
                    "--kind", "tasks", "--id", "t1", "--expect-rev", "1", "--evidence", "dropped")
-        code, out = self.update("host", "tasks", "t1", {"stage": "todo", "goal": "g",
-                                                        "observed_at": "2999-01-01T00:00:00+00:00"})
-        self.assertEqual(out["reason"], "record-retired", "a retired task id never reopens")
+        code, out = self.update("host", "tasks", "t1", {"stage": "todo", "goal": "g"}, "--expect-rev", "1")
+        self.assertEqual(out["reason"], "record-retired", "an old revision does not restore the settled task")
+        code, out = self.update("host", "tasks", "t1", {"stage": "todo", "goal": "new duty"})
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("verdict", self.doc()["state"]["tasks"]["t1"])
 
     def test_a_worker_caller_cannot_write_as_host(self) -> None:
         self.init()
@@ -667,9 +666,9 @@ class StateTool(StateProject):
         self.assertEqual(doc["state"]["tasks"], {}, "finished work left the current set")
         self.assertEqual(list(doc["state"]["alerts"]), ["conn-wait"], "a repeat updates one alert")
         self.assertEqual(doc["state"]["alerts"]["conn-wait"]["count"], 40)
-        self.assertEqual(len(doc["state"]["retired"]), 40)
-        self.assertLess(sizes[-1] - sizes[20], (sizes[20] - sizes[0]) + 4096,
-                        "growth is the bounded tombstone list, not history")
+        self.assertFalse(doc["state"].get("retired"))
+        self.assertNotIn("commit c0", self.file.read_text(encoding="utf-8"))
+        self.assertLess(sizes[-1] - sizes[0], 8192, "finished rows do not accumulate a history list")
         self.assertNotIn("index:t0", doc["body"], "evidence stays out of the Host view")
 
     def test_a_repair_keeps_its_failure_evidence_for_the_next_decision(self) -> None:

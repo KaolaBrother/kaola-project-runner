@@ -196,9 +196,9 @@ class RecordContract(unittest.TestCase):
         state = self.doc()["state"]
         self.assertNotIn("done-one", state["tasks"])
         self.assertEqual(state["tasks"]["open-one"]["goal"], "apply repair")
-        stone = state["retired"][-1]
-        self.assertEqual(stone["cite"]["path"], "README.md")
-        self.assertNotIn("evidence", stone)
+        self.assertEqual(out["value"]["cite"]["path"], "README.md")
+        self.assertNotIn("evidence", out["value"])
+        self.assertFalse(state.get("retired"))
 
     def test_devin_hold_scope_is_not_shortened(self) -> None:
         self.init()
@@ -317,7 +317,8 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(state["tasks"]["open-one"]["goal"], "still open")
         self.assertEqual(state["recovery"]["protected_untracked"], ["notes/local.txt"])
         self.assertNotIn("legacy", state["recovery"])
-        self.assertNotIn("evidence", state["retired"][0])
+        self.assertFalse(state.get("retired"))
+        self.assertIn("retired.tasks/old", out["removed"])
         self.assertEqual(stale.read_text(encoding="utf-8"), "unique-old-bytes")
         self.assertFalse(list(self.file.parent.glob("heartbeat-prompt.v2-*.json")))
 
@@ -396,6 +397,76 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(facts["i-pause"]["reason"], "paused")
         self.assertIsNone(facts["i-pause"].get("task_note"))
         self.assertIn("t-missing", facts["i-missing"]["task_note"])
+
+    def test_delegator_ceiling_narrows_new_dispatch_and_keeps_a_live_row(self) -> None:
+        auth = {
+            "classes": dict(CLASS_SENTENCES),
+            "grants": [
+                {"id": "codex/default", "state": "granted", "count": 1},
+                {"id": "claude-code/default", "state": "granted", "count": 1},
+                {"id": "droid/default", "state": "granted", "count": 4, "shared_seat": "droid"},
+                {"id": "droid/opus", "state": "granted", "count": 4, "shared_seat": "droid"},
+                {"id": "droid/core", "state": "granted", "count": 4, "shared_seat": "droid"},
+            ],
+            "elite_cap": 8,
+        }
+        self.init(auth)
+        prompt = "keep the live seat"
+        digest = "sha256:" + hashlib.sha256(prompt.encode()).hexdigest()
+        plan = self.repo / "ceiling-plan.json"
+        plan.write_text(json.dumps({
+            "scope": "research", "repo": str(self.repo.resolve()),
+            "items": [
+                {"item_id": "live-codex", "preset": "codex/default", "session": "codex-live",
+                 "prompt": prompt},
+                {"item_id": "new-claude", "preset": "claude-code/default", "session": "claude-new",
+                 "prompt": "outside the ceiling"},
+                {"item_id": "third-droid", "preset": "droid/core", "session": "droid-c",
+                 "prompt": "third shared seat"},
+            ],
+        }), encoding="utf-8")
+        index = self.repo / ".kaola" / "dispatch-index.json"
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "items": [{
+            "item_id": "live-codex", "preset": "codex/default", "session": "codex-live",
+            "status": "in-flight", "holder_instance_id": "holder-live",
+            "prompt_sha256": digest, "repo": str(self.repo.resolve()),
+        }]}), encoding="utf-8")
+        live = self.repo / "live.json"
+        live.write_text(json.dumps({"rows": [
+            {"preset": "droid/default", "session": "droid-a", "repo": str(self.repo.resolve()),
+             "state": "running"},
+            {"preset": "droid/opus", "session": "droid-b", "repo": str(self.repo.resolve()),
+             "state": "running"},
+        ]}), encoding="utf-8")
+        base = ["execute", "--plan", str(plan), "--authorization", str(self.file),
+                "--platforms", str(PLATFORMS), "--index", str(index), "--live", str(live), "--dry-run"]
+        code, open_host = run_dispatch(base)
+        self.assertEqual(code, 0, open_host)
+        open_rows = {row["item_id"]: row for row in open_host["items"]}
+        self.assertNotEqual(open_rows["new-claude"]["reason"], "above-ceiling")
+        (self.repo / ".kaola" / "delegator-heartbeat.json").write_text(json.dumps({
+            "schema": "kaola-delegator-heartbeat/1",
+            "authorization": {
+                "elite_grants": [
+                    {"preset_ids": ["droid/default", "droid/opus", "droid/core"], "count": 2},
+                    {"preset_id": "codex/default", "count": 1},
+                ],
+                "elite_cap": 4,
+                "worker_pool": ["zcode/default"],
+                "revoked": ["codex/default"],
+            },
+        }), encoding="utf-8")
+        code, limited = run_dispatch(base)
+        self.assertEqual(code, 0, limited)
+        self.assertEqual(limited["effective_cap"], 4)
+        rows = {row["item_id"]: row for row in limited["items"]}
+        self.assertEqual(rows["new-claude"]["status"], "not-run")
+        self.assertEqual(rows["new-claude"]["reason"], "above-ceiling")
+        self.assertEqual(rows["third-droid"]["status"], "not-run")
+        self.assertEqual(rows["third-droid"]["reason"], "shared-occupied")
+        self.assertEqual(rows["live-codex"]["status"], "in-flight")
+        self.assertEqual(rows["live-codex"]["evidence"]["pending_duty"], "stop")
+        self.assertEqual(index.read_text(encoding="utf-8").count("live-codex"), 1)
 
     def execute(self, script: Path, plan: Path, authorization: Path, state: Path | None) -> dict:
         argv = [PYTHON, str(script), "execute", "--plan", str(plan), "--authorization", str(authorization),
@@ -491,9 +562,9 @@ class RecordContract(unittest.TestCase):
             "--kind", "tasks", "--id", "design-1", "--expect-rev", "1",
             "--evidence", "accepted design row", "--cite", CITE)
         self.assertEqual(code, 0, out)
-        stone = self.doc()["state"]["retired"][-1]
-        self.assertNotEqual(stone.get("writer_holder"), "node-1")
-        ident = f"host:retired/tasks/design-1@{stone['host_revision']}"
+        self.assertEqual(out["value"]["cite"]["path"], "README.md")
+        self.assertFalse(self.doc()["state"].get("retired"))
+        ident = "host:tasks/design-1@1"
         doc = self.doc()
         doc["state"].setdefault("alerts", {})["maintenance-returned"] = {
             "level": "warn", "owner": "host", "summary": "1 maintenance input(s) not applied by a node",
@@ -850,8 +921,9 @@ class RecordContract(unittest.TestCase):
             "--kind", "tasks", "--id", "done-one", "--expect-rev", "1", "--evidence", "README.md",
             "--cite", CITE)
         self.assertEqual(code, 0, out)
-        self.assertEqual(self.doc()["state"]["retired"][-1]["cite"]["path"], "README.md")
-        self.assertNotIn("commit", self.doc()["state"]["retired"][-1]["cite"])
+        self.assertEqual(out["value"]["cite"]["path"], "README.md")
+        self.assertNotIn("commit", out["value"]["cite"])
+        self.assertFalse(self.doc()["state"].get("retired"))
 
     def test_delegator_role_view_uses_locators(self) -> None:
         self.init()

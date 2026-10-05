@@ -1,8 +1,7 @@
 # Dispatch and collect
 
 `scripts/kaola-dispatch.py` executes an adopted plan; it does not choose workers,
-grant, accept or stop seats. Host allocates within authorization. Index is
-correlation, not a ledger; trivial calls use no model.
+grant, accept or stop seats. Host allocates within authorization. The Delegator file is the ceiling. Index is correlation, not a ledger.
 
 Gathering, research, counterexamples or critique, edge exploration,
 verification: spread useful parallel items as evenly as reasonably possible across
