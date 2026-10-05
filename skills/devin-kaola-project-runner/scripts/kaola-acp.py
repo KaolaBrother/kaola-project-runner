@@ -4,7 +4,7 @@
 Thin socket client: every command talks to the per-session holder process
 (``kaola-acp-holder.py``) over ``holder.sock`` with newline-delimited JSON.
 Receipts are ``schema_version: 3`` JSON on stdout; fact errors ride inside the
-receipt as ``error: {code, message}`` while usage errors exit non-zero.
+receipt as ``error: {code, message}``; usage errors also return JSON and exit non-zero.
 """
 
 from __future__ import annotations
@@ -381,25 +381,41 @@ def absolute_codex_path(env: dict[str, str]) -> str:
     return path if os.path.isabs(path) else ""
 
 
+def codex_child_path(args: argparse.Namespace) -> str:
+    """Keep an explicit child path; otherwise resolve the Runner runtime once."""
+    if hasattr(args, "resolved_codex_child_path"):
+        return args.resolved_codex_child_path
+    if os.environ.get("CODEX_PATH"):
+        path = os.environ["CODEX_PATH"]
+    else:
+        binary = runtime_binary(args.manifest)
+        resolved = shutil.which(binary)
+        path = os.path.abspath(resolved) if resolved else ""
+    args.resolved_codex_child_path = path
+    return path
+
+
 def codex_child_error(args: argparse.Namespace) -> dict[str, str] | None:
     """Why a manifest Codex launch must not start, or None.
 
     codex-acp runs its nested ``@openai/codex`` when ``CODEX_PATH`` is unset.
     A ``codex`` entry on PATH does not change that child. The supported child
-    is the absolute ``CODEX_PATH`` binary. This does not read the binary's
-    version and does not search PATH.
+    is the explicit absolute ``CODEX_PATH`` binary, or the resolved Runner
+    runtime (CODEX_BIN, then PATH). This does not read the binary's version.
     """
     if not codex_manifest_launch(args):
         return None
-    path = absolute_codex_path(os.environ)
+    path = codex_child_path(args)
     requested = (getattr(args, "manifest", None) or {}).get("acp_requested_cli") or ""
-    if not path:
+    if not path or not os.path.isabs(path):
         return {
             "code": "codex-child-path",
             "message": (
-                "Codex child CLI requires an absolute CODEX_PATH "
-                f"(requested Codex CLI {requested}). PATH does not select the child. "
-                "The adapter's nested @openai/codex package does not select the child"
+                "Cannot resolve an absolute Codex child executable "
+                f"(requested Codex CLI {requested}). Set CODEX_PATH to the absolute "
+                "path of an executable Codex CLI, or unset CODEX_PATH and use "
+                "CODEX_BIN or PATH. For example: CODEX_PATH=/absolute/path/to/codex. "
+                "The adapter's nested @openai/codex package is not used"
             ),
         }
     if not os.path.isfile(path):
@@ -542,9 +558,8 @@ def agent_environment(args: argparse.Namespace) -> dict[str, str]:
     Loopback-reaching platforms also get the loopback proxy bypass; that lands
     in this copy only, never in ``os.environ``.
 
-    Issue #247: a Codex manifest launch keeps an absolute ``CODEX_PATH`` and
-    drops any other value, so the adapter cannot treat a bare name as PATH or
-    fall through to its nested ``@openai/codex`` package.
+    A Codex manifest launch supplies the same absolute child path checked
+    before spawn. An invalid explicit path is refused before this is used.
     """
     env = dict(os.environ)
     bridge_env = BRIDGE_BINARY_ENV.get(args.platform)
@@ -555,8 +570,8 @@ def agent_environment(args: argparse.Namespace) -> dict[str, str]:
     if args.platform == "dsh":
         env[DSH_PERMISSION_ENV] = dsh_permission_mode(args)[0]
     if codex_manifest_launch(args):
-        path = absolute_codex_path(env)
-        if path:
+        path = codex_child_path(args)
+        if os.path.isabs(path):
             env["CODEX_PATH"] = path
         else:
             env.pop("CODEX_PATH", None)
@@ -706,9 +721,36 @@ def session_new_extra(args: argparse.Namespace) -> float:
     return max(0.0, session_new_timeout(args) - SESSION_NEW_TIMEOUT)
 
 
+class InputError(SystemExit):
+    def __init__(self, message: str, code: int = 2):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class ReceiptArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        # argparse can echo prompt text or a secret in an invalid value.
+        reason = "Invalid arguments (invalid choice)" if "invalid choice:" in message else "Invalid arguments"
+        die(f"{reason}. Use --help for the accepted arguments.")
+
+
+def input_error_receipt(message: str, platform: str | None = None,
+                        action: str | None = None, repo: str | None = None,
+                        session: str | None = None) -> dict[str, Any]:
+    """Input failed before any transport mutation; no holder was contacted."""
+    return {"schema_version": 3, "platform": platform, "action": action,
+            "repo": repo, "session": session, "transport": {"selected": "acp"},
+            "error": {"code": "invalid-input", "message": message},
+            "mutation_status": "not_started", "mutation_performed": False}
+
+
 def die(message: str, code: int = 2) -> None:
     print(f"kaola-acp: {message}", file=sys.stderr)
-    raise SystemExit(code)
+    raise InputError(message, code)
 
 
 def canonical_dir(path: str) -> str:
@@ -813,7 +855,7 @@ def probe_socket_ok(path: Path) -> bool:
 
 
 def parse_list_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="kaola-acp.py list")
+    parser = ReceiptArgumentParser(prog="kaola-acp.py list")
     parser.add_argument("--platform", choices=PLATFORMS)
     parser.add_argument("--repo")
     parser.add_argument("--record-root")
@@ -939,7 +981,7 @@ SURVEY_BASE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 def parse_survey_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="kaola-acp.py survey")
+    parser = ReceiptArgumentParser(prog="kaola-acp.py survey")
     parser.add_argument("--platform", choices=PLATFORMS)
     parser.add_argument("--login-shell")
     return parser.parse_args(argv)
@@ -1118,7 +1160,7 @@ def quota_module():
 
 
 def parse_packages_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="kaola-acp.py packages")
+    parser = ReceiptArgumentParser(prog="kaola-acp.py packages")
     parser.add_argument("--platform", choices=PLATFORMS)
     parser.add_argument("--installed-only", action="store_true")
     parser.add_argument("--login-shell")
@@ -1126,7 +1168,7 @@ def parse_packages_args(argv: list[str]) -> argparse.Namespace:
 
 
 def parse_model_package_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="kaola-acp.py model-package")
+    parser = ReceiptArgumentParser(prog="kaola-acp.py model-package")
     parser.add_argument("--platform", required=True, choices=PLATFORMS)
     parser.add_argument("--model", required=True)
     return parser.parse_args(argv)
@@ -5150,7 +5192,7 @@ def main() -> int:
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
         return 0
 
-    parser = argparse.ArgumentParser(prog="kaola-acp.py")
+    parser = ReceiptArgumentParser(prog="kaola-acp.py")
     parser.add_argument("platform", choices=PLATFORMS)
     parser.add_argument("command", choices=[
         "preflight", "start", "send", "steer", "wait", "observe", "capture",
@@ -5479,4 +5521,20 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except InputError as exc:
+        argv = sys.argv[1:]
+        def argument_value(flag: str) -> str | None:
+            for index, word in enumerate(argv):
+                if word == flag and index + 1 < len(argv):
+                    return argv[index + 1]
+                if word.startswith(flag + "="):
+                    return word[len(flag) + 1:]
+            return None
+        receipt = input_error_receipt(
+            str(exc), argv[0] if argv else None,
+            argv[1] if len(argv) > 1 and argv[0] in PLATFORMS else None,
+            argument_value("--repo"), argument_value("--session"))
+        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        raise SystemExit(exc.code)

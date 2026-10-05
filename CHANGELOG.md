@@ -4,6 +4,23 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart not required
+
+The changed launch resolution and input parsing run in the client. The holder,
+bridge, quota catalog, adapters and ACP protocol are unchanged. The Codex
+manifest changes only its explanatory text.
+
+- Codex manifest launches use an explicit absolute `CODEX_PATH`, or resolve
+  `CODEX_BIN` then PATH and supply the absolute executable to the adapter.
+  An invalid explicit child path still fails before spawn. The error gives
+  the setup steps (Issue #260, item 7).
+- Invalid Runner arguments return a JSON `invalid-input` receipt and exit
+  nonzero. The rejected call reports `not_started` and `mutation_performed:
+  false`; earlier calls keep their original mutation state. Prompt files can
+  be sent through stdin. `--text-file` remains unsupported (Issue #260, item 8).
+
 ## 0.9.0 — 2026-10-05 (lifecycle state and OpenCode managed permissions)
 
 Seats: restart required

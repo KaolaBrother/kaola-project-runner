@@ -2,7 +2,7 @@
 """Issue #247: a Codex manifest launch's child is absolute CODEX_PATH.
 
 The adapter version, the requested CLI, and the launched child's package
-version stay separate facts. PATH is not copied into CODEX_PATH. An explicit
+version stay separate facts. An explicit CODEX_PATH wins over PATH. An explicit
 --command keeps the previous launch. Offline: no npx and no Codex binary.
 """
 
@@ -73,6 +73,48 @@ class CodexChildPathTests(unittest.TestCase):
             self.assertEqual(child["CODEX_PATH"], str(binary))
             self.assertNotIn(str(decoy / "codex"), child["CODEX_PATH"])
 
+    def test_unset_child_path_resolves_codex_bin_before_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "chosen codex"
+            binary.write_text("#!/bin/sh\n", encoding="utf-8")
+            binary.chmod(0o755)
+            with mock.patch.dict(os.environ, {"CODEX_BIN": str(binary), "PATH": "/usr/bin"}, clear=True):
+                args = self.args()
+                self.assertIsNone(self.acp.codex_child_error(args))
+                self.assertEqual(self.acp.agent_environment(args)["CODEX_PATH"], str(binary))
+
+    def test_unset_child_path_resolves_path_to_an_absolute_child(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "codex"
+            binary.write_text("#!/bin/sh\n", encoding="utf-8")
+            binary.chmod(0o755)
+            with mock.patch.dict(os.environ, {"PATH": directory}, clear=True):
+                args = self.args()
+                self.assertIsNone(self.acp.codex_child_error(args))
+                self.assertEqual(self.acp.agent_environment(args)["CODEX_PATH"], str(binary))
+
+    def test_spawn_uses_the_path_checked_before_the_environment_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "codex"
+            binary.write_text("#!/bin/sh\n", encoding="utf-8")
+            binary.chmod(0o755)
+            args = self.args()
+            with mock.patch.dict(os.environ, {"CODEX_BIN": str(binary)}, clear=True):
+                self.assertIsNone(self.acp.codex_child_error(args))
+            with mock.patch.dict(os.environ, {"CODEX_PATH": "/changed/codex"}, clear=True):
+                self.assertEqual(self.acp.agent_environment(args)["CODEX_PATH"], str(binary))
+
+    def test_invalid_explicit_child_does_not_fall_back(self) -> None:
+        for path in ("codex", "/missing/codex"):
+            with self.subTest(path=path), mock.patch.dict(os.environ, {"CODEX_PATH": path}, clear=True), mock.patch.object(self.acp, "runtime_binary") as runtime:
+                self.assertEqual(self.acp.codex_child_error(self.args())["code"], "codex-child-path")
+                runtime.assert_not_called()
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "codex"
+            binary.write_text("not executable", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"CODEX_PATH": str(binary)}, clear=True):
+                self.assertIn("not executable", self.acp.codex_child_error(self.args())["message"])
+
     def test_relative_codex_path_is_dropped_on_a_manifest_launch(self) -> None:
         with mock.patch.dict(os.environ, {"CODEX_PATH": "codex", "PATH": "/usr/bin"}, clear=True):
             child = self.acp.agent_environment(self.args())
@@ -90,7 +132,7 @@ class CodexChildPathTests(unittest.TestCase):
             repo.mkdir()
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             env = {k: v for k, v in os.environ.items()
-                   if k not in {"CODEX_PATH", "KAOLA_ACP_COMMAND"} and not k.startswith("KAOLA_")}
+                   if k not in {"CODEX_PATH", "CODEX_BIN", "KAOLA_ACP_COMMAND"} and not k.startswith("KAOLA_")}
             env["PATH"] = "/usr/bin:/bin"
             result = subprocess.run(
                 [sys.executable, str(CLI), "codex", "start", "--repo", str(repo),
@@ -104,6 +146,7 @@ class CodexChildPathTests(unittest.TestCase):
         self.assertEqual(receipt["mutation_status"], "not_started")
         self.assertNotIn("holder_pid", receipt)
         self.assertNotIn("npx", result.stderr)
+        self.assertIn("CODEX_PATH=/absolute/path/to/codex", receipt["error"]["message"])
 
     def test_child_package_comes_from_the_app_server_process_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

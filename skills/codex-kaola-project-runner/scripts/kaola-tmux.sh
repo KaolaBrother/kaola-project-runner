@@ -32,7 +32,16 @@ usage() {
 Transport is ACP only (Issue #130); a request for the pty transport is refused (transport-pty-retired).'
 }
 
-die() { printf 'kaola-tmux[%s]: %s\n' "${platform:-unknown}" "$*" >&2; exit 1; }
+die() {
+  local error_python
+  printf 'kaola-tmux[%s]: %s\n' "${platform:-unknown}" "$*" >&2
+  error_python="$(resolve_tool "${PYTHON_BIN:-python3}")" || { printf '%s\n' 'python3 executable not found' >&2; exit 1; }
+  "$error_python" -c 'import json,runpy,sys
+receipt=runpy.run_path(sys.argv[1])["input_error_receipt"]
+print(json.dumps(receipt(*sys.argv[2:]),ensure_ascii=False,sort_keys=True))' \
+    "$ACP_CLI" "$*" "${platform:-}" "${command_name:-}" "${repo:-}" "${session:-}"
+  exit 1
+}
 resolve_tool() { if [[ "$1" == */* ]]; then [[ -x "$1" ]] || return 1; printf '%s\n' "$1"; else command -v "$1"; fi; }
 canonical_dir() { (cd "$1" 2>/dev/null && pwd -P); }
 json_value() { local expression="$1"; JSON_INPUT="$(cat)" "$PYTHON_BIN" -c 'import json,os,sys; d=json.loads(os.environ["JSON_INPUT"]); v=eval(sys.argv[1], {"d":d}); print(json.dumps(v,separators=(",",":")) if isinstance(v,(dict,list,bool)) else ("" if v is None else str(v)))' "$expression"; }
@@ -54,7 +63,8 @@ print(json.dumps(d,ensure_ascii=False,sort_keys=True))' "$@"
 # KPR_CANONICAL_REPO is this invocation's own channel to emit_json and kaola-acp.py;
 # a value inherited from a parent Runner (a Host-dispatched seat) is not a binding.
 unset KPR_CANONICAL_REPO
-platform="${1:-}"; [[ -n "$platform" ]] || { usage; exit 2; }; shift
+platform="${1:-}"; [[ -n "$platform" ]] || die "missing platform"; shift
+[[ "$platform" != -h && "$platform" != --help ]] || { usage; exit 0; }
 case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode|droid|dsh) ;; *) die "unknown platform: $platform" ;; esac
 adapter_file="$script_dir/adapters/$platform.sh"; [[ -f "$adapter_file" ]] || die "adapter not installed"
 [[ -f "$MODEL_POLICY_HELPER" && -f "$ACP_CLI" ]] || die "ACP transport is not installed"
@@ -63,7 +73,8 @@ source "$adapter_file"
 [[ "${ADAPTER_ID:-}" == "$platform" ]] || die "adapter identity mismatch"
 [[ "${ADAPTER_ANSWER_MODE:-}" =~ ^(unsupported|claude-clear-v1)$ ]] || die "adapter answer mode missing"
 
-command_name="${1:-}"; [[ -n "$command_name" ]] || { usage; exit 2; }; shift
+command_name="${1:-}"; [[ -n "$command_name" ]] || die "missing command"; shift
+[[ "$command_name" != -h && "$command_name" != --help ]] || { usage; exit 0; }
 if [[ "$command_name" == view ]]; then
   printf '%s\n' '{"error":{"code":"view-unsupported","message":"view is not a Runner command; use kaola-acp"},"schema":"kaola-acp-view/1"}'
   exit 1
@@ -82,6 +93,10 @@ expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mod
 preserve_dispatched=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --repo|--session|--resume|--lines|--text|--if-snapshot|--decision-id|--model|--effort|--tier|--role|--fast|--permission-mode|--transport|--key|--steer-mode|--cancel-timeout|--timeout|--request-id|--option|--expected-holder-instance-id|--since)
+      [[ $# -ge 2 ]] || die "missing value for $1" ;;
+  esac
+  case "$1" in
     --repo) repo="$2"; shift 2 ;; --session) session="$2"; shift 2 ;; --resume) resume_id="$2"; shift 2 ;;
     --continue) continue_mode=true; shift ;; --force) force=true; shift ;; --lines) lines="$2"; shift 2 ;;
     --preserve-dispatched-workers) preserve_dispatched=true; shift ;;
@@ -97,7 +112,7 @@ while [[ $# -gt 0 ]]; do
     --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
     --expected-holder-instance-id) expected_holder_instance_id="$2"; expected_holder_instance_id_given=true; shift 2 ;;
     --since) capture_since="$2"; shift 2 ;; --full) capture_full=true; shift ;; --inline) capture_inline=true; shift ;;
-    -h|--help) usage; exit 0 ;; *) die "unknown argument: $1" ;;
+    -h|--help) usage; exit 0 ;; *) die "unknown argument; use --help for the accepted arguments" ;;
   esac
 done
 
