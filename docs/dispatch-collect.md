@@ -91,6 +91,8 @@ A stated Delegator `count` applies when the Host grant omits `count`.
 One `elite_grants` entry with several `preset_ids` and one `count` is one shared pool.
 `lifetime`, `switch_authorization`, and structured `special_requirements` stay on that decision.
 A string `special_requirements`, or a `lifetime` outside `task` and `standing`, blocks only those presets.
+The row keeps the exact text, the preset names, the Delegator field, and the Host role.
+That prose is not written as `revoked` or `excluded`.
 `keep_open` and nonempty `wait` or `next` do not keep or finish a task.
 
 ```bash

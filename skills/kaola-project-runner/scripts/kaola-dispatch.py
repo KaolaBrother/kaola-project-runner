@@ -1156,7 +1156,18 @@ def _parse_elite_grants(raw_elite: list[Any]) -> tuple[
         if evidence:
             problem_evidence.setdefault(ident, evidence)
 
-    for grant in raw_elite:
+    def literal(ident_list: list[str], field: str, key: str, value: Any) -> None:
+        evidence = {
+            key: value,
+            "presets": list(ident_list),
+            "source": ".kaola/delegator-heartbeat.json",
+            "field": field,
+            "role": "host",
+        }
+        for ident in ident_list:
+            problem(ident, "ceiling-incomplete", evidence)
+
+    for index, grant in enumerate(raw_elite):
         if not isinstance(grant, dict):
             return "ceiling-unreadable"
         ids: list[str] = []
@@ -1182,8 +1193,7 @@ def _parse_elite_grants(raw_elite: list[Any]) -> tuple[
                 problem(ident, "ceiling-unreadable")
             lifetime = None
         elif isinstance(lifetime, str) and lifetime not in GRANT_LIFETIMES:
-            for ident in ids:
-                problem(ident, "ceiling-incomplete", {"lifetime": lifetime})
+            literal(ids, f"authorization.elite_grants[{index}].lifetime", "lifetime", lifetime)
             lifetime = None
         special = grant.get("special_requirements")
         if special is not None and not isinstance(special, (str, dict)):
@@ -1191,15 +1201,15 @@ def _parse_elite_grants(raw_elite: list[Any]) -> tuple[
                 problem(ident, "ceiling-unreadable")
             special = None
         elif isinstance(special, str):
-            for ident in ids:
-                problem(ident, "ceiling-incomplete", {"special_requirements": special})
+            literal(ids, f"authorization.elite_grants[{index}].special_requirements",
+                    "special_requirements", special)
             special = None
         elif isinstance(special, dict) and (
             set(special) - {"effort", "model", "task_scope"}
             or any(value is not None and not isinstance(value, str) for value in special.values())
         ):
-            for ident in ids:
-                problem(ident, "ceiling-incomplete", {"special_requirements": special})
+            literal(ids, f"authorization.elite_grants[{index}].special_requirements",
+                    "special_requirements", special)
             special = None
         if len(ids) > 1:
             if stated is None:

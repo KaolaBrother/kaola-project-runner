@@ -561,8 +561,17 @@ class RecordContract(unittest.TestCase):
         )
         with self.subTest("owner-limits"):
             self.assertEqual(limited["codex-effort"]["reason"], "override-conflicts-owner")
-            self.assertEqual(limited["claude-text"]["reason"], "ceiling-incomplete")
-            self.assertEqual(limited["claude-text"]["evidence"]["special_requirements"], "owner limit")
+        self.assertEqual(limited["claude-text"]["reason"], "ceiling-incomplete")
+        self.assertEqual(limited["claude-text"]["evidence"]["special_requirements"], "owner limit")
+        self.assertEqual(limited["claude-text"]["evidence"]["presets"], ["claude-code/default"])
+        self.assertEqual(limited["claude-text"]["evidence"]["source"], ".kaola/delegator-heartbeat.json")
+        self.assertEqual(limited["claude-text"]["evidence"]["field"],
+                         "authorization.elite_grants[1].special_requirements")
+        self.assertEqual(limited["claude-text"]["evidence"]["role"], "host")
+        self.assertEqual(json.loads(self.file.read_text(encoding="utf-8"))["state"]["authorization"]["grants"], [
+            {"id": "codex/default", "state": "granted", "count": 1},
+            {"id": "claude-code/default", "state": "granted", "count": 1},
+        ])
 
         lifetime = rows(
             {"classes": classes, "elite_cap": 4, "grants": [
@@ -579,8 +588,11 @@ class RecordContract(unittest.TestCase):
         with self.subTest("lifetime"):
             self.assertEqual(lifetime["astra-task"]["reason"], "dry-run")
             self.assertEqual(lifetime["astra-task"]["evidence"]["lifetime"], "task")
-            self.assertEqual(lifetime["codex-prose"]["reason"], "ceiling-incomplete")
-            self.assertEqual(lifetime["codex-prose"]["evidence"]["lifetime"], "until Friday")
+        self.assertEqual(lifetime["codex-prose"]["reason"], "ceiling-incomplete")
+        self.assertEqual(lifetime["codex-prose"]["evidence"]["lifetime"], "until Friday")
+        self.assertEqual(lifetime["codex-prose"]["evidence"]["presets"], ["codex/default"])
+        self.assertEqual(lifetime["codex-prose"]["evidence"]["role"], "host")
+        self.assertNotIn("revoked", json.loads(self.file.read_text(encoding="utf-8"))["state"]["authorization"])
 
     def execute(self, script: Path, plan: Path, authorization: Path, state: Path | None) -> dict:
         argv = [PYTHON, str(script), "execute", "--plan", str(plan), "--authorization", str(authorization),
