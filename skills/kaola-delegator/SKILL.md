@@ -20,7 +20,7 @@ goal; progress; the Host platform; authorized worker platforms by class;
 Elite grants/counts; Expert grants/lifetime; bound-target local choices
 separate from authorization (host-platforms.md); Worker pool rules;
 exclusions; the quota the user actually gave, each figure in its own unit;
-priority; delivery/stop boundary; project path.
+priority; delivery/stop boundary; project path; `project.user_language`.
 On a live Host, apply only the user's latest change; consolidate nonurgent corrections at latest values; urgent owner stops go now. Relay explicit owner model/seat choices unchanged; the Host allocates. Invent no assignments/constraints. On a new Host, missing,
 conflicting, or expired key values must be confirmed before `start`. A quota
 unit the user never gave is not a missing key value — carry it as unspecified
