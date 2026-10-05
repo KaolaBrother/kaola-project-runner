@@ -590,12 +590,26 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `dispositions` and a `maintenance` brief; the Sideagent view adds `host_revision` and
   `pending_host_changes`; the Delegator view adds `maintenance`. The Delegator view lists the `AGENTS.md`
   user-requirements region, holds, alerts, pending decisions, `unverified`, then doing, todo,
-  and outcomes.
+  and outcomes. Unknown content is `unknown` locators. It is not view text.
+  Host view `capability.presets` starts from stored `capability_summary.presets`, drops paused,
+  revoked, and excluded ids, and adds granted grant ids. Stored Class sentences stay.
+  `delivery-open` content is the task `goal`, `next`, and verdict value.
+  For `mode: node`, `sideagent_maintenance` says `a node is running` only when that session's
+  record is `ready` and `holder_pid` is alive. No record, or a dead pid, says no node is running.
+  An unreadable record root says liveness was not read.
 - `check [--index] [--live] [--repo]` reports problems without writing.
-- `timer --repo --target --entry --body|--body-file` compares a native timer body with the
-  entry line plus the fixed locator sentence; exit 1 on `mismatch`.
+- `timer --repo --target --entry [--body|--body-file]` compares a supplied native timer body
+  with the entry line plus the fixed locator sentence. Exit 1 on `mismatch`. No body returns
+  `unavailable` and exit 0. That is not a mismatch. It does not block an owner stop.
 - `migrate` is a read-only plan unless `--write`; see
   [state-format migration](conventions.md#state-format-updates-and-migration).
+  On schema `/2`, the report includes `removed`. Each name is a locator.
+- `delegator view|update|migrate --file .kaola/delegator-heartbeat.json` is the Delegator file tool.
+  `project.user_language` is an optional string. It is the language for Delegator replies to the user.
+  A missing key stores no language. The tool does not choose one.
+  `adopted` needs a string `evidence` or `locator` that names the Host record or path. `sent` does not.
+- An accepted task `--cite` needs a retrievable path. A commit is optional. When a commit is present,
+  `git cat-file -e commit:path` must succeed. Holds, alerts, cancellations, and relays use `--evidence` only.
 
 The Host view is bounded at 64 KiB (`host-view-too-large`). The whole file is bounded at
 1 MiB when `carrier.capability` is `heartbeat-state/2`, else at the 64 KiB legacy reader

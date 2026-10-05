@@ -58,7 +58,7 @@ AUTH = {"classes": {"Expert": "e", "Elite": "l", "Worker": "w"},
         "grants": [{"id": "codex/default", "state": "granted", "count": 1},
                    {"id": "zcode/default", "state": "granted"}],
         "elite_cap": 2}
-CITE = '{"commit":"abcdef1","path":"README.md"}'
+CITE = '{"path":"README.md","locator":"README.md"}'
 
 
 class StateProject(unittest.TestCase):
@@ -66,6 +66,7 @@ class StateProject(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i255-")
         self.repo = Path(self.tmp.name) / "consumer"
         (self.repo / ".kaola").mkdir(parents=True)
+        (self.repo / "README.md").write_text("retire evidence\n", encoding="utf-8")
         self.file = self.repo / ".kaola" / "heartbeat-prompt.json"
 
     def tearDown(self) -> None:
@@ -149,7 +150,7 @@ class StateTool(StateProject):
         doc = self.doc()
         self.assertNotIn("t1", doc["state"]["tasks"])
         stone = doc["state"]["retired"][-1]
-        self.assertEqual(stone["cite"], {"commit": "abcdef1", "path": "README.md"})
+        self.assertEqual(stone["cite"], {"path": "README.md", "locator": "README.md"})
         self.assertNotIn("evidence", stone)
         code, out = self.update("sideagent", "tasks", "t1", {"stage": "doing"})
         self.assertEqual(out["reason"], "record-retired", "a late event does not reopen a retired task")
@@ -212,8 +213,8 @@ class StateTool(StateProject):
         doc = self.doc()
         self.assertNotIn("t5", doc["state"]["tasks"])
         stone = doc["state"]["retired"][-1]
-        self.assertEqual((stone["handed_to"], stone["seats"], stone["dispatch"], stone["cite"]["commit"]),
-                         ("t6", ["codex-KT-i7-a"], ["i7"], "abcdef1"))
+        self.assertEqual((stone["handed_to"], stone["seats"], stone["dispatch"], stone["cite"]["path"]),
+                         ("t6", ["codex-KT-i7-a"], ["i7"], "README.md"))
         self.assertNotIn("evidence", stone)
         receiver = doc["state"]["tasks"]["t6"]
         self.assertEqual((receiver["dispatch"], receiver["sessions"], receiver["rev"]),
@@ -694,18 +695,17 @@ class StateTool(StateProject):
         self.assertEqual((task["dispatch"], task["verdict"]["value"]), (["i1", "i2"], "repair"),
                          "the repair stays the same task with its earlier evidence")
 
-    def test_timer_body_is_the_same_at_every_cadence(self) -> None:
-        bodies = set()
-        for minutes in (30, 60, 120, 240):
-            (self.repo / ".kaola" / "delegator-heartbeat.json").write_text(json.dumps(
-                {"cadence": {"timezone": "Asia/Shanghai", "start_local": "08:00", "end_local": "22:00",
-                             "interval_minutes": minutes}}), encoding="utf-8")
-            code, out = self.state("timer", "--repo", str(self.repo), "--target", "local",
-                                   "--entry", "/kaola-delegator", "--body", "")
-            self.assertEqual(code, 1)
-            bodies.add(out["expected"])
-        self.assertEqual(len(bodies), 1, "cadence lives in the Delegator file, not in the timer text")
-        self.assertNotRegex(bodies.pop(), r"\d+ ?min|interval|08:00")
+    def test_timer_readback_stays_the_entry_and_can_be_unavailable(self) -> None:
+        (self.repo / ".kaola" / "delegator-heartbeat.json").write_text(json.dumps(
+            {"cadence": {"timezone": "Asia/Shanghai", "start_local": "08:00", "end_local": "22:00",
+                         "interval_minutes": 60}}), encoding="utf-8")
+        code, out = self.state("timer", "--repo", str(self.repo), "--target", "local",
+                               "--entry", "/kaola-delegator", "--body", "not-the-template")
+        self.assertEqual((code, out["result"]), (1, "mismatch"))
+        self.assertNotRegex(out["expected"], r"\d+ ?min|interval|08:00")
+        missing_code, missing = self.state("timer", "--repo", str(self.repo), "--target", "local",
+                                           "--entry", "/kaola-delegator")
+        self.assertEqual((missing_code, missing["result"]), (0, "unavailable"))
 
     def test_check_finds_untraced_and_unassociated_work(self) -> None:
         self.init()
@@ -2032,6 +2032,23 @@ class ConsolidatedDispatch(StateProject):
         self.assertEqual(self.doc()["host_revision"], host_revision,
                          "tool-only linkage is not a Host business write")
         self.assertEqual(out["task_links"]["linked"], {"t1": ["w1", "w2"]})
+
+    def test_a_second_execute_batch_keeps_the_first_in_flight_ref(self) -> None:
+        self.init()
+        self.update("host", "tasks", "t1", {"stage": "doing", "goal": "parser", "keep_open": True})
+        self.sessions(["zcode-KT-i1-a", "zcode-KT-i1-b"])
+        first = {"scope": "implementation", "mutation": True, "core": "core\n", "core_revision": "r1",
+                 "items": [{"item_id": "w1", "preset": "zcode/default", "session": "zcode-KT-i1-a",
+                            "worker_scope": "first", "task_id": "t1"}]}
+        code, out = self.execute(first, "--state", str(self.file))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["dispatch"], ["w1"])
+        second = {"scope": "implementation", "mutation": True, "core": "core\n", "core_revision": "r1",
+                  "items": [{"item_id": "w2", "preset": "zcode/default", "session": "zcode-KT-i1-b",
+                             "worker_scope": "second", "task_id": "t1"}]}
+        code, out = self.execute(second, "--state", str(self.file))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["dispatch"], ["w1", "w2"])
 
     def test_mutation_stays_refused_outside_implementation_and_prompts_are_exact(self) -> None:
         self.init()

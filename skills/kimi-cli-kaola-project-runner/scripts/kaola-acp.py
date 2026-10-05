@@ -3870,9 +3870,10 @@ def _restart_required_name(name: str) -> bool:
     """Files the release-note operator test treats as a seat restart.
 
     ``git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py
-    scripts/kaola-quota.py scripts/adapters platforms``. The holder pins
-    ``kaola-quota.py`` at startup (Issue #162), so a running seat picks up its
-    new bytes only by restarting: the CLI re-imports it per call, so one live
+    scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters
+    platforms``. The holder pins ``kaola-quota.py`` and
+    ``kaola-record-contract.py`` at startup, so a running seat picks up those
+    bytes only by restarting: the CLI re-imports them per call, so one live
     seat would otherwise stamp ``view`` with the old code and ``observe``/
     ``status`` with the new. ``kaola-acp.py`` and ``kaola-tmux.sh`` are per-call
     CLI files. A pin bump is not in the set.

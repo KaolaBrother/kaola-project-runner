@@ -673,7 +673,7 @@ class UpgradeSafetyTests(unittest.TestCase):
         conventions = (PROJECT / "docs" / "conventions.md").read_text(encoding="utf-8")
         self.assertIn(
             "git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py "
-            "scripts/kaola-quota.py scripts/adapters platforms",
+            "scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms",
             conventions,
         )
         self.assertIn("Seats: restart required", conventions)

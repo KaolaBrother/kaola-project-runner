@@ -47,6 +47,6 @@ Relay user changes to the same Host: idle `send`; busy `steer` or wait for idle
 (no queue). `--no-wait` admission and Host `end_turn` are not delivery. After
 the first Host beat, verify file/work-product evidence and the first dispatch
 receipt against plan and authorization; do not trust the Host's self-description.
-Correct mismatches on this Host; do not accept completion. At cadence, read the [snapshot (`sweep=` line)](references/snapshot.md), observe/capture outcomes and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved human decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
+Correct mismatches on this Host; do not accept completion. Use `kaola-dispatch.py delegator`. Read the [snapshot (`sweep=` line)](references/snapshot.md), observe/capture outcomes and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved human decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
 
 KPR update: [host-platforms.md](references/host-platforms.md#kpr-updates); a notice proves no updated install or loaded guidance, authorizes no install/restart.

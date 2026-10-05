@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 
@@ -26,7 +27,7 @@ CLI = REPO / "scripts" / "kaola-acp.py"
 MOCK = REPO / "tests" / "contract" / "mock-acp-agent.py"
 PLATFORMS = REPO / "platforms"
 PYTHON = sys.executable
-CITE = '{"commit":"abcdef1","path":"README.md"}'
+CITE = '{"path":"README.md","locator":"README.md"}'
 CLASS_SENTENCES = {
     "Expert": "Expert is the stored grant sentence for this project.",
     "Elite": "Elite is the stored grant sentence for this project.",
@@ -63,6 +64,7 @@ class RecordContract(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i259-")
         self.repo = Path(self.tmp.name) / "consumer"
         (self.repo / ".kaola").mkdir(parents=True)
+        (self.repo / "README.md").write_text("retire evidence\n", encoding="utf-8")
         self.file = self.repo / ".kaola" / "heartbeat-prompt.json"
         self.delegator = self.repo / ".kaola" / "delegator-heartbeat.json"
 
@@ -277,7 +279,8 @@ class RecordContract(unittest.TestCase):
         code, out = run_dispatch([
             "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
             "--source", "host record", "--expect-revision", "0",
-            "--set", json.dumps({"watch": {"relay-1": {"status": "adopted", "next": "repair seated"}}})])
+            "--set", json.dumps({"watch": {"relay-1": {"status": "adopted", "next": "repair seated",
+                                                       "evidence": "host:tasks/t1"}}})])
         self.assertEqual(code, 0, out)
         watched = json.loads(self.delegator.read_text())["watch"]["relay-1"]["status"]
         self.assertEqual(watched, "adopted")
@@ -293,7 +296,7 @@ class RecordContract(unittest.TestCase):
         }
         doc["state"]["retired"] = [{
             "kind": "tasks", "id": "old", "outcome": "accepted", "at": "2026-10-05T00:00:00+00:00",
-            "evidence": "do not keep this prose", "cite": {"commit": "abcdef1", "path": "README.md"},
+            "evidence": "do not keep this prose", "cite": {"path": "README.md", "locator": "README.md"},
         }]
         self.file.write_text(json.dumps(doc), encoding="utf-8")
         stale = self.file.with_name("heartbeat-prompt.v1-aaaaaaaaaaaa.json")
@@ -522,6 +525,345 @@ class RecordContract(unittest.TestCase):
         self.assertNotIn("design-1", [row.get("id") for row in view.get("tasks") or []])
         self.assertNotIn("design-1", json.dumps(view.get("alerts")))
         self.assertNotIn("maintenance-returned", [row.get("id") for row in view.get("attention") or []])
+
+    def test_delegator_migration_keeps_duties_and_blocks_unmapped_text(self) -> None:
+        self.delegator.write_text(json.dumps({
+            "revision": 2,
+            "project": {"goal": "close the selected issues", "user_language": "zh"},
+            "host": {"platform": "codex", "session": "codex-KT-host"},
+            "day_start": {"action": "reconcile_then_open_intake", "state": "pending", "evidence": "owner-day"},
+            "day_end": {"action": "pause_new_claims_keep_inflight", "state": "confirmed",
+                        "host_ack": "host-ack", "claim_check": "none"},
+            "final_stop": "stop at the owner boundary",
+            "authorization": {"elite_grants": [{
+                "preset_ids": ["droid/default", "droid/opus"], "count": 2, "class": "Elite",
+                "lifetime": "task", "special_requirements": "owner limit",
+            }]},
+            "watch": {"relay-1": {
+                "kind": "relay", "status": "pending", "summary": "owner constraint",
+                "detail": "pending relay text", "evidence": "owner msg 3", "next": "host adopts",
+                "report": {"old": True},
+            }},
+        }), encoding="utf-8")
+        code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+        self.assertEqual((code, out["result"]), (0, "migrated"), out)
+        doc = json.loads(self.delegator.read_text(encoding="utf-8"))
+        self.assertEqual(doc["project"]["user_language"], "zh")
+        code, view = run_dispatch(["delegator", "view", "--file", str(self.delegator)])
+        self.assertEqual(view["project"]["user_language"], "zh")
+        self.assertEqual(doc["day_start"]["evidence"], "owner-day")
+        self.assertEqual(doc["day_end"]["host_ack"], "host-ack")
+        self.assertEqual(doc["final_stop"], "stop at the owner boundary")
+        self.assertEqual(doc["authorization"]["elite_grants"][0]["special_requirements"], "owner limit")
+        self.assertEqual(doc["watch"]["relay-1"]["detail"], "pending relay text")
+        self.assertIn("watch.relay-1.report", out["dropped"])
+        self.delegator.write_text(json.dumps({
+            "revision": 1,
+            "watch": {"relay-1": {"kind": "relay", "status": "pending", "narrative": "unmapped owner text",
+                                  "next": "deliver"}},
+        }), encoding="utf-8")
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator)])
+        self.assertEqual(out["result"], "blocked", out)
+        self.assertEqual(self.delegator.read_bytes(), before)
+        self.assertTrue(any("narrative" in item.get("path", "") for item in out["blockers"]))
+
+    def test_delegator_update_and_view_are_closed(self) -> None:
+        self.delegator.write_text(json.dumps({
+            "revision": 0, "project": {"goal": "close the selected issues"},
+            "authorization": {"elite_grants": [{"preset_ids": ["droid/default"], "count": 2, "class": "Elite"}]},
+            "watch": {"relay-1": {"kind": "relay", "status": "pending", "summary": "text", "next": "send"}},
+        }), encoding="utf-8")
+        code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("user_language", json.loads(self.delegator.read_text(encoding="utf-8"))["project"])
+        revision = json.loads(self.delegator.read_text(encoding="utf-8"))["revision"]
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch([
+            "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+            "--source", "s", "--expect-revision", str(revision),
+            "--set", json.dumps({"watch": {"relay-2": {"kind": "journal", "status": "Pending note"}}})])
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(self.delegator.read_bytes(), before)
+        code, out = run_dispatch([
+            "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+            "--source", "s", "--expect-revision", str(revision),
+            "--set", json.dumps({"watch": {"relay-1": {"status": "adopted", "next": "done"}}})])
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("evidence", out["detail"])
+        code, out = run_dispatch([
+            "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+            "--source", "s", "--expect-revision", str(revision),
+            "--set", json.dumps({"watch": {"relay-1": {"status": "sent", "next": "wait for host"}}})])
+        self.assertEqual(code, 0, out)
+        revision = json.loads(self.delegator.read_text(encoding="utf-8"))["revision"]
+        code, out = run_dispatch([
+            "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+            "--source", "host record", "--expect-revision", str(revision),
+            "--set", json.dumps({"watch": {"relay-1": {"status": "adopted", "evidence": "host:tasks/t1"}}})])
+        self.assertEqual(code, 0, out)
+        doc = json.loads(self.delegator.read_text(encoding="utf-8"))
+        doc["authorization"]["secret_grant"] = "no"
+        doc["journal"] = ["hand"]
+        self.delegator.write_text(json.dumps(doc), encoding="utf-8")
+        code, view = run_dispatch(["delegator", "view", "--file", str(self.delegator)])
+        self.assertEqual(code, 0, view)
+        self.assertNotIn("secret_grant", json.dumps(view["authorization"]))
+        self.assertTrue(any(item["path"] == "authorization.secret_grant" for item in view["unknown"]))
+        self.assertTrue(any(item["path"] == "journal" for item in view["unknown"]))
+
+    def test_capability_keeps_worker_pool_presets_and_stored_classes(self) -> None:
+        self.init({
+            "classes": dict(CLASS_SENTENCES),
+            "capability_summary": {"presets": [
+                "codex/default", "codex/luna", "devin/default", "dsh/default",
+                "opencode/default", "zcode/default",
+            ]},
+            "grants": [{"id": "codex/default", "state": "paused", "count": 1}],
+            "paused": ["codex/default"],
+            "elite_cap": 2,
+        })
+        view = json.loads(self.doc()["body"])
+        presets = view["capability"]["presets"]
+        for preset in ("codex/luna", "devin/default", "dsh/default", "opencode/default", "zcode/default"):
+            self.assertIn(preset, presets)
+        self.assertNotIn("codex/default", presets)
+        self.assertEqual(view["authorization"]["classes"]["Worker"], CLASS_SENTENCES["Worker"])
+
+    def test_nested_types_are_refused_and_bytes_stay(self) -> None:
+        self.init()
+        before = self.file.read_bytes()
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "t1",
+            "--set", json.dumps({"stage": "todo", "goal": "g", "next": {"history": [{"turn": 1}]}}))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("path", out)
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--section", "sideagent", "--expect-revision", str(self.doc()["revision"]),
+            "--set", json.dumps({"platform": "zcode", "session": "zcode-KT-node", "state": "active",
+                                 "narrative": "free"}))
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_cleanup_names_removals_and_legacy_refusal_says_how(self) -> None:
+        self.init()
+        doc = self.doc()
+        doc["state"]["tasks"]["t1"] = {
+            "stage": "doing", "goal": "keep", "next": "continue", "legacy": {"note": "old"},
+            "rev": 1, "writer": "host", "source": "s",
+        }
+        doc["state"]["recovery"] = {"legacy": {"completion_evidence": "old"}, "v1_host": {"session": "x"}}
+        doc["state"]["unverified"] = {"t1-stage": {"summary": "old warning", "locator": "pending[0]"}}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        before = self.file.read_bytes()
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "t1", "--expect-rev", "1", "--set", json.dumps({"next": "still open"}))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("state migrate", out.get("recovery", ""))
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 0, out)
+        removed = " ".join(out.get("removed") or [])
+        self.assertIn("tasks.t1.legacy", removed)
+        self.assertIn("recovery.legacy", removed)
+        self.assertIn("recovery.v1_host", removed)
+        self.assertIn("unverified.t1-stage", removed)
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["goal"], "keep")
+        self.assertNotIn("t1-stage", self.doc()["state"].get("unverified") or {})
+
+    def test_cancelled_seat_and_keep_open_stay_unaccounted(self) -> None:
+        self.init()
+        self.state("update", "--file", str(self.file), "--writer", "host", "--source", "bind",
+                   "--section", "sideagent", "--expect-revision", "1",
+                   "--set", json.dumps({"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active"}))
+        self.state("update", "--file", str(self.file), "--writer", "host", "--source", "s",
+                   "--kind", "tasks", "--id", "live-cancel",
+                   "--set", json.dumps({"stage": "doing", "goal": "stop the seat",
+                                        "next": "stop codex-KT-live", "sessions": ["codex-KT-live"],
+                                        "verdict": {"value": "cancelled"}}))
+        self.state("update", "--file", str(self.file), "--writer", "host", "--source", "s",
+                   "--kind", "tasks", "--id", "kept",
+                   "--set", json.dumps({"stage": "done", "goal": "still open", "keep_open": True,
+                                        "next": "new obligation", "verdict": {"value": "accepted"}}))
+        code, pending = self.state("view", "--file", str(self.file), "--role", "sideagent")
+        entries = [{"input": item, "retained": item[len("host:"):].split("@", 1)[0]}
+                   for item in pending["pending_host_changes"] if item.startswith("host:section/")]
+        env = {key: value for key, value in os.environ.items() if key not in CALLER_ENV}
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps({
+            "holder_instance_id": "node-1", "platform": "zcode", "repo": str(self.repo),
+            "session": "zcode-KT-sideagent"})
+        code, out = run_dispatch([
+            "state", "checkpoint", "--file", str(self.file), "--writer", "sideagent",
+            "--source", "open-duties", "--batch", "open-duties",
+            "--through-host-revision", str(self.doc()["host_revision"]),
+            "--entries", json.dumps(entries)], env)
+        self.assertEqual(code, 0, out)
+        returned = out["value"]["returned_to_host"]
+        self.assertTrue(any("live-cancel" in key for key in returned), returned)
+        self.assertTrue(any(key.startswith("host:tasks/kept@") for key in returned), returned)
+        self.assertFalse(out["value"]["verified"])
+
+    def test_node_process_write_does_not_change_delivery_open(self) -> None:
+        self.init()
+        self.state("update", "--file", str(self.file), "--writer", "host", "--source", "bind",
+                   "--section", "sideagent", "--expect-revision", "1",
+                   "--set", json.dumps({"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active"}))
+        self.state("update", "--file", str(self.file), "--writer", "host", "--source", "s",
+                   "--kind", "tasks", "--id", "t3",
+                   "--set", json.dumps({"stage": "review", "goal": "close the selected issues",
+                                        "next": "review the research"}))
+        self.state("update", "--file", str(self.file), "--writer", "host", "--source", "host-turn",
+                   "--kind", "tasks", "--id", "t3", "--expect-rev", "1",
+                   "--set", json.dumps({"verdict": {"value": "repair", "why": "named repair remains"},
+                                        "next": "seat the named repair"}))
+        first = [row for row in json.loads(self.doc()["body"])["attention"] if row["why"] == "delivery-open"]
+        env = {key: value for key, value in os.environ.items() if key not in CALLER_ENV}
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps({
+            "holder_instance_id": "node-1", "platform": "zcode", "repo": str(self.repo),
+            "session": "zcode-KT-sideagent"})
+        code, out = run_dispatch([
+            "state", "update", "--file", str(self.file), "--writer", "sideagent",
+            "--source", "stop confirmed", "--kind", "tasks", "--id", "t3", "--expect-rev", "2",
+            "--set", json.dumps({"wait": "codex-KT-repair stopped"})], env)
+        self.assertEqual(code, 0, out)
+        second = [row for row in json.loads(self.doc()["body"])["attention"] if row["why"] == "delivery-open"]
+        self.assertEqual(first, second)
+        self.assertEqual(self.doc()["state"]["tasks"]["t3"]["goal"], "close the selected issues")
+
+    def test_node_running_follows_the_live_record(self) -> None:
+        self.init()
+        self.state("update", "--file", str(self.file), "--writer", "host", "--source", "bind",
+                   "--section", "sideagent", "--expect-revision", "1",
+                   "--set", json.dumps({"platform": "zcode", "session": "zcode-KT-node", "state": "active",
+                                        "mode": "node"}))
+        root = self.repo / "records"
+        env = {key: value for key, value in os.environ.items() if key not in CALLER_ENV}
+        env["KAOLA_ACP_RECORD_ROOT"] = str(root)
+        code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertIn("no node is running", out["sideagent_maintenance"])
+        record = root / "zcode" / "zcode-KT-node" / "digest" / "record.json"
+        record.parent.mkdir(parents=True)
+        record.write_text(json.dumps({
+            "session_role": "sideagent", "state": "ready", "holder_pid": os.getpid(),
+        }), encoding="utf-8")
+        code, out = run_dispatch(["state", "view", "--file", str(self.file), "--role", "host"], env)
+        self.assertEqual(out["sideagent_maintenance"], "a node is running")
+
+    def test_timer_without_a_body_is_unavailable(self) -> None:
+        code, out = self.state("timer", "--repo", str(self.repo), "--target", "local",
+                               "--entry", "/kaola-delegator")
+        self.assertEqual(out["result"], "unavailable")
+        self.assertNotEqual(out["result"], "mismatch")
+
+    def test_a_fabricated_cite_is_refused_and_a_real_path_is_kept(self) -> None:
+        self.init()
+        self.state("update", "--file", str(self.file), "--writer", "host", "--source", "s",
+                   "--kind", "tasks", "--id", "done-one",
+                   "--set", json.dumps({"stage": "done", "goal": "finished", "verdict": {"value": "accepted"}}))
+        before = self.file.read_bytes()
+        code, out = self.state(
+            "retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "done-one", "--expect-rev", "1", "--evidence", "not a commit",
+            "--cite", '{"commit":"abcdef1","path":"README.md"}')
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertIn("invent", out["detail"])
+        code, out = self.state(
+            "retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "done-one", "--expect-rev", "1", "--evidence", "README.md",
+            "--cite", CITE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["state"]["retired"][-1]["cite"]["path"], "README.md")
+        self.assertNotIn("commit", self.doc()["state"]["retired"][-1]["cite"])
+
+    def test_delegator_role_view_uses_locators(self) -> None:
+        self.init()
+        doc = self.doc()
+        doc["state"]["holds"]["h1"] = {
+            "reason": "quota", "narrative": "secret prose", "rev": 1, "writer": "host", "source": "s",
+        }
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.state("view", "--file", str(self.file), "--role", "delegator", "--repo", str(self.repo))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("secret prose", json.dumps(out["special"]["holds"]))
+        self.assertTrue(any(item["path"] == "state.holds.h1.narrative" for item in out["unknown"]))
+
+    def test_owner_stop_is_not_blocked_by_the_legacy_bound(self) -> None:
+        self.init()
+        doc = self.doc()
+        doc["state"]["tasks"]["pad"] = {
+            "stage": "todo", "goal": "x" * 70000, "rev": 1, "writer": "host", "source": "s",
+        }
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "pad", "--expect-rev", "1", "--set", json.dumps({"next": "continue"}))
+        self.assertEqual(out["reason"], "carrier-limit", out)
+        self.assertIn("owner stop", out["recovery"])
+        before = self.file.read_bytes()
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "owner",
+            "--section", "project", "--expect-revision", str(self.doc()["revision"]),
+            "--set", json.dumps({"stop": "stop at the owner boundary"}))
+        self.assertEqual(code, 0, out)
+        self.assertNotEqual(self.file.read_bytes(), before)
+        self.assertEqual(self.doc()["state"]["project"]["stop"], "stop at the owner boundary")
+        self.assertEqual(self.doc()["state"]["tasks"]["pad"]["goal"], "x" * 70000)
+
+    def test_a_failed_write_removes_its_temp_file(self) -> None:
+        spec = importlib.util.spec_from_file_location("kpr_dispatch_259", DISPATCH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        target = self.repo / "atomic.json"
+        target.write_text("original\n", encoding="utf-8")
+        real = Path.write_text
+
+        def fail_temp(path: Path, *args: object, **kwargs: object) -> int:
+            if path.name.endswith(".tmp"):
+                raise OSError("disk")
+            return real(path, *args, **kwargs)
+
+        with unittest.mock.patch.object(Path, "write_text", fail_temp):
+            with self.assertRaises(OSError):
+                module.atomic_write(target, "new\n")
+        self.assertFalse(target.with_name("atomic.json.tmp").exists())
+        self.assertEqual(target.read_text(encoding="utf-8"), "original\n")
+
+    def test_an_oversized_migrated_record_still_accepts_an_owner_stop(self) -> None:
+        body = {
+            "project": {"code": "KT", "goal": "keep the open duty"},
+            "authorization": {"elite_cap": 2},
+            "active": [
+                {"ref": f"row-{n}", "session": f"codex-KT-i{n}-x", "evidence": "e" * 900}
+                for n in range(80)
+            ],
+        }
+        self.file.write_text(json.dumps({
+            "schema": "kaola-heartbeat-prompt/1", "body": json.dumps(body),
+        }), encoding="utf-8")
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 0, out)
+        self.assertGreater(self.file.stat().st_size, 65536)
+        self.assertIsNone(self.doc().get("carrier"))
+        revision = str(self.doc()["revision"])
+        code, stopped = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "owner",
+            "--section", "project", "--expect-revision", revision,
+            "--set", json.dumps({"stop": "stop at the owner boundary"}))
+        self.assertEqual(code, 0, stopped)
+        self.assertEqual(self.doc()["state"]["project"]["stop"], "stop at the owner boundary")
+        task_id = next(iter(self.doc()["state"]["tasks"]))
+        code, ordinary = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", task_id, "--expect-rev", "1",
+            "--set", json.dumps({"next": "continue"}))
+        self.assertEqual(ordinary["reason"], "carrier-limit", ordinary)
+        self.assertIn("owner stop", ordinary["recovery"])
 
     def doc(self) -> dict:
         return json.loads(self.file.read_text(encoding="utf-8"))

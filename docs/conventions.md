@@ -170,13 +170,28 @@ This is a release/update requirement. For the lifecycle state of
   `recovery.protected_untracked` when it is a list of non-empty strings, and lists unknown keys,
   unassociated index rows and any v1 Sideagent binding not proven by `authorization_source`
   plus its exact live holder as `unverified` locators. Other legacy field names leave and are
-  not copied. An unresolved critical mapping writes nothing and leaves the original file
+  named in `removed`, or the write is blocked. An unresolved critical mapping writes nothing and leaves the original file
   intact. Do not write `heartbeat-prompt.v1-<sha12>.json` or `recovery.migration.raw`.
   `state-overwritten` is not raised from those copies; overwrite detection is reduced and
   recovery uses project, Runner, and forge records. Existing hash-named copies are not
   deleted or trusted (`state backups`). A clean repeat reports `current`; an unreadable file
   is left unchanged and reported, and any schema other than v1 or v2 is refused
-  (`schema-unsupported`) rather than read as v1.
+  (`schema-unsupported`) rather than read as v1. A later `state migrate` of a current file names
+  each leftover it removes, including `tasks.<id>.legacy`, `recovery.legacy`, `recovery.v1_host`,
+  `unverified.<id>.raw`, and `unverified.<id>-stage` when `writer` is `host` and the stage is
+  already a task stage. A write that still sees an unknown legacy key is refused with `path`,
+  `allowed`, and `recovery` that names `state migrate`. A failed write removes `<file>.tmp`.
+  The original file stays. A clean repeat stays `current`.
+  An accepted-task `--cite` stores a retrievable path. A path is enough when that file exists
+  under the state file's repository. A commit is optional. When present, `git cat-file -e
+  commit:path` must succeed. The contract module does not run Git. Holds, alerts, cancellations,
+  and relays still use `--evidence` only.
+  A project update whose patch has a non-empty string `stop` uses the 1 MiB bound. Other writes
+  without `heartbeat-state/2` stay at 64 KiB. `carrier-limit` names that stop command.
+  Delegator migration keeps `day_start`, `day_end`, `final_stop`, grant `lifetime` and
+  `special_requirements`, watch `summary`, `detail`, and `evidence`, and a string
+  `project.user_language` when that key is present. A missing key stays missing.
+  An unmapped non-empty watch key blocks the write and names the path.
 - Holder: the v2 file may exceed 64 KiB after migration records a live Host holder that
   advertises `heartbeat-state/2` as `carrier`. `state migrate` without `--live` uses the
   1 MiB bound and does not treat the missing list as an old holder. An older holder named by
@@ -225,17 +240,19 @@ changed, or when `kaola-quota.py` changed - the holder pins that catalog at
 startup (Issue #162), so a running seat only picks up its new bytes by
 restarting. The holder also pins `scripts/kaola-record-contract.py` at startup
 (Issue #259). A running seat picks up a new projection only by restarting.
-That file is outside the operator diff. The operator test is a non-empty diff:
+The operator test includes that pinned module:
 
 ```bash
-git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/adapters platforms
+git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms
 ```
 
 `OLD` and `NEW` are the previous release tag and the commit being released.
-A pin bump whose holder, bridge, and protocol are byte-identical still says
-`Seats: restart not required` when that diff is empty: running seats keep the
-code they started with, and the note is what tells the operator they may stay
-up. The note is part of cutting the release. It does not itself tag or publish.
+A non-empty diff says `Seats: restart required`. An empty diff says
+`Seats: restart not required`: running seats keep the code they started with.
+The note is part of cutting the release. It does not itself tag or publish.
+This candidate is unreleased. It changes the holder and the pinned record
+module. No tag is cut here. Running seats keep the projection they loaded
+until restart.
 
 ## Tests and live evidence
 

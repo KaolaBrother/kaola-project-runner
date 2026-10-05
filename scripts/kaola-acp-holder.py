@@ -2989,13 +2989,19 @@ class Holder:
         maintained = body is not None
         if not maintained:
             if defect is not None:
-                body = (f"The heartbeat prompt file at {source} exists but carries no "
-                        f"usable prompt: {defect}. This {self.host_name} Host session maintains "
-                        'that file; write a JSON object whose "body" field is a '
-                        "non-empty string holding the full working prompt, and treat "
-                        "this pass as running without it. Recover authorization and "
-                        "field state from the consuming project records, then run one "
-                        "full pass.")
+                if ("stored body was not injected" in defect or "projected Host view" in defect
+                        or "record contract" in defect):
+                    body = (f"The heartbeat file at {source} uses schema kaola-heartbeat-prompt/2. "
+                            f"{defect} Do not write a body string. Repair the structured state "
+                            "with the state tool, then retry. This pass runs without the projection.")
+                else:
+                    body = (f"The heartbeat prompt file at {source} exists but carries no "
+                            f"usable prompt: {defect}. This {self.host_name} Host session maintains "
+                            'that file; write a JSON object whose "body" field is a '
+                            "non-empty string holding the full working prompt, and treat "
+                            "this pass as running without it. Recover authorization and "
+                            "field state from the consuming project records, then run one "
+                            "full pass.")
             else:
                 body = (f"No maintained heartbeat prompt was found at {source}. Recover "
                         "authorization and field state from the consuming project records, "

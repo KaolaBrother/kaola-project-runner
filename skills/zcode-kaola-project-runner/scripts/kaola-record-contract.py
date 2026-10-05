@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -80,9 +81,38 @@ WATCH_STATUS = frozenset({"pending", "sent", "adopted", "open", "settled", "bloc
 WATCH_KIND = frozenset({"relay", "observation", "recovery", "decision"})
 WATCH_KEYS = frozenset({
     "kind", "status", "source", "next", "scope", "issue", "preset", "presets", "pool",
-    "locator", "at",
+    "locator", "at", "summary", "detail", "evidence",
 })
-DELEGATOR_GRANT_KEYS = frozenset({"preset_id", "preset_ids", "count", "class", "switch_authorization"})
+ASSIGNMENT_KEYS = frozenset({
+    "session", "holder_instance_id", "platform", "preset", "holder", "state", "locator",
+    "ref", "candidate", "next", "evidence", "wait", "resume_when",
+    "dispatch_event_cursor", "prompt_fingerprint", "authorization_source", "handed_from",
+})
+TASK_TEXT_KEYS = frozenset({
+    "goal", "scope", "acceptance", "source", "wait", "next", "boundary", "duty",
+    "owner", "resume_when", "ref",
+})
+HOLD_TEXT_KEYS = frozenset({
+    "scope", "reason", "owner", "resume_when", "next", "preset", "summary", "pool",
+})
+DELEGATOR_GRANT_KEYS = frozenset({
+    "preset_id", "preset_ids", "count", "class", "switch_authorization",
+    "lifetime", "special_requirements",
+})
+DAY_START_KEYS = frozenset({"action", "state", "evidence"})
+DAY_END_KEYS = frozenset({"action", "state", "host_ack", "claim_check", "evidence"})
+FINAL_STOP_KEYS = frozenset({"action", "state", "evidence", "boundary", "text"})
+DELEGATOR_HOST_KEYS = frozenset({
+    "platform", "session", "holder_instance_id", "acp_session_id", "native_session_id",
+    "preset_id", "state",
+})
+DELEGATOR_PROJECT_KEYS = frozenset({
+    "goal", "code", "issue", "repo", "status", "stop", "user_language",
+})
+DELEGATOR_CADENCE_KEYS = frozenset({"timezone", "start_local", "end_local", "interval_minutes"})
+DELEGATOR_STOP_KEYS = frozenset({"boundary", "state", "evidence"})
+GRANT_STATES = frozenset({"granted", "paused", "revoked", "excluded"})
+TASK_STAGES = frozenset({"todo", "doing", "review", "closeout", "done"})
 DELEGATOR_AUTH_KEYS = frozenset({
     "run_state", "dispatch_enabled", "expert_task_grants", "worker_pool", "worker_pool_cap",
     "account_token_quotas", "elite_grants", "elite_cap", "priority", "revoked",
@@ -91,6 +121,7 @@ DELEGATOR_AUTH_KEYS = frozenset({
 DELEGATOR_TOP_KEYS = frozenset({
     "schema", "revision", "updated_at", "project", "host", "authorization", "watch",
     "stop", "entry", "timer_owner", "cadence", "source", "retired",
+    "day_start", "day_end", "final_stop",
 })
 # Non-critical freeform bags removed by these field names. Not by reading the text.
 LEGACY_BAG_KEYS = frozenset({
@@ -129,18 +160,18 @@ def refusal(path: str, allowed: str, recovery: str) -> dict[str, str]:
 
 
 def cite_problem(cite: Any) -> str | None:
-    """Shape only. This module does not run Git or check that the object exists."""
+    """Shape only. This module does not run Git. The state tool checks that the path is a file."""
     if not isinstance(cite, dict):
-        return "cite is an object with commit and path"
+        return "cite is an object with path"
     if set(cite) - {"commit", "path", "locator"}:
         return "cite allows only commit, path, and locator"
-    commit = cite.get("commit")
     path = cite.get("path")
-    if not isinstance(commit, str) or COMMIT_RE.fullmatch(commit) is None:
-        return "commit is 7 to 40 lowercase hex characters"
     if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/"):
         return "path is a relative path inside the repository"
-    locator = cite.get("locator", "")
+    commit = cite.get("commit")
+    if commit is not None and (not isinstance(commit, str) or COMMIT_RE.fullmatch(commit) is None):
+        return "commit is 7 to 40 lowercase hex characters"
+    locator = cite.get("locator")
     if locator is not None and not isinstance(locator, str):
         return "locator is a string"
     return None
@@ -190,6 +221,77 @@ def reject_record_patch(kind: str, patch: dict[str, Any]) -> dict[str, str] | No
                         ", ".join(sorted(VERDICT_KEYS)),
                         "remove this key from the patch and retry; the file was not changed",
                     )
+        typed = record_type_problem(kind, {key: value})
+        if typed:
+            return typed
+    return None
+
+
+def _text(value: Any) -> bool:
+    return isinstance(value, str)
+
+
+def _string_list_ok(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def record_type_problem(kind: str, record: dict[str, Any]) -> dict[str, str] | None:
+    """Refuse nested bags and wrong types. Null is a deletion and is not checked here."""
+    if kind == "tasks":
+        for key in TASK_TEXT_KEYS:
+            if key in record and record[key] is not None and not _text(record[key]):
+                return refusal(f"tasks.{key}", "string",
+                               "set this field to a string, or null to remove it; the file was not changed")
+        if "keep_open" in record and record["keep_open"] is not None and not isinstance(record["keep_open"], bool):
+            return refusal("tasks.keep_open", "boolean",
+                           "set keep_open to true or false; the file was not changed")
+        if "depends" in record and record["depends"] is not None and not _string_list_ok(record["depends"]):
+            return refusal("tasks.depends", "array of strings",
+                           "set depends to an array of task ids; the file was not changed")
+        if "needs" in record and record["needs"] is not None and not (
+                _text(record["needs"]) or _string_list_ok(record["needs"])):
+            return refusal("tasks.needs", "string or array of strings",
+                           "set needs to text or an array of strings; the file was not changed")
+        problem = _rows_problem("tasks.sessions", record.get("sessions"))
+        if problem:
+            return problem
+        problem = _rows_problem("tasks.assignments", record.get("assignments"))
+        if problem:
+            return problem
+    elif kind == "holds":
+        for key in HOLD_TEXT_KEYS:
+            if key in record and record[key] is not None and not _text(record[key]):
+                return refusal(f"holds.{key}", "string",
+                               "set this field to a string; the file was not changed")
+        for key in ("presets", "pools"):
+            if key in record and record[key] is not None and not _string_list_ok(record[key]):
+                return refusal(f"holds.{key}", "array of strings",
+                               "set this field to an array of ids; the file was not changed")
+        if "impact" in record and record["impact"] is not None and not _text(record["impact"]):
+            return refusal("holds.impact", "string",
+                           "set impact to a string; the file was not changed")
+    return None
+
+
+def _rows_problem(path: str, value: Any) -> dict[str, str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        return refusal(path, "array of session names or seat objects",
+                       "replace this value with that array; the file was not changed")
+    allowed = ", ".join(sorted(ASSIGNMENT_KEYS))
+    for index, item in enumerate(value):
+        if isinstance(item, str):
+            continue
+        if not isinstance(item, dict):
+            return refusal(f"{path}[{index}]", "string or object",
+                           "replace this item; the file was not changed")
+        for key in item:
+            if key not in ASSIGNMENT_KEYS:
+                return refusal(
+                    f"{path}[{index}].{key}", allowed,
+                    "remove this key; history and snapshot bags are not seat fields. The file was not changed",
+                )
     return None
 
 
@@ -211,7 +313,31 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
                 ", ".join(sorted(AUTH_KEYS)),
                 "rehome this authorization fact into an allowed field; the file was not written",
             ))
+    classes = auth.get("classes")
+    if classes is not None:
+        if not isinstance(classes, dict) or any(not isinstance(key, str) or not isinstance(value, str) or not value
+                                                for key, value in classes.items()):
+            found.append(refusal(f"{prefix}.classes", "object of class name to stored sentence",
+                                 "keep each Class sentence as a string; the file was not written"))
+    for key in ("paused", "revoked", "exclusions"):
+        if key in auth and auth[key] is not None and not _string_list_ok(auth[key]):
+            found.append(refusal(f"{prefix}.{key}", "array of preset ids",
+                                 "set this field to an array of preset ids; the file was not written"))
+    if "elite_cap" in auth and auth["elite_cap"] is not None and not isinstance(auth["elite_cap"], int):
+        found.append(refusal(f"{prefix}.elite_cap", "integer",
+                             "set elite_cap to an integer; the file was not written"))
+    summary = auth.get("capability_summary")
+    if summary is not None and (
+            not isinstance(summary, dict)
+            or not _string_list_ok(summary.get("presets"))
+            or ("text" in summary and summary["text"] is not None and not isinstance(summary["text"], str))):
+        found.append(refusal(f"{prefix}.capability_summary", "object with presets array",
+                             "keep the stored preset list; the file was not written"))
     grants = auth.get("grants") or []
+    if "grants" in auth and not isinstance(grants, list):
+        found.append(refusal(f"{prefix}.grants", "array of grant objects",
+                             "rehome grants into that array; the file was not written"))
+        grants = []
     if isinstance(grants, list):
         for index, grant in enumerate(grants):
             if not isinstance(grant, dict):
@@ -225,6 +351,17 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
                         ", ".join(sorted(GRANT_KEYS)),
                         "rehome this grant fact; the file was not written",
                     ))
+            if "id" in grant and not isinstance(grant.get("id"), str):
+                found.append(refusal(f"{prefix}.grants[{index}].id", "preset id string",
+                                     "set id to a preset id; the file was not written"))
+            if "state" in grant and grant.get("state") not in GRANT_STATES:
+                found.append(refusal(f"{prefix}.grants[{index}].state",
+                                     "granted, paused, revoked, or excluded",
+                                     "set state to one of those tokens; the file was not written"))
+            count = grant.get("count")
+            if "count" in grant and not isinstance(count, int):
+                found.append(refusal(f"{prefix}.grants[{index}].count", "integer",
+                                     "set count to an integer; the file was not written"))
     return found
 
 
@@ -233,11 +370,20 @@ def project_blockers(project: Any) -> list[dict[str, str]]:
         return []
     if not isinstance(project, dict):
         return [refusal("project", "object", "rehome project; the file was not written")]
-    return [refusal(
+    found = [refusal(
         f"project.{key}",
         ", ".join(sorted(PROJECT_KEYS)),
         "rehome this project fact; the file was not written",
     ) for key in sorted(project) if key not in PROJECT_KEYS]
+    for key in ("code", "goal", "issue", "repo", "requirements_source", "skill_adoption_source", "status", "stop"):
+        if key in project and project[key] is not None and not isinstance(project[key], str):
+            found.append(refusal(f"project.{key}", "string",
+                                 "set this field to a string; the file was not written"))
+    rules = project.get("rules")
+    if rules is not None and not (isinstance(rules, str) or _string_list_ok(rules)):
+        found.append(refusal("project.rules", "string or array of strings",
+                             "remove history bags from rules; the file was not written"))
+    return found
 
 
 def protected_blockers(value: Any, path: str) -> list[dict[str, str]]:
@@ -312,28 +458,50 @@ def authorization_view(auth: Any) -> dict[str, Any]:
 
 
 def capability_from_grants(auth: Any) -> dict[str, Any]:
-    """Compact preset and shared-seat summary from the stored grants. Class text stays on the grant."""
-    grants = []
-    if isinstance(auth, dict):
-        for grant in auth.get("grants") or []:
-            if isinstance(grant, dict):
-                grants.append(grant)
-    presets = []
+    """Eligible presets. Stored Worker-pool ids stay. Paused, revoked, and excluded ids leave.
+
+    Class sentences stay on ``authorization.classes``. This function does not write them.
+    """
+    if not isinstance(auth, dict):
+        return {"presets": [], "shared_seats": []}
+    blocked: set[str] = set()
+    for key in ("paused", "revoked", "exclusions"):
+        value = auth.get(key)
+        if isinstance(value, list):
+            blocked.update(item for item in value if isinstance(item, str))
+        elif isinstance(value, str) and value:
+            blocked.add(value)
+    summary = auth.get("capability_summary")
+    presets: list[str] = []
+    if isinstance(summary, dict) and isinstance(summary.get("presets"), list):
+        for item in summary["presets"]:
+            if isinstance(item, str) and item not in presets:
+                presets.append(item)
     shared: dict[str, dict[str, Any]] = {}
-    for grant in grants:
-        if grant.get("state") not in (None, "granted", "paused"):
+    for grant in auth.get("grants") or []:
+        if not isinstance(grant, dict):
             continue
         ident = grant.get("id")
-        if isinstance(ident, str):
+        state = grant.get("state")
+        if state in ("paused", "revoked", "excluded"):
+            if isinstance(ident, str):
+                blocked.add(ident)
+            continue
+        if state not in (None, "granted"):
+            continue
+        if isinstance(ident, str) and ident not in presets:
             presets.append(ident)
         seat = grant.get("shared_seat")
-        if isinstance(seat, str) and seat:
+        if isinstance(seat, str) and seat and isinstance(ident, str):
             row = shared.setdefault(seat, {"seat": seat, "ids": [], "count": grant.get("count")})
-            if isinstance(ident, str) and ident not in row["ids"]:
+            if ident not in row["ids"]:
                 row["ids"].append(ident)
             if grant.get("count") is not None:
                 row["count"] = grant.get("count")
-    return {"presets": presets, "shared_seats": [shared[key] for key in sorted(shared)]}
+    return {
+        "presets": [item for item in presets if item not in blocked],
+        "shared_seats": [shared[key] for key in sorted(shared)],
+    }
 
 
 def project_view(project: Any) -> dict[str, Any]:
@@ -366,6 +534,29 @@ def unknown_paths(state: dict[str, Any]) -> list[dict[str, str]]:
     for key in (state.get("recovery") or {}) if isinstance(state.get("recovery"), dict) else {}:
         if key not in RECOVERY_KEYS:
             add(f"state.recovery.{key}")
+        elif key == "host" and isinstance((state.get("recovery") or {}).get("host"), dict):
+            for nested in state["recovery"]["host"]:
+                if nested not in V1_IDENTITY:
+                    add(f"state.recovery.host.{nested}")
+    auth = state.get("authorization")
+    if isinstance(auth, dict):
+        for key in auth:
+            if key not in AUTH_KEYS:
+                add(f"state.authorization.{key}")
+    binding = state.get("sideagent")
+    if isinstance(binding, dict):
+        for key in binding:
+            if key not in SIDEAGENT_KEYS:
+                add(f"state.sideagent.{key}")
+    unverified = state.get("unverified")
+    if isinstance(unverified, dict):
+        for ident, item in unverified.items():
+            if not isinstance(item, dict):
+                add(f"state.unverified.{ident}")
+                continue
+            for key in item:
+                if key not in UNVERIFIED_KEYS:
+                    add(f"state.unverified.{ident}.{key}")
     for kind, allowed in RECORD_KEYS.items():
         records = state.get(kind) or {}
         if not isinstance(records, dict):
@@ -443,10 +634,10 @@ def clear_stage_warning(state: dict[str, Any], task_id: str) -> None:
         unverified.pop(f"{task_id}-stage", None)
 
 
-def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[str, Any], bool]:
-    """Drop non-critical bags by field name. A bad protected_untracked stops the write."""
+def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[str, Any], bool, list[str]]:
+    """Drop non-critical bags by field name. Name every removal. A bad protected list stops the write."""
     if not isinstance(state, dict):
-        return [refusal("state", "object", "the file was not written")], state, False
+        return [refusal("state", "object", "the file was not written")], state, False, []
     blockers: list[dict[str, str]] = []
     recovery = state.get("recovery") if isinstance(state.get("recovery"), dict) else {}
     if "protected_untracked" in recovery:
@@ -458,36 +649,62 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
     blockers.extend(authorization_blockers(state.get("authorization")))
     blockers.extend(project_blockers(state.get("project")))
     if blockers:
-        return blockers, state, False
+        return blockers, state, False, []
     cleaned = json.loads(json.dumps(state))
     changed = False
+    removed: list[str] = []
     rec = cleaned.get("recovery") if isinstance(cleaned.get("recovery"), dict) else None
     if isinstance(rec, dict):
         legacy = rec.get("legacy") if isinstance(rec.get("legacy"), dict) else None
         if isinstance(legacy, dict) and "protected_untracked" in legacy and "protected_untracked" not in rec:
             rec["protected_untracked"] = list(legacy["protected_untracked"])
             changed = True
+            removed.append("recovery.legacy.protected_untracked mapped to recovery.protected_untracked")
         for key in ("legacy", "v1_host", "migration"):
-            if key in rec:
-                rec.pop(key)
-                changed = True
-    for task in (cleaned.get("tasks") or {}).values():
+            if key not in rec:
+                continue
+            if key == "legacy" and isinstance(rec.get("legacy"), dict):
+                for nested in sorted(rec["legacy"]):
+                    if nested != "protected_untracked":
+                        removed.append(f"recovery.legacy.{nested}")
+            removed.append(f"recovery.{key}")
+            rec.pop(key)
+            changed = True
+    tasks = cleaned.get("tasks") if isinstance(cleaned.get("tasks"), dict) else {}
+    for task_id, task in tasks.items():
         if isinstance(task, dict) and "legacy" in task:
+            removed.append(f"tasks.{task_id}.legacy")
             task.pop("legacy")
             changed = True
     unverified = cleaned.get("unverified")
     if isinstance(unverified, dict):
-        for item in unverified.values():
+        for ident, item in list(unverified.items()):
             if isinstance(item, dict) and "raw" in item:
+                removed.append(f"unverified.{ident}.raw")
                 item.pop("raw")
+                changed = True
+        for task_id, task in tasks.items():
+            warning = f"{task_id}-stage"
+            if (warning in unverified and isinstance(task, dict)
+                    and task.get("writer") == "host" and task.get("stage") in TASK_STAGES):
+                unverified.pop(warning)
+                removed.append(f"unverified.{warning}")
                 changed = True
     stones = cleaned.get("retired")
     if isinstance(stones, list):
-        narrowed = [machine_stone(stone) if isinstance(stone, dict) else stone for stone in stones]
+        narrowed = []
+        for stone in stones:
+            if not isinstance(stone, dict):
+                narrowed.append(stone)
+                continue
+            for key in stone:
+                if key not in STONE_KEYS:
+                    removed.append(f"retired.{stone.get('kind')}/{stone.get('id')}.{key}")
+            narrowed.append(machine_stone(stone))
         if narrowed != stones:
             cleaned["retired"] = narrowed
             changed = True
-    return [], cleaned, changed
+    return [], cleaned, changed, removed
 
 
 def assess_backups(directory: Path, current_text: str) -> dict[str, Any]:
@@ -506,18 +723,183 @@ def assess_backups(directory: Path, current_text: str) -> dict[str, Any]:
     return {"backups": found, "deleted": False, "procedure": CLEANUP_PROCEDURE}
 
 
-def _watch_status(item: dict[str, Any]) -> tuple[str | None, bool]:
-    """Exact token only. A sentence in relay_status is a critical blocker, not a guess."""
-    for key in ("status", "relay_status", "relay"):
+def _watch_status(item: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return (token, path of a non-token status). A sentence is not a status."""
+    for key in ("status", "relay_status", "relay", "state"):
+        if key not in item or item.get(key) in (None, ""):
+            continue
         value = item.get(key)
         if isinstance(value, str) and value in WATCH_STATUS:
-            return value, False
-        if key in CRITICAL_WATCH_FIELDS and value not in (None, ""):
-            return None, True
-    state = item.get("state")
-    if isinstance(state, str) and state in WATCH_STATUS:
-        return state, False
-    return None, False
+            return value, None
+        return None, key
+    return None, None
+
+
+def _string_field(value: Any, path: str, allowed: str) -> dict[str, str] | None:
+    if value is None or isinstance(value, str):
+        return None
+    return refusal(path, allowed, "set this field to a string; the file was not written")
+
+
+def section_shape_problems(section: str, value: Any) -> list[dict[str, str]]:
+    """Nested types for recovery, sideagent, and unverified. Unknown keys are refused."""
+    found: list[dict[str, str]] = []
+    if section == "recovery":
+        if value is None:
+            return found
+        if not isinstance(value, dict):
+            return [refusal("recovery", "object", "rehome recovery; the file was not written")]
+        host = value.get("host")
+        if host is not None:
+            if not isinstance(host, dict):
+                found.append(refusal("recovery.host", "object of identity fields",
+                                     "remove history bags; the file was not written"))
+            else:
+                for key, item in host.items():
+                    if key not in V1_IDENTITY:
+                        found.append(refusal(f"recovery.host.{key}", ", ".join(sorted(V1_IDENTITY)),
+                                             "remove this key; the file was not written"))
+                    elif not isinstance(item, str):
+                        found.append(refusal(f"recovery.host.{key}", "string",
+                                             "set this field to a string; the file was not written"))
+        return found
+    if section == "sideagent":
+        if value is None:
+            return found
+        if not isinstance(value, dict):
+            return [refusal("sideagent", "binding object", "rehome the binding; the file was not written")]
+        for key in value:
+            if key not in SIDEAGENT_KEYS:
+                found.append(refusal(f"sideagent.{key}", ", ".join(sorted(SIDEAGENT_KEYS)),
+                                     "remove this key; the file was not written"))
+        recipe = value.get("recipe")
+        if recipe is not None:
+            if not isinstance(recipe, dict):
+                found.append(refusal("sideagent.recipe", "object", "rehome the recipe; the file was not written"))
+            else:
+                for key in recipe:
+                    if key not in RECIPE_KEYS:
+                        found.append(refusal(f"sideagent.recipe.{key}", ", ".join(sorted(RECIPE_KEYS)),
+                                             "remove this key; the file was not written"))
+        return found
+    if section == "unverified":
+        if not isinstance(value, dict):
+            return [refusal("unverified", "object of locator records",
+                            "rehome each note as an object; the file was not written")]
+        for ident, item in value.items():
+            if not isinstance(item, dict):
+                found.append(refusal(f"unverified.{ident}", "object with summary and locator",
+                                     "replace the bare value with that object; the file was not written"))
+                continue
+            for key in item:
+                if key not in UNVERIFIED_KEYS:
+                    found.append(refusal(f"unverified.{ident}.{key}", ", ".join(sorted(UNVERIFIED_KEYS)),
+                                         "remove this key; the file was not written"))
+            summary = item.get("summary")
+            if summary is not None and not isinstance(summary, str):
+                found.append(refusal(f"unverified.{ident}.summary", "string",
+                                     "set summary to a string; the file was not written"))
+            locator = item.get("locator")
+            if locator is not None and not (isinstance(locator, str) or _string_list_ok(locator)):
+                found.append(refusal(f"unverified.{ident}.locator", "string or array of strings",
+                                     "set locator to a path; the file was not written"))
+        return found
+    return found
+
+
+def _day_problems(path: str, value: Any, allowed: frozenset[str], *, text_ok: bool = False) -> list[dict[str, str]]:
+    if value is None:
+        return []
+    if text_ok and isinstance(value, str):
+        return []
+    if not isinstance(value, dict):
+        return [refusal(path, "object" + (" or string" if text_ok else ""),
+                        "keep the owner's duty; the file was not written")]
+    found = []
+    for key in value:
+        if key in LEGACY_BAG_KEYS:
+            continue
+        if key not in allowed:
+            found.append(refusal(f"{path}.{key}", ", ".join(sorted(allowed)),
+                                 "rehome this field; the file was not written"))
+    state = value.get("state")
+    if state is not None and state not in ("pending", "confirmed"):
+        found.append(refusal(f"{path}.state", "pending or confirmed",
+                             "set state to one token; the file was not written"))
+    for key in allowed:
+        if key == "state" or key not in value:
+            continue
+        problem = _string_field(value.get(key), f"{path}.{key}", "string")
+        if problem:
+            found.append(problem)
+    return found
+
+
+def _delegator_nest_problems(doc: dict[str, Any], dropped: list[str]) -> list[dict[str, str]]:
+    found: list[dict[str, str]] = []
+    for key, value in doc.items():
+        if key in DELEGATOR_TOP_KEYS or key in ("schema", "revision"):
+            continue
+        if key in LEGACY_BAG_KEYS or value in (None, "", [], {}):
+            dropped.append(key)
+        else:
+            found.append(refusal(key, ", ".join(sorted(DELEGATOR_TOP_KEYS)),
+                                 "rehome this duty or name it for removal; the file was not written"))
+    found.extend(_day_problems("day_start", doc.get("day_start"), DAY_START_KEYS))
+    found.extend(_day_problems("day_end", doc.get("day_end"), DAY_END_KEYS))
+    found.extend(_day_problems("final_stop", doc.get("final_stop"), FINAL_STOP_KEYS, text_ok=True))
+    host = doc.get("host")
+    if isinstance(host, dict):
+        for key in host:
+            if key not in DELEGATOR_HOST_KEYS:
+                if key in LEGACY_BAG_KEYS:
+                    dropped.append(f"host.{key}")
+                else:
+                    found.append(refusal(f"host.{key}", ", ".join(sorted(DELEGATOR_HOST_KEYS)),
+                                         "remove this key; the file was not written"))
+    elif host is not None:
+        found.append(refusal("host", "object", "rehome host identity; the file was not written"))
+    project = doc.get("project")
+    if isinstance(project, dict):
+        for key in project:
+            if key not in DELEGATOR_PROJECT_KEYS:
+                found.append(refusal(f"project.{key}", ", ".join(sorted(DELEGATOR_PROJECT_KEYS)),
+                                     "do not copy Host task tables here; the file was not written"))
+            elif not isinstance(project[key], str):
+                found.append(refusal(f"project.{key}", "string",
+                                     "set this field to a string; the file was not written"))
+    cadence = doc.get("cadence")
+    if isinstance(cadence, dict):
+        for key, value in cadence.items():
+            if key not in DELEGATOR_CADENCE_KEYS:
+                found.append(refusal(f"cadence.{key}", ", ".join(sorted(DELEGATOR_CADENCE_KEYS)),
+                                     "remove this key; the file was not written"))
+            elif key == "interval_minutes" and not isinstance(value, int):
+                found.append(refusal("cadence.interval_minutes", "integer",
+                                     "set interval_minutes to an integer; the file was not written"))
+            elif key != "interval_minutes" and not isinstance(value, str):
+                found.append(refusal(f"cadence.{key}", "string",
+                                     "set this field to a string; the file was not written"))
+    stop = doc.get("stop")
+    if isinstance(stop, dict):
+        for key in stop:
+            if key not in DELEGATOR_STOP_KEYS:
+                found.append(refusal(f"stop.{key}", ", ".join(sorted(DELEGATOR_STOP_KEYS)),
+                                     "remove this key; the file was not written"))
+    elif stop is not None and not isinstance(stop, str):
+        found.append(refusal("stop", "string or object", "rehome the stop boundary; the file was not written"))
+    retired = doc.get("retired")
+    if isinstance(retired, list):
+        for index, stone in enumerate(retired):
+            if not isinstance(stone, dict):
+                found.append(refusal(f"retired[{index}]", "machine stone",
+                                     "rehome this row; the file was not written"))
+                continue
+            for key in stone:
+                if key not in STONE_KEYS:
+                    found.append(refusal(f"retired[{index}].{key}", ", ".join(sorted(STONE_KEYS)),
+                                         "remove prose; the file was not written"))
+    return found
 
 
 def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[str]]:
@@ -556,24 +938,83 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
                         ", ".join(sorted(DELEGATOR_GRANT_KEYS)),
                         "rehome this grant fact; the file was not written",
                     ))
+            lifetime = grant.get("lifetime")
+            if lifetime is not None and not isinstance(lifetime, str):
+                blockers.append(refusal(f"authorization.elite_grants[{index}].lifetime", "string",
+                                        "keep the owner's lifetime text; the file was not written"))
+            special = grant.get("special_requirements")
+            if special is not None and not isinstance(special, (str, dict)):
+                blockers.append(refusal(
+                    f"authorization.elite_grants[{index}].special_requirements",
+                    "string or object",
+                    "keep the owner's requirement; the file was not written",
+                ))
+        pool = auth.get("worker_pool")
+        if pool is not None and not _string_list_ok(pool):
+            blockers.append(refusal("authorization.worker_pool", "array of preset ids",
+                                    "set worker_pool to that array; the file was not written"))
+        paused = auth.get("paused")
+        if paused is not None and not _string_list_ok(paused):
+            blockers.append(refusal("authorization.paused", "array of preset ids",
+                                    "set paused to that array; the file was not written"))
+        cap = auth.get("elite_cap")
+        if cap is not None and not isinstance(cap, int):
+            blockers.append(refusal("authorization.elite_cap", "integer",
+                                    "set elite_cap to an integer; the file was not written"))
+        limits = auth.get("known_resource_limits")
+        if limits is not None and (
+                not isinstance(limits, dict)
+                or any(isinstance(item, (dict, list)) for item in limits.values())):
+            blockers.append(refusal("authorization.known_resource_limits",
+                                    "object of strings or numbers",
+                                    "remove nested history; the file was not written"))
+    blockers.extend(_delegator_nest_problems(doc, dropped))
     watch = doc.get("watch")
     if isinstance(watch, dict):
         for ident, item in watch.items():
+            if ident in LEGACY_BAG_KEYS:
+                dropped.append(f"watch.{ident}")
+                continue
             if not isinstance(item, dict):
                 blockers.append(refusal(f"watch.{ident}", "object",
                                         "rehome this duty; the file was not written"))
                 continue
-            _status, critical = _watch_status(item)
-            if critical:
+            status, bad = _watch_status(item)
+            if bad:
                 blockers.append(refusal(
-                    f"watch.{ident}.relay_status",
-                    "pending, sent, or adopted",
-                    "rehome this relay to status pending, sent, or adopted; the file was not written",
+                    f"watch.{ident}.{bad}",
+                    "pending, sent, adopted, open, settled, or blocked",
+                    "set status to one token; the file was not written",
                 ))
-            for key in item:
-                if key not in WATCH_KEYS and key not in {"state", "relay_status", "relay", "kind"} | LEGACY_BAG_KEYS:
-                    if key not in LEGACY_BAG_KEYS:
+            kind = item.get("kind")
+            if kind is not None and kind not in WATCH_KIND:
+                blockers.append(refusal(f"watch.{ident}.kind", ", ".join(sorted(WATCH_KIND)),
+                                        "set kind to one of those tokens; the file was not written"))
+            if status == "adopted":
+                evidence = item.get("evidence") or item.get("locator")
+                if not isinstance(evidence, str) or not evidence:
+                    blockers.append(refusal(
+                        f"watch.{ident}.evidence",
+                        "string that names the Host record or path",
+                        "adopted needs the Host evidence; sent does not. The file was not written",
+                    ))
+            for key, value in item.items():
+                if key in LEGACY_BAG_KEYS:
+                    dropped.append(f"watch.{ident}.{key}")
+                    continue
+                if key not in WATCH_KEYS and key not in {"state", "relay_status", "relay"}:
+                    if value not in (None, "", [], {}):
+                        blockers.append(refusal(
+                            f"watch.{ident}.{key}",
+                            ", ".join(sorted(WATCH_KEYS)),
+                            "rehome this text onto summary, detail, or evidence; the file was not written",
+                        ))
+                    else:
                         dropped.append(f"watch.{ident}.{key}")
+            for key in ("summary", "detail", "evidence", "source", "next", "locator"):
+                problem = _string_field(item.get(key), f"watch.{ident}.{key}", "string")
+                if key in item and problem:
+                    blockers.append(problem)
     return blockers, dropped
 
 
@@ -582,9 +1023,28 @@ def delegator_migrated(doc: dict[str, Any]) -> tuple[dict[str, Any] | None, list
     if blockers:
         return None, blockers, dropped
     out: dict[str, Any] = {"schema": DELEGATOR_SCHEMA, "revision": int(doc.get("revision") or 0)}
-    for key in ("project", "host", "authorization", "stop", "entry", "timer_owner", "cadence", "source"):
-        if key in doc:
-            out[key] = doc[key]
+    for key in ("project", "host", "authorization", "stop", "entry", "timer_owner", "cadence", "source",
+                "day_start", "day_end", "final_stop"):
+        if key not in doc:
+            continue
+        value = doc[key]
+        allowed = {
+            "day_start": DAY_START_KEYS, "day_end": DAY_END_KEYS, "final_stop": FINAL_STOP_KEYS,
+        }.get(key)
+        if isinstance(value, dict) and allowed is not None:
+            for bag in LEGACY_BAG_KEYS:
+                if bag in value:
+                    dropped.append(f"{key}.{bag}")
+            out[key] = {item: value[item] for item in allowed if item in value}
+        elif key == "host" and isinstance(value, dict):
+            for bag in LEGACY_BAG_KEYS:
+                if bag in value:
+                    dropped.append(f"host.{bag}")
+            out[key] = {item: value[item] for item in DELEGATOR_HOST_KEYS if item in value}
+        elif key == "project" and isinstance(value, dict):
+            out[key] = {item: value[item] for item in DELEGATOR_PROJECT_KEYS if item in value}
+        else:
+            out[key] = value
     watch_out: dict[str, Any] = {}
     for ident, item in (doc.get("watch") or {}).items() if isinstance(doc.get("watch"), dict) else []:
         if not isinstance(item, dict) or ident in LEGACY_BAG_KEYS:
@@ -642,13 +1102,102 @@ def task_attention(task_id: str, task: dict[str, Any]) -> list[dict[str, Any]]:
         found.append({"kind": "tasks", "id": task_id, "why": "verdict-missing", "stage": task["stage"],
                       "content": judgment_digest(task)})
     if isinstance(verdict, dict) and verdict.get("value") == "repair" and task.get("goal"):
+        # Host goal, next, and verdict only. A node process write does not change this row.
+        body = {"goal": task.get("goal"), "next": task.get("next"), "verdict": verdict.get("value")}
+        text = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         found.append({"kind": "tasks", "id": task_id, "why": "delivery-open",
-                      "content": judgment_digest(task)})
+                      "content": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]})
     if isinstance(task.get("transcribed"), dict):
         found.append({"kind": "tasks", "id": task_id, "why": "transcribed-check",
                       "host_turn": task["transcribed"].get("host_turn"),
                       "fields": task["transcribed"].get("fields")})
     return found
+
+
+def _record_root() -> Path:
+    root = os.environ.get("KAOLA_ACP_RECORD_ROOT")
+    if root:
+        return Path(root)
+    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    return Path(base) / f"kaola-{os.getuid()}"
+
+
+def node_is_running(binding: Any) -> bool | None:
+    """True when a live Sideagent record matches this node binding. False when none does.
+
+    None means the record root could not be read. A binding alone is not a running node.
+    """
+    if not isinstance(binding, dict) or binding.get("mode") != "node":
+        return None
+    platform, session = binding.get("platform"), binding.get("session")
+    if not isinstance(platform, str) or not isinstance(session, str):
+        return False
+    root = _record_root() / platform / session
+    try:
+        paths = list(root.glob("*/record.json")) if root.is_dir() else []
+    except OSError:
+        return None
+    for path in paths:
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        if record.get("session_role") not in ("sideagent", "sidekick"):
+            continue
+        if record.get("state") != "ready":
+            continue
+        pid = record.get("holder_pid")
+        if not isinstance(pid, int) or pid <= 0:
+            continue
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            continue
+        return True
+    return False
+
+
+def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
+    """Field-by-field view of the Delegator file. Unknown keys are locators."""
+    unknown: list[dict[str, str]] = []
+
+    def add(path: str) -> None:
+        unknown.append({"path": path})
+
+    for key in doc:
+        if key not in DELEGATOR_TOP_KEYS:
+            add(key)
+    auth = doc.get("authorization") if isinstance(doc.get("authorization"), dict) else {}
+    for key in auth:
+        if key not in DELEGATOR_AUTH_KEYS:
+            add(f"authorization.{key}")
+    watch = doc.get("watch") if isinstance(doc.get("watch"), dict) else {}
+    duties = []
+    for ident, item in sorted(watch.items()):
+        if not isinstance(item, dict):
+            add(f"watch.{ident}")
+            continue
+        for key in item:
+            if key not in WATCH_KEYS and key not in {"state", "relay_status", "relay"}:
+                add(f"watch.{ident}.{key}")
+        duties.append({"id": ident, **{key: item.get(key) for key in WATCH_KEYS if key in item}})
+    host = doc.get("host") if isinstance(doc.get("host"), dict) else {}
+    project = doc.get("project") if isinstance(doc.get("project"), dict) else {}
+    return {
+        "view": "delegator-file",
+        "schema": doc.get("schema"),
+        "revision": doc.get("revision"),
+        "project": {key: project[key] for key in DELEGATOR_PROJECT_KEYS if key in project},
+        "host": {key: host[key] for key in DELEGATOR_HOST_KEYS if key in host},
+        "authorization": {key: auth[key] for key in DELEGATOR_AUTH_KEYS if key in auth},
+        "watch": duties,
+        "day_start": doc.get("day_start"),
+        "day_end": doc.get("day_end"),
+        "final_stop": doc.get("final_stop"),
+        "unknown": unknown,
+    }
 
 
 def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
@@ -742,10 +1291,20 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
         "tasks": tasks,
     }
     if isinstance(binding, dict):
-        view["sideagent_maintenance"] = (
-            "no node is running; an idle binding is not missing maintenance"
-            if binding.get("mode") == "node" else "binding present"
-        )
+        if binding.get("mode") == "node":
+            running = node_is_running(binding)
+            if running is True:
+                view["sideagent_maintenance"] = "a node is running"
+            elif running is False:
+                view["sideagent_maintenance"] = (
+                    "no node is running; an idle binding is not missing maintenance"
+                )
+            else:
+                view["sideagent_maintenance"] = (
+                    "node liveness was not read; a binding is not proof a node is running"
+                )
+        else:
+            view["sideagent_maintenance"] = "binding present"
     elif binding is None:
         view["sideagent_maintenance"] = "no binding; that is not evidence maintenance ran"
     for key, value in (("holds", holds), ("alerts", alerts), ("decisions", decisions),

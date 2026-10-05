@@ -11,7 +11,7 @@ limits first; no invented work or fixed quota ([Choosing](worker-profiles.md)).
 
 ## Routine context
 
-Keep goals, progress, Class meanings and `capability_summary`.
+Keep goals, progress, and the grant's stored Class text.
 At a claim, dispatch, adoption or acceptance decision, fetch only fresh facts
 that can affect it. Reuse state read this turn; a Runner return
 uses its correlated receipt, not a heartbeat reload. Update changed
