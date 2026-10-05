@@ -950,6 +950,204 @@ class RecordContract(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertEqual(self.delegator.read_bytes(), before)
 
+    def test_watch_alias_text_stays_blocked_when_status_is_added(self) -> None:
+        for alias in ("relay_status", "relay", "state"):
+            for has_status in (False, True):
+                with self.subTest(alias=alias, has_status=has_status):
+                    text = f"Owner condition in {alias}: keep the repair pending."
+                    duty = {"kind": "relay", alias: text, "source": "owner-message-7",
+                            "summary": "deliver the repair", "next": "Host adopts"}
+                    if has_status:
+                        duty["status"] = "open"
+                    doc = {"schema": "kaola-delegator-heartbeat/1", "revision": 7,
+                           "source": "owner-message-7", "watch": {"repair": duty},
+                           "authorization": {"elite_cap": 4, "elite_grants": [{
+                               "preset_ids": ["droid/default", "droid/opus", "droid/core"],
+                               "count": 2, "class": "Elite"}]}}
+                    self.delegator.write_text(json.dumps(doc), encoding="utf-8")
+                    before = self.delegator.read_bytes()
+                    for args in (["migrate", "--write"],
+                                 ["update", "--writer", "delegator", "--source", "owner-message-7",
+                                  "--expect-revision", "7", "--set", '{"watch":{"repair":{"status":"open"}}}']):
+                        code, out = run_dispatch(["delegator", *args, "--file", str(self.delegator)])
+                        self.assertEqual(code, 2, out)
+                        self.assertEqual(self.delegator.read_bytes(), before)
+                        problem = next(row for row in out["blockers"]
+                                       if row["path"] == f"watch.repair.{alias}")
+                        for field in ("summary", "detail", "evidence"):
+                            self.assertIn(field, problem["recovery"])
+                    code, out = run_dispatch([
+                        "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+                        "--source", "owner-message-7", "--expect-revision", "7", "--set",
+                        json.dumps({"watch": {"repair": {alias: None, "status": "open", "detail": text}}})])
+                    self.assertEqual(code, 0, out)
+                    saved = json.loads(self.delegator.read_text())
+                    self.assertEqual(saved["watch"]["repair"]["detail"], text)
+                    self.assertEqual(saved["watch"]["repair"]["source"], duty["source"])
+                    self.assertEqual(saved["source"], doc["source"])
+                    self.assertEqual(saved["authorization"], doc["authorization"])
+
+        # Each non-token alias needs its own path, also with a valid status.
+        self.delegator.write_text(json.dumps({"revision": 0, "watch": {"repair": {
+            "kind": "relay", "status": "open", "relay_status": "owner condition",
+            "relay": {"condition": "not a token"}, "state": 3}}}), encoding="utf-8")
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+        self.assertEqual(code, 2, out)
+        self.assertEqual(self.delegator.read_bytes(), before)
+        self.assertEqual({row["path"] for row in out["blockers"]},
+                         {"watch.repair.relay_status", "watch.repair.relay", "watch.repair.state"})
+
+    def test_watch_alias_tokens_keep_pending_data_and_status_precedence(self) -> None:
+        record = load_module(REPO / "scripts" / "kaola-record-contract.py", "kpr_i259_aliases")
+        for alias in ("relay_status", "relay", "state"):
+            for token in ("pending", "sent", "adopted", "open", "settled", "blocked"):
+                for has_status in (False, True):
+                    with self.subTest(alias=alias, token=token, has_status=has_status):
+                        duty = {alias: token, "source": "owner-message-7", "summary": "pending repair",
+                                "detail": "keep the owner condition", "next": "Host adopts",
+                                "evidence": "host:tasks/repair"}
+                        if has_status:
+                            duty["status"] = "open"
+                        normalized, blockers, _ = record.delegator_migrated({"watch": {"repair": duty}})
+                        self.assertFalse(blockers)
+                        kept = normalized["watch"]["repair"]
+                        self.assertEqual(kept["status"], "open" if has_status else token)
+                        for field in ("source", "summary", "detail", "next", "evidence"):
+                            self.assertEqual(kept[field], duty[field])
+
+    def test_release_named_typed_duty_is_preserved_with_adoption_guards(self) -> None:
+        for status in ("pending", "sent", "open", "blocked", "adopted", "settled"):
+            with self.subTest(status=status):
+                duty = {"kind": "recovery", "status": status, "source": "owner-release",
+                        "summary": "release remains a current duty", "next": "Host judges readiness",
+                        "evidence": "host:tasks/release"}
+                self.delegator.write_text(json.dumps({"revision": 0, "watch": {
+                    "release": duty, "repair": {"kind": "relay", "status": "pending", "next": "deliver"}}}),
+                    encoding="utf-8")
+                code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+                self.assertEqual(code, 0, out)
+                self.assertNotIn("watch.release", out["dropped"])
+                code, out = run_dispatch([
+                    "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+                    "--source", "owner-release", "--expect-revision", "0", "--set", '{"project":{"goal":"ship"}}'])
+                self.assertEqual(code, 0, out)
+                saved = json.loads(self.delegator.read_text())
+                self.assertEqual(saved["watch"]["release"], duty)
+                self.assertEqual(saved["watch"]["repair"]["status"], "pending")
+                code, view = run_dispatch(["delegator", "view", "--file", str(self.delegator)])
+                self.assertEqual(code, 0, view)
+                shown = next(row for row in view["watch"] if row["id"] == "release")
+                self.assertEqual(shown, {"id": "release", **duty})
+                before = self.delegator.read_bytes()
+                code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+                self.assertEqual(code, 0, out)
+                self.assertEqual(self.delegator.read_bytes(), before)
+        for duty in ({"report": "unmapped owner condition"},
+                     {"kind": "relay", "status": "adopted", "summary": "not proven adopted"}):
+            self.delegator.write_text(json.dumps({"revision": 0, "watch": {"release": duty}}), encoding="utf-8")
+            before = self.delegator.read_bytes()
+            code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+            self.assertEqual(code, 2, out)
+            self.assertEqual(self.delegator.read_bytes(), before)
+            self.assertTrue(any(row["path"].startswith("watch.release") for row in out["blockers"]))
+
+    def test_delegator_view_keeps_current_closed_operating_fields(self) -> None:
+        fields = {
+            "stop": {"boundary": "owner boundary", "state": "pending", "evidence": "owner-stop"},
+            "cadence": {"timezone": "Asia/Taipei", "start_local": "09:00", "end_local": "18:00",
+                        "interval_minutes": 5},
+            "entry": {"skill": "kaola-delegator", "target": "device-local", "timer_template": "canonical"},
+            "timer_owner": {"platform": "codex", "native_timer_id": "timer-7", "state": "active"},
+            "source": "owner-message-7",
+        }
+        self.delegator.write_text(json.dumps({"revision": 0, **fields}), encoding="utf-8")
+        code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+        self.assertEqual(code, 0, out)
+        before = self.delegator.read_bytes()
+        code, view = run_dispatch(["delegator", "view", "--file", str(self.delegator)])
+        self.assertEqual(code, 0, view)
+        self.assertEqual(self.delegator.read_bytes(), before)
+        for key, value in fields.items():
+            self.assertEqual(view[key], value)
+        record = load_module(REPO / "scripts" / "kaola-record-contract.py", "kpr_i259_view_fields")
+        self.assertEqual(record.delegator_file_view({"stop": "owner boundary"})["stop"], "owner boundary")
+        malformed = json.loads(json.dumps(fields))
+        for key in ("stop", "cadence", "entry", "timer_owner"):
+            malformed[key]["raw"] = {"history": "PRIVATE-UNMAPPED-TEXT"}
+        malformed["cadence"]["interval_minutes"] = True
+        malformed["entry"]["target"] = ["PRIVATE-UNMAPPED-TEXT"]
+        malformed["source"] = {"history": "PRIVATE-UNMAPPED-TEXT"}
+        view = record.delegator_file_view(malformed)
+        self.assertNotIn("PRIVATE-UNMAPPED-TEXT", json.dumps(view))
+        self.assertNotIn("interval_minutes", view["cadence"])
+        self.assertNotIn("target", view["entry"])
+        self.assertNotIn("source", view)
+        self.assertEqual({row["path"] for row in view["unknown"]},
+                         {"stop.raw", "cadence.raw", "entry.raw", "timer_owner.raw",
+                          "cadence.interval_minutes", "entry.target", "source"})
+
+    def test_capability_summary_closure_refuses_writes_and_keeps_legacy_duties(self) -> None:
+        self.init({"classes": dict(CLASS_SENTENCES), "elite_cap": 4,
+                   "grants": [{"id": "droid/opus", "count": 2, "shared_seat": "droid", "state": "granted"}],
+                   "capability_summary": {"presets": ["droid/opus"]}})
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner-7",
+                               "--kind", "tasks", "--id", "repair", "--set",
+                               json.dumps({"stage": "doing", "goal": "apply repair", "wait": "owner condition",
+                                           "next": "Host judges"}))
+        self.assertEqual(code, 0, out)
+        original = self.doc()
+        before = self.file.read_bytes()
+        for key, value in (("text", "UNMAPPED-OWNER-CONDITION"),
+                           ("notes", {"condition": "UNMAPPED-OWNER-CONDITION"})):
+            with self.subTest(key=key):
+                code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner-7",
+                                       "--section", "authorization", "--expect-revision", str(original["revision"]), "--set",
+                                       json.dumps({"capability_summary": {key: value}}))
+                self.assertEqual(code, 2, out)
+                self.assertEqual(out["path"], f"authorization.capability_summary.{key}")
+                self.assertIn("rehome", out["recovery"])
+                self.assertEqual(self.file.read_bytes(), before)
+                legacy = json.loads(json.dumps(original))
+                legacy["state"]["authorization"]["capability_summary"][key] = value
+                self.file.write_text(json.dumps(legacy), encoding="utf-8")
+                sentinel = self.file.read_bytes()
+                code, view = self.state("view", "--file", str(self.file), "--role", "host")
+                self.assertEqual(code, 0, view)
+                self.assertEqual(self.file.read_bytes(), sentinel)
+                self.assertIn(f"state.authorization.capability_summary.{key}",
+                              [row["path"] for row in view["unknown"]])
+                self.assertNotIn("UNMAPPED-OWNER-CONDITION", json.dumps(view))
+                self.assertEqual(view["authorization"]["grants"], original["state"]["authorization"]["grants"])
+                self.assertEqual(view["capability"]["presets"], ["droid/opus"])
+                self.assertEqual(next(task for task in view["tasks"] if task["id"] == "repair")["wait"],
+                                 "owner condition")
+                for write in (False, True):
+                    code, out = self.state("migrate", "--file", str(self.file), *(["--write"] if write else []))
+                    self.assertEqual(code, 2, out)
+                    self.assertFalse(out["writes"])
+                    self.assertIn(f"authorization.capability_summary.{key}",
+                                  [row["path"] for row in out["blockers"]])
+                    self.assertEqual(self.file.read_bytes(), sentinel)
+                # Restore only this test fixture; no product mapping is inferred.
+                self.file.write_bytes(before)
+        code, out = self.state("migrate", "--file", str(self.file))
+        self.assertEqual((code, out["result"]), (0, "current"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_shared_skeleton_uses_owner_count_without_a_project_grant(self) -> None:
+        text = (REPO / "templates/orchestrator/references/heartbeat-skeleton.txt").read_text()
+        self.assertIn("容量取 owner 的实际 count", text)
+        self.assertNotIn("本项目授予 count=2", text)
+        self.assertNotIn("离开 active", text)
+        self.assertNotIn("留在 pending", text)
+        example = json.loads(next(line.removeprefix("例：") for line in text.splitlines()
+                                  if line.startswith("例：")))
+        auth = example["authorization"]
+        self.assertEqual(auth["elite_cap"], 4)
+        self.assertEqual(auth["grants"][0], {"id": "droid/opus", "count": 2,
+                                            "shared_seat": "droid", "state": "granted"})
+
     def test_delegator_open_nested_bags_refuse_without_writes(self) -> None:
         for patch, path in [({"entry": {"report": {"past": True}}}, "entry.report"),
                             ({"timer_owner": {"raw": []}}, "timer_owner.raw"),

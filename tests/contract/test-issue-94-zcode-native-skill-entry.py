@@ -24,10 +24,15 @@ live-evidence boundaries honest.
 
 from __future__ import annotations
 
+import ast
+import hashlib
 import json
 import re
+import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 PROJECT = Path(__file__).resolve().parents[2]
 ORCH_T = PROJECT / "templates" / "orchestrator"
@@ -246,37 +251,47 @@ class HolderEnvelope(unittest.TestCase):
             self.assertNotIn(banned, self.src)
 
     def test_interrupt_resend_is_verbatim_with_no_host_marker(self) -> None:
-        """The composite interrupt resend carries the Agent's text verbatim
-        on every session. The holder has no Host marker, no role classifier,
-        no persistent flag: nothing infers Host identity from literal prompt
-        content, and a stop/resume cannot lose or restore a marker that does
-        not exist. The only use of HOST_SKILL_ENTRY is the worker-event
-        notification envelope's own first line."""
-        self.assertNotIn("host_entry_session", self.src)
-        self.assertNotIn("host_skill_entry_prepended", self.src)
-        self.assertNotIn("entry Host", self.src)
-        # the resend goes through op_prompt with the caller's text unchanged
-        m = re.search(r'self\.op_prompt\(\{"text": text, "wait": False\}\)',
-                      self.src)
-        self.assertIsNotNone(m, "interrupt resend must send text verbatim")
-        # HOST_SKILL_ENTRY is used exactly twice: its definition and the
-        # ZCode fallback of the holder's own entry (Issue #119). That entry is
-        # read only by the constructor, the notification payload's first line,
-        # the carrier-op capability guard, and the record - never as
-        # prompt-content inspection or a resend prepend.
-        uses = [ln for ln in self.src.splitlines()
-                if "HOST_SKILL_ENTRY" in ln]
-        self.assertEqual(len(uses), 2, uses)
-        self.assertIn('HOST_SKILL_ENTRY = "/kaola-project-runner"', uses[0])
-        self.assertIn('entry = HOST_SKILL_ENTRY if args.platform == "zcode"', uses[1])
-        entry_uses = [ln.strip() for ln in self.src.splitlines()
-                      if "self.host_entry" in ln]
-        self.assertEqual(entry_uses, [
-            "self.host_entry: str = entry",
-            '"host_skill_entry": self.host_entry,',
-            "self.host_entry,",
-            "if not self.host_entry:",
-        ], entry_uses)
+        """Interrupt/resend keeps caller text. Automatic recovery is separate."""
+        holder_class = next(node for node in ast.parse(self.src).body
+                            if isinstance(node, ast.ClassDef) and node.name == "Holder")
+        methods = {node.name: node for node in holder_class.body
+                   if isinstance(node, ast.FunctionDef)}
+        for name in ("op_steer_interrupt", "op_prompt"):
+            source = ast.get_source_segment(self.src, methods[name])
+            for marker in ("host_entry_session", "host_skill_entry_prepended", "entry Host"):
+                self.assertNotIn(marker, source, name)
+
+        # Execute the actual resend method with in-memory transport doubles.
+        # No constructor, holder process, automatic recovery or CLI is started.
+        scope = {"hashlib": hashlib}
+        exec(compile(ast.Module(body=[methods["op_steer_interrupt"]], type_ignores=[]),
+                     str(HOLDER), "exec"), scope)
+        for entry in ("", ENTRY):
+            for active in (False, True):
+                for text in ("Mention /kaola-project-runner without requesting an entry.",
+                             ENTRY + "\n  Keep caller spacing and text: 原文\n"):
+                    with self.subTest(entry=entry, active=active, text=text):
+                        holder = SimpleNamespace(
+                            host_entry=entry, session_role="host" if entry else "worker",
+                            agent=SimpleNamespace(exited=threading.Event(), proc=object()),
+                            lock=threading.RLock(), events=[],
+                            turn={"active": active, "request_id": 7,
+                                  "mutation_status": "in_progress" if active else "completed"},
+                            _no_acp_session=lambda: None,
+                            cancel_turn=Mock(return_value=({"outcome": "cancelled"}, True,
+                                {"active": False, "stop_reason": "cancelled",
+                                 "mutation_status": "unknown", "is_current": True})),
+                            op_prompt=Mock(return_value={"outcome": "in_progress",
+                                "turn_request_id": 8, "mutation_status": "in_progress"}),
+                        )
+                        receipt = scope["op_steer_interrupt"](holder, {"text": text})
+                        holder.op_prompt.assert_called_once_with({"text": text, "wait": False})
+                        self.assertEqual(receipt["steer_fingerprint"],
+                                         "sha256:" + hashlib.sha256(text.encode()).hexdigest())
+                        self.assertIs(receipt["interrupted"], active)
+                        self.assertEqual(holder.cancel_turn.call_count, int(active))
+                        self.assertNotIn("host_skill_entry_prepended", receipt)
+                        self.assertNotIn("host_entry_session", vars(holder))
 
     def test_holder_documents_interrupt_is_no_recovery_entry(self) -> None:
         text = flat(self.src)

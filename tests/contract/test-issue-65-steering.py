@@ -437,7 +437,8 @@ class SteeringContract(unittest.TestCase):
                 self.assertRegex(body, r'runtime-tmux\.sh" steer ')
                 self.assertIn("## Steering a running turn", body)
                 if values["native_steering"] == "supported":
-                    self.assertIn("steers natively", body)
+                    self.assertRegex(body, r'runtime-tmux\.sh" steer --repo "\$REPO" '
+                                     r'--session "\$SESSION" --text ')
                     self.assertNotIn("exposes no native mid-turn entry", body)
                 elif values["native_steering"] == "unknown":
                     # Issue #88: an unverified surface must not be described as a

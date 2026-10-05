@@ -16,12 +16,13 @@ one-sentence summaries in the maintainer docs, and asserts the rule did not
 leak into the outer Agent's surfaces (host-startup and Kaola-Delegator), which
 hand over the count as intake and never schedule.
 
-The heartbeat skeleton is Chinese, so it is checked with its own phrases for
-the same five meanings; `stop-before-start` is kept literally there.
+The heartbeat skeleton uses typed tasks and tool views. The main Skill owns
+the cap and stop rules; the skeleton does not repeat them.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -113,10 +114,21 @@ class HeartbeatSkeleton(unittest.TestCase):
         self.text = flat(REFS / "heartbeat-skeleton.md")
 
     def test_rule_is_deferred_to_the_main_skill(self) -> None:
-        # Issue #208: the carrier loads the main Skill every beat, so the
-        # skeleton keeps live seat facts and defers the cap/stop rules there.
+        # The main Skill owns cap/stop policy. The example retains typed work.
         self.assertIn("不复述 Skill 规则", self.text)
-        self.assertIn("已停席不列 live", self.text)
+        example = re.search(r"例：(\{.*\})", self.text)
+        self.assertIsNotNone(example)
+        body = json.loads(example.group(1))
+        self.assertIsInstance(body["tasks"], list)
+        ids = [task["id"] for task in body["tasks"]]
+        self.assertTrue(ids)
+        self.assertTrue(all(isinstance(ident, str) and ident for ident in ids))
+        self.assertEqual(len(ids), len(set(ids)))
+        for task in body["tasks"]:
+            self.assertIn(task["stage"], {"todo", "doing", "review", "closeout", "done"})
+            self.assertIsInstance(task["goal"], str)
+        for old in ("active", "pending", "workers"):
+            self.assertNotIn(old, body)
         for restated in ("达上限先精确 stop 一个再 start", "验收完成或放弃该席位的同一拍即精确 stop"):
             with self.subTest(restated=restated):
                 self.assertNotIn(restated, self.text)

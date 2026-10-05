@@ -273,9 +273,16 @@ class AuthorizationNotationTest(unittest.TestCase):
             self.assertEqual(skeleton.count(definition), 1, definition)
         self.assertNotIn("rows", auth)
         self.assertIn("capability_summary", auth)
-        self.assertEqual(sorted(auth["capability_summary"]), ["presets", "text"])
-        self.assertIn("droid/opus", auth["capability_summary"]["presets"])
-        self.assertNotIn("Expert not granted", auth["capability_summary"]["text"])
+        # The tool derives the capability view. The stored example has only
+        # current preset IDs and no handwritten capability text or roster.
+        self.assertEqual(sorted(auth), ["capability_summary", "classes", "elite_cap", "grants"])
+        self.assertEqual(sorted(auth["capability_summary"]), ["presets"])
+        self.assertEqual(auth["capability_summary"]["presets"], ["droid/opus", "devin/default"])
+        self.assertEqual([grant["id"] for grant in auth["grants"]],
+                         auth["capability_summary"]["presets"])
+        self.assertEqual(auth["elite_cap"], 4)
+        self.assertEqual(auth["grants"][0]["count"], 2)
+        self.assertEqual(auth["grants"][0]["shared_seat"], "droid")
         self.assertNotIn("computer_interaction", auth["capability_summary"])
         catalog = {}
         for line in (ORCHESTRATOR / "references" / "profile-catalog.md").read_text(encoding="utf-8").splitlines():
@@ -284,6 +291,7 @@ class AuthorizationNotationTest(unittest.TestCase):
                 catalog[match["preset"]] = match["profile"]
         for grant in auth["grants"]:
             self.assertIn(grant["id"], catalog)
+            self.assertEqual(grant["state"], "granted")
             self.assertNotIn("profile", grant)
             self.assertNotIn(catalog[grant["id"]], json.dumps(auth))
 

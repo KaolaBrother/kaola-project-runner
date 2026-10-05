@@ -331,10 +331,6 @@ def _rows_problem(path: str, value: Any) -> dict[str, str] | None:
     return None
 
 
-def _string_list(value: Any) -> bool:
-    return isinstance(value, list) and all(isinstance(item, str) for item in value)
-
-
 def count_ok(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
@@ -454,10 +450,17 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
         found.append(refusal(f"{prefix}.elite_cap", "integer",
                              "set elite_cap to an integer; the file was not written"))
     summary = auth.get("capability_summary")
+    if isinstance(summary, dict):
+        for key in sorted(summary):
+            if key != "presets":
+                found.append(refusal(
+                    f"{prefix}.capability_summary.{key}", "presets only",
+                    "read this value from its source and rehome any unresolved duty in its typed field; "
+                    "then remove this key explicitly. No grant is inferred; the file was not written",
+                ))
     if summary is not None and (
             not isinstance(summary, dict)
-            or not _string_list_ok(summary.get("presets"))
-            or ("text" in summary and summary["text"] is not None and not isinstance(summary["text"], str))):
+            or not _string_list_ok(summary.get("presets"))):
         found.append(refusal(f"{prefix}.capability_summary", "object with presets array",
                              "keep the stored preset list; the file was not written"))
     grants = auth.get("grants") or []
@@ -670,6 +673,11 @@ def unknown_paths(state: dict[str, Any]) -> list[dict[str, str]]:
         for key in auth:
             if key not in AUTH_KEYS:
                 add(f"state.authorization.{key}")
+        summary = auth.get("capability_summary")
+        if isinstance(summary, dict):
+            for key in summary:
+                if key != "presets":
+                    add(f"state.authorization.capability_summary.{key}")
     binding = state.get("sideagent")
     if isinstance(binding, dict):
         for key in binding:
@@ -861,16 +869,26 @@ def assess_backups(directory: Path, current_text: str) -> dict[str, Any]:
     return {"backups": found, "deleted": False, "procedure": CLEANUP_PROCEDURE}
 
 
-def _watch_status(item: dict[str, Any]) -> tuple[str | None, str | None]:
-    """Return (token, path of a non-token status). A sentence is not a status."""
+def _watch_status(item: dict[str, Any]) -> tuple[str | None, list[str]]:
+    """Return the first token only when every nonempty status field is a token."""
+    status = None
+    bad = []
     for key in ("status", "relay_status", "relay", "state"):
         if key not in item or item.get(key) in (None, ""):
             continue
         value = item.get(key)
         if isinstance(value, str) and value in WATCH_STATUS:
-            return value, None
-        return None, key
-    return None, None
+            if status is None:
+                status = value
+        else:
+            bad.append(key)
+    return (None if bad else status), bad
+
+
+def _watch_duty_shape(item: Any) -> bool:
+    """A declared kind and closed duty keys distinguish a duty from a legacy bag."""
+    return (isinstance(item, dict) and isinstance(item.get("kind"), str)
+            and item["kind"] in WATCH_KIND and item.keys() <= WATCH_KEYS | {"state", "relay_status", "relay"})
 
 
 def _string_field(value: Any, path: str, allowed: str) -> dict[str, str] | None:
@@ -1080,8 +1098,15 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
         blockers.append(refusal("watch", "object keyed by current duty id", "rehome current duties; the file was not written"))
     if isinstance(watch, dict):
         for ident, item in watch.items():
-            if ident in LEGACY_BAG_KEYS:
-                status = _watch_status(item)[0] if isinstance(item, dict) else None
+            status, bad_keys = _watch_status(item) if isinstance(item, dict) else (None, [])
+            for bad in bad_keys:
+                blockers.append(refusal(
+                    f"watch.{ident}.{bad}",
+                    "pending, sent, adopted, open, settled, or blocked",
+                    "reconcile this value from its source and rehome its text in summary, detail, or evidence; "
+                    "then set the status field to one token or remove the alias. The file was not written",
+                ))
+            if ident in LEGACY_BAG_KEYS and not _watch_duty_shape(item):
                 if status == "adopted" and not (isinstance(item.get("evidence") or item.get("locator"), str)
                                                  and (item.get("evidence") or item.get("locator"))):
                     status = None
@@ -1095,15 +1120,8 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
                 blockers.append(refusal(f"watch.{ident}", "object",
                                         "rehome this duty; the file was not written"))
                 continue
-            status, bad = _watch_status(item)
-            if bad:
-                blockers.append(refusal(
-                    f"watch.{ident}.{bad}",
-                    "pending, sent, adopted, open, settled, or blocked",
-                    "set status to one token; the file was not written",
-                ))
             kind = item.get("kind")
-            if kind is not None and kind not in WATCH_KIND:
+            if kind is not None and (not isinstance(kind, str) or kind not in WATCH_KIND):
                 blockers.append(refusal(f"watch.{ident}.kind", ", ".join(sorted(WATCH_KIND)),
                                         "set kind to one of those tokens; the file was not written"))
             if status == "adopted":
@@ -1172,7 +1190,7 @@ def delegator_migrated(doc: dict[str, Any]) -> tuple[dict[str, Any] | None, list
             out[key] = value
     watch_out: dict[str, Any] = {}
     for ident, item in (doc.get("watch") or {}).items() if isinstance(doc.get("watch"), dict) else []:
-        if not isinstance(item, dict) or ident in LEGACY_BAG_KEYS:
+        if not isinstance(item, dict) or (ident in LEGACY_BAG_KEYS and not _watch_duty_shape(item)):
             if ident in LEGACY_BAG_KEYS:
                 dropped.append(f"watch.{ident}")
             continue
@@ -1375,7 +1393,7 @@ def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
     watch = doc.get("watch") if isinstance(doc.get("watch"), dict) else {}
     duties = []
     for ident, item in sorted(watch.items()):
-        if ident in LEGACY_BAG_KEYS:
+        if ident in LEGACY_BAG_KEYS and not _watch_duty_shape(item):
             add(f"watch.{ident}")
             continue
         if not isinstance(item, dict):
@@ -1413,6 +1431,18 @@ def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
     for problem in problems:
         if {"path": problem["path"]} not in unknown:
             add(problem["path"])
+    current = {}
+    for key, allowed in (("stop", DELEGATOR_STOP_KEYS), ("entry", DELEGATOR_ENTRY_KEYS),
+                         ("timer_owner", DELEGATOR_TIMER_KEYS), ("cadence", DELEGATOR_CADENCE_KEYS)):
+        value = doc.get(key)
+        if isinstance(value, dict):
+            current[key] = {field: value[field] for field in allowed if field in value and (
+                count_ok(value[field]) if key == "cadence" and field == "interval_minutes"
+                else isinstance(value[field], str))}
+        elif key == "stop" and isinstance(value, str):
+            current[key] = value
+    if isinstance(doc.get("source"), str):
+        current["source"] = doc["source"]
     return {
         "view": "delegator-file",
         "schema": doc.get("schema"),
@@ -1421,6 +1451,7 @@ def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
         "host": {key: host[key] for key in DELEGATOR_HOST_KEYS if isinstance(host.get(key), str)},
         "authorization": auth_view,
         "watch": duties,
+        **current,
         **{key: ({field: value[field] for field in allowed if isinstance(value.get(field), str)}
                   if isinstance(value, dict) else value if isinstance(value, str) else None)
            for key, allowed in (("day_start", DAY_START_KEYS), ("day_end", DAY_END_KEYS), ("final_stop", FINAL_STOP_KEYS))

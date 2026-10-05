@@ -4355,7 +4355,7 @@ def already_settled_input(state: dict[str, Any], ident: str) -> bool:
 
 def checkpoint_entry(state: dict[str, Any], entry: Any, holder: str) -> tuple[str | None, str | None]:
     """(input id, why it is not settled) for one checkpoint entry. Applied
-    evidence must be a current record or tombstone this node wrote; a
+    evidence names a record this node wrote or a current retirement; a
     retained duty must be a current record with a responsible next reader."""
     if not isinstance(entry, dict) or not isinstance(entry.get("input"), str) or not entry["input"]:
         return None, "entry-unreadable"
