@@ -128,27 +128,32 @@ class RecordContract(unittest.TestCase):
         self.assertIn("doing", delegator)
         self.assertNotIn("retired", delegator)
 
-    def test_shared_seat_group_is_still_admitted_as_one(self) -> None:
-        """Owner grant count is 2. Current admission still returns shared-occupied."""
+    def test_shared_seat_group_keeps_grant_count_two(self) -> None:
+        """Owner grant count is 2. One live seat leaves one place in that pool."""
         dispatch = load_module(DISPATCH, "kpr_i259_dispatch")
         grants = [
             {"id": "droid/default", "state": "granted", "count": 2, "shared_seat": "droid"},
             {"id": "droid/opus", "state": "granted", "count": 2, "shared_seat": "droid"},
             {"id": "droid/core", "state": "granted", "count": 2, "shared_seat": "droid"},
         ]
-        catalog = {grant["id"]: {"class": "Elite"} for grant in grants}
+        self.assertEqual({grant["count"] for grant in grants}, {2})
+        catalog = {grant["id"]: {"class": "Elite", "platform": "droid"} for grant in grants}
         rows = [{
             "session": "droid-KT-one", "state": "ready", "platform": "droid",
             "preset": "droid/default", "repo": str(self.repo),
         }]
         used_count, _seats, occupied, unnamed = dispatch.live_occupancy(
             rows, str(self.repo), catalog, grants)
-        self.assertEqual(occupied, {"droid"})
+        self.assertEqual(occupied, {"droid": 1})
+        self.assertEqual(dispatch.shared_seat_capacities(grants), {"droid": 2})
         self.assertEqual(used_count["droid/default"], 1)
         item = {
             "preset": "droid/opus", "_shared_seat": "droid", "_count": 2,
-            "_platform": "droid", "_pool": True,
+            "_shared_capacity": 2, "_platform": "droid", "_pool": True,
         }
+        self.assertIsNone(
+            dispatch.held_refusal(item, used_count, 1, occupied, unnamed, None, grants, catalog))
+        occupied["droid"] = 2
         self.assertEqual(
             dispatch.held_refusal(item, used_count, 1, occupied, unnamed, None, grants, catalog),
             "shared-occupied")

@@ -129,8 +129,28 @@ monitor() {
       sample_bin=/usr/bin/sample
       [[ -x "$sample_bin" ]] || sample_bin="$(command -v sample 2>/dev/null || true)"
       if [[ -n "$sample_bin" ]]; then
+        # sample can stay alive past its own interval. The suite kill is next
+        # and must not wait on that diagnostic.
         sample_file="$receipt_dir/$label.sample.tmp"
-        "$sample_bin" "$leaf" 5 -file "$sample_file" >/dev/null 2>&1 || printf 'sample exited %s\n' "$?"
+        "$sample_bin" "$leaf" 5 -file "$sample_file" >/dev/null 2>&1 &
+        sample_pid=$!
+        sample_waited=0
+        while (( sample_waited < 8 )); do
+          if ! kill -0 "$sample_pid" 2>/dev/null; then
+            break
+          fi
+          sleep 1
+          sample_waited=$((sample_waited + 1))
+        done
+        if kill -0 "$sample_pid" 2>/dev/null; then
+          kill -TERM "$sample_pid" 2>/dev/null || true
+          sleep 1
+          if kill -0 "$sample_pid" 2>/dev/null; then
+            kill -KILL "$sample_pid" 2>/dev/null || true
+          fi
+          printf 'sample did not finish within 8 s; the suite kill continues\n'
+        fi
+        wait "$sample_pid" 2>/dev/null || true
         cat "$sample_file" 2>/dev/null || true
         rm -f "$sample_file"
       else
