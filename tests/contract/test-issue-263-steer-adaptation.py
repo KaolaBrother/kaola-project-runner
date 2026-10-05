@@ -149,7 +149,7 @@ class OpenCodeAdapter(unittest.TestCase):
         snapshot = Path(self.tmp.name) / 'config.json'
         fake.write_text('#!' + sys.executable + '\n' +
             'import json,os,sys\n' +
-            f'open({str(snapshot)!r},"w").write(os.environ["OPENCODE_CONFIG_CONTENT"])\n' +
+            f'open({str(snapshot)!r},"w").write(json.dumps({{"config":json.loads(os.environ["OPENCODE_CONFIG_CONTENT"]),"args":sys.argv[1:]}}))\n' +
             'request=json.loads(sys.stdin.readline())\n' +
             'print(json.dumps({"jsonrpc":"2.0","id":request["id"],"result":{"protocolVersion":1}}),flush=True)\n' +
             'sys.exit(7)\n')
@@ -163,7 +163,9 @@ class OpenCodeAdapter(unittest.TestCase):
             result = json.loads(process.stdout.readline())
             self.assertEqual(result['result']['protocolVersion'], 1)
             self.assertEqual(process.wait(timeout=5), 7)
-            overlay = json.loads(snapshot.read_text())
+            received = json.loads(snapshot.read_text())
+            self.assertEqual(received["args"], ["acp"])
+            overlay = received["config"]
             self.assertEqual(overlay['agents'], original['agents'])
             self.assertEqual(overlay['plugins'][0], original['plugins'][0])
             added = overlay['plugins'][-1]

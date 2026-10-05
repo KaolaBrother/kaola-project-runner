@@ -125,11 +125,11 @@ def request_permission_if(func: ast.FunctionDef, source: str) -> ast.If:
 
 
 class Issue24KeepAcpWithoutSkip(unittest.TestCase):
-    """Default OpenCode ACP stays ``opencode acp`` with no measured skip applied."""
+    """The V2 steer adapter keeps native ACP and adds no skip argv."""
 
     def test_acp_command_is_opencode_acp_without_skip_argv(self) -> None:
         command = parse_manifest(MANIFEST)["acp_command"]
-        self.assertEqual(command, "opencode acp")
+        self.assertEqual(command, "python3 $SKILL_DIR/scripts/kaola-opencode-acp.py")
         for flag in SKIP_ARGV:
             self.assertNotIn(
                 flag,
@@ -234,7 +234,7 @@ class Issue24DocumentGeneratedAcpSurface(unittest.TestCase):
             skill_quirks_pointer(body),
             "generated SKILL.md must name the reference carrying this platform's quirks",
         )
-        self.assertIn("`opencode acp`", body)
+        self.assertIn("kaola-opencode-acp.py", body)
         self.assertNotRegex(
             body,
             r"opencode\s+acp\s+--(?:auto|yolo|dangerously-skip-permissions)",
