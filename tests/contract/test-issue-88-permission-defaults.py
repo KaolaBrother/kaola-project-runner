@@ -288,7 +288,7 @@ class PlatformFactsStayTheSingleSource(unittest.TestCase):
 
     def test_opencode_still_has_no_acp_skip_all(self) -> None:
         values = manifest_values(OPENCODE_MANIFEST)
-        self.assertEqual(values["acp_command"], "opencode acp")
+        self.assertEqual(values["acp_command"], "python3 $SKILL_DIR/scripts/kaola-opencode-acp.py")
         self.assertIn("no ACP skip-all", values["acp_quirks"])
 
     def test_opencode_no_skip_all_is_measured_on_the_verified_build(self) -> None:
@@ -328,49 +328,23 @@ class OpenCodeSteeringEvidenceIsVersioned(unittest.TestCase):
             f"the 1.18.17 probe must be marked historical: {summary!r}",
         )
 
-    def test_summary_refuses_to_speak_for_the_verified_version(self) -> None:
+    def test_summary_separates_native_acp_from_the_local_adapter(self) -> None:
         values = manifest_values(OPENCODE_MANIFEST)
-        summary = values["steering_summary"]
-        self.assertIn(
-            "2.0.22",
-            summary,
-            "the summary must name the currently verified version it does NOT cover",
-        )
-        self.assertIn(
-            "2.0.11",
-            summary,
-            "the summary must keep the 2.0.11 initialize observation versioned",
-        )
-        self.assertIn("cli=2.0.22", values["acp_verified_versions"])
-        self.assertRegex(
-            summary,
-            r"not a measurement of",
-            f"the summary must deny that 1.18.17 measured the verified build: {summary!r}",
-        )
-        self.assertRegex(
-            summary,
-            r"unknown",
-            f"the un-probed current version must read as unknown: {summary!r}",
-        )
+        for fact in ("2.0.22", "local V2", "native-admitted", "original active ACP request id"):
+            self.assertIn(fact, values["steering_summary"])
+        self.assertEqual(values["native_steering"], "supported")
+        self.assertEqual(values["acp_steer_method"], "_session/steering")
 
     def test_generated_steering_reference_carries_the_calibration(self) -> None:
         text = OPENCODE_STEERING.read_text(encoding="utf-8")
-        for needle in ("1.18.17", "2.0.11", "unknown"):
-            self.assertIn(
-                needle,
-                text,
-                f"generated OpenCode steering reference lost {needle!r}",
-            )
+        for needle in ("1.18.17", "2.0.11", "native-admitted", "No cancel fallback"):
+            self.assertIn(needle, text)
 
 
-class OpenCodeCurrentCapabilityIsUnknownEverywhere(unittest.TestCase):
-    """The review's finding: marking the summary "unknown" while the manifest still
-    said ``unsupported`` left the reference and every steer receipt asserting a
-    proven absence. The three surfaces must now agree.
+class SteeringCapabilityWording(unittest.TestCase):
+    """Current adapter facts plus unchanged unknown/unsupported refusal wording.
 
-    Scope guard: this changes what the Runner *claims*, never what it *does*. The
-    refusal, the error codes, ``available_steer_modes`` and the no-auto-degrade
-    rule are asserted unchanged below, and no probe engine is added.
+    Unknown is tested with a test-only manifest because OpenCode now has an adapter.
     """
 
     @classmethod
@@ -394,50 +368,31 @@ class OpenCodeCurrentCapabilityIsUnknownEverywhere(unittest.TestCase):
         """Real CLI, no holder and no session: these paths refuse before any I/O."""
         env = {k: v for k, v in os.environ.items()
                if k != "KAOLA_PROJECT_RUNNER_CANONICAL_REPO"}
+        target = TMUX
+        if platform == "opencode":
+            import shutil
+            fixture = Path(self._tmp.name) / "unknown-fixture"
+            if not fixture.exists():
+                shutil.copytree(PROJECT / "scripts", fixture / "scripts")
+                shutil.copytree(PROJECT / "platforms", fixture / "platforms")
+                path = fixture / "platforms/opencode.yaml"
+                text = path.read_text().replace('native_steering: "supported"', 'native_steering: "unknown"')
+                text = text.replace('acp_steer_method: "_session/steering"', 'acp_steer_method: ""')
+                path.write_text(text)
+            target = fixture / "scripts/kaola-tmux.sh"
         result = subprocess.run(
-            ["bash", str(TMUX), platform, "steer", "--repo", str(self.repo),
+            ["bash", str(target), platform, "steer", "--repo", str(self.repo),
              "--session", f"{platform}-kaola-i88unk", "--text", "hi", *extra],
             capture_output=True, text=True, env=env, timeout=60)
         return json.loads(result.stdout)
 
-    def test_manifest_current_capability_is_unknown(self) -> None:
-        self.assertEqual(
-            manifest_values(OPENCODE_MANIFEST)["native_steering"],
-            "unknown",
-            "the 1.18.17 probe does not measure the verified 2.0.11 build, so the "
-            "current capability is unknown, not unsupported",
-        )
-
-    def test_the_historical_unsupported_result_is_still_recorded(self) -> None:
-        """Marking the current state unknown must not erase what 1.18.17 measured."""
-        summary = manifest_values(OPENCODE_MANIFEST)["steering_summary"]
-        self.assertIn("1.18.17", summary)
-        self.assertIn("-32601", summary)
-        self.assertRegex(summary, r"[Hh]istorical evidence")
-
-    def test_generated_worker_skill_claims_no_proven_absence(self) -> None:
-        body = OPENCODE_SKILL.read_text(encoding="utf-8")
-        self.assertIn(
-            "No native mid-turn entry has been verified",
-            body,
-            "an unknown surface must read as unverified",
-        )
-        self.assertNotIn(
-            "exposes no native mid-turn entry",
-            body,
-            "an unknown surface must not be described as a proven absence",
-        )
-
-    def test_generated_worker_skill_keeps_the_explicit_composite(self) -> None:
-        """No auto-degrade, no invented native tool: the composite stays opt-in."""
-        body = OPENCODE_SKILL.read_text(encoding="utf-8")
-        self.assertIn("--steer-mode interrupt", body)
-        self.assertIn("never injection", body)
-        self.assertIn("refuses and writes nothing", body)
-        self.assertEqual(manifest_values(OPENCODE_MANIFEST)["acp_steer_method"], "")
-
-    def test_generated_reference_reports_unknown(self) -> None:
-        self.assertIn("unknown", OPENCODE_STEERING.read_text(encoding="utf-8"))
+    def test_current_adapter_and_generated_skill_agree(self) -> None:
+        values = manifest_values(OPENCODE_MANIFEST)
+        self.assertEqual(values["native_steering"], "supported")
+        self.assertIn("_session/steering", OPENCODE_STEERING.read_text())
+        self.assertIn("--steer-mode interrupt", OPENCODE_SKILL.read_text())
+        self.assertIn("1.18.17", values["steering_summary"])
+        self.assertIn("-32601", values["steering_summary"])
 
     def test_cli_bare_steer_refuses_without_claiming_a_proven_absence(self) -> None:
         receipt = self.steer("opencode")
@@ -466,7 +421,7 @@ class OpenCodeCurrentCapabilityIsUnknownEverywhere(unittest.TestCase):
 
     def test_a_genuinely_unsupported_platform_still_says_so(self) -> None:
         """`unknown` must not leak onto platforms that really were measured."""
-        receipt = self.steer("grok", "--steer-mode", "native")
+        receipt = self.steer("cursor-cli", "--steer-mode", "native")
         self.assertEqual(receipt["steer_outcome"], "unsupported")
         self.assertEqual(receipt["error"]["code"], "steer-unsupported")
         message = receipt["error"]["message"]
@@ -477,10 +432,10 @@ class OpenCodeCurrentCapabilityIsUnknownEverywhere(unittest.TestCase):
     def test_unsupported_wording_is_byte_identical_to_the_baseline(self) -> None:
         """Issue #88 reworded only the `unknown` case. A platform that really was
         measured keeps each path's original sentence, so no unrelated receipt moved."""
-        bare = self.steer("grok")["error"]["message"]
-        self.assertIn("grok exposes no native mid-turn steering entry on its ACP surface", bare)
-        native = self.steer("grok", "--steer-mode", "native")["error"]["message"]
-        self.assertIn("grok has no native mid-turn steering entry on the ACP channel", native)
+        bare = self.steer("cursor-cli")["error"]["message"]
+        self.assertIn("cursor-cli exposes no native mid-turn steering entry on its ACP surface", bare)
+        native = self.steer("cursor-cli", "--steer-mode", "native")["error"]["message"]
+        self.assertIn("cursor-cli has no native mid-turn steering entry on the ACP channel", native)
 
 
 class ReadmeDefersToTheManifestsForNativeSteering(unittest.TestCase):
@@ -570,13 +525,13 @@ class ApiDocDefersToTheManifests(unittest.TestCase):
         for key in ("native_steering", "steering_summary"):
             self.assertIn(key, text, f"docs/api.md must name {key} as the source")
 
-    def test_opencode_unknown_stays_documented_with_its_versions(self) -> None:
+    def test_opencode_adapter_stays_documented_with_its_versions(self) -> None:
         """The one case #88 established is still concrete, not generalised away."""
         text = flowed(API_DOC.read_text(encoding="utf-8"))
         self.assertIn("1.18.17", text)
         self.assertIn("2.0.11", text)
-        self.assertIn("steer-capability-unknown", text)
-        self.assertIn("instead of a proven absence", text)
+        self.assertIn("native-admitted", text)
+        self.assertIn("resume:false", text)
 
 
 class DshSkipAllIsTheLaunchVariable(unittest.TestCase):

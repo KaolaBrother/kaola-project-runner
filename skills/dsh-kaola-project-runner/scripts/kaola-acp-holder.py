@@ -1097,6 +1097,8 @@ QUOTA_MODULE = "kaola-quota.py"
 RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
     "kaola-zcode-acp.py",
+    "kaola-opencode-acp.py",
+    "kaola-opencode-steer.mjs",
     "kaola-acp.py",
     "kaola-quota.py",
     "kaola-tmux.sh",
@@ -4171,15 +4173,19 @@ class Holder:
                         "mutation_performed": False}
             turn_request_id_before = self.turn["request_id"]
             turn_fingerprint = self.turn["fingerprint"]
+            request_params = {
+                "sessionId": self.acp_session_id,
+                "prompt": [{"type": "text", "text": text}],
+                "_meta": {"steering": {"idleBehavior": "promptRequired"}},
+            }
+            if self.args.platform == "grok" and method == "_x.ai/interject":
+                # Grok ignores idleBehavior and requires top-level text.
+                request_params = {"sessionId": self.acp_session_id, "text": text}
+            elif self.args.platform == "opencode":
+                request_params["_meta"]["steering"]["expectedTurnId"] = turn_request_id_before
             steer_request_id = self.agent.send_request(
                 method,
-                {
-                    "sessionId": self.acp_session_id,
-                    "prompt": [{"type": "text", "text": text}],
-                    # A compliant agent must not manufacture a detached turn when
-                    # the turn settles between our check and its handler.
-                    "_meta": {"steering": {"idleBehavior": "promptRequired"}},
-                },
+                request_params,
             )
             self.events.append({"kind": "steer_sent", "method": method,
                                 "request_id": steer_request_id,
@@ -4211,6 +4217,14 @@ class Holder:
                          "detail": detail}
         else:
             result = response.get("result") or {}
+            if not isinstance(result, dict):
+                result = {}
+            if self.args.platform == "grok" and method == "_x.ai/interject":
+                envelope = result.get("result") if isinstance(result, dict) else None
+                if isinstance(envelope, dict) and envelope.get("status") == "queued" and not result.get("error"):
+                    base["steer_native_status"] = "queued"
+                    result = {"outcome": "written", "confirmation": "native-queued",
+                              "reason": "Grok acknowledged the interject request; delivery and adoption are unconfirmed"}
             native = result.get("outcome")
             base["steer_native_outcome"] = native
             # What actually backs the claim. An agent that acknowledges
@@ -4232,6 +4246,10 @@ class Holder:
                                     "the write was flushed without error, but this platform "
                                     "acknowledges no consumption - read the turn's own output "
                                     "to judge, and do not resend blindly"}
+                if confirmation in ("native-queued", "native-admitted"):
+                    error["message"] = ("the native entry acknowledged the request; running-turn "
+                                        "consumption and model adoption are unconfirmed; read the "
+                                        "original turn output and do not resend blindly")
             elif native == "queued":
                 # Issue #81: the platform admitted the text to its follow-up
                 # queue - it surfaces on a LATER turn. The running turn did not

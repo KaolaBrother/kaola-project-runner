@@ -15,7 +15,7 @@ PLATFORMS = {
     "kimi-cli": ("acp", "kimi acp"),
     "cursor-cli": ("acp", "cursor-agent --yolo acp"),
     "devin": ("acp", "devin acp"),
-    "opencode": ("acp", "opencode acp"),
+    "opencode": ("acp", "python3 $SKILL_DIR/scripts/kaola-opencode-acp.py"),
     "claude-code": ("acp", "node $SKILL_DIR/scripts/vendor/claude-code-acp/dist/index.js"),
     "codex": (
         "acp",

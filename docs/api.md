@@ -939,14 +939,20 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
   `unsupported`), `acp_steer_method` carries the entry and may be non-empty only when
   `native_steering` is `supported`, and `steering_summary` records the versioned evidence. Read the
   current roster out of `platforms/*.yaml` rather than from this page: which platforms qualify
-  changes as surfaces are investigated, so no count or list is pinned here. One case worth knowing is
-  `opencode`, whose `-32601` probe ran on 1.18.17 and whose 2.0.11 `initialize` advertised no
-  steering `_meta`, while `acp_verified_versions` names 2.0.22 (permission QA only;
-  2.0.15 was record-only since the 2026-09-24 Pink batch). No steering method was
-  re-probed on any newer build: it is `unknown`, and the
-  Runner reports an unverified capability (`steer_outcome: unknown`, `steer-capability-unknown`)
-  instead of a proven absence. The refusal, the explicit composite and
-  the no-auto-degrade rule are identical for `unsupported` and `unknown` alike.
+  changes as surfaces are investigated, so no count or list is pinned here. The OpenCode `1.18.17` -32601 probe and `2.0.11`
+  initialize observation remain historical. The V2 local adapter adds the entry for CLI 2.0.22;
+  native ACP keeps the original prompt and stream. It checks the exact active ACP request id,
+  then uses the installed plugin `session.prompt` API with `delivery:"steer", resume:false`.
+  `native-admitted` confirms inbox admission. It does not confirm consumption or adoption.
+  A turn-end race can leave input pending without starting a new turn.
+  Grok CLI 1.0.46 uses `_x.ai/interject` with top-level `text`. Its nested `queued` reply
+  maps to `written`, `steer_consumed:null`, and `native-queued`. This is an interject request
+  acknowledgment. It does not mean admission to the holder's later-turn follow-up queue.
+  Grok has no native expected-turn guard: a turn-end race can start a detached fallback turn.
+  Read the original turn output before you judge adoption. Never replay an unknown write.
+  The OpenCode adapter and the Grok mapping require a new holder at a safe boundary. A running
+  holder retains its old code. No consumer is restarted by this change. A custom `opencode acp`
+  command has no adapter entry. V1 and other V2 builds are unverified.
 - `--steer-mode interrupt` is the composite and works on every platform: cancel the running turn,
   confirm it actually stopped, then send the text **once** as the next prompt on the same ACP
   session, so the conversation keeps its context. It is interrupted-then-continued, never injection —
@@ -969,7 +975,7 @@ Every platform has a usable path inside ACP, and the Agent picks which one:
 | `steer_outcome` | `steer_consumed` | `steer_confirmation` | Meaning |
 |---|---|---|---|
 | `injected` | `true` | `agent-confirmed` | the agent acknowledged that the running turn took it |
-| `written` | `null` | `write-only` | flushed into the running turn's input, which this platform acknowledges in no way |
+| `written` | `null` | `write-only`, `native-queued` or `native-admitted` | write or native admission confirmed; running-turn consumption and adoption are unconfirmed |
 | `interrupted_and_resent` | `true` | `cancel-confirmed` | composite: the turn was cancelled and confirmed stopped, then this text ran as the next turn |
 | `resent_without_interrupt` | `true` | `no-turn-to-interrupt` | composite: the turn had already ended on its own, so nothing was interrupted |
 | `started_new_turn` | `true` | `agent-confirmed` | the agent opened a separate turn this holder does not track — not injection |

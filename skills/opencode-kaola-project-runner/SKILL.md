@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport
 
-ACP is the only transport (Issue #130). The ACP command is `opencode acp`; prompts travel over its stdio JSON-RPC, never shell eval. Login is a human act outside the Runner and needs no terminal. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
+ACP is the only transport (Issue #130). The ACP command is `python3 $SKILL_DIR/scripts/kaola-opencode-acp.py`; prompts travel over its stdio JSON-RPC, never shell eval. Login is a human act outside the Runner and needs no terminal. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
 
 | `mutation_status` | Safe interpretation |
 |---|---|
@@ -89,21 +89,18 @@ After reading current evidence, the controlling Agent chooses what to send:
 
 ## Steering a running turn
 
-No native mid-turn entry has been verified on OpenCode's ACP surface, so a bare
-`steer` refuses and writes nothing. That is an unverified capability, not a
-proven absence: nothing here says the entry does not exist. The available path
-is the composite, which you choose explicitly:
+OpenCode's ACP surface steers natively, so `steer` is an Agent choice for a
+turn already running — not a Runner policy:
 
 ```bash
-"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" \
-  --steer-mode interrupt --text '<redirection>'
+"$SKILL_DIR/scripts/runtime-tmux.sh" steer --repo "$REPO" --session "$SESSION" --text '<redirection>'
 ```
 
-It **cancels** the running turn, confirms it stopped, then sends your text as the
-next turn on the same session, which keeps the conversation's context. That is
-interrupted-then-continued, never injection: work in progress stops and may have
-left partial side effects (`side_effects_possible`). An unconfirmed cancel sends
-nothing and reports `unknown`. See [references/steering.md](references/steering.md).
+Read `steer_outcome` with `steer_confirmation`: only `injected` means the agent
+acknowledged consumption, `written` means flushed but unacknowledged (read the
+turn's own output), and `not_consumed`/`unknown` mean do not resend
+blindly. `--steer-mode interrupt` is the other, explicitly chosen path: it
+cancels the turn first. See [references/steering.md](references/steering.md).
 
 ## Cancel and permissions
 

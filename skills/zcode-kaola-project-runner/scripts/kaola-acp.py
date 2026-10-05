@@ -103,6 +103,7 @@ SKILL_SCRIPTS_TOKEN = "$SKILL_DIR/scripts/"
 # the bridge in this variable, so the bridge never looks the binary up itself.
 BRIDGE_BINARY_ENV = {
     "claude-code": "CLAUDE_ACP_CLAUDE_BIN",
+    "opencode": "OPENCODE_BIN",
 }
 # Issue #124: platforms whose `initialize` returns no `agentInfo`, so a start
 # records the launched CLI's own `--version` instead (a fact, never a gate).
@@ -3202,7 +3203,7 @@ SKILL_DISCOVERY_DIRS = (".zcode/skills", ".agents/skills")
 # The three required names ship in every worker Skill; the ZCode bridge is
 # compared only where both sides have it.
 WORKER_SKILL_SCRIPTS = ("kaola-acp.py", "kaola-acp-holder.py", "kaola-tmux.sh")
-WORKER_SKILL_OPTIONAL_SCRIPTS = ("kaola-zcode-acp.py",)
+WORKER_SKILL_OPTIONAL_SCRIPTS = ("kaola-zcode-acp.py", "kaola-opencode-acp.py", "kaola-opencode-steer.mjs")
 SKEW_DETAIL_CAP = 12
 # Issue #121: the main orchestrator Skill ships no scripts, so #105 never saw
 # it. Every worker Skill carries the main Skill's build record instead, and a
@@ -3921,6 +3922,7 @@ def _restart_required_name(name: str) -> bool:
     """
     return (
         name in ("kaola-acp-holder.py", "kaola-zcode-acp.py", "kaola-quota.py",
+                 "kaola-opencode-acp.py", "kaola-opencode-steer.mjs",
                  "platform.yaml")
         or name.startswith("adapters/")
         or name.startswith("platforms/")

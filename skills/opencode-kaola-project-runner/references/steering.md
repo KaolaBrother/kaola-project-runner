@@ -1,7 +1,7 @@
 # OpenCode steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unknown**. Historical evidence, OpenCode 1.18.17: all four candidate steering methods answered JSON-RPC -32601 and `initialize` advertised no steering `_meta`. That is not a measurement of the verified 2.0.x builds: 2.0.11 `initialize` also advertised no steering `_meta`, but no steering method was re-probed on 2.0.11 or on the recorded 2.0.15 or permission-tested 2.0.22, so native steering is unknown until a live probe settles it. The composite `--steer-mode interrupt` was exercised live on 1.18.31.
+**supported** (entry `_session/steering`). Historical evidence: 1.18.17 candidate methods returned -32601; 2.0.11 initialize alone did not measure steer. CLI 2.0.22 uses the local V2 integration. The local V2 adapter exposes _session/steering over the existing ACP contract. It guards the original active ACP request id and calls the installed plugin session.prompt API with delivery steer and resume false. Native ACP retains its stream and original prompt. written with native-admitted confirms inbox admission only. A turn-end race can leave input pending; it cannot resume an idle turn. No cancel fallback. Old holders and custom opencode acp commands have no adapter entry; a controlled restart is needed to use this path.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
@@ -22,7 +22,7 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 | `steer_outcome` | `steer_consumed` | Meaning |
 |---|---|---|
 | `injected` | `true` | the agent acknowledged that the running turn took the text; adoption by the model is a separate question |
-| `written` | `null` | the text was flushed into the running turn's input, but this platform acknowledges no consumption — read the turn's own output to judge |
+| `written` | `null` | the entry confirmed a write or native admission; running-turn consumption is unconfirmed. Read the original turn output to judge adoption |
 | `interrupted_and_resent` | `true` | composite: the running turn was cancelled and confirmed stopped, then this text ran as the next turn |
 | `resent_without_interrupt` | `true` | composite: the turn had already ended, so nothing was interrupted and this text ran as the next turn |
 | `started_new_turn` | `true` | the agent opened a separate turn instead — not injection, and this holder does not track it |
@@ -34,6 +34,9 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
 `cancel-confirmed` (the composite saw the old turn stop), or `none`.
+`native-queued` means Grok acknowledged an interject request. `native-admitted`
+means OpenCode admitted steer input. Neither confirms model adoption. Grok
+`queued` does not mean the holder's separate follow-up-queue outcome.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is

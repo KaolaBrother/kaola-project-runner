@@ -39,8 +39,8 @@ MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 PLATFORMS = PROJECT / "platforms"
 SKILLS = PROJECT / "skills"
 
-# grok's manifest declares no native entry; codex declares `_session/steering`.
-UNSUPPORTED_PLATFORM = "grok"
+# Cursor has no native entry; Codex declares `_session/steering`.
+UNSUPPORTED_PLATFORM = "cursor-cli"
 SUPPORTED_PLATFORM = "codex"
 STEER_TEXT = "STOP the loop and reply with exactly STEERED-OK-65"
 

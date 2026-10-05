@@ -726,6 +726,9 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         if not source.is_file():
             raise ValueError(f"required ZCode ACP adapter missing: {source}")
         result[f"scripts/{ZCODE_ADAPTER}"] = source.read_bytes()
+    if manifest["id"] == "opencode":
+        for name in ("kaola-opencode-acp.py", "kaola-opencode-steer.mjs"):
+            result[f"scripts/{name}"] = (shared_root / name).read_bytes()
     return result
 
 

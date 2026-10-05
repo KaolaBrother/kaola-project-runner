@@ -1,7 +1,7 @@
 # Grok CLI steering (`steer`)
 
 Scope: the ACP channel only. Native steering on this platform's ACP surface:
-**unsupported**. No steering entry on the ACP surface: cli 1.0.40 answers JSON-RPC -32601 with the explicit data `unknown ACP extension method`, and `initialize` advertises `x.ai/hooks` and `x.ai/capabilities` but no steering `_meta`.
+**supported** (entry `_x.ai/interject`). CLI 1.0.46 accepts top-level text at _x.ai/interject. Native queued acknowledges the request, not running-turn consumption or model adoption. KPR reports written with native-queued confirmation. The holder refuses known idle turns; Grok cannot guard a turn-end race and can start a detached interject-fallback turn. Read original turn output; do not resend an unknown write.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
@@ -22,7 +22,7 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 | `steer_outcome` | `steer_consumed` | Meaning |
 |---|---|---|
 | `injected` | `true` | the agent acknowledged that the running turn took the text; adoption by the model is a separate question |
-| `written` | `null` | the text was flushed into the running turn's input, but this platform acknowledges no consumption — read the turn's own output to judge |
+| `written` | `null` | the entry confirmed a write or native admission; running-turn consumption is unconfirmed. Read the original turn output to judge adoption |
 | `interrupted_and_resent` | `true` | composite: the running turn was cancelled and confirmed stopped, then this text ran as the next turn |
 | `resent_without_interrupt` | `true` | composite: the turn had already ended, so nothing was interrupted and this text ran as the next turn |
 | `started_new_turn` | `true` | the agent opened a separate turn instead — not injection, and this holder does not track it |
@@ -34,6 +34,9 @@ transport under the same identity, redaction, and bounded-receipt rules as `send
 `steer_confirmation` says what backs the claim: `agent-confirmed` (the agent acknowledged it),
 `write-only` (the bytes were flushed into the running turn and nothing more is knowable),
 `cancel-confirmed` (the composite saw the old turn stop), or `none`.
+`native-queued` means Grok acknowledged an interject request. `native-admitted`
+means OpenCode admitted steer input. Neither confirms model adoption. Grok
+`queued` does not mean the holder's separate follow-up-queue outcome.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is
