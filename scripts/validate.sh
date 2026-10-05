@@ -164,6 +164,7 @@ python_suites_all=(
   "test-issue-260-transport.py"
   "test-issue-254-opencode-model.py"
   "test-issue-255-lifecycle-state.py"
+  "test-issue-264-compact-recovery.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -241,6 +242,7 @@ python_suites_b=(
   "test-issue-247-codex-child.py"
   "test-issue-260-transport.py"
   "test-issue-254-opencode-model.py"
+  "test-issue-264-compact-recovery.py"
 )
 run_suite_lane() {
   local status=0 rc

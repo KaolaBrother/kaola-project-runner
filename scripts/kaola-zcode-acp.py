@@ -1513,19 +1513,58 @@ class ZCodeAcpAgent:
     # -- backend -> ACP ---------------------------------------------------
 
     def on_backend_event(self, msg: dict[str, Any]) -> None:
-        if msg.get("method") != "session/event":
-            return
+        method = msg.get("method")
         params = msg.get("params") or {}
+        if method not in ("session/event", "state.updated"):
+            return
         with self.lock:
             session = self.by_backend.get(params.get("sessionId"))
         if session is None:
             return
-        etype = params.get("type")
-        payload = params.get("payload") or {}
         try:
-            self.translate_event(session, etype, payload, params.get("turnId"))
+            if method == "state.updated":
+                self.translate_state_updated(session, params)
+            else:
+                etype = params.get("type")
+                payload = params.get("payload") or {}
+                self.translate_event(session, etype, payload, params.get("turnId"))
         except Exception as exc:  # never let one event kill the stream
-            log(f"event translation failed ({etype}): {exc}")
+            log(f"event translation failed ({method}): {exc}")
+
+    # Issue #264: the engine reports background compaction on two channels.
+    # The compact orchestrator appends a `compact_completed`/`compact_failed`
+    # `session/event`; the v4 background path emits a `state.updated`
+    # notification whose `reason` is `compact_started`, `session_compacted`,
+    # `session_compact_failed`, or `session_compact_cancelled`. Map both onto
+    # the ACP `compaction_update` variant so one holder rule covers every
+    # platform. Emit only facts the engine sent; never invent a completion.
+    STATE_COMPACT_REASONS = {
+        "compact_started": "in_progress",
+        "session_compacted": "completed",
+        "session_compact_failed": "failed",
+        "session_compact_cancelled": "cancelled",
+    }
+    EVENT_COMPACT_TYPES = {
+        "compact_started": "in_progress",
+        "compact_completed": "completed",
+        "compact_failed": "failed",
+    }
+
+    def translate_state_updated(self, session: Session, params: dict[str, Any]) -> None:
+        status = self.STATE_COMPACT_REASONS.get(params.get("reason"))
+        if status is None:
+            return
+        revision = params.get("revision")
+        occurrence = f"zcode-state-{revision}" if revision is not None else None
+        self.emit_compaction(session, status, occurrence)
+
+    def emit_compaction(self, session: Session, status: str,
+                        occurrence: str | None) -> None:
+        update: dict[str, Any] = {"sessionUpdate": "compaction_update",
+                                  "status": status}
+        if occurrence:
+            update["compactionId"] = occurrence
+        self.update(session, update)
 
     def translate_event(self, session: Session, etype: str, payload: dict[str, Any],
                         params_turn_id: str | None = None) -> None:
@@ -1561,6 +1600,15 @@ class ZCodeAcpAgent:
             usage = payload.get("usage")
             if usage:
                 self.update(session, {"sessionUpdate": "usage_update", "usage": usage})
+            return
+
+        # Issue #264: project the engine's compact timeline events onto ACP.
+        compact_status = self.EVENT_COMPACT_TYPES.get(etype)
+        if compact_status is not None:
+            occurrence = (payload.get("operationId") or payload.get("boundaryId")
+                          or payload.get("compactId"))
+            self.emit_compaction(session, compact_status,
+                                 str(occurrence) if occurrence else None)
             return
 
         # Issue #81: bind the running turn's backend id for the steer ledger.
