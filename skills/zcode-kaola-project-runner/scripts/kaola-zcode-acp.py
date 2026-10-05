@@ -1532,12 +1532,23 @@ class ZCodeAcpAgent:
             log(f"event translation failed ({method}): {exc}")
 
     # Issue #264: the engine reports background compaction on two channels.
-    # The compact orchestrator appends a `compact_completed`/`compact_failed`
-    # `session/event`; the v4 background path emits a `state.updated`
-    # notification whose `reason` is `compact_started`, `session_compacted`,
-    # `session_compact_failed`, or `session_compact_cancelled`. Map both onto
-    # the ACP `compaction_update` variant so one holder rule covers every
-    # platform. Emit only facts the engine sent; never invent a completion.
+    # Exact source locators in the installed engine bundle
+    # `/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs`:
+    #   * `RRn` emits `{method:"state.updated", params:{patch, reason, revision,
+    #     scope:"session", sessionId, type:"state.updated", workspace}}`
+    #     (constructor `afterStateMutation`/`emitStateUpdated` region).
+    #   * `session/compact` (`JKo`) sets `{status:"running"}` through
+    #     `RRn(..., "compact_started", ...)`; `cXa` then calls
+    #     `tD(e, t, s)` with `s = "session_compacted"`, `"session_compact_failed"`,
+    #     or `"session_compact_cancelled"`.
+    #   * The compact orchestrator appends `compact_started`,
+    #     `compact_completed`, and `compact_failed` session events through
+    #     `k6e` -> `createEvent`/`appendEvent`; `compact_completed` carries
+    #     `operationId` (`cmp_<uuid>`) and `boundaryId`.
+    # A real app-server wire capture confirmed `state.updated` on this stdio
+    # channel with keys patch/reason/revision/scope/sessionId/type/workspace.
+    # Map only those exact names onto the ACP `compaction_update` variant. Emit
+    # only facts the engine sent; never invent a completion.
     STATE_COMPACT_REASONS = {
         "compact_started": "in_progress",
         "session_compacted": "completed",
@@ -1551,6 +1562,12 @@ class ZCodeAcpAgent:
     }
 
     def translate_state_updated(self, session: Session, params: dict[str, Any]) -> None:
+        # The captured frame always carries a session id and scope "session".
+        # A different scope is not this session's compact state.
+        if params.get("scope") != "session":
+            return
+        if not params.get("sessionId"):
+            return
         status = self.STATE_COMPACT_REASONS.get(params.get("reason"))
         if status is None:
             return

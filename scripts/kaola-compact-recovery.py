@@ -16,24 +16,33 @@ Keep these facts separate. A source event is not ACP exposure. Exposure is not
 delivery. Delivery is not a model reread. Only a real completed signal starts
 the reload. Never use a start, a failure, a token drop, or assistant prose.
 
-The recognition rules come from the reused original evidence:
+Accepted shapes and their positive source locators:
 
-* Codex adapter 2.0.1 emits ``compaction_update`` with ``status == "completed"``
-  only when the client advertises ``clientCapabilities.session.compaction``.
-* OpenCode 2.0.22 emits ``session_info_update`` with the
-  ``_meta["opencode/compaction"]`` marker; the completed marker carries the
-  per-occurrence ``messageId``.
+* Codex adapter 2.0.1, `createCompactionUpdate`, emits ``compaction_update``
+  with status exactly ``completed`` only when the client advertises
+  ``clientCapabilities.session.compaction``
+  (``@agentclientprotocol/codex-acp/dist/index.js``, `clientSupportsCompaction`
+  and `createCompactionUpdate`; status union in the ACP schema).
+* OpenCode 2.0.22, the located handler, emits through `ji` a
+  ``session_info_update`` whose ``_meta["opencode/compaction"]`` marker is
+  ``{status, messageId, reason[, error]}``. `session.compaction.ended` emits
+  ``status:"completed"`` with the started ``messageId``; the history-replay
+  generator `uu` also emits an entry whose status is not ``running``
+  (``opencode` binary offset 119677809 region, `mu` and `ji`). The resume
+  replay is the reason the holder also needs a ready-state guard.
 * Devin 3000.11.3 emits the ACP notification ``_cognition.ai/compaction`` with
-  ``status == "completed"``. That payload carries no per-occurrence token.
-* Grok 1.0.46 emits the ACP notification ``x.ai/session_notification`` (the wire
-  form is ``_x.ai/session_notification``) with the nested update
-  ``auto_compact_completed``. That payload carries no per-occurrence token.
+  ``params.sessionId`` and ``params.status``; the measured completed value is
+  ``completed``.
+* Grok 1.0.46 emits ``x.ai/session_notification`` (wire
+  ``_x.ai/session_notification``) with ``params.update.sessionUpdate ==
+  "auto_compact_completed"``. The installed binary proves the notification is
+  matched by session id ("load-race: x.ai/session_notification DROPPED - no
+  agent matches session_id"), so a completion must carry that session id.
 * ZCode 3.14.3 emits compact completion on the engine stream; the ZCode bridge
   maps it onto ``compaction_update``. This module only reads the ACP side.
 
-A signal without a per-occurrence token is still a real completed signal. The
-reload instruction is harmless and coalesces through the existing holder
-cursor, so no exactly-once gate is needed.
+Every accepted source requires a non-empty session id. A payload without one is
+not accepted; the holder cannot prove its transport scope.
 """
 
 from __future__ import annotations
@@ -50,9 +59,11 @@ GROK_NOTIFICATION_METHODS = ("_x.ai/session_notification", "x.ai/session_notific
 
 # The OpenCode marker key inside ``session_info_update._meta``.
 OPENCODE_COMPACTION_META = "opencode/compaction"
+OPENCODE_CHILD_META = "opencode/child-session"
 
-# Only these statuses are a completed compaction.
-COMPLETED_STATUSES = frozenset({"completed", "complete", "compacted"})
+# Only this exact status is a completed compaction. No aliases: the inspected
+# sources use ``completed`` verbatim.
+COMPLETED_STATUS = "completed"
 
 # Grok's completed nested update name.
 GROK_COMPLETED_UPDATE = "auto_compact_completed"
@@ -62,14 +73,14 @@ class CompactSignal:
     """One recognized completed compaction.
 
     ``source`` names the wire rule that matched. ``session_id`` is the ACP
-    session that carried the signal, or ``None`` when the payload omits it.
-    ``occurrence_id`` is a stable per-occurrence token when the runtime sends
-    one, else ``None``.
+    session that carried the signal. It is always non-empty for an accepted
+    signal. ``occurrence_id`` is a stable per-occurrence token when the runtime
+    sends one, else ``None``.
     """
 
     __slots__ = ("source", "session_id", "occurrence_id")
 
-    def __init__(self, source: str, session_id: Optional[str],
+    def __init__(self, source: str, session_id: str,
                  occurrence_id: Optional[str]) -> None:
         self.source = source
         self.session_id = session_id
@@ -96,8 +107,10 @@ def _text(value: Any) -> Optional[str]:
     return None
 
 
-def _completed_status(value: Any) -> bool:
-    return isinstance(value, str) and value.strip().lower() in COMPLETED_STATUSES
+def _completed(update: Mapping[str, Any]) -> bool:
+    """The exact, positively sourced completed status."""
+    status = update.get("status")
+    return status == COMPLETED_STATUS
 
 
 def _marker_occurrence(marker: Mapping[str, Any]) -> Optional[str]:
@@ -106,11 +119,12 @@ def _marker_occurrence(marker: Mapping[str, Any]) -> Optional[str]:
 
 
 def classify(message: Any) -> Optional[CompactSignal]:
-    """Classify one inbound ACP message or one ``session/update`` payload.
+    """Classify one inbound ACP message or one ``events.jsonl`` record.
 
-    Accept a raw JSON-RPC message (``{"method": ..., "params": ...}``), a bare
-    ``session/update`` params object, or an ``events.jsonl`` record. Return a
-    :class:`CompactSignal` for a real completed compaction, else ``None``.
+    Return a :class:`CompactSignal` for a real completed compaction, else
+    ``None``. Only a raw JSON-RPC message (``{"method": ..., "params": ...}``)
+    or an ``events.jsonl`` record is accepted. A bare payload without a method
+    or a record kind has no proven transport scope and is rejected.
     """
     if not isinstance(message, Mapping):
         return None
@@ -132,10 +146,6 @@ def classify(message: Any) -> Optional[CompactSignal]:
         return _from_session_update(params if isinstance(params, Mapping) else {})
     if isinstance(method, str):
         return _from_notification(message)
-
-    # A bare update payload without a wrapper.
-    if "sessionUpdate" in message:
-        return _from_session_update({"update": message})
     return None
 
 
@@ -144,10 +154,13 @@ def _from_session_update(params: Mapping[str, Any]) -> Optional[CompactSignal]:
     if not isinstance(update, Mapping):
         return None
     variant = update.get("sessionUpdate")
+    # Every accepted source is session-scoped. No session id, no proof.
     session_id = _text(params.get("sessionId"))
+    if session_id is None:
+        return None
 
     if variant == COMPACTION_UPDATE:
-        if not _completed_status(update.get("status")):
+        if not _completed(update):
             return None
         return CompactSignal("acp-compaction-update", session_id,
                              _text(update.get("compactionId")))
@@ -156,10 +169,14 @@ def _from_session_update(params: Mapping[str, Any]) -> Optional[CompactSignal]:
         meta = update.get("_meta")
         if not isinstance(meta, Mapping):
             return None
+        # A child-session update is a different session's work even when it
+        # names this session id; never let it wake this session.
+        if OPENCODE_CHILD_META in meta:
+            return None
         marker = meta.get(OPENCODE_COMPACTION_META)
         if not isinstance(marker, Mapping):
             return None
-        if not _completed_status(marker.get("status")):
+        if not _completed(marker):
             return None
         return CompactSignal("opencode-compaction-meta", session_id,
                              _marker_occurrence(marker))
@@ -173,9 +190,11 @@ def _from_notification(message: Mapping[str, Any]) -> Optional[CompactSignal]:
     if not isinstance(params, Mapping):
         return None
     session_id = _text(params.get("sessionId"))
+    if session_id is None:
+        return None
 
     if method == DEVIN_COMPACTION_METHOD:
-        if not _completed_status(params.get("status")):
+        if not _completed(params):
             return None
         return CompactSignal("devin-compaction", session_id, None)
 
@@ -193,40 +212,52 @@ def _from_notification(message: Mapping[str, Any]) -> Optional[CompactSignal]:
 def is_same_session(signal: CompactSignal, session_id: Optional[str]) -> bool:
     """True when the signal belongs to this holder's own session.
 
-    A payload that omits ``sessionId`` is not foreign; the holder already
-    scopes such updates to its live session. A payload with a different
-    session id is a child thread and must not wake this session.
+    ``session_id`` is the holder's own ACP session id. An accepted signal always
+    carries a session id, so a holder that has not yet established its session
+    must not accept one (this also blocks resume/history replay).
     """
-    return signal.session_id is None or signal.session_id == session_id
+    return session_id is not None and signal.session_id == session_id
 
 
-def reload_instruction() -> str:
+def reload_instruction(skill_path: Optional[str] = None) -> str:
     """The one instruction that satisfies the behavior.
 
-    It names no cached body and relies on the installed directory. It never
-    asks the model to restart, cancel, or replay an unknown mutation.
+    It names no cached body. With ``skill_path`` it names the exact installed
+    Skill file. It never asks the model to restart, cancel, or replay.
     """
-    return (
-        "The runtime context was compacted. Before you continue, completely "
-        "re-read the current installed Skill for your role from its installed "
-        "directory, not from memory or a cached copy. Then continue the "
-        "in-progress task from the durable project records, exactly where it "
-        "stopped. Do not restart completed work."
-    )
+    if skill_path:
+        reopen = (f"completely re-read the current installed Skill at "
+                  f"{skill_path} from its installed directory, not from memory "
+                  f"or a cached copy. ")
+    else:
+        reopen = ("completely re-read the current installed Skill for your role "
+                  "from its installed directory, not from memory or a cached "
+                  "copy. ")
+    return ("The runtime context was compacted. Before you continue, " + reopen
+            + "Then continue the in-progress task from the durable project "
+            "records, exactly where it stopped. Do not restart completed work.")
 
 
-def reload_prompt(host_entry: str) -> str:
-    """Build the full reload prompt for one holder.
+def host_reload_prompt(host_entry: str) -> str:
+    """Reload prompt for a Host session.
 
     The first line is the session's own measured native Skill entry, so the
-    runtime loads the Skill the same way it does on any other turn. The
-    instruction follows.
+    runtime opens the Skill the same way it does on any other turn.
     """
     entry = (host_entry or "").strip()
     body = reload_instruction()
     if not entry:
         return body
     return f"{entry}\n{body}"
+
+
+def worker_reload_prompt(skill_path: Optional[str]) -> str:
+    """Reload prompt for a non-Host session.
+
+    A worker's applicable Skill is its own installed platform Skill. Name that
+    exact file. Do not open the Host control-plane entry in a worker session.
+    """
+    return reload_instruction(skill_path=skill_path)
 
 
 class CompactReloadTracker:
@@ -275,3 +306,17 @@ class CompactReloadTracker:
             self.last_delivered_id = self.pending_id
         self.pending = False
         self.pending_id = None
+
+    def mark_delivered_occurrence(self, occurrence: Optional[str]) -> None:
+        """Record one delivery that may race a newer pending signal.
+
+        ``occurrence`` is the id that was actually delivered. If it is still the
+        newest pending id, clear the pending flag. If a newer signal arrived
+        during admission, keep that newer obligation pending so it gets its own
+        later delivery instead of being lost.
+        """
+        if occurrence is not None:
+            self.last_delivered_id = occurrence
+        if self.pending_id == occurrence:
+            self.pending = False
+            self.pending_id = None
