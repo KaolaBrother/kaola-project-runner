@@ -20,4 +20,6 @@ Use only seats current authorization already allows. A task may move to a differ
 
 ## Handoff
 
+Write in accordance with ASD-STE100.
+
 Keep the original issue and run, the valid work, and the evidence. One writer owns the work. Checkpoint and hand off through existing lifecycle operations, and exact-stop the previous seat once it no longer owns the task. In the existing run records and the current heartbeat frontier, record only the substantive failure evidence, the attempted approach, the preserved output locator, and what the next owner will do differently. Those four facts are current frontier state. Do not rewrite an immutable `failed` or `done` mission line, and do not create a second ledger ([issue-dispatch.md](issue-dispatch.md)). You keep QA and acceptance: recheck the affected evidence and the actual gap. An extra full suite or an independent reviewer is not required.

@@ -77,6 +77,8 @@ Use the evidence internally to choose the next communication action. Do not narr
 process, snapshot, model, or activity fields in user progress updates; report only visible
 task progress, an actual transport failure, or a decision that genuinely needs the user.
 
+Write in accordance with ASD-STE100.
+
 After reading current evidence, the controlling Agent chooses what to send:
 
 ```bash
