@@ -82,6 +82,70 @@ class Notice(unittest.TestCase):
         self.assertEqual(self.notice()["reason"], "coalesced")
         self.assertEqual(self.holder.compact_reload.pending_seq, seq)
 
+    def test_staging_event_precedes_admission_when_prior_ends_at_append(self):
+        append = self.holder.events.append
+        ended, finished = threading.Event(), threading.Event()
+        threads = []
+
+        def end_prior():
+            try:
+                self.settle(self.params["expected_prior_turn_request_id"])
+            finally:
+                finished.set()
+
+        def interleave(event, **kwargs):
+            if event["kind"] == "turn_ended":
+                ended.set()
+            if event["kind"] == "compact_project_notice":
+                thread = threading.Thread(target=end_prior)
+                threads.append(thread)
+                thread.start()
+                self.assertTrue(ended.wait(3))
+                # At the old unlocked boundary the response can finish before
+                # the append. Under the fixed staging lock it must wait.
+                if not self.holder.worker_events_lock.locked():
+                    self.assertTrue(finished.wait(3))
+            return append(event, **kwargs)
+
+        self.holder.events.append = interleave
+        self.notice()
+        for thread in threads:
+            thread.join(3)
+            self.assertFalse(thread.is_alive())
+        kinds = [event["kind"] for event in self.holder.events.read_since(0, None)]
+        self.assertLess(kinds.index("compact_project_notice"),
+                        kinds.index("compact_project_notice_admitted"), kinds)
+
+    def test_missing_host_entry_retains_notice_and_reload(self):
+        self.holder.session_role = "host"
+        self.holder.host_entry = ""
+        self.notice()
+        self.settle(self.params["expected_prior_turn_request_id"])
+        self.assertTrue(self.holder.compact_reload.pending)
+        self.assertIsNotNone(self.holder.compact_notice_pending)
+        self.assertEqual(self.holder._deliver_compact_reload()["reason"],
+                         "notice-host-entry-absent")
+        self.holder.compact_notice_pending = None
+        self.assertEqual(self.holder._deliver_compact_reload()["reason"],
+                         "host-entry-absent")
+        self.assertTrue(self.holder.compact_reload.pending)
+        self.assertEqual(len(self.agent.prompts_sent()), 1)
+
+    def test_source_checkout_does_not_name_directory_as_installed_skill(self):
+        self.assertIsNone(self.holder.installed_skill_path)
+        self.settle(self.params["expected_prior_turn_request_id"])
+        module = race.holder_module.compact_module()
+        self.holder.compact_reload = module.CompactReloadTracker()
+        self.holder.compact_reload.observe(module.CompactSignal(
+            "acp-compaction-update", self.holder.acp_session_id, "fixture"))
+        self.assertTrue(self.holder._deliver_compact_reload()["delivered"])
+        text = self.agent.prompts_sent()[-1]["params"]["prompt"][0]["text"]
+        self.assertIn("droid-kaola-project-runner", text)
+        self.assertNotIn(str(ROOT) + " and", text)
+        event = next(e for e in self.holder.events.read_since(0, None)
+                     if e["kind"] == "compact_reload_delivered")
+        self.assertIsNone(event["skill_path"])
+
     def test_foreign_missing_or_stop_hook_never_writes_or_stages(self):
         for bad in ({"hook_session_id": "foreign"}, {"hook_cwd": "/other"},
                     {"expected_holder_instance_id": "foreign"},

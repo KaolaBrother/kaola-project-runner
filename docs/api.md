@@ -1450,3 +1450,10 @@ local guard writes nothing; a native turn-end race can admit a detached later tu
 is reported as `started_new_turn`. No cancel or retry occurs. The adapter uses the exact DSH_BIN
 and a process-local overlay; it changes no profile or global configuration. A custom direct ACP
 command omits the adapter. Its local plugin and socket are removed when the adapter ends.
+
+A missing measured Host Skill entry keeps the compact reload pending. Recover the
+applicable installed Host Skill entry from the current authorized records; do not
+clear the duty or guess an entry. A holder run from source does not name the checkout
+directory as an installed platform Skill file. Its reminder names the platform
+Skill and asks the worker to locate and read the full installed file through its
+Skill catalog or active task records. Reminder admission does not prove that read.

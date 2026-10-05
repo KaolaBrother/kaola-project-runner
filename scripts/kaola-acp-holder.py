@@ -1866,7 +1866,7 @@ class Holder:
         holder_script = Path(__file__).resolve()
         skill_root = holder_script.parent.parent
         skill_file = skill_root / "SKILL.md"
-        self.installed_skill_path = str(skill_file if skill_file.is_file() else skill_root)
+        self.installed_skill_path = str(skill_file) if skill_file.is_file() else None
         self.worker_events_lock = threading.Lock()
         self.heartbeat_notify_lock = threading.Lock()
         # Issue #92: the one worker event that cannot be re-derived later. A
@@ -3842,8 +3842,9 @@ class Holder:
                     "acp_session_id": self.acp_session_id,
                     "platform_skill_path": platform_path,
                     "task_skill_paths": list(paths), "write_unknown": False}
-        self.events.append({"kind": "compact_project_notice", "completion": "unconfirmed",
-                            "session_id": self.acp_session_id, "turn_request_id": prior})
+                # Record staging before a response can admit the reminder.
+                self.events.append({"kind": "compact_project_notice", "completion": "unconfirmed",
+                                    "session_id": self.acp_session_id, "turn_request_id": prior})
         return {"notice_pending": True, "notice_recorded": True,
                 "completion": "unconfirmed", "acp_mutation_performed": False,
                 "prior_turn_request_id": prior}
@@ -3968,7 +3969,7 @@ class Holder:
             result = self._attempt_compact_reload(module)
             settled = bool(result.get("delivered")
                            or result.get("reason") in
-                           ("host-entry-absent", "native-route-owned"))
+                           ("native-route-owned",))
         finally:
             with self.worker_events_lock:
                 if settled:
@@ -4006,6 +4007,13 @@ class Holder:
             text = module.host_reload_prompt(self.host_entry)
         else:
             text = module.worker_reload_prompt(self.installed_skill_path)
+            if self.installed_skill_path is None:
+                text += (" The holder runs from source; the installed platform Skill file "
+                         "location is not known here. Locate the current installed "
+                         + self.args.platform + "-kaola-project-runner Skill through your "
+                         "available Skill catalog or the active task records, then read "
+                         "its full SKILL.md. Do not treat the source checkout directory "
+                         "as an installed Skill file.")
         prompt = self.op_prompt({"text": text, "wait": False})
         if prompt.get("error") or prompt.get("outcome") != "in_progress":
             return {"delivered": False, "error": prompt.get("error") or prompt}
